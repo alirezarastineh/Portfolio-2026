@@ -1,0 +1,41 @@
+# Add this to the existing system Caddyfile on the Hetzner host.
+# It assumes docker compose exposes services on 127.0.0.1 only.
+
+{$CLIENT_PUBLIC_DOMAIN:alirezarastineh.me} {
+	reverse_proxy 127.0.0.1:{$CLIENT_HOST_PORT:3010}
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}
+
+{$SERVER_PUBLIC_DOMAIN:api.alirezarastineh.me} {
+	reverse_proxy 127.0.0.1:{$API_HOST_PORT:8010}
+
+	request_body {
+		max_size 5MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+	}
+}
+
+{$PGADMIN_PUBLIC_DOMAIN:pgadmin.alirezarastineh.me} {
+	basic_auth {
+		portfolio-admin $2b$14$2GGK1mRW5LXHTuh10Yky/eE4/MkANf9U0er453R6zKaC7j662EGFq
+	}
+
+	reverse_proxy 127.0.0.1:{$PGADMIN_HOST_PORT:5051} {
+		header_up Host {host}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+	}
+}
