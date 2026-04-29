@@ -3,6 +3,8 @@
 This stack is designed for the same Hetzner host that already runs another project.
 It does not bind ports 80 or 443. Docker exposes services on `127.0.0.1`, then the existing system Caddy proxies public domains to those localhost ports.
 
+For the full deployment and development workflow, see `../../DEPLOYMENT.md`.
+
 ## Files
 
 - `docker-compose.yml` runs PostgreSQL, Hono API, Analog client, and pgAdmin.
