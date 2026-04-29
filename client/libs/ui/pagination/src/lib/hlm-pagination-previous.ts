@@ -57,6 +57,6 @@ export class HlmPaginationPrevious {
   );
 
   constructor() {
-    classes(() => ["gap-1 px-2.5", !this.iconOnly() ? "sm:pl-2.5" : ""]);
+    classes(() => ["gap-1 px-2.5", this.iconOnly() ? "" : "sm:pl-2.5"]);
   }
 }

@@ -33,7 +33,7 @@ import { HlmDialogClose } from "./hlm-dialog-close";
     }
 
     @if (showCloseButton()) {
-      <button hlmBtn variant="ghost" size="icon-sm" class="absolute end-4 top-4" hlmDialogClose>
+      <button hlmBtn variant="ghost" size="icon-sm" class="absolute inset-e-4 top-4" hlmDialogClose>
         <span class="sr-only">close</span>
         <ng-icon hlm size="sm" name="lucideX" />
       </button>

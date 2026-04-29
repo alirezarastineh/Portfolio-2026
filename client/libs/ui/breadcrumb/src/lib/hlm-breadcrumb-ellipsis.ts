@@ -23,7 +23,7 @@ import type { ClassValue } from "clsx";
   `,
 })
 export class HlmBreadcrumbEllipsis {
-  public readonly userClass = input<ClassValue>("", { alias: "class" });
+  public readonly userClass = input<ClassValue>("", { alias: "class" }); // NOSONAR - alias required: 'class' is a reserved keyword, cannot be a TS property name
   /** Screen reader only text for the ellipsis */
   public readonly srOnlyText = input<string>("More");
 

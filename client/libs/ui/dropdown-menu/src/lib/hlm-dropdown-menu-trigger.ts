@@ -4,6 +4,11 @@ import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { createMenuPosition, type MenuAlign, type MenuSide } from "@spartan-ng/brain/core";
 import { injectHlmDropdownMenuConfig } from "./hlm-dropdown-menu-token";
 
+interface CdkMenuTriggerPrivate {
+  overlayRef: { _positionStrategy: { _lastPosition: unknown } };
+  _spartanLastPosition: unknown;
+}
+
 @Directive({
   selector: "[hlmDropdownMenuTrigger]",
   hostDirectives: [
@@ -34,12 +39,10 @@ export class HlmDropdownMenuTrigger {
     // used to position the menu. we store this in our trigger which the brnMenu directive has
     // access to through DI
     this._cdkTrigger.opened.pipe(takeUntilDestroyed()).subscribe(() =>
-      setTimeout(
-        () =>
-          // eslint-disable-next-line
-          ((this._cdkTrigger as any)._spartanLastPosition = // eslint-disable-next-line
-            (this._cdkTrigger as any).overlayRef._positionStrategy._lastPosition),
-      ),
+      setTimeout(() => {
+        const t = this._cdkTrigger as unknown as CdkMenuTriggerPrivate;
+        t._spartanLastPosition = t.overlayRef._positionStrategy._lastPosition;
+      }),
     );
 
     effect(() => {

@@ -132,7 +132,7 @@ import type { ClassValue } from "clsx";
               @for (date of week; track _dateAdapter.getTime(date)) {
                 <td
                   brnCalendarCell
-                  class="data-[selected]:data-[outside]:bg-accent/50 data-[selected]:bg-accent relative size-8 p-0 text-center text-sm focus-within:relative focus-within:z-20 first:data-[selected]:rounded-l-md last:data-[selected]:rounded-r-md [&:has([aria-selected].day-range-end)]:rounded-r-md"
+                  class="data-selected:data-outside:bg-accent/50 data-selected:bg-accent relative size-8 p-0 text-center text-sm focus-within:relative focus-within:z-20 first:data-selected:rounded-l-md last:data-selected:rounded-r-md [&:has([aria-selected].day-range-end)]:rounded-r-md"
                 >
                   <button brnCalendarCellButton [date]="date" [class]="_btnClass">
                     {{ _dateAdapter.getDate(date) }}
@@ -195,7 +195,7 @@ export class HlmCalendar<T> {
   /** Get the heading for the current month and year */
   protected readonly _heading = computed(() => {
     const config = this._i18n.config();
-    const date = this._calendar().focusedDate();
+    const date = this._calendar().focusedDate() as T;
 
     return {
       header: config.formatHeader(

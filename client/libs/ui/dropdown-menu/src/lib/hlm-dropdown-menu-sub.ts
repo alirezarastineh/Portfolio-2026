@@ -3,6 +3,15 @@ import { Directive, inject, signal } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { classes } from "@spartan-ng/helm/utils";
 
+interface SpartanPosition {
+  originX: string;
+  originY: string;
+}
+
+interface CdkMenuPrivate {
+  _parentTrigger: { _spartanLastPosition: SpartanPosition | null | undefined };
+}
+
 @Directive({
   selector: "[hlmDropdownMenuSub],hlm-dropdown-menu-sub",
   hostDirectives: [CdkMenu],
@@ -43,15 +52,15 @@ export class HlmDropdownMenuSub {
     setTimeout(() => {
       // our menu trigger directive leaves the last position used for use immediately after opening
       // we can access it here and determine the correct side.
-      // eslint-disable-next-line
-      const ps = (this._host as any)._parentTrigger._spartanLastPosition;
+      const ps = (this._host as unknown as CdkMenuPrivate)._parentTrigger._spartanLastPosition;
       if (!ps) {
         // if we have no last position we default to the most likely option
         // I hate that we have to do this and hope we can revisit soon and improve
         this._side.set(isRoot ? "top" : "left");
         return;
       }
-      const side = isRoot ? ps.originY : ps.originX === "end" ? "right" : "left";
+      const xSide = ps.originX === "end" ? "right" : "left";
+      const side = isRoot ? ps.originY : xSide;
       this._side.set(side);
     });
   }

@@ -6,6 +6,11 @@ import { createMenuPosition, type MenuAlign, type MenuSide } from "@spartan-ng/b
 import { classes } from "@spartan-ng/helm/utils";
 import { injectHlmMenubarConfig } from "./hlm-menubar-token";
 
+interface CdkMenuTriggerPrivate {
+  overlayRef: { _positionStrategy: { _lastPosition: unknown } };
+  _spartanLastPosition: unknown;
+}
+
 @Directive({
   selector: "button[hlmMenubarTrigger]",
   hostDirectives: [
@@ -40,14 +45,14 @@ export class HlmMenubarTrigger {
     // once the trigger opens we wait until the next tick and then grab the last position
     // used to position the menu. we store this in our trigger which the brnMenu directive has
     // access to through DI
-    this._cdkTrigger.opened.pipe(takeUntilDestroyed()).subscribe(() =>
-      setTimeout(
-        () =>
-          // eslint-disable-next-line
-          ((this._cdkTrigger as any)._spartanLastPosition = // eslint-disable-next-line
-            (this._cdkTrigger as any).overlayRef._positionStrategy._lastPosition),
-      ),
-    );
+    this._cdkTrigger.opened
+      .pipe(takeUntilDestroyed())
+      .subscribe(() =>
+        setTimeout(() => {
+          const t = this._cdkTrigger as unknown as CdkMenuTriggerPrivate;
+          t._spartanLastPosition = t.overlayRef._positionStrategy._lastPosition;
+        }),
+      );
 
     effect(() => {
       this._cdkTrigger.menuPosition = this._menuPosition();

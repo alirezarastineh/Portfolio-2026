@@ -45,7 +45,7 @@ import type { ClassValue } from "clsx";
       [aria-label]="ariaLabel()"
       [aria-labelledby]="ariaLabelledby()"
       [aria-describedby]="ariaDescribedby()"
-      (change)="change.emit($event)"
+      (change)="radioChange.emit($event)"
     >
       <ng-content select="[target],[indicator],hlm-radio-indicator" indicator />
       <ng-content />
@@ -71,7 +71,7 @@ export class HlmRadio<T = unknown> {
     this._groupSpartanInvalid() ? "text-destructive" : "",
   );
 
-  public readonly userClass = input<ClassValue>("", { alias: "class" });
+  public readonly userClass = input<ClassValue>("", { alias: "class" }); // NOSONAR - alias required: 'class' is a reserved keyword, cannot be a TS property name
   protected readonly _computedClass = computed(() =>
     hlm(
       "group relative flex items-center gap-x-3",
@@ -111,8 +111,7 @@ export class HlmRadio<T = unknown> {
   /**
    * Event emitted when the checked state of this radio button changes.
    */
-  // eslint-disable-next-line @angular-eslint/no-output-native
-  public readonly change = output<BrnRadioChange<T>>();
+  public readonly radioChange = output<BrnRadioChange<T>>();
 
   constructor() {
     effect(() => {

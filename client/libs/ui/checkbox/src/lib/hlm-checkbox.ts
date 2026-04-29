@@ -67,7 +67,7 @@ export const HLM_CHECKBOX_VALUE_ACCESSOR = {
   `,
 })
 export class HlmCheckbox implements ControlValueAccessor {
-  public readonly userClass = input<ClassValue>("", { alias: "class" });
+  public readonly userClass = input<ClassValue>("", { alias: "class" }); // NOSONAR - alias required: 'class' is a reserved keyword, cannot be a TS property name
 
   protected readonly _computedClass = computed(() =>
     hlm(

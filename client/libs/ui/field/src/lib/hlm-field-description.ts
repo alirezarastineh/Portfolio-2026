@@ -15,7 +15,7 @@ export class HlmFieldDescription implements OnDestroy {
 
   private readonly _a11y = inject(BrnFieldA11yService, { optional: true, host: true });
 
-  public readonly userClass = input<ClassValue>("", { alias: "class" });
+  public readonly userClass = input<ClassValue>("", { alias: "class" }); // NOSONAR - alias required: 'class' is a reserved keyword, cannot be a TS property name
   public readonly id = input<string>(`hlm-field-description-${HlmFieldDescription._id++}`);
 
   private _registeredId?: string;

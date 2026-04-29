@@ -113,7 +113,7 @@ export class HlmDateRangePicker<T> implements ControlValueAccessor {
   );
   protected readonly _ariaInvalid = computed(() => (this._invalid?.() ? "true" : null));
 
-  public readonly userClass = input<ClassValue>("", { alias: "class" });
+  public readonly userClass = input<ClassValue>("", { alias: "class" }); // NOSONAR - alias required: 'class' is a reserved keyword, cannot be a TS property name
   protected readonly _computedClass = computed(() =>
     hlm(
       "ring-offset-background border-input bg-background hover:bg-accent dark:bg-input/30 dark:hover:bg-input/50 inline-flex h-9 w-[280px] cursor-default items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm font-normal whitespace-nowrap transition-all disabled:pointer-events-none disabled:opacity-50",
@@ -209,10 +209,10 @@ export class HlmDateRangePicker<T> implements ControlValueAccessor {
   /** CONTROL VALUE ACCESSOR */
   public writeValue(value: [T, T] | null): void {
     untracked(() => {
-      if (!value) {
-        this._mutableDate.set(undefined);
-      } else {
+      if (value) {
         this._mutableDate.set(this.transformDates()(value));
+      } else {
+        this._mutableDate.set(undefined);
       }
     });
   }

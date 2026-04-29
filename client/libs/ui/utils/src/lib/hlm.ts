@@ -61,9 +61,9 @@ export function classes(computed: () => ClassValue[] | string, options: ClassesO
     const sourceId = sourceCounter++;
 
     // Get or create the class manager for this element
-    let manager = elementClassManagers.get(element);
+    let mgr = elementClassManagers.get(element);
 
-    if (!manager) {
+    if (!mgr) {
       // Initialize base classes from variation (host attribute 'class')
       const initialBaseClasses = new Set<string>();
 
@@ -71,7 +71,7 @@ export function classes(computed: () => ClassValue[] | string, options: ClassesO
         toClassList(baseClasses).forEach((cls) => initialBaseClasses.add(cls));
       }
 
-      manager = {
+      mgr = {
         element,
         sources: new Map(),
         baseClasses: initialBaseClasses,
@@ -83,7 +83,7 @@ export function classes(computed: () => ClassValue[] | string, options: ClassesO
         previousTransition: "",
         previousTransitionPriority: "",
       };
-      elementClassManagers.set(element, manager);
+      elementClassManagers.set(element, mgr);
 
       // Setup global observer if needed and register this element
       setupGlobalObserver(platformId);
@@ -93,12 +93,14 @@ export function classes(computed: () => ClassValue[] | string, options: ClassesO
       // the browser has painted them. This prevents CSS transition animations
       // during hydration when classes change from SSR state to client state.
       if (isPlatformBrowser(platformId)) {
-        manager.previousTransition = element.style.getPropertyValue("transition");
-        manager.previousTransitionPriority = element.style.getPropertyPriority("transition");
+        mgr.previousTransition = element.style.getPropertyValue("transition");
+        mgr.previousTransitionPriority = element.style.getPropertyPriority("transition");
         element.style.setProperty("transition", "none", "important");
-        manager.transitionsSuppressed = true;
+        mgr.transitionsSuppressed = true;
       }
     }
+
+    const manager = mgr;
 
     // Assign order once at registration time
     const sourceOrder = manager.nextOrder++;
@@ -108,47 +110,47 @@ export function classes(computed: () => ClassValue[] | string, options: ClassesO
       const newClasses = toClassList(computed());
 
       // Update this source's classes, keeping the original order
-      manager!.sources.set(sourceId, {
+      manager.sources.set(sourceId, {
         classes: new Set(newClasses),
         order: sourceOrder,
       });
 
       // Update the element
-      updateElement(manager!);
+      updateElement(manager);
 
       // Re-enable transitions after the first effect writes correct classes.
       // Deferred to next animation frame so the browser paints the class change
       // with transitions disabled first, then re-enables them.
-      if (manager!.transitionsSuppressed) {
-        manager!.transitionsSuppressed = false;
-        manager!.restoreRafId = requestAnimationFrame(() => {
-          manager!.restoreRafId = null;
-          restoreTransitionSuppression(manager!);
+      if (manager.transitionsSuppressed) {
+        manager.transitionsSuppressed = false;
+        manager.restoreRafId = requestAnimationFrame(() => {
+          manager.restoreRafId = null;
+          restoreTransitionSuppression(manager);
         });
       }
     }
 
     // Register cleanup with DestroyRef
     destroyRef.onDestroy(() => {
-      if (manager!.restoreRafId !== null) {
-        cancelAnimationFrame(manager!.restoreRafId);
-        manager!.restoreRafId = null;
+      if (manager.restoreRafId !== null) {
+        cancelAnimationFrame(manager.restoreRafId);
+        manager.restoreRafId = null;
       }
 
-      if (manager!.transitionsSuppressed) {
-        manager!.transitionsSuppressed = false;
-        restoreTransitionSuppression(manager!);
+      if (manager.transitionsSuppressed) {
+        manager.transitionsSuppressed = false;
+        restoreTransitionSuppression(manager);
       }
 
       // Remove this source from the manager
-      manager!.sources.delete(sourceId);
+      manager.sources.delete(sourceId);
 
       // If no more sources, clean up the manager
-      if (manager!.sources.size === 0) {
+      if (manager.sources.size === 0) {
         cleanupManager(element);
       } else {
         // Update element without this source's classes
-        updateElement(manager!);
+        updateElement(manager);
       }
     });
 
@@ -174,53 +176,52 @@ function restoreTransitionSuppression(manager: ElementClassManager): void {
   }
 }
 
+function syncBaseClassesFromDom(manager: ElementClassManager): void {
+  const currentClasses = toClassList(manager.element.className);
+  const allSourceClasses = new Set<string>();
+
+  for (const source of manager.sources.values()) {
+    for (const className of source.classes) {
+      allSourceClasses.add(className);
+    }
+  }
+
+  manager.baseClasses.clear();
+  for (const className of currentClasses) {
+    if (!allSourceClasses.has(className)) {
+      manager.baseClasses.add(className);
+    }
+  }
+}
+
+function handleClassMutation(mutation: MutationRecord): void {
+  if (mutation.type !== "attributes" || mutation.attributeName !== "class") return;
+
+  const element = mutation.target as HTMLElement;
+  const manager = elementClassManagers.get(element);
+
+  if (!manager || !observedElements.has(element)) return;
+  if (manager.isUpdating) return;
+
+  syncBaseClassesFromDom(manager);
+  updateElement(manager);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
 function setupGlobalObserver(platformId: Object): void {
-  if (isPlatformBrowser(platformId) && !globalObserver) {
-    // Create single global observer that watches the entire document
-    globalObserver = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        if (mutation.type === "attributes" && mutation.attributeName === "class") {
-          const element = mutation.target as HTMLElement;
-          const manager = elementClassManagers.get(element);
+  if (!isPlatformBrowser(platformId) || globalObserver) return;
 
-          // Only process elements we're managing
-          if (manager && observedElements.has(element)) {
-            if (manager.isUpdating) continue; // Ignore changes we're making
+  globalObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      handleClassMutation(mutation);
+    }
+  });
 
-            // Update base classes to include any externally added classes
-            const currentClasses = toClassList(element.className);
-            const allSourceClasses = new Set<string>();
-
-            // Collect all classes from all sources
-            for (const source of manager.sources.values()) {
-              for (const className of source.classes) {
-                allSourceClasses.add(className);
-              }
-            }
-
-            // Any classes not from sources become new base classes
-            manager.baseClasses.clear();
-
-            for (const className of currentClasses) {
-              if (!allSourceClasses.has(className)) {
-                manager.baseClasses.add(className);
-              }
-            }
-
-            updateElement(manager);
-          }
-        }
-      }
-    });
-
-    // Start observing the entire document for class attribute changes
-    globalObserver.observe(document, {
-      attributes: true,
-      attributeFilter: ["class"],
-      subtree: true, // Watch all descendants
-    });
-  }
+  globalObserver.observe(document, {
+    attributes: true,
+    attributeFilter: ["class"],
+    subtree: true,
+  });
 }
 
 function updateElement(manager: ElementClassManager): void {

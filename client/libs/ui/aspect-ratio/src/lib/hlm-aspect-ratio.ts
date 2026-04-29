@@ -4,10 +4,8 @@ import { classes } from "@spartan-ng/helm/utils";
 
 const parseDividedString = (value: NumberInput): NumberInput => {
   if (typeof value !== "string" || !value.includes("/")) return value;
-  return value
-    .split("/")
-    .map((v) => Number.parseInt(v, 10))
-    .reduce((a, b) => a / b);
+  const [numerator, ...denominators] = value.split("/").map((v) => Number.parseInt(v, 10));
+  return denominators.reduce((a, b) => a / b, numerator);
 };
 
 @Directive({

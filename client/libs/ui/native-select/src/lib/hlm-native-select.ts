@@ -101,7 +101,7 @@ export class HlmNativeSelect implements ControlValueAccessor {
   /** Manual override for aria-invalid. When not set, auto-detects from the parent autocomplete error state. */
   public readonly ariaInvalidOverride = input<boolean | undefined, BooleanInput>(undefined, {
     transform: (v: BooleanInput) => (v === "" || v === undefined ? undefined : booleanAttribute(v)),
-    alias: "aria-invalid",
+    alias: "aria-invalid", // NOSONAR - alias required: 'aria-invalid' contains a hyphen, cannot be a TS property name
   });
 
   protected readonly _ariaInvalid = computed(() => this.ariaInvalidOverride() ?? this._invalid?.());

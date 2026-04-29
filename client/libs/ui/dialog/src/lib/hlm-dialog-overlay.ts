@@ -14,7 +14,7 @@ export const hlmDialogOverlayClass =
 export class HlmDialogOverlay {
   private readonly _classSettable = injectCustomClassSettable({ optional: true, host: true });
 
-  public readonly userClass = input<ClassValue>("", { alias: "class" });
+  public readonly userClass = input<ClassValue>("", { alias: "class" }); // NOSONAR - alias required: 'class' is a reserved keyword, cannot be a TS property name
   protected readonly _computedClass = computed(() => hlm(hlmDialogOverlayClass, this.userClass()));
 
   constructor() {

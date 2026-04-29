@@ -46,7 +46,7 @@ export class HlmComboboxTrigger {
   private static _id = 0;
 
   public readonly userClass = input<ClassValue>("", {
-    alias: "class",
+    alias: "class", // NOSONAR - alias required: 'class' is a reserved keyword, cannot be a TS property name
   });
   protected readonly _computedClass = computed(() =>
     hlm("data-placeholder:text-muted-foreground", this.userClass()),

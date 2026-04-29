@@ -62,9 +62,9 @@ import { classes } from "@spartan-ng/helm/utils";
           class="group flex w-0 flex-col items-center justify-center gap-2 group-data-vertical:h-0 group-data-vertical:w-auto group-data-vertical:flex-row"
         >
           <div
-            class="bg-muted-foreground/70 h-1 w-px group-data-vertical:h-px group-data-vertical:w-1 group-data-horizontal:group-data-[skip]:h-0.5 group-data-vertical:group-data-[skip]:w-0.5"
+            class="bg-muted-foreground/70 h-1 w-px group-data-vertical:h-px group-data-vertical:w-1 roup-data-horizontal:group-data-skip:h-0.5 group-data-vertical:group-data-skip:w-0.5"
           ></div>
-          <div class="text-center group-data-[skip]:opacity-0">{{ formattedTick }}</div>
+          <div class="text-center group-data-skip:opacity-0">{{ formattedTick }}</div>
         </div>
       </div>
     }

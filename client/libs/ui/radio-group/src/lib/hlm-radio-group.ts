@@ -23,7 +23,7 @@ import type { ClassValue } from "clsx";
   },
 })
 export class HlmRadioGroup {
-  public readonly userClass = input<ClassValue>("", { alias: "class" });
+  public readonly userClass = input<ClassValue>("", { alias: "class" }); // NOSONAR - alias required: 'class' is a reserved keyword, cannot be a TS property name
   private readonly _brnRadioGroup = inject(BrnRadioGroup);
   protected readonly _ariaInvalid = computed(() => this._brnRadioGroup.controlState?.()?.invalid);
 

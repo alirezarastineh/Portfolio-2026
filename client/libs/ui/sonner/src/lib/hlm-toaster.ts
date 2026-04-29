@@ -93,7 +93,7 @@ export class HlmToaster {
   });
   public readonly toastOptions = input<ToasterProps["toastOptions"]>({});
   public readonly offset = input<ToasterProps["offset"]>(null);
-  public readonly userClass = input<ClassValue>("", { alias: "class" });
+  public readonly userClass = input<ClassValue>("", { alias: "class" }); // NOSONAR - alias required: 'class' is a reserved keyword, cannot be a TS property name
   public readonly userStyle = input<Record<string, string>>(
     {
       "--normal-bg": "var(--popover)",
@@ -101,7 +101,7 @@ export class HlmToaster {
       "--normal-border": "var(--border)",
       "--border-radius": "var(--radius)",
     },
-    { alias: "style" },
+    { alias: "style" }, // NOSONAR - alias required: 'style' is a reserved keyword, cannot be a TS property name
   );
 
   protected readonly _computedClass = computed(() => hlm("toaster group", this.userClass()));
