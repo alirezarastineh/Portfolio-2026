@@ -30,7 +30,7 @@ www.alirezarastineh.me {
 }
 
 {$PGADMIN_PUBLIC_DOMAIN:pgadmin.alirezarastineh.me} {
-	basic_auth {
+	basicauth {
 		portfolio-admin $2b$14$2GGK1mRW5LXHTuh10Yky/eE4/MkANf9U0er453R6zKaC7j662EGFq
 	}
 
