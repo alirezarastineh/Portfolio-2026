@@ -37,7 +37,7 @@
     "embla-carousel-angular": "^21.0.0",
     "front-matter": "^4.0.2",
     "gsap": "^3.15.0",
-    "h3": "2.0.1-rc.21",
+    "h3": "1.15.11",
     "marked": "^18.0.3",
     "marked-gfm-heading-id": "^4.1.4",
     "marked-highlight": "^2.2.4",
