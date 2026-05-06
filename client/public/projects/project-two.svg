@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Project two mockup">
+  <defs>
+    <pattern id="p2-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <circle cx="20" cy="20" r="1" fill="#6366F12E" />
+    </pattern>
+  </defs>
+  <rect width="1600" height="1000" fill="#121214" />
+  <rect width="1600" height="1000" fill="url(#p2-grid)" />
+
+  <g>
+    <rect x="120" y="120" width="1360" height="760" rx="18" fill="#1A1A1E" stroke="#FFFFFF14" />
+    <rect x="120" y="120" width="1360" height="58" rx="18" fill="#1F1F23" />
+    <rect x="120" y="160" width="1360" height="20" fill="#1A1A1E" />
+    <circle cx="158" cy="149" r="8" fill="#EF4444" />
+    <circle cx="186" cy="149" r="8" fill="#EAB308" />
+    <circle cx="214" cy="149" r="8" fill="#22C55E" />
+    <text
+      x="800"
+      y="156"
+      text-anchor="middle"
+      font-family="ui-monospace, SFMono-Regular, Consolas, monospace"
+      font-size="16"
+      fill="#9CA3AF"
+    >
+      user@portfolio - pipeline.log
+    </text>
+  </g>
+
+  <g font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="22">
+    <text x="160" y="240" fill="#FB923C">$</text>
+    <text x="190" y="240" fill="#F3F4F6">deploy --service ingest --env prod</text>
+    <text x="160" y="284" fill="#9CA3AF">&gt; build</text>
+    <text x="290" y="284" fill="#F3F4F6">image - 28.4s</text>
+    <text x="160" y="324" fill="#9CA3AF">&gt; push</text>
+    <text x="290" y="324" fill="#F3F4F6">registry - 4.1s</text>
+    <text x="160" y="364" fill="#9CA3AF">&gt; apply</text>
+    <text x="290" y="364" fill="#F3F4F6">manifest - 0.7s</text>
+
+    <text x="160" y="430" fill="#FB923C">$</text>
+    <text x="190" y="430" fill="#F3F4F6">tail -f workers.queue</text>
+    <text x="160" y="474" fill="#818CF8">[INFO]</text>
+    <text x="280" y="474" fill="#D1D5DB">job.embed - batch=128 - 142ms</text>
+    <text x="160" y="514" fill="#818CF8">[INFO]</text>
+    <text x="280" y="514" fill="#D1D5DB">job.upsert - vectors=128 - 38ms</text>
+    <text x="160" y="554" fill="#818CF8">[INFO]</text>
+    <text x="280" y="554" fill="#D1D5DB">job.embed - batch=128 - 138ms</text>
+    <text x="160" y="594" fill="#EAB308">[WARN]</text>
+    <text x="280" y="594" fill="#D1D5DB">rate.throttle - backoff=400ms</text>
+    <text x="160" y="634" fill="#818CF8">[INFO]</text>
+    <text x="280" y="634" fill="#D1D5DB">job.embed - batch=64 - 78ms</text>
+    <text x="160" y="674" fill="#22C55E">[OK]</text>
+    <text x="280" y="674" fill="#D1D5DB">queue.drain - pending=0</text>
+
+    <text x="160" y="744" fill="#FB923C">$</text>
+    <text x="190" y="744" fill="#F3F4F6">_</text>
+  </g>
+</svg>
