@@ -51,9 +51,9 @@ export const profile: Profile = {
     },
     {
       label: "Email",
-      href: "mailto:alirezakhalireza@gmail.com",
+      href: "mailto:alirezarastineh95@gmail.com",
       icon: "mail",
     },
   ],
-  contactEmail: "alirezakhalireza@gmail.com",
+  contactEmail: "alirezarastineh95@gmail.com",
 };
