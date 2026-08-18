@@ -5,3 +5,5 @@ allowBuilds:
   lmdb: true
   msgpackr-extract: true
   nx: true
+minimumReleaseAgeExclude:
+  - marked@18.0.10

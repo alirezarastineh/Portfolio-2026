@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideExternalLink, lucideFileText, lucideGithub } from "@ng-icons/lucide";
+import { lucideExternalLink, lucideFileText } from "@ng-icons/lucide";
 
+import { brandGithub } from "../icons/brand-icons";
 import { ScrambleTextComponent } from "./scramble-text.component";
 import type { Project } from "../data/projects.data";
 import { LanguageService } from "../services/language.service";
@@ -22,7 +23,7 @@ interface ExternalLink {
   selector: "app-project-card",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NgIcon, ScrambleTextComponent],
-  viewProviders: [provideIcons({ lucideExternalLink, lucideFileText, lucideGithub })],
+  viewProviders: [provideIcons({ lucideExternalLink, lucideFileText, brandGithub })],
   host: {
     class: "block",
   },
@@ -151,7 +152,7 @@ export class ProjectCardComponent {
     const c = this.lang.t().projectCard;
     const out: ExternalLink[] = [];
     if (l.live) out.push({ label: c.live, href: l.live, icon: "lucideExternalLink" });
-    if (l.repo) out.push({ label: c.repo, href: l.repo, icon: "lucideGithub" });
+    if (l.repo) out.push({ label: c.repo, href: l.repo, icon: "brandGithub" });
     if (l.caseStudy)
       out.push({ label: c.caseStudy, href: l.caseStudy, icon: "lucideFileText" });
     return out;

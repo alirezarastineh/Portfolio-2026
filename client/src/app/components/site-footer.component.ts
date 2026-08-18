@@ -1,13 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
 import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideGithub, lucideLinkedin, lucideMail } from "@ng-icons/lucide";
+import { lucideMail } from "@ng-icons/lucide";
 
+import { brandGithub, brandLinkedin } from "../icons/brand-icons";
 import { profile, type SocialLink } from "../data/profile.data";
 import { LanguageService } from "../services/language.service";
 
 const ICON_MAP: Record<SocialLink["icon"], string> = {
-  github: "lucideGithub",
-  linkedin: "lucideLinkedin",
+  github: "brandGithub",
+  linkedin: "brandLinkedin",
   mail: "lucideMail",
   twitter: "lucideMail",
 };
@@ -16,7 +17,7 @@ const ICON_MAP: Record<SocialLink["icon"], string> = {
   selector: "app-site-footer",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NgIcon],
-  viewProviders: [provideIcons({ lucideGithub, lucideLinkedin, lucideMail })],
+  viewProviders: [provideIcons({ brandGithub, brandLinkedin, lucideMail })],
   host: {
     class: "block",
   },
