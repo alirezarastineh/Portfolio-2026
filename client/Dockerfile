@@ -85,4 +85,4 @@ COPY --from=build /usr/src/app/dist ./dist
 EXPOSE 3000
 
 # Run the application.
-CMD ["pnpm", "run", "preview"]
+CMD ["node", "dist/analog/server/index.mjs"]
