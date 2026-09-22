@@ -1,0 +1,29 @@
+.env
+# Includes .env.example: it is kept locally only, so real values put into it
+# by mistake can never be committed.
+.env.*
+
+node_modules/
+dist/
+build/
+coverage/
+
+*.log
+.DS_Store
+Thumbs.db
+
+# SSH private keys.
+.ssh/
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+*.pem
+
+# Local tooling state.
+.claude/*
+.codex
+.kilo/
+.codegraph/
+server/.vitest/
+DEPLOYMENT.md

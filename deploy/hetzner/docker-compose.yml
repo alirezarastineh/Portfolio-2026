@@ -1,0 +1,242 @@
+name: ${COMPOSE_PROJECT_NAME:-portfolio}
+
+# Docker's default json-file driver never rotates, so a chatty container
+# eventually fills the disk. 5 × 10 MB per container is plenty to debug with.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+# Resource limits, sized for a Hetzner CCX13 (2 dedicated vCPUs, 8 GB RAM)
+# that should stay light: the whole stack peaks around 2.7 GB and idles near
+# 1 GB. No service may take more than one core, so a runaway container cannot
+# starve the rest of the box. A container that hits its memory limit is
+# restarted (restart: unless-stopped) instead of pushing the host into swap.
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 768m
+    cpus: 1.0
+    # Safe for postgres: its entrypoint only ever drops privileges (root → postgres).
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-portfolio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-portfolio}
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  api:
+    build:
+      context: ../../server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # A real PID 1 that forwards SIGTERM, so the graceful shutdown in
+    # src/index.ts runs instead of Docker SIGKILLing node after 10s.
+    init: true
+    logging: *logging
+    mem_limit: 512m
+    cpus: 1.0
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      # V8 garbage-collects before the container limit instead of being OOM-killed.
+      NODE_OPTIONS: --max-old-space-size=384
+      HOST: 0.0.0.0
+      PORT: ${API_PORT:-3000}
+      # The app's own connection. With APP_DB_USER/APP_DB_PASSWORD set it uses
+      # the least-privilege role from create-app-role.sql; unset, the owner.
+      DATABASE_URL: postgresql://${APP_DB_USER:-${POSTGRES_USER:-portfolio}}:${APP_DB_PASSWORD:-${POSTGRES_PASSWORD}}@db:5432/${POSTGRES_DB:-portfolio}
+      # Boot-time migrations always run as the owner, who may change the schema.
+      MIGRATION_DATABASE_URL: postgresql://${POSTGRES_USER:-portfolio}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-portfolio}
+      CORS_ORIGIN: https://${CLIENT_PUBLIC_DOMAIN:-alirezarastineh.me}
+      # Credentialed surface: /auth and /admin only. Also the CSRF Origin allowlist.
+      ADMIN_ORIGIN: https://${CLIENT_PUBLIC_DOMAIN:-alirezarastineh.me}
+      # Shared parent domain, so the cookie set by api.* reaches the admin on the apex.
+      SESSION_COOKIE_DOMAIN: ${SESSION_COOKIE_DOMAIN:-.alirezarastineh.me}
+      # Optional: encrypts TOTP secrets at rest. See .env.example before setting.
+      TOTP_ENC_KEY: ${TOTP_ENC_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:?RESEND_API_KEY is required}
+      CONTACT_TO: ${CONTACT_TO:-contact@alirezarastineh.me}
+      CONTACT_FROM: ${CONTACT_FROM:-contact@alirezarastineh.me}
+      # Lets a publish drop the SSR container's cached content immediately
+      # instead of waiting out its 60s TTL. Reached over the internal network.
+      CONTENT_INVALIDATE_URL: http://client:${CLIENT_PORT:-3000}/api/v1/content/_invalidate
+      CONTENT_INVALIDATE_TOKEN: ${CONTENT_INVALIDATE_TOKEN:?CONTENT_INVALIDATE_TOKEN is required}
+      MEDIA_ROOT: /data/media
+      MEDIA_PUBLIC_BASE_URL: https://${SERVER_PUBLIC_DOMAIN:-api.alirezarastineh.me}
+      # 4 MiB — deliberately under Caddy's 5MB request_body cap, so an oversized
+      # upload gets our JSON error instead of Caddy's HTML 413.
+      MEDIA_MAX_BYTES: "4194304"
+      # Optional error reporting; off when empty.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: production
+      SENTRY_RELEASE: ${IMAGE_TAG:-}
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8010}:${API_PORT:-3000}"
+    volumes:
+      # read_only below applies to the image layers; a named volume mounted
+      # here stays writable. Ownership is seeded by the Dockerfile, which is the
+      # only chance to get it right — cap_drop: ALL means the container cannot
+      # chown the mountpoint itself.
+      - media:/data/media
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "fetch(''http://127.0.0.1:'' + (process.env.PORT || 3000) + ''/health'').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  client:
+    build:
+      context: ../../client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://api.alirezarastineh.me}
+        API_INTERNAL_BASE_URL: http://api:${API_PORT:-3000}
+        # Baked into the browser bundle; each feature stays off while empty.
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+        VITE_UMAMI_SRC: ${VITE_UMAMI_SRC:-}
+        VITE_UMAMI_WEBSITE_ID: ${VITE_UMAMI_WEBSITE_ID:-}
+    restart: unless-stopped
+    init: true
+    logging: *logging
+    mem_limit: 512m
+    cpus: 1.0
+    # Runs as `node` on port 3000 and needs no Linux capabilities at all.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      NODE_OPTIONS: --max-old-space-size=384
+      HOST: 0.0.0.0
+      PORT: ${CLIENT_PORT:-3000}
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://api.alirezarastineh.me}
+      API_INTERNAL_BASE_URL: http://api:${API_PORT:-3000}
+      CONTENT_INVALIDATE_TOKEN: ${CONTENT_INVALIDATE_TOKEN:?CONTENT_INVALIDATE_TOKEN is required}
+    ports:
+      - "127.0.0.1:${CLIENT_HOST_PORT:-3010}:${CLIENT_PORT:-3000}"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "fetch(''http://127.0.0.1:'' + (process.env.PORT || 3000) + ''/'').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  pgadmin:
+    # Pinned: an untagged image silently jumps versions (and migrates its data
+    # volume) on the next pull. Bump deliberately.
+    image: dpage/pgadmin4:9.18
+    restart: unless-stopped
+    # No no-new-privileges here: the image binds port 80 as a non-root user
+    # through a file capability, which that flag would disable.
+    logging: *logging
+    mem_limit: 384m
+    cpus: 0.5
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?PGADMIN_DEFAULT_EMAIL is required}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?PGADMIN_DEFAULT_PASSWORD is required}
+      PGADMIN_CONFIG_PROXY_X_FOR_COUNT: "1"
+      PGADMIN_CONFIG_PROXY_X_PROTO_COUNT: "1"
+      PGADMIN_CONFIG_PROXY_X_HOST_COUNT: "1"
+      PGADMIN_CONFIG_PROXY_X_PORT_COUNT: "1"
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "False"
+      PGADMIN_CONFIG_CONSOLE_LOG_LEVEL: "30"
+    ports:
+      - "127.0.0.1:${PGADMIN_HOST_PORT:-5051}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+
+  # Cookieless, self-hosted analytics. Only runs with the `analytics` profile
+  # enabled (COMPOSE_PROFILES=analytics in .env), after its database exists —
+  # see DEPLOYMENT.md, "Analytics (Umami)". Uses the same Postgres server with
+  # its own database and role, instead of a second Postgres container.
+  umami:
+    image: ghcr.io/umami-software/umami:3.4
+    profiles: ["analytics"]
+    restart: unless-stopped
+    init: true
+    logging: *logging
+    mem_limit: 512m
+    cpus: 0.5
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      DATABASE_URL: postgresql://umami:${UMAMI_DB_PASSWORD:-}@db:5432/umami
+      APP_SECRET: ${UMAMI_APP_SECRET:-}
+      # Required before anyone can enable 2FA on the dashboard login.
+      TWO_FACTOR_ENCRYPTION_KEY: ${UMAMI_2FA_KEY:-}
+      # No calls home: neither anonymous telemetry nor update checks.
+      DISABLE_TELEMETRY: "1"
+      DISABLE_UPDATES: "1"
+    ports:
+      - "127.0.0.1:${UMAMI_HOST_PORT:-3020}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "fetch(''http://127.0.0.1:3000/api/heartbeat'').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"',
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - internal
+
+volumes:
+  pgdata:
+  pgadmin_data:
+  media:
+
+networks:
+  internal:

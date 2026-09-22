@@ -1,0 +1,13 @@
+# Installed as /etc/systemd/system/portfolio-backup.timer — see DEPLOYMENT.md,
+# "Backups".
+[Unit]
+Description=Nightly portfolio backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+# Spread the start a little, and catch up after a reboot that skipped a run.
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

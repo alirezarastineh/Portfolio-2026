@@ -1,0 +1,114 @@
+# Add this to the existing system Caddyfile on the Hetzner host.
+# It assumes docker compose exposes services on 127.0.0.1 only.
+
+{$CLIENT_PUBLIC_DOMAIN:alirezarastineh.me} {
+	# JSON access log, rotated. Written out per site rather than as an
+	# argument snippet: {args[0]} needs Caddy 2.7+, and the host runs 2.6.
+	# Caddy redacts Cookie and Authorization headers in these by default.
+	log {
+		output file /var/log/caddy/portfolio-site-access.log {
+			roll_size 20MiB
+			roll_keep 5
+			roll_keep_for 336h
+		}
+		format json
+	}
+	# Cache invalidation is called by the API over the compose network
+	# (http://client:3000), never through here. Closing it at the edge leaves
+	# the bearer token as a second layer rather than the only one.
+	@internal path /api/v1/content/_invalidate
+	respond @internal 404
+
+	reverse_proxy 127.0.0.1:{$CLIENT_HOST_PORT:3010}
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Nothing may frame the site — in particular the admin (clickjacking).
+		X-Frame-Options "DENY"
+		Cross-Origin-Opener-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
+		# Report-only first: violations show in the browser console without
+		# breaking anything. Enforcing needs a per-request nonce for Angular's
+		# inline event-replay script (see DEPLOYMENT.md, "Security headers").
+		# Also allowed: the Umami tracker (script + beacon) and Sentry's ingest
+		# hosts for the error reporter.
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://{$ANALYTICS_PUBLIC_DOMAIN:analytics.alirezarastineh.me}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://{$SERVER_PUBLIC_DOMAIN:api.alirezarastineh.me}; font-src 'self' data:; connect-src 'self' https://{$SERVER_PUBLIC_DOMAIN:api.alirezarastineh.me} https://{$ANALYTICS_PUBLIC_DOMAIN:analytics.alirezarastineh.me} https://*.ingest.sentry.io https://*.ingest.de.sentry.io https://*.ingest.us.sentry.io; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	}
+
+	# Build output under /assets is content-hashed: a changed file gets a new
+	# name, so browsers may keep each one forever instead of revalidating.
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+
+	# Belt and braces alongside robots.txt and the route's own noindex meta tag.
+	header /admin* X-Robots-Tag "noindex, nofollow"
+}
+
+www.alirezarastineh.me {
+	redir https://alirezarastineh.me{uri} permanent
+}
+
+{$SERVER_PUBLIC_DOMAIN:api.alirezarastineh.me} {
+	# JSON access log, rotated. Written out per site rather than as an
+	# argument snippet: {args[0]} needs Caddy 2.7+, and the host runs 2.6.
+	# Caddy redacts Cookie and Authorization headers in these by default.
+	log {
+		output file /var/log/caddy/portfolio-api-access.log {
+			roll_size 20MiB
+			roll_keep 5
+			roll_keep_for 336h
+		}
+		format json
+	}
+	reverse_proxy 127.0.0.1:{$API_HOST_PORT:8010}
+	# Compresses the content JSON. If a streaming (SSE) route is added later,
+	# exclude it here: compression would buffer the stream.
+	encode zstd gzip
+
+	request_body {
+		max_size 5MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+	}
+}
+
+# Umami analytics — only once its DNS record, database and container exist
+# (DEPLOYMENT.md, "Analytics (Umami)"). Public on purpose: visitors' browsers
+# load the tracker and send page views here; the dashboard is behind Umami's
+# own login.
+{$ANALYTICS_PUBLIC_DOMAIN:analytics.alirezarastineh.me} {
+	# JSON access log, rotated. Written out per site rather than as an
+	# argument snippet: {args[0]} needs Caddy 2.7+, and the host runs 2.6.
+	# Caddy redacts Cookie and Authorization headers in these by default.
+	log {
+		output file /var/log/caddy/portfolio-analytics-access.log {
+			roll_size 20MiB
+			roll_keep 5
+			roll_keep_for 336h
+		}
+		format json
+	}
+	reverse_proxy 127.0.0.1:{$UMAMI_HOST_PORT:3020}
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}
+
+# pgAdmin is deliberately NOT exposed publicly any more. It listens on
+# 127.0.0.1:5051 on the host only; reach it through SSH from your machine:
+#
+#   ssh -N -L 5051:127.0.0.1:5051 <user>@<host>    then open http://localhost:5051
+#
+# See DEPLOYMENT.md, "pgAdmin access". Remove the old pgadmin.* site block from
+# the host's Caddyfile and reload Caddy.

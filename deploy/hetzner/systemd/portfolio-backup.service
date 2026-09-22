@@ -1,0 +1,17 @@
+# Installed as /etc/systemd/system/portfolio-backup.service — see DEPLOYMENT.md,
+# "Backups". Adjust the path below if the checkout is not /root/Portfolio-2026.
+[Unit]
+Description=Portfolio database and media backup (local + offsite)
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Optional: restic settings for the offsite copy. The leading "-" keeps the
+# unit working (local backups only) when the file does not exist.
+EnvironmentFile=-/etc/portfolio-backup.env
+# Through bash, so it runs whatever file mode the checkout ends up with.
+ExecStart=/bin/bash /root/Portfolio-2026/deploy/hetzner/backup.sh
+Nice=10
+IOSchedulingClass=idle

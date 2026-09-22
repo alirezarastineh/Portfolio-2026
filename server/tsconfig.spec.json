@@ -1,0 +1,11 @@
+{
+  // Type-checks the specs and test harness, which the build config excludes.
+  // Vitest only transpiles, so without this a wrong type in a test goes unseen.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*.ts", "vitest.config.ts"],
+  "exclude": ["node_modules"]
+}

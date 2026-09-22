@@ -1,0 +1,7 @@
+allowBuilds:
+  # Test-only Postgres binaries: the postinstall only restores the symlinks in
+  # native/pg-symlinks.json (shared-library links on Linux, none on Windows).
+  '@embedded-postgres/linux-x64': true
+  '@embedded-postgres/windows-x64': true
+  esbuild: true
+minimumReleaseAge: 0

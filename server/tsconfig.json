@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "NodeNext",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx",
+    "outDir": "./dist"
+  },
+  // Specs are run by vitest, which transpiles them itself — keep them out of
+  // the production build so they never ship in the image.
+  "exclude": ["node_modules", "**/*.spec.ts", "**/*.test.ts", "src/test/**", "vitest.config.ts"]
+}

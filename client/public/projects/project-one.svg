@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Project one mockup">
+  <defs>
+    <pattern id="p1-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <circle cx="20" cy="20" r="1" fill="#6366F138" />
+    </pattern>
+    <linearGradient id="p1-glow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6366F12E" />
+      <stop offset="1" stop-color="#6366F100" />
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="#141416" />
+  <rect width="1600" height="1000" fill="url(#p1-grid)" />
+  <rect width="1600" height="500" fill="url(#p1-glow)" />
+
+  <g font-family="ui-monospace, SFMono-Regular, Consolas, monospace" fill="#9CA3AF">
+    <text x="100" y="120" font-size="20" letter-spacing="3">// dashboard.tsx</text>
+  </g>
+
+  <g stroke="#FFFFFF14" stroke-width="1">
+    <rect x="100" y="160" width="420" height="180" rx="14" fill="#1F1F23" />
+    <rect x="560" y="160" width="420" height="180" rx="14" fill="#1F1F23" />
+    <rect x="1020" y="160" width="480" height="180" rx="14" fill="#1F1F23" />
+    <rect x="100" y="380" width="880" height="500" rx="14" fill="#1F1F23" />
+    <rect x="1020" y="380" width="480" height="500" rx="14" fill="#1F1F23" />
+  </g>
+
+  <g font-family="ui-monospace, SFMono-Regular, Consolas, monospace">
+    <text x="124" y="210" font-size="18" fill="#9CA3AF">latency.p99</text>
+    <text x="124" y="282" font-size="48" fill="#F3F4F6" font-weight="600">42ms</text>
+    <text x="124" y="316" font-size="14" fill="#FB923C">+ 12% faster</text>
+
+    <text x="584" y="210" font-size="18" fill="#9CA3AF">tokens / sec</text>
+    <text x="584" y="282" font-size="48" fill="#F3F4F6" font-weight="600">186</text>
+    <text x="584" y="316" font-size="14" fill="#818CF8">streaming</text>
+
+    <text x="1044" y="210" font-size="18" fill="#9CA3AF">cache.hit</text>
+    <text x="1044" y="282" font-size="48" fill="#F3F4F6" font-weight="600">73%</text>
+    <text x="1044" y="316" font-size="14" fill="#FB923C">semantic</text>
+  </g>
+
+  <polyline
+    points="140,800 240,720 340,750 440,640 540,690 640,560 740,610 840,500 940,540"
+    fill="none"
+    stroke="#FB923C"
+    stroke-width="3"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <polyline
+    points="140,840 240,790 340,810 440,750 540,770 640,700 740,720 840,650 940,680"
+    fill="none"
+    stroke="#818CF899"
+    stroke-width="2.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-dasharray="4 6"
+  />
+
+  <g font-family="ui-monospace, SFMono-Regular, Consolas, monospace" fill="#9CA3AF">
+    <text x="124" y="430" font-size="14" letter-spacing="2">REQUESTS / 24H</text>
+  </g>
+
+  <g stroke="#FFFFFF0D" stroke-width="1">
+    <line x1="140" y1="500" x2="940" y2="500" />
+    <line x1="140" y1="600" x2="940" y2="600" />
+    <line x1="140" y1="700" x2="940" y2="700" />
+    <line x1="140" y1="800" x2="940" y2="800" />
+  </g>
+
+  <g font-family="ui-monospace, SFMono-Regular, Consolas, monospace" fill="#D1D5DB" font-size="14">
+    <text x="1044" y="430" letter-spacing="2" fill="#9CA3AF">EVENT FEED</text>
+    <text x="1044" y="480">&gt; rag.retrieve - 24ms</text>
+    <text x="1044" y="510">&gt; llm.stream - 1.4s</text>
+    <text x="1044" y="540">&gt; cache.hit - 1ms</text>
+    <text x="1044" y="570">&gt; rag.retrieve - 18ms</text>
+    <text x="1044" y="600">&gt; llm.stream - 0.9s</text>
+    <text x="1044" y="630">&gt; guardrail.pass - 6ms</text>
+    <text x="1044" y="660">&gt; embed.upsert - 22ms</text>
+  </g>
+</svg>

@@ -1,0 +1,6 @@
+* text=auto
+
+# Executed on the Linux host; a CRLF shebang line fails to run.
+*.sh text eol=lf
+# Everything under deploy/ (systemd units, SQL, Caddyfile) is consumed on Linux.
+deploy/** text eol=lf

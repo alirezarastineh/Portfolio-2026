@@ -1,0 +1,14 @@
+# Overlay used only by the GitHub deploy workflow (.github/workflows/deploy.yml):
+# run the images CI already built and pushed to GHCR instead of building on the
+# host. The manual flow in DEPLOYMENT.md never loads this file and is unchanged.
+#
+#   IMAGE_TAG=<git sha> docker compose --env-file .env \
+#     -f deploy/hetzner/docker-compose.yml -f deploy/hetzner/docker-compose.images.yml \
+#     up -d --no-build api client
+services:
+  api:
+    image: ghcr.io/alirezarastineh/portfolio-2026/api:${IMAGE_TAG:?IMAGE_TAG is required}
+    pull_policy: always
+  client:
+    image: ghcr.io/alirezarastineh/portfolio-2026/client:${IMAGE_TAG:?IMAGE_TAG is required}
+    pull_policy: always
