@@ -3,8 +3,8 @@
   "locale": "de",
   "ui": {
     "profile": {
-      "role": "Fullstack-KI-Softwareingenieur",
-      "heroHeadline": "Fullstack-Engineering trifft künstliche Intelligenz.",
+      "role": "Full Stack AI Engineer",
+      "heroHeadline": "Full-Stack-Engineering trifft künstliche Intelligenz.",
       "heroSubheadline": "Verbindung von zuverlässiger Cloud-Infrastruktur und modernsten Machine-Learning-Methoden für produktionsreife Anwendungen.",
       "primaryCta": "Projekte ansehen",
       "secondaryCta": "Kontakt aufnehmen",
@@ -36,7 +36,7 @@
       "philosophy": "KI-Anwendungen in einem Jupyter-Notebook zu bauen ist einfach – sie in der Produktion stabil zu halten ist schwer. Meine Engineering-Philosophie konzentriert sich auf defensive KI-Integration. Ich behandle Sprachmodelle als leistungsstarke, aber unberechenbare Microservices. Durch strikte semantische Routing-Regeln, Output-Parsing und automatisierte Fallback-Mechanismen bekämpfe ich aktiv Halluzinationen und erzwinge zuverlässige Datenstrukturen. Ich priorisiere die Nutzererfahrung, indem ich Token zum Frontend streame, um Latenz zu kaschieren, und optimiere gleichzeitig Prompt-Payloads sowie semantisches Caching, um die API-Inferenzkosten strikt im Griff zu behalten. Ich schreibe keine Prompts – ich entwickle resiliente Fullstack-Systeme um sie herum.",
       "terminalTitle": "user@portfolio — zsh",
       "terminalPrompt": "user@portfolio:~$",
-      "terminalOutputWhoami": "Alireza Rastineh — Fullstack-KI-Softwareingenieur",
+      "terminalOutputWhoami": "Alireza Rastineh — Full Stack AI Engineer",
       "terminalOutputLs": "kernarchitektur/   ki-ml-stack/   devops/   datenpipelines/",
       "terminalOutputContact": "Offen für Senior-Fullstack- und KI-Engineering-Rollen. Kontaktaufnahme über das Kontaktformular oder direkt per E-Mail."
     },
@@ -356,19 +356,19 @@
     }
   ],
   "seo": {
-    "title": "Alireza Rastineh — Fullstack-KI-Softwareingenieur",
-    "description": "Fullstack-KI-Softwareingenieur. Zuverlässige Cloud-Infrastruktur trifft auf defensive KI-Entwicklung — produktionsreifes Angular, FastAPI, RAG-Pipelines und Observability.",
+    "title": "Alireza Rastineh — Full Stack AI Engineer",
+    "description": "Full Stack AI Engineer. Zuverlässige Cloud-Infrastruktur trifft auf defensive KI-Entwicklung — produktionsreifes Angular, FastAPI, RAG-Pipelines und Observability.",
     "author": "Alireza Rastineh",
     "siteName": "Alireza Rastineh",
     "canonical": "https://alirezarastineh.me/",
     "themeColor": "#3b3b3d",
-    "ogTitle": "Alireza Rastineh — Fullstack-KI-Softwareingenieur",
+    "ogTitle": "Alireza Rastineh — Full Stack AI Engineer",
     "ogDescription": "Defensive KI-Integration, produktionsreife Fullstack-Systeme und resiliente ML-Infrastruktur.",
     "ogImage": "https://alirezarastineh.me/og.png",
     "ogUrl": "https://alirezarastineh.me/",
     "ogLocale": "de_DE",
     "twitterCard": "summary_large_image",
-    "twitterTitle": "Alireza Rastineh — Fullstack-KI-Softwareingenieur",
+    "twitterTitle": "Alireza Rastineh — Full Stack AI Engineer",
     "twitterDescription": "Defensive KI-Integration, produktionsreife Fullstack-Systeme und resiliente ML-Infrastruktur.",
     "twitterImage": "https://alirezarastineh.me/og.png"
   }
