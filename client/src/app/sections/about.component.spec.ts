@@ -73,15 +73,16 @@ describe("AboutSectionComponent", () => {
     await fixture.whenStable();
 
     const english = fixture.nativeElement.textContent as string;
-    expect(english).toContain("Full Stack AI Engineer");
+    expect(english).toContain("Building AI applications");
+    expect(english).not.toContain("KI-Anwendungen");
 
     language.activate("de");
     fixture.detectChanges();
     await fixture.whenStable();
 
     const german = fixture.nativeElement.textContent as string;
-    expect(german).toContain("Full Stack AI Engineer");
-    expect(german).not.toContain("Full Stack AI Engineer");
+    expect(german).toContain("KI-Anwendungen");
+    expect(german).not.toContain("Building AI applications");
   });
 
   it("renders the localized terminal chrome", async () => {
