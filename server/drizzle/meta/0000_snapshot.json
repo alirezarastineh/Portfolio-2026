@@ -123,12 +123,8 @@
           "name": "admin_sessions_user_id_admin_users_id_fk",
           "tableFrom": "admin_sessions",
           "tableTo": "admin_users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -138,9 +134,7 @@
         "admin_sessions_token_hash_unique": {
           "name": "admin_sessions_token_hash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
+          "columns": ["token_hash"]
         }
       },
       "policies": {},
@@ -224,9 +218,7 @@
         "admin_users_email_unique": {
           "name": "admin_users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -341,12 +333,8 @@
           "name": "content_documents_updated_by_admin_users_id_fk",
           "tableFrom": "content_documents",
           "tableTo": "admin_users",
-          "columnsFrom": [
-            "updated_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["updated_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -354,10 +342,7 @@
       "compositePrimaryKeys": {
         "content_documents_section_locale_pk": {
           "name": "content_documents_section_locale_pk",
-          "columns": [
-            "section",
-            "locale"
-          ]
+          "columns": ["section", "locale"]
         }
       },
       "uniqueConstraints": {},
@@ -407,12 +392,8 @@
           "name": "content_pointers_version_id_content_versions_id_fk",
           "tableFrom": "content_pointers",
           "tableTo": "content_versions",
-          "columnsFrom": [
-            "version_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["version_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -420,12 +401,8 @@
           "name": "content_pointers_published_by_admin_users_id_fk",
           "tableFrom": "content_pointers",
           "tableTo": "admin_users",
-          "columnsFrom": [
-            "published_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["published_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -513,12 +490,8 @@
           "name": "content_versions_created_by_admin_users_id_fk",
           "tableFrom": "content_versions",
           "tableTo": "admin_users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -630,12 +603,8 @@
           "name": "media_assets_created_by_admin_users_id_fk",
           "tableFrom": "media_assets",
           "tableTo": "admin_users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -645,16 +614,12 @@
         "media_assets_filename_unique": {
           "name": "media_assets_filename_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "filename"
-          ]
+          "columns": ["filename"]
         },
         "media_assets_checksum_sha256_unique": {
           "name": "media_assets_checksum_sha256_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "checksum_sha256"
-          ]
+          "columns": ["checksum_sha256"]
         }
       },
       "policies": {},
@@ -728,12 +693,8 @@
           "name": "project_translations_project_id_projects_id_fk",
           "tableFrom": "project_translations",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -741,10 +702,7 @@
       "compositePrimaryKeys": {
         "project_translations_project_id_locale_pk": {
           "name": "project_translations_project_id_locale_pk",
-          "columns": [
-            "project_id",
-            "locale"
-          ]
+          "columns": ["project_id", "locale"]
         }
       },
       "uniqueConstraints": {},
@@ -877,12 +835,8 @@
           "name": "projects_image_id_media_assets_id_fk",
           "tableFrom": "projects",
           "tableTo": "media_assets",
-          "columnsFrom": [
-            "image_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["image_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -892,9 +846,7 @@
         "projects_slug_unique": {
           "name": "projects_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -962,12 +914,8 @@
           "name": "site_profile_updated_by_admin_users_id_fk",
           "tableFrom": "site_profile",
           "tableTo": "admin_users",
-          "columnsFrom": [
-            "updated_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["updated_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1025,12 +973,8 @@
           "name": "skill_translations_skill_id_skills_id_fk",
           "tableFrom": "skill_translations",
           "tableTo": "skills",
-          "columnsFrom": [
-            "skill_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["skill_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1038,10 +982,7 @@
       "compositePrimaryKeys": {
         "skill_translations_skill_id_locale_pk": {
           "name": "skill_translations_skill_id_locale_pk",
-          "columns": [
-            "skill_id",
-            "locale"
-          ]
+          "columns": ["skill_id", "locale"]
         }
       },
       "uniqueConstraints": {},
@@ -1228,10 +1169,7 @@
     "public.locale": {
       "name": "locale",
       "schema": "public",
-      "values": [
-        "en",
-        "de"
-      ]
+      "values": ["en", "de"]
     }
   },
   "schemas": {},

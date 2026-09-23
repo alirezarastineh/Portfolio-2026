@@ -37,10 +37,10 @@ function targetsProdTunnel(url: string | undefined): boolean {
  * while the app's own pool can use a role limited to reading and writing rows
  * — see deploy/hetzner/create-app-role.sql. Unset, both use DATABASE_URL.
  */
-export async function runMigrations(): Promise<void> {
+export async function runMigrations(): Promise<boolean> {
   if (process.env.RUN_MIGRATIONS === "false") {
     console.log("[db] RUN_MIGRATIONS=false — skipping migrations");
-    return;
+    return false;
   }
 
   const migrationUrl = process.env.MIGRATION_DATABASE_URL?.trim() || undefined;
@@ -57,7 +57,7 @@ export async function runMigrations(): Promise<void> {
       "[db] DATABASE_URL points at the production tunnel — skipping migrations. " +
         "Set ALLOW_REMOTE_MIGRATIONS=1 and run `pnpm db:migrate` to apply them on purpose.",
     );
-    return;
+    return false;
   }
 
   // A dedicated pool for the owner role, closed afterwards so no privileged
@@ -79,6 +79,7 @@ export async function runMigrations(): Promise<void> {
     await lockClient.query("CREATE EXTENSION IF NOT EXISTS citext");
     await migrate(db, { migrationsFolder });
     console.log("[db] migrations applied");
+    return true;
   } finally {
     // Session-level lock: released on the same connection that took it.
     await lockClient.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_ID]);

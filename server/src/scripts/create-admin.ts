@@ -34,9 +34,7 @@ if (!email?.includes("@")) {
 try {
   const db = getDb();
 
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(adminUsers);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(adminUsers);
 
   if (count > 0 && !force) {
     console.error(

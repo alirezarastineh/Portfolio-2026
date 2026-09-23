@@ -23,8 +23,18 @@ describe("diffJson", () => {
 
   /** A reorder is one change, not every field of every project shifting. */
   it("keys object lists by slug, so a reorder is a single order change", () => {
-    const before = { projects: [{ slug: "a", name: "A" }, { slug: "b", name: "B" }] };
-    const after = { projects: [{ slug: "b", name: "B" }, { slug: "a", name: "A" }] };
+    const before = {
+      projects: [
+        { slug: "a", name: "A" },
+        { slug: "b", name: "B" },
+      ],
+    };
+    const after = {
+      projects: [
+        { slug: "b", name: "B" },
+        { slug: "a", name: "A" },
+      ],
+    };
 
     expect(diffJson(before, after)).toEqual([
       { path: "projects (order)", kind: "changed", before: "a, b", after: "b, a" },

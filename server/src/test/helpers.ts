@@ -24,10 +24,7 @@ export async function resetDb(): Promise<void> {
   invalidateContentCache();
 }
 
-export async function createAdmin(
-  email = ADMIN_EMAIL,
-  password = ADMIN_PASSWORD,
-): Promise<string> {
+export async function createAdmin(email = ADMIN_EMAIL, password = ADMIN_PASSWORD): Promise<string> {
   const [row] = await getDb()
     .insert(adminUsers)
     .values({ email, passwordHash: await hashPassword(password) })

@@ -5,7 +5,7 @@ import { TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { adminApiInterceptor } from "./admin-api.interceptor";
+import { adminApiInterceptor, isAdminCall } from "./admin-api.interceptor";
 import { AdminSessionService } from "./admin-session.service";
 
 const API = "https://api.test";
@@ -80,6 +80,16 @@ describe("adminApiInterceptor", () => {
 
     expect(session.clear).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  /** Regression: the old pattern matched `/auth` anywhere, so a post slug `auth` counted. */
+  it("recognises admin calls by the start of the path only", () => {
+    expect(isAdminCall(`${API}/admin/status`)).toBe(true);
+    expect(isAdminCall(`${API}/auth/me`)).toBe(true);
+    expect(isAdminCall(`${API}/admin`)).toBe(true);
+    expect(isAdminCall("/api/v1/content/en/posts/auth")).toBe(false);
+    expect(isAdminCall("/api/v2/content/de/posts/admin")).toBe(false);
+    expect(isAdminCall(`${API}/administrator`)).toBe(false);
   });
 
   it("sends credentials on admin calls only", () => {

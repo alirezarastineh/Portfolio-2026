@@ -9,13 +9,26 @@ import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmSwitch } from "@spartan-ng/helm/switch";
 
 import { AdminApiService, type SocialInput, type SocialRow } from "../../admin/admin-api.service";
+import { ICON_KEYS } from "../../icons/icon-registry";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import {
   SortableListComponent,
   SortableRowDirective,
 } from "../../admin/components/sortable-list.component";
 
-const ICONS: SocialInput["icon"][] = ["github", "linkedin", "mail", "twitter"];
+/** Any registry key; the link icons first. */
+const ICONS = [
+  "github",
+  "linkedin",
+  "x",
+  "mail",
+  "website",
+  "rss",
+  "mastodon",
+  ...ICON_KEYS.filter(
+    (k) => !["github", "linkedin", "x", "mail", "website", "rss", "mastodon"].includes(k),
+  ),
+];
 
 @Component({
   selector: "app-admin-socials",
@@ -58,7 +71,9 @@ const ICONS: SocialInput["icon"][] = ["github", "linkedin", "mail", "twitter"];
           (reordered)="onReorder($event)"
         >
           <ng-template appSortableRow let-row>
-            <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto_auto_auto] sm:items-center">
+            <div
+              class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto_auto_auto] sm:items-center"
+            >
               <input
                 hlmInput
                 class="h-9"

@@ -93,15 +93,7 @@
       "id": "devops",
       "icon": "container",
       "span": "sm",
-      "items": [
-        "Docker",
-        "GitHub Actions",
-        "Caddy",
-        "Hetzner",
-        "Linux",
-        "Nginx",
-        "CI/CD"
-      ],
+      "items": ["Docker", "GitHub Actions", "Caddy", "Hetzner", "Linux", "Nginx", "CI/CD"],
       "position": 2,
       "translations": {
         "en": {
@@ -120,14 +112,7 @@
       "id": "data-pipelines",
       "icon": "database",
       "span": "sm",
-      "items": [
-        "PostgreSQL",
-        "Redis",
-        "Drizzle ORM",
-        "Prisma",
-        "Kafka",
-        "BullMQ"
-      ],
+      "items": ["PostgreSQL", "Redis", "Drizzle ORM", "Prisma", "Kafka", "BullMQ"],
       "position": 3,
       "translations": {
         "en": {
@@ -147,12 +132,7 @@
     {
       "slug": "project-one",
       "imagePath": "/projects/project-one.svg",
-      "stack": [
-        "TypeScript",
-        "Python",
-        "FastAPI",
-        "Postgres"
-      ],
+      "stack": ["TypeScript", "Python", "FastAPI", "Postgres"],
       "linkLive": "",
       "linkRepo": "",
       "linkCaseStudy": "",
@@ -189,11 +169,7 @@
     {
       "slug": "project-two",
       "imagePath": "/projects/project-two.svg",
-      "stack": [
-        "Angular",
-        "Node.js",
-        "Redis"
-      ],
+      "stack": ["Angular", "Node.js", "Redis"],
       "linkLive": "",
       "linkRepo": "",
       "linkCaseStudy": "",
@@ -206,11 +182,7 @@
           "problem": "TODO: Business problem.",
           "aiArchitecture": "TODO: AI architecture.",
           "fullStackInfra": "TODO: Infrastructure.",
-          "outcomes": [
-            "TODO: Metric #1",
-            "TODO: Metric #2",
-            "TODO: Metric #3"
-          ]
+          "outcomes": ["TODO: Metric #1", "TODO: Metric #2", "TODO: Metric #3"]
         },
         "de": {
           "name": "TODO: Project Two",
@@ -219,22 +191,14 @@
           "problem": "TODO: Business problem.",
           "aiArchitecture": "TODO: AI architecture.",
           "fullStackInfra": "TODO: Infrastructure.",
-          "outcomes": [
-            "TODO: Metric #1",
-            "TODO: Metric #2",
-            "TODO: Metric #3"
-          ]
+          "outcomes": ["TODO: Metric #1", "TODO: Metric #2", "TODO: Metric #3"]
         }
       }
     },
     {
       "slug": "project-three",
       "imagePath": "/projects/project-three.svg",
-      "stack": [
-        "React",
-        "PyTorch",
-        "Docker"
-      ],
+      "stack": ["React", "PyTorch", "Docker"],
       "linkLive": "",
       "linkRepo": "",
       "linkCaseStudy": "",
@@ -247,11 +211,7 @@
           "problem": "TODO: Business problem.",
           "aiArchitecture": "TODO: AI architecture.",
           "fullStackInfra": "TODO: Infrastructure.",
-          "outcomes": [
-            "TODO: Metric #1",
-            "TODO: Metric #2",
-            "TODO: Metric #3"
-          ]
+          "outcomes": ["TODO: Metric #1", "TODO: Metric #2", "TODO: Metric #3"]
         },
         "de": {
           "name": "TODO: Project Three",
@@ -260,11 +220,7 @@
           "problem": "TODO: Business problem.",
           "aiArchitecture": "TODO: AI architecture.",
           "fullStackInfra": "TODO: Infrastructure.",
-          "outcomes": [
-            "TODO: Metric #1",
-            "TODO: Metric #2",
-            "TODO: Metric #3"
-          ]
+          "outcomes": ["TODO: Metric #1", "TODO: Metric #2", "TODO: Metric #3"]
         }
       }
     }

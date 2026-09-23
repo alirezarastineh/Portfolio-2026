@@ -12,9 +12,14 @@ export interface DiffEntry {
 function identityKeys(items: unknown[]): string[] | null {
   for (const field of ["slug", "id"]) {
     const keys = items.map((item) =>
-      item !== null && typeof item === "object" ? (item as Record<string, unknown>)[field] : undefined,
+      item !== null && typeof item === "object"
+        ? (item as Record<string, unknown>)[field]
+        : undefined,
     );
-    if (keys.every((k): k is string => typeof k === "string") && new Set(keys).size === keys.length) {
+    if (
+      keys.every((k): k is string => typeof k === "string") &&
+      new Set(keys).size === keys.length
+    ) {
       return keys;
     }
   }

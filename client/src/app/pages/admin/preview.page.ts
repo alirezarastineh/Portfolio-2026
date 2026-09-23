@@ -37,8 +37,7 @@ import type { AppContent, Locale } from "../../content/schema";
         <div>
           <h1 class="m-0 font-mono text-2xl tracking-tight">Preview draft</h1>
           <p class="mt-1 text-sm text-muted-foreground">
-            What publishing would produce right now. Visitors still see the last
-            published version.
+            What publishing would produce right now. Visitors still see the last published version.
           </p>
         </div>
         <div class="flex items-center gap-3">
@@ -65,16 +64,26 @@ import type { AppContent, Locale } from "../../content/schema";
                 </div>
 
                 <div>
-                  <p class="m-0 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">Hero</p>
-                  <p class="m-0 mt-1 text-lg font-medium leading-snug">{{ c.ui.profile.heroHeadline }}</p>
-                  <p class="m-0 mt-1 text-sm text-muted-foreground">{{ c.ui.profile.heroSubheadline }}</p>
+                  <p
+                    class="m-0 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
+                  >
+                    Hero
+                  </p>
+                  <p class="m-0 mt-1 text-lg font-medium leading-snug">
+                    {{ c.ui.profile.heroHeadline }}
+                  </p>
+                  <p class="m-0 mt-1 text-sm text-muted-foreground">
+                    {{ c.ui.profile.heroSubheadline }}
+                  </p>
                   <p class="m-0 mt-1 font-mono text-[0.72rem] text-muted-foreground">
                     {{ c.identity.handle }} · {{ c.ui.profile.role }}
                   </p>
                 </div>
 
                 <div>
-                  <p class="m-0 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
+                  <p
+                    class="m-0 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
+                  >
                     {{ c.ui.about.heading }}
                   </p>
                   <p class="m-0 mt-1 line-clamp-4 text-sm text-muted-foreground">
@@ -83,7 +92,9 @@ import type { AppContent, Locale } from "../../content/schema";
                 </div>
 
                 <div>
-                  <p class="m-0 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
+                  <p
+                    class="m-0 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
+                  >
                     Skills ({{ c.skills.length }})
                   </p>
                   <ul class="m-0 mt-1 flex list-none flex-wrap gap-1.5 p-0" role="list">
@@ -96,7 +107,9 @@ import type { AppContent, Locale } from "../../content/schema";
                 </div>
 
                 <div>
-                  <p class="m-0 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
+                  <p
+                    class="m-0 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
+                  >
                     Projects ({{ c.projects.length }})
                   </p>
                   <ul class="m-0 mt-1 flex list-none flex-col gap-2 p-0" role="list">
@@ -110,9 +123,43 @@ import type { AppContent, Locale } from "../../content/schema";
                 </div>
 
                 <div>
-                  <p class="m-0 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">SEO</p>
+                  <p
+                    class="m-0 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
+                  >
+                    Experience ({{ c.experiences.length }})
+                  </p>
+                  <ul class="m-0 mt-1 flex list-none flex-col gap-1 p-0" role="list">
+                    @for (e of c.experiences; track e.id) {
+                      <li class="font-mono text-[0.75rem]">{{ e.title }} · {{ e.org.name }}</li>
+                    }
+                  </ul>
+                </div>
+
+                <div>
+                  <p
+                    class="m-0 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
+                  >
+                    Posts live ({{ c.posts.length }})
+                  </p>
+                  <ul class="m-0 mt-1 flex list-none flex-col gap-1 p-0" role="list">
+                    @for (post of c.posts; track post.slug) {
+                      <li class="font-mono text-[0.75rem]">
+                        {{ post.title }} · {{ post.readingMinutes }} min
+                      </li>
+                    }
+                  </ul>
+                </div>
+
+                <div>
+                  <p
+                    class="m-0 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
+                  >
+                    SEO
+                  </p>
                   <p class="m-0 mt-1 text-sm">{{ c.seo.title }}</p>
-                  <p class="m-0 mt-0.5 text-[0.75rem] text-muted-foreground">{{ c.seo.description }}</p>
+                  <p class="m-0 mt-0.5 text-[0.75rem] text-muted-foreground">
+                    {{ c.seo.description }}
+                  </p>
                 </div>
               </section>
             }

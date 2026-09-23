@@ -14,6 +14,7 @@ import { HlmTextarea } from "@spartan-ng/helm/textarea";
 import { unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 
 import { AdminApiService, type SkillInput, type SkillRow } from "../../admin/admin-api.service";
+import { ICON_KEYS } from "../../icons/icon-registry";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import { LocaleToggleComponent } from "../../admin/components/editor-chrome.component";
 import type { LocaleView } from "../../admin/components/field-pair.component";
@@ -28,7 +29,14 @@ import {
 } from "../../admin/components/ui-group-editor.component";
 import type { Locale } from "../../content/schema";
 
-const ICONS: SkillInput["icon"][] = ["cpu", "brain-circuit", "container", "database"];
+/** Any registry key; the capability icons first. */
+const ICONS = [
+  "cpu",
+  "brain-circuit",
+  "container",
+  "database",
+  ...ICON_KEYS.filter((k) => !["cpu", "brain-circuit", "container", "database"].includes(k)),
+];
 const SPANS: SkillInput["span"][] = ["lg", "tall", "sm"];
 
 const HEADING_FIELDS: UiFieldDef[] = [
@@ -98,7 +106,9 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           <ng-template appSortableRow let-row>
             <div class="flex flex-col gap-4">
               <div class="flex flex-wrap items-center gap-3">
-                <code class="rounded bg-muted px-2 py-1 font-mono text-[0.72rem]">{{ row.id }}</code>
+                <code class="rounded bg-muted px-2 py-1 font-mono text-[0.72rem]">{{
+                  row.id
+                }}</code>
                 <select
                   class="h-8 rounded-md border border-border bg-card px-2 font-mono text-[0.75rem]"
                   [ngModel]="row.icon"
@@ -119,7 +129,9 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                     <option [value]="span">{{ span }}</option>
                   }
                 </select>
-                <label class="flex items-center gap-2 font-mono text-[0.72rem] text-muted-foreground">
+                <label
+                  class="flex items-center gap-2 font-mono text-[0.72rem] text-muted-foreground"
+                >
                   <hlm-switch
                     [checked]="row.isVisible"
                     (checkedChange)="patch(row.id, { isVisible: $event })"
@@ -141,7 +153,9 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
               <div [class]="view() === 'both' ? 'grid gap-4 lg:grid-cols-2' : 'grid gap-4'">
                 @for (locale of visibleLocales(); track locale) {
                   <div class="flex flex-col gap-2 rounded-lg border border-border/60 p-3">
-                    <span class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
+                    <span
+                      class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
+                    >
                       {{ locale }}
                     </span>
                     <input

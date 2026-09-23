@@ -2,6 +2,13 @@ import { defineConfig, loadEnv } from "vite";
 import analog from "@analogjs/platform";
 import tailwindcss from "@tailwindcss/vite";
 
+import { localeRedirect } from "./src/app/content/locale";
+
+const PUBLIC_PAGE_CACHE = {
+  "cache-control": "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
+};
+const NO_STORE = { "cache-control": "no-store" };
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -81,12 +88,40 @@ export default defineConfig(({ mode }) => {
         "@ng-icons/core",
         "@ng-icons/lucide",
         "@tiptap/core",
+        "@tiptap/extension-image",
         "@tiptap/starter-kit",
         "embla-carousel-angular",
       ],
     },
     define: { "process.env": publicEnv },
     plugins: [
+      {
+        // Production runs src/server/middleware/locale.ts through Nitro. In
+        // dev, Analog finds that file by globbing a path that still has
+        // Windows backslashes, which matches nothing — so on Windows `/` would
+        // not redirect locally. Same function, dev server only.
+        name: "locale-redirect-dev",
+        apply: "serve",
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            const accept = req.headers["accept-language"];
+            const redirect = localeRedirect(
+              req.url ?? "/",
+              req.headers.cookie,
+              Array.isArray(accept) ? accept.join(",") : accept,
+            );
+            if (!redirect) return next();
+
+            res.statusCode = redirect.status;
+            res.setHeader("Location", redirect.location);
+            if (redirect.negotiated) {
+              res.setHeader("Vary", "Cookie, Accept-Language");
+              res.setHeader("Cache-Control", "private, no-store");
+            }
+            res.end();
+          });
+        },
+      },
       {
         name: "ignore-chrome-devtools",
         configureServer(server) {
@@ -104,12 +139,34 @@ export default defineConfig(({ mode }) => {
       // Nitro defaults to prerendering `/` at build time and bakes the content
       // into dist/analog/public/index.html — every CMS edit would then be
       // invisible in production until the next rebuild.
-      analog({ prerender: { routes: [] } }),
+      analog({
+        prerender: { routes: [] },
+        nitro: {
+          routeRules: {
+            // A page's HTML now depends only on its URL (no cookie picks the
+            // language), so a shared cache may keep it briefly.
+            ...Object.fromEntries(
+              ["/en", "/en/**", "/de", "/de/**"].map((path) => [
+                path,
+                { headers: PUBLIC_PAGE_CACHE },
+              ]),
+            ),
+            "/admin": { headers: NO_STORE },
+            "/admin/**": { headers: NO_STORE },
+          },
+        },
+      }),
       tailwindcss(),
     ],
     server: {
       proxy: {
         "/contact": {
+          target: devApiTarget,
+          changeOrigin: true,
+        },
+        // Published content uses relative /media/... paths; in production
+        // Caddy proxies them to the API, here Vite does.
+        "/media": {
           target: devApiTarget,
           changeOrigin: true,
         },

@@ -30,9 +30,7 @@ export function clientIp(c: Context): string {
   // Only Caddy can reach the container (ports bind to 127.0.0.1), so the
   // forwarded headers are trustworthy here — same assumption contact.ts makes.
   return (
-    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
-    c.req.header("x-real-ip") ??
-    "unknown"
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("x-real-ip") ?? "unknown"
   );
 }
 

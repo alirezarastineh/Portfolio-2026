@@ -18,8 +18,8 @@ import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
 import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
-import { HlmSheetImports } from "@spartan-ng/helm/sheet";
 import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
+import { HlmSwitch } from "@spartan-ng/helm/switch";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
 import {
@@ -28,38 +28,84 @@ import {
   type ProjectRow,
   type ProjectTranslation,
 } from "../../../admin/admin-api.service";
+import type { MetricInput } from "../../../admin/admin-schema";
 import {
   LocaleToggleComponent,
   SaveBarComponent,
 } from "../../../admin/components/editor-chrome.component";
 import type { LocaleView } from "../../../admin/components/field-pair.component";
-import { MediaPickerComponent } from "../../../admin/components/media-picker.component";
+import {
+  GalleryEditorComponent,
+  type GalleryItem,
+} from "../../../admin/components/gallery-editor.component";
+import { MediaFieldComponent } from "../../../admin/components/media-field.component";
+import { MetricsEditorComponent } from "../../../admin/components/metrics-editor.component";
 import { RichTextComponent } from "../../../admin/components/rich-text.component";
 import { StringListComponent } from "../../../admin/components/string-list.component";
-import {
-  UnsavedChangesService,
-  unsavedChangesGuard,
-} from "../../../admin/unsaved-changes.service";
+import { UnsavedChangesService, unsavedChangesGuard } from "../../../admin/unsaved-changes.service";
 import type { Locale } from "../../../content/schema";
 
+type TextKey =
+  | "name"
+  | "descriptor"
+  | "hook"
+  | "role"
+  | "categoryLabel"
+  | "seoDescription"
+  | "problem"
+  | "aiArchitecture"
+  | "fullStackInfra";
+
 interface TextFieldDef {
-  key: keyof Omit<ProjectTranslation, "outcomes">;
+  key: TextKey;
   label: string;
   multiline?: boolean;
   /** Rendered with the Tiptap editor and stored as sanitized HTML. */
   rich?: boolean;
   rows?: number;
   hint?: string;
+  maxLength?: number;
 }
 
-const TEXT_FIELDS: TextFieldDef[] = [
-  { key: "name", label: "Name" },
-  { key: "descriptor", label: "Descriptor", hint: "Short uppercase eyebrow above the title." },
-  { key: "hook", label: "Hook", multiline: true, rows: 2, hint: "One sentence: what it does, for whom." },
+const CARD_FIELDS: TextFieldDef[] = [
+  { key: "name", label: "Name", maxLength: 160 },
+  {
+    key: "descriptor",
+    label: "Descriptor",
+    hint: "Short uppercase eyebrow above the title.",
+    maxLength: 200,
+  },
+  {
+    key: "hook",
+    label: "Hook",
+    multiline: true,
+    rows: 2,
+    hint: "One sentence: what it does, for whom.",
+    maxLength: 600,
+  },
+  { key: "role", label: "Your role", hint: "e.g. Lead engineer · team of 4", maxLength: 160 },
+  {
+    key: "categoryLabel",
+    label: "Category label",
+    hint: "How the category key reads in this language.",
+    maxLength: 80,
+  },
   { key: "problem", label: "Problem", rich: true },
   { key: "aiArchitecture", label: "AI architecture", rich: true },
   { key: "fullStackInfra", label: "Full-stack & infrastructure", rich: true },
+  {
+    key: "seoDescription",
+    label: "Search description",
+    multiline: true,
+    rows: 2,
+    hint: "For the case-study page; the hook is used when empty. About 150 characters.",
+    maxLength: 300,
+  },
 ];
+
+function filledMetrics(metrics: MetricInput[]): MetricInput[] {
+  return metrics.filter((m) => m.value.trim() !== "" && m.label.trim() !== "");
+}
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
@@ -68,16 +114,18 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule,
+    GalleryEditorComponent,
     HlmButton,
     HlmField,
     HlmFieldLabel,
     HlmInput,
     HlmSeparator,
-    HlmSheetImports,
     HlmSkeleton,
+    HlmSwitch,
     HlmTextarea,
     LocaleToggleComponent,
-    MediaPickerComponent,
+    MediaFieldComponent,
+    MetricsEditorComponent,
     NgIcon,
     RichTextComponent,
     RouterLink,
@@ -111,41 +159,67 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
         <section class="grid gap-4 sm:grid-cols-2">
           <div hlmField>
             <label hlmFieldLabel for="slug">Slug</label>
-            <input hlmInput id="slug" [ngModel]="p.slug" (ngModelChange)="patch({ slug: $event })" />
+            <input
+              hlmInput
+              id="slug"
+              [ngModel]="p.slug"
+              (ngModelChange)="patch({ slug: $event })"
+            />
           </div>
           <div hlmField>
-            <label hlmFieldLabel for="imagePath">Image</label>
-            <div class="flex items-center gap-3">
-              @if (p.imagePath) {
-                <img
-                  [src]="previewUrl(p.imagePath)"
-                  alt=""
-                  class="h-12 w-20 shrink-0 rounded border border-border object-cover"
-                />
-              }
-              <input
-                hlmInput
-                id="imagePath"
-                class="flex-1"
-                [ngModel]="p.imagePath"
-                (ngModelChange)="patch({ imagePath: $event, imageId: null })"
-                placeholder="/projects/example.svg"
-              />
-              <button hlmBtn variant="outline" size="sm" type="button" (click)="togglePicker()">
-                Browse
-              </button>
-            </div>
+            <label hlmFieldLabel for="category">Category key</label>
+            <input
+              hlmInput
+              id="category"
+              placeholder="ai-platform"
+              [ngModel]="p.category"
+              (ngModelChange)="patch({ category: $event })"
+            />
+          </div>
+          <div hlmField>
+            <label hlmFieldLabel for="periodStart">Started</label>
+            <input
+              hlmInput
+              id="periodStart"
+              type="date"
+              [ngModel]="p.periodStart ?? ''"
+              (ngModelChange)="patch({ periodStart: $event || null })"
+            />
+          </div>
+          <div hlmField>
+            <label hlmFieldLabel for="periodEnd">Ended</label>
+            <input
+              hlmInput
+              id="periodEnd"
+              type="date"
+              [ngModel]="p.periodEnd ?? ''"
+              (ngModelChange)="patch({ periodEnd: $event || null })"
+              aria-describedby="periodEnd-hint"
+            />
+            <span id="periodEnd-hint" class="text-[0.72rem] text-muted-foreground"
+              >Empty = ongoing.</span
+            >
           </div>
           <div hlmField>
             <label hlmFieldLabel for="linkLive">Live URL</label>
-            <input hlmInput id="linkLive" [ngModel]="p.linkLive" (ngModelChange)="patch({ linkLive: $event })" />
+            <input
+              hlmInput
+              id="linkLive"
+              [ngModel]="p.linkLive"
+              (ngModelChange)="patch({ linkLive: $event })"
+            />
           </div>
           <div hlmField>
             <label hlmFieldLabel for="linkRepo">Repository URL</label>
-            <input hlmInput id="linkRepo" [ngModel]="p.linkRepo" (ngModelChange)="patch({ linkRepo: $event })" />
+            <input
+              hlmInput
+              id="linkRepo"
+              [ngModel]="p.linkRepo"
+              (ngModelChange)="patch({ linkRepo: $event })"
+            />
           </div>
           <div hlmField>
-            <label hlmFieldLabel for="linkCaseStudy">Case study URL</label>
+            <label hlmFieldLabel for="linkCaseStudy">External case study URL</label>
             <input
               hlmInput
               id="linkCaseStudy"
@@ -153,70 +227,90 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
               (ngModelChange)="patch({ linkCaseStudy: $event })"
             />
           </div>
+          <label class="flex items-center gap-3 self-end pb-2 font-mono text-[0.8rem]">
+            <hlm-switch [checked]="p.featured" (checkedChange)="patch({ featured: $event })" />
+            <span>Featured on the home page</span>
+          </label>
         </section>
 
-        <!-- A side sheet keeps the form in view while choosing, instead of
-             pushing every field below the fold with an inline panel. -->
-        <hlm-sheet
-          side="right"
-          [state]="pickerOpen() ? 'open' : 'closed'"
-          (stateChanged)="pickerOpen.set($event === 'open')"
-        >
-          <hlm-sheet-content *hlmSheetPortal="let ctx" class="w-full overflow-y-auto sm:max-w-2xl">
-            <hlm-sheet-header>
-              <h2 hlmSheetTitle>Choose an image</h2>
-              <p hlmSheetDescription>Upload a new one or pick from the library.</p>
-            </hlm-sheet-header>
-            <div class="px-4 pb-6">
-              <app-media-picker [selected]="p.imagePath" (chosen)="chooseImage($event)" />
-            </div>
-          </hlm-sheet-content>
-        </hlm-sheet>
-
-        <app-string-list
-          label="Tech stack"
-          singular="technology"
-          emptyText="No stack entries yet."
-          [max]="40"
-          [value]="p.stack"
-          (valueChange)="patch({ stack: $event })"
+        <app-media-field
+          id="cover"
+          label="Cover image"
+          hint="Shown on the card and at the top of the case study."
+          [path]="p.coverPath"
+          (chosen)="chooseCover($event)"
         />
+        @if (!p.coverId) {
+          <div hlmField>
+            <label hlmFieldLabel for="imagePath">Placeholder path (legacy)</label>
+            <input
+              hlmInput
+              id="imagePath"
+              placeholder="/projects/example.svg"
+              [ngModel]="p.imagePath"
+              (ngModelChange)="patch({ imagePath: $event })"
+            />
+          </div>
+        }
+
+        <div class="grid gap-6 sm:grid-cols-2">
+          <app-string-list
+            label="Tech stack"
+            singular="technology"
+            emptyText="No stack entries yet."
+            [max]="40"
+            [value]="p.stack"
+            (valueChange)="patch({ stack: $event })"
+          />
+          <app-string-list
+            label="Tags"
+            singular="tag"
+            emptyText="No tags yet."
+            [max]="20"
+            [value]="p.tags"
+            (valueChange)="patch({ tags: $event })"
+          />
+        </div>
 
         <hlm-separator />
 
-        @for (field of textFields; track field.key) {
+        @for (field of cardFields; track field.key) {
           <div class="flex flex-col gap-2">
             <span class="font-mono text-[0.8rem]">{{ field.label }}</span>
             @if (field.hint) {
               <p class="m-0 text-[0.75rem] text-muted-foreground">{{ field.hint }}</p>
             }
-            <div [class]="view() === 'both' ? 'grid gap-3 lg:grid-cols-2' : 'grid gap-3'">
+            <div [class]="columns()">
               @for (locale of visibleLocales(); track locale) {
                 <div class="flex flex-col gap-1">
                   @if (view() === "both") {
-                    <span class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
+                    <span
+                      class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
+                    >
                       {{ locale }}
                     </span>
                   }
                   @if (field.rich) {
                     <app-rich-text
                       [ngModel]="p.translations[locale][field.key]"
-                      (ngModelChange)="patchTranslationField(locale, field.key, $event)"
+                      (ngModelChange)="patchText(locale, field.key, $event)"
                       [label]="field.label + ' (' + locale + ')'"
                     />
                   } @else if (field.multiline) {
                     <textarea
                       hlmTextarea
                       [rows]="field.rows ?? 3"
+                      [attr.maxlength]="field.maxLength ?? null"
                       [ngModel]="p.translations[locale][field.key]"
-                      (ngModelChange)="patchTranslationField(locale, field.key, $event)"
+                      (ngModelChange)="patchText(locale, field.key, $event)"
                       [attr.aria-label]="field.label + ' (' + locale + ')'"
                     ></textarea>
                   } @else {
                     <input
                       hlmInput
+                      [attr.maxlength]="field.maxLength ?? null"
                       [ngModel]="p.translations[locale][field.key]"
-                      (ngModelChange)="patchTranslationField(locale, field.key, $event)"
+                      (ngModelChange)="patchText(locale, field.key, $event)"
                       [attr.aria-label]="field.label + ' (' + locale + ')'"
                     />
                   }
@@ -227,7 +321,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           <hlm-separator />
         }
 
-        <div [class]="view() === 'both' ? 'grid gap-4 lg:grid-cols-2' : 'grid gap-4'">
+        <div [class]="columns()">
           @for (locale of visibleLocales(); track locale) {
             <app-string-list
               [label]="'Outcomes (' + locale + ')'"
@@ -240,6 +334,53 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           }
         </div>
 
+        <hlm-separator />
+
+        <div [class]="columns()">
+          @for (locale of visibleLocales(); track locale) {
+            <app-metrics-editor
+              [label]="'Metrics (' + locale + ')'"
+              [value]="p.translations[locale].metrics"
+              (valueChange)="patchMetrics(locale, $event)"
+            />
+          }
+        </div>
+
+        <hlm-separator />
+
+        <section class="flex flex-col gap-3">
+          <div>
+            <h2 class="m-0 font-mono text-sm uppercase tracking-[0.2em] text-muted-foreground">
+              Case study
+            </h2>
+            <p class="m-0 mt-1 text-[0.78rem] text-muted-foreground">
+              The long read at /work/{{ p.slug }}. Empty in a language = no case-study page in that
+              language.
+            </p>
+          </div>
+          @for (locale of visibleLocales(); track locale) {
+            <div class="flex flex-col gap-1">
+              @if (view() === "both") {
+                <span
+                  class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
+                >
+                  {{ locale }}
+                </span>
+              }
+              <app-rich-text
+                mode="long"
+                [ngModel]="p.translations[locale].body"
+                (ngModelChange)="patchText(locale, 'body', $event)"
+                [label]="'Case study (' + locale + ')'"
+              />
+            </div>
+          }
+        </section>
+
+        <hlm-separator />
+
+        <app-gallery-editor [value]="gallery()" (valueChange)="patchGallery($event)" />
+
         <app-save-bar [dirty]="dirty()" [saving]="saving()" (save)="save()" (discard)="discard()" />
       }
     </div>
@@ -251,7 +392,7 @@ export default class AdminProjectEditorPage implements OnInit {
   private readonly router = inject(Router);
   private readonly unsaved = inject(UnsavedChangesService);
 
-  protected readonly textFields = TEXT_FIELDS;
+  protected readonly cardFields = CARD_FIELDS;
   protected readonly view = signal<LocaleView>("both");
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
@@ -265,6 +406,11 @@ export default class AdminProjectEditorPage implements OnInit {
     const current = this.project();
     return current !== null && JSON.stringify(current) !== JSON.stringify(this.pristine);
   });
+
+  protected readonly gallery = computed<GalleryItem[]>(() => this.project()?.gallery ?? []);
+  protected readonly columns = computed(() =>
+    this.view() === "both" ? "grid gap-3 lg:grid-cols-2" : "grid gap-3",
+  );
 
   constructor() {
     effect(() => this.unsaved.set("project", this.dirty()));
@@ -281,34 +427,24 @@ export default class AdminProjectEditorPage implements OnInit {
 
   private async load(): Promise<void> {
     const slug = this.route.snapshot.paramMap.get("slug");
-    const result = await this.api.listProjects();
+    const list = await this.api.listProjects();
+    const id = list.ok ? list.data.projects.find((p) => p.slug === slug)?.id : undefined;
+    const result = id ? await this.api.getProject(id) : null;
     this.loading.set(false);
 
-    if (!result.ok) {
-      toast.error("Could not load project", { description: result.error });
+    if (!list.ok || (result && !result.ok)) {
+      toast.error("Could not load project", { description: list.ok ? "" : list.error });
       return;
     }
 
-    const found = result.data.projects.find((p) => p.slug === slug) ?? null;
+    const found = result?.ok ? result.data.project : null;
     this.project.set(found ? structuredClone(found) : null);
     this.pristine = found ? structuredClone(found) : null;
     this.revision.update((v) => v + 1);
   }
 
-  protected readonly pickerOpen = signal(false);
-
-  protected togglePicker(): void {
-    this.pickerOpen.set(true);
-  }
-
-  /** Uploaded paths are relative; prefix them so the admin can preview them. */
-  protected previewUrl(path: string): string {
-    return path.startsWith("/media/") ? this.api.baseUrl + path : path;
-  }
-
-  protected chooseImage(asset: MediaAsset): void {
-    this.patch({ imageId: asset.id, imagePath: asset.path });
-    this.pickerOpen.set(false);
+  protected chooseCover(asset: MediaAsset | null): void {
+    this.patch({ coverId: asset?.id ?? null, coverPath: asset?.path ?? null });
   }
 
   protected patch(change: Partial<ProjectRow>): void {
@@ -316,14 +452,18 @@ export default class AdminProjectEditorPage implements OnInit {
     this.revision.update((v) => v + 1);
   }
 
+  protected patchGallery(gallery: GalleryItem[]): void {
+    this.patch({ gallery });
+  }
+
   /** Angular templates cannot express a computed property key, so the field
    * name arrives as its own argument. */
-  protected patchTranslationField(
-    locale: Locale,
-    key: TextFieldDef["key"],
-    value: string,
-  ): void {
+  protected patchText(locale: Locale, key: TextKey | "body", value: string): void {
     this.patchTranslation(locale, { [key]: value } as Partial<ProjectTranslation>);
+  }
+
+  protected patchMetrics(locale: Locale, metrics: MetricInput[]): void {
+    this.patchTranslation(locale, { metrics });
   }
 
   protected patchTranslation(locale: Locale, change: Partial<ProjectTranslation>): void {
@@ -353,23 +493,34 @@ export default class AdminProjectEditorPage implements OnInit {
     this.saving.set(true);
     const result = await this.api.updateProject(current.id, {
       slug: current.slug,
-      imageId: current.imageId ?? null,
-      imagePath: current.imagePath,
-      stack: current.stack,
+      coverId: current.coverId,
+      imagePath: current.coverId ? "" : current.imagePath,
+      stack: current.stack.filter((s) => s.trim() !== ""),
       linkLive: current.linkLive,
       linkRepo: current.linkRepo,
       linkCaseStudy: current.linkCaseStudy,
       isVisible: current.isVisible,
-      translations: current.translations,
+      featured: current.featured,
+      periodStart: current.periodStart,
+      periodEnd: current.periodEnd,
+      category: current.category.trim(),
+      tags: current.tags.filter((t) => t.trim() !== ""),
+      gallery: current.gallery.map(({ mediaId, caption }) => ({ mediaId, caption })),
+      // A metric row left blank is not an error, just not a metric.
+      translations: {
+        en: { ...current.translations.en, metrics: filledMetrics(current.translations.en.metrics) },
+        de: { ...current.translations.de, metrics: filledMetrics(current.translations.de.metrics) },
+      },
     });
     this.saving.set(false);
 
     if (!result.ok) {
-      const description =
-        result.error === "duplicate_slug"
-          ? "Another project already uses that slug."
-          : result.error;
-      toast.error("Save failed", { description });
+      const descriptions: Record<string, string> = {
+        duplicate_slug: "Another project already uses that slug.",
+        invalid_input:
+          "Check the dates (the end cannot come before the start), metrics and field lengths.",
+      };
+      toast.error("Save failed", { description: descriptions[result.error] ?? result.error });
       return;
     }
 

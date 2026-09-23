@@ -82,8 +82,6 @@ describe("Router integration", () => {
     const result = await run("/admin/projects", "browser", new StubSession());
     const router = TestBed.inject(Router);
 
-    expect(router.serializeUrl(result as UrlTree)).toBe(
-      "/admin/login?r=%2Fadmin%2Fprojects",
-    );
+    expect(router.serializeUrl(result as UrlTree)).toBe("/admin/login?r=%2Fadmin%2Fprojects");
   });
 });

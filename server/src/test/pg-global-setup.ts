@@ -22,7 +22,9 @@ function freePort(): Promise<number> {
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
       server.close(() =>
-        typeof address === "object" && address ? resolve(address.port) : reject(new Error("no port")),
+        typeof address === "object" && address
+          ? resolve(address.port)
+          : reject(new Error("no port")),
       );
     });
   });
@@ -47,6 +49,9 @@ export default async function setup(project: TestProject): Promise<() => Promise
       password: "postgres",
       port,
       persistent: false,
+      // UTF-8 like production (the postgres image's default). Left to initdb,
+      // Windows picks WIN1252, which cannot store characters such as "−".
+      initdbFlags: ["--encoding=UTF8", "--locale=C"],
       onLog: () => {},
     });
 

@@ -61,6 +61,8 @@ function isAvif(b: Buffer): boolean {
 
 function pngSize(b: Buffer): { width: number | null; height: number | null } {
   // IHDR is always the first chunk: width/height are big-endian at 16 and 20.
+  // A truncated file shorter than that used to throw RangeError → a 500.
+  if (b.length < 24) return { width: null, height: null };
   return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
 }
 
@@ -126,9 +128,28 @@ function jpegSize(b: Buffer): { width: number | null; height: number | null } {
   return { width: null, height: null };
 }
 
-/** Guards `GET /media/:name` — the stored form is always `<uuid>.<ext>`. */
+export interface SniffedDocument {
+  mime: "application/pdf";
+  ext: "pdf";
+}
+
+/**
+ * PDFs, for the downloadable CV. Only the `%PDF-` header is checked: a PDF is
+ * served as a download-or-view document, never parsed or rendered here.
+ */
+export function sniffDocument(buffer: Buffer): SniffedDocument | null {
+  if (buffer.length < 8) return null;
+  return buffer.toString("ascii", 0, 5) === "%PDF-"
+    ? { mime: "application/pdf", ext: "pdf" }
+    : null;
+}
+
+/**
+ * Guards `GET /media/:name` — originals are `<uuid>.<ext>`, resized variants
+ * `<uuid>-<width>w.<webp|avif>`.
+ */
 export const MEDIA_FILENAME_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(-\d+w)?\.(png|jpe?g|webp|avif|gif)$/;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(-\d+w)?\.(png|jpe?g|webp|avif|gif|pdf)$/;
 
 export function isSafeMediaFilename(name: string): boolean {
   return MEDIA_FILENAME_PATTERN.test(name);

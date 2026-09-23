@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
 
 permissions:
@@ -66,9 +66,47 @@ jobs:
         env:
           VITE_API_BASE_URL: https://api.alirezarastineh.me
 
+  e2e:
+    name: Client — e2e, axe, Lighthouse
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # Tests run against the bundled fallback content with every request to
+      # another origin blocked, so the API URL baked in here is never reached.
+      - run: pnpm build
+        env:
+          VITE_API_BASE_URL: https://api.alirezarastineh.me
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+      # Uses the runner's preinstalled Chrome.
+      - run: pnpm lhci
+      - name: Upload reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-reports
+          path: |
+            client/playwright-report/
+            client/test-results/
+            client/.lighthouseci/
+          if-no-files-found: ignore
+          retention-days: 14
+
   docker:
     name: Docker images build
-    needs: [server, client]
+    needs: [server, client, e2e]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

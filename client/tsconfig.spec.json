@@ -9,10 +9,5 @@
     "types": ["node", "vitest/globals"]
   },
   "files": ["src/test-setup.ts"],
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.d.ts",
-    "src/**/*.json",
-    "libs/**/*.ts"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.json", "libs/**/*.ts"]
 }

@@ -9,7 +9,16 @@ import { defineConfig, globalIgnores } from "eslint/config";
 export default defineConfig([
   // Build output and caches: linting these produced ~11k findings against
   // generated code nobody edits.
-  globalIgnores(["dist/", "out-tsc/", "coverage/", ".angular/", "node_modules/"]),
+  globalIgnores([
+    "dist/",
+    "out-tsc/",
+    "coverage/",
+    ".angular/",
+    "node_modules/",
+    "playwright-report/",
+    "test-results/",
+    ".lighthouseci/",
+  ]),
   {
     files: ["**/*.{js,mjs,cjs,ts,mts,cts}"],
     plugins: { js },
@@ -48,5 +57,11 @@ export default defineConfig([
       // Font stacks live in custom properties that already end in a generic family.
       "css/font-family-fallbacks": "off",
     },
+  },
+  {
+    // Partials imported by styles.css use the theme's custom properties, which
+    // are declared there; linted on their own, every var() looks unknown.
+    files: ["src/styles/**/*.css"],
+    rules: { "css/no-invalid-properties": "off" },
   },
 ]);

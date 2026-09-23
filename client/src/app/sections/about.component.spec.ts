@@ -3,10 +3,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { signal, type Signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
+import { provideRouter } from "@angular/router";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { ContentStore } from "../content/content.store";
-import { INITIAL_LOCALE } from "../content/locale.token";
 import { appContentSchema, type AppContent, type Locale } from "../content/schema";
 import { LanguageService } from "../services/language.service";
 import { AboutSectionComponent } from "./about.component";
@@ -26,10 +26,6 @@ class StubContentStore {
   content(locale: Locale): Signal<AppContent> {
     return this.state[locale].asReadonly();
   }
-  hasResolved(): boolean {
-    return true;
-  }
-  async load(): Promise<void> {}
 }
 
 describe("AboutSectionComponent", () => {
@@ -59,19 +55,8 @@ describe("AboutSectionComponent", () => {
 
   beforeEach(() => {
     TestBed.resetTestingModule();
-    // A previous test's `setLang` persists a cookie in jsdom, and `getInitial`
-    // reads it — correct behaviour, but it would leak between tests.
-    try {
-      document.cookie = "portfolio-lang=; Path=/; Max-Age=0";
-      localStorage.clear();
-    } catch {
-      // Storage is unavailable in some environments.
-    }
     TestBed.configureTestingModule({
-      providers: [
-        { provide: ContentStore, useValue: new StubContentStore() },
-        { provide: INITIAL_LOCALE, useValue: "en" },
-      ],
+      providers: [{ provide: ContentStore, useValue: new StubContentStore() }, provideRouter([])],
     });
   });
 
@@ -90,7 +75,7 @@ describe("AboutSectionComponent", () => {
     const english = fixture.nativeElement.textContent as string;
     expect(english).toContain("Full Stack AI Software Engineer");
 
-    await language.setLang("de");
+    language.activate("de");
     fixture.detectChanges();
     await fixture.whenStable();
 
@@ -107,7 +92,7 @@ describe("AboutSectionComponent", () => {
 
     expect(fixture.nativeElement.textContent).toContain("// about");
 
-    await language.setLang("de");
+    language.activate("de");
     fixture.detectChanges();
     await fixture.whenStable();
 

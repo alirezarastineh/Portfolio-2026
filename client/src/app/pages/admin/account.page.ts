@@ -57,8 +57,7 @@ import { AdminSessionService } from "../../admin/admin-session.service";
             }
           </h2>
           <p hlmCardDescription>
-            The admin panel is reachable from the public internet. Enrol an
-            authenticator app.
+            The admin panel is reachable from the public internet. Enrol an authenticator app.
           </p>
         </div>
         <div hlmCardContent class="flex flex-col gap-4">
@@ -84,7 +83,11 @@ import { AdminSessionService } from "../../admin/admin-session.service";
               <p class="m-0 break-all font-mono text-[0.7rem] text-muted-foreground">
                 {{ otpauthUri() }}
               </p>
-              <form [formGroup]="confirmForm" (ngSubmit)="confirmTotp()" class="flex items-end gap-2">
+              <form
+                [formGroup]="confirmForm"
+                (ngSubmit)="confirmTotp()"
+                class="flex items-end gap-2"
+              >
                 <div hlmField class="flex-1">
                   <label hlmFieldLabel for="totp-code">Code from your app</label>
                   <input hlmInput id="totp-code" formControlName="code" class="font-mono" />
@@ -113,7 +116,11 @@ import { AdminSessionService } from "../../admin/admin-session.service";
           <h2 hlmCardTitle class="font-mono text-base">Change password</h2>
         </div>
         <div hlmCardContent>
-          <form [formGroup]="passwordForm" (ngSubmit)="changePassword()" class="flex flex-col gap-3">
+          <form
+            [formGroup]="passwordForm"
+            (ngSubmit)="changePassword()"
+            class="flex flex-col gap-3"
+          >
             <div hlmField>
               <label hlmFieldLabel for="current">Current password</label>
               <input hlmInput id="current" type="password" formControlName="currentPassword" />
@@ -125,7 +132,9 @@ import { AdminSessionService } from "../../admin/admin-session.service";
                 At least 12 characters. All other sessions are signed out.
               </p>
             </div>
-            <button hlmBtn type="submit" class="self-start" [disabled]="busy()">Update password</button>
+            <button hlmBtn type="submit" class="self-start" [disabled]="busy()">
+              Update password
+            </button>
           </form>
         </div>
       </section>
@@ -139,7 +148,9 @@ import { AdminSessionService } from "../../admin/admin-session.service";
             <hlm-skeleton class="h-24 w-full" />
           } @else {
             @for (row of sessions(); track row.id) {
-              <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3">
+              <div
+                class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
+              >
                 <div class="min-w-0">
                   <p class="m-0 font-mono text-[0.78rem]">
                     {{ row.ip || "unknown IP" }}
@@ -157,7 +168,13 @@ import { AdminSessionService } from "../../admin/admin-session.service";
                 }
               </div>
             }
-            <button hlmBtn variant="ghost" size="sm" class="self-start" (click)="signOutEverywhere()">
+            <button
+              hlmBtn
+              variant="ghost"
+              size="sm"
+              class="self-start"
+              (click)="signOutEverywhere()"
+            >
               Sign out everywhere
             </button>
           }
@@ -251,7 +268,8 @@ export default class AdminAccountPage implements OnInit {
 
     if (!result.ok) {
       toast.error("Could not change password", {
-        description: result.error === "invalid_credentials" ? "Current password is wrong." : result.error,
+        description:
+          result.error === "invalid_credentials" ? "Current password is wrong." : result.error,
       });
       return;
     }

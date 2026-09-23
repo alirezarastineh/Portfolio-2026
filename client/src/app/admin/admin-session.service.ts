@@ -3,7 +3,8 @@ import { computed, inject, Injectable, PLATFORM_ID, signal } from "@angular/core
 
 import { AdminApiService, type AdminUser } from "./admin-api.service";
 
-@Injectable({ providedIn: "root" })
+/** Provided by the admin route, alongside the `AdminApiService` it calls. */
+@Injectable()
 export class AdminSessionService {
   private readonly api = inject(AdminApiService);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));

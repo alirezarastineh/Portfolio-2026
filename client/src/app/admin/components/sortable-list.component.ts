@@ -66,7 +66,9 @@ export class SortableRowDirective {}
           </div>
         </li>
       } @empty {
-        <li class="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+        <li
+          class="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground"
+        >
           {{ emptyText() }}
         </li>
       }

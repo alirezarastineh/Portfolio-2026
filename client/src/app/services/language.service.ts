@@ -1,92 +1,95 @@
 import { isPlatformBrowser } from "@angular/common";
 import { computed, inject, Injectable, PLATFORM_ID, signal } from "@angular/core";
+import { toSignal } from "@angular/core/rxjs-interop";
+import { NavigationEnd, Router, type UrlTree } from "@angular/router";
+import { filter, map } from "rxjs";
 
 import { ContentStore } from "../content/content.store";
 import {
-  INITIAL_LOCALE,
-  LOCALE_COOKIE,
-  LOCALE_STORAGE_KEY,
-  isLocale,
-  parseLocaleCookie,
-} from "../content/locale.token";
-import type { AppContent, AppTranslations, Locale } from "../content/schema";
+  DEFAULT_LOCALE,
+  LOCALES,
+  localeCookie,
+  pageKey,
+  swapLocale,
+  type Locale,
+} from "../content/locale";
+import type { AppContent, AppTranslations } from "../content/schema";
 
-const COOKIE_MAX_AGE = 31_536_000; // one year
-
+/**
+ * The active language. The URL decides it: `/de/...` is German, and the
+ * `[locale]` route's resolver calls `activate()` once that locale's content has
+ * loaded. So the server render, the hydrated page and a shared link always
+ * agree, and switching language is an ordinary navigation.
+ */
 @Injectable({ providedIn: "root" })
 export class LanguageService {
-  private readonly platform = inject(PLATFORM_ID);
   private readonly store = inject(ContentStore);
-  private readonly initialLocale = inject(INITIAL_LOCALE);
-  private readonly _lang = signal<Locale>(this.getInitial());
+  private readonly router = inject(Router);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
+  private readonly _lang = signal<Locale>(DEFAULT_LOCALE);
   readonly lang = this._lang.asReadonly();
 
   /**
-   * The keystone. Every template reads copy through `lang.t().some.path`, so
-   * swapping the backing store from static imports to DB-fed signals needed no
-   * template changes at all.
+   * Structural content — socials, skills, projects, SEO, identity. Only read
+   * under the `[locale]` route, whose resolver loads it first; reading it
+   * anywhere else is a bug, and says so.
    */
-  readonly t = computed<AppTranslations>(() => this.store.content(this._lang())().ui);
+  readonly content = computed<AppContent>(() => {
+    const content = this.store.content(this._lang())();
+    if (!content) {
+      throw new Error(`[i18n] "${this._lang()}" content read before the locale route loaded it`);
+    }
+    return content;
+  });
 
-  /** Structural content — socials, skills, projects, SEO, identity. */
-  readonly content = computed<AppContent>(() => this.store.content(this._lang())());
+  /** The localized copy tree every template reads through `lang.t().some.path`. */
+  readonly t = computed<AppTranslations>(() => this.content().ui);
 
-  toggle(): void {
-    void this.setLang(this._lang() === "en" ? "de" : "en");
+  /** The current URL as a signal, so links derived from it stay current in OnPush views. */
+  private readonly url = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map(() => this.router.url),
+    ),
+    { initialValue: this.router.url },
+  );
+
+  /** The current page without its language: `/` for home, `/legal/imprint`, … */
+  readonly page = computed(() => pageKey(this.url()));
+
+  /** This page in each language — what the language switch links to. */
+  readonly alternates = computed<Record<Locale, UrlTree>>(() => {
+    const url = this.url();
+    return Object.fromEntries(
+      LOCALES.map((locale) => [locale, this.router.parseUrl(swapLocale(url, locale))]),
+    ) as Record<Locale, UrlTree>;
+  });
+
+  /** Called by the locale route's resolver once the content is loaded. */
+  activate(locale: Locale): void {
+    this._lang.set(locale);
   }
 
-  async setLang(next: Locale): Promise<void> {
-    if (next === this._lang()) return;
-
-    // Fetch before switching so the UI never flashes the other locale's
-    // fallback; the current locale stays on screen until the new one lands.
-    if (!this.store.hasResolved(next)) {
-      await this.store.load(next);
+  /**
+   * Remembers an explicit choice, so a later visit to `/` lands in the same
+   * language. The URL, not this cookie, decides what a page renders.
+   */
+  remember(locale: Locale): void {
+    if (!this.isBrowser) return;
+    try {
+      document.cookie = localeCookie(locale);
+    } catch {
+      // Cookies may be blocked; the choice then lasts as long as the URL does.
     }
-
-    this._lang.set(next);
-    this.persist(next);
   }
 
-  private persist(next: Locale): void {
-    if (!isPlatformBrowser(this.platform)) return;
-
-    try {
-      // The cookie is what SSR reads, so it is the authoritative store.
-      document.cookie = `${LOCALE_COOKIE}=${next}; Path=/; Max-Age=${COOKIE_MAX_AGE}; SameSite=Lax`;
-    } catch {
-      // Ignore cookie errors
-    }
-    try {
-      localStorage?.setItem(LOCALE_STORAGE_KEY, next);
-    } catch {
-      // Ignore storage errors
-    }
-    // `<html lang>` is handled by an effect in App, so it stays correct for
-    // server renders too rather than only after a client-side toggle.
-  }
-
-  private getInitial(): Locale {
-    // On the server this token carries the locale negotiated from the request.
-    if (!isPlatformBrowser(this.platform)) return this.initialLocale;
-
-    const fromCookie = parseLocaleCookie(
-      typeof document === "undefined" ? null : document.cookie,
-    );
-    if (fromCookie) return fromCookie;
-
-    // No cookie yet: SSR already negotiated one for this render, so trust it
-    // over localStorage to keep the server and client markup in agreement.
-    if (isLocale(this.initialLocale)) return this.initialLocale;
-
-    try {
-      const stored = localStorage?.getItem(LOCALE_STORAGE_KEY);
-      if (isLocale(stored)) return stored;
-    } catch {
-      // Ignore storage errors
-    }
-
-    return "en";
+  /**
+   * Content links such as `#projects` point at the home page's sections. With
+   * `<base href="/">` a bare fragment would resolve to `/#projects` and reload
+   * the site, so they become `/en#projects`.
+   */
+  homeHref(href: string): string {
+    return href.startsWith("#") ? `/${this._lang()}${href}` : href;
   }
 }

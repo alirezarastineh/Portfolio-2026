@@ -5,6 +5,7 @@ export interface ContactPayload {
   email: string;
   message: string;
   website?: string;
+  locale?: "en" | "de";
 }
 
 export type ContactResult = { ok: true } | { ok: false; error: string };
@@ -34,9 +35,7 @@ export class ContactService {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = (await res.json().catch(() => null)) as
-        | { ok?: boolean; error?: string }
-        | null;
+      const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
       if (!res.ok || !data?.ok) {
         return { ok: false, error: data?.error ?? "network_error" };
       }

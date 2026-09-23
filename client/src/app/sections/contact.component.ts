@@ -250,7 +250,8 @@ export class ContactSectionComponent {
 
     this.state.set("submitting");
     this.errorMsg.set("");
-    const result = await this.contact.send(parsed.data);
+    // The page language, so the inbox shows which language to reply in.
+    const result = await this.contact.send({ ...parsed.data, locale: this.lang.lang() });
     if (result.ok) {
       this.state.set("success");
     } else {

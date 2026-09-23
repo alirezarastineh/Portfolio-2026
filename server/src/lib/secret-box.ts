@@ -40,7 +40,9 @@ export function seal(plaintext: string): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  return PREFIX + [iv, ciphertext, cipher.getAuthTag()].map((b) => b.toString("base64url")).join(":");
+  return (
+    PREFIX + [iv, ciphertext, cipher.getAuthTag()].map((b) => b.toString("base64url")).join(":")
+  );
 }
 
 export function unseal(stored: string): string {

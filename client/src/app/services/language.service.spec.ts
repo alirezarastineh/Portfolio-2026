@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { signal, type Signal } from "@angular/core";
+import { Component, signal, type Signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
+import { provideRouter, Router } from "@angular/router";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { ContentStore } from "../content/content.store";
-import { INITIAL_LOCALE } from "../content/locale.token";
 import { appContentSchema, type AppContent, type Locale } from "../content/schema";
 import { LanguageService } from "./language.service";
 
@@ -19,34 +19,28 @@ function fallback(locale: Locale): AppContent {
 
 /** Stands in for the HTTP-backed store so these tests never touch the network. */
 class StubContentStore {
-  readonly state: Record<Locale, ReturnType<typeof signal<AppContent>>> = {
-    en: signal(fallback("en")),
-    de: signal(fallback("de")),
+  readonly state: Record<Locale, ReturnType<typeof signal<AppContent | null>>> = {
+    en: signal<AppContent | null>(fallback("en")),
+    de: signal<AppContent | null>(fallback("de")),
   };
-  readonly resolved = new Set<Locale>();
-  loadCalls: Locale[] = [];
 
-  content(locale: Locale): Signal<AppContent> {
+  content(locale: Locale): Signal<AppContent | null> {
     return this.state[locale].asReadonly();
-  }
-  hasResolved(locale: Locale): boolean {
-    return this.resolved.has(locale);
-  }
-  async load(locale: Locale): Promise<void> {
-    this.loadCalls.push(locale);
-    this.resolved.add(locale);
   }
 }
 
-function setup(initial: Locale = "en") {
+@Component({ template: "" })
+class Blank {}
+
+function setup() {
   const store = new StubContentStore();
   TestBed.configureTestingModule({
     providers: [
       { provide: ContentStore, useValue: store },
-      { provide: INITIAL_LOCALE, useValue: initial },
+      provideRouter([{ path: "**", component: Blank }]),
     ],
   });
-  return { store, service: TestBed.inject(LanguageService) };
+  return { store, service: TestBed.inject(LanguageService), router: TestBed.inject(Router) };
 }
 
 describe("LanguageService", () => {
@@ -54,81 +48,62 @@ describe("LanguageService", () => {
     TestBed.resetTestingModule();
     try {
       document.cookie = "portfolio-lang=; Path=/; Max-Age=0";
-      localStorage.clear();
     } catch {
-      // Storage is unavailable in some environments; the service tolerates it.
+      // Cookies are unavailable in some environments; the service tolerates it.
     }
   });
 
-  /**
-   * The no-flash contract: `t()` is seeded from the bundled fallback, so it is
-   * never undefined even before any content has been fetched.
-   */
-  it("exposes usable copy before any content resolves", () => {
-    const { service, store } = setup();
-
-    expect(store.hasResolved("en")).toBe(false);
-    expect(service.t()).toBeDefined();
-    expect(service.t().profile.heroHeadline.length).toBeGreaterThan(0);
+  it("starts in English until a locale route activates one", () => {
+    expect(setup().service.lang()).toBe("en");
   });
 
-  it("starts in German when the token says so", () => {
-    expect(setup("de").service.lang()).toBe("de");
-  });
-
-  it("starts in English when the token says so", () => {
-    expect(setup("en").service.lang()).toBe("en");
-  });
-
-  it("flips the copy tree when the language changes", async () => {
-    const { service } = setup("en");
+  it("switches the copy tree when a locale is activated", () => {
+    const { service } = setup();
     const before = service.t().about.heading;
 
-    await service.setLang("de");
+    service.activate("de");
 
     expect(service.lang()).toBe("de");
     expect(service.t().about.heading).not.toBe(before);
     expect(service.t().about.heading).toContain("über mich");
   });
 
-  it("fetches the target locale before switching, so no stale copy is shown", async () => {
-    const { service, store } = setup("en");
-
-    await service.setLang("de");
-
-    expect(store.loadCalls).toEqual(["de"]);
+  it("exposes structural content for the active locale", () => {
+    const { service } = setup();
+    service.activate("de");
+    expect(service.content().skills[0]!.title).toBe("Kernarchitektur");
   });
 
-  it("does not refetch a locale that already resolved", async () => {
-    const { service, store } = setup("en");
-    store.resolved.add("de");
+  /** Reading content outside the locale route is a bug; it must say so, not render blanks. */
+  it("fails loudly when content is read before its locale loaded", () => {
+    const { service, store } = setup();
+    store.state.de.set(null);
+    service.activate("de");
 
-    await service.setLang("de");
-
-    expect(store.loadCalls).toEqual([]);
+    expect(() => service.content()).toThrow(/before the locale route loaded it/);
   });
 
-  it("ignores a switch to the current locale", async () => {
-    const { service, store } = setup("en");
-
-    await service.setLang("en");
-
-    expect(store.loadCalls).toEqual([]);
-  });
-
-  it("exposes structural content for the active locale", async () => {
-    const { service } = setup("en");
-    expect(service.content().skills.length).toBeGreaterThan(0);
-
-    await service.setLang("de");
-    expect(service.content().skills[0].title).toBe("Kernarchitektur");
-  });
-
-  it("persists the choice in a cookie, which is what SSR reads", async () => {
-    const { service } = setup("en");
-
-    await service.setLang("de");
-
+  it("remembers an explicit choice in the cookie that `/` negotiates from", () => {
+    setup().service.remember("de");
     expect(document.cookie).toContain("portfolio-lang=de");
+  });
+
+  it("links the current page in both languages", async () => {
+    const { service, router } = setup();
+    await router.navigateByUrl("/en/legal/imprint#top");
+
+    expect(router.serializeUrl(service.alternates().de)).toBe("/de/legal/imprint#top");
+    expect(router.serializeUrl(service.alternates().en)).toBe("/en/legal/imprint#top");
+    expect(service.page()).toBe("/legal/imprint");
+  });
+
+  /** With `<base href="/">`, a bare `#projects` would resolve to `/#projects` and reload the site. */
+  it("anchors content fragments to the localized home page", () => {
+    const { service } = setup();
+    service.activate("de");
+
+    expect(service.homeHref("#projects")).toBe("/de#projects");
+    expect(service.homeHref("https://example.com")).toBe("https://example.com");
+    expect(service.homeHref("mailto:a@b.c")).toBe("mailto:a@b.c");
   });
 });

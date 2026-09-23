@@ -20,7 +20,7 @@ import { HlmSwitch } from "@spartan-ng/helm/switch";
 
 import { unsavedChangesGuard } from "../../../admin/unsaved-changes.service";
 
-import { AdminApiService, type ProjectRow } from "../../../admin/admin-api.service";
+import { AdminApiService, type ProjectListRow } from "../../../admin/admin-api.service";
 import { ConfirmService } from "../../../admin/components/confirm-dialog.component";
 import {
   SortableListComponent,
@@ -55,7 +55,14 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
     UiGroupEditorComponent,
   ],
   viewProviders: [
-    provideIcons({ lucideEllipsis, lucideEye, lucideEyeOff, lucidePencil, lucidePlus, lucideTrash2 }),
+    provideIcons({
+      lucideEllipsis,
+      lucideEye,
+      lucideEyeOff,
+      lucidePencil,
+      lucidePlus,
+      lucideTrash2,
+    }),
   ],
   host: { class: "block" },
   template: `
@@ -96,15 +103,26 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
             <div class="flex flex-wrap items-center gap-3">
               <div class="min-w-0 flex-1">
                 <p class="m-0 truncate font-mono text-sm">
-                  {{ row.translations.en.name || row.slug }}
+                  {{ row.translations.en?.name || row.slug }}
                 </p>
                 <p class="m-0 mt-0.5 truncate font-mono text-[0.72rem] text-muted-foreground">
                   /{{ row.slug }}
                 </p>
               </div>
 
-              @if (!row.translations.de.name || row.translations.de.name === row.translations.en.name) {
+              @if (
+                !row.translations.de?.name ||
+                row.translations.de?.name === row.translations.en?.name
+              ) {
                 <span hlmBadge variant="outline" class="font-mono text-[0.65rem]">DE todo</span>
+              }
+              @if (row.translations.en?.hasCaseStudy || row.translations.de?.hasCaseStudy) {
+                <span hlmBadge variant="secondary" class="font-mono text-[0.65rem]"
+                  >case study</span
+                >
+              }
+              @if (row.featured) {
+                <span hlmBadge variant="secondary" class="font-mono text-[0.65rem]">featured</span>
               }
 
               <label class="flex items-center gap-2 font-mono text-[0.72rem] text-muted-foreground">
@@ -142,7 +160,11 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
               <span>Edit</span>
             </button>
             <button hlmDropdownMenuItem (triggered)="toggleVisible(row, !row.isVisible)">
-              <ng-icon [name]="row.isVisible ? 'lucideEyeOff' : 'lucideEye'" size="14" aria-hidden="true" />
+              <ng-icon
+                [name]="row.isVisible ? 'lucideEyeOff' : 'lucideEye'"
+                size="14"
+                aria-hidden="true"
+              />
               <span>{{ row.isVisible ? "Hide from site" : "Show on site" }}</span>
             </button>
             <hlm-dropdown-menu-separator />
@@ -165,14 +187,14 @@ export default class AdminProjectsPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
 
   protected readonly headingFields = HEADING_FIELDS;
-  protected readonly rows = signal<ProjectRow[]>([]);
+  protected readonly rows = signal<ProjectListRow[]>([]);
   protected readonly loading = signal(true);
 
   ngOnInit(): void {
     void this.load();
   }
 
-  protected readonly trackRow = (row: ProjectRow): string => row.id;
+  protected readonly trackRow = (row: ProjectListRow): string => row.id;
 
   private async load(): Promise<void> {
     const result = await this.api.listProjects();
@@ -185,11 +207,11 @@ export default class AdminProjectsPage implements OnInit {
     this.rows.set(result.data.projects);
   }
 
-  protected async toggleVisible(row: ProjectRow, isVisible: boolean): Promise<void> {
+  protected async toggleVisible(row: ProjectListRow, isVisible: boolean): Promise<void> {
     const previous = this.rows();
     this.rows.update((list) => list.map((r) => (r.id === row.id ? { ...r, isVisible } : r)));
 
-    const result = await this.api.updateProject(row.id, { ...row, isVisible });
+    const result = await this.api.setVisibility("projects", row.id, isVisible);
     if (!result.ok) {
       this.rows.set(previous);
       toast.error("Not saved", { description: result.error });
@@ -206,17 +228,28 @@ export default class AdminProjectsPage implements OnInit {
       aiArchitecture: "",
       fullStackInfra: "",
       outcomes: [] as string[],
+      role: "",
+      categoryLabel: "",
+      metrics: [],
+      body: "",
+      seoDescription: "",
     };
 
     const result = await this.api.createProject({
       slug,
-      imageId: null,
+      coverId: null,
       imagePath: "",
       stack: [],
       linkLive: "",
       linkRepo: "",
       linkCaseStudy: "",
       isVisible: true,
+      featured: false,
+      periodStart: null,
+      periodEnd: null,
+      category: "",
+      tags: [],
+      gallery: [],
       translations: { en: { ...blank }, de: { ...blank } },
     });
 
@@ -227,12 +260,13 @@ export default class AdminProjectsPage implements OnInit {
     await this.load();
   }
 
-  protected async remove(row: ProjectRow): Promise<void> {
+  protected async remove(row: ProjectListRow): Promise<void> {
     // Deletion is immediate and has no undo, unlike edits which stay in draft
     // until published — so it always asks first.
     const go = await this.confirm.ask({
-      title: `Delete ${row.translations.en.name || row.slug}?`,
-      description: "Its text in both languages is deleted. Its image stays in the media library. This cannot be undone.",
+      title: `Delete ${row.translations.en?.name || row.slug}?`,
+      description:
+        "Its text and case study in both languages are deleted. Its images stay in the media library. This cannot be undone.",
       confirmLabel: "Delete project",
       destructive: true,
     });
@@ -248,7 +282,7 @@ export default class AdminProjectsPage implements OnInit {
     }
   }
 
-  protected async onReorder(next: ProjectRow[]): Promise<void> {
+  protected async onReorder(next: ProjectListRow[]): Promise<void> {
     const previous = this.rows();
     this.rows.set(next);
 

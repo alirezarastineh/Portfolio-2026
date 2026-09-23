@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal, viewChild } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  inject,
+  OnInit,
+  signal,
+  viewChild,
+} from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmAlert, HlmAlertDescription, HlmAlertTitle } from "@spartan-ng/helm/alert";
@@ -6,7 +13,11 @@ import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmDialogImports } from "@spartan-ng/helm/dialog";
 
-import { AdminApiService, type MediaAsset, type MediaReconcile } from "../../admin/admin-api.service";
+import {
+  AdminApiService,
+  type MediaAsset,
+  type MediaReconcile,
+} from "../../admin/admin-api.service";
 import { MediaPickerComponent } from "../../admin/components/media-picker.component";
 
 @Component({
@@ -28,8 +39,9 @@ import { MediaPickerComponent } from "../../admin/components/media-picker.compon
       <header>
         <h1 class="m-0 font-mono text-2xl tracking-tight">Media</h1>
         <p class="mt-1 text-sm text-muted-foreground">
-          Images available to projects. Deleting is blocked while something still
-          uses the file.
+          Images for projects, and PDFs such as your CV. Uploaded photos are straightened, stripped
+          of location data and resized automatically. Deleting is blocked while the draft or the
+          live site still uses a file.
         </p>
       </header>
 
@@ -40,62 +52,85 @@ import { MediaPickerComponent } from "../../admin/components/media-picker.compon
             <div hlmAlertDescription>
               @if (r.missingFiles.length) {
                 <p class="m-0">
-                  {{ r.missingFiles.length }} record(s) point at a file that is not on
-                  disk — usually a database restore without a matching media restore.
+                  {{ r.missingFiles.length }} record(s) point at a file that is not on disk —
+                  usually a database restore without a matching media restore.
                 </p>
               }
               @if (r.orphanFiles.length) {
-                <p class="m-0">
-                  {{ r.orphanFiles.length }} file(s) on disk have no record.
-                </p>
+                <p class="m-0">{{ r.orphanFiles.length }} file(s) on disk have no record.</p>
               }
             </div>
           </div>
         }
         <p class="m-0 font-mono text-[0.72rem] text-muted-foreground">
-          {{ r.totalAssets }} image(s) · {{ formatSize(r.totalBytes) }} stored
+          {{ r.totalAssets }} file(s) · {{ formatSize(r.totalBytes) }} in originals
         </p>
       }
 
-      <app-media-picker [deletable]="true" (chosen)="select($event)" />
+      <app-media-picker [deletable]="true" [allowDocuments]="true" (chosen)="select($event)" />
 
-      <!-- Clicking a thumbnail opens its alt text in a dialog rather than an
-           inline form below the grid, which was easy to miss on a long list. -->
+      <!-- Clicking a thumbnail opens its alt text (or, for a PDF, its link) in a
+           dialog rather than an inline form below the grid, which was easy to
+           miss on a long list. -->
       <hlm-dialog
         [state]="active() ? 'open' : 'closed'"
         (stateChanged)="$event === 'closed' && active.set(null)"
       >
         <hlm-dialog-content *hlmDialogPortal="let ctx" class="sm:max-w-lg">
           @if (active(); as asset) {
-            <hlm-dialog-header>
-              <h2 hlmDialogTitle>Alt text</h2>
-              <p hlmDialogDescription>
-                {{ asset.originalName }} — describe it for screen readers and for
-                when the image fails to load.
-              </p>
-            </hlm-dialog-header>
+            @if (asset.kind === "document") {
+              <hlm-dialog-header>
+                <h2 hlmDialogTitle>{{ asset.originalName }}</h2>
+                <p hlmDialogDescription>
+                  PDF · {{ formatSize(asset.byteSize) }} — served at
+                  <code class="font-mono text-[0.72rem]">{{ asset.path }}</code>
+                </p>
+              </hlm-dialog-header>
+              <hlm-dialog-footer>
+                <a hlmBtn variant="outline" [href]="asset.url" target="_blank" rel="noopener"
+                  >Open PDF</a
+                >
+                <button hlmBtn type="button" (click)="active.set(null)">Close</button>
+              </hlm-dialog-footer>
+            } @else {
+              <hlm-dialog-header>
+                <h2 hlmDialogTitle>Alt text</h2>
+                <p hlmDialogDescription>
+                  {{ asset.originalName }} — describe it for screen readers and for when the image
+                  fails to load.
+                </p>
+              </hlm-dialog-header>
 
-            <img
-              [src]="asset.url"
-              alt=""
-              class="max-h-48 w-full rounded-md border border-border object-contain"
-            />
+              <img
+                [src]="asset.url"
+                alt=""
+                class="max-h-48 w-full rounded-md border border-border object-contain"
+              />
 
-            <div class="grid gap-3">
-              <label class="flex flex-col gap-1">
-                <span class="font-mono text-[0.68rem] uppercase tracking-[0.2em] text-muted-foreground">EN</span>
-                <input hlmInput [(ngModel)]="altEn" aria-label="Alt text (English)" />
-              </label>
-              <label class="flex flex-col gap-1">
-                <span class="font-mono text-[0.68rem] uppercase tracking-[0.2em] text-muted-foreground">DE</span>
-                <input hlmInput [(ngModel)]="altDe" aria-label="Alt text (German)" />
-              </label>
-            </div>
+              <div class="grid gap-3">
+                <label class="flex flex-col gap-1">
+                  <span
+                    class="font-mono text-[0.68rem] uppercase tracking-[0.2em] text-muted-foreground"
+                    >EN</span
+                  >
+                  <input hlmInput [(ngModel)]="altEn" aria-label="Alt text (English)" />
+                </label>
+                <label class="flex flex-col gap-1">
+                  <span
+                    class="font-mono text-[0.68rem] uppercase tracking-[0.2em] text-muted-foreground"
+                    >DE</span
+                  >
+                  <input hlmInput [(ngModel)]="altDe" aria-label="Alt text (German)" />
+                </label>
+              </div>
 
-            <hlm-dialog-footer>
-              <button hlmBtn variant="ghost" type="button" (click)="active.set(null)">Cancel</button>
-              <button hlmBtn type="button" (click)="saveAlt(asset)">Save alt text</button>
-            </hlm-dialog-footer>
+              <hlm-dialog-footer>
+                <button hlmBtn variant="ghost" type="button" (click)="active.set(null)">
+                  Cancel
+                </button>
+                <button hlmBtn type="button" (click)="saveAlt(asset)">Save alt text</button>
+              </hlm-dialog-footer>
+            }
           }
         </hlm-dialog-content>
       </hlm-dialog>

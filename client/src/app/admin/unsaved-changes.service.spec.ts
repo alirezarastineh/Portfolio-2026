@@ -90,7 +90,9 @@ describe("beforeunload", () => {
     expect(registrations()).toBe(1);
 
     service.clearAll();
-    expect(remove.mock.calls.some(([type]: [string, ...unknown[]]) => type === "beforeunload")).toBe(true);
+    expect(
+      remove.mock.calls.some(([type]: [string, ...unknown[]]) => type === "beforeunload"),
+    ).toBe(true);
   });
 });
 

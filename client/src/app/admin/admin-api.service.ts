@@ -3,6 +3,32 @@ import { inject, Injectable } from "@angular/core";
 import { firstValueFrom } from "rxjs";
 
 import type { AppContent, Locale } from "../content/schema";
+import type {
+  ExperienceInput,
+  PostInput,
+  ProfileInput,
+  ProjectInput,
+  ProjectTranslationInput,
+  SkillInput,
+  SocialInput,
+} from "./admin-schema";
+
+export type {
+  ExperienceInput,
+  ExperienceTranslationInput,
+  GalleryItemInput,
+  LegalSectionInput,
+  MetricInput,
+  PostInput,
+  PostStatus,
+  PostTranslationInput,
+  ProfileInput,
+  ProjectInput,
+  ProjectTranslationInput,
+  SkillInput,
+  SkillTranslationInput,
+  SocialInput,
+} from "./admin-schema";
 
 export interface AdminUser {
   id: string;
@@ -33,6 +59,8 @@ export interface RevisionRow {
   locale: Locale;
   checksum: string;
   label: string | null;
+  /** The publish (or rollback) this version belongs to, with the other locale's version. */
+  publicationId: number | null;
   createdAt: string;
   live: boolean;
 }
@@ -51,13 +79,15 @@ export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string; s
  * browser-facing one — unlike public content, these calls never run during SSR
  * (the guard defers everything to the browser, where the session cookie lives).
  */
-@Injectable({ providedIn: "root" })
+/**
+ * Provided by the admin route (`pages/admin.page.ts`), not the root: it must
+ * use the admin's HttpClient, whose interceptor adds credentials and CSRF.
+ */
+@Injectable()
 export class AdminApiService {
   private readonly http = inject(HttpClient);
 
-  readonly baseUrl = (import.meta.env.VITE_API_BASE_URL ?? "")
-    .trim()
-    .replace(/\/$/, "");
+  readonly baseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/$/, "");
 
   private url(path: string): string {
     return `${this.baseUrl}${path}`;
@@ -155,11 +185,13 @@ export class AdminApiService {
   }
 
   publish(label?: string) {
-    return this.request<{ ok: true; published: { locale: Locale; versionId: number }[] }>(
-      "POST",
-      "/admin/publish",
-      label ? { label } : {},
-    );
+    return this.request<{
+      ok: true;
+      /** True when the draft already matched what is live, so nothing was written. */
+      unchanged: boolean;
+      publicationId: number | null;
+      published: { locale: Locale; versionId: number }[];
+    }>("POST", "/admin/publish", label ? { label } : {});
   }
 
   revisions() {
@@ -170,10 +202,36 @@ export class AdminApiService {
     return this.request<RevisionDetail>("GET", `/admin/revisions/${id}`);
   }
 
+  /** Rolls back the whole publication `id` belongs to — every locale moves together. */
   rollback(id: number) {
-    return this.request<{ ok: true; locale: Locale; versionId: number }>(
+    return this.request<{
+      ok: true;
+      locale: Locale;
+      versionId: number;
+      publicationId: number;
+      rolledBack: { locale: Locale; versionId: number }[];
+    }>("POST", `/admin/revisions/${id}/rollback`, {});
+  }
+
+  publications() {
+    return this.request<{ publications: PublicationRow[] }>("GET", "/admin/publications");
+  }
+
+  /** Every locale of the publication goes live again, as a new publication. */
+  rollbackPublication(publicationId: number) {
+    return this.request<{
+      ok: true;
+      publicationId: number;
+      restoredFrom: number;
+      results: { locale: Locale; versionId: number }[];
+    }>("POST", `/admin/publications/${publicationId}/rollback`, {});
+  }
+
+  /** Makes the draft match a publication again; nothing goes live until the next publish. */
+  restoreDraft(publicationId: number) {
+    return this.request<{ ok: true; restored: Locale[] }>(
       "POST",
-      `/admin/revisions/${id}/rollback`,
+      `/admin/publications/${publicationId}/restore-draft`,
       {},
     );
   }
@@ -238,8 +296,13 @@ export class AdminApiService {
     return this.request<{ ok: true }>("DELETE", `/admin/skills/${id}`);
   }
 
+  /** Light rows: names per locale, no bodies. */
   listProjects() {
-    return this.request<{ projects: ProjectRow[] }>("GET", "/admin/projects");
+    return this.request<{ projects: ProjectListRow[] }>("GET", "/admin/projects");
+  }
+
+  getProject(id: string) {
+    return this.request<{ project: ProjectRow }>("GET", `/admin/projects/${id}`);
   }
 
   createProject(input: ProjectInput) {
@@ -254,8 +317,77 @@ export class AdminApiService {
     return this.request<{ ok: true }>("DELETE", `/admin/projects/${id}`);
   }
 
-  reorder(entity: "socials" | "skills" | "projects", ids: string[]) {
+  setVisibility(entity: "projects" | "experiences", id: string, isVisible: boolean) {
+    return this.request<{ ok: true }>("PATCH", `/admin/${entity}/${id}/visibility`, { isVisible });
+  }
+
+  reorder(entity: "socials" | "skills" | "projects" | "experiences", ids: string[]) {
     return this.request<{ ok: true }>("PATCH", `/admin/${entity}/reorder`, { ids });
+  }
+
+  /* ---- experience ---- */
+
+  listExperiences() {
+    return this.request<{ experiences: ExperienceRow[] }>("GET", "/admin/experiences");
+  }
+
+  createExperience(input: ExperienceInput) {
+    return this.request<{ ok: true; id: string }>("POST", "/admin/experiences", input);
+  }
+
+  updateExperience(id: string, input: ExperienceInput) {
+    return this.request<{ ok: true }>("PUT", `/admin/experiences/${id}`, input);
+  }
+
+  deleteExperience(id: string) {
+    return this.request<{ ok: true }>("DELETE", `/admin/experiences/${id}`);
+  }
+
+  /* ---- writing ---- */
+
+  listPosts() {
+    return this.request<{ posts: PostListRow[] }>("GET", "/admin/posts");
+  }
+
+  getPost(id: string) {
+    return this.request<{ post: PostRow }>("GET", `/admin/posts/${id}`);
+  }
+
+  createPost(input: PostInput) {
+    return this.request<{ ok: true; id: string }>("POST", "/admin/posts", input);
+  }
+
+  updatePost(id: string, input: PostInput) {
+    return this.request<{ ok: true }>("PUT", `/admin/posts/${id}`, input);
+  }
+
+  deletePost(id: string) {
+    return this.request<{ ok: true }>("DELETE", `/admin/posts/${id}`);
+  }
+
+  /* ---- CVs ---- */
+
+  getResumes() {
+    return this.request<{ resumes: Record<Locale, ResumeRow | null> }>("GET", "/admin/resumes");
+  }
+
+  putResume(locale: Locale, mediaId: string) {
+    return this.request<{ ok: true }>("PUT", `/admin/resumes/${locale}`, { mediaId });
+  }
+
+  deleteResume(locale: Locale) {
+    return this.request<{ ok: true }>("DELETE", `/admin/resumes/${locale}`);
+  }
+
+  /* ---- contact inbox ---- */
+
+  listMessages(status?: MessageStatus) {
+    const query = status ? `?status=${status}` : "";
+    return this.request<{ messages: MessageRow[] }>("GET", `/admin/messages${query}`);
+  }
+
+  setMessageStatus(id: string, status: MessageStatus) {
+    return this.request<{ ok: true }>("PATCH", `/admin/messages/${id}`, { status });
   }
 
   /* ---- media ---- */
@@ -267,7 +399,7 @@ export class AdminApiService {
   /**
    * Multipart, so the JSON-only CSRF layer does not apply — the double-submit
    * token and the Origin allowlist still do. Reports upload progress (0–100)
-   * because a 4 MB image over a slow link otherwise looks frozen.
+   * because a 10 MB photo over a slow link otherwise looks frozen.
    */
   uploadMedia(
     file: File,
@@ -307,8 +439,12 @@ export class AdminApiService {
     return this.request<{ ok: true }>("PATCH", `/admin/media/${id}`, alt);
   }
 
-  deleteMedia(id: string) {
-    return this.request<{ ok: true }>("DELETE", `/admin/media/${id}`);
+  /**
+   * `confirm` overrides the one refusal that is a warning rather than a block:
+   * the asset appears only in recent publications (`media_in_history`).
+   */
+  deleteMedia(id: string, confirm = false) {
+    return this.request<{ ok: true }>("DELETE", `/admin/media/${id}${confirm ? "?confirm=1" : ""}`);
   }
 
   mediaReconcile() {
@@ -321,9 +457,13 @@ export interface MediaAsset {
   filename: string;
   originalName: string;
   mime: string;
+  /** `document` is a PDF (the CV); only images can go on a project. */
+  kind: "image" | "document";
   byteSize: number;
   width: number | null;
   height: number | null;
+  /** Tiny blurred WebP data URI; null for GIFs, PDFs and not-yet-reprocessed images. */
+  blurDataUri: string | null;
   altEn: string | null;
   altDe: string | null;
   createdAt: string;
@@ -331,6 +471,8 @@ export interface MediaAsset {
   url: string;
   /** Relative `/media/<file>`; this is what a project stores. */
   path: string;
+  /** Resized copies, smallest first per format; empty for GIFs, PDFs and small images. */
+  variants: { format: "webp" | "avif"; width: number; height: number; path: string }[];
 }
 
 export interface MediaReconcile {
@@ -341,60 +483,88 @@ export interface MediaReconcile {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Collection shapes — mirror the server's Zod inputs                          */
+/* Rows the API returns. Inputs are the mirrored Zod schemas (admin-schema.ts), */
+/* so the editors are typed against exactly what the server validates.         */
 /* -------------------------------------------------------------------------- */
 
-export interface ProfileInput {
-  name: string;
-  handle: string;
-  contactEmail: string;
-  primaryCtaHref: string;
-  secondaryCtaHref: string;
-}
-export type ProfileRow = ProfileInput & { updatedAt: string };
+export type ProfileRow = ProfileInput & { avatarPath: string | null; updatedAt: string };
 
-export interface SocialInput {
-  label: string;
-  href: string;
-  icon: "github" | "linkedin" | "mail" | "twitter";
-  isVisible: boolean;
-}
 export type SocialRow = SocialInput & { id: string; position: number };
 
-export interface SkillTranslation {
-  title: string;
-  caption: string;
-  narrative: string;
-}
-export interface SkillInput {
-  id: string;
-  icon: "cpu" | "brain-circuit" | "container" | "database";
-  span: "lg" | "tall" | "sm";
-  items: string[];
-  isVisible: boolean;
-  translations: Record<Locale, SkillTranslation>;
-}
+export type SkillTranslation = SkillInput["translations"]["en"];
 export type SkillRow = SkillInput & { position: number };
 
-export interface ProjectTranslation {
+export type ProjectTranslation = ProjectTranslationInput;
+
+/** A project as the editor loads it: the input shape plus ids and previews. */
+export type ProjectRow = Omit<ProjectInput, "gallery"> & {
+  id: string;
+  position: number;
+  /** `/media/<file>` of the cover, for the preview. */
+  coverPath: string | null;
+  gallery: (ProjectInput["gallery"][number] & { path: string })[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProjectListRow = Omit<ProjectRow, "gallery" | "translations"> & {
+  translations: Partial<Record<Locale, { name: string; hasCaseStudy: boolean }>>;
+};
+
+export type ExperienceRow = ExperienceInput & {
+  id: string;
+  position: number;
+  logoPath: string | null;
+  updatedAt: string;
+};
+
+export type PostRow = PostInput & {
+  id: string;
+  coverPath: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PostListRow = Omit<PostRow, "translations"> & {
+  translations: Partial<Record<Locale, { title: string }>>;
+};
+
+export interface ResumeRow {
+  mediaId: string;
+  path: string;
+  originalName: string;
+  byteSize: number;
+  updatedAt: string;
+}
+
+export interface PublicationRow {
+  id: number;
+  kind: "publish" | "rollback";
+  label: string | null;
+  schemaVersion: number;
+  restoredFrom: number | null;
+  createdAt: string;
+  versions: { id: number; locale: Locale; live: boolean }[];
+  live: boolean;
+}
+
+export type MessageStatus = "new" | "read" | "archived" | "spam";
+
+export interface MessageRow {
+  id: string;
+  createdAt: string;
+  locale: Locale | null;
   name: string;
-  descriptor: string;
-  hook: string;
-  problem: string;
-  aiArchitecture: string;
-  fullStackInfra: string;
-  outcomes: string[];
+  email: string;
+  message: string;
+  status: MessageStatus;
+  mailStatus: "pending" | "sent" | "failed" | "skipped";
+  mailError: string | null;
 }
-export interface ProjectInput {
-  slug: string;
-  /** Set when the image came from the media library; null for a legacy path. */
-  imageId: string | null;
-  imagePath: string;
-  stack: string[];
-  linkLive: string;
-  linkRepo: string;
-  linkCaseStudy: string;
-  isVisible: boolean;
-  translations: Record<Locale, ProjectTranslation>;
-}
-export type ProjectRow = ProjectInput & { id: string; position: number };
+
+/** Re-exported for pages that type a single translation. */
+export type {
+  ExperienceTranslationInput as ExperienceTranslation,
+  PostTranslationInput as PostTranslation,
+  PostStatus as PostState,
+} from "./admin-schema";

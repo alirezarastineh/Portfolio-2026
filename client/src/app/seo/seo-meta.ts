@@ -1,59 +1,163 @@
+import { DOCUMENT } from "@angular/common";
 import { inject } from "@angular/core";
 import type { ResolveFn } from "@angular/router";
 import type { MetaTag } from "@analogjs/router";
 
+import { LOCALES, OG_LOCALE, otherLocale, type Locale } from "../content/locale";
+import type { AppContent } from "../content/schema";
 import { LanguageService } from "../services/language.service";
+import { applyHead } from "./head";
+
+const FALLBACK_ORIGIN = "https://alirezarastineh.me";
+
+/** The site's origin: the profile's site URL, else the SEO document's canonical URL. */
+export function siteOrigin(content: AppContent): string {
+  for (const candidate of [content.identity.siteUrl, content.seo.canonical]) {
+    try {
+      if (candidate) return new URL(candidate).origin;
+    } catch {
+      // try the next one
+    }
+  }
+  return FALLBACK_ORIGIN;
+}
+
+/** `https://…/en` for home, `https://…/en/legal/imprint` for a subpage. */
+export function pageUrl(origin: string, locale: Locale, path = ""): string {
+  return `${origin}/${locale}${path}`;
+}
 
 /**
- * Builds the page's meta tags from the published `seo` document.
- *
- * Analog turns a function-valued `routeMeta.meta` into a route resolver, and
- * applies the result with Angular's `Meta.updateTag`, which matches on the
- * name/property selector — so these overwrite the static tags in `index.html`
- * rather than duplicating them. The static ones stay as a sensible fallback for
- * the brief moment before hydration.
+ * The page in every language, plus `x-default` for visitors in neither.
+ * Every language version lists all of them, itself included — hreflang must
+ * be reciprocal or search engines ignore it.
  */
-export const seoMetaResolver: ResolveFn<MetaTag[]> = () => {
-  const lang = inject(LanguageService);
-  const seo = lang.content().seo;
+export function languageAlternates(
+  origin: string,
+  path: string,
+  xDefault: string,
+): Record<string, string> {
+  const alternates: Record<string, string> = {};
+  for (const locale of LOCALES) alternates[locale] = pageUrl(origin, locale, path);
+  alternates["x-default"] = xDefault;
+  return alternates;
+}
 
+interface PageMeta {
+  title: string;
+  description: string;
+  url: string;
+  robots: string;
+  /** Social cards default to the page title and description. */
+  ogTitle?: string;
+  ogDescription?: string;
+  twitterTitle?: string;
+  twitterDescription?: string;
+}
+
+/**
+ * The full set of tags for one page. Every page emits all of them: Analog
+ * updates tags by name on navigation but never removes one, so a tag a page
+ * left out would keep the previous page's value.
+ */
+export function pageMeta(content: AppContent, locale: Locale, page: PageMeta): MetaTag[] {
+  const seo = content.seo;
   return [
-    { name: "description", content: seo.description },
+    { name: "description", content: page.description },
+    { name: "robots", content: page.robots },
     { name: "author", content: seo.author },
     { name: "theme-color", content: seo.themeColor },
     { property: "og:type", content: "website" },
     { property: "og:site_name", content: seo.siteName },
-    { property: "og:title", content: seo.ogTitle },
-    { property: "og:description", content: seo.ogDescription },
-    { property: "og:url", content: seo.ogUrl },
+    { property: "og:title", content: page.ogTitle ?? page.title },
+    { property: "og:description", content: page.ogDescription ?? page.description },
+    { property: "og:url", content: page.url },
     { property: "og:image", content: seo.ogImage },
-    { property: "og:locale", content: seo.ogLocale },
+    { property: "og:image:alt", content: page.ogTitle ?? page.title },
+    { property: "og:locale", content: seo.ogLocale || OG_LOCALE[locale] },
+    { property: "og:locale:alternate", content: OG_LOCALE[otherLocale(locale)] },
     { name: "twitter:card", content: seo.twitterCard },
-    { name: "twitter:title", content: seo.twitterTitle },
-    { name: "twitter:description", content: seo.twitterDescription },
+    { name: "twitter:title", content: page.twitterTitle ?? page.title },
+    { name: "twitter:description", content: page.twitterDescription ?? page.description },
     { name: "twitter:image", content: seo.twitterImage },
   ];
-};
-
-export const seoTitleResolver: ResolveFn<string> = () =>
-  inject(LanguageService).content().seo.title;
+}
 
 /**
- * `Meta` only manages `<meta>`, so the canonical `<link>` is set by hand. Kept
- * DOM-level rather than templated because it lives in `<head>`, outside the
- * component tree — and it must be right during SSR, not only after hydration.
- * The document is passed in: this is called from an effect, which runs outside
- * an injection context on every run after the first.
+ * Structured data for the home page: the person, the site, and the page that
+ * is the person's profile — Google's `ProfilePage` type for exactly this.
  */
-export function applyCanonical(document: Document, href: string): void {
-  const head = document.head;
-  if (!head) return;
+export function homeJsonLd(content: AppContent, locale: Locale, origin: string): object {
+  const personId = `${origin}/#person`;
+  const websiteId = `${origin}/#website`;
+  const url = pageUrl(origin, locale);
 
-  let link = head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
-  if (!link) {
-    link = document.createElement("link");
-    link.setAttribute("rel", "canonical");
-    head.appendChild(link);
-  }
-  link.setAttribute("href", href);
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "ProfilePage",
+        "@id": `${url}#page`,
+        url,
+        name: content.seo.title,
+        description: content.seo.description,
+        inLanguage: locale,
+        isPartOf: { "@id": websiteId },
+        mainEntity: { "@id": personId },
+      },
+      {
+        "@type": "Person",
+        "@id": personId,
+        name: content.identity.name,
+        alternateName: content.identity.handle,
+        url,
+        jobTitle: content.ui.profile.role,
+        email: `mailto:${content.identity.contactEmail}`,
+        sameAs: content.socials.map((s) => s.href).filter((href) => /^https?:\/\//i.test(href)),
+        knowsAbout: [...new Set(content.skills.flatMap((s) => s.items))].slice(0, 30),
+      },
+      {
+        "@type": "WebSite",
+        "@id": websiteId,
+        url: `${origin}/`,
+        name: content.seo.siteName,
+        inLanguage: [...LOCALES],
+        publisher: { "@id": personId },
+      },
+    ],
+  };
 }
+
+export const homeTitleResolver: ResolveFn<string> = () =>
+  inject(LanguageService).content().seo.title;
+
+export const homeMetaResolver: ResolveFn<MetaTag[]> = () => {
+  const lang = inject(LanguageService);
+  const content = lang.content();
+  const seo = content.seo;
+
+  return pageMeta(content, lang.lang(), {
+    title: seo.title,
+    description: seo.description,
+    url: pageUrl(siteOrigin(content), lang.lang()),
+    robots: "index, follow",
+    ogTitle: seo.ogTitle,
+    ogDescription: seo.ogDescription,
+    twitterTitle: seo.twitterTitle,
+    twitterDescription: seo.twitterDescription,
+  });
+};
+
+/** `x-default` is `/`, which sends each visitor to their own language. */
+export const homeHeadResolver: ResolveFn<true> = () => {
+  const lang = inject(LanguageService);
+  const content = lang.content();
+  const origin = siteOrigin(content);
+
+  applyHead(inject(DOCUMENT), {
+    canonical: pageUrl(origin, lang.lang()),
+    alternates: languageAlternates(origin, "", `${origin}/`),
+    jsonLd: homeJsonLd(content, lang.lang(), origin),
+  });
+  return true;
+};

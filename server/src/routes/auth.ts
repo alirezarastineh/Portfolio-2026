@@ -3,11 +3,7 @@ import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
-import {
-  clearSessionCookies,
-  setSessionCookies,
-  readSessionToken,
-} from "../auth/cookies.js";
+import { clearSessionCookies, setSessionCookies, readSessionToken } from "../auth/cookies.js";
 import {
   clientIp,
   clientIpOrNull,
@@ -81,7 +77,10 @@ authRouter.post(
     const pairKey = ipEmailBucket(ip, email);
 
     // No hard limit on the email alone — see IP_EMAIL_LIMIT for why.
-    if ((await tooManyAttempts(ipKey, IP_LIMIT)) || (await tooManyAttempts(pairKey, IP_EMAIL_LIMIT))) {
+    if (
+      (await tooManyAttempts(ipKey, IP_LIMIT)) ||
+      (await tooManyAttempts(pairKey, IP_EMAIL_LIMIT))
+    ) {
       return c.json({ error: "rate_limited" }, 429);
     }
 
@@ -150,10 +149,8 @@ authRouter.post(
   "/totp",
   loadSession,
   requireCsrf,
-  zValidator(
-    "json",
-    z.object({ code: z.string().min(6).max(20) }),
-    (result, c) => (result.success ? undefined : c.json({ error: "invalid_input" }, 400)),
+  zValidator("json", z.object({ code: z.string().min(6).max(20) }), (result, c) =>
+    result.success ? undefined : c.json({ error: "invalid_input" }, 400),
   ),
   async (c) => {
     const session = c.get("session");
@@ -325,7 +322,10 @@ authRouter.post(
   requireCsrf,
   zValidator(
     "json",
-    z.object({ currentPassword: z.string().min(1).max(400), newPassword: z.string().min(12).max(400) }),
+    z.object({
+      currentPassword: z.string().min(1).max(400),
+      newPassword: z.string().min(12).max(400),
+    }),
     (result, c) => (result.success ? undefined : c.json({ error: "invalid_input" }, 400)),
   ),
   async (c) => {
@@ -427,10 +427,8 @@ authRouter.post(
   loadSession,
   requireFullSession,
   requireCsrf,
-  zValidator(
-    "json",
-    z.object({ code: z.string().min(6).max(10) }),
-    (result, c) => (result.success ? undefined : c.json({ error: "invalid_input" }, 400)),
+  zValidator("json", z.object({ code: z.string().min(6).max(10) }), (result, c) =>
+    result.success ? undefined : c.json({ error: "invalid_input" }, 400),
   ),
   async (c) => {
     const session = c.get("session");

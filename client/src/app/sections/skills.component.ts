@@ -1,23 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
-import { NgIcon, provideIcons } from "@ng-icons/core";
-import {
-  lucideBrainCircuit,
-  lucideContainer,
-  lucideCpu,
-  lucideDatabase,
-} from "@ng-icons/lucide";
+import { NgIcon } from "@ng-icons/core";
 
 import { ScrambleTextComponent } from "../components/scramble-text.component";
 import { SpotlightCardComponent } from "../components/spotlight-card.component";
-import type { BentoSpan, SkillIcon } from "../content/schema";
+import type { BentoSpan } from "../content/schema";
+import { iconFor, provideRegistryIcons } from "../icons/icon-registry";
 import { LanguageService } from "../services/language.service";
-
-const ICON_MAP: Record<SkillIcon, string> = {
-  cpu: "lucideCpu",
-  "brain-circuit": "lucideBrainCircuit",
-  container: "lucideContainer",
-  database: "lucideDatabase",
-};
 
 const SPAN_MAP: Record<BentoSpan, string> = {
   lg: "lg:col-span-2 lg:row-span-2",
@@ -29,31 +17,22 @@ const SPAN_MAP: Record<BentoSpan, string> = {
   selector: "app-skills-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NgIcon, ScrambleTextComponent, SpotlightCardComponent],
-  viewProviders: [
-    provideIcons({ lucideCpu, lucideBrainCircuit, lucideContainer, lucideDatabase }),
-  ],
+  viewProviders: [provideRegistryIcons()],
   host: {
     class: "block",
   },
   template: `
-    <section
-      id="skills"
-      class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32"
-    >
+    <section id="skills" class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32">
       <div class="mx-auto flex max-w-7xl flex-col gap-10">
         <header class="flex flex-wrap items-baseline justify-between gap-4">
           <h2 class="m-0 font-mono text-2xl tracking-tight text-foreground sm:text-3xl">
             <app-scramble-text [text]="lang.t().skills.heading" />
           </h2>
-          <p
-            class="font-mono text-[0.7rem] uppercase tracking-[0.22em] text-muted-foreground"
-          >
+          <p class="font-mono text-[0.7rem] uppercase tracking-[0.22em] text-muted-foreground">
             {{ lang.t().skills.subtitle }}
           </p>
         </header>
-        <div
-          class="grid auto-rows-[minmax(180px,auto)] grid-cols-1 gap-4 lg:grid-cols-4 lg:gap-5"
-        >
+        <div class="grid auto-rows-[minmax(180px,auto)] grid-cols-1 gap-4 lg:grid-cols-4 lg:gap-5">
           @for (card of cards(); track card.id) {
             <app-spotlight-card [class]="layoutClass(card.span)">
               <article class="flex h-full flex-col gap-5 p-6">
@@ -85,9 +64,7 @@ const SPAN_MAP: Record<BentoSpan, string> = {
                   }
                 </ul>
                 @if (card.narrative) {
-                  <p
-                    class="mt-auto text-pretty text-sm leading-relaxed text-muted-foreground"
-                  >
+                  <p class="mt-auto text-pretty text-sm leading-relaxed text-muted-foreground">
                     {{ card.narrative }}
                   </p>
                 }
@@ -109,8 +86,8 @@ export class SkillsSectionComponent {
    */
   readonly cards = computed(() => this.lang.content().skills);
 
-  iconFor(icon: SkillIcon): string {
-    return ICON_MAP[icon];
+  iconFor(icon: string): string {
+    return iconFor(icon, "lucideSparkles");
   }
 
   layoutClass(span: BentoSpan): string {

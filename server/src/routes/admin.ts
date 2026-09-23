@@ -1,24 +1,39 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import { requireAdmin } from "../auth/middleware.js";
 import { adminCollectionsRouter } from "./admin-collections.js";
 import { adminMediaRouter } from "./admin-media.js";
+import { adminMessagesRouter } from "./admin-messages.js";
 import { buildContent } from "../content/build.js";
-import { invalidateContentCache } from "../content/cache.js";
-import { checksumOf, notifyClientCache, publishAll } from "../content/publish.js";
+import {
+  buildAll,
+  PublicationError,
+  publishAll,
+  rollbackToPublication,
+} from "../content/publish.js";
+import { restoreDraftFromPublication } from "../content/restore.js";
 import { LOCALES, localeSchema, seoSchema, uiSchema, type Locale } from "../content/schema.js";
+import { upcast } from "../content/upcast.js";
 import { getDb } from "../db/client.js";
 import {
   contentDocuments,
   contentPointers,
+  contentPublications,
   contentVersions,
+  experiences,
+  experienceTranslations,
+  postTranslations,
+  posts,
+  profileResumes,
   projects,
+  projectTranslations,
   siteProfile,
   skills,
   socials,
 } from "../db/schema.js";
+import { legalSectionSanitized } from "./admin-inputs.js";
 
 /**
  * The authenticated surface. Section editors land here in Phase 5; for now it
@@ -32,6 +47,7 @@ adminRouter.use("*", ...requireAdmin);
 // above instead of re-declaring it.
 adminRouter.route("/", adminCollectionsRouter);
 adminRouter.route("/", adminMediaRouter);
+adminRouter.route("/", adminMessagesRouter);
 
 /**
  * True when publishing now would change what visitors see.
@@ -41,25 +57,25 @@ adminRouter.route("/", adminMediaRouter);
  * nothing should not light the badge. A draft that fails validation cannot
  * match anything live, so it counts as changed.
  */
-async function draftDiffersFromLive(live: { locale: Locale; checksum: string }[]): Promise<boolean> {
-  const db = getDb();
-
-  for (const locale of LOCALES) {
-    const published = live.find((p) => p.locale === locale);
-    if (!published) return true;
-
-    try {
-      if (checksumOf(await buildContent(db, locale)) !== published.checksum) return true;
-    } catch {
-      return true;
-    }
+async function draftDiffersFromLive(
+  live: { locale: Locale; checksum: string }[],
+): Promise<boolean> {
+  try {
+    const built = await buildAll(getDb());
+    return built.some((b) => live.find((p) => p.locale === b.locale)?.checksum !== b.checksum);
+  } catch {
+    return true;
   }
-  return false;
 }
 
-/** Version ids are bigserials; anything else in the path is a 400, not a lookup. */
+/** Version and publication ids are bigserials; anything else in the path is a 400, not a lookup. */
 function parseVersionId(raw: string): number | null {
   return /^\d{1,15}$/.test(raw) ? Number(raw) : null;
+}
+
+/** The admin sees the machine-readable code; details only where they help fix it. */
+function publicationErrorResponse(error: PublicationError) {
+  return { error: error.code, ...(error.detail ? { detail: error.detail } : {}) };
 }
 
 adminRouter.get("/status", async (c) => {
@@ -81,9 +97,15 @@ adminRouter.get("/status", async (c) => {
       select max(t) as latest from (
         select max(updated_at) as t from ${contentDocuments}
         union all select max(updated_at) from ${siteProfile}
+        union all select max(updated_at) from ${profileResumes}
         union all select max(updated_at) from ${socials}
         union all select max(updated_at) from ${skills}
         union all select max(updated_at) from ${projects}
+        union all select max(updated_at) from ${projectTranslations}
+        union all select max(updated_at) from ${experiences}
+        union all select max(updated_at) from ${experienceTranslations}
+        union all select max(updated_at) from ${posts}
+        union all select max(updated_at) from ${postTranslations}
       ) as edits
     `),
   ]);
@@ -145,8 +167,13 @@ adminRouter.post("/publish", async (c) => {
   }
 
   try {
-    const results = await publishAll({ label, userId: session.userId });
-    return c.json({ ok: true, published: results });
+    const outcome = await publishAll({ label, userId: session.userId });
+    return c.json({
+      ok: true,
+      unchanged: outcome.unchanged,
+      publicationId: outcome.publicationId,
+      published: outcome.results,
+    });
   } catch (error) {
     console.error("[admin] publish failed", error);
     return c.json({ error: "publish_failed", detail: String(error) }, 422);
@@ -154,15 +181,23 @@ adminRouter.post("/publish", async (c) => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* Section documents (the `ui` and `seo` jsonb trees)                          */
+/* Section documents (`ui`, `seo`, and the legal pages)                        */
 /* -------------------------------------------------------------------------- */
 
-/** Zod validators keyed by section, so a bad payload never reaches the DB. */
-const SECTION_SCHEMAS = { ui: uiSchema, seo: seoSchema } as const;
+/**
+ * Zod validators keyed by section, so a bad payload never reaches the DB. The
+ * legal pages sanitize their body as they parse.
+ */
+const SECTION_SCHEMAS = {
+  ui: uiSchema,
+  seo: seoSchema,
+  imprint: legalSectionSanitized,
+  privacy: legalSectionSanitized,
+} as const;
 type SectionName = keyof typeof SECTION_SCHEMAS;
 
 function isSection(value: string): value is SectionName {
-  return value === "ui" || value === "seo";
+  return Object.hasOwn(SECTION_SCHEMAS, value);
 }
 
 adminRouter.get("/sections/:section", async (c) => {
@@ -256,6 +291,7 @@ adminRouter.get("/revisions", async (c) => {
       locale: contentVersions.locale,
       checksum: contentVersions.checksum,
       label: contentVersions.label,
+      publicationId: contentVersions.publicationId,
       createdAt: contentVersions.createdAt,
     })
     .from(contentVersions)
@@ -285,6 +321,7 @@ adminRouter.get("/revisions/:id", async (c) => {
       locale: contentVersions.locale,
       label: contentVersions.label,
       checksum: contentVersions.checksum,
+      publicationId: contentVersions.publicationId,
       createdAt: contentVersions.createdAt,
       payload: contentVersions.payload,
     })
@@ -295,79 +332,135 @@ adminRouter.get("/revisions/:id", async (c) => {
   if (!revision) return c.json({ error: "not_found" }, 404);
 
   const [live] = await db
-    .select({ id: contentVersions.id, payload: contentVersions.payload })
+    .select({
+      id: contentVersions.id,
+      payload: contentVersions.payload,
+      createdAt: contentVersions.createdAt,
+    })
     .from(contentPointers)
     .innerJoin(contentVersions, eq(contentVersions.id, contentPointers.versionId))
     .where(eq(contentPointers.locale, revision.locale))
     .limit(1);
 
+  // Both sides as v2, so a diff against a pre-v2 revision shows content
+  // changes rather than the format change.
+  const asV2 = (payload: unknown, at: Date) => {
+    const result = upcast(payload, at.toISOString());
+    return result.ok ? result.content : payload;
+  };
+
   return c.json({
-    revision: { ...revision, live: live?.id === revision.id },
-    live: live ?? null,
+    revision: {
+      ...revision,
+      payload: asV2(revision.payload, revision.createdAt),
+      live: live?.id === revision.id,
+    },
+    live: live ? { id: live.id, payload: asV2(live.payload, live.createdAt) } : null,
   });
 });
 
 /**
- * Rollback copies an old payload into a NEW version and repoints, so history
- * is append-only and the rolled-back-from state stays inspectable.
+ * Kept for the current Revisions page, which picks one locale's version: it
+ * now rolls back that version's whole publication, so the other locale moves
+ * with it instead of being left pointing at a different moment. `locale` and
+ * `versionId` describe the requested locale, as the page expects.
  */
 adminRouter.post("/revisions/:id/rollback", async (c) => {
-  const session = c.get("session");
   const id = parseVersionId(c.req.param("id"));
-  if (id === null) {
-    return c.json({ error: "invalid_id" }, 400);
-  }
+  if (id === null) return c.json({ error: "invalid_id" }, 400);
 
-  const db = getDb();
-  const [source] = await db
-    .select({
-      locale: contentVersions.locale,
-      payload: contentVersions.payload,
-      checksum: contentVersions.checksum,
-    })
+  const [source] = await getDb()
+    .select({ locale: contentVersions.locale, publicationId: contentVersions.publicationId })
     .from(contentVersions)
     .where(eq(contentVersions.id, id))
     .limit(1);
-
   if (!source) return c.json({ error: "not_found" }, 404);
+  if (source.publicationId === null) return c.json({ error: "not_migrated" }, 409);
 
-  const versionId = await db.transaction(async (tx) => {
-    const [created] = await tx
-      .insert(contentVersions)
-      .values({
-        locale: source.locale,
-        payload: source.payload,
-        checksum: source.checksum,
-        label: `rollback to #${id}`,
-        createdBy: session.userId,
-      })
-      .returning({ id: contentVersions.id });
+  try {
+    const outcome = await rollbackToPublication(source.publicationId, c.get("session").userId);
+    const requested = outcome.results.find((r) => r.locale === source.locale);
+    return c.json({
+      ok: true,
+      locale: source.locale,
+      versionId: requested?.versionId ?? null,
+      publicationId: outcome.publicationId,
+      rolledBack: outcome.results,
+    });
+  } catch (error) {
+    if (error instanceof PublicationError) {
+      return c.json(publicationErrorResponse(error), error.status);
+    }
+    throw error;
+  }
+});
 
-    if (!created) throw new Error("failed to create rollback version");
+/* -------------------------------------------------------------------------- */
+/* Publications — one publish or rollback, every locale together               */
+/* -------------------------------------------------------------------------- */
 
-    await tx
-      .insert(contentPointers)
-      .values({
-        locale: source.locale,
-        versionId: created.id,
-        publishedBy: session.userId,
-      })
-      .onConflictDoUpdate({
-        target: contentPointers.locale,
-        set: {
-          versionId: created.id,
-          publishedAt: new Date(),
-          publishedBy: session.userId,
-        },
-      });
+adminRouter.get("/publications", async (c) => {
+  const db = getDb();
+  const publications = await db
+    .select()
+    .from(contentPublications)
+    .orderBy(desc(contentPublications.id))
+    .limit(50);
 
-    return created.id;
+  const ids = publications.map((p) => p.id);
+  const versions =
+    ids.length > 0
+      ? await db
+          .select({
+            id: contentVersions.id,
+            locale: contentVersions.locale,
+            publicationId: contentVersions.publicationId,
+          })
+          .from(contentVersions)
+          .where(inArray(contentVersions.publicationId, ids))
+      : [];
+  const pointers = await db.select().from(contentPointers);
+  const liveVersionIds = new Set(pointers.map((p) => p.versionId));
+
+  return c.json({
+    publications: publications.map((p) => {
+      const own = versions.filter((v) => v.publicationId === p.id);
+      return {
+        ...p,
+        versions: own.map(({ id, locale }) => ({ id, locale, live: liveVersionIds.has(id) })),
+        live: own.length > 0 && own.every((v) => liveVersionIds.has(v.id)),
+      };
+    }),
   });
+});
 
-  // Both cache tiers, exactly as a publish does — clearing only the API's own
-  // left the SSR container serving the old version for up to its 60s TTL.
-  invalidateContentCache(source.locale);
-  await notifyClientCache(source.locale);
+adminRouter.post("/publications/:id/rollback", async (c) => {
+  const id = parseVersionId(c.req.param("id"));
+  if (id === null) return c.json({ error: "invalid_id" }, 400);
 
-  return c.json({ ok: true, locale: source.locale, versionId });
+  try {
+    const outcome = await rollbackToPublication(id, c.get("session").userId);
+    return c.json({ ok: true, ...outcome });
+  } catch (error) {
+    if (error instanceof PublicationError) {
+      return c.json(publicationErrorResponse(error), error.status);
+    }
+    throw error;
+  }
+});
+
+/** Makes the draft match a publication again; nothing goes live until the next publish. */
+adminRouter.post("/publications/:id/restore-draft", async (c) => {
+  const id = parseVersionId(c.req.param("id"));
+  if (id === null) return c.json({ error: "invalid_id" }, 400);
+
+  try {
+    const outcome = await restoreDraftFromPublication(id, c.get("session").userId);
+    return c.json({ ok: true, ...outcome });
+  } catch (error) {
+    if (error instanceof PublicationError) {
+      return c.json(publicationErrorResponse(error), error.status);
+    }
+    throw error;
+  }
 });

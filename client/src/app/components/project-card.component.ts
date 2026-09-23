@@ -10,6 +10,7 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideExternalLink, lucideFileText } from "@ng-icons/lucide";
 
 import { brandGithub } from "../icons/brand-icons";
+import { PictureComponent } from "./picture.component";
 import { ScrambleTextComponent } from "./scramble-text.component";
 import type { Project } from "../content/schema";
 import { fmt } from "../i18n/interpolate";
@@ -32,7 +33,7 @@ interface ExternalLink {
 @Component({
   selector: "app-project-card",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgIcon, ScrambleTextComponent],
+  imports: [NgIcon, PictureComponent, ScrambleTextComponent],
   viewProviders: [provideIcons({ lucideExternalLink, lucideFileText, brandGithub })],
   host: {
     class: "block",
@@ -85,13 +86,12 @@ interface ExternalLink {
       <div
         class="relative aspect-16/10 overflow-hidden border-b border-border bg-[oklch(0.27_0_0)] lg:aspect-auto lg:border-b-0 lg:border-r"
       >
-        <img
-          [src]="project().image"
-          [alt]="project().name + ' preview'"
-          [loading]="isPriority() ? 'eager' : 'lazy'"
-          [attr.fetchpriority]="isPriority() ? 'high' : null"
-          decoding="async"
-          class="block size-full object-cover"
+        <!-- The card's image column is ~60% of the row on desktop. -->
+        <app-picture
+          [image]="project().cover"
+          [priority]="isPriority()"
+          sizes="(min-width: 1024px) 60vw, 100vw"
+          imgClass="block size-full object-cover"
         />
         <div
           class="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,transparent_55%,oklch(0.18_0_0/65%)_100%)]"
@@ -104,7 +104,14 @@ interface ExternalLink {
         </span>
       </div>
 
-      <div class="flex flex-col gap-5 p-6 sm:p-8 lg:overflow-y-auto">
+      <!-- Scrolls on its own on desktop, so it must take keyboard focus to be
+           scrollable without a mouse. Goes away with the inner scroll (Phase 6). -->
+      <div
+        class="flex flex-col gap-5 p-6 sm:p-8 lg:overflow-y-auto"
+        tabindex="0"
+        role="group"
+        [attr.aria-label]="project().name"
+      >
         <p class="font-mono text-[0.72rem] uppercase tracking-[0.22em] text-muted-foreground">
           {{ project().descriptor }}
         </p>
@@ -120,9 +127,7 @@ interface ExternalLink {
         <dl class="m-0 grid gap-4">
           @for (block of blocks(); track block.label) {
             <div class="flex flex-col gap-1.5">
-              <dt
-                class="font-mono text-[0.68rem] uppercase tracking-[0.22em] text-accent-orange"
-              >
+              <dt class="font-mono text-[0.68rem] uppercase tracking-[0.22em] text-accent-orange">
                 {{ block.label }} ▸
               </dt>
               @if (block.list) {
@@ -216,8 +221,7 @@ export class ProjectCardComponent {
     const out: ExternalLink[] = [];
     if (l.live) out.push({ label: c.live, href: l.live, icon: "lucideExternalLink" });
     if (l.repo) out.push({ label: c.repo, href: l.repo, icon: "brandGithub" });
-    if (l.caseStudy)
-      out.push({ label: c.caseStudy, href: l.caseStudy, icon: "lucideFileText" });
+    if (l.caseStudy) out.push({ label: c.caseStudy, href: l.caseStudy, icon: "lucideFileText" });
     return out;
   });
 }

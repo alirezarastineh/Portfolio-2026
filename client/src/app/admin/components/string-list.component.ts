@@ -32,14 +32,7 @@ let counter = 0;
 @Component({
   selector: "app-string-list",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    FormsModule,
-    HlmButton,
-    HlmInput,
-    NgIcon,
-    SortableListComponent,
-    SortableRowDirective,
-  ],
+  imports: [FormsModule, HlmButton, HlmInput, NgIcon, SortableListComponent, SortableRowDirective],
   viewProviders: [provideIcons({ lucidePlus, lucideTrash2 })],
   host: { class: "block" },
   template: `
@@ -126,7 +119,9 @@ export class StringListComponent {
   }
 
   private sameAsLast(next: string[]): boolean {
-    return next.length === this.lastEmitted.length && next.every((v, i) => v === this.lastEmitted[i]);
+    return (
+      next.length === this.lastEmitted.length && next.every((v, i) => v === this.lastEmitted[i])
+    );
   }
 
   protected readonly trackEntry = (entry: Entry): string => entry.id;

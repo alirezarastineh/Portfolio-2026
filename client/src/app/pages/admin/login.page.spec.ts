@@ -47,8 +47,7 @@ function setup() {
   return { fixture, api };
 }
 
-const text = (fixture: { nativeElement: HTMLElement }) =>
-  fixture.nativeElement.textContent ?? "";
+const text = (fixture: { nativeElement: HTMLElement }) => fixture.nativeElement.textContent ?? "";
 
 describe("AdminLoginPage", () => {
   beforeEach(() => {

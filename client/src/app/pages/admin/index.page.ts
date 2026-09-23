@@ -11,6 +11,7 @@ import {
   HlmCardHeader,
   HlmCardTitle,
 } from "@spartan-ng/helm/card";
+import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmSpinner } from "@spartan-ng/helm/spinner";
 
@@ -35,6 +36,7 @@ import {
     HlmCardDescription,
     HlmCardHeader,
     HlmCardTitle,
+    HlmInput,
     HlmSkeleton,
     HlmSpinner,
     RouterLink,
@@ -49,13 +51,27 @@ import {
             Edits are saved as a draft. Publishing makes them live.
           </p>
         </div>
-        <button hlmBtn [disabled]="publishing()" (click)="publish()">
-          @if (publishing()) {
-            <hlm-spinner class="size-4" />
-          } @else {
-            Publish
-          }
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Optional; shown in Publications, so a rollback target is easy to find later. -->
+          <input
+            #labelInput
+            hlmInput
+            class="h-9 w-56"
+            maxlength="200"
+            placeholder="What changed? (optional)"
+            aria-label="Label for this publish"
+            [value]="label()"
+            (input)="label.set(labelInput.value)"
+            (keydown.enter)="publish()"
+          />
+          <button hlmBtn [disabled]="publishing()" (click)="publish()">
+            @if (publishing()) {
+              <hlm-spinner class="size-4" />
+            } @else {
+              Publish
+            }
+          </button>
+        </div>
       </header>
 
       @if (reconcile(); as r) {
@@ -64,8 +80,8 @@ import {
             <h2 hlmAlertTitle>Media and database are out of step</h2>
             <p hlmAlertDescription>
               {{ r.missingFiles.length }} record(s) without a file,
-              {{ r.orphanFiles.length }} file(s) without a record. Usually a
-              database restore without a matching media restore.
+              {{ r.orphanFiles.length }} file(s) without a record. Usually a database restore
+              without a matching media restore.
               <a routerLink="/admin/media" class="underline underline-offset-4">Open media</a>
             </p>
           </div>
@@ -95,13 +111,17 @@ import {
           </div>
           <div hlmCardContent class="grid gap-4 sm:grid-cols-2">
             <div>
-              <p class="m-0 font-mono text-[0.7rem] uppercase tracking-[0.2em] text-muted-foreground">
+              <p
+                class="m-0 font-mono text-[0.7rem] uppercase tracking-[0.2em] text-muted-foreground"
+              >
                 Last edit
               </p>
               <p class="m-0 mt-1 text-sm">{{ s.lastEdit ? formatDate(s.lastEdit) : "—" }}</p>
             </div>
             <div>
-              <p class="m-0 font-mono text-[0.7rem] uppercase tracking-[0.2em] text-muted-foreground">
+              <p
+                class="m-0 font-mono text-[0.7rem] uppercase tracking-[0.2em] text-muted-foreground"
+              >
                 Last publish
               </p>
               <p class="m-0 mt-1 text-sm">{{ s.lastPublish ? formatDate(s.lastPublish) : "—" }}</p>
@@ -147,19 +167,24 @@ export default class AdminDashboardPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
 
   protected readonly quickLinks = [
-    { path: "/admin/hero", label: "Hero" },
+    { path: "/admin/hero", label: "Hero & identity" },
     { path: "/admin/about", label: "Über mich" },
     { path: "/admin/projects", label: "Projects" },
+    { path: "/admin/experience", label: "Experience" },
+    { path: "/admin/writing", label: "Writing" },
     { path: "/admin/skills", label: "Skills" },
+    { path: "/admin/legal", label: "Legal pages" },
     { path: "/admin/seo", label: "SEO" },
     { path: "/admin/media", label: "Media" },
-    { path: "/admin/revisions", label: "Revisions" },
+    { path: "/admin/inbox", label: "Inbox" },
+    { path: "/admin/publications", label: "Publications" },
   ];
 
   protected readonly status = signal<AdminStatus | null>(null);
   protected readonly reconcile = signal<MediaReconcile | null>(null);
   protected readonly loading = signal(true);
   protected readonly publishing = signal(false);
+  protected readonly label = signal("");
 
   ngOnInit(): void {
     void this.load();
@@ -190,14 +215,14 @@ export default class AdminDashboardPage implements OnInit {
     const go = await this.confirm.ask({
       title: "Publish the draft?",
       description:
-        "Both languages go live immediately. The current version is kept, so you can roll back from Revisions.",
+        "Both languages go live immediately. The current version is kept, so you can roll back from Publications.",
       confirmLabel: "Publish",
     });
     if (!go) return;
 
     this.publishing.set(true);
 
-    const result = await this.api.publish("admin");
+    const result = await this.api.publish(this.label().trim() || undefined);
     this.publishing.set(false);
 
     if (!result.ok) {
@@ -205,8 +230,16 @@ export default class AdminDashboardPage implements OnInit {
       return;
     }
 
+    if (result.data.unchanged) {
+      toast.info("Nothing to publish", {
+        description: "The draft already matches what is live, so no new revision was made.",
+      });
+      return;
+    }
+
     const versions = result.data.published.map((p) => `${p.locale} v${p.versionId}`).join(", ");
     toast.success("Published", { description: versions });
+    this.label.set("");
     await this.load();
   }
 }

@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { eq, sql } from "drizzle-orm";
 
+import { backfillContentV2 } from "../content/backfill.js";
 import { publishAll } from "../content/publish.js";
 import { LOCALES, type Locale } from "../content/schema.js";
 import { getDb } from "./client.js";
@@ -67,29 +68,21 @@ function loadSeedFile(): SeedFile {
   return JSON.parse(readFileSync(path, "utf8")) as SeedFile;
 }
 
-/**
- * Idempotent: every insert either conflicts away or is guarded by a count, so
- * re-running never duplicates rows or overwrites edits made in the admin.
- */
-export async function seed(): Promise<void> {
-  const db = getDb();
-  const data = loadSeedFile();
+type Database = ReturnType<typeof getDb>;
 
-  await db
-    .insert(siteProfile)
-    .values({ id: true, ...data.identity })
-    .onConflictDoNothing();
-
+async function seedSocials(db: Database, socialsData: SeedFile["socials"]): Promise<void> {
   // Socials have generated ids and so no natural key to conflict on; skipping
   // when rows already exist is what keeps this safe to re-run.
   const [{ count: socialCount }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(socials);
   if (socialCount === 0) {
-    await db.insert(socials).values(data.socials);
+    await db.insert(socials).values(socialsData);
   }
+}
 
-  for (const skill of data.skills) {
+async function seedSkills(db: Database, skillsData: SeedFile["skills"]): Promise<void> {
+  for (const skill of skillsData) {
     await db
       .insert(skills)
       .values({
@@ -108,8 +101,10 @@ export async function seed(): Promise<void> {
         .onConflictDoNothing();
     }
   }
+}
 
-  for (const project of data.projects) {
+async function seedProjects(db: Database, projectsData: SeedFile["projects"]): Promise<void> {
+  for (const project of projectsData) {
     const [inserted] = await db
       .insert(projects)
       .values({
@@ -146,20 +141,49 @@ export async function seed(): Promise<void> {
         .onConflictDoNothing();
     }
   }
+}
 
+async function seedDocuments(db: Database, documentsData: SeedFile["documents"]): Promise<void> {
   for (const section of ["ui", "seo"] as const) {
     for (const locale of LOCALES) {
       await db
         .insert(contentDocuments)
-        .values({ section, locale, data: data.documents[section][locale] })
+        .values({ section, locale, data: documentsData[section][locale] })
         .onConflictDoNothing();
     }
   }
+}
+
+/**
+ * Idempotent: every insert either conflicts away or is guarded by a count, so
+ * re-running never duplicates rows or overwrites edits made in the admin.
+ */
+export async function seed(): Promise<void> {
+  const db = getDb();
+  const data = loadSeedFile();
+
+  await db
+    .insert(siteProfile)
+    .values({ id: true, ...data.identity })
+    .onConflictDoNothing();
+
+  await seedSocials(db, data.socials);
+  await seedSkills(db, data.skills);
+  await seedProjects(db, data.projects);
+  await seedDocuments(db, data.documents);
+
+  // The seed file holds v1 copy; bring it up to v2 (and create the legal
+  // pages) before the first build validates it.
+  await backfillContentV2(db);
 
   const published = await publishAll({ label: "seed" });
-  for (const result of published) {
+  if (published.unchanged) {
+    console.log("[seed] draft already matches what is live — nothing published");
+  }
+  const status = published.unchanged ? "live" : "published";
+  for (const result of published.results) {
     console.log(
-      `[seed] published ${result.locale} → version ${result.versionId} (${result.checksum.slice(0, 12)}…)`,
+      `[seed] ${status} ${result.locale} → version ${result.versionId} (${result.checksum.slice(0, 12)}…)`,
     );
   }
 }

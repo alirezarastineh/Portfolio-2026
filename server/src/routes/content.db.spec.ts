@@ -1,7 +1,13 @@
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createApp } from "../app.js";
-import type { AppContent } from "../content/schema.js";
+import { invalidateContentCache } from "../content/cache.js";
+import { publishAll } from "../content/publish.js";
+import type { AppContent, Doc } from "../content/schema.js";
+import * as v1 from "../content/schema-v1.js";
+import { getDb } from "../db/client.js";
+import { contentPointers, contentPublications, contentVersions } from "../db/schema.js";
 import { seed } from "../db/seed.js";
 import { createAdmin, resetDb, TestClient } from "../test/helpers.js";
 
@@ -15,50 +21,135 @@ beforeEach(async () => {
 });
 
 async function liveContent(locale: "en" | "de" = "en"): Promise<AppContent> {
-  const res = await app.request(`/v1/content/${locale}`);
+  const res = await app.request(`/v2/content/${locale}`);
   expect(res.status).toBe(200);
   return (await res.json()) as AppContent;
 }
 
-describe("public content API", () => {
-  it("serves the published snapshot with a version validator", async () => {
-    const res = await app.request("/v1/content/en");
+describe("public content API (v2)", () => {
+  it("serves the published core with a version validator", async () => {
+    const res = await app.request("/v2/content/en");
     expect(res.status).toBe(200);
     expect(res.headers.get("etag")).toMatch(/^W\/"en-\d+"$/);
     expect(res.headers.get("x-content-version")).toMatch(/^\d+$/);
-    expect(((await res.json()) as AppContent).locale).toBe("en");
+    const body = (await res.json()) as AppContent;
+    expect(body).toMatchObject({ version: 2, locale: "en" });
+    expect(body.legal.map((l) => l.doc)).toEqual(["imprint", "privacy"]);
   });
 
   it("answers a matching If-None-Match with 304 and no body", async () => {
-    const first = await app.request("/v1/content/en");
+    const first = await app.request("/v2/content/en");
     const etag = first.headers.get("etag")!;
 
-    const second = await app.request("/v1/content/en", { headers: { "if-none-match": etag } });
+    const second = await app.request("/v2/content/en", { headers: { "if-none-match": etag } });
     expect(second.status).toBe(304);
     expect(await second.text()).toBe("");
   });
 
   it("rejects an unsupported locale", async () => {
-    const res = await app.request("/v1/content/fr");
-    expect(res.status).toBe(400);
+    expect((await app.request("/v2/content/fr")).status).toBe(400);
+    expect((await app.request("/v2/content/fr/legal/imprint")).status).toBe(400);
+  });
+
+  it("serves a doc with its own validator, keyed by the live version", async () => {
+    const res = await app.request("/v2/content/de/legal/imprint");
+    expect(res.status).toBe(200);
+    const etag = res.headers.get("etag")!;
+    expect(etag).toMatch(/^W\/"de-\d+-legal:imprint"$/);
+    const doc = (await res.json()) as Doc;
+    expect(doc).toMatchObject({ kind: "legal", doc: "imprint", title: "Impressum" });
+
+    const again = await app.request("/v2/content/de/legal/imprint", {
+      headers: { "if-none-match": etag },
+    });
+    expect(again.status).toBe(304);
+  });
+
+  it("answers 404 for a doc that does not exist or a kind it does not know", async () => {
+    expect((await app.request("/v2/content/en/posts/nope")).status).toBe(404);
+    expect((await app.request("/v2/content/en/legal/cookies")).status).toBe(404);
+    expect((await app.request("/v2/content/en/secrets/x")).status).toBe(404);
+    expect((await app.request("/v2/content/en/posts/Bad_Slug")).status).toBe(404);
+  });
+});
+
+describe("public content API (v1, downcast)", () => {
+  it("serves the live content in the v1 shape for clients built before v2", async () => {
+    const res = await app.request("/v1/content/en");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("etag")).toMatch(/^W\/"en-\d+-v1"$/);
+    const body = (await res.json()) as unknown;
+    const parsed = v1.appContentSchema.safeParse(body);
+    expect(parsed.error?.issues ?? []).toEqual([]);
+    expect(parsed.data?.version).toBe(1);
+  });
+
+  it("drops the socials a v1 client cannot draw", async () => {
+    const client = new TestClient(app);
+    await client.login();
+    await client.post("/admin/socials", {
+      label: "Mastodon",
+      href: "https://m.example",
+      icon: "mastodon",
+    });
+    await publishAll();
+
+    const v2 = await liveContent();
+    expect(v2.socials.some((s) => s.icon === "mastodon")).toBe(true);
+    const old = (await (await app.request("/v1/content/en")).json()) as v1.AppContent;
+    expect(old.socials.some((s) => s.label === "Mastodon")).toBe(false);
+  });
+});
+
+describe("a live snapshot published before v2", () => {
+  /** What the first request after deploying v2 sees, until the next publish. */
+  async function pointAtV1Snapshot() {
+    const v1Payload = (await (await app.request("/v1/content/en")).json()) as v1.AppContent;
+    const [pub] = await getDb()
+      .insert(contentPublications)
+      .values({ kind: "publish", schemaVersion: 1 })
+      .returning({ id: contentPublications.id });
+    const [version] = await getDb()
+      .insert(contentVersions)
+      .values({ locale: "en", payload: v1Payload, checksum: "legacy", publicationId: pub!.id })
+      .returning({ id: contentVersions.id });
+    await getDb()
+      .update(contentPointers)
+      .set({ versionId: version!.id })
+      .where(eq(contentPointers.locale, "en"));
+    invalidateContentCache();
+    return version!.id;
+  }
+
+  it("is served upcast to v2, with the bundled legal pages", async () => {
+    const versionId = await pointAtV1Snapshot();
+    const res = await app.request("/v2/content/en");
+    expect(res.headers.get("x-content-version")).toBe(String(versionId));
+    const body = (await res.json()) as AppContent;
+    expect(body.version).toBe(2);
+    expect(body.experiences).toEqual([]);
+
+    const imprint = await app.request("/v2/content/en/legal/imprint");
+    expect(imprint.status).toBe(200);
+    expect(((await imprint.json()) as Doc).kind).toBe("legal");
   });
 });
 
 describe("publish and rollback", () => {
   async function renameFirstProject(client: TestClient, name: string) {
-    const list = await client.get("/admin/projects");
-    const { projects } = (await list.json()) as {
-      projects: (Record<string, unknown> & { id: string; translations: Record<string, object> })[];
+    const list = (await (await client.get("/admin/projects")).json()) as {
+      projects: { id: string }[];
     };
-    const project = projects[0]!;
-    const { id, position, createdAt, updatedAt, translations, ...rest } = project;
-    void position;
-    void createdAt;
-    void updatedAt;
+    const id = list.projects[0]!.id;
+    const { project } = (await (await client.get(`/admin/projects/${id}`)).json()) as {
+      project: Record<string, unknown> & { translations: Record<string, object> };
+    };
+    const { id: _id, coverPath, position, createdAt, updatedAt, ...rest } = project;
+    void [_id, coverPath, position, createdAt, updatedAt];
 
     const res = await client.put(`/admin/projects/${id}`, {
       ...rest,
-      translations: { ...translations, en: { ...translations.en, name } },
+      translations: { ...project.translations, en: { ...project.translations["en"], name } },
     });
     expect(res.status).toBe(200);
   }
@@ -79,12 +170,12 @@ describe("publish and rollback", () => {
   it("invalidates the previous validator when a new version goes live", async () => {
     const client = new TestClient(app);
     await client.login();
-    const oldEtag = (await app.request("/v1/content/en")).headers.get("etag")!;
+    const oldEtag = (await app.request("/v2/content/en")).headers.get("etag")!;
 
     await renameFirstProject(client, "Next version");
     await client.post("/admin/publish", {});
 
-    const res = await app.request("/v1/content/en", { headers: { "if-none-match": oldEtag } });
+    const res = await app.request("/v2/content/en", { headers: { "if-none-match": oldEtag } });
     expect(res.status).toBe(200);
   });
 

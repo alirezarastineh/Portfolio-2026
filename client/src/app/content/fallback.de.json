@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "locale": "de",
   "ui": {
     "profile": {
@@ -14,7 +14,17 @@
       "skills": "fähigkeiten",
       "projects": "projekte",
       "about": "über mich",
-      "contact": "kontakt"
+      "contact": "kontakt",
+      "work": "Projekte",
+      "experience": "Werdegang",
+      "writing": "Artikel"
+    },
+    "hero": {
+      "availabilityOpen": "Offen für Senior-Rollen in AI / Full-Stack",
+      "availabilityLimited": "Eingeschränkt verfügbar",
+      "availabilityClosed": "Derzeit keine neuen Projekte",
+      "downloadCv": "Lebenslauf herunterladen",
+      "askCta": "frag mein Portfolio"
     },
     "skills": {
       "heading": "// fähigkeiten",
@@ -33,6 +43,48 @@
     "projects": {
       "heading": "// projekte",
       "subtitle": "fallstudien"
+    },
+    "experience": {
+      "heading": "Werdegang",
+      "subtitle": "Beruf · Ausbildung · Zertifikate",
+      "work": "Beruf",
+      "education": "Ausbildung",
+      "certifications": "Zertifikate",
+      "present": "Heute",
+      "credential": "Nachweis ansehen",
+      "years": "{n} J.",
+      "months": "{n} Mon.",
+      "fullTime": "Vollzeit",
+      "partTime": "Teilzeit",
+      "contract": "Vertrag",
+      "freelance": "Freiberuflich",
+      "internship": "Praktikum"
+    },
+    "writing": {
+      "heading": "Artikel",
+      "subtitle": "Notizen aus der Praxis",
+      "readingTime": "{n} Min. Lesezeit",
+      "allPosts": "Alle Artikel",
+      "empty": "Noch nichts veröffentlicht.",
+      "rss": "RSS-Feed",
+      "published": "Veröffentlicht",
+      "updated": "Aktualisiert",
+      "tags": "Themen"
+    },
+    "caseStudy": {
+      "allWork": "Alle Projekte",
+      "readCaseStudy": "Fallstudie lesen",
+      "role": "Rolle",
+      "period": "Zeitraum",
+      "category": "Kategorie",
+      "metrics": "Ergebnisse",
+      "gallery": "Galerie",
+      "toc": "Auf dieser Seite",
+      "previous": "Vorheriges Projekt",
+      "next": "Nächstes Projekt",
+      "ctaHeading": "Sie planen etwas Ähnliches?",
+      "ctaBody": "Erzählen Sie mir, woran Sie arbeiten — ich antworte innerhalb von zwei Werktagen.",
+      "ctaButton": "Ähnliches Projekt besprechen"
     },
     "contact": {
       "heading": "// kontakt",
@@ -69,6 +121,24 @@
       "repo": "repo",
       "caseStudy": "fallstudie",
       "techStackAriaLabel": "Tech-Stack"
+    },
+    "legal": {
+      "nav": "Rechtliches",
+      "imprint": "Impressum",
+      "privacy": "Datenschutz",
+      "updated": "Stand"
+    },
+    "notFound": {
+      "title": "404: Seite nicht gefunden",
+      "body": "Diese Seite gibt es nicht, oder sie ist umgezogen.",
+      "home": "Zur Startseite"
+    },
+    "ask": {
+      "title": "frag mein Portfolio",
+      "hint": "Stellen Sie eine Frage, oder \"help\"",
+      "placeholder": "Fragen Sie nach Projekten, Erfahrung oder Verfügbarkeit…",
+      "disclosure": "Die Antworten erzeugt eine KI aus den Inhalten dieser Website.",
+      "offline": "Der Assistent pausiert. Nutzen Sie bitte das Kontaktformular."
     }
   },
   "identity": {
@@ -76,7 +146,16 @@
     "handle": "@alirezarastineh",
     "contactEmail": "contact@alirezarastineh.me",
     "primaryCtaHref": "#projects",
-    "secondaryCtaHref": "#contact"
+    "secondaryCtaHref": "#contact",
+    "siteUrl": "https://alirezarastineh.me",
+    "availability": "open",
+    "location": {
+      "city": "",
+      "country": ""
+    },
+    "timezone": "",
+    "avatar": null,
+    "resume": null
   },
   "socials": [
     {
@@ -142,15 +221,7 @@
       "id": "devops",
       "icon": "container",
       "span": "sm",
-      "items": [
-        "Docker",
-        "GitHub Actions",
-        "Caddy",
-        "Hetzner",
-        "Linux",
-        "Nginx",
-        "CI/CD"
-      ],
+      "items": ["Docker", "GitHub Actions", "Caddy", "Hetzner", "Linux", "Nginx", "CI/CD"],
       "title": "DevOps & Cloud",
       "caption": "// data + ML + cloud",
       "narrative": "Durch die Orchestrierung von PyTorch-Modell-Trainingspipelines via Docker und GitHub Actions stelle ich sicher, dass Machine-Learning-Dienste sauber in skalierbare, hochverfügbare Cloud-Umgebungen deployt werden."
@@ -159,14 +230,7 @@
       "id": "data-pipelines",
       "icon": "database",
       "span": "sm",
-      "items": [
-        "PostgreSQL",
-        "Redis",
-        "Drizzle ORM",
-        "Prisma",
-        "Kafka",
-        "BullMQ"
-      ],
+      "items": ["PostgreSQL", "Redis", "Drizzle ORM", "Prisma", "Kafka", "BullMQ"],
       "title": "Datenpipelines",
       "caption": "// speicher + streams",
       "narrative": "Typisierte Schemata, Vektorindizes und asynchrone Queues sorgen dafür, dass Inferenzjobs, Embeddings und Nutzerdaten ohne Engpässe fließen."
@@ -186,18 +250,29 @@
         "TODO: Concrete metric #2 (latency, throughput, cost)",
         "TODO: Concrete metric #3 (adoption, retention, savings)"
       ],
-      "stack": [
-        "TypeScript",
-        "Python",
-        "FastAPI",
-        "Postgres"
-      ],
-      "image": "/projects/project-one.svg",
+      "stack": ["TypeScript", "Python", "FastAPI", "Postgres"],
       "links": {
         "live": "",
         "repo": "",
         "caseStudy": ""
-      }
+      },
+      "cover": {
+        "src": "/projects/project-one.svg",
+        "srcset": "",
+        "sources": [],
+        "width": null,
+        "height": null,
+        "alt": "TODO: Project One",
+        "blur": null
+      },
+      "featured": false,
+      "period": null,
+      "role": "",
+      "category": null,
+      "tags": [],
+      "metrics": [],
+      "hasCaseStudy": false,
+      "updatedAt": "2026-09-22T00:00:00.000Z"
     },
     {
       "slug": "project-two",
@@ -207,22 +282,30 @@
       "problem": "<p>TODO: Business problem.</p>",
       "aiArchitecture": "<p>TODO: AI architecture.</p>",
       "fullStackInfra": "<p>TODO: Infrastructure.</p>",
-      "outcomes": [
-        "TODO: Metric #1",
-        "TODO: Metric #2",
-        "TODO: Metric #3"
-      ],
-      "stack": [
-        "Angular",
-        "Node.js",
-        "Redis"
-      ],
-      "image": "/projects/project-two.svg",
+      "outcomes": ["TODO: Metric #1", "TODO: Metric #2", "TODO: Metric #3"],
+      "stack": ["Angular", "Node.js", "Redis"],
       "links": {
         "live": "",
         "repo": "",
         "caseStudy": ""
-      }
+      },
+      "cover": {
+        "src": "/projects/project-two.svg",
+        "srcset": "",
+        "sources": [],
+        "width": null,
+        "height": null,
+        "alt": "TODO: Project Two",
+        "blur": null
+      },
+      "featured": false,
+      "period": null,
+      "role": "",
+      "category": null,
+      "tags": [],
+      "metrics": [],
+      "hasCaseStudy": false,
+      "updatedAt": "2026-09-22T00:00:00.000Z"
     },
     {
       "slug": "project-three",
@@ -232,22 +315,44 @@
       "problem": "<p>TODO: Business problem.</p>",
       "aiArchitecture": "<p>TODO: AI architecture.</p>",
       "fullStackInfra": "<p>TODO: Infrastructure.</p>",
-      "outcomes": [
-        "TODO: Metric #1",
-        "TODO: Metric #2",
-        "TODO: Metric #3"
-      ],
-      "stack": [
-        "React",
-        "PyTorch",
-        "Docker"
-      ],
-      "image": "/projects/project-three.svg",
+      "outcomes": ["TODO: Metric #1", "TODO: Metric #2", "TODO: Metric #3"],
+      "stack": ["React", "PyTorch", "Docker"],
       "links": {
         "live": "",
         "repo": "",
         "caseStudy": ""
-      }
+      },
+      "cover": {
+        "src": "/projects/project-three.svg",
+        "srcset": "",
+        "sources": [],
+        "width": null,
+        "height": null,
+        "alt": "TODO: Project Three",
+        "blur": null
+      },
+      "featured": false,
+      "period": null,
+      "role": "",
+      "category": null,
+      "tags": [],
+      "metrics": [],
+      "hasCaseStudy": false,
+      "updatedAt": "2026-09-22T00:00:00.000Z"
+    }
+  ],
+  "experiences": [],
+  "posts": [],
+  "legal": [
+    {
+      "doc": "imprint",
+      "title": "Impressum",
+      "updatedAt": "2026-09-22T00:00:00.000Z"
+    },
+    {
+      "doc": "privacy",
+      "title": "Datenschutzerklärung",
+      "updatedAt": "2026-09-22T00:00:00.000Z"
     }
   ],
   "seo": {

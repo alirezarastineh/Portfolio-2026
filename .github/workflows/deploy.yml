@@ -92,11 +92,11 @@ jobs:
           # Same as the documented `git pull --ff-only`, then a guard: the
           # checkout must be the commit the images were built from, or compose
           # config and container code would drift apart.
-          git fetch --quiet origin master
-          git merge --ff-only --quiet origin/master
+          git fetch --quiet origin main
+          git merge --ff-only --quiet origin/main
           if [ "$(git rev-parse HEAD)" != "$IMAGE_TAG" ]; then
             echo "Host checkout $(git rev-parse --short HEAD) is not the built commit ${IMAGE_TAG:0:7}." >&2
-            echo "Re-run the workflow from the latest master." >&2
+            echo "Re-run the workflow from the latest main." >&2
             exit 1
           fi
 

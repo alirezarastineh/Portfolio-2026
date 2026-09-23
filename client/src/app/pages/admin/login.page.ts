@@ -53,7 +53,7 @@ const ERROR_COPY: Record<string, string> = {
   ],
   host: { class: "block" },
   template: `
-    <div class="flex min-h-screen items-center justify-center px-6 py-12">
+    <main class="flex min-h-screen items-center justify-center px-6 py-12">
       <section hlmCard class="w-full max-w-sm">
         <div hlmCardHeader>
           <h1 hlmCardTitle class="font-mono">
@@ -76,7 +76,11 @@ const ERROR_COPY: Record<string, string> = {
           }
 
           @if (step() === "credentials") {
-            <form [formGroup]="credentials" (ngSubmit)="submitCredentials()" class="flex flex-col gap-4">
+            <form
+              [formGroup]="credentials"
+              (ngSubmit)="submitCredentials()"
+              class="flex flex-col gap-4"
+            >
               <div hlmField>
                 <label hlmFieldLabel for="email">Email</label>
                 <input
@@ -150,7 +154,11 @@ const ERROR_COPY: Record<string, string> = {
                 }
               </button>
               <button hlmBtn variant="link" type="button" size="sm" (click)="toggleRecovery()">
-                {{ useRecovery() ? "Use an authenticator code instead" : "Lost your device? Use a recovery code" }}
+                {{
+                  useRecovery()
+                    ? "Use an authenticator code instead"
+                    : "Lost your device? Use a recovery code"
+                }}
               </button>
               <button hlmBtn variant="ghost" type="button" (click)="backToCredentials()">
                 Use a different account
@@ -159,7 +167,7 @@ const ERROR_COPY: Record<string, string> = {
           }
         </div>
       </section>
-    </div>
+    </main>
   `,
 })
 export default class AdminLoginPage {

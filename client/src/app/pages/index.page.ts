@@ -1,49 +1,31 @@
-import { DOCUMENT } from "@angular/common";
-import { Component, effect, inject } from "@angular/core";
 import type { RouteMeta } from "@analogjs/router";
+import type { RedirectFunction } from "@angular/router";
+import { injectRequest } from "@analogjs/router/tokens";
 
-import { PublicShellComponent } from "../layouts/public-shell.component";
-import { applyCanonical, seoMetaResolver, seoTitleResolver } from "../seo/seo-meta";
-import { LanguageService } from "../services/language.service";
-import { AboutSectionComponent } from "../sections/about.component";
-import { ContactSectionComponent } from "../sections/contact.component";
-import { HeroSectionComponent } from "../sections/hero.component";
-import { ProjectsSectionComponent } from "../sections/projects.component";
-import { SkillsSectionComponent } from "../sections/skills.component";
+import { negotiateLocale } from "../content/locale";
 
-export const routeMeta: RouteMeta = {
-  title: seoTitleResolver,
-  meta: seoMetaResolver,
+const header = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value.join(",") : value;
+
+/**
+ * `/` has no content of its own. In production the Nitro middleware answers it
+ * before Angular runs (a per-visitor 302); this covers in-app navigation to
+ * `/` and any server that runs without the middleware.
+ */
+const toPreferredLocale: RedirectFunction = () => {
+  const request = injectRequest();
+  if (request) {
+    return `/${negotiateLocale(header(request.headers.cookie), header(request.headers["accept-language"]))}`;
+  }
+  if (typeof document !== "undefined") {
+    return `/${negotiateLocale(document.cookie, navigator.languages?.join(",") ?? navigator.language)}`;
+  }
+  return "/en";
 };
 
-@Component({
-  selector: "app-home",
-  imports: [
-    AboutSectionComponent,
-    ContactSectionComponent,
-    HeroSectionComponent,
-    ProjectsSectionComponent,
-    PublicShellComponent,
-    SkillsSectionComponent,
-  ],
-  template: `
-    <app-public-shell>
-      <main class="block">
-        <app-hero-section />
-        <app-skills-section />
-        <app-projects-section />
-        <app-about-section />
-        <app-contact-section />
-      </main>
-    </app-public-shell>
-  `,
-})
-export default class Home {
-  private readonly lang = inject(LanguageService);
-  private readonly document = inject(DOCUMENT);
-
-  constructor() {
-    // Re-applied on locale switch so the canonical never lags the content.
-    effect(() => applyCanonical(this.document, this.lang.content().seo.canonical));
-  }
-}
+// Analog types `redirectTo` as a string; Angular also accepts a function, and
+// Analog passes redirect meta through unchanged.
+export const routeMeta: RouteMeta = {
+  redirectTo: toPreferredLocale as unknown as string,
+  pathMatch: "full",
+};

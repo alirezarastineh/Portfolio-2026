@@ -173,11 +173,7 @@ export class UiGroupEditorComponent {
     this.saving.set(true);
 
     const raw = this.form.getRawValue() as Record<Locale, StringRecord>;
-    const result = await this.ui.saveGroup(
-      this.group(),
-      raw as never,
-      this.updatedAt,
-    );
+    const result = await this.ui.saveGroup(this.group(), raw as never, this.updatedAt);
     this.saving.set(false);
 
     if (!result.ok) {

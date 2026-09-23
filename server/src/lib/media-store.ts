@@ -8,9 +8,10 @@ export function mediaRoot(): string {
 }
 
 export function maxUploadBytes(): number {
-  // 4 MiB, deliberately under Caddy's `request_body max_size 5MB` so the
-  // rejection is our JSON error rather than Caddy's HTML 413.
-  return Number.parseInt(process.env.MEDIA_MAX_BYTES ?? "4194304", 10);
+  // 10 MiB: a full-size phone photo or a CV PDF. Deliberately under the 11MB
+  // Caddy allows on the upload route, so the rejection is our JSON error rather
+  // than Caddy's HTML 413.
+  return Number.parseInt(process.env.MEDIA_MAX_BYTES ?? "10485760", 10);
 }
 
 /**
@@ -51,6 +52,30 @@ export async function storeMedia(buffer: Buffer, ext: string): Promise<string> {
   const filename = `${randomUUID()}.${ext}`;
   await writeAtomically(buffer, filename);
   return filename;
+}
+
+/** For derived files (resized variants) whose name is decided by the caller. */
+export async function writeMediaFile(buffer: Buffer, filename: string): Promise<void> {
+  await writeAtomically(buffer, filename);
+}
+
+/**
+ * Half-written uploads left by a crash mid-write. Run at boot, before anything
+ * can be writing: a single API instance owns the media volume.
+ */
+export async function cleanupPartialUploads(): Promise<number> {
+  const tmp = join(mediaRoot(), "tmp");
+  let removed = 0;
+  try {
+    for (const entry of await readdir(tmp)) {
+      if (!entry.endsWith(".part")) continue;
+      await rm(join(tmp, entry), { force: true });
+      removed++;
+    }
+  } catch {
+    // No tmp directory yet: nothing to clean.
+  }
+  return removed;
 }
 
 /**

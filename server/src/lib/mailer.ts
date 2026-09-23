@@ -36,7 +36,9 @@ export async function sendContactEmail(payload: ContactPayload): Promise<SendRes
       from: `Portfolio Contact <${contactFrom}>`,
       to: [contactTo],
       replyTo: payload.email,
-      subject: `New contact from ${payload.name}`,
+      // Line breaks in a header field could start a new one; the name is the
+      // only visitor-supplied text that lands in a header.
+      subject: `New contact from ${payload.name.replace(/[\r\n]+/g, " ").slice(0, 120)}`,
       text: [
         `Name:    ${payload.name}`,
         `Email:   ${payload.email}`,

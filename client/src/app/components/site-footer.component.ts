@@ -1,23 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
-import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideMail } from "@ng-icons/lucide";
+import { RouterLink } from "@angular/router";
+import { NgIcon } from "@ng-icons/core";
 
-import { brandGithub, brandLinkedin } from "../icons/brand-icons";
-import type { SocialIcon } from "../content/schema";
+import { iconFor, provideRegistryIcons } from "../icons/icon-registry";
 import { LanguageService } from "../services/language.service";
-
-const ICON_MAP: Record<SocialIcon, string> = {
-  github: "brandGithub",
-  linkedin: "brandLinkedin",
-  mail: "lucideMail",
-  twitter: "lucideMail",
-};
 
 @Component({
   selector: "app-site-footer",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgIcon],
-  viewProviders: [provideIcons({ brandGithub, brandLinkedin, lucideMail })],
+  imports: [NgIcon, RouterLink],
+  viewProviders: [provideRegistryIcons()],
   host: {
     class: "block",
   },
@@ -33,6 +25,23 @@ const ICON_MAP: Record<SocialIcon, string> = {
         <span class="font-mono text-[0.78rem] text-muted-foreground"
           >{{ lang.t().profile.role }} · {{ lang.t().profile.location }}</span
         >
+        <!-- Impressum and Datenschutz: required for a site run from Germany,
+             and reachable from every page. -->
+        <nav
+          class="inline-flex gap-4 font-mono text-[0.78rem]"
+          [attr.aria-label]="lang.t().legal.nav"
+        >
+          <a
+            class="text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+            [routerLink]="['/', lang.lang(), 'legal', 'imprint']"
+            >{{ lang.t().legal.imprint }}</a
+          >
+          <a
+            class="text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+            [routerLink]="['/', lang.lang(), 'legal', 'privacy']"
+            >{{ lang.t().legal.privacy }}</a
+          >
+        </nav>
         <ul class="m-0 inline-flex list-none gap-2 p-0" role="list">
           @for (s of socials(); track s.href) {
             <li>
@@ -63,7 +72,7 @@ export class SiteFooterComponent {
     return raw.length > 12 ? raw.slice(0, 12) : raw;
   });
 
-  iconFor(icon: SocialIcon): string {
-    return ICON_MAP[icon];
+  iconFor(icon: string): string {
+    return iconFor(icon);
   }
 }

@@ -16,10 +16,21 @@
 	# Cache invalidation is called by the API over the compose network
 	# (http://client:3000), never through here. Closing it at the edge leaves
 	# the bearer token as a second layer rather than the only one.
-	@internal path /api/v1/content/_invalidate
-	respond @internal 404
+	# A handle block of its own: `handle` runs before `respond`, so a bare
+	# respond here would lose to the catch-all handle below.
+	handle /api/v1/content/_invalidate {
+		respond 404
+	}
 
-	reverse_proxy 127.0.0.1:{$CLIENT_HOST_PORT:3010}
+	# Uploaded media is served from the site's own origin: published content
+	# holds relative /media/... paths, so images load without a second host.
+	# The API serves them with immutable caching of its own.
+	handle /media/* {
+		reverse_proxy 127.0.0.1:{$API_HOST_PORT:8010}
+	}
+	handle {
+		reverse_proxy 127.0.0.1:{$CLIENT_HOST_PORT:3010}
+	}
 	encode zstd gzip
 
 	header {
@@ -30,12 +41,11 @@
 		X-Frame-Options "DENY"
 		Cross-Origin-Opener-Policy "same-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
-		# Report-only first: violations show in the browser console without
-		# breaking anything. Enforcing needs a per-request nonce for Angular's
-		# inline event-replay script (see DEPLOYMENT.md, "Security headers").
-		# Also allowed: the Umami tracker (script + beacon) and Sentry's ingest
-		# hosts for the error reporter.
-		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://{$ANALYTICS_PUBLIC_DOMAIN:analytics.alirezarastineh.me}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://{$SERVER_PUBLIC_DOMAIN:api.alirezarastineh.me}; font-src 'self' data:; connect-src 'self' https://{$SERVER_PUBLIC_DOMAIN:api.alirezarastineh.me} https://{$ANALYTICS_PUBLIC_DOMAIN:analytics.alirezarastineh.me} https://*.ingest.sentry.io https://*.ingest.de.sentry.io https://*.ingest.us.sentry.io; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		# No Content-Security-Policy here: the SSR server sends it
+		# (client/src/server/middleware/csp.ts), because enforcing it needs a
+		# nonce that is new on every request for Angular's inline event-replay
+		# scripts. A policy set here as well would be applied on top of that
+		# one, without the nonce, and block them.
 	}
 
 	# Build output under /assets is content-hashed: a changed file gets a new
@@ -67,7 +77,15 @@ www.alirezarastineh.me {
 	# exclude it here: compression would buffer the stream.
 	encode zstd gzip
 
-	request_body {
+	# Uploads (a phone photo, a CV PDF) get 11MB: just over the API's own 10 MiB
+	# limit, so an oversized file gets the API's JSON error, not Caddy's page.
+	# Everything else stays at 5MB.
+	@upload path /admin/media
+	request_body @upload {
+		max_size 11MB
+	}
+	@notUpload not path /admin/media
+	request_body @notUpload {
 		max_size 5MB
 	}
 

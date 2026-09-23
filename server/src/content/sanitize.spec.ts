@@ -4,7 +4,8 @@ import { plainTextToRichText, sanitizeRichText } from "./sanitize.js";
 
 describe("sanitizeRichText", () => {
   it("keeps the formatting the editor can produce", () => {
-    const html = "<p>Intro <strong>bold</strong> <em>italic</em> <code>code</code></p><ul><li>One</li></ul>";
+    const html =
+      "<p>Intro <strong>bold</strong> <em>italic</em> <code>code</code></p><ul><li>One</li></ul>";
     expect(sanitizeRichText(html)).toBe(html);
   });
 

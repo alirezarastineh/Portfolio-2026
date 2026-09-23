@@ -1,40 +1,34 @@
 import { provideHttpClient, withInterceptors } from "@angular/common/http";
-import {
-  ApplicationConfig,
-  ErrorHandler,
-  inject,
-  provideAppInitializer,
-  provideBrowserGlobalErrorListeners,
-} from "@angular/core";
+import { ApplicationConfig, ErrorHandler, provideBrowserGlobalErrorListeners } from "@angular/core";
 import { provideClientHydration, withEventReplay } from "@angular/platform-browser";
-import { provideFileRouter, requestContextInterceptor } from "@analogjs/router";
+import { withInMemoryScrolling, withRouterConfig } from "@angular/router";
+import { provideFileRouter, requestContextInterceptor, routes } from "@analogjs/router";
 
-import { adminApiInterceptor } from "./admin/admin-api.interceptor";
-import { ContentStore } from "./content/content.store";
+import { guardLocaleRoute } from "./content/locale-route";
 import { ReportingErrorHandler } from "./monitoring/reporting-error-handler";
-import { LanguageService } from "./services/language.service";
+import { providePageScroll } from "./navigation/page-scroll";
 
+// Before the router reads the routes: `/fr` must not match `:locale`.
+guardLocaleRoute(routes);
+
+/**
+ * No app-wide content preload: public pages load their locale's content in the
+ * `[locale]` route's resolver, so `/admin` never waits for (or fetches) public
+ * content. The admin's HTTP interceptor lives on the admin route for the same
+ * reason — it and the admin API client stay out of the public bundle.
+ */
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     { provide: ErrorHandler, useClass: ReportingErrorHandler },
-    provideFileRouter(),
-    provideHttpClient(
-      withInterceptors([requestContextInterceptor, adminApiInterceptor]),
+    provideFileRouter(
+      // The `[locale]` param reaches every page below it, including the
+      // empty-path children Analog creates for each file route.
+      withRouterConfig({ paramsInheritanceStrategy: "always" }),
+      withInMemoryScrolling({ anchorScrolling: "enabled" }),
     ),
+    providePageScroll(),
+    provideHttpClient(withInterceptors([requestContextInterceptor])),
     provideClientHydration(withEventReplay()),
-    /**
-     * Blocks the first render until the initial locale's content is available.
-     *
-     * On the server that is one in-process Nitro call; in the browser the same
-     * relative URL is replayed from TransferState, so it resolves instantly and
-     * without a second network request. Only the initial locale is awaited —
-     * the other is fetched lazily on first toggle.
-     */
-    provideAppInitializer(() => {
-      const store = inject(ContentStore);
-      const language = inject(LanguageService);
-      return store.load(language.lang());
-    }),
   ],
 };

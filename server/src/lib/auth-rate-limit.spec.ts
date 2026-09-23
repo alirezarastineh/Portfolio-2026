@@ -29,12 +29,7 @@ describe("auth rate limit buckets", () => {
   });
 
   it("keeps the pair and TOTP buckets apart from the single-key ones", () => {
-    const buckets = [
-      ipBucket("x"),
-      emailBucket("x"),
-      ipEmailBucket("x", "x"),
-      totpBucket("x"),
-    ];
+    const buckets = [ipBucket("x"), emailBucket("x"), ipEmailBucket("x", "x"), totpBucket("x")];
     expect(new Set(buckets).size).toBe(buckets.length);
   });
 });

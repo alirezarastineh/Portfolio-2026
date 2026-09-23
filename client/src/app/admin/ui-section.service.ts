@@ -19,8 +19,10 @@ export type SaveOutcome =
  * in slices (hero, about, contact, …). This loads the whole document, hands a
  * page just its group, and merges the group back on save so one editor can
  * never clobber another's fields.
+ *
+ * Provided by the admin route, alongside the `AdminApiService` it calls.
  */
-@Injectable({ providedIn: "root" })
+@Injectable()
 export class UiSectionService {
   private readonly api = inject(AdminApiService);
 
@@ -59,11 +61,7 @@ export class UiSectionService {
       de: { ...current.data.data.de, [group]: value.de },
     };
 
-    const saved = await this.api.putSection<AppTranslations>(
-      "ui",
-      merged,
-      current.data.updatedAt,
-    );
+    const saved = await this.api.putSection<AppTranslations>("ui", merged, current.data.updatedAt);
 
     if (!saved.ok) {
       if (saved.status === 409) return { ok: false, reason: "stale", error: "stale" };

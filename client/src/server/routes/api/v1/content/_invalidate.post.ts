@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { defineEventHandler, getHeader, readBody, setResponseStatus } from "h3";
 
-import { invalidate } from "./[locale].get";
+import { invalidate } from "../../../../utils/content-upstream";
 
 /**
  * Constant-time, so response timing cannot be used to recover the token byte

@@ -4,7 +4,9 @@ import { assertTestDatabase } from "./guard.js";
 
 describe("assertTestDatabase", () => {
   it("accepts a database named as a test database", () => {
-    expect(() => assertTestDatabase("postgresql://u:p@127.0.0.1:61234/portfolio_test")).not.toThrow();
+    expect(() =>
+      assertTestDatabase("postgresql://u:p@127.0.0.1:61234/portfolio_test"),
+    ).not.toThrow();
   });
 
   /** Dev shares the production database through the tunnel; the suites truncate tables. */

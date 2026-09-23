@@ -62,7 +62,12 @@ describe("sniffImage", () => {
   });
 
   it("identifies AVIF, leaving dimensions unknown", () => {
-    expect(sniffImage(AVIF)).toEqual({ mime: "image/avif", ext: "avif", width: null, height: null });
+    expect(sniffImage(AVIF)).toEqual({
+      mime: "image/avif",
+      ext: "avif",
+      width: null,
+      height: null,
+    });
   });
 
   /**
@@ -75,7 +80,9 @@ describe("sniffImage", () => {
 
   /** SVG is deliberately unsupported: it can carry script on our own origin. */
   it("rejects SVG", () => {
-    expect(sniffImage(pad([...Buffer.from('<svg xmlns="http://www.w3.org/2000/svg">', "ascii")]))).toBeNull();
+    expect(
+      sniffImage(pad([...Buffer.from('<svg xmlns="http://www.w3.org/2000/svg">', "ascii")])),
+    ).toBeNull();
   });
 
   it("rejects HTML, PDF and empty input", () => {

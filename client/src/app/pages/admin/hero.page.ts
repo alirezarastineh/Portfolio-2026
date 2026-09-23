@@ -15,34 +15,64 @@ import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
 import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 
-import { AdminApiService, type ProfileInput } from "../../admin/admin-api.service";
+import {
+  AdminApiService,
+  type MediaAsset,
+  type ProfileInput,
+  type ResumeRow,
+} from "../../admin/admin-api.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import {
   LocaleToggleComponent,
   SaveBarComponent,
 } from "../../admin/components/editor-chrome.component";
 import { FieldPairComponent, type LocaleView } from "../../admin/components/field-pair.component";
+import { MediaFieldComponent } from "../../admin/components/media-field.component";
 import { UiSectionService } from "../../admin/ui-section.service";
-import type { AppTranslations, Locale } from "../../content/schema";
+import type { AppTranslations, Availability, Locale } from "../../content/schema";
 
 type ProfileGroup = AppTranslations["profile"];
 type NavGroup = AppTranslations["nav"];
+type HeroGroup = AppTranslations["hero"];
 
-const PROFILE_FIELDS: { key: keyof ProfileGroup; label: string; multiline?: boolean; hint?: string }[] =
-  [
-    { key: "role", label: "Role", hint: "Shown next to your handle and in the footer." },
-    { key: "heroHeadline", label: "Hero headline", multiline: true },
-    { key: "heroSubheadline", label: "Hero subheadline", multiline: true },
-    { key: "primaryCta", label: "Primary button label" },
-    { key: "secondaryCta", label: "Secondary button label" },
-    { key: "location", label: "Location", hint: "Rendered in the footer." },
-  ];
+interface Field<K extends string> {
+  key: K;
+  label: string;
+  multiline?: boolean;
+  hint?: string;
+}
 
-const NAV_FIELDS: { key: keyof NavGroup; label: string }[] = [
+const PROFILE_FIELDS: Field<keyof ProfileGroup>[] = [
+  { key: "role", label: "Role", hint: "Shown next to your handle and in the footer." },
+  { key: "heroHeadline", label: "Hero headline", multiline: true },
+  { key: "heroSubheadline", label: "Hero subheadline", multiline: true },
+  { key: "primaryCta", label: "Primary button label" },
+  { key: "secondaryCta", label: "Secondary button label" },
+  { key: "location", label: "Location", hint: "Rendered in the footer." },
+];
+
+const HERO_FIELDS: Field<keyof HeroGroup>[] = [
+  { key: "availabilityOpen", label: "Availability — open" },
+  { key: "availabilityLimited", label: "Availability — limited" },
+  { key: "availabilityClosed", label: "Availability — closed" },
+  { key: "downloadCv", label: "CV button label" },
+  { key: "askCta", label: "Ask-my-portfolio button label" },
+];
+
+const NAV_FIELDS: Field<keyof NavGroup>[] = [
   { key: "skills", label: "Nav — skills" },
   { key: "projects", label: "Nav — projects" },
   { key: "about", label: "Nav — about" },
   { key: "contact", label: "Nav — contact" },
+  { key: "work", label: "Nav — work (case studies)" },
+  { key: "experience", label: "Nav — experience" },
+  { key: "writing", label: "Nav — writing" },
+];
+
+const AVAILABILITY: { value: Availability; label: string }[] = [
+  { value: "open", label: "Open to new roles" },
+  { value: "limited", label: "Limited availability" },
+  { value: "closed", label: "Not available" },
 ];
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
@@ -58,6 +88,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
     HlmSeparator,
     HlmSkeleton,
     LocaleToggleComponent,
+    MediaFieldComponent,
     ReactiveFormsModule,
     SaveBarComponent,
   ],
@@ -68,7 +99,8 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
         <div>
           <h1 class="m-0 font-mono text-2xl tracking-tight">Hero &amp; identity</h1>
           <p class="mt-1 text-sm text-muted-foreground">
-            The headline, call-to-action labels and navigation wording.
+            Who you are, where, whether you are available — plus the headline, button labels and
+            navigation wording.
           </p>
         </div>
         <app-locale-toggle [(view)]="view" />
@@ -100,6 +132,15 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
               <input hlmInput id="contactEmail" type="email" formControlName="contactEmail" />
             </div>
             <div hlmField>
+              <label hlmFieldLabel for="siteUrl">Site address</label>
+              <input
+                hlmInput
+                id="siteUrl"
+                formControlName="siteUrl"
+                placeholder="https://alirezarastineh.me"
+              />
+            </div>
+            <div hlmField>
               <label hlmFieldLabel for="primaryCtaHref">Primary button link</label>
               <input hlmInput id="primaryCtaHref" formControlName="primaryCtaHref" />
             </div>
@@ -107,7 +148,78 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
               <label hlmFieldLabel for="secondaryCtaHref">Secondary button link</label>
               <input hlmInput id="secondaryCtaHref" formControlName="secondaryCtaHref" />
             </div>
+            <div hlmField>
+              <label hlmFieldLabel for="availability">Availability</label>
+              <select
+                id="availability"
+                formControlName="availability"
+                class="h-9 rounded-md border border-border bg-card px-2 text-sm"
+              >
+                @for (option of availability; track option.value) {
+                  <option [value]="option.value">{{ option.label }}</option>
+                }
+              </select>
+            </div>
+            <div hlmField>
+              <label hlmFieldLabel for="timezone">Time zone</label>
+              <input
+                hlmInput
+                id="timezone"
+                formControlName="timezone"
+                placeholder="Europe/Berlin"
+              />
+            </div>
+            <div hlmField>
+              <label hlmFieldLabel for="locationCity">City</label>
+              <input
+                hlmInput
+                id="locationCity"
+                formControlName="locationCity"
+                placeholder="Berlin"
+              />
+            </div>
+            <div hlmField>
+              <label hlmFieldLabel for="locationCountry">Country code</label>
+              <input
+                hlmInput
+                id="locationCountry"
+                formControlName="locationCountry"
+                placeholder="DE"
+                maxlength="2"
+                class="uppercase"
+              />
+            </div>
           </form>
+
+          <app-media-field
+            id="avatar"
+            label="Photo"
+            hint="Optional; shown in the hero and in the structured data."
+            [path]="avatarPath()"
+            (chosen)="chooseAvatar($event)"
+          />
+        </section>
+
+        <hlm-separator />
+
+        <section class="flex flex-col gap-4">
+          <h2 class="m-0 font-mono text-sm uppercase tracking-[0.2em] text-muted-foreground">CV</h2>
+          <p class="m-0 -mt-2 text-[0.78rem] text-muted-foreground">
+            A PDF per language, behind the "Download CV" button. Saved immediately; live after the
+            next publish.
+          </p>
+          <div class="grid gap-4 sm:grid-cols-2">
+            @for (locale of locales; track locale) {
+              <app-media-field
+                [id]="'cv-' + locale"
+                [label]="'CV (' + locale.toUpperCase() + ')'"
+                kind="document"
+                [path]="resumes()[locale]?.path ?? null"
+                [caption]="resumes()[locale]?.originalName ?? ''"
+                (chosen)="chooseResume(locale, $event)"
+              />
+            }
+          </div>
         </section>
 
         <hlm-separator />
@@ -125,8 +237,18 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                 [multiline]="field.multiline ?? false"
                 [rows]="2"
                 [view]="view()"
-                [controlEn]="profileControl('en', field.key)"
-                [controlDe]="profileControl('de', field.key)"
+                [controlEn]="control('profile', 'en', field.key)"
+                [controlDe]="control('profile', 'de', field.key)"
+              />
+            }
+
+            @for (field of heroFields; track field.key) {
+              <app-field-pair
+                [id]="'hero-' + field.key"
+                [label]="field.label"
+                [view]="view()"
+                [controlEn]="control('hero', 'en', field.key)"
+                [controlDe]="control('hero', 'de', field.key)"
               />
             }
 
@@ -140,19 +262,14 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                 [id]="'nav-' + field.key"
                 [label]="field.label"
                 [view]="view()"
-                [controlEn]="navControl('en', field.key)"
-                [controlDe]="navControl('de', field.key)"
+                [controlEn]="control('nav', 'en', field.key)"
+                [controlDe]="control('nav', 'de', field.key)"
               />
             }
           </form>
         </section>
 
-        <app-save-bar
-          [dirty]="dirty()"
-          [saving]="saving()"
-          (save)="save()"
-          (discard)="discard()"
-        />
+        <app-save-bar [dirty]="dirty()" [saving]="saving()" (save)="save()" (discard)="discard()" />
       }
     </div>
   `,
@@ -164,7 +281,10 @@ export default class AdminHeroPage implements OnInit {
   private readonly unsaved = inject(UnsavedChangesService);
 
   protected readonly profileFields = PROFILE_FIELDS;
+  protected readonly heroFields = HERO_FIELDS;
   protected readonly navFields = NAV_FIELDS;
+  protected readonly availability = AVAILABILITY;
+  protected readonly locales: Locale[] = ["en", "de"];
   protected readonly view = signal<LocaleView>("both");
 
   protected readonly loading = signal(true);
@@ -172,10 +292,16 @@ export default class AdminHeroPage implements OnInit {
   protected readonly saving = signal(false);
   private readonly revision = signal(0);
 
-  private profileUpdatedAt: string | null = null;
+  protected readonly avatarId = signal<string | null>(null);
+  protected readonly avatarPath = signal<string | null>(null);
+  protected readonly resumes = signal<Record<Locale, ResumeRow | null>>({ en: null, de: null });
+
+  private uiUpdatedAt: string | null = null;
   private pristine: {
-    identity: ProfileInput;
+    identity: Omit<ProfileInput, "avatarId">;
+    avatar: { id: string | null; path: string | null };
     profile: Record<Locale, ProfileGroup>;
+    hero: Record<Locale, HeroGroup>;
     nav: Record<Locale, NavGroup>;
   } | null = null;
 
@@ -185,24 +311,35 @@ export default class AdminHeroPage implements OnInit {
     contactEmail: "",
     primaryCtaHref: "",
     secondaryCtaHref: "",
+    siteUrl: "",
+    availability: "open" as Availability,
+    locationCity: "",
+    locationCountry: "",
+    timezone: "",
   });
 
   protected readonly form = this.fb.nonNullable.group({
-    profileEn: this.fb.nonNullable.group(this.blank(PROFILE_FIELDS)),
-    profileDe: this.fb.nonNullable.group(this.blank(PROFILE_FIELDS)),
-    navEn: this.fb.nonNullable.group(this.blank(NAV_FIELDS)),
-    navDe: this.fb.nonNullable.group(this.blank(NAV_FIELDS)),
+    profileEn: this.fb.nonNullable.group(blank(PROFILE_FIELDS)),
+    profileDe: this.fb.nonNullable.group(blank(PROFILE_FIELDS)),
+    heroEn: this.fb.nonNullable.group(blank(HERO_FIELDS)),
+    heroDe: this.fb.nonNullable.group(blank(HERO_FIELDS)),
+    navEn: this.fb.nonNullable.group(blank(NAV_FIELDS)),
+    navDe: this.fb.nonNullable.group(blank(NAV_FIELDS)),
   });
 
   protected readonly dirty = computed(() => {
     this.revision();
-    return this.form.dirty || this.identity.dirty;
+    return (
+      this.form.dirty ||
+      this.identity.dirty ||
+      (this.pristine !== null && this.avatarId() !== this.pristine.avatar.id)
+    );
   });
 
   constructor() {
     const bump = () => {
       this.revision.update((v) => v + 1);
-      this.unsaved.set("hero", this.form.dirty || this.identity.dirty);
+      this.unsaved.set("hero", this.dirty());
     };
     this.form.valueChanges.subscribe(bump);
     this.identity.valueChanges.subscribe(bump);
@@ -213,43 +350,51 @@ export default class AdminHeroPage implements OnInit {
     void this.load();
   }
 
-  private blank(fields: { key: string }[]): Record<string, string> {
-    return Object.fromEntries(fields.map((f) => [f.key, ""]));
-  }
-
-  protected profileControl(locale: Locale, key: keyof ProfileGroup): FormControl<string> {
-    const group = locale === "en" ? this.form.controls.profileEn : this.form.controls.profileDe;
-    return (group.controls as Record<string, FormControl<string>>)[key];
-  }
-
-  protected navControl(locale: Locale, key: keyof NavGroup): FormControl<string> {
-    const group = locale === "en" ? this.form.controls.navEn : this.form.controls.navDe;
-    return (group.controls as Record<string, FormControl<string>>)[key];
+  protected control(
+    group: "profile" | "hero" | "nav",
+    locale: Locale,
+    key: string,
+  ): FormControl<string> {
+    const name = `${group}${locale === "en" ? "En" : "De"}` as keyof typeof this.form.controls;
+    return (this.form.controls[name].controls as Record<string, FormControl<string>>)[key]!;
   }
 
   private async load(): Promise<void> {
-    const [profileResult, profileGroup, navGroup] = await Promise.all([
+    const [profileResult, resumes, profileGroup, heroGroup, navGroup] = await Promise.all([
       this.api.getProfile(),
+      this.api.getResumes(),
       this.ui.loadGroup("profile"),
+      this.ui.loadGroup("hero"),
       this.ui.loadGroup("nav"),
     ]);
     this.loading.set(false);
 
-    if (!profileResult.ok || !profileGroup || !navGroup) {
+    if (!profileResult.ok || !profileGroup || !heroGroup || !navGroup) {
       toast.error("Could not load hero section");
       return;
     }
+    if (resumes.ok) this.resumes.set(resumes.data.resumes);
 
     const p = profileResult.data.profile;
-    const identity: ProfileInput = {
-      name: p.name,
-      handle: p.handle,
-      contactEmail: p.contactEmail,
-      primaryCtaHref: p.primaryCtaHref,
-      secondaryCtaHref: p.secondaryCtaHref,
+    this.uiUpdatedAt = profileGroup.updatedAt;
+    this.pristine = {
+      identity: {
+        name: p.name,
+        handle: p.handle,
+        contactEmail: p.contactEmail,
+        primaryCtaHref: p.primaryCtaHref,
+        secondaryCtaHref: p.secondaryCtaHref,
+        siteUrl: p.siteUrl,
+        availability: p.availability,
+        locationCity: p.locationCity,
+        locationCountry: p.locationCountry,
+        timezone: p.timezone,
+      },
+      avatar: { id: p.avatarId, path: p.avatarPath },
+      profile: profileGroup.value,
+      hero: heroGroup.value,
+      nav: navGroup.value,
     };
-    this.profileUpdatedAt = profileGroup.updatedAt;
-    this.pristine = { identity, profile: profileGroup.value, nav: navGroup.value };
 
     this.applyPristine();
     this.loaded.set(true);
@@ -259,9 +404,13 @@ export default class AdminHeroPage implements OnInit {
     if (!this.pristine) return;
 
     this.identity.reset(this.pristine.identity);
+    this.avatarId.set(this.pristine.avatar.id);
+    this.avatarPath.set(this.pristine.avatar.path);
     this.form.reset({
       profileEn: this.pristine.profile.en,
       profileDe: this.pristine.profile.de,
+      heroEn: this.pristine.hero.en,
+      heroDe: this.pristine.hero.de,
       navEn: this.pristine.nav.en,
       navDe: this.pristine.nav.de,
     });
@@ -275,52 +424,76 @@ export default class AdminHeroPage implements OnInit {
     this.applyPristine();
   }
 
+  protected chooseAvatar(asset: MediaAsset | null): void {
+    this.avatarId.set(asset?.id ?? null);
+    this.avatarPath.set(asset?.path ?? null);
+    this.revision.update((v) => v + 1);
+    this.unsaved.set("hero", this.dirty());
+  }
+
+  /** CVs point at media; changing one is saved at once and goes live with the next publish. */
+  protected async chooseResume(locale: Locale, asset: MediaAsset | null): Promise<void> {
+    const result = asset
+      ? await this.api.putResume(locale, asset.id)
+      : await this.api.deleteResume(locale);
+    if (!result.ok) {
+      toast.error("CV not saved", { description: result.error });
+      return;
+    }
+    const refreshed = await this.api.getResumes();
+    if (refreshed.ok) this.resumes.set(refreshed.data.resumes);
+    toast.success(
+      asset ? `CV (${locale.toUpperCase()}) set` : `CV (${locale.toUpperCase()}) removed`,
+    );
+  }
+
   protected async save(): Promise<void> {
     if (this.saving()) return;
     this.saving.set(true);
 
     const raw = this.form.getRawValue();
     const identity = this.identity.getRawValue();
+    const value = {
+      profile: { en: raw.profileEn as ProfileGroup, de: raw.profileDe as ProfileGroup },
+      hero: { en: raw.heroEn as HeroGroup, de: raw.heroDe as HeroGroup },
+      nav: { en: raw.navEn as NavGroup, de: raw.navDe as NavGroup },
+    };
 
-    const profileSave = await this.ui.saveGroup(
-      "profile",
-      { en: raw.profileEn as ProfileGroup, de: raw.profileDe as ProfileGroup },
-      this.profileUpdatedAt,
-    );
-
-    if (!profileSave.ok) {
-      this.saving.set(false);
-      this.reportSaveFailure(profileSave.reason);
-      return;
+    // All three groups live in the same document, so each save must use the
+    // token the previous one just produced.
+    let token = this.uiUpdatedAt;
+    for (const group of ["profile", "hero", "nav"] as const) {
+      const saved = await this.ui.saveGroup(group, value[group] as never, token);
+      if (!saved.ok) {
+        this.saving.set(false);
+        this.reportSaveFailure(saved.reason);
+        return;
+      }
+      token = saved.updatedAt;
     }
 
-    // Both groups live in the same document, so the second save must use the
-    // token the first one just produced.
-    const navSave = await this.ui.saveGroup(
-      "nav",
-      { en: raw.navEn as NavGroup, de: raw.navDe as NavGroup },
-      profileSave.updatedAt,
-    );
-
-    if (!navSave.ok) {
-      this.saving.set(false);
-      this.reportSaveFailure(navSave.reason);
-      return;
-    }
-
-    const identitySave = await this.api.putProfile(identity);
+    const identitySave = await this.api.putProfile({
+      ...identity,
+      locationCountry: identity.locationCountry.trim().toUpperCase(),
+      avatarId: this.avatarId(),
+    });
     this.saving.set(false);
 
     if (!identitySave.ok) {
-      toast.error("Identity not saved", { description: identitySave.error });
+      toast.error("Identity not saved", {
+        description:
+          identitySave.error === "invalid_input"
+            ? "Check the site address (an origin without a path), the country code and the time zone."
+            : identitySave.error,
+      });
       return;
     }
 
-    this.profileUpdatedAt = navSave.updatedAt;
+    this.uiUpdatedAt = token;
     this.pristine = {
-      identity,
-      profile: { en: raw.profileEn as ProfileGroup, de: raw.profileDe as ProfileGroup },
-      nav: { en: raw.navEn as NavGroup, de: raw.navDe as NavGroup },
+      identity: { ...identity, locationCountry: identity.locationCountry.trim().toUpperCase() },
+      avatar: { id: this.avatarId(), path: this.avatarPath() },
+      ...value,
     };
     this.form.markAsPristine();
     this.identity.markAsPristine();
@@ -340,4 +513,8 @@ export default class AdminHeroPage implements OnInit {
       toast.error("Save failed");
     }
   }
+}
+
+function blank(fields: { key: string }[]): Record<string, string> {
+  return Object.fromEntries(fields.map((f) => [f.key, ""]));
 }

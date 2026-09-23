@@ -25,18 +25,13 @@ import { ScrambleTextComponent } from "../components/scramble-text.component";
     class: "block",
   },
   template: `
-    <section
-      id="projects"
-      class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32"
-    >
+    <section id="projects" class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32">
       <div class="mx-auto flex max-w-7xl flex-col gap-10">
         <header class="flex flex-wrap items-baseline justify-between gap-4">
           <h2 class="m-0 font-mono text-2xl tracking-tight text-foreground sm:text-3xl">
             <app-scramble-text [text]="lang.t().projects.heading" />
           </h2>
-          <p
-            class="font-mono text-[0.7rem] uppercase tracking-[0.22em] text-muted-foreground"
-          >
+          <p class="font-mono text-[0.7rem] uppercase tracking-[0.22em] text-muted-foreground">
             {{ lang.t().projects.subtitle }}
           </p>
         </header>

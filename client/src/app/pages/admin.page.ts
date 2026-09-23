@@ -1,5 +1,10 @@
 import { isPlatformBrowser } from "@angular/common";
 import {
+  provideHttpClient,
+  withInterceptors,
+  withRequestsMadeViaParent,
+} from "@angular/common/http";
+import {
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -12,14 +17,19 @@ import { NavigationEnd, Router, RouterLink, RouterOutlet } from "@angular/router
 import type { RouteMeta } from "@analogjs/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import {
+  lucideBriefcase,
   lucideEye,
   lucideFileText,
   lucideHistory,
   lucideHouse,
   lucideImage,
   lucideImages,
+  lucideInbox,
   lucideLayers,
   lucideLogOut,
+  lucideNewspaper,
+  lucidePenLine,
+  lucideScale,
   lucideSearch,
   lucideSend,
   lucideShare2,
@@ -36,9 +46,11 @@ import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmToaster } from "@spartan-ng/helm/sonner";
 import { filter } from "rxjs";
 
+import { adminApiInterceptor } from "../admin/admin-api.interceptor";
 import { adminAuthGuard } from "../admin/admin-auth.guard";
 import { AdminApiService } from "../admin/admin-api.service";
 import { AdminSessionService } from "../admin/admin-session.service";
+import { UiSectionService } from "../admin/ui-section.service";
 import { UnsavedChangesService } from "../admin/unsaved-changes.service";
 
 export const routeMeta: RouteMeta = {
@@ -46,6 +58,19 @@ export const routeMeta: RouteMeta = {
   // Belt and braces alongside robots.txt and the Caddy X-Robots-Tag header.
   meta: [{ name: "robots", content: "noindex, nofollow" }],
   canActivateChild: [adminAuthGuard],
+  /**
+   * The admin's own HttpClient: credentials and the CSRF header on every API
+   * call, on top of the app's interceptors. Provided here rather than at the
+   * root so the interceptor and the API client ship in the admin's lazy chunk,
+   * not in every visitor's bundle. The services that talk to the API are
+   * provided alongside, so they get this client and not the root one.
+   */
+  providers: [
+    provideHttpClient(withInterceptors([adminApiInterceptor]), withRequestsMadeViaParent()),
+    AdminApiService,
+    AdminSessionService,
+    UiSectionService,
+  ],
 };
 
 interface NavItem {
@@ -58,13 +83,18 @@ interface NavItem {
 const NAV: NavItem[] = [
   { path: "/admin", label: "Dashboard", icon: "lucideHouse", group: "Overview" },
   { path: "/admin/preview", label: "Preview draft", icon: "lucideEye", group: "Overview" },
-  { path: "/admin/revisions", label: "Revisions", icon: "lucideHistory", group: "Overview" },
-  { path: "/admin/hero", label: "Hero", icon: "lucideSquareUser", group: "Content" },
+  { path: "/admin/publications", label: "Publications", icon: "lucideHistory", group: "Overview" },
+  { path: "/admin/inbox", label: "Inbox", icon: "lucideInbox", group: "Overview" },
+  { path: "/admin/hero", label: "Hero & identity", icon: "lucideSquareUser", group: "Content" },
   { path: "/admin/about", label: "Über mich", icon: "lucideFileText", group: "Content" },
   { path: "/admin/skills", label: "Skills", icon: "lucideLayers", group: "Content" },
   { path: "/admin/projects", label: "Projects", icon: "lucideImage", group: "Content" },
+  { path: "/admin/experience", label: "Experience", icon: "lucideBriefcase", group: "Content" },
+  { path: "/admin/writing", label: "Writing", icon: "lucideNewspaper", group: "Content" },
   { path: "/admin/contact", label: "Contact copy", icon: "lucideSend", group: "Content" },
   { path: "/admin/socials", label: "Socials", icon: "lucideShare2", group: "Content" },
+  { path: "/admin/copy", label: "Page copy", icon: "lucidePenLine", group: "Content" },
+  { path: "/admin/legal", label: "Legal pages", icon: "lucideScale", group: "Content" },
   { path: "/admin/seo", label: "SEO & meta", icon: "lucideSearch", group: "Content" },
   { path: "/admin/media", label: "Media", icon: "lucideImages", group: "Library" },
 ];
@@ -88,14 +118,19 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
   ],
   viewProviders: [
     provideIcons({
+      lucideBriefcase,
       lucideEye,
       lucideFileText,
       lucideHistory,
       lucideHouse,
       lucideImage,
       lucideImages,
+      lucideInbox,
       lucideLayers,
       lucideLogOut,
+      lucideNewspaper,
+      lucidePenLine,
+      lucideScale,
       lucideSearch,
       lucideSend,
       lucideShare2,
@@ -108,7 +143,10 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
     "(document:keydown)": "onKeydown($event)",
   },
   template: `
-    <hlm-toaster position="bottom-right" />
+    <!-- Browser only: the toaster reads window.matchMedia, which the server's DOM lacks. -->
+    @if (isBrowser) {
+      <hlm-toaster position="bottom-right" />
+    }
 
     @if (!ready()) {
       <!-- SSR and the pre-hydration moment: the guard defers to the browser. -->
@@ -283,7 +321,7 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
 export default class AdminLayout {
   private readonly api = inject(AdminApiService);
   private readonly router = inject(Router);
-  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  protected readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   protected readonly session = inject(AdminSessionService);
   protected readonly unsaved = inject(UnsavedChangesService);
 
@@ -327,7 +365,7 @@ export default class AdminLayout {
   });
 
   protected readonly projectSlug = computed(() => {
-    const match = /^\/admin\/projects\/([^/]+)$/.exec(this.url());
+    const match = /^\/admin\/(?:projects|writing)\/([^/]+)$/.exec(this.url());
     return match ? decodeURIComponent(match[1] ?? "") : null;
   });
 

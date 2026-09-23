@@ -67,10 +67,7 @@ export async function tooManyAttempts(
   return (await recentFailures(bucket, windowMs)) >= limit;
 }
 
-export async function recordAttempt(
-  bucket: string,
-  outcome: "fail" | "success",
-): Promise<void> {
+export async function recordAttempt(bucket: string, outcome: "fail" | "success"): Promise<void> {
   await getDb().insert(authAttempts).values({ bucket, outcome });
 }
 

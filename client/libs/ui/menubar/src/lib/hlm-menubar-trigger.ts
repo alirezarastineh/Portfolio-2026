@@ -45,14 +45,12 @@ export class HlmMenubarTrigger {
     // once the trigger opens we wait until the next tick and then grab the last position
     // used to position the menu. we store this in our trigger which the brnMenu directive has
     // access to through DI
-    this._cdkTrigger.opened
-      .pipe(takeUntilDestroyed())
-      .subscribe(() =>
-        setTimeout(() => {
-          const t = this._cdkTrigger as unknown as CdkMenuTriggerPrivate;
-          t._spartanLastPosition = t.overlayRef._positionStrategy._lastPosition;
-        }),
-      );
+    this._cdkTrigger.opened.pipe(takeUntilDestroyed()).subscribe(() =>
+      setTimeout(() => {
+        const t = this._cdkTrigger as unknown as CdkMenuTriggerPrivate;
+        t._spartanLastPosition = t.overlayRef._positionStrategy._lastPosition;
+      }),
+    );
 
     effect(() => {
       this._cdkTrigger.menuPosition = this._menuPosition();

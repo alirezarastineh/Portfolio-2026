@@ -24,7 +24,13 @@ describe("requestLog", () => {
     const lines = captureLines();
     await app.request("/things/42");
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatchObject({ msg: "request", method: "GET", path: "/things/42", status: 200, level: "info" });
+    expect(lines[0]).toMatchObject({
+      msg: "request",
+      method: "GET",
+      path: "/things/42",
+      status: 200,
+      level: "info",
+    });
     expect(typeof lines[0]!.ms).toBe("number");
   });
 

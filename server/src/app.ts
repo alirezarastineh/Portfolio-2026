@@ -8,7 +8,7 @@ import { requestLog } from "./lib/request-log.js";
 import { adminRouter } from "./routes/admin.js";
 import { authRouter } from "./routes/auth.js";
 import { contactRouter } from "./routes/contact.js";
-import { contentRouter } from "./routes/content.js";
+import { contentV1Router, contentV2Router } from "./routes/content.js";
 import { mediaRouter } from "./routes/media.js";
 
 /**
@@ -71,7 +71,9 @@ export function createApp(): Hono {
   });
 
   app.route("/contact", contactRouter);
-  app.route("/v1/content", contentRouter);
+  app.route("/v2/content", contentV2Router);
+  // Temporary: clients built before content model v2 (Phase 9 removes it).
+  app.route("/v1/content", contentV1Router);
   // Public: uploaded images must be fetchable by anyone viewing the portfolio.
   app.route("/media", mediaRouter);
   app.route("/auth", authRouter);

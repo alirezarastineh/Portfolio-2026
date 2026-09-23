@@ -1,84 +1,67 @@
 import { HttpClient } from "@angular/common/http";
-import { inject, Injectable, signal, type Signal } from "@angular/core";
+import { inject, Injectable, signal, type Signal, type WritableSignal } from "@angular/core";
 import { firstValueFrom } from "rxjs";
 
-import fallbackDe from "./fallback.de.json";
-import fallbackEn from "./fallback.en.json";
 import { appContentSchema, type AppContent, type Locale } from "./schema";
 
 /**
- * The bundled fallbacks are validated by `schema.spec.ts` at test time, so the
- * cast is checked — just not by the compiler, since a JSON import is untyped.
+ * Published content, one signal per locale.
+ *
+ * Starts empty on purpose: the bundled fallback lives only on the server now
+ * (the Nitro BFF answers with it when the API is down), which keeps ~30 KB of
+ * JSON out of the browser bundle. Every public page sits under the `[locale]`
+ * route, whose resolver calls `ensure()` before anything renders — so a
+ * component never sees an empty store.
  */
-const FALLBACK: Record<Locale, AppContent> = {
-  en: fallbackEn as unknown as AppContent,
-  de: fallbackDe as unknown as AppContent,
-};
-
 @Injectable({ providedIn: "root" })
 export class ContentStore {
   private readonly http = inject(HttpClient);
 
-  private readonly state: Record<Locale, ReturnType<typeof signal<AppContent>>> = {
-    en: signal<AppContent>(FALLBACK.en),
-    de: signal<AppContent>(FALLBACK.de),
+  private readonly state: Record<Locale, WritableSignal<AppContent | null>> = {
+    en: signal<AppContent | null>(null),
+    de: signal<AppContent | null>(null),
   };
 
-  private readonly resolved = new Set<Locale>();
-  private readonly inFlight = new Map<Locale, Promise<void>>();
+  private readonly inFlight = new Map<Locale, Promise<AppContent>>();
 
-  /**
-   * Always returns a usable payload. Seeded with the bundled fallback, so the
-   * first render never has to deal with `undefined` and there is no flash of
-   * empty content before the fetch lands.
-   */
-  content(locale: Locale): Signal<AppContent> {
+  content(locale: Locale): Signal<AppContent | null> {
     return this.state[locale].asReadonly();
   }
 
-  hasResolved(locale: Locale): boolean {
-    return this.resolved.has(locale);
-  }
-
   /**
+   * Resolves once the locale's content is loaded, fetching it at most once.
+   * Rejects only when there is nothing at all to show — the BFF falls back to
+   * the bundled content itself, so that means the site's own server is down.
+   *
    * Relative URL on purpose: it is identical on the server and in the browser,
-   * which is what lets Angular's HTTP transfer cache replay the SSR response on
-   * hydration instead of re-fetching. During SSR Analog's
-   * `requestContextInterceptor` routes it through Nitro's `$fetch`, so it never
-   * leaves the process.
+   * which lets Angular's HTTP transfer cache replay the SSR response during
+   * hydration instead of fetching again. During SSR, Analog's
+   * `requestContextInterceptor` routes it through Nitro in-process.
    */
-  async load(locale: Locale): Promise<void> {
+  ensure(locale: Locale): Promise<AppContent> {
+    const loaded = this.state[locale]();
+    if (loaded) return Promise.resolve(loaded);
+
     const existing = this.inFlight.get(locale);
     if (existing) return existing;
 
-    const request = this.fetchLocale(locale).finally(() => {
-      this.inFlight.delete(locale);
-    });
-
+    const request = this.fetchLocale(locale).finally(() => this.inFlight.delete(locale));
     this.inFlight.set(locale, request);
     return request;
   }
 
-  private async fetchLocale(locale: Locale): Promise<void> {
-    try {
-      const raw = await firstValueFrom(
-        this.http.get<unknown>(`/api/v1/content/${locale}`),
-      );
+  private async fetchLocale(locale: Locale): Promise<AppContent> {
+    const raw = await firstValueFrom(this.http.get<unknown>(`/api/v2/content/${locale}`));
 
-      // Network data is never trusted: a schema mismatch keeps the last good
-      // payload rather than rendering a half-broken page.
-      const parsed = appContentSchema.safeParse(raw);
-      if (!parsed.success) {
-        console.error(`[content] invalid payload for "${locale}"`, parsed.error.issues);
-        return;
-      }
-
-      this.state[locale].set(parsed.data);
-      this.resolved.add(locale);
-    } catch (error) {
-      console.error(`[content] failed to load "${locale}", using fallback`, error);
+    // Network data is never trusted blindly: a payload that does not match the
+    // schema this build was made for is an error, not something to render.
+    const parsed = appContentSchema.safeParse(raw);
+    if (!parsed.success) {
+      console.error(`[content] invalid payload for "${locale}"`, parsed.error.issues);
+      throw new Error(`invalid content payload for "${locale}"`);
     }
+
+    this.state[locale].set(parsed.data);
+    return parsed.data;
   }
 }
-
-export { LOCALES } from "./schema";

@@ -26,8 +26,19 @@ function readCsrfCookie(): string | null {
   return null;
 }
 
-function isAdminCall(url: string): boolean {
-  return /\/(auth|admin)\//.test(url) || /\/(auth|admin)$/.test(url);
+/**
+ * Anchored to the start of the path: the API's `/admin/…` and `/auth/…`
+ * routes. Matching anywhere in the URL once let a public URL that merely
+ * ended in `/auth` (a post slug, say) go out with credentials.
+ */
+export function isAdminCall(url: string): boolean {
+  let path: string;
+  try {
+    path = new URL(url, "https://relative.invalid").pathname;
+  } catch {
+    return false;
+  }
+  return /^\/(auth|admin)(\/|$)/.test(path);
 }
 
 /**

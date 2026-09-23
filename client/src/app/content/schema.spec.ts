@@ -3,25 +3,37 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { appContentSchema, LOCALES, type AppContent } from "./schema";
+import { appContentSchema, docSchema, LOCALES, type AppContent } from "./schema";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-function loadFallback(locale: string): unknown {
-  return JSON.parse(readFileSync(resolve(here, `fallback.${locale}.json`), "utf8"));
+function loadJson(name: string): unknown {
+  return JSON.parse(readFileSync(resolve(here, name), "utf8"));
 }
+
+const loadFallback = (locale: string) => loadJson(`fallback.${locale}.json`);
 
 describe("appContentSchema", () => {
   /**
    * The fallbacks are what the site renders when the API is unreachable, so a
    * schema change that invalidates them must fail here rather than in
-   * production during an outage. Regenerate with `pnpm seed:export`.
+   * production during an outage. Regenerate with `pnpm -C server content:fallback`.
    */
   for (const locale of LOCALES) {
     it(`accepts the bundled ${locale} fallback`, () => {
       const result = appContentSchema.safeParse(loadFallback(locale));
       expect(result.error?.issues ?? []).toEqual([]);
       expect(result.success).toBe(true);
+    });
+
+    it(`accepts the bundled ${locale} fallback docs, one for every legal page the core lists`, () => {
+      const docs = loadJson(`fallback-docs.${locale}.json`) as Record<string, unknown>;
+      for (const [key, doc] of Object.entries(docs)) {
+        const result = docSchema.safeParse(doc);
+        expect(result.error?.issues ?? [], key).toEqual([]);
+      }
+      const core = appContentSchema.parse(loadFallback(locale));
+      for (const legal of core.legal) expect(docs, legal.doc).toHaveProperty(`legal:${legal.doc}`);
     });
   }
 
@@ -31,6 +43,7 @@ describe("appContentSchema", () => {
       expect(content.ui.contact.errorMinlength).toContain("{n}");
       expect(content.ui.contact.errorMaxlength).toContain("{n}");
       expect(content.ui.projectCard.caseLabel).toContain("{i}");
+      expect(content.ui.writing.readingTime).toContain("{n}");
     }
   });
 
@@ -45,6 +58,12 @@ describe("appContentSchema", () => {
     };
 
     expect(appContentSchema.safeParse(broken).success).toBe(false);
+  });
+
+  it("rejects a payload from before content model v2", () => {
+    expect(
+      appContentSchema.safeParse({ ...(loadFallback("en") as object), version: 1 }).success,
+    ).toBe(false);
   });
 
   it("keys skills by a stable id rather than array position", () => {

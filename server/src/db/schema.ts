@@ -5,6 +5,7 @@ import {
   boolean,
   check,
   customType,
+  date,
   index,
   inet,
   integer,
@@ -14,6 +15,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -90,7 +92,9 @@ export const adminSessions = pgTable(
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
   (t) => [
-    index("admin_sessions_user_idx").on(t.userId).where(sql`${t.revokedAt} is null`),
+    index("admin_sessions_user_idx")
+      .on(t.userId)
+      .where(sql`${t.revokedAt} is null`),
     index("admin_sessions_idle_expiry_idx").on(t.idleExpiresAt),
   ],
 );
@@ -115,6 +119,30 @@ export const authAttempts = pgTable(
 /* Published snapshots — the only thing the public read path touches           */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * One publish (or rollback) as a unit: the versions of every locale it wrote.
+ * Rolling back a publication moves all of its locales together, so English
+ * and German can never be left pointing at different moments.
+ */
+export const contentPublications = pgTable(
+  "content_publications",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    kind: text("kind").notNull().default("publish"),
+    label: text("label"),
+    /** appContentSchema version the payloads were written with. */
+    schemaVersion: integer("schema_version").notNull().default(1),
+    /** Set on a rollback: the publication whose content it restored. */
+    restoredFrom: bigint("restored_from", { mode: "number" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by").references(() => adminUsers.id, { onDelete: "set null" }),
+  },
+  (t) => [
+    index("content_publications_created_idx").on(t.createdAt.desc()),
+    check("content_publications_kind_check", sql`${t.kind} in ('publish', 'rollback')`),
+  ],
+);
+
 export const contentVersions = pgTable(
   "content_versions",
   {
@@ -125,10 +153,37 @@ export const contentVersions = pgTable(
     /** sha256 of the canonical JSON, so identical republishes are detectable. */
     checksum: text("checksum").notNull(),
     label: text("label"),
+    /** Nullable only until the backfill migration has run; every new version gets one. */
+    publicationId: bigint("publication_id", { mode: "number" }).references(
+      () => contentPublications.id,
+    ),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by").references(() => adminUsers.id, { onDelete: "set null" }),
   },
-  (t) => [index("content_versions_locale_created_idx").on(t.locale, t.createdAt.desc())],
+  (t) => [
+    index("content_versions_locale_created_idx").on(t.locale, t.createdAt.desc()),
+    index("content_versions_publication_idx").on(t.publicationId),
+  ],
+);
+
+/**
+ * The long-form bodies of a published version (a case study, a post, a legal
+ * page), kept out of `content_versions.payload` so the core every page loads
+ * stays small. Keyed by the version, so a body can never be served with a
+ * different version's core, and one pointer move publishes or rolls back both.
+ */
+export const contentVersionDocs = pgTable(
+  "content_version_docs",
+  {
+    versionId: bigint("version_id", { mode: "number" })
+      .notNull()
+      .references(() => contentVersions.id, { onDelete: "cascade" }),
+    /** `project:<slug>`, `post:<slug>` or `legal:<doc>`. */
+    key: text("key").notNull(),
+    payload: jsonb("payload").notNull(),
+    checksum: text("checksum").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.versionId, t.key] })],
 );
 
 /** Exactly two rows — one per locale. Rollback repoints these; history is never mutated. */
@@ -145,7 +200,10 @@ export const contentPointers = pgTable("content_pointers", {
 /* Working set — this IS the draft                                             */
 /* -------------------------------------------------------------------------- */
 
-/** Fixed-shape string trees: the `ui` translation tree and `seo` metadata. */
+/**
+ * Fixed-shape trees, one row per locale: the `ui` translation tree, `seo`
+ * metadata, and the two legal pages (`imprint`, `privacy`: `{title, body}`).
+ */
 export const contentDocuments = pgTable(
   "content_documents",
   {
@@ -157,7 +215,10 @@ export const contentDocuments = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.section, t.locale] }),
-    check("content_documents_section_check", sql`${t.section} in ('ui', 'seo')`),
+    check(
+      "content_documents_section_check",
+      sql`${t.section} in ('ui', 'seo', 'imprint', 'privacy')`,
+    ),
   ],
 );
 
@@ -174,11 +235,36 @@ export const siteProfile = pgTable(
     contactEmail: text("contact_email").notNull(),
     primaryCtaHref: text("primary_cta_href").notNull(),
     secondaryCtaHref: text("secondary_cta_href").notNull(),
+    /** The public origin (`https://alirezarastineh.me`); absolute URLs are built from it. */
+    siteUrl: text("site_url"),
+    availability: text("availability").notNull().default("open"),
+    locationCity: text("location_city").notNull().default(""),
+    /** ISO 3166-1 alpha-2, or empty. */
+    locationCountry: text("location_country").notNull().default(""),
+    /** IANA zone, e.g. `Europe/Berlin`. */
+    timezone: text("timezone").notNull().default(""),
+    avatarId: uuid("avatar_id").references(() => mediaAssets.id, { onDelete: "restrict" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     updatedBy: uuid("updated_by").references(() => adminUsers.id, { onDelete: "set null" }),
   },
-  (t) => [check("site_profile_singleton", sql`${t.id}`)],
+  (t) => [
+    check("site_profile_singleton", sql`${t.id}`),
+    check(
+      "site_profile_availability_check",
+      sql`${t.availability} in ('open', 'limited', 'closed')`,
+    ),
+    check("site_profile_country_check", sql`${t.locationCountry} ~ '^([A-Z]{2})?$'`),
+  ],
 );
+
+/** The CV per language: a PDF from the media library. */
+export const profileResumes = pgTable("profile_resumes", {
+  locale: localeEnum("locale").primaryKey(),
+  mediaId: uuid("media_id")
+    .notNull()
+    .references(() => mediaAssets.id, { onDelete: "restrict" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const socials = pgTable(
   "socials",
@@ -194,7 +280,9 @@ export const socials = pgTable(
   },
   (t) => [
     index("socials_position_idx").on(t.position, t.id),
-    check("socials_icon_check", sql`${t.icon} in ('github', 'linkedin', 'mail', 'twitter')`),
+    // A key into the client's icon registry, which owns the list of known
+    // icons; an unknown key renders a neutral fallback rather than failing.
+    check("socials_icon_check", sql`${t.icon} ~ '^[a-z0-9-]{1,40}$'`),
   ],
 );
 
@@ -213,7 +301,7 @@ export const skills = pgTable(
   },
   (t) => [
     index("skills_position_idx").on(t.position, t.id),
-    check("skills_icon_check", sql`${t.icon} in ('cpu', 'brain-circuit', 'container', 'database')`),
+    check("skills_icon_check", sql`${t.icon} ~ '^[a-z0-9-]{1,40}$'`),
     check("skills_span_check", sql`${t.span} in ('lg', 'tall', 'sm')`),
   ],
 );
@@ -244,14 +332,63 @@ export const mediaAssets = pgTable(
     byteSize: integer("byte_size").notNull(),
     width: integer("width"),
     height: integer("height"),
-    /** Unique, so identical bytes dedupe to one asset. */
+    /** Unique, so identical bytes dedupe to one asset. Taken over the uploaded bytes. */
     checksumSha256: bytea("checksum_sha256").notNull().unique(),
+    /** `image` (processed, with variants) or `document` (a PDF, stored as-is). */
+    kind: text("kind").notNull().default("image"),
+    /** Tiny blurred WebP as a data: URI, shown while the real image loads. */
+    blurDataUri: text("blur_data_uri"),
     altEn: text("alt_en"),
     altDe: text("alt_de"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by").references(() => adminUsers.id, { onDelete: "set null" }),
   },
-  (t) => [index("media_assets_created_idx").on(t.createdAt.desc())],
+  (t) => [
+    index("media_assets_created_idx").on(t.createdAt.desc()),
+    check("media_assets_kind_check", sql`${t.kind} in ('image', 'document')`),
+  ],
+);
+
+/** Resized WebP/AVIF copies of an image, for `srcset`. Deleted with their asset. */
+export const mediaVariants = pgTable(
+  "media_variants",
+  {
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => mediaAssets.id, { onDelete: "cascade" }),
+    format: text("format").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    /** `<asset uuid>-<width>w.<format>`, served by the same route as the original. */
+    filename: text("filename").notNull().unique(),
+    byteSize: integer("byte_size").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.assetId, t.format, t.width] }),
+    check("media_variants_format_check", sql`${t.format} in ('webp', 'avif')`),
+  ],
+);
+
+/**
+ * Which media each published version uses, recorded at publish time. Deleting
+ * an asset a live version points at would break the public site, and one used
+ * by an older version would break a rollback to it — this is what lets the
+ * media routes refuse or warn.
+ */
+export const versionMediaRefs = pgTable(
+  "version_media_refs",
+  {
+    versionId: bigint("version_id", { mode: "number" })
+      .notNull()
+      .references(() => contentVersions.id, { onDelete: "cascade" }),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => mediaAssets.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.versionId, t.assetId] }),
+    index("version_media_refs_asset_idx").on(t.assetId),
+  ],
 );
 
 export const projects = pgTable(
@@ -259,13 +396,26 @@ export const projects = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     slug: text("slug").notNull().unique(),
+    /** Legacy (v1): kept in step with `cover_id` until Phase 9 drops it. */
     imageId: uuid("image_id").references(() => mediaAssets.id, { onDelete: "set null" }),
-    /** Resolved at publish time to an absolute URL; legacy `/projects/*.svg` passes through. */
+    /**
+     * Legacy (v1). A `/media/…` path mirrors `cover_id`; a `/projects/*.svg`
+     * path is a bundled placeholder and is published as-is when there is no cover.
+     */
     imagePath: text("image_path"),
+    /** The cover image; the only image column the v2 build reads. */
+    coverId: uuid("cover_id").references(() => mediaAssets.id, { onDelete: "restrict" }),
     stack: jsonb("stack").$type<string[]>().notNull().default([]),
     linkLive: text("link_live"),
     linkRepo: text("link_repo"),
     linkCaseStudy: text("link_case_study"),
+    featured: boolean("featured").notNull().default(false),
+    periodStart: date("period_start", { mode: "string" }),
+    /** Null while the project is ongoing. */
+    periodEnd: date("period_end", { mode: "string" }),
+    /** Stable key (`ai-platform`); its label is translated per locale. */
+    category: text("category"),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
     /** Drives both render order and the GSAP sticky-stack z-index. */
     position: integer("position").notNull(),
     isVisible: boolean("is_visible").notNull().default(true),
@@ -274,8 +424,15 @@ export const projects = pgTable(
   (t) => [
     index("projects_position_idx").on(t.position, t.id),
     index("projects_image_idx").on(t.imageId),
+    index("projects_cover_idx").on(t.coverId),
   ],
 );
+
+export interface MetricValue {
+  value: string;
+  label: string;
+  context?: string;
+}
 
 export const projectTranslations = pgTable(
   "project_translations",
@@ -291,8 +448,173 @@ export const projectTranslations = pgTable(
     aiArchitecture: text("ai_architecture").notNull(),
     fullStackInfra: text("full_stack_infra").notNull(),
     outcomes: jsonb("outcomes").$type<string[]>().notNull().default([]),
+    role: text("role").notNull().default(""),
+    categoryLabel: text("category_label").notNull().default(""),
+    /** Per locale, since number formatting differs ("40%" vs "40 %"). */
+    metrics: jsonb("metrics").$type<MetricValue[]>().notNull().default([]),
+    /** The long-form case study, sanitized rich text. Empty = no case-study page. */
+    body: text("body").notNull().default(""),
+    seoDescription: text("seo_description").notNull().default(""),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.projectId, t.locale] })],
+);
+
+/** Screenshots shown on a case study, in order. */
+export const projectGallery = pgTable(
+  "project_gallery",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    mediaId: uuid("media_id")
+      .notNull()
+      .references(() => mediaAssets.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    caption: jsonb("caption").$type<Partial<Record<"en" | "de", string>>>().notNull().default({}),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.mediaId] }),
+    index("project_gallery_media_idx").on(t.mediaId),
+  ],
+);
+
+/* -------------------------------------------------------------------------- */
+/* Experience timeline                                                         */
+/* -------------------------------------------------------------------------- */
+
+export const experiences = pgTable(
+  "experiences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind").notNull().default("work"),
+    orgName: text("org_name").notNull(),
+    orgUrl: text("org_url"),
+    logoId: uuid("logo_id").references(() => mediaAssets.id, { onDelete: "restrict" }),
+    location: text("location").notNull().default(""),
+    /** A key (`full-time`, `contract`, …) whose label is translated in `ui.experience`. */
+    employmentType: text("employment_type").notNull().default(""),
+    startDate: date("start_date", { mode: "string" }).notNull(),
+    /** Null = present. */
+    endDate: date("end_date", { mode: "string" }),
+    /** Whether the dates mean a month or only a year. */
+    datePrecision: text("date_precision").notNull().default("month"),
+    credentialId: text("credential_id"),
+    credentialUrl: text("credential_url"),
+    skills: jsonb("skills").$type<string[]>().notNull().default([]),
+    position: integer("position").notNull(),
+    isVisible: boolean("is_visible").notNull().default(true),
+    ...timestamps,
+  },
+  (t) => [
+    index("experiences_position_idx").on(t.position, t.id),
+    index("experiences_logo_idx").on(t.logoId),
+    check("experiences_kind_check", sql`${t.kind} in ('work', 'education', 'certification')`),
+    check("experiences_precision_check", sql`${t.datePrecision} in ('month', 'year')`),
+    check(
+      "experiences_employment_type_check",
+      sql`${t.employmentType} in ('', 'full-time', 'part-time', 'contract', 'freelance', 'internship')`,
+    ),
+    check("experiences_period_check", sql`${t.endDate} is null or ${t.endDate} >= ${t.startDate}`),
+  ],
+);
+
+export const experienceTranslations = pgTable(
+  "experience_translations",
+  {
+    experienceId: uuid("experience_id")
+      .notNull()
+      .references(() => experiences.id, { onDelete: "cascade" }),
+    locale: localeEnum("locale").notNull(),
+    title: text("title").notNull(),
+    summary: text("summary").notNull().default(""),
+    highlights: jsonb("highlights").$type<string[]>().notNull().default([]),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.experienceId, t.locale] })],
+);
+
+/* -------------------------------------------------------------------------- */
+/* Writing                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export const posts = pgTable(
+  "posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Shared by both languages; a post may exist in only one of them. */
+    slug: text("slug").notNull(),
+    status: text("status").notNull().default("draft"),
+    /** Published posts show only once this has passed (and after a publish). */
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    coverId: uuid("cover_id").references(() => mediaAssets.id, { onDelete: "restrict" }),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    /** Set when the post first appeared elsewhere; becomes its canonical URL. */
+    canonicalUrl: text("canonical_url"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("posts_slug_idx").on(t.slug),
+    index("posts_published_idx").on(t.publishedAt.desc()),
+    index("posts_cover_idx").on(t.coverId),
+    check("posts_status_check", sql`${t.status} in ('draft', 'published')`),
+    check(
+      "posts_published_at_check",
+      sql`${t.status} <> 'published' or ${t.publishedAt} is not null`,
+    ),
+  ],
+);
+
+/** A missing row means the post does not exist in that language. */
+export const postTranslations = pgTable(
+  "post_translations",
+  {
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    locale: localeEnum("locale").notNull(),
+    title: text("title").notNull(),
+    excerpt: text("excerpt").notNull().default(""),
+    body: text("body").notNull().default(""),
+    seoTitle: text("seo_title").notNull().default(""),
+    seoDescription: text("seo_description").notNull().default(""),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.postId, t.locale] })],
+);
+
+/* -------------------------------------------------------------------------- */
+/* Contact form                                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every message is stored before the email is attempted, so a mail outage
+ * delays a message instead of losing it. Pruned after 180 days.
+ */
+export const contactMessages = pgTable(
+  "contact_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    locale: localeEnum("locale"),
+    name: text("name").notNull(),
+    email: citext("email").notNull(),
+    message: text("message").notNull(),
+    /** Salted sha256 of the sender's IP: enough to rate-limit, not to identify. */
+    ipHash: text("ip_hash").notNull(),
+    status: text("status").notNull().default("new"),
+    mailStatus: text("mail_status").notNull().default("pending"),
+    mailError: text("mail_error"),
+  },
+  (t) => [
+    index("contact_messages_created_idx").on(t.createdAt.desc()),
+    index("contact_messages_ip_created_idx").on(t.ipHash, t.createdAt),
+    check("contact_messages_status_check", sql`${t.status} in ('new', 'read', 'archived', 'spam')`),
+    check(
+      "contact_messages_mail_status_check",
+      sql`${t.mailStatus} in ('pending', 'sent', 'failed', 'skipped')`,
+    ),
+  ],
 );
 
 export type Locale = (typeof localeEnum.enumValues)[number];

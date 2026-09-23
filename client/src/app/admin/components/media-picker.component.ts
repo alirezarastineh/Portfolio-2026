@@ -10,7 +10,7 @@ import {
 } from "@angular/core";
 import { toast } from "@spartan-ng/brain/sonner";
 import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideCheck, lucideImage, lucideUpload, lucideX } from "@ng-icons/lucide";
+import { lucideCheck, lucideFileText, lucideImage, lucideUpload, lucideX } from "@ng-icons/lucide";
 import { HlmAspectRatio } from "@spartan-ng/helm/aspect-ratio";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmEmptyImports } from "@spartan-ng/helm/empty";
@@ -20,33 +20,32 @@ import { HlmSpinner } from "@spartan-ng/helm/spinner";
 import { AdminApiService, type MediaAsset } from "../admin-api.service";
 import { ConfirmService } from "./confirm-dialog.component";
 
-const MAX_BYTES = 4 * 1024 * 1024;
-const ACCEPTED = "image/png,image/jpeg,image/webp,image/avif,image/gif";
+/** Matches the API's MEDIA_MAX_BYTES (10 MiB). */
+const MAX_BYTES = 10 * 1024 * 1024;
+const IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/avif,image/gif";
 
 export const UPLOAD_ERRORS: Record<string, string> = {
-  file_too_large: "That file is over 4 MB. Compress it and try again.",
-  unsupported_media_type: "Only PNG, JPEG, WebP, AVIF and GIF are accepted.",
+  file_too_large: "That file is over 10 MB. Compress it and try again.",
+  image_too_large: "That image is over 50 megapixels. Scale it down and try again.",
+  unsupported_media_type: "Only PNG, JPEG, WebP, AVIF, GIF and PDF are accepted.",
   missing_file: "No file was received.",
   invalid_upload: "The upload could not be read.",
-  media_in_use: "Still used by a project — change that first.",
+  media_in_use:
+    "Still used by the draft (a project, gallery, post, experience, CV, photo or a text) — change that first.",
+  media_in_use_live: "Shown on the live site right now — publish without it first.",
 };
 
 /**
- * Grid of uploaded images with drag-and-drop upload. Used standalone on the
- * media page and inside the project editor as a picker.
+ * Grid of uploaded media with drag-and-drop upload. Used standalone on the
+ * media page (images and PDFs) and inside the project editor as an image picker.
  */
 @Component({
   selector: "app-media-picker",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    HlmAspectRatio,
-    HlmButton,
-    HlmEmptyImports,
-    HlmProgressImports,
-    HlmSpinner,
-    NgIcon,
+  imports: [HlmAspectRatio, HlmButton, HlmEmptyImports, HlmProgressImports, HlmSpinner, NgIcon],
+  viewProviders: [
+    provideIcons({ lucideCheck, lucideFileText, lucideImage, lucideUpload, lucideX }),
   ],
-  viewProviders: [provideIcons({ lucideCheck, lucideImage, lucideUpload, lucideX })],
   host: { class: "block" },
   template: `
     <div class="flex flex-col gap-4">
@@ -69,34 +68,39 @@ export const UPLOAD_ERRORS: Record<string, string> = {
           </div>
         } @else {
           <ng-icon name="lucideUpload" size="20" class="text-muted-foreground" aria-hidden="true" />
-          <p class="m-0 text-sm text-muted-foreground">Drop an image here, or</p>
+          <p class="m-0 text-sm text-muted-foreground">Drop {{ accepts() }} here, or</p>
           <button hlmBtn variant="outline" size="sm" type="button" (click)="fileInput.click()">
             Choose a file
           </button>
           <p class="m-0 font-mono text-[0.7rem] text-muted-foreground">
-            PNG · JPEG · WebP · AVIF · GIF — max 4 MB
+            {{
+              documentsOnly()
+                ? "PDF"
+                : "PNG · JPEG · WebP · AVIF · GIF" + (allowDocuments() ? " · PDF" : "")
+            }}
+            — max 10 MB
           </p>
         }
         <input
           #fileInput
           type="file"
           class="hidden"
-          [accept]="accepted"
+          [accept]="accepted()"
           (change)="onFileInput($event)"
-          aria-label="Upload an image"
+          [attr.aria-label]="'Upload ' + accepts()"
         />
       </div>
 
       @if (loading()) {
         <hlm-spinner class="size-5 self-center" />
-      } @else if (!assets().length) {
+      } @else if (!visible().length) {
         <div hlmEmpty class="border border-dashed border-border">
           <div hlmEmptyHeader>
             <div hlmEmptyMedia variant="icon">
               <ng-icon name="lucideImage" size="20" aria-hidden="true" />
             </div>
-            <h3 hlmEmptyTitle>No images yet</h3>
-            <p hlmEmptyDescription>Upload a screenshot above to use it on a project.</p>
+            <h3 hlmEmptyTitle>{{ documentsOnly() ? "No PDFs yet" : "No images yet" }}</h3>
+            <p hlmEmptyDescription>Upload {{ accepts() }} above to use it here.</p>
           </div>
         </div>
       } @else {
@@ -104,7 +108,7 @@ export const UPLOAD_ERRORS: Record<string, string> = {
           class="m-0 grid list-none grid-cols-2 gap-3 p-0 sm:grid-cols-3 lg:grid-cols-4"
           role="list"
         >
-          @for (asset of assets(); track asset.id) {
+          @for (asset of visible(); track asset.id) {
             <li class="relative">
               <button
                 type="button"
@@ -115,13 +119,28 @@ export const UPLOAD_ERRORS: Record<string, string> = {
                 [attr.aria-pressed]="selectedPath() === asset.path"
               >
                 <div [hlmAspectRatio]="16 / 10" class="overflow-hidden bg-muted">
-                  <img
-                    [src]="asset.url"
-                    [alt]="asset.altEn || asset.originalName"
-                    loading="lazy"
-                    decoding="async"
-                    class="size-full object-cover"
-                  />
+                  @if (asset.kind === "document") {
+                    <span class="flex size-full flex-col items-center justify-center gap-1">
+                      <ng-icon
+                        name="lucideFileText"
+                        size="28"
+                        class="text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      <span class="font-mono text-[0.62rem] text-muted-foreground">PDF</span>
+                    </span>
+                  } @else {
+                    <img
+                      [src]="thumbnail(asset)"
+                      [alt]="asset.altEn || asset.originalName"
+                      loading="lazy"
+                      decoding="async"
+                      class="size-full bg-cover bg-center object-cover"
+                      [style.background-image]="
+                        asset.blurDataUri ? 'url(' + asset.blurDataUri + ')' : null
+                      "
+                    />
+                  }
                 </div>
                 <span class="flex items-center justify-between gap-2 px-2 py-1.5">
                   <span
@@ -139,7 +158,14 @@ export const UPLOAD_ERRORS: Record<string, string> = {
                   }
                 </span>
                 <span class="block px-2 pb-1.5 font-mono text-[0.62rem] text-muted-foreground">
-                  {{ asset.width && asset.height ? asset.width + "×" + asset.height : "—" }} ·
+                  {{
+                    asset.width && asset.height
+                      ? asset.width + "×" + asset.height
+                      : asset.kind === "document"
+                        ? "PDF"
+                        : "—"
+                  }}
+                  ·
                   {{ formatSize(asset.byteSize) }}
                 </span>
               </button>
@@ -171,10 +197,27 @@ export class MediaPickerComponent implements OnInit {
   /** The currently chosen `/media/<file>` path, when used as a picker. */
   readonly selected = input<string | null>(null);
   readonly deletable = input(false);
+  /** PDFs too (the media library); off where only an image makes sense. */
+  readonly allowDocuments = input(false);
+  /** Only PDFs — for choosing a CV. */
+  readonly documentsOnly = input(false);
   readonly chosen = output<MediaAsset>();
 
-  protected readonly accepted = ACCEPTED;
+  protected readonly accepted = computed(() => {
+    if (this.documentsOnly()) return "application/pdf";
+    return this.allowDocuments() ? `${IMAGE_TYPES},application/pdf` : IMAGE_TYPES;
+  });
   protected readonly assets = signal<MediaAsset[]>([]);
+  protected readonly visible = computed(() => {
+    if (this.documentsOnly()) return this.assets().filter((a) => a.kind === "document");
+    return this.allowDocuments()
+      ? this.assets()
+      : this.assets().filter((a) => a.kind !== "document");
+  });
+  protected readonly accepts = computed(() => {
+    if (this.documentsOnly()) return "a PDF";
+    return this.allowDocuments() ? "an image or a PDF" : "an image";
+  });
   protected readonly loading = signal(true);
   protected readonly uploading = signal(false);
   protected readonly progress = signal(0);
@@ -184,6 +227,18 @@ export class MediaPickerComponent implements OnInit {
 
   ngOnInit(): void {
     void this.load();
+  }
+
+  /**
+   * The smallest WebP copy when there is one: a grid of full-size originals is
+   * tens of MB. Resolved against the original's absolute URL, so it loads from
+   * the same host as the original does.
+   */
+  protected thumbnail(asset: MediaAsset): string {
+    const small = asset.variants.find((v) => v.format === "webp");
+    if (!small) return asset.url;
+    const file = small.path.slice(small.path.lastIndexOf("/") + 1);
+    return asset.url.slice(0, asset.url.lastIndexOf("/") + 1) + file;
   }
 
   protected formatSize(bytes: number): string {
@@ -255,16 +310,30 @@ export class MediaPickerComponent implements OnInit {
   protected async remove(asset: MediaAsset): Promise<void> {
     const go = await this.confirm.ask({
       title: `Delete ${asset.originalName}?`,
-      description: "This removes the file from disk. It cannot be undone.",
+      description: "This removes the file and its resized copies from disk. It cannot be undone.",
       confirmLabel: "Delete",
       destructive: true,
     });
     if (!go) return;
 
-    const result = await this.api.deleteMedia(asset.id);
+    let result = await this.api.deleteMedia(asset.id);
+
+    // Only older publications use it: allowed, but a rollback to one of them
+    // would then be refused, so that is worth a second question.
+    if (!result.ok && result.error === "media_in_history") {
+      const anyway = await this.confirm.ask({
+        title: "Used by a recent publication",
+        description:
+          "One of the last 20 publications shows this file. Once it is deleted, rolling back to that publication will be refused. Delete anyway?",
+        confirmLabel: "Delete anyway",
+        destructive: true,
+      });
+      if (!anyway) return;
+      result = await this.api.deleteMedia(asset.id, true);
+    }
 
     if (!result.ok) {
-      // 409 means a project still points at it — deleting would blank that image.
+      // 409: the draft or the live site still uses it — deleting would blank that image.
       toast.error("Not deleted", {
         description: UPLOAD_ERRORS[result.error] ?? result.error,
       });

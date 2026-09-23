@@ -1,3 +1,6 @@
+-- citext backs the case-insensitive unique on admin_users.email. Part of the
+-- migration itself, so `drizzle-kit migrate` on an empty database works too.
+CREATE EXTENSION IF NOT EXISTS citext;--> statement-breakpoint
 CREATE TYPE "public"."locale" AS ENUM('en', 'de');--> statement-breakpoint
 CREATE TABLE "admin_sessions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

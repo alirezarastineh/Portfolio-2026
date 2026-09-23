@@ -32,10 +32,13 @@ import { GridCanvasComponent } from "../visuals/grid-canvas.component";
           {{ lang.t().profile.heroSubheadline }}
         </p>
         <div class="mt-2 flex flex-wrap gap-3">
-          <app-magnetic-button variant="primary" [href]="identity().primaryCtaHref">
+          <app-magnetic-button variant="primary" [href]="lang.homeHref(identity().primaryCtaHref)">
             {{ lang.t().profile.primaryCta }}
           </app-magnetic-button>
-          <app-magnetic-button variant="secondary" [href]="identity().secondaryCtaHref">
+          <app-magnetic-button
+            variant="secondary"
+            [href]="lang.homeHref(identity().secondaryCtaHref)"
+          >
             {{ lang.t().profile.secondaryCta }}
           </app-magnetic-button>
         </div>

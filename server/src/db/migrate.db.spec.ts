@@ -34,7 +34,8 @@ async function withClient<T>(url: string, run: (client: pg.Client) => Promise<T>
 describe("migrations", () => {
   it("are idempotent through a dedicated owner connection", async () => {
     vi.stubEnv("MIGRATION_DATABASE_URL", process.env.DATABASE_URL!);
-    await expect(runMigrations()).resolves.toBeUndefined();
+    // True: they ran (nothing left to apply is still a run).
+    await expect(runMigrations()).resolves.toBe(true);
   });
 });
 
