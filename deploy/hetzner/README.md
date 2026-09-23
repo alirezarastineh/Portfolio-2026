@@ -17,6 +17,9 @@ For the full deployment and development workflow, see `../../DEPLOYMENT.md`.
   files, the auth boundary and media ownership — and reports every failure in
   one run rather than stopping at the first.
 - `open-dev-db-tunnel.ps1` opens a Windows/WSL SSH tunnel to the server DB.
+- `load-env.sh` is how the scripts above read the repo `.env`: as data, the way
+  docker compose does. They never `source` it, so a value compose accepts (an
+  unquoted value with spaces, a `$$`) cannot break them or run as a command.
 
 ## Backups have two halves
 

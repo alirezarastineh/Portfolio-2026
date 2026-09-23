@@ -14,10 +14,10 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   exit 1
 fi
 
-set -a
-# shellcheck disable=SC1090
-source "${ENV_FILE}"
-set +a
+# Read as data, the way docker compose reads it (see load-env.sh).
+# shellcheck source=load-env.sh
+source "${SCRIPT_DIR}/load-env.sh"
+load_env "${ENV_FILE}"
 
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/portfolio-postgres}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"

@@ -3,7 +3,7 @@
   "locale": "en",
   "ui": {
     "profile": {
-      "role": "Full Stack AI Engineer",
+      "role": "Full Stack AI Software Engineer",
       "heroHeadline": "Full Stack Engineering Meets AI Intelligence.",
       "heroSubheadline": "Bridging reliable cloud infrastructure and cutting-edge machine learning to deliver production-ready applications.",
       "primaryCta": "View Projects",
@@ -36,7 +36,7 @@
       "philosophy": "Building AI applications in a Jupyter notebook is easy; keeping them stable in production is hard. My engineering philosophy centers on defensive AI integration. I treat language models as powerful but unpredictable microservices. By implementing strict semantic routing, output parsing, and automated fallback mechanisms, I actively mitigate hallucinations and enforce reliable data structures. I prioritize the user experience by streaming tokens to the frontend to mask latency, while simultaneously optimizing prompt payloads and leveraging semantic caching to keep API inference costs strictly under control. I don't just write prompts; I engineer resilient, full-stack systems around them.",
       "terminalTitle": "user@portfolio — zsh",
       "terminalPrompt": "user@portfolio:~$",
-      "terminalOutputWhoami": "Alireza Rastineh — Full Stack AI Engineer",
+      "terminalOutputWhoami": "Alireza Rastineh — Full Stack AI Software Engineer",
       "terminalOutputLs": "core-architecture/   ai-ml-stack/   devops/   data-pipelines/",
       "terminalOutputContact": "Open to senior full-stack and AI engineering roles. Reach out via the contact form below or email directly."
     },
@@ -221,7 +221,15 @@
       "id": "devops",
       "icon": "container",
       "span": "sm",
-      "items": ["Docker", "GitHub Actions", "Caddy", "Hetzner", "Linux", "Nginx", "CI/CD"],
+      "items": [
+        "Docker",
+        "GitHub Actions",
+        "Caddy",
+        "Hetzner",
+        "Linux",
+        "Nginx",
+        "CI/CD"
+      ],
       "title": "DevOps & Cloud",
       "caption": "// data + ML + cloud",
       "narrative": "By orchestrating PyTorch model training pipelines via Docker and GitHub Actions, I ensure that machine learning services deploy cleanly into scalable, highly available cloud environments."
@@ -230,7 +238,14 @@
       "id": "data-pipelines",
       "icon": "database",
       "span": "sm",
-      "items": ["PostgreSQL", "Redis", "Drizzle ORM", "Prisma", "Kafka", "BullMQ"],
+      "items": [
+        "PostgreSQL",
+        "Redis",
+        "Drizzle ORM",
+        "Prisma",
+        "Kafka",
+        "BullMQ"
+      ],
       "title": "Data Pipelines",
       "caption": "// storage + streams",
       "narrative": "Typed schemas, vector indexes, and async queues keep inference jobs, embeddings, and user data flowing without bottlenecks."
@@ -250,7 +265,12 @@
         "TODO: Concrete metric #2 (latency, throughput, cost)",
         "TODO: Concrete metric #3 (adoption, retention, savings)"
       ],
-      "stack": ["TypeScript", "Python", "FastAPI", "Postgres"],
+      "stack": [
+        "TypeScript",
+        "Python",
+        "FastAPI",
+        "Postgres"
+      ],
       "links": {
         "live": "",
         "repo": "",
@@ -272,7 +292,7 @@
       "tags": [],
       "metrics": [],
       "hasCaseStudy": false,
-      "updatedAt": "2026-09-22T00:00:00.000Z"
+      "updatedAt": "2026-09-21T18:34:10.544Z"
     },
     {
       "slug": "project-two",
@@ -282,8 +302,16 @@
       "problem": "<p>TODO: Business problem.</p>",
       "aiArchitecture": "<p>TODO: AI architecture.</p>",
       "fullStackInfra": "<p>TODO: Infrastructure.</p>",
-      "outcomes": ["TODO: Metric #1", "TODO: Metric #2", "TODO: Metric #3"],
-      "stack": ["Angular", "Node.js", "Redis"],
+      "outcomes": [
+        "TODO: Metric #1",
+        "TODO: Metric #2",
+        "TODO: Metric #3"
+      ],
+      "stack": [
+        "Angular",
+        "Node.js",
+        "Redis"
+      ],
       "links": {
         "live": "",
         "repo": "",
@@ -305,7 +333,7 @@
       "tags": [],
       "metrics": [],
       "hasCaseStudy": false,
-      "updatedAt": "2026-09-22T00:00:00.000Z"
+      "updatedAt": "2026-09-21T18:34:10.544Z"
     },
     {
       "slug": "project-three",
@@ -315,8 +343,16 @@
       "problem": "<p>TODO: Business problem.</p>",
       "aiArchitecture": "<p>TODO: AI architecture.</p>",
       "fullStackInfra": "<p>TODO: Infrastructure.</p>",
-      "outcomes": ["TODO: Metric #1", "TODO: Metric #2", "TODO: Metric #3"],
-      "stack": ["React", "PyTorch", "Docker"],
+      "outcomes": [
+        "TODO: Metric #1",
+        "TODO: Metric #2",
+        "TODO: Metric #3"
+      ],
+      "stack": [
+        "React",
+        "PyTorch",
+        "Docker"
+      ],
       "links": {
         "live": "",
         "repo": "",
@@ -338,7 +374,7 @@
       "tags": [],
       "metrics": [],
       "hasCaseStudy": false,
-      "updatedAt": "2026-09-22T00:00:00.000Z"
+      "updatedAt": "2026-09-21T18:34:10.544Z"
     }
   ],
   "experiences": [],
@@ -356,19 +392,19 @@
     }
   ],
   "seo": {
-    "title": "Alireza Rastineh — Full Stack AI Engineer",
-    "description": "Full Stack AI Engineer. Reliable cloud infrastructure meets defensive AI engineering — production-grade Angular, FastAPI, RAG pipelines, and observability.",
+    "title": "Alireza Rastineh — Full Stack AI Software Engineer",
+    "description": "Full Stack AI Software Engineer. Reliable cloud infrastructure meets defensive AI engineering — production-grade Angular, FastAPI, RAG pipelines, and observability.",
     "author": "Alireza Rastineh",
     "siteName": "Alireza Rastineh",
     "canonical": "https://alirezarastineh.me/",
     "themeColor": "#3b3b3d",
-    "ogTitle": "Alireza Rastineh — Full Stack AI Engineer",
+    "ogTitle": "Alireza Rastineh — Full Stack AI Software Engineer",
     "ogDescription": "Defensive AI integration, production-grade full-stack systems, and resilient ML infrastructure.",
     "ogImage": "https://alirezarastineh.me/og.png",
     "ogUrl": "https://alirezarastineh.me/",
     "ogLocale": "en_US",
     "twitterCard": "summary_large_image",
-    "twitterTitle": "Alireza Rastineh — Full Stack AI Engineer",
+    "twitterTitle": "Alireza Rastineh — Full Stack AI Software Engineer",
     "twitterDescription": "Defensive AI integration, production-grade full-stack systems, and resilient ML infrastructure.",
     "twitterImage": "https://alirezarastineh.me/og.png"
   }

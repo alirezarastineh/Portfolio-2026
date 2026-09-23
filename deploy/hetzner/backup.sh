@@ -25,10 +25,10 @@ fi
 
 # BACKUP_DIR may be overridden in the repo .env; read it the same way the
 # backup scripts do.
-set -a
-# shellcheck disable=SC1090
-source "${REPO_DIR}/.env"
-set +a
+# Read as data, the way docker compose reads it (see load-env.sh).
+# shellcheck source=load-env.sh
+source "${SCRIPT_DIR}/load-env.sh"
+load_env "${REPO_DIR}/.env"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/portfolio-postgres}"
 
 restic backup --quiet --tag portfolio "${BACKUP_DIR}"

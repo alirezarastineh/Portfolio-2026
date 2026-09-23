@@ -30,8 +30,9 @@ module.exports = {
         "categories:performance": ["warn", { minScore: 0.95 }],
         "cumulative-layout-shift": ["error", { maxNumericValue: 0.1 }],
         // Uncompressed bytes (see above). Measured 2026-09-23: scripts ~782 KB on
-        // home, ~510-535 KB on subpages; styles 190 KB (194,212 bytes, admin CSS
-        // included — Phase 6 splits it out).
+        // home, ~510-535 KB on subpages; styles ~192,600 bytes transferred (file
+        // plus headers; admin CSS included — Phase 6 splits it out). CI measured
+        // a few dozen bytes more than local builds.
         "resource-summary:script:size": ["error", { maxNumericValue: 800 * KB }],
         "resource-summary:stylesheet:size": ["error", { maxNumericValue: 190 * KB }],
         "resource-summary:third-party:count": ["error", { maxNumericValue: 0 }],

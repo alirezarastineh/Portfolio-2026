@@ -4,8 +4,7 @@
 @import "tailwindcss/utilities.css";
 @import "@spartan-ng/brain/hlm-tailwind-preset.css";
 
-@import "@fontsource-variable/geist/index.css";
-@import "@fontsource-variable/geist-mono/index.css";
+@import "./styles/fonts.css";
 
 @import "./styles/prose.css";
 @import "./styles/code.css";
