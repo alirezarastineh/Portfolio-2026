@@ -5,6 +5,18 @@ import { firstValueFrom } from "rxjs";
 import { docSchema, type Doc, type DocKind, type Locale } from "./schema";
 
 /**
+ * The HTTP status of a failed request. In the browser that is Angular's
+ * `HttpErrorResponse`; during SSR, Analog's `requestContextInterceptor` calls
+ * Nitro in-process with ofetch, which rejects with its own `FetchError`.
+ */
+export function statusOf(error: unknown): number | null {
+  if (error instanceof HttpErrorResponse) return error.status;
+  const { status, statusCode } = (error ?? {}) as { status?: unknown; statusCode?: unknown };
+  if (typeof status === "number") return status;
+  return typeof statusCode === "number" ? statusCode : null;
+}
+
+/**
  * The long-form bodies — a case study, a post, a legal page — fetched per page
  * rather than shipped in the core every page loads.
  *
@@ -40,7 +52,7 @@ export class DocStore {
     try {
       raw = await firstValueFrom(this.http.get<unknown>(url));
     } catch (error) {
-      if (error instanceof HttpErrorResponse && error.status === 404) {
+      if (statusOf(error) === 404) {
         this.loaded.set(url, null);
         return null;
       }

@@ -97,6 +97,23 @@ describe("LanguageService", () => {
     expect(service.page()).toBe("/legal/imprint");
   });
 
+  it("follows a page's pinned alternates, and only while that page is shown", async () => {
+    const { service, router } = setup();
+    await router.navigateByUrl("/en/writing/notes");
+    service.pinAlternates("/en/writing/notes", { en: "/en/writing/notes", de: "/de/writing" });
+
+    expect(router.serializeUrl(service.alternates().de)).toBe("/de/writing");
+    expect(router.serializeUrl(service.alternates().en)).toBe("/en/writing/notes");
+
+    // The same page in another language still counts as that page…
+    await router.navigateByUrl("/de/writing/notes");
+    expect(router.serializeUrl(service.alternates().de)).toBe("/de/writing");
+
+    // …any other page swaps the language in its own URL again.
+    await router.navigateByUrl("/en/legal/privacy");
+    expect(router.serializeUrl(service.alternates().de)).toBe("/de/legal/privacy");
+  });
+
   /** With `<base href="/">`, a bare `#projects` would resolve to `/#projects` and reload the site. */
   it("anchors content fragments to the localized home page", () => {
     const { service } = setup();

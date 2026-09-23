@@ -12,6 +12,12 @@ import { isPlatformBrowser } from "@angular/common";
 
 const GLYPHS = String.raw`!<>-_\/[]{}—=+*^?#__abcdefghijklmnopqrstuvwxyz0123456789`;
 
+function randomGlyph(): string {
+  const buffer = new Uint32Array(1);
+  crypto.getRandomValues(buffer);
+  return GLYPHS[buffer[0]! % GLYPHS.length] ?? "";
+}
+
 @Component({
   selector: "app-scramble-text",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -79,7 +85,7 @@ export class ScrambleTextComponent {
         } else if (final[i] === " ") {
           out += " ";
         } else {
-          out += GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
+          out += randomGlyph();
         }
       }
       el.textContent = out;

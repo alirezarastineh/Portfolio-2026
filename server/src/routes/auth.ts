@@ -141,6 +141,66 @@ authRouter.post(
   },
 );
 
+/**
+ * Atomically marks a TOTP time step as consumed to prevent replay attacks.
+ * Also reseals/migrates the secret if needed.
+ */
+async function claimTotpStep(
+  db: ReturnType<typeof getDb>,
+  userId: string,
+  secret: string,
+  rawSecret: string,
+  step: number,
+): Promise<boolean> {
+  const claimed = await db
+    .update(adminUsers)
+    .set({
+      totpLastStep: step,
+      // Migrates a pre-encryption secret the first time it is used.
+      ...(needsReseal(rawSecret) ? { totpSecret: seal(secret) } : {}),
+    })
+    .where(
+      and(
+        eq(adminUsers.id, userId),
+        or(isNull(adminUsers.totpLastStep), lt(adminUsers.totpLastStep, step)),
+      ),
+    )
+    .returning({ id: adminUsers.id });
+
+  return claimed.length > 0;
+}
+
+/**
+ * Verifies and burns a single-use recovery code if valid, updating remaining hashes in DB.
+ */
+async function consumeRecoveryCode(
+  db: ReturnType<typeof getDb>,
+  userId: string,
+  hashes: string[],
+  code: string,
+): Promise<boolean> {
+  const normalized = normalizeRecoveryCode(code);
+  const remaining: string[] = [];
+  let accepted = false;
+
+  for (const hash of hashes) {
+    if (!accepted && (await verifyPassword(hash, normalized))) {
+      accepted = true;
+      continue; // single use: drop it
+    }
+    remaining.push(hash);
+  }
+
+  if (accepted) {
+    await db
+      .update(adminUsers)
+      .set({ recoveryCodeHashes: remaining, updatedAt: new Date() })
+      .where(eq(adminUsers.id, userId));
+  }
+
+  return accepted;
+}
+
 /* -------------------------------------------------------------------------- */
 /* TOTP step                                                                   */
 /* -------------------------------------------------------------------------- */
@@ -190,38 +250,10 @@ authRouter.post(
     if (step !== null) {
       // Claimed atomically, so an intercepted code cannot be replayed inside its
       // validity window — not even by two requests racing each other.
-      const claimed = await db
-        .update(adminUsers)
-        .set({
-          totpLastStep: step,
-          // Migrates a pre-encryption secret the first time it is used.
-          ...(needsReseal(user.totpSecret) ? { totpSecret: seal(secret) } : {}),
-        })
-        .where(
-          and(
-            eq(adminUsers.id, user.id),
-            or(isNull(adminUsers.totpLastStep), lt(adminUsers.totpLastStep, step)),
-          ),
-        )
-        .returning({ id: adminUsers.id });
-      accepted = claimed.length > 0;
+      accepted = await claimTotpStep(db, user.id, secret, user.totpSecret, step);
     } else if (looksLikeRecoveryCode(code)) {
       // Fall back to a recovery code, consuming it on success.
-      const normalized = normalizeRecoveryCode(code);
-      const remaining: string[] = [];
-      for (const hash of user.recoveryCodeHashes) {
-        if (!accepted && (await verifyPassword(hash, normalized))) {
-          accepted = true;
-          continue; // single use: drop it
-        }
-        remaining.push(hash);
-      }
-      if (accepted) {
-        await db
-          .update(adminUsers)
-          .set({ recoveryCodeHashes: remaining, updatedAt: new Date() })
-          .where(eq(adminUsers.id, user.id));
-      }
+      accepted = await consumeRecoveryCode(db, user.id, user.recoveryCodeHashes, code);
     }
 
     if (!accepted) {

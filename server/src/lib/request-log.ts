@@ -1,5 +1,11 @@
 import type { MiddlewareHandler } from "hono";
 
+function logLevel(status: number): "error" | "warn" | "info" {
+  if (status >= 500) return "error";
+  if (status >= 400) return "warn";
+  return "info";
+}
+
 /**
  * One JSON line per request on stdout, where `docker compose logs api` and any
  * log shipper can parse it. Deliberately minimal: the path without its query
@@ -17,7 +23,7 @@ export const requestLog: MiddlewareHandler = async (c, next) => {
   console.log(
     JSON.stringify({
       time: new Date().toISOString(),
-      level: status >= 500 ? "error" : status >= 400 ? "warn" : "info",
+      level: logLevel(status),
       msg: "request",
       method: c.req.method,
       path: c.req.path,

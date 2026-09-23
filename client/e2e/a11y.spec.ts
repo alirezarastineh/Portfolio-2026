@@ -5,6 +5,12 @@ import { expect, test } from "./fixtures";
 const PAGES = [
   "/en",
   "/de",
+  "/en/work/project-one",
+  "/de/work/project-one",
+  "/en/writing",
+  "/de/writing?tag=rag",
+  "/en/writing/shipping-rag-to-production",
+  "/de/writing/shipping-rag-to-production",
   "/en/legal/imprint",
   "/de/legal/privacy",
   "/en/does-not-exist",

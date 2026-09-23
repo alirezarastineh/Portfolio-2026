@@ -19,6 +19,9 @@ test.describe("hydration", () => {
   for (const path of [
     "/en",
     "/de",
+    "/en/work/project-one",
+    "/de/writing",
+    "/en/writing/shipping-rag-to-production",
     "/en/legal/imprint",
     "/de/legal/privacy",
     "/en/does-not-exist",

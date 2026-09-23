@@ -83,8 +83,9 @@ jobs:
           cache: pnpm
           cache-dependency-path: client/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # Tests run against the bundled fallback content with every request to
-      # another origin blocked, so the API URL baked in here is never reached.
+      # Tests run against a local fixture API (e2e/fixture-api.mjs) with every
+      # request to another origin blocked, so the API URL baked in here is never
+      # reached.
       - run: pnpm build
         env:
           VITE_API_BASE_URL: https://api.alirezarastineh.me

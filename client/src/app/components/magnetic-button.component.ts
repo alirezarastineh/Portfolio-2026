@@ -31,6 +31,7 @@ type ButtonType = "button" | "submit";
         [attr.href]="href()"
         [attr.target]="external() ? '_blank' : null"
         [attr.rel]="external() ? 'noreferrer noopener' : null"
+        [attr.download]="download() ? '' : null"
         (mousemove)="onMove($event)"
         (mouseleave)="onLeave()"
       >
@@ -56,6 +57,8 @@ type ButtonType = "button" | "submit";
 export class MagneticButtonComponent {
   readonly variant = input<Variant>("primary");
   readonly href = input<string | undefined>(undefined);
+  /** Saves the link's file instead of opening it, under the name the server gives. */
+  readonly download = input(false);
   /** Only applies when rendering a `<button>` (no `href`). */
   readonly buttonType = input<ButtonType>("button");
   readonly strength = input<number>(0.3);

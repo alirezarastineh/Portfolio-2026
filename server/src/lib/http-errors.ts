@@ -1,5 +1,6 @@
 import type { ErrorHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { routePath } from "hono/route";
 
 import { captureError } from "./sentry.js";
 
@@ -33,6 +34,6 @@ export const onApiError: ErrorHandler = (error, c) => {
   }
 
   console.error(`[api] unhandled error on ${c.req.method} ${c.req.path}`, error);
-  captureError(error, { method: c.req.method, path: c.req.routePath || c.req.path });
+  captureError(error, { method: c.req.method, path: routePath(c) || c.req.path });
   return c.json({ error: "internal_error" }, 500);
 };

@@ -4,7 +4,7 @@ import type { ResolveFn } from "@angular/router";
 import type { MetaTag } from "@analogjs/router";
 
 import { LOCALES, OG_LOCALE, otherLocale, type Locale } from "../content/locale";
-import type { AppContent } from "../content/schema";
+import type { Alternates, AppContent, Image } from "../content/schema";
 import { LanguageService } from "../services/language.service";
 import { applyHead } from "./head";
 
@@ -43,11 +43,55 @@ export function languageAlternates(
   return alternates;
 }
 
+/**
+ * hreflang for a page that exists in only some languages — a case study or a
+ * post, whose `alternates` are null where there is no version. `x-default` is
+ * the English version when there is one.
+ */
+export function docLanguageAlternates(
+  origin: string,
+  alternates: Alternates,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const locale of LOCALES) {
+    const path = alternates[locale];
+    if (path) out[locale] = `${origin}${path}`;
+  }
+  const xDefault = out["en"] ?? Object.values(out)[0];
+  if (xDefault) out["x-default"] = xDefault;
+  return out;
+}
+
+/**
+ * An image as an absolute URL for social cards and structured data, or null
+ * when there is none a card can show — the legacy SVG placeholders are not.
+ */
+export function absoluteImage(origin: string, image: Image | null | undefined): string | null {
+  if (!image || /\.svg$/i.test(image.src)) return null;
+  return /^https?:\/\//i.test(image.src) ? image.src : `${origin}${image.src}`;
+}
+
+/** The locale's RSS feed, when it has posts to put in one. */
+export function feedsOf(content: AppContent, locale: Locale): { title: string; href: string }[] {
+  if (content.posts.length === 0) return [];
+  return [
+    {
+      title: `${content.ui.writing.heading} · ${content.identity.name}`,
+      href: pageUrl(siteOrigin(content), locale, "/rss.xml"),
+    },
+  ];
+}
+
 interface PageMeta {
   title: string;
   description: string;
   url: string;
   robots: string;
+  /** `article` for a post; everything else is `website`. */
+  ogType?: "website" | "article";
+  /** Absolute URL of the page's own card image; the site's default otherwise. */
+  image?: string | null;
+  imageAlt?: string;
   /** Social cards default to the page title and description. */
   ogTitle?: string;
   ogDescription?: string;
@@ -67,19 +111,22 @@ export function pageMeta(content: AppContent, locale: Locale, page: PageMeta): M
     { name: "robots", content: page.robots },
     { name: "author", content: seo.author },
     { name: "theme-color", content: seo.themeColor },
-    { property: "og:type", content: "website" },
+    { property: "og:type", content: page.ogType ?? "website" },
     { property: "og:site_name", content: seo.siteName },
     { property: "og:title", content: page.ogTitle ?? page.title },
     { property: "og:description", content: page.ogDescription ?? page.description },
     { property: "og:url", content: page.url },
-    { property: "og:image", content: seo.ogImage },
-    { property: "og:image:alt", content: page.ogTitle ?? page.title },
+    { property: "og:image", content: page.image ?? seo.ogImage },
+    {
+      property: "og:image:alt",
+      content: (page.image && page.imageAlt) || page.ogTitle || page.title,
+    },
     { property: "og:locale", content: seo.ogLocale || OG_LOCALE[locale] },
     { property: "og:locale:alternate", content: OG_LOCALE[otherLocale(locale)] },
     { name: "twitter:card", content: seo.twitterCard },
     { name: "twitter:title", content: page.twitterTitle ?? page.title },
     { name: "twitter:description", content: page.twitterDescription ?? page.description },
-    { name: "twitter:image", content: seo.twitterImage },
+    { name: "twitter:image", content: page.image ?? seo.twitterImage },
   ];
 }
 
@@ -158,6 +205,7 @@ export const homeHeadResolver: ResolveFn<true> = () => {
     canonical: pageUrl(origin, lang.lang()),
     alternates: languageAlternates(origin, "", `${origin}/`),
     jsonLd: homeJsonLd(content, lang.lang(), origin),
+    feeds: feedsOf(content, lang.lang()),
   });
   return true;
 };

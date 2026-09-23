@@ -180,6 +180,23 @@ a {
   }
 }
 
+/* Page transitions (`withViewTransitions`, app.config.ts): a quick cross-fade,
+   and a project card's image morphing into its case study's cover — the two
+   share `view-transition-name: project-<slug>`. Reduced motion skips them in
+   script (navigation/view-transitions.ts); this only sets their pace. */
+/* eslint-disable css/use-baseline -- progressive enhancement: a browser
+   without view transitions ignores these and navigates without animation. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+}
+
+::view-transition-group(*) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+/* eslint-enable css/use-baseline */
+
 .terminal-caret {
   display: inline-block;
   width: 0.55em;

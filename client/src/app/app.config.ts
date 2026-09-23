@@ -1,12 +1,13 @@
 import { provideHttpClient, withInterceptors } from "@angular/common/http";
 import { ApplicationConfig, ErrorHandler, provideBrowserGlobalErrorListeners } from "@angular/core";
 import { provideClientHydration, withEventReplay } from "@angular/platform-browser";
-import { withInMemoryScrolling, withRouterConfig } from "@angular/router";
+import { withInMemoryScrolling, withRouterConfig, withViewTransitions } from "@angular/router";
 import { provideFileRouter, requestContextInterceptor, routes } from "@analogjs/router";
 
 import { guardLocaleRoute } from "./content/locale-route";
 import { ReportingErrorHandler } from "./monitoring/reporting-error-handler";
 import { providePageScroll } from "./navigation/page-scroll";
+import { animatePageChangesOnly } from "./navigation/view-transitions";
 
 // Before the router reads the routes: `/fr` must not match `:locale`.
 guardLocaleRoute(routes);
@@ -26,6 +27,12 @@ export const appConfig: ApplicationConfig = {
       // empty-path children Analog creates for each file route.
       withRouterConfig({ paramsInheritanceStrategy: "always" }),
       withInMemoryScrolling({ anchorScrolling: "enabled" }),
+      // A cross-fade between pages, and a project card's image morphing into
+      // its case study's cover. Browsers without the API navigate as before.
+      withViewTransitions({
+        skipInitialTransition: true,
+        onViewTransitionCreated: animatePageChangesOnly,
+      }),
     ),
     providePageScroll(),
     provideHttpClient(withInterceptors([requestContextInterceptor])),

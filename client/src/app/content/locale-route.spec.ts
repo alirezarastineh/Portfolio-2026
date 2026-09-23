@@ -46,6 +46,11 @@ class LocaleNotFound {}
 class RootNotFound {}
 @Component({ template: "admin" })
 class Admin {}
+@Component({ selector: "app-imprint-stub", template: "imprint" })
+class Imprint {}
+
+/** How often the home page's (large) chunk was loaded. */
+let homeLoads = 0;
 
 /**
  * The shape Analog generates from `pages/`: each file becomes
@@ -64,7 +69,22 @@ function fileRoutes(): Routes {
           component: Layout,
           resolve: { content: localeContentResolver },
           children: [
-            { path: "", loadChildren: async () => [{ path: "", component: Home }] },
+            {
+              path: "",
+              loadChildren: async () => {
+                homeLoads += 1;
+                return [{ path: "", component: Home }];
+              },
+            },
+            {
+              path: "legal",
+              children: [
+                {
+                  path: "imprint",
+                  loadChildren: async () => [{ path: "", component: Imprint }],
+                },
+              ],
+            },
             { path: "**", loadChildren: async () => [{ path: "", component: LocaleNotFound }] },
           ],
         },
@@ -81,6 +101,7 @@ describe("locale routing", () => {
 
   beforeEach(() => {
     store = new StubContentStore();
+    homeLoads = 0;
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
@@ -119,6 +140,20 @@ describe("locale routing", () => {
 
   it("fails loudly if the locale page is ever renamed", () => {
     expect(() => guardLocaleRoute([{ path: ":lang" }])).toThrow(/no :locale route/);
+  });
+
+  /**
+   * Regression: the home page is a lazy `path: ''` child. With the default
+   * prefix match the router loaded its chunk for every page, only to find it
+   * did not match.
+   */
+  it("loads the home page's code for the home page only", async () => {
+    expect(await render("/en/legal/imprint")).toBe("[layout]imprint");
+    expect(await render("/en/does-not-exist")).toBe("[layout]locale-404");
+    expect(homeLoads).toBe(0);
+
+    expect(await render("/en")).toBe("[layout]home");
+    expect(homeLoads).toBe(1);
   });
 
   it("keeps an unknown page under a real locale inside the site", async () => {

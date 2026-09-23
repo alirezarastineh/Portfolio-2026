@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
+import { NgIcon, provideIcons } from "@ng-icons/core";
+import { lucideDownload } from "@ng-icons/lucide";
 
 import { MagneticButtonComponent } from "../components/magnetic-button.component";
 import { LanguageService } from "../services/language.service";
@@ -7,7 +9,8 @@ import { GridCanvasComponent } from "../visuals/grid-canvas.component";
 @Component({
   selector: "app-hero-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MagneticButtonComponent, GridCanvasComponent],
+  imports: [MagneticButtonComponent, GridCanvasComponent, NgIcon],
+  viewProviders: [provideIcons({ lucideDownload })],
   host: {
     class: "block",
   },
@@ -41,6 +44,18 @@ import { GridCanvasComponent } from "../visuals/grid-canvas.component";
           >
             {{ lang.t().profile.secondaryCta }}
           </app-magnetic-button>
+          @if (identity().resume) {
+            <!-- /en/resume.pdf redirects to this language's CV, saved as
+                 Alireza-Rastineh-CV-en.pdf. Hidden until one is set. -->
+            <app-magnetic-button
+              variant="secondary"
+              [href]="'/' + lang.lang() + '/resume.pdf'"
+              [download]="true"
+            >
+              <ng-icon name="lucideDownload" size="16" aria-hidden="true" />
+              {{ lang.t().hero.downloadCv }}
+            </app-magnetic-button>
+          }
         </div>
       </div>
       <div

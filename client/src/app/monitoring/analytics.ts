@@ -24,8 +24,9 @@ export function injectUmami(doc: Document, config: UmamiConfig): void {
   script.id = SCRIPT_ID;
   script.defer = true;
   script.src = config.src;
-  script.setAttribute("data-website-id", config.websiteId);
-  script.setAttribute("data-domains", config.hostname);
-  script.setAttribute("data-do-not-track", "true");
+  // Not `script.dataset`: runs during SSR where server DOM (e.g. Domino) lacks `dataset`.
+  script.setAttribute("data-website-id", config.websiteId); // NOSONAR
+  script.setAttribute("data-domains", config.hostname); // NOSONAR
+  script.setAttribute("data-do-not-track", "true"); // NOSONAR
   doc.head.appendChild(script);
 }

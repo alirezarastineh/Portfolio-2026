@@ -3,7 +3,6 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideChevronDown } from "@ng-icons/lucide";
 import {
   BrnComboboxAnchor,
-  BrnComboboxInputWrapper,
   BrnComboboxPopoverTrigger,
   BrnComboboxTrigger,
 } from "@spartan-ng/brain/combobox";
@@ -24,7 +23,6 @@ import type { ClassValue } from "clsx";
   ],
   providers: [provideIcons({ lucideChevronDown })],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  hostDirectives: [BrnComboboxInputWrapper],
   template: `
     <button
       brnComboboxTrigger

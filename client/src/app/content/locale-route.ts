@@ -1,5 +1,5 @@
 import { inject } from "@angular/core";
-import type { CanMatchFn, ResolveFn, Route } from "@angular/router";
+import type { CanMatchFn, ResolveFn, Route, Routes } from "@angular/router";
 
 import { LanguageService } from "../services/language.service";
 import { ContentStore } from "./content.store";
@@ -27,6 +27,21 @@ export function guardLocaleRoute(fileRoutes: Route[]): void {
     throw new Error("[routing] no :locale route — was pages/[locale].page.ts renamed?");
   }
   route.canMatch = [localeSegmentGuard];
+
+  // `[locale]/index.page.ts` becomes a lazy `path: ''` child with the default
+  // prefix match. To route `/de/legal/privacy`, the router would first load
+  // the home page's chunk (hero, projects, GSAP: ~155 KB) only to find it does
+  // not match. Matching it on `/de` alone keeps that code on the home page.
+  const load = route.loadChildren as (() => Promise<Routes>) | undefined;
+  if (!load) throw new Error("[routing] the :locale route is not lazy — has Analog changed?");
+  route.loadChildren = async () => {
+    const loaded = await load();
+    for (const layout of loaded) {
+      const home = layout.children?.find((child) => child.path === "" && child.loadChildren);
+      if (home) home.pathMatch = "full";
+    }
+    return loaded;
+  };
 }
 
 /**

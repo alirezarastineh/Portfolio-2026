@@ -58,13 +58,36 @@ export class LanguageService {
   /** The current page without its language: `/` for home, `/legal/imprint`, … */
   readonly page = computed(() => pageKey(this.url()));
 
-  /** This page in each language — what the language switch links to. */
+  /** Set by a page whose other-language version is not the same path; see `pinAlternates`. */
+  private readonly pinned = signal<{ page: string; urls: Partial<Record<Locale, string>> } | null>(
+    null,
+  );
+
+  /**
+   * This page in each language — what the language switch links to. The same
+   * path in the other language, unless the page pinned somewhere else.
+   */
   readonly alternates = computed<Record<Locale, UrlTree>>(() => {
     const url = this.url();
+    const pinned = this.pinned();
+    const own = pinned?.page === pageKey(url) ? pinned.urls : {};
     return Object.fromEntries(
-      LOCALES.map((locale) => [locale, this.router.parseUrl(swapLocale(url, locale))]),
+      LOCALES.map((locale) => [
+        locale,
+        this.router.parseUrl(own[locale] ?? swapLocale(url, locale)),
+      ]),
     ) as Record<Locale, UrlTree>;
   });
+
+  /**
+   * For a page that does not exist in every language — a post written only in
+   * English — the switch leads to `urls[locale]` instead of a 404. Pinned to
+   * `path` (`/en/writing/x`), so it applies while that page is shown and
+   * lapses on the next one. Called from the page's resolver.
+   */
+  pinAlternates(path: string, urls: Partial<Record<Locale, string>>): void {
+    this.pinned.set({ page: pageKey(path), urls });
+  }
 
   /** Called by the locale route's resolver once the content is loaded. */
   activate(locale: Locale): void {

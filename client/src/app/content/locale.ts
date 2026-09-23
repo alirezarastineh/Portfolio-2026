@@ -86,6 +86,20 @@ export function swapLocale(url: string, locale: Locale): string {
   return LOCALE_PREFIX.test(url) ? url.replace(LOCALE_PREFIX, `/${locale}`) : `/${locale}`;
 }
 
+/**
+ * Where the language switch leads from a page that may not exist in every
+ * language (a case study, a post): its own version where there is one,
+ * `fallback(locale)` — an index page — where there is not.
+ */
+export function switchTargets(
+  alternates: Partial<Record<Locale, string | null>>,
+  fallback: (locale: Locale) => string,
+): Record<Locale, string> {
+  return Object.fromEntries(
+    LOCALES.map((locale) => [locale, alternates[locale] ?? fallback(locale)]),
+  ) as Record<Locale, string>;
+}
+
 /** The page a URL shows, independent of its language: `/de/legal/imprint?x#y` → `/legal/imprint`. */
 export function pageKey(url: string): string {
   const path = url.split(/[?#]/, 1)[0] ?? "";

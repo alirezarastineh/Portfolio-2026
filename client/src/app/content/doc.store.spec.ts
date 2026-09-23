@@ -6,7 +6,7 @@ import { HttpTestingController, provideHttpClientTesting } from "@angular/common
 import { TestBed } from "@angular/core/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DocStore } from "./doc.store";
+import { DocStore, statusOf } from "./doc.store";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const docs = JSON.parse(readFileSync(resolve(here, "fallback-docs.en.json"), "utf8")) as Record<
@@ -55,6 +55,17 @@ describe("DocStore", () => {
     const bad = store.ensure("en", "legal", "privacy");
     backend.expectOne("/api/v2/content/en/legal/privacy").flush({ kind: "legal", title: 42 });
     await expect(bad).rejects.toThrow(/invalid doc/);
+  });
+
+  /** During SSR the request goes through Nitro's ofetch, which rejects with its own error. */
+  it("reads a 404 from the server render's FetchError too", () => {
+    const fetchError = Object.assign(new Error("[GET] /api/v2/content/en/posts/x: 404"), {
+      status: 404,
+      statusCode: 404,
+    });
+    expect(statusOf(fetchError)).toBe(404);
+    expect(statusOf({ statusCode: 503 })).toBe(503);
+    expect(statusOf(new Error("network"))).toBeNull();
   });
 
   it("rejects on a real failure rather than pretending the doc is missing", async () => {

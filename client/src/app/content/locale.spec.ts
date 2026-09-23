@@ -8,6 +8,7 @@ import {
   parseAcceptLanguage,
   parseLocaleCookie,
   swapLocale,
+  switchTargets,
 } from "./locale";
 
 describe("negotiateLocale", () => {
@@ -92,5 +93,13 @@ describe("localeRedirect", () => {
     ]) {
       expect(localeRedirect(path, null, "de")).toBeNull();
     }
+  });
+});
+
+describe("switchTargets", () => {
+  it("keeps a page's own versions and sends a missing language to the fallback", () => {
+    expect(
+      switchTargets({ en: "/en/writing/notes", de: null }, (locale) => `/${locale}/writing`),
+    ).toEqual({ en: "/en/writing/notes", de: "/de/writing" });
   });
 });

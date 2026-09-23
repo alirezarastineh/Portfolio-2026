@@ -1,6 +1,15 @@
 import { expect, inlineScripts, policyNonce, test } from "./fixtures";
 
-const PAGES = ["/en", "/de", "/en/legal/privacy", "/de/does-not-exist", "/admin/login"];
+const PAGES = [
+  "/en",
+  "/de",
+  "/en/work/project-one",
+  "/en/writing",
+  "/de/writing/shipping-rag-to-production",
+  "/en/legal/privacy",
+  "/de/does-not-exist",
+  "/admin/login",
+];
 
 test.describe("content security policy", () => {
   test("pages get an enforced policy with a fresh nonce per request", async ({ request }) => {
@@ -26,7 +35,7 @@ test.describe("content security policy", () => {
   });
 
   test("files and the BFF carry no page policy", async ({ request }) => {
-    for (const path of ["/robots.txt", "/sitemap.xml", "/api/v1/content/en"]) {
+    for (const path of ["/robots.txt", "/sitemap.xml", "/en/rss.xml", "/api/v1/content/en"]) {
       expect((await request.get(path)).headers()["content-security-policy"], path).toBeUndefined();
     }
   });

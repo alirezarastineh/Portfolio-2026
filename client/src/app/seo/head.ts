@@ -9,6 +9,8 @@ export interface HeadSpec {
   alternates?: Record<string, string>;
   /** One JSON-LD object (use `@graph` for several). */
   jsonLd?: object | null;
+  /** RSS feeds to advertise, so a feed reader finds them from the page. */
+  feeds?: { title: string; href: string }[];
 }
 
 /**
@@ -52,6 +54,15 @@ export function applyHead(document: Document, spec: HeadSpec): void {
     link.setAttribute("rel", "alternate");
     link.setAttribute("hreflang", hreflang);
     link.setAttribute("href", href);
+    add(link);
+  }
+
+  for (const feed of spec.feeds ?? []) {
+    const link = document.createElement("link");
+    link.setAttribute("rel", "alternate");
+    link.setAttribute("type", "application/rss+xml");
+    link.setAttribute("title", feed.title);
+    link.setAttribute("href", feed.href);
     add(link);
   }
 

@@ -6,7 +6,6 @@ import {
   BrnAutocompleteAnchor,
   BrnAutocompleteClear,
   BrnAutocompleteInput,
-  BrnAutocompleteInputWrapper,
 } from "@spartan-ng/brain/autocomplete";
 import { HlmInputGroupImports } from "@spartan-ng/helm/input-group";
 
@@ -21,7 +20,6 @@ import { HlmInputGroupImports } from "@spartan-ng/helm/input-group";
   ],
   providers: [provideIcons({ lucideSearch, lucideX })],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  hostDirectives: [BrnAutocompleteInputWrapper],
   template: `
     <hlm-input-group brnAutocompleteAnchor class="w-auto">
       <input

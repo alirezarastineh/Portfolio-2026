@@ -1,19 +1,14 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  input,
-  ViewEncapsulation,
-} from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
+import { RouterLink } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideExternalLink, lucideFileText } from "@ng-icons/lucide";
+import { lucideArrowRight, lucideExternalLink, lucideFileText } from "@ng-icons/lucide";
 
 import { brandGithub } from "../icons/brand-icons";
 import { PictureComponent } from "./picture.component";
 import { ScrambleTextComponent } from "./scramble-text.component";
 import type { Project } from "../content/schema";
 import { fmt } from "../i18n/interpolate";
+import { projectTransitionName } from "../navigation/view-transitions";
 import { LanguageService } from "../services/language.service";
 
 interface DetailBlock {
@@ -33,58 +28,22 @@ interface ExternalLink {
 @Component({
   selector: "app-project-card",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgIcon, PictureComponent, ScrambleTextComponent],
-  viewProviders: [provideIcons({ lucideExternalLink, lucideFileText, brandGithub })],
+  imports: [NgIcon, PictureComponent, RouterLink, ScrambleTextComponent],
+  viewProviders: [
+    provideIcons({ lucideArrowRight, lucideExternalLink, lucideFileText, brandGithub }),
+  ],
   host: {
     class: "block",
   },
-  // The prose rules target markup injected through [innerHTML], which never
-  // carries Angular's scoping attribute — so emulated encapsulation cannot
-  // reach it. The `.project-prose` prefix does the scoping instead.
-  encapsulation: ViewEncapsulation.None,
-  styles: `
-    /* Tailwind v4 here has no typography plugin, so the handful of elements the
-       editor can emit are styled directly — lighter than adding one. */
-    .project-prose p {
-      margin: 0 0 0.5rem;
-    }
-    .project-prose p:last-child {
-      margin-bottom: 0;
-    }
-    .project-prose ul,
-    .project-prose ol {
-      margin: 0 0 0.5rem;
-      padding-left: 1.15rem;
-    }
-    .project-prose ul {
-      list-style: disc;
-    }
-    .project-prose ol {
-      list-style: decimal;
-    }
-    .project-prose li {
-      margin-bottom: 0.15rem;
-    }
-    .project-prose strong {
-      font-weight: 600;
-      color: var(--color-foreground);
-    }
-    .project-prose code {
-      font-family: var(--font-mono);
-      font-size: 0.92em;
-    }
-    .project-prose a {
-      color: var(--color-accent-indigo);
-      text-decoration: underline;
-      text-underline-offset: 2px;
-    }
-  `,
   template: `
     <article
       class="grid grid-cols-1 overflow-hidden rounded-2xl border border-border bg-card shadow-[0_24px_60px_-30px_oklch(0_0_0/70%)] lg:h-full lg:grid-cols-[3fr_2fr]"
     >
+      <!-- Shares its view-transition name with the case study's cover, so
+           opening the case study morphs this image into it. -->
       <div
         class="relative aspect-16/10 overflow-hidden border-b border-border bg-[oklch(0.27_0_0)] lg:aspect-auto lg:border-b-0 lg:border-r"
+        [style.view-transition-name]="transitionName()"
       >
         <!-- The card's image column is ~60% of the row on desktop. -->
         <app-picture
@@ -146,7 +105,7 @@ interface ExternalLink {
               } @else if (block.rich) {
                 <!-- Sanitized on write by the API; Angular sanitizes again here. -->
                 <dd
-                  class="project-prose m-0 text-sm leading-relaxed text-foreground/90"
+                  class="prose-compact m-0 text-sm leading-relaxed text-foreground/90"
                   [innerHTML]="block.body"
                 ></dd>
               } @else {
@@ -169,6 +128,16 @@ interface ExternalLink {
             </li>
           }
         </ul>
+
+        @if (project().hasCaseStudy) {
+          <a
+            class="inline-flex h-10 w-fit items-center gap-2 rounded-lg border border-accent-orange/60 px-4 font-mono text-[0.8rem] text-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange hover:bg-accent-orange/10"
+            [routerLink]="caseStudyLink()"
+          >
+            <span>{{ lang.t().caseStudy.readCaseStudy }}</span>
+            <ng-icon name="lucideArrowRight" size="14" aria-hidden="true" />
+          </a>
+        }
 
         @if (links().length) {
           <nav class="flex flex-wrap gap-2" aria-label="Project links">
@@ -196,6 +165,11 @@ export class ProjectCardComponent {
   readonly priority = input<boolean>(false);
 
   readonly isPriority = computed(() => this.priority() || this.index() === 0);
+
+  readonly caseStudyLink = computed(() => ["/", this.lang.lang(), "work", this.project().slug]);
+  readonly transitionName = computed(() =>
+    this.project().hasCaseStudy ? projectTransitionName(this.project().slug) : null,
+  );
 
   readonly indexLabel = computed(() => {
     // Padding lives here now rather than baked into the copy, so the editable

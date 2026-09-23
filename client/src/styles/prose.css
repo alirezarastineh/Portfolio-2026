@@ -1,9 +1,12 @@
 /*
- * Long-form bodies from the CMS (legal pages now; case studies and posts in
- * Phase 5), rendered through [innerHTML]. That markup carries no Angular
- * scoping attribute, so it is styled here under one class. Tailwind v4 here
- * has no typography plugin; the handful of elements the editor can emit are
- * styled directly.
+ * Rich text from the CMS, rendered through [innerHTML]. That markup carries no
+ * Angular scoping attribute, so it is styled here under a class. Tailwind v4
+ * here has no typography plugin; the handful of elements the editor can emit
+ * are styled directly.
+ *
+ * - `.prose-body`: long-form bodies (case studies, posts, legal pages) and
+ *   the case study's summary sections.
+ * - `.prose-compact`: the short rich-text fields on a project card.
  */
 .prose-body {
   max-width: 68ch;
@@ -46,9 +49,12 @@
   color: var(--color-foreground);
 }
 
+/* Foreground text with an indigo underline: indigo text itself is ~2.5:1 on
+   the background, below the 4.5:1 body text needs. */
 .prose-body a {
-  color: var(--color-accent-indigo);
+  color: var(--color-foreground);
   text-decoration: underline;
+  text-decoration-color: var(--color-accent-indigo);
   text-underline-offset: 3px;
 }
 
@@ -110,4 +116,47 @@
 .prose-body pre.code-block .line {
   display: block;
   min-height: 1lh;
+}
+
+.prose-compact p {
+  margin: 0 0 0.5rem;
+}
+
+.prose-compact p:last-child {
+  margin-bottom: 0;
+}
+
+.prose-compact ul,
+.prose-compact ol {
+  margin: 0 0 0.5rem;
+  padding-left: 1.15rem;
+}
+
+.prose-compact ul {
+  list-style: disc;
+}
+
+.prose-compact ol {
+  list-style: decimal;
+}
+
+.prose-compact li {
+  margin-bottom: 0.15rem;
+}
+
+.prose-compact strong {
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.prose-compact code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.prose-compact a {
+  color: var(--color-foreground);
+  text-decoration: underline;
+  text-decoration-color: var(--color-accent-indigo);
+  text-underline-offset: 2px;
 }

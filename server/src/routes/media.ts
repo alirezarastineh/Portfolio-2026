@@ -37,6 +37,7 @@ async function lookup(name: string): Promise<Served | null> {
   const db = getDb();
   const [asset] = await db
     .select({
+      id: mediaAssets.id,
       mime: mediaAssets.mime,
       kind: mediaAssets.kind,
       originalName: mediaAssets.originalName,
@@ -49,7 +50,8 @@ async function lookup(name: string): Promise<Served | null> {
     return {
       mime: asset.mime,
       etag: `"${asset.checksum.toString("hex").slice(0, 32)}"`,
-      downloadName: asset.kind === "document" ? safeDownloadName(asset.originalName) : null,
+      downloadName:
+        asset.kind === "document" ? await documentName(db, asset.id, asset.originalName) : null,
     };
   }
 
@@ -79,14 +81,39 @@ async function lookup(name: string): Promise<Served | null> {
  * offers when saving.
  */
 function safeDownloadName(originalName: string): string {
-  const cleaned = originalName
+  const base = headerSafe(originalName).replace(/\.pdf$/i, "") || "document";
+  return `${base}.pdf`;
+}
+
+/** Letters, digits, `.`, `_` and `-` only: accents dropped, spaces as `-`. */
+function headerSafe(text: string): string {
+  return text
     .normalize("NFKD")
     .replace(/[^\w.\- ]+/g, "")
     .replace(/\s+/g, "-")
     .replace(/^[.-]+/, "")
     .slice(0, 100);
-  const base = cleaned.replace(/\.pdf$/i, "") || "document";
-  return `${base}.pdf`;
+}
+
+/**
+ * The name a document is saved under. A CV is `Alireza-Rastineh-CV-en.pdf`,
+ * whatever it was uploaded as (`/{locale}/resume.pdf` redirects here); one
+ * PDF set as the CV for both languages drops the language. Any other document
+ * keeps its uploader's name.
+ */
+async function documentName(db: DbExecutor, assetId: string, originalName: string): Promise<string> {
+  const resumes = await db
+    .select({ locale: profileResumes.locale })
+    .from(profileResumes)
+    .where(eq(profileResumes.mediaId, assetId))
+    .orderBy(profileResumes.locale);
+  if (resumes.length === 0) return safeDownloadName(originalName);
+
+  const [profile] = await db.select({ name: siteProfile.name }).from(siteProfile).limit(1);
+  const person = headerSafe(profile?.name ?? "");
+  const prefix = person ? `${person}-` : "";
+  const locale = resumes.length === 1 ? `-${resumes[0]!.locale}` : "";
+  return `${prefix}CV${locale}.pdf`;
 }
 
 mediaRouter.get("/:name", async (c) => {

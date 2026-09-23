@@ -9,12 +9,11 @@ import {
   viewChild,
 } from "@angular/core";
 import { classes } from "@spartan-ng/helm/utils";
-import {
-  EmblaCarouselDirective,
-  type EmblaEventType,
-  type EmblaOptionsType,
-  type EmblaPluginType,
-} from "embla-carousel-angular";
+import { EmblaCarouselDirective } from "embla-carousel-angular";
+
+type EmblaOptionsType = ReturnType<EmblaCarouselDirective["options"]>;
+type EmblaPluginType = ReturnType<EmblaCarouselDirective["plugins"]>[number];
+type EmblaEventType = ReturnType<EmblaCarouselDirective["subscribeToEvents"]>[number];
 
 @Component({
   selector: "hlm-carousel",
@@ -86,18 +85,18 @@ export class HlmCarousel {
   protected onKeydown(event: KeyboardEvent) {
     if (event.key === "ArrowLeft") {
       event.preventDefault();
-      this._emblaCarousel().scrollPrev();
+      this._emblaCarousel().goToPrev();
     } else if (event.key === "ArrowRight") {
       event.preventDefault();
-      this._emblaCarousel().scrollNext();
+      this._emblaCarousel().goToNext();
     }
   }
 
   scrollPrev() {
-    this._emblaCarousel().scrollPrev();
+    this._emblaCarousel().goToPrev();
   }
 
   scrollNext() {
-    this._emblaCarousel().scrollNext();
+    this._emblaCarousel().goToNext();
   }
 }

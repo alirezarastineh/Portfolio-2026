@@ -122,6 +122,28 @@ check "an unknown page answers 404" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${CLIENT}/en/does-not-exist')\" = 404 ]"
 check "legal pages are served" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${CLIENT}/de/legal/privacy')\" = 200 ]"
+check "the writing index is served" \
+  bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${CLIENT}/en/writing')\" = 200 ]"
+check "an unknown case study answers 404" \
+  bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${CLIENT}/en/work/does-not-exist')\" = 404 ]"
+check "an unknown post answers 404" \
+  bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${CLIENT}/en/writing/does-not-exist')\" = 404 ]"
+
+# /en/resume.pdf: 404 until a CV is set in the admin, then a redirect to the
+# file, which the API names <Name>-CV-en.pdf.
+RESUME="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "${CLIENT}/en/resume.pdf")"
+case "${RESUME}" in
+  "404 "*) echo "  info  no English CV set yet (/en/resume.pdf answers 404)" ;;
+  "302 ${CLIENT}/media/"*.pdf)
+    # From the api: the SSR container itself does not serve /media (Caddy routes it).
+    if curl -fsSI "${API}${RESUME#"302 ${CLIENT}"}" | tr -d '\r' | grep -qi '^content-disposition:.*-CV-en\.pdf'; then
+      pass "/en/resume.pdf redirects to the CV, saved as <Name>-CV-en.pdf"
+    else
+      fail "/en/resume.pdf redirects, but the file is not named <Name>-CV-en.pdf (api not updated?)"
+    fi
+    ;;
+  *) fail "/en/resume.pdf should redirect to /media/….pdf or answer 404 (got '${RESUME}')" ;;
+esac
 
 echo "== content security policy =="
 # The SSR container sends the policy (CSP_MODE: enforce or report-only) with a
@@ -156,6 +178,8 @@ check "robots.txt disallows /admin" bash -c "curl -fsS '${CLIENT}/robots.txt' | 
 check "robots.txt disallows /api/" bash -c "curl -fsS '${CLIENT}/robots.txt' | grep -q 'Disallow: /api/'"
 check "sitemap.xml lists both languages with alternates" \
   bash -c "curl -fsS '${CLIENT}/sitemap.xml' | grep -q 'hreflang=\"de\"'"
+check "each language has an RSS feed" \
+  bash -c "curl -fsS '${CLIENT}/en/rss.xml' | grep -q '<rss version=\"2.0\"' && curl -fsS '${CLIENT}/de/rss.xml' | grep -q '<language>de</language>'"
 
 echo "== auth boundary =="
 check "admin is locked without a session" \

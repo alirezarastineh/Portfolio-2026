@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app.js";
 import { publishAll } from "../content/publish.js";
 import { getDb } from "../db/client.js";
-import { mediaVariants, projects } from "../db/schema.js";
+import { mediaVariants, projects, siteProfile } from "../db/schema.js";
 import { seed } from "../db/seed.js";
 import { createAdmin, resetDb, TestClient } from "../test/helpers.js";
 
@@ -143,6 +143,22 @@ describe("media upload", () => {
       'inline; filename="Lebenslauf-A-2026.pdf"',
     );
     expect(Buffer.from(await served.arrayBuffer()).equals(PDF)).toBe(true);
+  });
+
+  it("names a CV after its owner and language, whatever it was uploaded as", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await seed();
+    await getDb().update(siteProfile).set({ name: "Jürgen Müller" });
+    const { body } = await upload(PDF, "final_v3 (1).pdf", "application/pdf");
+    const disposition = async () =>
+      (await app.request(`/media/${body.media.filename}`)).headers.get("content-disposition");
+
+    expect((await client.put("/admin/resumes/de", { mediaId: body.media.id })).status).toBe(200);
+    expect(await disposition()).toBe('inline; filename="Jurgen-Muller-CV-de.pdf"');
+
+    // One file as the CV for both languages carries no language.
+    expect((await client.put("/admin/resumes/en", { mediaId: body.media.id })).status).toBe(200);
+    expect(await disposition()).toBe('inline; filename="Jurgen-Muller-CV.pdf"');
   });
 
   it("refuses an upload over the limit before reading it", async () => {

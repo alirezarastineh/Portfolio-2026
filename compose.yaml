@@ -6,7 +6,7 @@
 # live containers from stale config on top of the production volume. It now
 # has its own fixed project name, volume and port, and cannot touch production.
 #
-#   docker compose up -d        → postgresql://portfolio:portfolio@127.0.0.1:5434/portfolio
+#   docker compose up -d        → postgresql://${POSTGRES_USER:-portfolio}:<password>@127.0.0.1:5434/${POSTGRES_DB:-portfolio}
 #
 # Tests do not need this: the server's db suites start their own embedded
 # Postgres (see DEPLOYMENT.md, "Run Tests").
@@ -17,16 +17,17 @@ services:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: portfolio
-      POSTGRES_PASSWORD: portfolio
-      POSTGRES_DB: portfolio
+      POSTGRES_USER: ${POSTGRES_USER:-portfolio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-portfolio}
     ports:
       # 5434, not 5433: never collides with the Hetzner stack's port on the host.
       - "127.0.0.1:5434:5432"
     volumes:
       - pgdata-dev:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U portfolio -d portfolio"]
+      test:
+        ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER:-portfolio}" -d "$${POSTGRES_DB:-portfolio}"']
       interval: 10s
       timeout: 5s
       retries: 10

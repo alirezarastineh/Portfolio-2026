@@ -3,6 +3,12 @@ import { booleanAttribute, ChangeDetectionStrategy, Component, input } from "@an
 import { HlmSkeletonImports } from "@spartan-ng/helm/skeleton";
 import { classes } from "@spartan-ng/helm/utils";
 
+function randomSkeletonWidth(): string {
+  const buffer = new Uint8Array(1);
+  crypto.getRandomValues(buffer);
+  return `${(buffer[0]! % 40) + 50}%`;
+}
+
 @Component({
   selector: "hlm-sidebar-menu-skeleton,div[hlmSidebarMenuSkeleton]",
   imports: [HlmSkeletonImports],
@@ -22,7 +28,7 @@ import { classes } from "@spartan-ng/helm/utils";
 })
 export class HlmSidebarMenuSkeleton {
   public readonly showIcon = input<boolean, BooleanInput>(false, { transform: booleanAttribute });
-  protected readonly _width = `${Math.floor(Math.random() * 40) + 50}%`;
+  protected readonly _width = randomSkeletonWidth();
 
   constructor() {
     classes(() => "flex h-8 items-center gap-2 rounded-md px-2");
