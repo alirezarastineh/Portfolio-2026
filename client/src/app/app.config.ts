@@ -36,6 +36,9 @@ export const appConfig: ApplicationConfig = {
     ),
     providePageScroll(),
     provideHttpClient(withInterceptors([requestContextInterceptor])),
+    // Incremental hydration is on by default since Angular 22: `@defer
+    // (hydrate on …)` blocks (the home page's sections) arrive server-rendered
+    // and load their code only when needed.
     provideClientHydration(withEventReplay()),
   ],
 };

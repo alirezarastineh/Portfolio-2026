@@ -18,19 +18,22 @@
   margin-top: 1rem;
 }
 
+/* Headings in the display face, like the rest of the site; mono is for
+   labels and code. */
 .prose-body h2 {
-  margin-top: 2.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
+  margin-top: 2.75rem;
+  font-size: 1.5rem;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
   color: var(--color-foreground);
 }
 
 .prose-body h3 {
-  margin-top: 1.75rem;
-  font-size: 1rem;
+  margin-top: 2rem;
+  font-size: 1.15rem;
   font-weight: 600;
+  line-height: 1.35;
   color: var(--color-foreground);
 }
 
@@ -49,8 +52,8 @@
   color: var(--color-foreground);
 }
 
-/* Foreground text with an indigo underline: indigo text itself is ~2.5:1 on
-   the background, below the 4.5:1 body text needs. */
+/* Foreground text with an indigo underline: indigo is decoration only (it
+   falls short of the 4.5:1 body text needs on cards in the dark theme). */
 .prose-body a {
   color: var(--color-foreground);
   text-decoration: underline;

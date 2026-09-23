@@ -1,32 +1,38 @@
 import { DOCUMENT } from "@angular/common";
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 
-import { GrainOverlayComponent } from "../components/grain-overlay.component";
+import { CommandPaletteComponent } from "../components/command-palette.component";
 import { SiteFooterComponent } from "../components/site-footer.component";
 import { SiteHeaderComponent } from "../components/site-header.component";
 import { injectUmami } from "../monitoring/analytics";
+import { CommandPaletteService } from "../services/command-palette.service";
 import { LanguageService } from "../services/language.service";
 
 /**
- * The public portfolio chrome.
- *
- * This used to live in `App`, which meant every route inherited the site header,
- * footer and grain overlay — including `/admin`. Pulling it into a shell lets
- * the admin render its own layout instead.
+ * The public portfolio chrome: header, footer and the ⌘K palette. The admin
+ * renders its own layout instead.
  */
 @Component({
   selector: "app-public-shell",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GrainOverlayComponent, SiteFooterComponent, SiteHeaderComponent],
-  host: { class: "block min-h-screen" },
+  imports: [CommandPaletteComponent, SiteFooterComponent, SiteHeaderComponent],
+  host: {
+    class: "block min-h-screen",
+    "(document:keydown)": "onKeydown($event)",
+  },
   template: `
     <app-site-header />
     <ng-content />
     <app-site-footer />
-    <app-grain-overlay />
+    <!-- Its code loads the first time someone opens it. -->
+    @defer (when palette.requested()) {
+      <app-command-palette />
+    }
   `,
 })
 export class PublicShellComponent {
+  protected readonly palette = inject(CommandPaletteService);
+
   constructor() {
     // Here rather than in App, so the admin is never tracked.
     injectUmami(inject(DOCUMENT), {
@@ -34,6 +40,14 @@ export class PublicShellComponent {
       websiteId: import.meta.env.VITE_UMAMI_WEBSITE_ID,
       hostname: canonicalHostname(inject(LanguageService).content().seo.canonical),
     });
+  }
+
+  /** ⌘K / Ctrl+K opens the palette from anywhere on the site. */
+  protected onKeydown(event: KeyboardEvent): void {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      this.palette.toggle();
+    }
   }
 }
 

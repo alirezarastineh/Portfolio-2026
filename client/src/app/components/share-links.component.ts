@@ -3,14 +3,9 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideCheck, lucideLink } from "@ng-icons/lucide";
 
 import type { Locale } from "../content/schema";
+import { CHROME } from "../i18n/chrome";
 import { fmt } from "../i18n/interpolate";
 import { brandLinkedin, brandX } from "../icons/brand-icons";
-
-/** Interface chrome rather than content, so not in the CMS. */
-const LABELS: Record<Locale, { share: string; copy: string; copied: string; on: string }> = {
-  en: { share: "Share", copy: "Copy link", copied: "Link copied", on: "Share on {site}" },
-  de: { share: "Teilen", copy: "Link kopieren", copied: "Link kopiert", on: "Auf {site} teilen" },
-};
 
 /**
  * Sharing a post without third-party scripts: plain links to the networks'
@@ -56,10 +51,10 @@ export class ShareLinksComponent {
   readonly locale = input.required<Locale>();
 
   protected readonly copied = signal(false);
-  protected readonly labels = computed(() => LABELS[this.locale()]);
+  protected readonly labels = computed(() => CHROME[this.locale()].share);
 
   protected readonly control =
-    "inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-transparent px-3 font-mono text-[0.78rem] text-foreground transition-colors duration-200 hover:border-accent-indigo/50 hover:text-accent-indigo";
+    "inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-transparent px-3 font-mono text-[0.78rem] text-foreground transition-colors duration-200 hover:border-accent-orange/50";
 
   protected readonly networks = computed(() => {
     const url = encodeURIComponent(this.url());

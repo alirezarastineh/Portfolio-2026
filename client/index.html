@@ -1,9 +1,31 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en" class="dark" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <base href="/" />
+    <!-- The saved theme, or else the system's, before anything paints. The
+         server renders dark; this only ever switches to light. Nonced per
+         request by id (src/app/security/csp-nonce.ts); keep it tiny. -->
+    <script id="theme-init">
+      (function () {
+        var t = null;
+        try {
+          t = localStorage.getItem("theme");
+        } catch (e) {
+          // Storage blocked (privacy settings): no saved choice, so the
+          // system setting decides below.
+          t = null;
+        }
+        if (t !== "light" && t !== "dark") {
+          var light = window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches;
+          t = light ? "light" : "dark";
+        }
+        var r = document.documentElement;
+        r.dataset.theme = t;
+        r.classList.toggle("dark", t === "dark");
+      })();
+    </script>
     <!-- Must precede the app's module script, which the build moves into
          <head>: it configures zod before any schema exists (see the file). -->
     <script defer src="/zod-config.js"></script>
@@ -14,11 +36,32 @@
       content="Full Stack AI Engineer. Reliable cloud infrastructure meets defensive AI engineering — production-grade Angular, FastAPI, RAG pipelines, and observability."
     />
     <meta name="author" content="Alireza Rastineh" />
-    <meta name="theme-color" content="#3b3b3d" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#121212" />
+    <meta name="color-scheme" content="dark light" />
 
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
     <!-- Canonical, hreflang and JSON-LD are written per page (src/app/seo/head.ts). -->
+
+    <!-- The two faces every page sets above the fold (src/styles/fonts.css):
+         fetched with the stylesheet rather than after it, so text does not
+         re-wrap when they arrive. -->
+    <link
+      rel="preload"
+      href="/node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Alireza Rastineh" />

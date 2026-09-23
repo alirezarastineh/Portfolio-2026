@@ -61,6 +61,29 @@ test.describe("case study", () => {
     });
   }
 
+  test("names a generated social card, which the server draws as a PNG", async ({
+    page,
+    request,
+  }) => {
+    await page.goto("/en/work/project-one");
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
+      "content",
+      `${SITE}/en/og/work/project-one.png`,
+    );
+
+    const card = await request.get("/en/og/work/project-one.png");
+    expect(card.status()).toBe(200);
+    expect(card.headers()["content-type"]).toBe("image/png");
+    expect((await card.body()).subarray(0, 4)).toEqual(Buffer.from([137, 80, 78, 71]));
+
+    const post = await request.get("/de/og/writing/shipping-rag-to-production.png");
+    expect(post.status()).toBe(200);
+    // No card for what has no page: a project without a case study, an unknown kind.
+    expect((await request.get("/en/og/work/project-three.png")).status()).toBe(404);
+    expect((await request.get("/en/og/nope/project-one.png")).status()).toBe(404);
+    expect((await request.get("/de/og/writing/notes-on-evals.png")).status()).toBe(404);
+  });
+
   test("the body's headings keep their anchors, in the server render too", async ({ request }) => {
     const html = await (await request.get("/en/work/project-one")).text();
     expect(html).toMatch(/<h2[^>]* id="architecture-decisions"[^>]*>Architecture decisions<\/h2>/);
@@ -68,14 +91,14 @@ test.describe("case study", () => {
     // The table of contents links to them through the router, not a bare #.
     expect(html).toContain('href="/en/work/project-one#retrieval"');
     // Highlighted at publish time: classes survive Angular's sanitizer.
-    expect(html).toContain('<span class="shd-ff7b72">const</span>');
+    expect(html).toContain('<span class="shd-ff7b72 shl-cf222e">const</span>');
   });
 
   test("a table-of-contents link scrolls to its section without leaving the page", async ({
     page,
   }) => {
     await page.goto("/en/work/project-one");
-    await page.waitForLoadState("networkidle");
+    await expect(page.locator("#main")).toBeVisible();
     await page
       .getByRole("navigation", { name: "On this page" })
       .getByRole("link", { name: "Retrieval" })
@@ -89,7 +112,7 @@ test.describe("case study", () => {
     problems,
   }) => {
     await page.goto("/en/work/project-one");
-    await page.waitForLoadState("networkidle");
+    await expect(page.locator("#main")).toBeVisible();
 
     await page.getByRole("link", { name: /^Open image 1 of 2/ }).click();
     const dialog = page.getByRole("dialog", { name: "Gallery" });
@@ -108,7 +131,7 @@ test.describe("case study", () => {
 
   test("links to the next case study, which exists in English only", async ({ page }) => {
     await page.goto("/en/work/project-one");
-    await page.waitForLoadState("networkidle");
+    await expect(page.locator("#main")).toBeVisible();
     await page.getByRole("link", { name: /Next project/ }).click();
     await expect(page).toHaveURL(/\/en\/work\/project-two$/);
 
@@ -125,18 +148,15 @@ test.describe("case study", () => {
 
   test("the home page's card opens its case study client-side", async ({ page }) => {
     await page.goto("/en");
-    await page.waitForLoadState("networkidle");
+    await expect(page.locator("#main")).toBeVisible();
     let loads = 0;
     page.on("request", (request) => {
       if (request.resourceType() === "document") loads += 1;
     });
 
-    const link = page.getByRole("link", { name: "Read case study" });
+    const link = page.getByRole("link", { name: /^Read case study/ });
     await expect(link).toHaveCount(2);
-    // By keyboard: wherever Playwright scrolls the link to click it, a later
-    // card of the sticky stack (flattened in Phase 6) lies over it.
-    await link.first().focus();
-    await page.keyboard.press("Enter");
+    await link.first().click();
     await expect(page).toHaveURL(/\/en\/work\/project-one$/);
     await expect(page.locator("main h1")).toBeVisible();
     expect(loads).toBe(0);

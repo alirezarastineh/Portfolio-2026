@@ -20,6 +20,21 @@ export default defineConfig(({ mode }) => {
   return {
     build: {
       target: ["es2020"],
+      rollupOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              // The Sentry SDK in a chunk of its own, loaded only when an
+              // error is reported (monitoring/reporting-error-handler.ts).
+              // Without it, Rolldown put its module-namespace helper — which
+              // every lazily loaded page imports — into Sentry's chunk, so
+              // every page downloaded all ~450 KB of Sentry for a three-line
+              // function. Isolated, the helper gets a chunk of its own.
+              { name: "sentry", test: /[\\/]@sentry(-internal)?[\\/]/ },
+            ],
+          },
+        },
+      },
     },
     resolve: {
       mainFields: ["module"],
@@ -142,6 +157,11 @@ export default defineConfig(({ mode }) => {
       analog({
         prerender: { routes: [] },
         nitro: {
+          // Brotli and gzip copies of the build's scripts and styles, written
+          // once at build time and served by content negotiation. Smaller than
+          // what Caddy compresses on the fly (which it then skips), and what
+          // Lighthouse measures locally is what visitors download.
+          compressPublicAssets: { brotli: true, gzip: true },
           routeRules: {
             // A page's HTML now depends only on its URL (no cookie picks the
             // language), so a shared cache may keep it briefly.

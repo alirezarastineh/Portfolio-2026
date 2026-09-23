@@ -23,12 +23,14 @@ const image = (src, alt) => ({
   blur: null,
 });
 
+// As the API's publish step writes it: a class per theme on every token
+// (github-dark-default `shd-`, github-light-default `shl-`; see code.css).
 const CODE =
   '<pre class="code-block code-lang-ts"><code><span class="line">' +
-  '<span class="shd-ff7b72">const</span><span class="shd-e6edf3"> answer = </span>' +
-  '<span class="shd-ff7b72">await</span><span class="shd-e6edf3"> </span>' +
-  '<span class="shd-d2a8ff">retrieve</span><span class="shd-e6edf3">(</span>' +
-  '<span class="shd-a5d6ff">"query"</span><span class="shd-e6edf3">);</span></span></code></pre>';
+  '<span class="shd-ff7b72 shl-cf222e">const</span><span class="shd-e6edf3 shl-1f2328"> answer = </span>' +
+  '<span class="shd-ff7b72 shl-cf222e">await</span><span class="shd-e6edf3 shl-1f2328"> </span>' +
+  '<span class="shd-d2a8ff shl-8250df">retrieve</span><span class="shd-e6edf3 shl-1f2328">(</span>' +
+  '<span class="shd-a5d6ff shl-0a3069">"query"</span><span class="shd-e6edf3 shl-1f2328">);</span></span></code></pre>';
 
 const COPY = {
   en: {

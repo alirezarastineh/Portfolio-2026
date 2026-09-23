@@ -1,20 +1,33 @@
-import { NgTemplateOutlet } from "@angular/common";
+import { isPlatformBrowser, NgTemplateOutlet } from "@angular/common";
 import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
-  DestroyRef, // NOSONAR
+  DestroyRef,
   ElementRef,
-  inject, // NOSONAR
+  inject,
   input,
+  PLATFORM_ID,
   viewChild,
 } from "@angular/core";
-import { gsap } from "gsap";
+
+import {
+  atRest,
+  coarsePointer,
+  prefersReducedMotion,
+  runFrames,
+  stepSpring,
+  type Spring,
+} from "../motion/frames";
 
 type Variant = "primary" | "secondary";
 type ButtonType = "button" | "submit";
 
+/**
+ * A button or link that leans toward the pointer. Only a pointer that hovers
+ * moves it: on touch it is a plain button, and reduced motion keeps it still.
+ */
 @Component({
   selector: "app-magnetic-button",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -32,10 +45,10 @@ type ButtonType = "button" | "submit";
         [attr.target]="external() ? '_blank' : null"
         [attr.rel]="external() ? 'noreferrer noopener' : null"
         [attr.download]="download() ? '' : null"
-        (mousemove)="onMove($event)"
-        (mouseleave)="onLeave()"
+        (pointermove)="onMove($event)"
+        (pointerleave)="onLeave()"
       >
-        <span class="inline-flex items-center gap-2 will-change-transform">
+        <span class="inline-flex items-center gap-2">
           <ng-container [ngTemplateOutlet]="projectedContent" />
         </span>
       </a>
@@ -44,10 +57,12 @@ type ButtonType = "button" | "submit";
         #target
         [attr.type]="buttonType()"
         [class]="buttonClass()"
-        (mousemove)="onMove($event)"
-        (mouseleave)="onLeave()"
+        [disabled]="disabled()"
+        [attr.aria-busy]="busy() ? 'true' : null"
+        (pointermove)="onMove($event)"
+        (pointerleave)="onLeave()"
       >
-        <span class="inline-flex items-center gap-2 will-change-transform">
+        <span class="inline-flex items-center gap-2">
           <ng-container [ngTemplateOutlet]="projectedContent" />
         </span>
       </button>
@@ -61,15 +76,18 @@ export class MagneticButtonComponent {
   readonly download = input(false);
   /** Only applies when rendering a `<button>` (no `href`). */
   readonly buttonType = input<ButtonType>("button");
+  readonly disabled = input(false);
+  /** Announced as busy (a form being sent). */
+  readonly busy = input(false);
   readonly strength = input<number>(0.3);
   readonly radius = input<number>(100);
 
   readonly buttonClass = computed(() =>
     [
-      "relative inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border px-6 font-mono text-sm font-medium tracking-[0.02em] transition-colors duration-200 ease-in-out will-change-transform focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-indigo",
+      "relative inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border px-6 font-mono text-sm font-medium tracking-[0.02em] transition-colors duration-200 ease-in-out disabled:cursor-not-allowed disabled:opacity-60",
       this.variant() === "primary"
-        ? "border-transparent bg-accent-orange text-[oklch(0.05_0_0)] hover:bg-[oklch(0.78_0.2_45)]"
-        : "border-border bg-transparent text-foreground hover:border-accent-indigo/50",
+        ? "border-transparent bg-accent-orange text-accent-orange-foreground hover:bg-accent-orange-hover"
+        : "border-border bg-transparent text-foreground hover:border-accent-orange/60",
     ].join(" "),
   );
 
@@ -81,63 +99,65 @@ export class MagneticButtonComponent {
 
   readonly target = viewChild<ElementRef<HTMLElement>>("target");
 
-  private readonly destroyRef = inject(DestroyRef);
-
-  private quickX?: gsap.QuickToFunc;
-  private quickY?: gsap.QuickToFunc;
-  private innerQuickX?: gsap.QuickToFunc;
-  private innerQuickY?: gsap.QuickToFunc;
+  private enabled = false;
+  private readonly x: Spring = { value: 0, velocity: 0 };
+  private readonly y: Spring = { value: 0, velocity: 0 };
+  private goal = { x: 0, y: 0 };
+  private stop?: () => void;
 
   constructor() {
+    const isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
     afterNextRender(() => {
-      const el = this.target()?.nativeElement;
-      if (!el) return;
-      const inner = el.querySelector("span") as HTMLElement | null;
-      this.quickX = gsap.quickTo(el, "x", { duration: 0.4, ease: "power3.out" });
-      this.quickY = gsap.quickTo(el, "y", { duration: 0.4, ease: "power3.out" });
-      if (inner) {
-        this.innerQuickX = gsap.quickTo(inner, "x", { duration: 0.5, ease: "power3.out" });
-        this.innerQuickY = gsap.quickTo(inner, "y", { duration: 0.5, ease: "power3.out" });
-      }
+      this.enabled = isBrowser && !prefersReducedMotion() && !coarsePointer();
     });
-    this.destroyRef.onDestroy(() => {
-      const el = this.target()?.nativeElement;
-      if (el) {
-        gsap.killTweensOf(el);
-        const inner = el.querySelector("span") as HTMLElement | null;
-        if (inner) gsap.killTweensOf(inner);
-      }
-    });
+    inject(DestroyRef).onDestroy(() => this.stop?.());
   }
 
-  onMove(event: MouseEvent): void {
+  onMove(event: PointerEvent): void {
+    if (!this.enabled || event.pointerType !== "mouse") return;
     const el = this.target()?.nativeElement;
-    if (!el || !this.quickX || !this.quickY) return;
+    if (!el) return;
     const rect = el.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const dx = event.clientX - cx;
-    const dy = event.clientY - cy;
-    const dist = Math.hypot(dx, dy);
-    const r = this.radius();
-    if (dist > r) {
+    const dx = event.clientX - (rect.left + rect.width / 2);
+    const dy = event.clientY - (rect.top + rect.height / 2);
+    if (Math.hypot(dx, dy) > this.radius()) {
       this.onLeave();
       return;
     }
     const s = this.strength();
-    this.quickX(dx * s);
-    this.quickY(dy * s);
-    this.innerQuickX?.(dx * s * 0.4);
-    this.innerQuickY?.(dy * s * 0.4);
+    this.moveTo(dx * s, dy * s);
   }
 
   onLeave(): void {
+    if (this.enabled) this.moveTo(0, 0);
+  }
+
+  private moveTo(x: number, y: number): void {
+    this.goal = { x, y };
+    if (this.stop) return;
+    this.stop = runFrames((dt) => {
+      stepSpring(this.x, this.goal.x, dt);
+      stepSpring(this.y, this.goal.y, dt);
+      const settled = atRest(this.x, this.goal.x) && atRest(this.y, this.goal.y);
+      if (settled) {
+        this.x.value = this.goal.x;
+        this.y.value = this.goal.y;
+      }
+      this.paint();
+      if (settled) this.stop = undefined;
+      return !settled;
+    });
+  }
+
+  /** The button leans; its label leans a little further, for depth. */
+  private paint(): void {
     const el = this.target()?.nativeElement;
     if (!el) return;
-    gsap.to(el, { x: 0, y: 0, duration: 0.6, ease: "back.out(2)" });
-    const inner = el.querySelector("span") as HTMLElement | null;
-    if (inner) {
-      gsap.to(inner, { x: 0, y: 0, duration: 0.6, ease: "back.out(2)" });
-    }
+    const { value: x } = this.x;
+    const { value: y } = this.y;
+    const still = x === 0 && y === 0;
+    el.style.transform = still ? "" : `translate3d(${x}px, ${y}px, 0)`;
+    const inner = el.firstElementChild as HTMLElement | null;
+    if (inner) inner.style.transform = still ? "" : `translate3d(${x * 0.4}px, ${y * 0.4}px, 0)`;
   }
 }

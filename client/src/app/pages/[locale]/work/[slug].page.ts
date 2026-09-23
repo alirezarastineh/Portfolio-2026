@@ -23,7 +23,7 @@ import { projectTransitionName } from "../../../navigation/view-transitions";
 import { applyHead } from "../../../seo/head";
 import { injectMarkNotFound } from "../../../seo/http-status";
 import {
-  absoluteImage,
+  socialCard,
   docLanguageAlternates,
   pageMeta,
   pageUrl,
@@ -79,8 +79,8 @@ const metaResolver: ResolveFn<MetaTag[]> = async (route) => {
     description: describe(study, content.seo.description),
     url: pageUrl(origin, lang.lang(), `/work/${study.project.slug}`),
     robots: "index, follow",
-    image: absoluteImage(origin, study.project.cover),
-    imageAlt: study.project.cover?.alt,
+    image: socialCard(origin, lang.lang(), "work", study.project.slug),
+    imageAlt: study.project.name,
   });
 };
 
@@ -143,7 +143,7 @@ interface Section {
   host: { class: "block" },
   template: `
     @if (study(); as s) {
-      <main class="px-6 pb-24 pt-28 sm:px-8 lg:px-12 lg:pt-32">
+      <main id="main" class="px-6 pb-24 pt-28 sm:px-8 lg:px-12 lg:pt-32">
         <article class="mx-auto flex max-w-6xl flex-col gap-12">
           <header class="flex flex-col gap-6">
             <app-breadcrumb [items]="crumbs()" [locale]="lang.lang()" />
@@ -155,7 +155,7 @@ interface Section {
                 </p>
               }
               <h1
-                class="m-0 text-balance text-4xl font-medium leading-[1.05] tracking-tight text-foreground sm:text-5xl"
+                class="m-0 text-balance text-4xl font-semibold leading-[1.05] tracking-tight text-foreground sm:text-6xl"
               >
                 {{ s.project.name }}
               </h1>
@@ -191,7 +191,7 @@ interface Section {
               >
                 @for (tech of s.project.stack; track tech) {
                   <li
-                    class="rounded-md border border-border bg-card/60 px-2 py-1 font-mono text-[0.7rem] text-foreground/85"
+                    class="rounded-md border border-border bg-muted/50 px-2 py-1 font-mono text-[0.7rem] text-foreground/85"
                   >
                     {{ tech }}
                   </li>
@@ -204,7 +204,7 @@ interface Section {
                 @for (link of links(); track link.href) {
                   <li>
                     <a
-                      class="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 font-mono text-[0.78rem] text-foreground transition-colors duration-200 hover:border-accent-indigo/50 hover:text-accent-indigo"
+                      class="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 font-mono text-[0.78rem] text-foreground transition-colors duration-200 hover:border-accent-orange/50"
                       [href]="link.href"
                       target="_blank"
                       rel="noreferrer noopener"
@@ -228,7 +228,7 @@ interface Section {
                       {{ metric.label }}
                     </dt>
                     <dd
-                      class="order-1 m-0 font-mono text-3xl font-medium tracking-tight text-accent-orange sm:text-4xl"
+                      class="order-1 m-0 text-3xl font-semibold tracking-tight text-accent-orange sm:text-4xl"
                     >
                       {{ metric.value }}
                     </dd>
@@ -245,7 +245,7 @@ interface Section {
 
           @if (s.project.cover) {
             <div
-              class="aspect-video overflow-hidden rounded-2xl border border-border bg-[oklch(0.27_0_0)]"
+              class="aspect-video overflow-hidden rounded-2xl border border-border bg-muted"
               [style.view-transition-name]="transitionName()"
             >
               <app-picture
@@ -348,14 +348,14 @@ interface Section {
           <section
             class="flex flex-col items-start gap-4 rounded-2xl border border-border bg-card/40 px-6 py-10 sm:px-10"
           >
-            <h2 class="m-0 text-2xl font-medium tracking-tight text-foreground">
+            <h2 class="m-0 text-2xl font-semibold tracking-tight text-foreground">
               {{ lang.t().caseStudy.ctaHeading }}
             </h2>
             <p class="m-0 max-w-2xl leading-relaxed text-muted-foreground">
               {{ lang.t().caseStudy.ctaBody }}
             </p>
             <a
-              class="mt-2 inline-flex h-11 items-center gap-2 rounded-lg bg-accent-orange px-6 font-mono text-sm font-medium text-[oklch(0.05_0_0)] transition-colors duration-200 hover:bg-[oklch(0.78_0.2_45)]"
+              class="mt-2 inline-flex h-11 items-center gap-2 rounded-lg bg-accent-orange px-6 font-mono text-sm font-medium text-accent-orange-foreground transition-colors duration-200 hover:bg-accent-orange-hover"
               [routerLink]="['/', lang.lang()]"
               fragment="contact"
             >
@@ -381,7 +381,7 @@ export default class CaseStudyPageComponent {
   protected readonly sectionHeading =
     "m-0 font-mono text-sm uppercase tracking-[0.22em] text-accent-orange";
   protected readonly neighbourLink =
-    "flex flex-col gap-2 rounded-2xl border border-border p-6 transition-colors duration-200 hover:border-accent-indigo/50";
+    "flex flex-col gap-2 rounded-2xl border border-border p-6 transition-colors duration-200 hover:border-accent-orange/40";
 
   protected readonly transitionName = computed(() => {
     const s = this.study();

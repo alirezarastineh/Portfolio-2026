@@ -8,7 +8,7 @@ import {
 } from "@ng-icons/lucide";
 
 import { PictureComponent } from "../components/picture.component";
-import { ScrambleTextComponent } from "../components/scramble-text.component";
+import { SectionHeadingComponent } from "../components/section-heading.component";
 import { formatDuration, formatMonth, formatPeriod } from "../content/period";
 import type { EmploymentType, Experience, ExperienceKind } from "../content/schema";
 import { LanguageService } from "../services/language.service";
@@ -44,23 +44,24 @@ const KIND_ICON: Record<ExperienceKind, string> = {
 @Component({
   selector: "app-experience-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgIcon, PictureComponent, ScrambleTextComponent],
+  imports: [NgIcon, PictureComponent, SectionHeadingComponent],
   viewProviders: [
     provideIcons({ lucideAward, lucideBriefcase, lucideExternalLink, lucideGraduationCap }),
   ],
   host: { class: "block" },
   template: `
     @if (groups().length) {
-      <section id="experience" class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32">
+      <section
+        id="experience"
+        aria-labelledby="experience-heading"
+        class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32"
+      >
         <div class="mx-auto flex max-w-5xl flex-col gap-12">
-          <header class="flex flex-wrap items-baseline justify-between gap-4">
-            <h2 class="m-0 font-mono text-2xl tracking-tight text-foreground sm:text-3xl">
-              <app-scramble-text [text]="lang.t().experience.heading" />
-            </h2>
-            <p class="font-mono text-[0.7rem] uppercase tracking-[0.22em] text-muted-foreground">
-              {{ lang.t().experience.subtitle }}
-            </p>
-          </header>
+          <app-section-heading
+            headingId="experience-heading"
+            [heading]="lang.t().experience.heading"
+            [eyebrow]="lang.t().experience.subtitle"
+          />
 
           @for (group of groups(); track group.kind) {
             <div class="flex flex-col gap-6">
@@ -141,7 +142,7 @@ const KIND_ICON: Record<ExperienceKind, string> = {
                               <li
                                 class="flex items-baseline gap-2 text-sm leading-relaxed text-foreground/90"
                               >
-                                <span class="text-accent-indigo" aria-hidden="true">▸</span>
+                                <span class="text-accent-orange" aria-hidden="true">▸</span>
                                 <span>{{ highlight }}</span>
                               </li>
                             }
@@ -151,7 +152,7 @@ const KIND_ICON: Record<ExperienceKind, string> = {
                           <ul class="m-0 mt-1 flex list-none flex-wrap gap-2 p-0" role="list">
                             @for (skill of entry.experience.skills; track skill) {
                               <li
-                                class="rounded-md border border-border bg-card/60 px-2 py-0.5 font-mono text-[0.7rem] text-foreground/85"
+                                class="rounded-md border border-border bg-muted/50 px-2 py-0.5 font-mono text-[0.7rem] text-foreground/85"
                               >
                                 {{ skill }}
                               </li>

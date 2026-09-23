@@ -11,24 +11,9 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideChevronLeft, lucideChevronRight, lucideX } from "@ng-icons/lucide";
 
 import type { GalleryImage, Locale } from "../content/schema";
+import { CHROME } from "../i18n/chrome";
 import { fmt } from "../i18n/interpolate";
 import { PictureComponent } from "./picture.component";
-
-/** Lightbox controls: interface chrome rather than content, so not in the CMS. */
-const LABELS: Record<Locale, { open: string; close: string; previous: string; next: string }> = {
-  en: {
-    open: "Open image {i} of {n}",
-    close: "Close",
-    previous: "Previous image",
-    next: "Next image",
-  },
-  de: {
-    open: "Bild {i} von {n} öffnen",
-    close: "Schließen",
-    previous: "Vorheriges Bild",
-    next: "Nächstes Bild",
-  },
-};
 
 /**
  * A case study's screenshots: a grid, and a lightbox on click. The lightbox is
@@ -142,7 +127,7 @@ export class GalleryComponent {
     const i = this.current();
     return i === null ? null : (this.images()[i] ?? null);
   });
-  protected readonly labels = computed(() => LABELS[this.locale()]);
+  protected readonly labels = computed(() => CHROME[this.locale()].gallery);
 
   protected readonly button =
     "inline-flex size-11 cursor-pointer items-center justify-center rounded-lg border border-white/25 bg-black/40 text-white transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";

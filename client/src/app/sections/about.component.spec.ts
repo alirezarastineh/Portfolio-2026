@@ -85,18 +85,39 @@ describe("AboutSectionComponent", () => {
     expect(german).not.toContain("Building AI applications");
   });
 
-  it("renders the localized terminal chrome", async () => {
+  /**
+   * The CMS heading is `// about`: the slashes are decoration, so the `<h2>`
+   * holds only the name and the section is labelled by it.
+   */
+  it("renders the localized heading without the comment slashes", async () => {
     const fixture = TestBed.createComponent(AboutSectionComponent);
     const language = TestBed.inject(LanguageService);
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(fixture.nativeElement.textContent).toContain("// about");
+    const heading = () => fixture.nativeElement.querySelector("h2") as HTMLElement;
+    expect(heading().textContent?.trim()).toBe("about");
+    expect(fixture.nativeElement.querySelector("section").getAttribute("aria-labelledby")).toBe(
+      heading().id,
+    );
 
     language.activate("de");
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(fixture.nativeElement.textContent).toContain("// über mich");
+    expect(heading().textContent?.trim()).toBe("über mich");
+  });
+
+  it("renders every line in full before any typing, as the server does", async () => {
+    const fixture = TestBed.createComponent(AboutSectionComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain("cat contact.txt");
+    expect(text).toContain("Open to senior full-stack and AI engineering roles");
+    // Nothing is held back for the typewriter.
+    const hidden = [...fixture.nativeElement.querySelectorAll(".invisible")] as HTMLElement[];
+    expect(hidden.filter((el) => el.textContent?.trim())).toEqual([]);
   });
 });

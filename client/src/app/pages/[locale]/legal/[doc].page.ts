@@ -83,7 +83,7 @@ export const routeMeta: RouteMeta = {
   host: { class: "block" },
   template: `
     @if (doc(); as page) {
-      <main class="mx-auto max-w-3xl px-6 pb-24 pt-32 sm:px-8">
+      <main id="main" class="mx-auto max-w-3xl px-6 pb-24 pt-32 sm:px-8">
         <article class="flex flex-col gap-10">
           <header class="flex flex-col gap-3">
             <p class="m-0 font-mono text-xs uppercase tracking-[0.22em] text-muted-foreground">

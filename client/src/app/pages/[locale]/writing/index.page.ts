@@ -60,7 +60,7 @@ export const routeMeta: RouteMeta = {
   viewProviders: [provideIcons({ lucideRss })],
   host: { class: "block" },
   template: `
-    <main class="mx-auto flex max-w-4xl flex-col gap-12 px-6 pb-24 pt-32 sm:px-8">
+    <main id="main" class="mx-auto flex max-w-4xl flex-col gap-12 px-6 pb-24 pt-32 sm:px-8">
       <header class="flex flex-col gap-4">
         <p class="m-0 font-mono text-xs uppercase tracking-[0.22em] text-muted-foreground">
           <span aria-hidden="true">// </span>{{ lang.t().writing.subtitle }}

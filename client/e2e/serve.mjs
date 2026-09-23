@@ -4,9 +4,17 @@
 // fixture-content.mjs), so runs are deterministic and offline, and the CSP
 // enforced. Used by Playwright and Lighthouse CI; also handy by hand:
 // `node e2e/serve.mjs [--port 4173]`.
+//
+// In front of it sits what Caddy does in production: responses the app sends
+// uncompressed (pages, feeds) are gzipped. The build's scripts and styles
+// arrive pre-compressed from Nitro already. So Lighthouse measures the bytes a
+// visitor actually downloads.
 import { existsSync } from "node:fs";
+import { createServer, request } from "node:http";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { createGzip } from "node:zlib";
+import { loadEnv } from "vite";
 
 import { startFixtureApi } from "./fixture-api.mjs";
 
@@ -19,9 +27,57 @@ if (!existsSync(fileURLToPath(entry))) {
 const { values } = parseArgs({ options: { port: { type: "string" } } });
 
 process.env.HOST ??= "127.0.0.1";
-process.env.PORT = values.port ?? process.env.PORT ?? "4173";
+const port = Number(values.port ?? process.env.PORT ?? "4173");
+// The app itself listens beside the compressing front, which takes `port`.
+const appPort = port + 10000;
+process.env.PORT = String(appPort);
 process.env.CSP_MODE ??= "enforce";
+// The API origin the build was made with (from .env.production, when there is
+// one), as compose passes it to the container: the CSP allows what the
+// bundle actually calls. Tests still never reach it (see fixtures.ts).
+const buildEnv = loadEnv("production", fileURLToPath(new URL("..", import.meta.url)), "VITE_");
+if (buildEnv.VITE_API_BASE_URL) process.env.VITE_API_BASE_URL ??= buildEnv.VITE_API_BASE_URL;
 // Never live content, whatever the shell has set: the fixture API, on loopback.
 process.env.API_INTERNAL_BASE_URL = await startFixtureApi();
 
+const COMPRESSIBLE = /^(text\/|application\/(json|xml|rss\+xml|manifest\+json))/;
+
+createServer((req, res) => {
+  const upstream = request(
+    {
+      host: process.env.HOST,
+      port: appPort,
+      method: req.method,
+      path: req.url,
+      headers: req.headers,
+    },
+    (reply) => {
+      const gzip =
+        req.method !== "HEAD" &&
+        reply.statusCode !== 204 &&
+        reply.statusCode !== 304 &&
+        !reply.headers["content-encoding"] &&
+        COMPRESSIBLE.test(String(reply.headers["content-type"] ?? "")) &&
+        /\bgzip\b/.test(String(req.headers["accept-encoding"] ?? ""));
+      if (!gzip) {
+        res.writeHead(reply.statusCode ?? 502, reply.headers);
+        reply.pipe(res);
+        return;
+      }
+      const headers = { ...reply.headers, "content-encoding": "gzip" };
+      delete headers["content-length"];
+      headers.vary = headers.vary ? `${headers.vary}, Accept-Encoding` : "Accept-Encoding";
+      res.writeHead(reply.statusCode ?? 502, headers);
+      reply.pipe(createGzip()).pipe(res);
+    },
+  );
+  upstream.on("error", () => {
+    if (!res.headersSent) res.writeHead(502);
+    res.end();
+  });
+  req.pipe(upstream);
+}).listen(port, process.env.HOST);
+
+// Prints "Listening on …", which Lighthouse CI waits for; the front above is
+// already accepting connections by then.
 await import(entry.href);

@@ -12,71 +12,98 @@ import {
   signal,
   untracked,
 } from "@angular/core";
-import { gsap } from "gsap";
 
+import { SectionHeadingComponent } from "../components/section-heading.component";
 import { TerminalWindowComponent } from "../components/terminal-window.component";
+import { CHROME } from "../i18n/chrome";
+import { prefersReducedMotion, runFrames } from "../motion/frames";
 import { LanguageService } from "../services/language.service";
+import { typingAt, type TerminalLine, type TypingState } from "./about-typing";
 
-type Phase = "idle" | "cmd" | "out" | "done";
-
-interface TerminalLine {
-  prompt: string;
-  command: string;
-  output: string;
-}
-
+/**
+ * The About section: a terminal session. The server renders every line, so
+ * the text is there for readers without JavaScript and for search engines.
+ * In the browser, if the section has not been seen yet, it types itself out
+ * the first time it scrolls into view. Text not yet typed keeps its place
+ * (hidden, not removed), so nothing below it moves; "skip" shows it all.
+ * Reduced motion never animates. Phase 7 turns the prompt into the assistant.
+ */
 @Component({
   selector: "app-about-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TerminalWindowComponent],
+  imports: [SectionHeadingComponent, TerminalWindowComponent],
   host: {
     class: "block",
   },
   template: `
-    <section id="about" class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32">
-      <div class="mx-auto flex max-w-205 flex-col gap-10">
-        <header class="flex flex-wrap items-baseline justify-between gap-4">
-          <h2 class="m-0 font-mono text-2xl tracking-tight text-foreground sm:text-3xl">
-            {{ lang.t().about.heading }}
-          </h2>
-          <p class="font-mono text-[0.7rem] uppercase tracking-[0.22em] text-muted-foreground">
-            {{ lang.t().about.subtitle }}
-          </p>
-        </header>
+    <section
+      id="about"
+      aria-labelledby="about-heading"
+      class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32"
+    >
+      <div class="mx-auto flex max-w-205 flex-col gap-12">
+        <app-section-heading
+          headingId="about-heading"
+          [heading]="lang.t().about.heading"
+          [eyebrow]="lang.t().about.subtitle"
+        />
 
-        <app-terminal-window [title]="lang.t().about.terminalTitle">
-          <div class="flex flex-col">
-            @for (line of lines(); track $index; let i = $index) {
-              @if (cmds()[i] !== null) {
-                <div class="flex flex-wrap items-baseline gap-x-2">
-                  <span class="text-accent-orange">{{ line.prompt }}</span>
-                  <span class="text-foreground"
-                    >{{ cmds()[i] }}
-                    @if (isTypingCmd(i)) {
-                      <span class="terminal-caret" aria-hidden="true"></span>
-                    }
-                  </span>
-                </div>
-              }
-              @if (outs()[i] !== null) {
-                <div
-                  class="mt-1 max-w-[78ch] whitespace-pre-wrap pb-3 leading-relaxed text-foreground/85"
-                >
-                  {{ outs()[i] }}
-                  @if (isTypingOut(i)) {
-                    <span class="terminal-caret" aria-hidden="true"></span>
-                  }
-                </div>
-              }
-            }
-            @if (phase() === "done") {
-              <div class="mt-1 flex items-baseline gap-2">
-                <span class="text-accent-orange">{{ lastPrompt() }}</span>
-                <span class="terminal-caret" aria-hidden="true"></span>
+        <div class="relative">
+          <app-terminal-window [title]="lang.t().about.terminalTitle">
+            @if (typing(); as state) {
+              <!-- Read in full by assistive technology while it types. -->
+              <div class="sr-only">
+                @for (line of lines(); track $index) {
+                  <p>{{ line.prompt }} {{ line.command }}</p>
+                  <p>{{ line.output }}</p>
+                }
               </div>
             }
-          </div>
-        </app-terminal-window>
+            <div class="flex flex-col" [attr.aria-hidden]="typing() ? 'true' : null">
+              @for (line of lines(); track $index; let i = $index) {
+                <div class="flex flex-wrap items-baseline gap-x-2">
+                  <span class="text-accent-orange" [class.invisible]="!started(i)">{{
+                    line.prompt
+                  }}</span>
+                  <!-- prettier-ignore -->
+                  <span class="text-foreground"
+                    >{{ shown(line.command, i, "cmd")
+                    }}@if (caretAt(i, "cmd")) {<span class="terminal-caret" aria-hidden="true"></span>}<span
+                      class="invisible"
+                      >{{ hidden(line.command, i, "cmd") }}</span
+                    ></span
+                  >
+                </div>
+                <!-- Typed and untyped text must touch: no whitespace in between, or
+                     it would render (pre-wrap) and shift the text as it types. -->
+                <!-- prettier-ignore -->
+                <p
+                  class="m-0 mt-1 max-w-[78ch] whitespace-pre-wrap pb-3 leading-relaxed text-foreground/85"
+                >{{ shown(line.output, i, "out")
+                  }}@if (caretAt(i, "out")) {<span class="terminal-caret" aria-hidden="true"></span>}<span
+                    class="invisible"
+                    >{{ hidden(line.output, i, "out") }}</span
+                  ></p>
+              }
+              <div class="mt-1 flex items-baseline gap-2" [class.invisible]="!finished()">
+                <span class="text-accent-orange">{{ lang.t().about.terminalPrompt }}</span>
+                <span class="terminal-caret" aria-hidden="true"></span>
+              </div>
+            </div>
+          </app-terminal-window>
+
+          @if (typing()) {
+            <!-- Its name starts with the visible word, so voice control finds it. -->
+            <button
+              type="button"
+              class="absolute right-3 top-1.5 cursor-pointer rounded-md px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
+              (click)="skip()"
+            >
+              {{ chrome().skip }}<span class="sr-only">: {{ chrome().skipLabel }}</span
+              ><span aria-hidden="true"> ▸</span>
+            </button>
+          }
+        </div>
       </div>
     </section>
   `,
@@ -84,53 +111,7 @@ interface TerminalLine {
 export class AboutSectionComponent {
   readonly lang = inject(LanguageService);
 
-  /**
-   * Was a field initializer, which snapshotted the copy once — so the terminal
-   * silently kept its original language across a toggle. It is derived now, and
-   * an effect keeps the rendered text in step.
-   */
-  readonly lines = computed<TerminalLine[]>(() => this.buildLines());
-  readonly lastPrompt = computed(() => this.lang.t().about.terminalPrompt);
-
-  readonly cmds = signal<(string | null)[]>([]);
-  readonly outs = signal<(string | null)[]>([]);
-  readonly activeIdx = signal<number>(-1);
-  readonly phase = signal<Phase>("idle");
-
-  private readonly host = inject(ElementRef<HTMLElement>);
-  private readonly destroyRef = inject(DestroyRef);
-  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
-  private observer?: IntersectionObserver;
-  private started = false;
-  private cancelled = false;
-  /** Bumped on every copy change so an in-flight typewriter abandons itself. */
-  private runId = 0;
-
-  constructor() {
-    effect(() => {
-      const lines = this.lines();
-      untracked(() => this.syncLines(lines));
-    });
-    afterNextRender(() => this.setup());
-    this.destroyRef.onDestroy(() => this.cleanup());
-  }
-
-  private syncLines(lines: TerminalLine[]): void {
-    this.runId++;
-
-    // Already revealed — swap straight to the new copy rather than replaying
-    // the whole typing animation in the reader's face.
-    if (this.started || this.phase() === "done") {
-      this.populateAll(lines);
-      this.phase.set("done");
-      return;
-    }
-
-    this.cmds.set(lines.map(() => null));
-    this.outs.set(lines.map(() => null));
-  }
-
-  private buildLines(): TerminalLine[] {
+  readonly lines = computed<TerminalLine[]>(() => {
     const t = this.lang.t().about;
     const prompt = t.terminalPrompt;
     return [
@@ -139,31 +120,85 @@ export class AboutSectionComponent {
       { prompt, command: "ls skills/", output: t.terminalOutputLs },
       { prompt, command: "cat contact.txt", output: t.terminalOutputContact },
     ];
+  });
+
+  protected readonly chrome = computed(() => CHROME[this.lang.lang()].about);
+
+  /** Null when everything is shown: on the server, with reduced motion, and once done. */
+  protected readonly typing = signal<TypingState | null>(null);
+  protected readonly finished = computed(() => this.typing() === null);
+
+  private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  private observer?: IntersectionObserver;
+  private stop?: () => void;
+
+  constructor() {
+    afterNextRender(() => this.arm());
+
+    // New copy (a language switch) shows in full at once, never retyped.
+    effect(() => {
+      this.lines();
+      untracked(() => this.skip());
+    });
+
+    inject(DestroyRef).onDestroy(() => {
+      this.observer?.disconnect();
+      this.stop?.();
+    });
   }
 
-  isTypingCmd(i: number): boolean {
-    return this.activeIdx() === i && this.phase() === "cmd";
+  protected started(i: number): boolean {
+    const state = this.typing();
+    return !state || i <= state.line;
   }
 
-  isTypingOut(i: number): boolean {
-    return this.activeIdx() === i && this.phase() === "out";
+  protected shown(text: string, i: number, part: "cmd" | "out"): string {
+    const state = this.typing();
+    return state ? text.slice(0, state[part][i]) : text;
   }
 
-  private setup(): void {
-    if (!this.isBrowser || this.reduceMotion()) {
-      this.populateAll(this.lines());
-      this.phase.set("done");
-      return;
-    }
+  protected hidden(text: string, i: number, part: "cmd" | "out"): string {
+    const state = this.typing();
+    return state ? text.slice(state[part][i]) : "";
+  }
+
+  protected caretAt(i: number, part: "cmd" | "out"): boolean {
+    const state = this.typing();
+    return !!state && state.line === i && state.part === part;
+  }
+
+  skip(): void {
+    this.observer?.disconnect();
+    this.stop?.();
+    this.stop = undefined;
+    this.typing.set(null);
+  }
+
+  /**
+   * Types only for a reader who has not seen the text yet: if the section is
+   * already on screen when the page becomes interactive (a link to #about),
+   * it stays as it is.
+   */
+  private arm(): void {
+    // Render hooks run during the server render here too.
+    if (!this.isBrowser || prefersReducedMotion()) return;
+    let first = true;
     this.observer = new IntersectionObserver(
       (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting && !this.started) {
-            this.started = true;
+        const visible = entries.some((entry) => entry.isIntersecting);
+        if (first) {
+          first = false;
+          if (visible) {
             this.observer?.disconnect();
-            void this.run();
-            break;
+            return;
           }
+          this.typing.set(typingAt(this.lines(), 0));
+          return;
+        }
+        if (visible) {
+          this.observer?.disconnect();
+          this.run();
         }
       },
       { threshold: 0.3 },
@@ -171,79 +206,20 @@ export class AboutSectionComponent {
     this.observer.observe(this.host.nativeElement);
   }
 
-  private reduceMotion(): boolean {
-    return globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-  }
-
-  private populateAll(lines: TerminalLine[]): void {
-    this.cmds.set(lines.map((l) => l.command));
-    this.outs.set(lines.map((l) => l.output));
-    this.activeIdx.set(lines.length);
-  }
-
-  private async run(): Promise<void> {
-    const myRun = ++this.runId;
+  private run(): void {
     const lines = this.lines();
-    const stale = () => this.cancelled || myRun !== this.runId;
-
-    for (let i = 0; i < lines.length; i++) {
-      if (stale()) return;
-      const line = lines[i];
-      this.activeIdx.set(i);
-      this.phase.set("cmd");
-      this.setSlot("cmd", i, "");
-      await this.typeText(line.command, (text) => this.setSlot("cmd", i, text));
-      await this.delay(0.18);
-      if (stale()) return;
-      this.phase.set("out");
-      this.setSlot("out", i, "");
-      await this.typeText(line.output, (text) => this.setSlot("out", i, text));
-      await this.delay(0.32);
-    }
-
-    if (stale()) return;
-    this.activeIdx.set(lines.length);
-    this.phase.set("done");
-  }
-
-  private setSlot(slot: "cmd" | "out", idx: number, text: string): void {
-    const sig = slot === "cmd" ? this.cmds : this.outs;
-    sig.update((arr) => {
-      const next = arr.slice();
-      next[idx] = text;
-      return next;
-    });
-  }
-
-  private typeText(text: string, write: (s: string) => void): Promise<void> {
-    return new Promise((resolve) => {
-      if (text.length === 0) {
-        write("");
-        resolve();
-        return;
+    let elapsed = 0;
+    this.stop = runFrames((dt) => {
+      if (!this.typing()) return false;
+      elapsed += dt * 1000;
+      const state = typingAt(lines, elapsed);
+      if (state.part === "done") {
+        this.typing.set(null);
+        this.stop = undefined;
+        return false;
       }
-      const state = { i: 0 };
-      gsap.to(state, {
-        i: text.length,
-        duration: text.length * 0.018,
-        ease: "none",
-        onUpdate: () => write(text.slice(0, Math.floor(state.i))),
-        onComplete: () => {
-          write(text);
-          resolve();
-        },
-      });
+      this.typing.set(state);
+      return true;
     });
-  }
-
-  private delay(seconds: number): Promise<void> {
-    return new Promise((resolve) => {
-      gsap.to({}, { duration: seconds, onComplete: () => resolve() });
-    });
-  }
-
-  private cleanup(): void {
-    this.cancelled = true;
-    this.observer?.disconnect();
   }
 }

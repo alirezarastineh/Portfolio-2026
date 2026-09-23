@@ -21,7 +21,7 @@ import { fmt } from "../../../i18n/interpolate";
 import { applyHead } from "../../../seo/head";
 import { injectMarkNotFound } from "../../../seo/http-status";
 import {
-  absoluteImage,
+  socialCard,
   docLanguageAlternates,
   feedsOf,
   pageMeta,
@@ -65,8 +65,8 @@ const metaResolver: ResolveFn<MetaTag[]> = async (route) => {
     ogType: "article",
     ogTitle: title,
     twitterTitle: title,
-    image: absoluteImage(origin, doc.cover),
-    imageAlt: doc.cover?.alt,
+    image: socialCard(origin, lang.lang(), "writing", doc.slug),
+    imageAlt: title,
   });
 };
 
@@ -127,7 +127,7 @@ export const routeMeta: RouteMeta = {
   host: { class: "block" },
   template: `
     @if (post(); as p) {
-      <main class="px-6 pb-24 pt-28 sm:px-8 lg:px-12 lg:pt-32">
+      <main id="main" class="px-6 pb-24 pt-28 sm:px-8 lg:px-12 lg:pt-32">
         <article class="mx-auto flex max-w-6xl flex-col gap-10">
           <header class="flex max-w-3xl flex-col gap-5">
             <app-breadcrumb [items]="crumbs()" [locale]="lang.lang()" />

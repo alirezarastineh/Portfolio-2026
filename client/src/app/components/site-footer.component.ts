@@ -46,13 +46,13 @@ import { LanguageService } from "../services/language.service";
           @for (s of socials(); track s.href) {
             <li>
               <a
-                class="inline-flex size-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition-[color,border-color] duration-200 ease-in-out hover:border-accent-indigo/50 hover:text-foreground"
+                class="inline-flex size-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition-[color,border-color] duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground"
                 [href]="s.href"
                 [attr.aria-label]="s.label"
-                target="_blank"
-                rel="noreferrer noopener"
+                [attr.target]="isWeb(s.href) ? '_blank' : null"
+                [attr.rel]="isWeb(s.href) ? 'noreferrer noopener' : null"
               >
-                <ng-icon [name]="iconFor(s.icon)" size="18" />
+                <ng-icon [name]="iconFor(s.icon)" size="18" aria-hidden="true" />
               </a>
             </li>
           }
@@ -74,5 +74,10 @@ export class SiteFooterComponent {
 
   iconFor(icon: string): string {
     return iconFor(icon);
+  }
+
+  /** A web page opens in a new tab; `mailto:` and the like never should. */
+  isWeb(href: string): boolean {
+    return /^https?:/i.test(href);
   }
 }

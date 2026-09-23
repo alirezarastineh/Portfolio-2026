@@ -40,6 +40,7 @@ const COPY: Record<Locale, Copy> = {
   host: { class: "block" },
   template: `
     <main
+      id="main"
       class="mx-auto flex min-h-[70vh] max-w-3xl flex-col justify-center gap-12 px-6 pb-24 pt-32 sm:px-8"
     >
       @for (entry of entries(); track entry.locale) {

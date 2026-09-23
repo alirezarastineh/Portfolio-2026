@@ -2,9 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from "@angular/co
 import { RouterLink } from "@angular/router";
 
 import type { Locale } from "../content/schema";
-
-/** The landmark's name: interface chrome rather than content, so not in the CMS. */
-const LABEL: Record<Locale, string> = { en: "Breadcrumb", de: "Brotkrümelnavigation" };
+import { CHROME } from "../i18n/chrome";
 
 export interface BreadcrumbItem {
   label: string;
@@ -48,5 +46,5 @@ export class BreadcrumbComponent {
   readonly items = input.required<readonly BreadcrumbItem[]>();
   readonly locale = input.required<Locale>();
 
-  protected readonly label = computed(() => LABEL[this.locale()]);
+  protected readonly label = computed(() => CHROME[this.locale()].breadcrumb);
 }

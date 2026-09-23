@@ -1,4 +1,4 @@
-import { isPlatformBrowser } from "@angular/common";
+import { DOCUMENT, isPlatformBrowser } from "@angular/common";
 import {
   provideHttpClient,
   withInterceptors,
@@ -49,6 +49,7 @@ import { filter } from "rxjs";
 import { adminApiInterceptor } from "../admin/admin-api.interceptor";
 import { adminAuthGuard } from "../admin/admin-auth.guard";
 import { AdminApiService } from "../admin/admin-api.service";
+import { addAdminStyles } from "../admin/admin-styles";
 import { AdminSessionService } from "../admin/admin-session.service";
 import { UiSectionService } from "../admin/ui-section.service";
 import { UnsavedChangesService } from "../admin/unsaved-changes.service";
@@ -328,6 +329,10 @@ export default class AdminLayout {
   protected readonly groups = GROUPS;
   protected readonly email = computed(() => this.session.user()?.email ?? "account");
   protected readonly paletteOpen = signal(false);
+
+  constructor() {
+    addAdminStyles(inject(DOCUMENT));
+  }
 
   /** `router.url` is not reactive, so re-read it whenever navigation settles. */
   private readonly navigated = toSignal(

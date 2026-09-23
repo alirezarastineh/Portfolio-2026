@@ -7,7 +7,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   EVENT_DISPATCH_SCRIPT_ID,
   provideRequestCspNonce,
-  stampEventDispatchScript,
+  stampKnownScripts,
+  THEME_SCRIPT_ID,
 } from "./csp-nonce";
 import { readRequestNonce, writeRequestNonce } from "./request-nonce";
 
@@ -39,26 +40,36 @@ describe("request nonce", () => {
   });
 });
 
-describe("stampEventDispatchScript", () => {
-  it("nonces the event-dispatch contract and nothing else", () => {
+describe("stampKnownScripts", () => {
+  it("nonces the event-dispatch contract and the theme script, and nothing else", () => {
     const contract = addScript(document, { id: EVENT_DISPATCH_SCRIPT_ID }, "/* contract */");
+    const theme = addScript(document, { id: THEME_SCRIPT_ID }, "/* theme */");
     const other = addScript(document, {}, "void 0");
     const data = addScript(document, { type: "application/ld+json" }, "{}");
 
-    stampEventDispatchScript(document, "n0nce");
+    stampKnownScripts(document, "n0nce");
 
     expect(contract.getAttribute("nonce")).toBe("n0nce");
+    expect(theme.getAttribute("nonce")).toBe("n0nce");
     expect(other.hasAttribute("nonce")).toBe(false);
     expect(data.hasAttribute("nonce")).toBe(false);
   });
 
-  it("does nothing without a nonce or without the script", () => {
+  it("never nonces an element that is not a script, even with a known id", () => {
+    const impostor = document.createElement("div");
+    impostor.id = THEME_SCRIPT_ID;
+    document.body.appendChild(impostor);
+    stampKnownScripts(document, "n0nce");
+    expect(impostor.hasAttribute("nonce")).toBe(false);
+  });
+
+  it("does nothing without a nonce or without the scripts", () => {
     const contract = addScript(document, { id: EVENT_DISPATCH_SCRIPT_ID });
-    stampEventDispatchScript(document, null);
+    stampKnownScripts(document, null);
     expect(contract.hasAttribute("nonce")).toBe(false);
 
     contract.remove();
-    expect(() => stampEventDispatchScript(document, "n")).not.toThrow();
+    expect(() => stampKnownScripts(document, "n")).not.toThrow();
   });
 });
 

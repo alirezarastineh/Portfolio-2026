@@ -71,6 +71,19 @@ export function absoluteImage(origin: string, image: Image | null | undefined): 
   return /^https?:\/\//i.test(image.src) ? image.src : `${origin}${image.src}`;
 }
 
+/**
+ * The generated social card of a case study or post (1200×630 PNG, drawn by
+ * the server from the published content: src/server/routes/[locale]/og).
+ */
+export function socialCard(
+  origin: string,
+  locale: Locale,
+  kind: "work" | "writing",
+  slug: string,
+): string {
+  return pageUrl(origin, locale, `/og/${kind}/${slug}.png`);
+}
+
 /** The locale's RSS feed, when it has posts to put in one. */
 export function feedsOf(content: AppContent, locale: Locale): { title: string; href: string }[] {
   if (content.posts.length === 0) return [];

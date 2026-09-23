@@ -28,7 +28,7 @@ test.describe("hydration", () => {
   ]) {
     test(`${path} hydrates without errors`, async ({ page, problems }) => {
       await page.goto(path);
-      await page.waitForLoadState("networkidle");
+      await expect(page.locator("#main")).toBeVisible();
       expectCleanConsole(problems);
     });
   }
@@ -41,7 +41,7 @@ test.describe("language switch", () => {
     isMobile,
   }) => {
     await page.goto("/en/legal/privacy");
-    await page.waitForLoadState("networkidle");
+    await expect(page.locator("#main")).toBeVisible();
     const loads = countDocumentLoads(page);
 
     if (isMobile) await page.getByRole("button", { name: "Toggle navigation" }).click();
@@ -69,7 +69,7 @@ test.describe("language switch", () => {
     await page.goto("/en");
     // The cookie is written by the click handler, so wait for hydration: a
     // click before it follows the plain link without remembering anything.
-    await page.waitForLoadState("networkidle");
+    await expect(page.locator("#main")).toBeVisible();
     if (isMobile) await page.getByRole("button", { name: "Toggle navigation" }).click();
     await page.locator('header a[hreflang="de"]:visible').click();
     await expect(page).toHaveURL(/\/de$/);
@@ -85,7 +85,7 @@ test.describe("site navigation", () => {
     isMobile,
   }) => {
     await page.goto("/en/legal/imprint");
-    await page.waitForLoadState("networkidle");
+    await expect(page.locator("#main")).toBeVisible();
 
     if (isMobile) await page.getByRole("button", { name: "Toggle navigation" }).click();
     await page.locator("header nav a:visible", { hasText: "Projects" }).click();
@@ -118,5 +118,48 @@ test.describe("site navigation", () => {
       .getByRole("link", { name: "Contact" })
       .click();
     await expect(page.getByRole("navigation", { name: "Mobile" })).toBeHidden();
+  });
+
+  test("the mobile menu keeps focus inside and closes on Escape or outside", async ({
+    page,
+    isMobile,
+  }) => {
+    if (!isMobile) return;
+    await page.goto("/en");
+    await expect(page.locator("#main")).toBeVisible();
+    const toggle = page.getByRole("button", { name: "Toggle navigation" });
+    const menu = page.getByRole("navigation", { name: "Mobile" });
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-controls", "mobile-nav");
+    // Shift+Tab from the toggle wraps to the menu's last link, not the page.
+    await toggle.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Shift+Tab");
+    const inHeader = await page.evaluate(() => !!document.activeElement?.closest("header"));
+    expect(inHeader).toBe(true);
+
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await expect(toggle).toBeFocused();
+
+    // A tap below the open menu, on the page.
+    await toggle.click();
+    await expect(menu).toBeVisible();
+    const viewport = page.viewportSize()!;
+    await page.mouse.click(viewport.width / 2, viewport.height - 20);
+    await expect(menu).toBeHidden();
+  });
+
+  test("widening the window to the desktop layout closes the menu", async ({ page, isMobile }) => {
+    if (!isMobile) return;
+    await page.goto("/en");
+    await expect(page.locator("#main")).toBeVisible();
+    await page.getByRole("button", { name: "Toggle navigation" }).click();
+    await expect(page.getByRole("navigation", { name: "Mobile" })).toBeVisible();
+    await page.setViewportSize({ width: 1024, height: 800 });
+    await expect(page.locator("#mobile-nav")).toHaveCount(0);
   });
 });

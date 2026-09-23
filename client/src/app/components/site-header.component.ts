@@ -1,4 +1,4 @@
-import { isPlatformBrowser } from "@angular/common";
+import { DOCUMENT, isPlatformBrowser } from "@angular/common";
 import {
   afterNextRender,
   ChangeDetectionStrategy,
@@ -6,61 +6,86 @@ import {
   computed,
   DestroyRef,
   effect,
+  ElementRef,
   inject,
   PLATFORM_ID,
   signal,
   untracked,
+  viewChild,
 } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideDownload, lucideMenu, lucideX } from "@ng-icons/lucide";
+import {
+  lucideDownload,
+  lucideMenu,
+  lucideMoon,
+  lucideSearch,
+  lucideSun,
+  lucideX,
+} from "@ng-icons/lucide";
 
 import { otherLocale } from "../content/locale";
+import { CHROME } from "../i18n/chrome";
+import { CommandPaletteService } from "../services/command-palette.service";
 import { LanguageService } from "../services/language.service";
+import { ThemeService } from "../services/theme.service";
 
-const SECTION_IDS = ["hero", "skills", "projects", "experience", "about", "contact"] as const;
+/** The home sections, in page order; the header highlights the one in view. */
+const SECTION_IDS = [
+  "hero",
+  "projects",
+  "experience",
+  "skills",
+  "writing",
+  "about",
+  "contact",
+] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
 /** A home section (`/en#projects`) or a page of its own (`/en/writing`). */
 interface NavLink {
   label: string;
-  key: SectionId | "writing";
+  key: SectionId;
   commands: string[];
   fragment?: SectionId;
 }
 
-const LABELS = {
-  en: {
-    home: "Home",
-    primary: "Primary",
-    mobile: "Mobile",
-    menu: "Toggle navigation",
-    switchTo: "Deutsch",
-  },
-  de: {
-    home: "Startseite",
-    primary: "Hauptnavigation",
-    mobile: "Mobil",
-    menu: "Navigation umschalten",
-    switchTo: "English",
-  },
-} as const;
+/** Tailwind's `md`: the desktop navigation takes over from the menu. */
+const DESKTOP = "(min-width: 768px)";
+
+const iconButton =
+  "inline-flex size-9 cursor-pointer items-center justify-center rounded-md border border-border text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground";
 
 @Component({
   selector: "app-site-header",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NgIcon, RouterLink],
-  viewProviders: [provideIcons({ lucideDownload, lucideMenu, lucideX })],
+  viewProviders: [
+    provideIcons({ lucideDownload, lucideMenu, lucideMoon, lucideSearch, lucideSun, lucideX }),
+  ],
   host: {
     class: "contents",
+    "(document:keydown.escape)": "onEscape()",
+    "(document:click)": "onDocumentClick($event)",
   },
   template: `
-    <header
-      class="fixed inset-x-0 top-0 z-40 border-b border-border bg-[oklch(0.235_0_0/78%)] backdrop-blur-md backdrop-saturate-140"
+    <!-- First stop for keyboard users. A real link to this page's <main>, so
+         it works before the app is interactive too. -->
+    <a
+      class="sr-only fixed left-4 top-3 z-60 rounded-md bg-accent-orange px-4 py-2 font-mono text-sm font-medium text-accent-orange-foreground focus:not-sr-only"
+      [attr.href]="skipHref()"
+      (click)="skipToContent($event)"
+      >{{ labels().skip }}</a
     >
-      <div
-        class="mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto_auto] items-center gap-4 px-6 py-3.5"
-      >
+
+    <!-- Solid while the menu is open, so the page does not show through it. -->
+    <header
+      #bar
+      class="fixed inset-x-0 top-0 z-40 border-b border-border backdrop-blur-md"
+      [class]="open() ? 'bg-background' : 'bg-background/80'"
+      (keydown)="trapFocus($event)"
+    >
+      <div class="mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-4 px-6 py-3">
         <a
           class="inline-flex items-center gap-[0.4rem] font-mono text-[0.95rem] font-semibold tracking-[0.04em] text-foreground"
           [routerLink]="home()"
@@ -71,6 +96,7 @@ const LABELS = {
           <span aria-hidden="true">{{ initials() }}</span>
           <span class="size-1.5 rounded-full bg-accent-orange" aria-hidden="true"></span>
         </a>
+
         <nav
           class="hidden justify-center gap-5 md:inline-flex lg:gap-7"
           [attr.aria-label]="labels().primary"
@@ -83,7 +109,6 @@ const LABELS = {
               [attr.aria-current]="isActive(link) ? 'true' : null"
               [routerLink]="link.commands"
               [fragment]="link.fragment"
-              (click)="closeMenu()"
             >
               @if (isActive(link)) {
                 <span
@@ -95,11 +120,23 @@ const LABELS = {
             </a>
           }
         </nav>
-        <div class="hidden items-center gap-2 md:inline-flex">
+
+        <!-- Pinned to the last column: on phones the navigation before it is hidden. -->
+        <div class="col-start-3 flex items-center justify-self-end gap-2">
+          <button
+            type="button"
+            [class]="searchClass"
+            [attr.aria-label]="labels().search"
+            aria-keyshortcuts="Control+K Meta+K"
+            (click)="palette.show()"
+          >
+            <ng-icon name="lucideSearch" size="15" aria-hidden="true" />
+            <kbd class="hidden font-mono text-[0.7rem] md:inline" aria-hidden="true">⌘K</kbd>
+          </button>
           <!-- A file, not a page: a plain link the router leaves alone. -->
           @if (resumeHref(); as href) {
             <a
-              class="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 font-mono text-[0.8rem] text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground"
+              class="hidden h-9 items-center gap-1.5 rounded-md border border-border px-2.5 font-mono text-[0.8rem] text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground md:inline-flex"
               [href]="href"
               download
             >
@@ -107,32 +144,51 @@ const LABELS = {
               CV
             </a>
           }
+          <!-- The server renders dark; the icon for the other theme is picked
+               in CSS, so hydration never meets different markup. -->
+          <button
+            type="button"
+            [class]="iconButton"
+            [attr.aria-label]="theme.theme() === 'dark' ? labels().toLight : labels().toDark"
+            (click)="theme.toggle()"
+          >
+            <span class="inline-flex in-data-[theme=light]:hidden" aria-hidden="true">
+              <ng-icon name="lucideSun" size="16" />
+            </span>
+            <span class="hidden in-data-[theme=light]:inline-flex" aria-hidden="true">
+              <ng-icon name="lucideMoon" size="16" />
+            </span>
+          </button>
           <!-- A real link to this page in the other language: crawlable, works
-               without JavaScript, and remembered for the next visit to "/". -->
+               without JavaScript, and remembered for the next visit to "/".
+               Its name keeps the visible "DE" and adds the language's name. -->
           <a
-            class="inline-flex cursor-pointer items-center justify-center rounded-md border border-border px-2.5 py-1 font-mono text-[0.8rem] text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground"
+            class="hidden h-9 items-center justify-center rounded-md border border-border px-2.5 font-mono text-[0.8rem] text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground md:inline-flex"
             [routerLink]="lang.alternates()[other()]"
             [attr.hreflang]="other()"
             [attr.lang]="other()"
-            [attr.aria-label]="labels().switchTo"
             (click)="lang.remember(other())"
           >
-            {{ other().toUpperCase() }}
+            {{ other().toUpperCase() }}<span class="sr-only"> – {{ labels().switchTo }}</span>
           </a>
+          <button
+            #toggle
+            type="button"
+            [class]="iconButton + ' md:hidden'"
+            aria-controls="mobile-nav"
+            [attr.aria-expanded]="open()"
+            [attr.aria-label]="labels().menu"
+            (click)="toggleMenu()"
+          >
+            <ng-icon [name]="open() ? 'lucideX' : 'lucideMenu'" size="18" aria-hidden="true" />
+          </button>
         </div>
-        <button
-          type="button"
-          class="inline-flex size-10 cursor-pointer items-center justify-center rounded-lg border border-border bg-transparent text-foreground md:hidden"
-          [attr.aria-expanded]="open()"
-          [attr.aria-label]="labels().menu"
-          (click)="toggleMenu()"
-        >
-          <ng-icon [name]="open() ? 'lucideX' : 'lucideMenu'" size="20" aria-hidden="true" />
-        </button>
       </div>
+
       @if (open()) {
         <nav
-          class="flex flex-col gap-1 border-t border-border px-6 pb-4 pt-2 md:hidden"
+          id="mobile-nav"
+          class="flex max-h-[calc(100svh-4rem)] flex-col gap-1 overflow-y-auto border-t border-border px-6 pb-5 pt-2 md:hidden"
           [attr.aria-label]="labels().mobile"
         >
           @for (link of links(); track link.key) {
@@ -172,7 +228,7 @@ const LABELS = {
             [attr.lang]="other()"
             (click)="lang.remember(other()); closeMenu()"
           >
-            {{ other().toUpperCase() }} — {{ labels().switchTo }}
+            {{ other().toUpperCase() }} – {{ labels().switchTo }}
           </a>
         </nav>
       }
@@ -181,6 +237,15 @@ const LABELS = {
 })
 export class SiteHeaderComponent {
   readonly lang = inject(LanguageService);
+  readonly theme = inject(ThemeService);
+  readonly palette = inject(CommandPaletteService);
+  private readonly doc = inject(DOCUMENT);
+
+  protected readonly iconButton = iconButton;
+  protected readonly searchClass = `${iconButton} md:w-auto md:gap-1.5 md:px-2.5`;
+
+  private readonly bar = viewChild.required<ElementRef<HTMLElement>>("bar");
+  private readonly toggleButton = viewChild.required<ElementRef<HTMLElement>>("toggle");
 
   readonly initials = computed(() =>
     this.lang
@@ -191,42 +256,49 @@ export class SiteHeaderComponent {
       .toUpperCase(),
   );
 
-  /** Home sections that exist in this language's content; Experience only with entries. */
-  private readonly sections = computed<SectionId[]>(() =>
-    SECTION_IDS.filter((id) => id !== "experience" || this.lang.content().experiences.length > 0),
-  );
+  /** Home sections that exist in this language's content. */
+  private readonly sections = computed<SectionId[]>(() => {
+    const content = this.lang.content();
+    return SECTION_IDS.filter(
+      (id) =>
+        (id !== "experience" || content.experiences.length > 0) &&
+        (id !== "writing" || content.posts.length > 0),
+    );
+  });
 
+  /** Writing links to its own page; on home it lights up while its section is in view. */
   readonly links = computed<NavLink[]>(() => {
     const n = this.lang.t().nav;
     const labels: Record<Exclude<SectionId, "hero">, string> = {
-      skills: n.skills,
       projects: n.projects,
       experience: n.experience,
+      skills: n.skills,
+      writing: n.writing,
       about: n.about,
       contact: n.contact,
     };
     const home = this.home();
-    const links: NavLink[] = this.sections()
+    return this.sections()
       .filter((id) => id !== "hero")
-      .map((id) => ({
-        label: labels[id as keyof typeof labels],
-        key: id,
-        commands: home,
-        fragment: id,
-      }));
-    if (this.lang.content().posts.length > 0) {
-      links.push({ label: n.writing, key: "writing", commands: [...home, "writing"] });
-    }
-    return links;
+      .map((id) =>
+        id === "writing"
+          ? { label: labels[id], key: id, commands: [...home, "writing"] }
+          : { label: labels[id], key: id, commands: home, fragment: id },
+      );
   });
 
   readonly home = computed(() => ["/", this.lang.lang()]);
   readonly other = computed(() => otherLocale(this.lang.lang()));
-  readonly labels = computed(() => LABELS[this.lang.lang()]);
+  readonly labels = computed(() => CHROME[this.lang.lang()].header);
   /** `/en/resume.pdf`, which redirects to this language's CV; null when there is none. */
   readonly resumeHref = computed(() =>
     this.lang.content().identity.resume ? `/${this.lang.lang()}/resume.pdf` : null,
   );
+  /** This page's `<main>`, as a real in-page link. */
+  protected readonly skipHref = computed(() => {
+    const page = this.lang.page();
+    return `/${this.lang.lang()}${page === "/" ? "" : page}#main`;
+  });
 
   readonly open = signal(false);
   readonly active = signal<SectionId>("hero");
@@ -236,12 +308,14 @@ export class SiteHeaderComponent {
   private mutationObserver?: MutationObserver;
   private readonly visible = new Set<SectionId>();
   private readonly observed = new Set<SectionId>();
+  private readonly cleanups: (() => void)[] = [];
   private rendered = false;
 
   constructor() {
     afterNextRender(() => {
       this.rendered = true;
       this.watchSections();
+      this.closeOnDesktop();
     });
 
     // The sections are recreated whenever the home page is entered again, so
@@ -273,8 +347,57 @@ export class SiteHeaderComponent {
     this.open.set(false);
   }
 
+  /** Moves focus into the page's <main>, rather than only scrolling to it. */
+  skipToContent(event: Event): void {
+    const main = this.doc.getElementById("main");
+    if (!main) return;
+    event.preventDefault();
+    if (!main.hasAttribute("tabindex")) main.setAttribute("tabindex", "-1");
+    main.focus();
+  }
+
+  onEscape(): void {
+    if (!this.open()) return;
+    this.closeMenu();
+    this.toggleButton().nativeElement.focus();
+  }
+
+  onDocumentClick(event: MouseEvent): void {
+    if (this.open() && !this.bar().nativeElement.contains(event.target as Node)) this.closeMenu();
+  }
+
+  /** While the menu is open, Tab cycles through the header rather than the page behind it. */
+  trapFocus(event: KeyboardEvent): void {
+    if (event.key !== "Tab" || !this.open()) return;
+    const focusable = [
+      ...this.bar().nativeElement.querySelectorAll<HTMLElement>("a[href], button:not([disabled])"),
+    ].filter((el) => el.offsetParent !== null);
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+    const current = this.doc.activeElement;
+    if (event.shiftKey && current === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && current === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  /** Widening the window to the desktop layout closes the menu it no longer shows. */
+  private closeOnDesktop(): void {
+    const query = globalThis.matchMedia?.(DESKTOP);
+    if (!query) return;
+    const close = (e: MediaQueryListEvent) => {
+      if (e.matches) this.closeMenu();
+    };
+    query.addEventListener("change", close);
+    this.cleanups.push(() => query.removeEventListener("change", close));
+  }
+
   private watchSections(): void {
-    this.unwatch();
+    this.unwatchSections();
     this.visible.clear();
     this.observed.clear();
     this.active.set("hero");
@@ -308,22 +431,27 @@ export class SiteHeaderComponent {
           this.mutationObserver = undefined;
         }
       });
-      this.mutationObserver.observe(document.body, { childList: true, subtree: true });
+      this.mutationObserver.observe(this.doc.body, { childList: true, subtree: true });
     }
   }
 
-  private unwatch(): void {
+  private unwatchSections(): void {
     this.observer?.disconnect();
     this.observer = undefined;
     this.mutationObserver?.disconnect();
     this.mutationObserver = undefined;
   }
 
+  private unwatch(): void {
+    this.unwatchSections();
+    for (const cleanup of this.cleanups) cleanup();
+  }
+
   private observePending(ids: readonly SectionId[]): void {
     if (!this.observer) return;
     for (const id of ids) {
       if (this.observed.has(id)) continue;
-      const el = document.getElementById(id);
+      const el = this.doc.getElementById(id);
       if (el) {
         this.observer.observe(el);
         this.observed.add(id);

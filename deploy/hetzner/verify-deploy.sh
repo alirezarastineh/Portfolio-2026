@@ -152,15 +152,16 @@ echo "== content security policy =="
 nonce_of_headers() {
   tr -d '\r' | sed -n "s/^content-security-policy[a-z-]*:.*'nonce-\([^']*\)'.*/\1/Ip" | head -n1
 }
-# The nonce in /en's header must also be on the inline event-dispatch script.
-contract_script_has_nonce() {
-  local headers body nonce
+# The nonce in /en's header must also be on an inline script the page names by
+# id: Analog's event-dispatch contract, or index.html's theme script.
+script_has_nonce() {
+  local id="$1" headers body nonce
   headers="$(mktemp)"
   body="$(curl -fsS -D "${headers}" "${CLIENT}/en")" || { rm -f "${headers}"; return 1; }
   nonce="$(nonce_of_headers <"${headers}")"
   rm -f "${headers}"
   [[ -n "${nonce}" ]] \
-    && grep -o '<script[^>]*id="ng-event-dispatch-contract"[^>]*>' <<<"${body}" | grep -qF "nonce=\"${nonce}\""
+    && grep -o "<script[^>]*id=\"${id}\"[^>]*>" <<<"${body}" | grep -qF "nonce=\"${nonce}\""
 }
 NONCE_A="$(curl -fsSI "${CLIENT}/en" | nonce_of_headers || true)"
 NONCE_B="$(curl -fsSI "${CLIENT}/en" | nonce_of_headers || true)"
@@ -169,7 +170,8 @@ if [[ -n "${NONCE_A}" && "${NONCE_A}" != "${NONCE_B}" ]]; then
 else
   fail "pages carry a CSP with a fresh nonce per request (got '${NONCE_A}', '${NONCE_B}') — CSP_MODE=off?"
 fi
-check "the inline event-replay script carries the request's nonce" contract_script_has_nonce
+check "the inline event-replay script carries the request's nonce" script_has_nonce ng-event-dispatch-contract
+check "the inline theme script carries the request's nonce" script_has_nonce theme-init
 CSP_HEADER="$(curl -fsSI "${CLIENT}/en" | tr -d '\r' | grep -io '^content-security-policy[a-z-]*' | head -n1 || true)"
 echo "  info  served as: ${CSP_HEADER:-none} (CSP_MODE=enforce in .env once report-only stays quiet)"
 
@@ -180,6 +182,29 @@ check "sitemap.xml lists both languages with alternates" \
   bash -c "curl -fsS '${CLIENT}/sitemap.xml' | grep -q 'hreflang=\"de\"'"
 check "each language has an RSS feed" \
   bash -c "curl -fsS '${CLIENT}/en/rss.xml' | grep -q '<rss version=\"2.0\"' && curl -fsS '${CLIENT}/de/rss.xml' | grep -q '<language>de</language>'"
+
+echo "== assets =="
+# Nitro serves the build's scripts and styles pre-compressed (compressPublicAssets).
+STYLESHEET="$(curl -fsS "${CLIENT}/en" | grep -o 'href="/assets/[^"]*\.css"' | head -n1 | cut -d'"' -f2 || true)"
+check "the stylesheet is served pre-compressed (brotli)" \
+  bash -c "curl -fsSI -H 'Accept-Encoding: br' '${CLIENT}${STYLESHEET}' | tr -d '\r' | grep -qi '^content-encoding: br'"
+check "the web manifest and icons are served" \
+  bash -c "curl -fsS '${CLIENT}/site.webmanifest' | grep -q '\"icons\"' && curl -fsSI '${CLIENT}/favicon.svg' >/dev/null && curl -fsSI '${CLIENT}/apple-touch-icon.png' >/dev/null"
+# resvg is a native module, like sharp: the Alpine (musl) build must load, or
+# every social card falls back to the default image.
+check "resvg loads in the client container (social cards render)" \
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T client \
+  node -e "import('@resvg/resvg-js').then((m) => { new m.Resvg('<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2\" height=\"2\"></svg>').render().asPng(); process.exit(0); }, () => process.exit(1))"
+# The first published case study, read with the api container's node (the host
+# may have no JSON tool).
+CASE_STUDY="$(curl -fsS "${API}/v2/content/en" | docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T api \
+  node -e "let s='';process.stdin.on('data',(d)=>(s+=d)).on('end',()=>{const p=JSON.parse(s).projects.find((x)=>x.hasCaseStudy);process.stdout.write(p?p.slug:'')})" || true)"
+if [[ -n "${CASE_STUDY}" ]]; then
+  check "a case study's social card renders (/en/og/work/${CASE_STUDY}.png)" \
+    bash -c "curl -fsSI '${CLIENT}/en/og/work/${CASE_STUDY}.png' | tr -d '\r' | grep -qi '^content-type: image/png'"
+else
+  echo "  info  no case study published yet; the social-card route is checked once there is one"
+fi
 
 echo "== auth boundary =="
 check "admin is locked without a session" \

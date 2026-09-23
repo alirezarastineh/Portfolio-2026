@@ -1,77 +1,96 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
 import { NgIcon } from "@ng-icons/core";
 
-import { ScrambleTextComponent } from "../components/scramble-text.component";
+import { SectionHeadingComponent } from "../components/section-heading.component";
 import { SpotlightCardComponent } from "../components/spotlight-card.component";
 import type { BentoSpan } from "../content/schema";
+import { splitCommentMark } from "../i18n/comment-mark";
 import { iconFor, provideRegistryIcons } from "../icons/icon-registry";
 import { LanguageService } from "../services/language.service";
 
+/**
+ * Bento cells on the four-column grid: `lg` is two by two, `tall` one by two,
+ * `sm` one by one — so lg, tall, sm, sm fill two rows exactly. On two columns
+ * `lg` takes the full width.
+ */
 const SPAN_MAP: Record<BentoSpan, string> = {
-  lg: "lg:col-span-2 lg:row-span-2",
-  tall: "lg:col-span-2 lg:row-span-2",
-  sm: "lg:col-span-2",
+  lg: "md:col-span-2 lg:row-span-2",
+  tall: "lg:row-span-2",
+  sm: "",
 };
 
 @Component({
   selector: "app-skills-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgIcon, ScrambleTextComponent, SpotlightCardComponent],
+  imports: [NgIcon, SectionHeadingComponent, SpotlightCardComponent],
   viewProviders: [provideRegistryIcons()],
   host: {
     class: "block",
   },
   template: `
-    <section id="skills" class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32">
-      <div class="mx-auto flex max-w-7xl flex-col gap-10">
-        <header class="flex flex-wrap items-baseline justify-between gap-4">
-          <h2 class="m-0 font-mono text-2xl tracking-tight text-foreground sm:text-3xl">
-            <app-scramble-text [text]="lang.t().skills.heading" />
-          </h2>
-          <p class="font-mono text-[0.7rem] uppercase tracking-[0.22em] text-muted-foreground">
-            {{ lang.t().skills.subtitle }}
-          </p>
-        </header>
-        <div class="grid auto-rows-[minmax(180px,auto)] grid-cols-1 gap-4 lg:grid-cols-4 lg:gap-5">
+    <section
+      id="skills"
+      aria-labelledby="skills-heading"
+      class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32"
+    >
+      <div class="mx-auto flex max-w-7xl flex-col gap-12">
+        <app-section-heading
+          headingId="skills-heading"
+          [heading]="lang.t().skills.heading"
+          [eyebrow]="lang.t().skills.subtitle"
+        />
+        <ul
+          class="m-0 grid list-none auto-rows-[minmax(180px,auto)] grid-flow-dense grid-cols-1 gap-4 p-0 md:grid-cols-2 lg:grid-cols-4 lg:gap-5"
+          role="list"
+        >
           @for (card of cards(); track card.id) {
-            <app-spotlight-card [class]="layoutClass(card.span)">
-              <article class="flex h-full flex-col gap-5 p-6">
-                <header class="flex items-start justify-between gap-3">
-                  <div class="flex flex-col gap-1.5">
+            <li [class]="card.layout">
+              <app-spotlight-card class="h-full">
+                <article class="flex h-full flex-col gap-5 p-6">
+                  <header class="flex items-start justify-between gap-3">
+                    <div class="flex flex-col gap-1.5">
+                      @if (card.caption.text) {
+                        <p
+                          class="m-0 font-mono text-[0.68rem] uppercase tracking-[0.22em] text-muted-foreground"
+                        >
+                          @if (card.caption.marked) {
+                            <span aria-hidden="true">// </span>
+                          }
+                          {{ card.caption.text }}
+                        </p>
+                      }
+                      <h3 class="m-0 text-lg font-semibold tracking-tight text-foreground">
+                        {{ card.title }}
+                      </h3>
+                    </div>
+                    <ng-icon
+                      [name]="card.icon"
+                      size="22"
+                      class="shrink-0 text-accent-indigo"
+                      aria-hidden="true"
+                    />
+                  </header>
+                  <ul class="m-0 flex list-none flex-wrap gap-2 p-0" role="list">
+                    @for (item of card.items; track item) {
+                      <li
+                        class="rounded-md border border-border bg-muted/50 px-2.5 py-1 font-mono text-[0.72rem] text-foreground/85"
+                      >
+                        {{ item }}
+                      </li>
+                    }
+                  </ul>
+                  @if (card.narrative) {
                     <p
-                      class="font-mono text-[0.68rem] uppercase tracking-[0.22em] text-muted-foreground"
+                      class="m-0 mt-auto text-pretty text-sm leading-relaxed text-muted-foreground"
                     >
-                      {{ card.caption }}
+                      {{ card.narrative }}
                     </p>
-                    <h3 class="m-0 font-mono text-lg font-medium text-foreground">
-                      {{ card.title }}
-                    </h3>
-                  </div>
-                  <ng-icon
-                    [name]="iconFor(card.icon)"
-                    size="22"
-                    class="shrink-0 text-accent-indigo"
-                    aria-hidden="true"
-                  />
-                </header>
-                <ul class="m-0 flex list-none flex-wrap gap-2 p-0" role="list">
-                  @for (item of card.items; track item) {
-                    <li
-                      class="rounded-md border border-border bg-card/60 px-2.5 py-1 font-mono text-[0.72rem] tracking-[0.01em] text-foreground/85"
-                    >
-                      {{ item }}
-                    </li>
                   }
-                </ul>
-                @if (card.narrative) {
-                  <p class="mt-auto text-pretty text-sm leading-relaxed text-muted-foreground">
-                    {{ card.narrative }}
-                  </p>
-                }
-              </article>
-            </app-spotlight-card>
+                </article>
+              </app-spotlight-card>
+            </li>
           }
-        </div>
+        </ul>
       </div>
     </section>
   `,
@@ -80,17 +99,15 @@ export class SkillsSectionComponent {
   readonly lang = inject(LanguageService);
 
   /**
-   * Copy and layout used to be joined by array index across two files. They
-   * arrive pre-joined by skill id now, so a reorder in the admin cannot
-   * silently pair the wrong title with the wrong card.
+   * Copy and layout arrive pre-joined by skill id, so a reorder in the admin
+   * cannot pair the wrong title with the wrong card.
    */
-  readonly cards = computed(() => this.lang.content().skills);
-
-  iconFor(icon: string): string {
-    return iconFor(icon, "lucideSparkles");
-  }
-
-  layoutClass(span: BentoSpan): string {
-    return SPAN_MAP[span];
-  }
+  readonly cards = computed(() =>
+    this.lang.content().skills.map((skill) => ({
+      ...skill,
+      caption: splitCommentMark(skill.caption),
+      icon: iconFor(skill.icon, "lucideSparkles"),
+      layout: SPAN_MAP[skill.span],
+    })),
+  );
 }

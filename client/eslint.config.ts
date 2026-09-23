@@ -64,4 +64,10 @@ export default defineConfig([
     files: ["src/styles/**/*.css"],
     rules: { "css/no-invalid-properties": "off" },
   },
+  {
+    // The Tailwind entry points use tokens declared in src/styles/tokens.css,
+    // which they import; as with the partials, var() looks unknown to the rule.
+    files: ["src/styles.css", "src/admin.css"],
+    rules: { "css/no-invalid-properties": "off" },
+  },
 ]);

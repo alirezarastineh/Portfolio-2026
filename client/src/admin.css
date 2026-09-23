@@ -1,0 +1,21 @@
+/*
+ * The admin's utilities: everything under src/app/admin, the admin pages, and
+ * all of libs/ui (Spartan). Compiled on its own so none of it reaches a
+ * visitor; the admin layout (pages/admin.page.ts) imports it `?inline` and
+ * adds it to the page. The public stylesheet (src/styles.css) is loaded on
+ * admin pages too and provides the tokens, fonts and base styles.
+ */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "@spartan-ng/brain/hlm-tailwind-preset.css";
+
+@import "./styles/theme.css";
+
+/* `@import "tailwindcss/utilities.css" source(none)`, as a plain at-rule so
+   editors' CSS parsers accept it: only the `@source` paths below. */
+@tailwind utilities source(none);
+
+@source "./app/admin";
+@source "./app/pages/admin";
+@source "./app/pages/admin.page.ts";
+@source "../libs/ui";

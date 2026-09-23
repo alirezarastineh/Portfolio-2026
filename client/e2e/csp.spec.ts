@@ -43,7 +43,7 @@ test.describe("content security policy", () => {
   for (const path of PAGES) {
     test(`${path} runs with no violations`, async ({ page, problems }) => {
       await page.goto(path);
-      await page.waitForLoadState("networkidle");
+      await expect(page.locator("#main")).toBeVisible();
       expect(problems.cspViolations).toEqual([]);
     });
   }
