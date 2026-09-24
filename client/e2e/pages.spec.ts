@@ -1,6 +1,6 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 
-import { expect, test } from "./fixtures";
+import { expect, interactive, test } from "./fixtures";
 
 // Content comes from e2e/fixture-content.mjs: `project-one` has a case study in
 // both languages, `project-two` in English only; `shipping-rag-to-production`
@@ -71,12 +71,16 @@ test.describe("case study", () => {
       `${SITE}/en/og/work/project-one.png`,
     );
 
-    const card = await request.get("/en/og/work/project-one.png");
+    // Redirects off: a failed render falls back to /og.png, which is a PNG
+    // too, so following it would hide the failure.
+    const card = await request.get("/en/og/work/project-one.png", { maxRedirects: 0 });
     expect(card.status()).toBe(200);
     expect(card.headers()["content-type"]).toBe("image/png");
     expect((await card.body()).subarray(0, 4)).toEqual(Buffer.from([137, 80, 78, 71]));
 
-    const post = await request.get("/de/og/writing/shipping-rag-to-production.png");
+    const post = await request.get("/de/og/writing/shipping-rag-to-production.png", {
+      maxRedirects: 0,
+    });
     expect(post.status()).toBe(200);
     // No card for what has no page: a project without a case study, an unknown kind.
     expect((await request.get("/en/og/work/project-three.png")).status()).toBe(404);
@@ -98,7 +102,7 @@ test.describe("case study", () => {
     page,
   }) => {
     await page.goto("/en/work/project-one");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
     await page
       .getByRole("navigation", { name: "On this page" })
       .getByRole("link", { name: "Retrieval" })
@@ -112,7 +116,7 @@ test.describe("case study", () => {
     problems,
   }) => {
     await page.goto("/en/work/project-one");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
 
     await page.getByRole("link", { name: /^Open image 1 of 2/ }).click();
     const dialog = page.getByRole("dialog", { name: "Gallery" });
@@ -131,7 +135,7 @@ test.describe("case study", () => {
 
   test("links to the next case study, which exists in English only", async ({ page }) => {
     await page.goto("/en/work/project-one");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
     await page.getByRole("link", { name: /Next project/ }).click();
     await expect(page).toHaveURL(/\/en\/work\/project-two$/);
 
@@ -148,7 +152,7 @@ test.describe("case study", () => {
 
   test("the home page's card opens its case study client-side", async ({ page }) => {
     await page.goto("/en");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
     let loads = 0;
     page.on("request", (request) => {
       if (request.resourceType() === "document") loads += 1;

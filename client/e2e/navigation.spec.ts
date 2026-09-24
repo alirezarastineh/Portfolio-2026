@@ -1,4 +1,4 @@
-import { expect, test, type PageProblems } from "./fixtures";
+import { expect, interactive, type PageProblems, test } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /** Counts full page loads, so a test can prove navigation stayed client-side. */
@@ -28,7 +28,7 @@ test.describe("hydration", () => {
   ]) {
     test(`${path} hydrates without errors`, async ({ page, problems }) => {
       await page.goto(path);
-      await expect(page.locator("#main")).toBeVisible();
+      await interactive(page);
       expectCleanConsole(problems);
     });
   }
@@ -41,7 +41,7 @@ test.describe("language switch", () => {
     isMobile,
   }) => {
     await page.goto("/en/legal/privacy");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
     const loads = countDocumentLoads(page);
 
     if (isMobile) await page.getByRole("button", { name: "Toggle navigation" }).click();
@@ -69,7 +69,7 @@ test.describe("language switch", () => {
     await page.goto("/en");
     // The cookie is written by the click handler, so wait for hydration: a
     // click before it follows the plain link without remembering anything.
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
     if (isMobile) await page.getByRole("button", { name: "Toggle navigation" }).click();
     await page.locator('header a[hreflang="de"]:visible').click();
     await expect(page).toHaveURL(/\/de$/);
@@ -85,7 +85,7 @@ test.describe("site navigation", () => {
     isMobile,
   }) => {
     await page.goto("/en/legal/imprint");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
 
     if (isMobile) await page.getByRole("button", { name: "Toggle navigation" }).click();
     await page.locator("header nav a:visible", { hasText: "Projects" }).click();
@@ -126,7 +126,7 @@ test.describe("site navigation", () => {
   }) => {
     if (!isMobile) return;
     await page.goto("/en");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
     const toggle = page.getByRole("button", { name: "Toggle navigation" });
     const menu = page.getByRole("navigation", { name: "Mobile" });
 
@@ -156,7 +156,7 @@ test.describe("site navigation", () => {
   test("widening the window to the desktop layout closes the menu", async ({ page, isMobile }) => {
     if (!isMobile) return;
     await page.goto("/en");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
     await page.getByRole("button", { name: "Toggle navigation" }).click();
     await expect(page.getByRole("navigation", { name: "Mobile" })).toBeVisible();
     await page.setViewportSize({ width: 1024, height: 800 });

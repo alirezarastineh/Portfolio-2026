@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 
-import { expect, test } from "./fixtures";
+import { expect, interactive, test } from "./fixtures";
 
 const PAGES = [
   "/en",
@@ -34,7 +34,7 @@ for (const colorScheme of ["dark", "light"] as const) {
     for (const path of PAGES) {
       test(`${path} has no new accessibility violations`, async ({ page }) => {
         await page.goto(path);
-        await expect(page.locator("#main")).toBeVisible();
+        await interactive(page);
         await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
 
         const { violations } = await new AxeBuilder({ page })

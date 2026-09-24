@@ -1,8 +1,21 @@
+import { createRequire } from "node:module";
+
 import { defineConfig, loadEnv } from "vite";
 import analog from "@analogjs/platform";
 import tailwindcss from "@tailwindcss/vite";
 
 import { localeRedirect } from "./src/app/content/locale";
+
+/**
+ * Satori shapes text with HarfBuzz, compiled to WebAssembly: `hb.js` reads
+ * `hb.wasm` from its own folder at runtime, by a computed path the server
+ * build's dependency tracing cannot follow. Named here so it is copied into
+ * the server output; without it every social card fell back to /og.png.
+ * Resolved from satori, whose dependency it is.
+ */
+const HARFBUZZ_WASM = createRequire(createRequire(import.meta.url).resolve("satori")).resolve(
+  "harfbuzzjs/hb.wasm",
+);
 
 const PUBLIC_PAGE_CACHE = {
   "cache-control": "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
@@ -162,6 +175,7 @@ export default defineConfig(({ mode }) => {
           // what Caddy compresses on the fly (which it then skips), and what
           // Lighthouse measures locally is what visitors download.
           compressPublicAssets: { brotli: true, gzip: true },
+          externals: { traceInclude: [HARFBUZZ_WASM] },
           routeRules: {
             // A page's HTML now depends only on its URL (no cookie picks the
             // language), so a shared cache may keep it briefly.

@@ -200,8 +200,10 @@ check "resvg loads in the client container (social cards render)" \
 CASE_STUDY="$(curl -fsS "${API}/v2/content/en" | docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T api \
   node -e "let s='';process.stdin.on('data',(d)=>(s+=d)).on('end',()=>{const p=JSON.parse(s).projects.find((x)=>x.hasCaseStudy);process.stdout.write(p?p.slug:'')})" || true)"
 if [[ -n "${CASE_STUDY}" ]]; then
+  # A GET without following redirects: a failed render redirects to /og.png,
+  # which is a PNG too.
   check "a case study's social card renders (/en/og/work/${CASE_STUDY}.png)" \
-    bash -c "curl -fsSI '${CLIENT}/en/og/work/${CASE_STUDY}.png' | tr -d '\r' | grep -qi '^content-type: image/png'"
+    bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code} %{content_type}' '${CLIENT}/en/og/work/${CASE_STUDY}.png')\" = '200 image/png' ]"
 else
   echo "  info  no case study published yet; the social-card route is checked once there is one"
 fi

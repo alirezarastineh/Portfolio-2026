@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { expect, test } from "./fixtures";
+import { expect, interactive, test } from "./fixtures";
 
 // The site-wide pieces: home layout, theme, skip link, command palette and the
 // contact form. Content from e2e/fixture-content.mjs.
@@ -66,7 +66,7 @@ test.describe("home", () => {
 
   test("switching language updates the section headings in place", async ({ page }) => {
     await page.goto("/en");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
     await page.locator('header a[hreflang="de"]').click();
     await expect(page).toHaveURL(/\/de$/);
     await expect(page.locator("#projects-heading")).toHaveText("projekte");
@@ -98,7 +98,7 @@ test.describe("theme", () => {
   }) => {
     await page.emulateMedia({ colorScheme: "dark" });
     await page.goto("/en");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
 
     await page.getByRole("button", { name: "Switch to the light theme" }).click();
     const html = page.locator("html");
@@ -123,7 +123,7 @@ test.describe("theme", () => {
 test.describe("keyboard", () => {
   test("the first Tab reaches a skip link that moves focus into the page", async ({ page }) => {
     await page.goto("/en/work/project-one");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
     await page.keyboard.press("Tab");
     const skip = page.getByRole("link", { name: "Skip to content" });
     await expect(skip).toBeFocused();
@@ -136,7 +136,7 @@ test.describe("keyboard", () => {
 test.describe("command palette", () => {
   test("⌘K opens it; typing filters, and Enter goes to the result", async ({ page, problems }) => {
     await page.goto("/en");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
     await page.keyboard.press("ControlOrMeta+k");
 
     const dialog = page.getByRole("dialog", { name: "Command palette" });
@@ -156,7 +156,7 @@ test.describe("command palette", () => {
 
   test("arrows move through the results; Escape closes and gives focus back", async ({ page }) => {
     await page.goto("/en/writing");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
     const button = page.getByRole("button", { name: "Search the site" });
     await button.click();
 
@@ -177,7 +177,7 @@ test.describe("command palette", () => {
   test("switches the theme", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" });
     await page.goto("/en");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
     await page.keyboard.press("ControlOrMeta+k");
     const dialog = page.getByRole("dialog", { name: "Command palette" });
     await dialog.getByRole("combobox").fill("light");
@@ -209,7 +209,7 @@ async function mockContact(page: Page, onSend: (body: unknown) => void): Promise
 test.describe("contact form", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/en#contact");
-    await expect(page.locator("#main")).toBeVisible();
+    await interactive(page);
   });
 
   test("an empty submit marks each field, describes the error, and focuses the first", async ({

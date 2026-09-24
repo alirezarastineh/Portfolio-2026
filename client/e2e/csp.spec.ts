@@ -1,4 +1,4 @@
-import { expect, inlineScripts, policyNonce, test } from "./fixtures";
+import { expect, inlineScripts, interactive, policyNonce, test } from "./fixtures";
 
 const PAGES = [
   "/en",
@@ -43,7 +43,7 @@ test.describe("content security policy", () => {
   for (const path of PAGES) {
     test(`${path} runs with no violations`, async ({ page, problems }) => {
       await page.goto(path);
-      await expect(page.locator("#main")).toBeVisible();
+      await interactive(page);
       expect(problems.cspViolations).toEqual([]);
     });
   }
