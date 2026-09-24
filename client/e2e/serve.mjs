@@ -32,9 +32,11 @@ const port = Number(values.port ?? process.env.PORT ?? "4173");
 const appPort = port + 10000;
 process.env.PORT = String(appPort);
 process.env.CSP_MODE ??= "enforce";
-// The API origin the build was made with (from .env.production, when there is
-// one), as compose passes it to the container: the CSP allows what the
-// bundle actually calls. Tests still never reach it (see fixtures.ts).
+// The API origin the build was made with, as compose passes it to the
+// container: the CSP must allow what the bundle actually calls, or the
+// browser blocks the contact form's POST. CI sets VITE_API_BASE_URL for the
+// whole e2e job; locally it comes from .env.production, when there is one.
+// Tests still never reach it (see fixtures.ts).
 const buildEnv = loadEnv("production", fileURLToPath(new URL("..", import.meta.url)), "VITE_");
 if (buildEnv.VITE_API_BASE_URL) process.env.VITE_API_BASE_URL ??= buildEnv.VITE_API_BASE_URL;
 // Never live content, whatever the shell has set: the fixture API, on loopback.

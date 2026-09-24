@@ -72,6 +72,13 @@ jobs:
     defaults:
       run:
         working-directory: client
+    # For the whole job, as compose passes it to the container at build and at
+    # run time: the bundle is built to call this API, and the test server's CSP
+    # (connect-src) must allow it, or the browser blocks the contact form's
+    # POST before the test's mock can answer it. Tests never reach it: every
+    # request to another origin is blocked or answered by the test itself.
+    env:
+      VITE_API_BASE_URL: https://api.alirezarastineh.me
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -83,12 +90,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: client/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # Tests run against a local fixture API (e2e/fixture-api.mjs) with every
-      # request to another origin blocked, so the API URL baked in here is never
-      # reached.
+      # Content comes from a local fixture API (e2e/fixture-api.mjs).
       - run: pnpm build
-        env:
-          VITE_API_BASE_URL: https://api.alirezarastineh.me
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e
       # Uses the runner's preinstalled Chrome.
