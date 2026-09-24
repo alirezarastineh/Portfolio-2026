@@ -240,6 +240,11 @@ export const AskStore = signalStore(
         const entryId = store._next.entryId;
         if (!entryId) return;
         const { failure, retryAfter } = failureFrom(error);
+        // The visitor sees one line; the console keeps what actually failed
+        // (a dropped connection and a bug both read as "offline" otherwise).
+        if (failure === "offline" || failure === "error") {
+          console.warn("[ask] answer failed:", error);
+        }
         const copy = ASK_COPY[locale()];
         const entry = store.entries().find((e) => e.id === entryId);
         const offline =

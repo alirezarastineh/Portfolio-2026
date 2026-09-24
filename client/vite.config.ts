@@ -127,6 +127,18 @@ export default defineConfig(({ mode }) => {
         "@tiptap/extension-image",
         "@tiptap/starter-kit",
         "embla-carousel-angular",
+        // Imported only by lazily loaded code (the contact form, the admin's
+        // UI kit, the assistant's terminal), so the dev server would find
+        // these on first use, re-bundle and reload mid-session — or not
+        // reload, and the new bundle's own copy of Angular's signals stops
+        // the page updating (an answer showed only after a reload).
+        "@angular/forms",
+        "@ai-sdk/angular",
+        "@ngrx/signals",
+        "ai",
+        "class-variance-authority",
+        "clsx",
+        "tailwind-merge",
       ],
     },
     define: { "process.env": publicEnv },

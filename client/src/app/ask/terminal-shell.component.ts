@@ -18,10 +18,11 @@ import {
 
 import { LanguageService } from "../services/language.service";
 import { AskAnswerComponent } from "./ask-answer.component";
+import { answersByQuestion } from "./answers";
 import { AskLauncherService } from "./ask-launcher.service";
 import { AskLinesComponent } from "./ask-lines.component";
 import { AskStore } from "./ask.store";
-import type { AskMessage, Entry } from "./ask-types";
+import type { Entry } from "./ask-types";
 import { complete, parseInput } from "./commands";
 import { track } from "./track";
 
@@ -206,16 +207,7 @@ export class TerminalShellComponent {
   protected readonly busy = computed(() => ["submitted", "streaming"].includes(this.status()));
   protected readonly showIdleCaret = computed(() => !this.focused() && !this.value());
 
-  /** Each question's answer: the assistant message right after it. */
-  protected readonly answers = computed(() => {
-    const messages: AskMessage[] = this.store.chat.messages;
-    const map = new Map<string, AskMessage>();
-    messages.forEach((m, i) => {
-      const next = messages[i + 1];
-      if (m.role === "user" && next?.role === "assistant") map.set(m.id, next);
-    });
-    return map;
-  });
+  protected readonly answers = computed(() => answersByQuestion(this.store.chat.messages));
 
   protected readonly latestAskId = computed(() => {
     const entries: Entry[] = this.store.entries();

@@ -234,6 +234,52 @@ test.describe("assistant terminal", () => {
     expect(problems.pageErrors).toEqual([]);
   });
 
+  test("an answer shows while it is still streaming", async ({ page }) => {
+    // A mocked route delivers its body at once, which hid a bug: the answer
+    // showed only after a reload. Here the stream pauses mid-answer, as a
+    // model does, and the words so far must already be on screen.
+    const chunks = answer({ text: "First words arrive now, the rest a little later." });
+    const cut = chunks.findIndex((c) => c["type"] === "text-delta" && c["delta"] === "now, ");
+    await page.addInitScript(
+      ({ head, tail }) => {
+        const original = window.fetch.bind(window);
+        window.fetch = async (input, init) => {
+          const url =
+            typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+          if (!url.endsWith("/v1/ask") || init?.method !== "POST") return original(input, init);
+          const encoder = new TextEncoder();
+          const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+          const body = new ReadableStream<Uint8Array>({
+            async start(controller) {
+              const send = (chunk: unknown) =>
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+              for (const chunk of head) {
+                send(chunk);
+                await wait(50);
+              }
+              await wait(3000);
+              for (const chunk of tail) send(chunk);
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              controller.close();
+            },
+          });
+          return new Response(body, {
+            headers: { "content-type": "text/event-stream", "x-vercel-ai-ui-message-stream": "v1" },
+          });
+        };
+      },
+      { head: chunks.slice(0, cut + 1), tail: chunks.slice(cut + 1) },
+    );
+    await mockAsk(page, () => undefined);
+    const prompt = await openPrompt(page);
+    await run(prompt, "What is he doing?");
+
+    const log = page.locator("#about [role=log]");
+    await expect(log).toContainText("First words arrive now,", { timeout: 2500 });
+    await expect(log).not.toContainText("a little later");
+    await expect(log).toContainText("First words arrive now, the rest a little later.");
+  });
+
   test("German pages ask in German", async ({ page }) => {
     const mock = await mockAsk(page, (route) =>
       sse(route, answer({ text: "Er testet jede Änderung." })),
