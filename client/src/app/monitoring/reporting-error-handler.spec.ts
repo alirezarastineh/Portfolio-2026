@@ -44,7 +44,16 @@ describe("ReportingErrorHandler", () => {
     handler("browser", DSN).handleError(error);
     await vi.waitFor(() => expect(sentry.captureException).toHaveBeenCalledWith(error));
     expect(sentry.init).toHaveBeenCalledWith(
-      expect.objectContaining({ dsn: DSN, sendDefaultPii: false }),
+      expect.objectContaining({
+        dsn: DSN,
+        dataCollection: expect.objectContaining({
+          userInfo: false,
+          cookies: false,
+          httpHeaders: false,
+          httpBodies: [],
+          urlQueryParams: false,
+        }),
+      }),
     );
   });
 

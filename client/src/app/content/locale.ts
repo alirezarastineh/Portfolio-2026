@@ -1,10 +1,14 @@
-import { LOCALES, type Locale } from "./schema";
-
 /**
  * Framework-free locale helpers, shared by the Angular app and the Nitro
  * server (the `/` redirect middleware), so both negotiate the same way.
+ *
+ * This file imports nothing: vite.config.ts loads it too, and Vite's native
+ * config loader (Node's type stripping) needs every relative import to name
+ * its `.ts` file, which the app's compiler does not accept. So the list below
+ * is not taken from `./schema`; `locale.spec.ts` keeps the two equal.
  */
-export { LOCALES, type Locale };
+export const LOCALES = ["en", "de"] as const;
+export type Locale = (typeof LOCALES)[number];
 
 export const DEFAULT_LOCALE: Locale = "en";
 export const LOCALE_COOKIE = "portfolio-lang";

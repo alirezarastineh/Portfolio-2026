@@ -33,6 +33,7 @@ import {
   LocaleToggleComponent,
   SaveBarComponent,
 } from "../../../admin/components/editor-chrome.component";
+import { CopilotSuggestComponent } from "../../../admin/components/copilot-suggest.component";
 import type { LocaleView } from "../../../admin/components/field-pair.component";
 import {
   GalleryEditorComponent,
@@ -124,6 +125,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
     HlmSwitch,
     HlmTextarea,
     LocaleToggleComponent,
+    CopilotSuggestComponent,
     MediaFieldComponent,
     MetricsEditorComponent,
     NgIcon,
@@ -305,6 +307,14 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                       (ngModelChange)="patchText(locale, field.key, $event)"
                       [attr.aria-label]="field.label + ' (' + locale + ')'"
                     ></textarea>
+                    @if (field.key === "seoDescription") {
+                      <app-copilot-suggest
+                        class="self-end"
+                        [locale]="locale"
+                        [source]="seoSources[locale]"
+                        (suggested)="patchText(locale, 'seoDescription', $event)"
+                      />
+                    }
                   } @else {
                     <input
                       hlmInput
@@ -398,6 +408,21 @@ export default class AdminProjectEditorPage implements OnInit {
   protected readonly saving = signal(false);
 
   protected readonly project = signal<ProjectRow | null>(null);
+
+  /** What the copilot describes when asked for a search description. */
+  protected readonly seoSources: Record<Locale, () => string> = {
+    en: () => this.pageText("en"),
+    de: () => this.pageText("de"),
+  };
+
+  private pageText(locale: Locale): string {
+    const t = this.project()?.translations[locale];
+    if (!t) return "";
+    return [t.name, t.descriptor, t.hook, t.problem, t.aiArchitecture, t.fullStackInfra, t.body]
+      .filter(Boolean)
+      .join("\n");
+  }
+
   private pristine: ProjectRow | null = null;
   private readonly revision = signal(0);
 

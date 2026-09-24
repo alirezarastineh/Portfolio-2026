@@ -1,0 +1,20 @@
+/* The TypeScript that runs in Node rather than in the app: the tool configs,
+   the build plugins they load and the scripts. */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // Vite's native config loader runs vite.config.ts with Node's type
+    // stripping, which needs every relative import to name its `.ts` file.
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
+  },
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "eslint.config.ts",
+    "build/**/*.ts",
+    "scripts/**/*.ts"
+  ],
+  "exclude": ["build/**/*.spec.ts"]
+}

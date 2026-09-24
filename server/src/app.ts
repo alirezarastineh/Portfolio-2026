@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 
+import { setAskDeps, type AskDeps } from "./ask/deps.js";
+import { createAskRouter } from "./ask/route.js";
 import { adminOrigins } from "./auth/middleware.js";
 import { getPool } from "./db/client.js";
 import { onApiError } from "./lib/http-errors.js";
@@ -14,9 +16,11 @@ import { mediaRouter } from "./routes/media.js";
 /**
  * The HTTP app, free of boot side effects (env loading, migrations, listening)
  * so tests can drive it through `app.request()` against a test database.
- * Env is read when this is called, so load it first.
+ * Env is read when this is called, so load it first. `ask` swaps the
+ * assistant's models and corpus (tests).
  */
-export function createApp(): Hono {
+export function createApp(options: { ask?: AskDeps } = {}): Hono {
+  setAskDeps(options.ask ?? {});
   const app = new Hono();
   app.onError(onApiError);
   // Silent under test, where it would only bury the reporter's output.
@@ -71,6 +75,7 @@ export function createApp(): Hono {
   });
 
   app.route("/contact", contactRouter);
+  app.route("/v1/ask", createAskRouter());
   app.route("/v2/content", contentV2Router);
   // Temporary: clients built before content model v2 (Phase 9 removes it).
   app.route("/v1/content", contentV1Router);

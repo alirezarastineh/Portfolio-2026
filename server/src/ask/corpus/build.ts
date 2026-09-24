@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { eq, inArray } from "drizzle-orm";
 
 import type { DbExecutor } from "../../content/build.js";
+import { buildAll } from "../../content/publish.js";
 import { htmlToText } from "../../content/sanitize.js";
 import { docKey, LOCALES, type AppContent, type Doc, type Locale } from "../../content/schema.js";
 import { payloadVersion, upcast, upcastDocs } from "../../content/upcast.js";
@@ -21,7 +22,8 @@ import { resolveMediaPath } from "../../lib/media-store.js";
  * so the memo key, and the next call rebuilds.
  */
 
-export type CorpusKind = "profile" | "experience" | "project" | "post" | "skills" | "cv";
+export type CorpusKind =
+  "profile" | "experience" | "project" | "post" | "skills" | "cv" | "faq" | "system-card";
 
 export interface CorpusDocument {
   /** Stable and unique across both languages, e.g. `project:atlas@en`. */
@@ -34,12 +36,38 @@ export interface CorpusDocument {
   text: string;
 }
 
+/** A project as data, for questions like "which projects used RAG?". */
+export interface ProjectFacts {
+  id: string;
+  slug: string;
+  locale: Locale;
+  name: string;
+  descriptor: string;
+  role: string;
+  period: string | null;
+  category: string | null;
+  stack: string[];
+  tags: string[];
+  metrics: string[];
+  url: string;
+  hasCaseStudy: boolean;
+}
+
+export interface PostFacts {
+  slug: string;
+  locale: Locale;
+  title: string;
+  url: string;
+}
+
 export interface Corpus {
   /** The live version of each locale, e.g. `en:12|de:13`. */
   key: string;
   documents: CorpusDocument[];
   /** Every document, in order, as Markdown with a header per document. */
   text: string;
+  projects: ProjectFacts[];
+  posts: PostFacts[];
 }
 
 interface LiveLocale {
@@ -142,7 +170,7 @@ function postDocument(
   };
 }
 
-function documentsFor(live: LiveLocale): CorpusDocument[] {
+function documentsFor(live: Pick<LiveLocale, "locale" | "core" | "docs">): CorpusDocument[] {
   const { locale, core, docs } = live;
   const ui = core.ui;
   const identity = core.identity;
@@ -276,7 +304,29 @@ async function loadLive(db: DbExecutor): Promise<LiveLocale[]> {
   return live;
 }
 
-async function buildCorpus(key: string, live: LiveLocale[]): Promise<Corpus> {
+function projectFacts(live: Pick<LiveLocale, "locale" | "core">): ProjectFacts[] {
+  const { locale, core } = live;
+  return core.projects.map((p) => ({
+    id: `project:${p.slug}@${locale}`,
+    slug: p.slug,
+    locale,
+    name: p.name,
+    descriptor: p.descriptor,
+    role: p.role,
+    period: p.period ? period(p.period.start, p.period.end, core.ui.experience.present) : null,
+    category: p.category?.label ?? null,
+    stack: p.stack,
+    tags: p.tags,
+    metrics: p.metrics.map((m) => `${m.value} ${m.label}`),
+    url: p.hasCaseStudy ? `/${locale}/work/${p.slug}` : `/${locale}#projects`,
+    hasCaseStudy: p.hasCaseStudy,
+  }));
+}
+
+async function buildCorpus(
+  key: string,
+  live: Pick<LiveLocale, "locale" | "core" | "docs">[],
+): Promise<Corpus> {
   const documents = live.flatMap(documentsFor);
   for (const { locale, core } of live) {
     const resume = core.identity.resume;
@@ -293,15 +343,48 @@ async function buildCorpus(key: string, live: LiveLocale[]): Promise<Corpus> {
       });
     }
   }
-  // Phase 7 appends the curated FAQ entries and the assistant's system card here.
-  return { key, documents, text: toMarkdown(documents) };
+  // The assistant's FAQ and system card are added by `ask/corpus/index.ts`:
+  // they are live on save, not published.
+  return {
+    key,
+    documents,
+    text: toMarkdown(documents),
+    projects: live.flatMap(projectFacts),
+    posts: live.flatMap(({ locale, core }) =>
+      core.posts.map((p) => ({
+        slug: p.slug,
+        locale,
+        title: p.title,
+        url: `/${locale}/writing/${p.slug}`,
+      })),
+    ),
+  };
+}
+
+/**
+ * The same corpus from the draft tables, for the admin's playground: what the
+ * assistant would know after the next publish. Never cached — drafts change
+ * with every save — and never reachable from the public endpoint.
+ */
+export async function getDraftCorpus(db: DbExecutor = getDb()): Promise<Corpus> {
+  const built = await buildAll(db);
+  return buildCorpus(
+    `draft:${built.map((b) => b.checksum.slice(0, 12)).join("|")}`,
+    built.map((b) => ({ locale: b.locale, core: b.built.core, docs: b.built.docs })),
+  );
 }
 
 export async function getCorpus(db: DbExecutor = getDb()): Promise<Corpus> {
-  const live = await loadLive(db);
-  const key = live.map((l) => `${l.locale}:${l.versionId}`).join("|");
+  // Only the pointers on every call: the payloads are read when they changed.
+  const pointers = await db
+    .select({ locale: contentPointers.locale, versionId: contentPointers.versionId })
+    .from(contentPointers);
+  const key = LOCALES.flatMap((locale) => {
+    const pointer = pointers.find((p) => p.locale === locale);
+    return pointer ? [`${locale}:${pointer.versionId}`] : [];
+  }).join("|");
   if (memo?.key !== key) {
-    const corpus = buildCorpus(key, live);
+    const corpus = loadLive(db).then((live) => buildCorpus(key, live));
     memo = { key, corpus };
     // A failed build must not stay memoised.
     corpus.catch(() => {

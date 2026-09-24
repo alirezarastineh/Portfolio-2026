@@ -12,6 +12,21 @@ import type {
   SkillInput,
   SocialInput,
 } from "./admin-schema";
+import type {
+  AnswersRow,
+  AssistantEnv,
+  AssistantHealth,
+  AssistantSettings,
+  AssistantSettingsInput,
+  ConversationFilter,
+  ConversationRow,
+  CopilotInput,
+  EvalSummary,
+  FaqEntry,
+  FaqInput,
+  InsightTopic,
+  UsageRow,
+} from "./assistant-types";
 
 export type {
   ExperienceInput,
@@ -388,6 +403,90 @@ export class AdminApiService {
 
   setMessageStatus(id: string, status: MessageStatus) {
     return this.request<{ ok: true }>("PATCH", `/admin/messages/${id}`, { status });
+  }
+
+  /* ---- assistant ---- */
+
+  assistantSettings() {
+    return this.request<{ settings: AssistantSettings; env: AssistantEnv }>(
+      "GET",
+      "/admin/assistant/settings",
+    );
+  }
+
+  saveAssistantSettings(input: AssistantSettingsInput) {
+    return this.request<{ ok: true; settings: AssistantSettings }>(
+      "PUT",
+      "/admin/assistant/settings",
+      input,
+    );
+  }
+
+  assistantHealth() {
+    return this.request<AssistantHealth>("GET", "/admin/assistant/health");
+  }
+
+  /** Gemini's own token count of the prefix (a free API call). */
+  assistantTokenCount() {
+    return this.request<{ model: string; totalTokens: number | null; estimate: number }>(
+      "POST",
+      "/admin/assistant/corpus/count",
+      {},
+    );
+  }
+
+  assistantUsage(days = 30) {
+    return this.request<{ days: number; models: UsageRow[]; answers: AnswersRow[] }>(
+      "GET",
+      `/admin/assistant/usage?days=${days}`,
+    );
+  }
+
+  assistantConversations(filter: ConversationFilter, source: "terminal" | "playground") {
+    const query = new URLSearchParams({ source, ...(filter === "all" ? {} : { filter }) });
+    return this.request<{ messages: ConversationRow[] }>(
+      "GET",
+      `/admin/assistant/conversations?${query.toString()}`,
+    );
+  }
+
+  listFaq() {
+    return this.request<{ faq: FaqEntry[] }>("GET", "/admin/assistant/faq");
+  }
+
+  createFaq(input: FaqInput) {
+    return this.request<{ ok: true; id: string }>("POST", "/admin/assistant/faq", input);
+  }
+
+  updateFaq(id: string, input: FaqInput) {
+    return this.request<{ ok: true }>("PUT", `/admin/assistant/faq/${id}`, input);
+  }
+
+  deleteFaq(id: string) {
+    return this.request<{ ok: true }>("DELETE", `/admin/assistant/faq/${id}`);
+  }
+
+  reorderFaq(ids: string[]) {
+    return this.request<{ ok: true }>("PATCH", "/admin/assistant/faq-order", { ids });
+  }
+
+  /** Groups recent visitor questions into topics; one model call, cached for a while. */
+  assistantInsights(refresh = false) {
+    return this.request<{ topics: InsightTopic[]; analysed: number; cached?: boolean }>(
+      "POST",
+      `/admin/assistant/insights${refresh ? "?refresh=1" : ""}`,
+      {},
+    );
+  }
+
+  /** Runs the eval suite live (paid model calls). */
+  runEvals(cases?: string[]) {
+    return this.request<EvalSummary>("POST", "/admin/assistant/evals", cases ? { cases } : {});
+  }
+
+  /** A draft from the editor copilot; nothing is saved. */
+  copilot(input: CopilotInput) {
+    return this.request<{ text: string; model: string }>("POST", "/admin/ai/copilot", input);
   }
 
   /* ---- media ---- */

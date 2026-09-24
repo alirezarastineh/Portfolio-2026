@@ -45,19 +45,14 @@
     <link rel="manifest" href="/site.webmanifest" />
     <!-- Canonical, hreflang and JSON-LD are written per page (src/app/seo/head.ts). -->
 
-    <!-- The two faces every page sets above the fold (src/styles/fonts.css):
-         fetched with the stylesheet rather than after it, so text does not
-         re-wrap when they arrive. -->
+    <!-- The sans face every page sets its headline in (src/styles/fonts.css):
+         fetched with the stylesheet rather than after it, so the text does not
+         re-wrap when it arrives. Geist Mono is not preloaded: it sets only short
+         labels, where a monospace fallback has nearly the same widths, and
+         every byte before the first paint delays it on a slow link. -->
     <link
       rel="preload"
       href="/node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin
-    />
-    <link
-      rel="preload"
-      href="/node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2"
       as="font"
       type="font/woff2"
       crossorigin

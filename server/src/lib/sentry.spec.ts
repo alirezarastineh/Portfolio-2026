@@ -34,10 +34,21 @@ describe("sentry", () => {
     expect(sdk.init).toHaveBeenCalledWith(
       expect.objectContaining({
         dsn: "https://key@o1.ingest.sentry.io/1",
-        sendDefaultPii: false,
-        skipOpenTelemetrySetup: true,
+        enableOpenTelemetrySetup: false,
       }),
     );
+    // SDK 11 collects everything unless told not to (it replaced `sendDefaultPii`).
+    expect(sdk.init.mock.calls[0]![0]).toMatchObject({
+      dataCollection: {
+        userInfo: false,
+        cookies: false,
+        httpHeaders: false,
+        httpBodies: [],
+        urlQueryParams: false,
+        genAI: { inputs: false, outputs: false },
+        stackFrameVariables: false,
+      },
+    });
     expect(sdk.init.mock.calls[0]![0]).not.toHaveProperty("tracesSampleRate");
   });
 

@@ -21,7 +21,18 @@ function loadSdk(dsn: string): Promise<BrowserSdk> {
       dsn,
       release: import.meta.env.VITE_GIT_SHA || undefined,
       environment: import.meta.env.MODE,
-      sendDefaultPii: false,
+      // Nothing personal leaves the browser: SDK 11 collects user info,
+      // cookies, headers, query strings and bodies unless told not to (it
+      // replaced `sendDefaultPii`). Assistant questions travel in request
+      // bodies, so bodies in particular stay out.
+      dataCollection: {
+        userInfo: false,
+        cookies: false,
+        httpHeaders: false,
+        httpBodies: [],
+        urlQueryParams: false,
+        genAI: { inputs: false, outputs: false },
+      },
       integrations: (defaults) =>
         defaults.filter(
           (integration) =>

@@ -6,3 +6,10 @@ allowBuilds:
   msgpackr-extract: true
   nx: true
 minimumReleaseAge: 0
+# Peers these packages declare too narrowly for the versions in use.
+peerDependencyRules:
+  allowAny:
+    - marked
+    - typescript
+    - chokidar
+    - node-fetch

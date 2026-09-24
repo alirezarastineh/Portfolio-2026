@@ -16,7 +16,8 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  */
 const SESSION_LOST = new Set(["unauthenticated", "totp_required"]);
 
-function readCsrfCookie(): string | null {
+/** The double-submit CSRF token, for requests made outside HttpClient (the playground stream). */
+export function readCsrfCookie(): string | null {
   if (typeof document === "undefined") return null;
 
   for (const part of document.cookie.split(";")) {

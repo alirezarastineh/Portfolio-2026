@@ -1,4 +1,6 @@
-* text=auto
+# LF everywhere, as Prettier writes it, whatever core.autocrlf says: no
+# "LF will be replaced by CRLF" churn on Windows checkouts.
+* text=auto eol=lf
 
 # Executed on the Linux host; a CRLF shebang line fails to run.
 *.sh text eol=lf

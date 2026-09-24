@@ -9,9 +9,10 @@
 //
 // Hard gates: accessibility, best practices and SEO stay at 100, no layout
 // shift, no third-party requests, and byte budgets on scripts and styles.
-// Performance only warns (measured 2026-09-23: 0.91 home, 0.93 case study and
-// legal page; the rest is simulated round trips and the render-blocking
-// stylesheet).
+// Performance only warns: measured 2026-09-24, with the app starting after
+// the first paint (build/boot-after-paint.ts), 0.94-0.97 home, 0.99-1 case
+// study, 1 legal page. Home's total blocking time varies from run to run
+// (~190-270 ms): its hydration is the most work.
 const PORT = process.env.LHCI_PORT || "4174";
 const BASE = `http://127.0.0.1:${PORT}`;
 const KB = 1024;
@@ -34,11 +35,10 @@ module.exports = {
         "categories:seo": ["error", { minScore: 1 }],
         "categories:performance": ["warn", { minScore: 0.95 }],
         "cumulative-layout-shift": ["error", { maxNumericValue: 0.1 }],
-        // Transferred bytes. Measured 2026-09-23: scripts ~194 KB on home
+        // Transferred bytes. Measured 2026-09-24: scripts ~198 KB on home
         // (sections below the hero hydrate, and load, as they scroll into
-        // view), ~158-167 KB on subpages; styles ~9.5 KB (admin CSS lives in
-        // the admin's chunk). Headroom for Phase 7's assistant, which loads
-        // on demand.
+        // view; the assistant's terminal loads on demand), ~158-167 KB on
+        // subpages; styles ~9.9 KB (admin CSS lives in the admin's chunk).
         "resource-summary:script:size": ["error", { maxNumericValue: 240 * KB }],
         "resource-summary:stylesheet:size": ["error", { maxNumericValue: 16 * KB }],
         "resource-summary:third-party:count": ["error", { maxNumericValue: 0 }],

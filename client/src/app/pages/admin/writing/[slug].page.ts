@@ -28,6 +28,7 @@ import {
   type PostRow,
   type PostTranslationInput,
 } from "../../../admin/admin-api.service";
+import { CopilotSuggestComponent } from "../../../admin/components/copilot-suggest.component";
 import { SaveBarComponent } from "../../../admin/components/editor-chrome.component";
 import { MediaFieldComponent } from "../../../admin/components/media-field.component";
 import { RichTextComponent } from "../../../admin/components/rich-text.component";
@@ -55,6 +56,7 @@ type PostDraft = PostRow;
   selector: "app-admin-post-editor",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    CopilotSuggestComponent,
     FormsModule,
     HlmButton,
     HlmField,
@@ -217,6 +219,12 @@ type PostDraft = PostRow;
                     [ngModel]="t.seoDescription"
                     (ngModelChange)="patchText(locale, { seoDescription: $event })"
                   />
+                  <app-copilot-suggest
+                    class="self-end"
+                    [locale]="locale"
+                    [source]="seoSources[locale]"
+                    (suggested)="patchText(locale, { seoDescription: $event })"
+                  />
                 </div>
               </div>
             } @else {
@@ -243,6 +251,19 @@ export default class AdminPostEditorPage implements OnInit {
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
   protected readonly post = signal<PostDraft | null>(null);
+
+  /** What the copilot describes when asked for a search description. */
+  protected readonly seoSources: Record<Locale, () => string> = {
+    en: () => this.postText("en"),
+    de: () => this.postText("de"),
+  };
+
+  private postText(locale: Locale): string {
+    const t = this.post()?.translations[locale];
+    if (!t) return "";
+    return [t.title, t.excerpt, t.body].filter(Boolean).join("\n");
+  }
+
   private pristine: PostDraft | null = null;
   private readonly revision = signal(0);
 

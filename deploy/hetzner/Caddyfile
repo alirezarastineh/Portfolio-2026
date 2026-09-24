@@ -72,10 +72,17 @@ www.alirezarastineh.me {
 		}
 		format json
 	}
-	reverse_proxy 127.0.0.1:{$API_HOST_PORT:8010}
-	# Compresses the content JSON. If a streaming (SSE) route is added later,
-	# exclude it here: compression would buffer the stream.
-	encode zstd gzip
+	# The assistant's answers stream as server-sent events. For them: no
+	# compression (the encoder would hold tokens back until its buffer fills)
+	# and every chunk flushed at once. verify-deploy.sh checks both.
+	@stream path /v1/ask /v1/ask/stream-check /admin/assistant/playground
+	reverse_proxy @stream 127.0.0.1:{$API_HOST_PORT:8010} {
+		flush_interval -1
+	}
+	@notStream not path /v1/ask /v1/ask/stream-check /admin/assistant/playground
+	reverse_proxy @notStream 127.0.0.1:{$API_HOST_PORT:8010}
+	# Compresses the content JSON; never the streams above.
+	encode @notStream zstd gzip
 
 	# Uploads (a phone photo, a CV PDF) get 11MB: just over the API's own 10 MiB
 	# limit, so an oversized file gets the API's JSON error, not Caddy's page.

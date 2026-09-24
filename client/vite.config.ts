@@ -4,7 +4,9 @@ import { defineConfig, loadEnv } from "vite";
 import analog from "@analogjs/platform";
 import tailwindcss from "@tailwindcss/vite";
 
-import { localeRedirect } from "./src/app/content/locale";
+// With its extension: Vite's native config loader (Node type stripping) needs it.
+import { localeRedirect } from "./src/app/content/locale.ts";
+import { bootAfterPaint } from "./build/boot-after-paint.ts";
 
 /**
  * Satori shapes text with HarfBuzz, compiled to WebAssembly: `hb.js` reads
@@ -37,6 +39,12 @@ export default defineConfig(({ mode }) => {
         output: {
           codeSplitting: {
             groups: [
+              // The compiler's own helpers (class fields down-levelled for
+              // es2020: `defineProperty`, private-field helpers) in a small
+              // chunk of their own. Sentry 11 uses class fields, and without
+              // this Rolldown placed the helpers in Sentry's chunk — which then
+              // every page imported statically (~118 KB transferred).
+              { name: "helpers", test: /@oxc-project\+runtime@[^/]+\/helpers\// },
               // The Sentry SDK in a chunk of its own, loaded only when an
               // error is reported (monitoring/reporting-error-handler.ts).
               // Without it, Rolldown put its module-namespace helper — which
@@ -123,6 +131,7 @@ export default defineConfig(({ mode }) => {
     },
     define: { "process.env": publicEnv },
     plugins: [
+      bootAfterPaint(),
       {
         // Production runs src/server/middleware/locale.ts through Nitro. In
         // dev, Analog finds that file by globbing a path that still has

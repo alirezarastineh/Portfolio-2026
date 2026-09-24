@@ -221,15 +221,7 @@
       "id": "devops",
       "icon": "container",
       "span": "sm",
-      "items": [
-        "Docker",
-        "GitHub Actions",
-        "Caddy",
-        "Hetzner",
-        "Linux",
-        "Nginx",
-        "CI/CD"
-      ],
+      "items": ["Docker", "GitHub Actions", "Caddy", "Hetzner", "Linux", "Nginx", "CI/CD"],
       "title": "DevOps & Cloud",
       "caption": "// data + ML + cloud",
       "narrative": "Durch die Orchestrierung von PyTorch-Modell-Trainingspipelines via Docker und GitHub Actions stelle ich sicher, dass Machine-Learning-Dienste sauber in skalierbare, hochverfügbare Cloud-Umgebungen deployt werden."
@@ -238,14 +230,7 @@
       "id": "data-pipelines",
       "icon": "database",
       "span": "sm",
-      "items": [
-        "PostgreSQL",
-        "Redis",
-        "Drizzle ORM",
-        "Prisma",
-        "Kafka",
-        "BullMQ"
-      ],
+      "items": ["PostgreSQL", "Redis", "Drizzle ORM", "Prisma", "Kafka", "BullMQ"],
       "title": "Datenpipelines",
       "caption": "// speicher + streams",
       "narrative": "Typisierte Schemata, Vektorindizes und asynchrone Queues sorgen dafür, dass Inferenzjobs, Embeddings und Nutzerdaten ohne Engpässe fließen."
@@ -265,12 +250,7 @@
         "TODO: Concrete metric #2 (latency, throughput, cost)",
         "TODO: Concrete metric #3 (adoption, retention, savings)"
       ],
-      "stack": [
-        "TypeScript",
-        "Python",
-        "FastAPI",
-        "Postgres"
-      ],
+      "stack": ["TypeScript", "Python", "FastAPI", "Postgres"],
       "links": {
         "live": "",
         "repo": "",
@@ -302,16 +282,8 @@
       "problem": "<p>TODO: Business problem.</p>",
       "aiArchitecture": "<p>TODO: AI architecture.</p>",
       "fullStackInfra": "<p>TODO: Infrastructure.</p>",
-      "outcomes": [
-        "TODO: Metric #1",
-        "TODO: Metric #2",
-        "TODO: Metric #3"
-      ],
-      "stack": [
-        "Angular",
-        "Node.js",
-        "Redis"
-      ],
+      "outcomes": ["TODO: Metric #1", "TODO: Metric #2", "TODO: Metric #3"],
+      "stack": ["Angular", "Node.js", "Redis"],
       "links": {
         "live": "",
         "repo": "",
@@ -343,16 +315,8 @@
       "problem": "<p>TODO: Business problem.</p>",
       "aiArchitecture": "<p>TODO: AI architecture.</p>",
       "fullStackInfra": "<p>TODO: Infrastructure.</p>",
-      "outcomes": [
-        "TODO: Metric #1",
-        "TODO: Metric #2",
-        "TODO: Metric #3"
-      ],
-      "stack": [
-        "React",
-        "PyTorch",
-        "Docker"
-      ],
+      "outcomes": ["TODO: Metric #1", "TODO: Metric #2", "TODO: Metric #3"],
+      "stack": ["React", "PyTorch", "Docker"],
       "links": {
         "live": "",
         "repo": "",

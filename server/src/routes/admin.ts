@@ -2,6 +2,7 @@ import { desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
+import { adminAskRouter } from "../ask/admin.js";
 import { requireAdmin } from "../auth/middleware.js";
 import { adminCollectionsRouter } from "./admin-collections.js";
 import { adminMediaRouter } from "./admin-media.js";
@@ -48,6 +49,7 @@ adminRouter.use("*", ...requireAdmin);
 adminRouter.route("/", adminCollectionsRouter);
 adminRouter.route("/", adminMediaRouter);
 adminRouter.route("/", adminMessagesRouter);
+adminRouter.route("/", adminAskRouter);
 
 /**
  * True when publishing now would change what visitors see.

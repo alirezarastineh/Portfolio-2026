@@ -6,7 +6,7 @@ let sdk: SentrySdk | undefined;
  * Error reporting to Sentry, off unless SENTRY_DSN is set. The SDK is only
  * imported then, so an unconfigured deploy pays nothing for it.
  *
- * Errors only: no tracing, and `skipOpenTelemetrySetup` keeps the SDK from
+ * Errors only: no tracing, and `enableOpenTelemetrySetup: false` keeps the SDK from
  * registering its OpenTelemetry auto-instrumentation — for a portfolio API
  * that is memory and per-request overhead with nothing to show for it.
  */
@@ -19,9 +19,21 @@ export async function initSentry(): Promise<void> {
     dsn,
     environment: process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV,
     release: process.env.SENTRY_RELEASE || undefined,
-    // No IPs, cookies or request bodies leave the server.
-    sendDefaultPii: false,
-    skipOpenTelemetrySetup: true,
+    // No IPs, cookies, headers, bodies or local variables leave the server —
+    // and no assistant questions or answers. SDK 11 collects all of these by
+    // default (it replaced `sendDefaultPii`), so each is switched off here.
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: false,
+      httpBodies: [],
+      urlQueryParams: false,
+      genAI: { inputs: false, outputs: false },
+      databaseQueryData: false,
+      queues: false,
+      stackFrameVariables: false,
+    },
+    enableOpenTelemetrySetup: false,
   });
   sdk = Sentry;
 }

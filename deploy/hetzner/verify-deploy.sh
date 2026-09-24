@@ -176,6 +176,7 @@ else
 fi
 check "the inline event-replay script carries the request's nonce" script_has_nonce ng-event-dispatch-contract
 check "the inline theme script carries the request's nonce" script_has_nonce theme-init
+check "the inline app loader carries the request's nonce" script_has_nonce app-boot
 CSP_HEADER="$(curl -fsSI "${CLIENT}/en" | tr -d '\r' | grep -io '^content-security-policy[a-z-]*' | head -n1 || true)"
 echo "  info  served as: ${CSP_HEADER:-none} (CSP_MODE=enforce in .env once report-only stays quiet)"
 
@@ -237,8 +238,60 @@ check "sharp loads in the api container (image processing works)" \
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T api \
   node -e "import('sharp').then((m) => process.exit(m.default.versions.vips ? 0 : 1), () => process.exit(1))"
 
+echo "== assistant =="
+# None of these calls a model: nothing here costs money.
+ASK_CONFIG="$(curl -fsS "${API}/v1/ask/config" 2>/dev/null || true)"
+if [[ "${ASK_CONFIG}" == *'"state"'* ]]; then
+  ASK_STATE="$(sed -n 's/.*"state":"\([a-z]*\)".*/\1/p' <<<"${ASK_CONFIG}")"
+  pass "assistant config is served (state: ${ASK_STATE:-?})"
+  if [[ "${ASK_STATE}" != "ok" ]]; then
+    echo "  info  the assistant is ${ASK_STATE}: SERVER_AI_ENABLED, a model key, the admin switch, or today's budget"
+  fi
+else
+  fail "assistant config is not served (${API}/v1/ask/config)"
+fi
+check "assistant rejects a malformed question without calling a model" \
+  bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' '${API}/v1/ask')\" = 400 ]"
+check "assistant admin is locked without a session" \
+  bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${API}/admin/assistant/settings')\" = 401 ]"
+if [[ "$(db_value "select count(*) from information_schema.tables where table_name in ('ai_settings', 'ai_faq', 'ai_usage', 'ai_messages', 'ai_feedback', 'ai_rate_events')")" == "6" ]]; then
+  pass "assistant tables exist (migration 0008)"
+else
+  fail "assistant tables missing — migration 0008_ask_assistant not applied?"
+fi
+check "the assistant's search and tokenizer load in the api container" \
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T api \
+  node -e "Promise.all([import('minisearch'), import('js-tiktoken/lite'), import('js-tiktoken/ranks/o200k_base')]).then(() => process.exit(0), () => process.exit(1))"
+# Three ticks 400 ms apart: streamed, the first arrives long before the last.
+STREAM_TIMES="$(curl -s -o /dev/null -w '%{time_starttransfer} %{time_total}' "${API}/v1/ask/stream-check" || true)"
+if awk -v t="${STREAM_TIMES}" 'BEGIN { split(t, a, " "); exit !(a[2] - a[1] > 0.5) }'; then
+  pass "the api streams (first byte ${STREAM_TIMES%% *}s, end ${STREAM_TIMES##* }s)"
+else
+  fail "the api buffers its stream (first byte / end: ${STREAM_TIMES})"
+fi
+
 echo "== edge (Caddy) =="
 SITE="https://${CLIENT_PUBLIC_DOMAIN:-alirezarastineh.me}"
+API_SITE="https://${SERVER_PUBLIC_DOMAIN:-api.alirezarastineh.me}"
+# Compression or proxy buffering would deliver an answer in one lump at the end.
+EDGE_STREAM_TIMES="$(curl -s -o /dev/null -H 'Accept-Encoding: gzip, zstd' -w '%{time_starttransfer} %{time_total}' "${API_SITE}/v1/ask/stream-check" || true)"
+if awk -v t="${EDGE_STREAM_TIMES}" 'BEGIN { split(t, a, " "); exit !(a[2] - a[1] > 0.5) }'; then
+  pass "Caddy passes the assistant's stream through as it happens"
+else
+  fail "Caddy buffers the assistant's stream (first byte / end: ${EDGE_STREAM_TIMES}) — see the @stream block in the Caddyfile"
+fi
+STREAM_HEADERS="$(curl -s -D - -o /dev/null -H 'Accept-Encoding: gzip, zstd' "${API_SITE}/v1/ask/stream-check" || true)"
+if ! grep -qi '^content-encoding' <<<"${STREAM_HEADERS}"; then
+  pass "the assistant's stream is not compressed at the edge"
+else
+  fail "the assistant's stream is compressed at the edge (it would be buffered)"
+fi
+CONTENT_HEADERS="$(curl -s -D - -o /dev/null -H 'Accept-Encoding: gzip' "${API_SITE}/v2/content/en" || true)"
+if grep -qi '^content-encoding' <<<"${CONTENT_HEADERS}"; then
+  pass "the content JSON is still compressed at the edge"
+else
+  fail "the content JSON is no longer compressed at the edge"
+fi
 # The API's JSON 404 (not the site's HTML one) proves /media/* reaches the API.
 check "site domain proxies /media/* to the api" \
   bash -c "curl -s '${SITE}/media/00000000-0000-4000-8000-000000000000.png' | grep -q '\"error\":\"not_found\"'"

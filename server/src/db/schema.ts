@@ -6,6 +6,7 @@ import {
   check,
   customType,
   date,
+  doublePrecision,
   index,
   inet,
   integer,
@@ -13,6 +14,7 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -615,6 +617,143 @@ export const contactMessages = pgTable(
       sql`${t.mailStatus} in ('pending', 'sent', 'failed', 'skipped')`,
     ),
   ],
+);
+
+/* -------------------------------------------------------------------------- */
+/* Portfolio assistant                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What the admin can change without a deploy. One row (id 1); a missing row
+ * means the defaults below, so a fresh database needs no seed.
+ */
+export const aiSettings = pgTable(
+  "ai_settings",
+  {
+    id: integer("id").primaryKey().default(1),
+    /** The admin's switch; `SERVER_AI_ENABLED` is the deploy's. Both must be on. */
+    enabled: boolean("enabled").notNull().default(true),
+    /** Null = `SERVER_AI_DAILY_BUDGET_USD`. */
+    dailyBudgetUsd: doublePrecision("daily_budget_usd"),
+    deepEnabled: boolean("deep_enabled").notNull().default(true),
+    suggestedQuestions: jsonb("suggested_questions")
+      .$type<Record<Locale, string[]>>()
+      .notNull()
+      .default({ en: [], de: [] }),
+    /** "How does this assistant work?", per language; empty = the built-in text. */
+    systemCard: jsonb("system_card")
+      .$type<Record<Locale, string>>()
+      .notNull()
+      .default({ en: "", de: "" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check("ai_settings_singleton_check", sql`${t.id} = 1`)],
+);
+
+/** Curated answers the assistant may cite; live on save, never published. */
+export const aiFaq = pgTable(
+  "ai_faq",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    position: integer("position").notNull(),
+    isVisible: boolean("is_visible").notNull().default(true),
+    ...timestamps,
+  },
+  (t) => [index("ai_faq_position_idx").on(t.position, t.id)],
+);
+
+export const aiFaqTranslations = pgTable(
+  "ai_faq_translations",
+  {
+    faqId: uuid("faq_id")
+      .notNull()
+      .references(() => aiFaq.id, { onDelete: "cascade" }),
+    locale: localeEnum("locale").notNull(),
+    question: text("question").notNull(),
+    answer: text("answer").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.faqId, t.locale] })],
+);
+
+/** Aggregates only (no content), per UTC day and model; kept indefinitely. */
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    day: date("day", { mode: "string" }).notNull(),
+    model: text("model").notNull(),
+    /** Model calls, not answers: one answer can take several steps or fallbacks. */
+    requests: integer("requests").notNull().default(0),
+    inputTokens: bigint("input_tokens", { mode: "number" }).notNull().default(0),
+    cachedInputTokens: bigint("cached_input_tokens", { mode: "number" }).notNull().default(0),
+    outputTokens: bigint("output_tokens", { mode: "number" }).notNull().default(0),
+    thoughtTokens: bigint("thought_tokens", { mode: "number" }).notNull().default(0),
+    usd: doublePrecision("usd").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.model] })],
+);
+
+/**
+ * One row per answer, redacted before insert: no IPs, emails or phone numbers.
+ * Pruned after 90 days.
+ */
+export const aiMessages = pgTable(
+  "ai_messages",
+  {
+    /** The assistant message id the visitor's browser holds (feedback refers to it). */
+    id: text("id").primaryKey(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Salted hash of the tab's random session id. */
+    sessionHash: text("session_hash").notNull(),
+    locale: localeEnum("locale").notNull(),
+    /** `terminal` (visitors), `playground` (the admin, draft content) or `eval`. */
+    source: text("source").notNull().default("terminal"),
+    /** `lite`, `deep`, or `answer-only` when only a model without tools was left. */
+    route: text("route").notNull(),
+    questionRedacted: text("question_redacted").notNull(),
+    answerExcerpt: text("answer_excerpt").notNull().default(""),
+    citedIds: jsonb("cited_ids").$type<string[]>().notNull().default([]),
+    toolCalls: jsonb("tool_calls").$type<string[]>().notNull().default([]),
+    /** The model that produced the answer; null when none did. */
+    model: text("model"),
+    attempts: jsonb("attempts").$type<unknown[]>().notNull().default([]),
+    ttftMs: integer("ttft_ms"),
+    totalMs: integer("total_ms").notNull(),
+    tokens: jsonb("tokens")
+      .$type<{ input: number; cached: number; output: number; thoughts: number }>()
+      .notNull(),
+    usd: doublePrecision("usd").notNull().default(0),
+    finishReason: text("finish_reason").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+  },
+  (t) => [
+    index("ai_messages_created_idx").on(t.createdAt.desc()),
+    index("ai_messages_session_idx").on(t.sessionHash, t.createdAt),
+    check("ai_messages_source_check", sql`${t.source} in ('terminal', 'playground', 'eval')`),
+  ],
+);
+
+export const aiFeedback = pgTable(
+  "ai_feedback",
+  {
+    messageId: text("message_id")
+      .primaryKey()
+      .references(() => aiMessages.id, { onDelete: "cascade" }),
+    value: smallint("value").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check("ai_feedback_value_check", sql`${t.value} in (-1, 1)`)],
+);
+
+/** Rate-limit events, keyed by a salted IP hash or session hash; pruned after a day. */
+export const aiRateEvents = pgTable(
+  "ai_rate_events",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    bucket: text("bucket").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("ai_rate_events_bucket_time_idx").on(t.bucket, t.occurredAt.desc())],
 );
 
 export type Locale = (typeof localeEnum.enumValues)[number];

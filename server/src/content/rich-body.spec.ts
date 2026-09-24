@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
+import { supportedLanguages } from "./highlight.js";
 import { unrenderBody } from "./restore.js";
 import {
   bodyMediaFilenames,
@@ -25,6 +26,10 @@ const media = new Map<string, BodyMedia>([
     },
   ],
 ]);
+
+// Shiki loads its grammars and themes once, on first use: seconds on a busy
+// machine. Paid here, so no test's own timeout includes it.
+beforeAll(() => supportedLanguages(), 30_000);
 
 describe("slugify", () => {
   it("makes readable, ASCII ids from headings in either language", () => {

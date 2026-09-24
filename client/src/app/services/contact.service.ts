@@ -1,4 +1,6 @@
-import { Injectable } from "@angular/core";
+import { Injectable, signal } from "@angular/core";
+
+import { apiBaseUrl } from "./api-base";
 
 export interface ContactPayload {
   name: string;
@@ -10,22 +12,15 @@ export interface ContactPayload {
 
 export type ContactResult = { ok: true } | { ok: false; error: string };
 
-/** Empty string = same-origin `/contact` (Vite dev proxy or unified deploy). */
-function resolveBaseUrl(): string {
-  const meta = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
-  let fromEnv = meta?.["VITE_API_BASE_URL"];
-  if (fromEnv && fromEnv.length > 0) {
-    while (fromEnv.endsWith("/")) {
-      fromEnv = fromEnv.slice(0, -1);
-    }
-    return fromEnv;
-  }
-  return "";
-}
-
 @Injectable({ providedIn: "root" })
 export class ContactService {
-  private readonly baseUrl = resolveBaseUrl();
+  private readonly baseUrl = apiBaseUrl();
+
+  /**
+   * A message the assistant's hand-off wrote, waiting for the form to take it
+   * (the form may not have hydrated yet). The visitor confirmed it first.
+   */
+  readonly prefill = signal<string | null>(null);
 
   async send(payload: ContactPayload): Promise<ContactResult> {
     try {

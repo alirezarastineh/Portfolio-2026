@@ -2,6 +2,7 @@ import {
   type AfterViewChecked,
   ChangeDetectionStrategy,
   Component,
+  computed,
   ElementRef,
   input,
   viewChild,
@@ -31,6 +32,16 @@ export function restoreHeadingIds(root: Element, toc: readonly TocEntry[]): void
 }
 
 /**
+ * The published body minus the heading ids Angular's sanitizer would strip
+ * anyway (they are restored from the table of contents after rendering). With
+ * nothing left for it to remove, the sanitizer stays on and silent: in dev mode
+ * it warns on every body otherwise.
+ */
+export function withoutHeadingIds(html: string): string {
+  return html.replace(/<(h[23])\s+id="[^"<>]*"/g, "<$1");
+}
+
+/**
  * A published long-form body: a case study, a post, a legal page. Sanitized
  * on write by the API; Angular sanitizes it again here, and the table of
  * contents' anchors are put back afterwards — in the server render too, so a
@@ -40,11 +51,13 @@ export function restoreHeadingIds(root: Element, toc: readonly TocEntry[]): void
   selector: "app-prose-body",
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: "block" },
-  template: `<div #body class="prose-body" [innerHTML]="html()"></div>`,
+  template: `<div #body class="prose-body" [innerHTML]="sanitizable()"></div>`,
 })
 export class ProseBodyComponent implements AfterViewChecked {
   readonly html = input.required<string>();
   readonly toc = input<readonly TocEntry[]>([]);
+
+  protected readonly sanitizable = computed(() => withoutHeadingIds(this.html()));
 
   private readonly body = viewChild.required<ElementRef<HTMLElement>>("body");
 

@@ -17,8 +17,18 @@ export const EVENT_DISPATCH_SCRIPT_ID = "ng-event-dispatch-contract";
  */
 export const THEME_SCRIPT_ID = "theme-init";
 
+/**
+ * The build's loader that starts the app after the first paint
+ * (`build/boot-after-paint.ts`, which uses the same id).
+ */
+export const APP_BOOT_SCRIPT_ID = "app-boot";
+
 /** The inline scripts Angular does not nonce itself, by id. */
-export const KNOWN_INLINE_SCRIPT_IDS = [EVENT_DISPATCH_SCRIPT_ID, THEME_SCRIPT_ID] as const;
+export const KNOWN_INLINE_SCRIPT_IDS = [
+  EVENT_DISPATCH_SCRIPT_ID,
+  THEME_SCRIPT_ID,
+  APP_BOOT_SCRIPT_ID,
+] as const;
 
 /**
  * Stamps the per-request nonce on the known inline scripts Angular does not

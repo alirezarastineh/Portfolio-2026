@@ -101,7 +101,11 @@ function headerSafe(text: string): string {
  * PDF set as the CV for both languages drops the language. Any other document
  * keeps its uploader's name.
  */
-async function documentName(db: DbExecutor, assetId: string, originalName: string): Promise<string> {
+async function documentName(
+  db: DbExecutor,
+  assetId: string,
+  originalName: string,
+): Promise<string> {
   const resumes = await db
     .select({ locale: profileResumes.locale })
     .from(profileResumes)

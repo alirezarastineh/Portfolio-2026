@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
+import { LOCALES as SCHEMA_LOCALES, type Locale as SchemaLocale } from "./schema";
 import {
+  LOCALES,
+  type Locale,
   localeOfPath,
   localeRedirect,
   negotiateLocale,
@@ -10,6 +13,13 @@ import {
   swapLocale,
   switchTargets,
 } from "./locale";
+
+describe("LOCALES", () => {
+  it("is the content schema's list", () => {
+    expect(LOCALES).toEqual(SCHEMA_LOCALES);
+    expectTypeOf<Locale>().toEqualTypeOf<SchemaLocale>();
+  });
+});
 
 describe("negotiateLocale", () => {
   it("prefers an explicit choice over the browser's languages", () => {

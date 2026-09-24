@@ -4,11 +4,13 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   ElementRef,
   inject,
   Injector,
   PLATFORM_ID,
   signal,
+  untracked,
   viewChild,
 } from "@angular/core";
 import { FormBuilder, ReactiveFormsModule, Validators } from "@angular/forms";
@@ -249,6 +251,20 @@ export class ContactSectionComponent {
 
   constructor() {
     afterNextRender(() => this.ready.set(this.isBrowser));
+
+    // The assistant's hand-off (after the visitor confirmed it): the summary
+    // becomes the message, and the visitor adds their name and email.
+    effect(() => {
+      const text = this.contact.prefill();
+      if (!text || !this.isBrowser) return;
+      untracked(() => {
+        this.contact.prefill.set(null);
+        if (this.state() === "success") this.reset();
+        this.form.controls.message.setValue(text.slice(0, 4000));
+        this.form.controls.message.markAsDirty();
+        afterNextRender(() => this.firstField()?.focus(), { injector: this.injector });
+      });
+    });
   }
 
   /**

@@ -27,6 +27,8 @@ interface FieldDef {
   label: string;
   multiline?: boolean;
   hint?: string;
+  /** Offer the AI copilot; off for URLs, names and codes. */
+  ai?: boolean;
 }
 
 const FIELDS: FieldDef[] = [
@@ -37,19 +39,29 @@ const FIELDS: FieldDef[] = [
     multiline: true,
     hint: "Roughly 150–160 characters.",
   },
-  { key: "author", label: "Author" },
-  { key: "siteName", label: "Site name" },
-  { key: "canonical", label: "Canonical URL", hint: "Absolute URL, including the trailing slash." },
-  { key: "themeColor", label: "Theme colour", hint: "Hex value used by mobile browser chrome." },
+  { key: "author", label: "Author", ai: false },
+  { key: "siteName", label: "Site name", ai: false },
+  {
+    key: "canonical",
+    label: "Canonical URL",
+    hint: "Absolute URL, including the trailing slash.",
+    ai: false,
+  },
+  {
+    key: "themeColor",
+    label: "Theme colour",
+    hint: "Hex value used by mobile browser chrome.",
+    ai: false,
+  },
   { key: "ogTitle", label: "OG title" },
   { key: "ogDescription", label: "OG description", multiline: true },
-  { key: "ogImage", label: "OG image URL" },
-  { key: "ogUrl", label: "OG URL" },
-  { key: "ogLocale", label: "OG locale", hint: "e.g. en_US / de_DE." },
-  { key: "twitterCard", label: "Twitter card type" },
+  { key: "ogImage", label: "OG image URL", ai: false },
+  { key: "ogUrl", label: "OG URL", ai: false },
+  { key: "ogLocale", label: "OG locale", hint: "e.g. en_US / de_DE.", ai: false },
+  { key: "twitterCard", label: "Twitter card type", ai: false },
   { key: "twitterTitle", label: "Twitter title" },
   { key: "twitterDescription", label: "Twitter description", multiline: true },
-  { key: "twitterImage", label: "Twitter image URL" },
+  { key: "twitterImage", label: "Twitter image URL", ai: false },
 ];
 
 type SeoGroup = Record<keyof Seo, FormControl<string>>;
@@ -95,6 +107,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
               [multiline]="field.multiline ?? false"
               [rows]="2"
               [view]="view()"
+              [ai]="field.ai ?? true"
               [controlEn]="controlFor('en', field.key)"
               [controlDe]="controlFor('de', field.key)"
             />

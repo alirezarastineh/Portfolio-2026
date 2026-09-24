@@ -86,9 +86,21 @@
     "strictTemplates": true,
     "disableTypeScriptVersionCheck": true
   },
+  // The shared options above; each file is checked by the project below that
+  // includes it (the editor follows these references too).
+  "files": [],
   "references": [
     {
+      "path": "tsconfig.app.json"
+    },
+    {
       "path": "tsconfig.spec.json"
+    },
+    {
+      "path": "tsconfig.node.json"
+    },
+    {
+      "path": "e2e/tsconfig.json"
     }
   ]
 }

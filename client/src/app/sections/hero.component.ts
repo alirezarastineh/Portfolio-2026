@@ -3,6 +3,7 @@ import { RouterLink } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideDownload } from "@ng-icons/lucide";
 
+import { AskLauncherService } from "../ask/ask-launcher.service";
 import { MagneticButtonComponent } from "../components/magnetic-button.component";
 import { PictureComponent } from "../components/picture.component";
 import { regionName, timeZoneLabel } from "../content/place";
@@ -104,11 +105,12 @@ const DOT: Record<Availability, string> = {
           }
         </div>
 
-        <!-- The About terminal becomes the portfolio assistant (Phase 7). -->
+        <!-- To the About terminal, whose prompt is the portfolio assistant. -->
         <a
           class="group inline-flex w-fit items-center gap-2 font-mono text-sm text-muted-foreground transition-colors duration-200 hover:text-foreground"
           [routerLink]="['/', lang.lang()]"
           fragment="about"
+          (click)="launcher.focusPrompt()"
         >
           <span class="text-accent-orange" aria-hidden="true">&gt;</span>
           <span
@@ -133,6 +135,7 @@ const DOT: Record<Availability, string> = {
 })
 export class HeroSectionComponent {
   readonly lang = inject(LanguageService);
+  protected readonly launcher = inject(AskLauncherService);
   readonly identity = computed(() => this.lang.content().identity);
 
   protected readonly dot = computed(() => DOT[this.identity().availability]);

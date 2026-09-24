@@ -13,6 +13,9 @@ import {
   untracked,
 } from "@angular/core";
 
+import { AskLauncherService } from "../ask/ask-launcher.service";
+import { hasStoredConversation } from "../ask/ask-storage";
+import { TerminalShellComponent } from "../ask/terminal-shell.component";
 import { SectionHeadingComponent } from "../components/section-heading.component";
 import { TerminalWindowComponent } from "../components/terminal-window.component";
 import { CHROME } from "../i18n/chrome";
@@ -26,12 +29,13 @@ import { typingAt, type TerminalLine, type TypingState } from "./about-typing";
  * In the browser, if the section has not been seen yet, it types itself out
  * the first time it scrolls into view. Text not yet typed keeps its place
  * (hidden, not removed), so nothing below it moves; "skip" shows it all.
- * Reduced motion never animates. Phase 7 turns the prompt into the assistant.
+ * Reduced motion never animates. The last line is the portfolio assistant's
+ * prompt (`ask/terminal-shell.component.ts`), loaded lazily.
  */
 @Component({
   selector: "app-about-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [SectionHeadingComponent, TerminalWindowComponent],
+  imports: [SectionHeadingComponent, TerminalShellComponent, TerminalWindowComponent],
   host: {
     class: "block",
   },
@@ -85,11 +89,24 @@ import { typingAt, type TerminalLine, type TypingState } from "./about-typing";
                     >{{ hidden(line.output, i, "out") }}</span
                   ></p>
               }
-              <div class="mt-1 flex items-baseline gap-2" [class.invisible]="!finished()">
-                <span class="text-accent-orange">{{ lang.t().about.terminalPrompt }}</span>
-                <span class="terminal-caret" aria-hidden="true"></span>
-              </div>
             </div>
+            <!-- The live prompt: the assistant's shell, loaded as the section
+                 nears the screen (or when asked for). Until then — and on the
+                 server — the same prompt, caret and hint hold its place. Not
+                 \`on viewport\`: that trigger runs during the server render here. -->
+            @defer (when loadShell()) {
+              <app-terminal-shell [active]="finished()" />
+            } @placeholder {
+              <div>
+                <div class="mt-1 flex items-baseline gap-2" [class.invisible]="!finished()">
+                  <span class="text-accent-orange">{{ lang.t().about.terminalPrompt }}</span>
+                  <span class="terminal-caret" aria-hidden="true"></span>
+                </div>
+                <p class="m-0 mt-1 text-xs text-muted-foreground" [class.invisible]="!finished()">
+                  {{ lang.t().ask.hint }} · {{ lang.t().ask.disclosure }}
+                </p>
+              </div>
+            }
           </app-terminal-window>
 
           @if (typing()) {
@@ -131,10 +148,17 @@ export class AboutSectionComponent {
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private observer?: IntersectionObserver;
+  private shellObserver?: IntersectionObserver;
+
+  /** True once the shell's code should load: near the screen, asked for, or a returning tab. */
+  protected readonly loadShell = signal(false);
   private stop?: () => void;
 
   constructor() {
-    afterNextRender(() => this.arm());
+    afterNextRender(() => {
+      this.arm();
+      this.watchForShell();
+    });
 
     // New copy (a language switch) shows in full at once, never retyped.
     effect(() => {
@@ -142,8 +166,19 @@ export class AboutSectionComponent {
       untracked(() => this.skip());
     });
 
+    // "Ask my portfolio" wants the prompt now, not after the intro.
+    const launcher = inject(AskLauncherService);
+    effect(() => {
+      if (!launcher.focusPending()) return;
+      untracked(() => {
+        this.skip();
+        this.loadShell.set(true);
+      });
+    });
+
     inject(DestroyRef).onDestroy(() => {
       this.observer?.disconnect();
+      this.shellObserver?.disconnect();
       this.stop?.();
     });
   }
@@ -180,9 +215,28 @@ export class AboutSectionComponent {
    * already on screen when the page becomes interactive (a link to #about),
    * it stays as it is.
    */
+  /** Loads the prompt's code a little before the section scrolls into view. */
+  private watchForShell(): void {
+    if (!this.isBrowser) return;
+    if (hasStoredConversation()) {
+      this.loadShell.set(true);
+      return;
+    }
+    this.shellObserver = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        this.shellObserver?.disconnect();
+        this.loadShell.set(true);
+      },
+      { rootMargin: "300px 0px" },
+    );
+    this.shellObserver.observe(this.host.nativeElement);
+  }
+
   private arm(): void {
-    // Render hooks run during the server render here too.
-    if (!this.isBrowser || prefersReducedMotion()) return;
+    // Render hooks run during the server render here too. A tab that already
+    // talked to the assistant has seen the intro.
+    if (!this.isBrowser || prefersReducedMotion() || hasStoredConversation()) return;
     let first = true;
     this.observer = new IntersectionObserver(
       (entries) => {

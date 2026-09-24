@@ -25,6 +25,7 @@ import {
   lucideSun,
 } from "@ng-icons/lucide";
 
+import { AskLauncherService } from "../ask/ask-launcher.service";
 import { otherLocale } from "../content/locale";
 import { splitCommentMark } from "../i18n/comment-mark";
 import { CHROME } from "../i18n/chrome";
@@ -166,6 +167,7 @@ interface Group {
 export class CommandPaletteComponent {
   protected readonly palette = inject(CommandPaletteService);
   private readonly lang = inject(LanguageService);
+  private readonly launcher = inject(AskLauncherService);
   private readonly theme = inject(ThemeService);
   private readonly router = inject(Router);
   private readonly doc = inject(DOCUMENT);
@@ -236,7 +238,15 @@ export class CommandPaletteComponent {
         label: labels.palette.ask,
         icon: "lucideSparkles",
         keywords: t.hero.askCta,
-        run: go(["/", l], "about"),
+        // Home has the terminal in its About section; elsewhere it opens in a sheet.
+        run: () => {
+          if (this.lang.page() === "/") {
+            this.launcher.focusPrompt();
+            void this.router.navigate(["/", l], { fragment: "about" });
+          } else {
+            this.launcher.openSheet();
+          }
+        },
       },
       {
         id: "palette-language",

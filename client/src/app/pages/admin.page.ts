@@ -33,6 +33,7 @@ import {
   lucideSearch,
   lucideSend,
   lucideShare2,
+  lucideSparkles,
   lucideSquareUser,
   lucideUser,
 } from "@ng-icons/lucide";
@@ -86,6 +87,7 @@ const NAV: NavItem[] = [
   { path: "/admin/preview", label: "Preview draft", icon: "lucideEye", group: "Overview" },
   { path: "/admin/publications", label: "Publications", icon: "lucideHistory", group: "Overview" },
   { path: "/admin/inbox", label: "Inbox", icon: "lucideInbox", group: "Overview" },
+  { path: "/admin/assistant", label: "Assistant", icon: "lucideSparkles", group: "Overview" },
   { path: "/admin/hero", label: "Hero & identity", icon: "lucideSquareUser", group: "Content" },
   { path: "/admin/about", label: "Über mich", icon: "lucideFileText", group: "Content" },
   { path: "/admin/skills", label: "Skills", icon: "lucideLayers", group: "Content" },
@@ -135,6 +137,7 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
       lucideSearch,
       lucideSend,
       lucideShare2,
+      lucideSparkles,
       lucideSquareUser,
       lucideUser,
     }),

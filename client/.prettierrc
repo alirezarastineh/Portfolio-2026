@@ -1,7 +1,5 @@
 {
   "semi": true,
   "singleQuote": false,
-  "printWidth": 100,
-  "tailwindPreserveWhitespace": true,
-  "tailwindPreserveDuplicates": true
+  "printWidth": 100
 }

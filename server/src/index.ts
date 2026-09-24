@@ -1,6 +1,11 @@
 import { serve } from "@hono/node-server";
 
 import { createApp } from "./app.js";
+import { getAskConfig } from "./ask/config.js";
+import { startAskPruning } from "./ask/log.js";
+import { checkModels } from "./ask/models/registry.js";
+import { abortAllAsks } from "./ask/route.js";
+import { loadEncoder } from "./ask/tokens.js";
 import { startSessionPruning } from "./auth/session.js";
 import { backfillContentV2 } from "./content/backfill.js";
 import { closeDb } from "./db/client.js";
@@ -53,6 +58,23 @@ if (migrated) {
 startAuthAttemptPruning();
 startSessionPruning();
 startContactPruning();
+startAskPruning();
+
+// The assistant never blocks the boot: a bad setting or missing key switches
+// it off, and the model check runs in the background.
+const askConfig = getAskConfig();
+if (askConfig.unavailableReason) {
+  console.warn(`[ask] assistant unavailable: ${askConfig.unavailableReason}`);
+} else if (askConfig.enabled) {
+  void loadEncoder();
+  void checkModels(askConfig);
+  if (askConfig.explicitCache) {
+    // Reserved: explicit context caching bills storage by the hour and does
+    // not pay off at portfolio traffic (the plan, §7.2). Implicit caching of
+    // the fixed prefix applies either way.
+    console.warn("[ask] SERVER_AI_EXPLICIT_CACHE is not implemented; implicit caching is used");
+  }
+}
 
 // Nothing is uploading yet, so any `.part` file is left over from a crash.
 const partials = await cleanupPartialUploads();
@@ -92,6 +114,8 @@ function shutdown(signal: string): void {
     process.exit(1);
   }, SHUTDOWN_TIMEOUT_MS).unref();
 
+  // Answers can stream for minutes; end them now so the drain can finish.
+  abortAllAsks();
   server.close((error) => {
     void Promise.allSettled([closeDb(), flushSentry()])
       .then((results) => {
