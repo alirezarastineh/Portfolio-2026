@@ -6,7 +6,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 // With its extension: Vite's native config loader (Node type stripping) needs it.
 import { localeRedirect } from "./src/app/content/locale.ts";
-import { bootAfterPaint } from "./build/boot-after-paint.ts";
+import { bootAfterPaint } from "./vite-plugins/boot-after-paint.ts";
 
 /**
  * Satori shapes text with HarfBuzz, compiled to WebAssembly: `hb.js` reads

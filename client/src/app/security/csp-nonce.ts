@@ -19,7 +19,7 @@ export const THEME_SCRIPT_ID = "theme-init";
 
 /**
  * The build's loader that starts the app after the first paint
- * (`build/boot-after-paint.ts`, which uses the same id).
+ * (`vite-plugins/boot-after-paint.ts`, which uses the same id).
  */
 export const APP_BOOT_SCRIPT_ID = "app-boot";
 

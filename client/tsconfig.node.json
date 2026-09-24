@@ -13,8 +13,8 @@
     "vite.config.ts",
     "vitest.config.ts",
     "eslint.config.ts",
-    "build/**/*.ts",
+    "vite-plugins/**/*.ts",
     "scripts/**/*.ts"
   ],
-  "exclude": ["build/**/*.spec.ts"]
+  "exclude": ["vite-plugins/**/*.spec.ts"]
 }

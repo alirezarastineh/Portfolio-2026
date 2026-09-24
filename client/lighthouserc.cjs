@@ -10,9 +10,9 @@
 // Hard gates: accessibility, best practices and SEO stay at 100, no layout
 // shift, no third-party requests, and byte budgets on scripts and styles.
 // Performance only warns: measured 2026-09-24, with the app starting after
-// the first paint (build/boot-after-paint.ts), 0.94-0.97 home, 0.99-1 case
-// study, 1 legal page. Home's total blocking time varies from run to run
-// (~190-270 ms): its hydration is the most work.
+// the first paint (vite-plugins/boot-after-paint.ts), 0.94-0.97 home,
+// 0.99-1 case study, 1 legal page. Home's total blocking time varies from
+// run to run (~190-270 ms): its hydration is the most work.
 const PORT = process.env.LHCI_PORT || "4174";
 const BASE = `http://127.0.0.1:${PORT}`;
 const KB = 1024;

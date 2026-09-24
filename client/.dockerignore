@@ -35,6 +35,3 @@
 **/.lighthouseci
 LICENSE
 README.md
-
-# Not build output (that is dist/): the Vite plugins vite.config.ts loads.
-!build
