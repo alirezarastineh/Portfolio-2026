@@ -1,3 +1,4 @@
+import { DOCUMENT, isPlatformBrowser } from "@angular/common";
 import {
   afterNextRender,
   ChangeDetectionStrategy,
@@ -6,6 +7,7 @@ import {
   ElementRef,
   inject,
   Injector,
+  PLATFORM_ID,
   signal,
   viewChild,
 } from "@angular/core";
@@ -93,6 +95,7 @@ const errorClass = "m-0 font-mono text-[0.72rem] text-destructive";
             novalidate
             class="relative flex flex-col gap-6"
             [attr.aria-busy]="state() === 'submitting' ? 'true' : null"
+            [attr.data-ready]="ready() ? '' : null"
           >
             <div class="flex flex-col gap-1.5">
               <label for="contact-name" [class]="labelClass">{{
@@ -200,7 +203,17 @@ export class ContactSectionComponent {
   private readonly fb = inject(FormBuilder);
   private readonly contact = inject(ContactService);
   private readonly injector = inject(Injector);
+  private readonly doc = inject(DOCUMENT);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   readonly lang = inject(LanguageService);
+
+  /**
+   * True once this form's code runs in the browser. The home page hydrates it
+   * when the browser is idle, so for a moment the server's markup is on screen
+   * without it; `data-ready` on the form marks the difference (tests wait on
+   * it).
+   */
+  protected readonly ready = signal(false);
 
   protected readonly fieldClass = fieldClass;
   protected readonly labelClass = labelClass;
@@ -222,11 +235,32 @@ export class ContactSectionComponent {
   private readonly successMessage = viewChild<ElementRef<HTMLElement>>("success");
 
   readonly form = this.fb.nonNullable.group({
-    name: ["", [Validators.required, Validators.maxLength(120)]],
-    email: ["", [Validators.required, Validators.email, Validators.maxLength(200)]],
-    message: ["", [Validators.required, Validators.minLength(10), Validators.maxLength(4000)]],
-    website: [""],
+    name: [this.typed("name"), [Validators.required, Validators.maxLength(120)]],
+    email: [
+      this.typed("email"),
+      [Validators.required, Validators.email, Validators.maxLength(200)],
+    ],
+    message: [
+      this.typed("message"),
+      [Validators.required, Validators.minLength(10), Validators.maxLength(4000)],
+    ],
+    website: [this.typed("website")],
   });
+
+  constructor() {
+    afterNextRender(() => this.ready.set(this.isBrowser));
+  }
+
+  /**
+   * What is already in the server-rendered field. Someone who started typing
+   * before the form's code arrived keeps their text: the form would otherwise
+   * write its own empty value over it as it takes the field over.
+   */
+  private typed(field: Field | "website"): string {
+    if (!this.isBrowser) return "";
+    const el = this.doc.getElementById(`contact-${field}`);
+    return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.value : "";
+  }
 
   showError(name: Field): boolean {
     const c = this.form.controls[name];
@@ -285,7 +319,9 @@ export class ContactSectionComponent {
   }
 
   reset(): void {
-    this.form.reset();
+    // Explicitly empty: a plain reset() returns to the initial values, which
+    // may be what was typed before the form's code arrived.
+    this.form.reset({ name: "", email: "", message: "", website: "" });
     this.state.set("idle");
     this.errorMsg.set("");
     afterNextRender(() => this.firstField()?.focus(), { injector: this.injector });

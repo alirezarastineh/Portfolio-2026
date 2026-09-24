@@ -207,9 +207,11 @@ async function mockContact(page: Page, onSend: (body: unknown) => void): Promise
 }
 
 test.describe("contact form", () => {
+  // The form hydrates when the browser is idle, which on a busy machine can be
+  // after the network has gone quiet: wait for the form itself to be ready.
   test.beforeEach(async ({ page }) => {
     await page.goto("/en#contact");
-    await interactive(page);
+    await expect(page.locator("#contact form[data-ready]")).toBeAttached();
   });
 
   test("an empty submit marks each field, describes the error, and focuses the first", async ({
@@ -259,5 +261,23 @@ test.describe("contact form", () => {
     await page.getByRole("button", { name: "> send_message()" }).click();
     await expect(page.locator("#contact").getByText("> message_sent.")).toBeVisible();
     expect(requests).toBe(0);
+  });
+});
+
+test.describe("contact form before hydration", () => {
+  test("keeps what was typed before the form's code arrived", async ({ page }) => {
+    // The form's code held back until a field is filled: the visitor types
+    // into the server's markup, then the form hydrates around their text.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(/\/contact\.component-[^/]*\.js$/, async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto("/en#contact");
+    await page.locator("#contact-name").fill("Ada");
+    release();
+    await expect(page.locator("#contact form[data-ready]")).toBeAttached();
+    await expect(page.locator("#contact-name")).toHaveValue("Ada");
   });
 });

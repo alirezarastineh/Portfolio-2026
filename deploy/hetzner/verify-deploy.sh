@@ -92,7 +92,11 @@ check "api rejects an unknown locale" \
 # The one that matters: SSR must render what the database holds. If it does
 # not, either prerendering came back or the BFF cannot reach the API.
 HEADLINE="$(curl -fsS "${API}/v2/content/en" | sed -n 's/.*"heroHeadline":"\([^"]*\)".*/\1/p')"
-if [[ -n "${HEADLINE}" ]] && curl -fsS "${CLIENT}/en" | grep -qF "${HEADLINE}"; then
+# The page is read whole first: piped into `grep -q`, which stops at the first
+# match, curl fails writing the rest of a page larger than the pipe buffer
+# (curl: (23)), and under pipefail a found headline would count as missing.
+HOME_EN="$(curl -fsS "${CLIENT}/en" || true)"
+if [[ -n "${HEADLINE}" ]] && grep -qF "${HEADLINE}" <<<"${HOME_EN}"; then
   pass "SSR renders the published hero headline"
 else
   fail "SSR renders the published hero headline (got '${HEADLINE}')"
@@ -185,7 +189,7 @@ check "each language has an RSS feed" \
 
 echo "== assets =="
 # Nitro serves the build's scripts and styles pre-compressed (compressPublicAssets).
-STYLESHEET="$(curl -fsS "${CLIENT}/en" | grep -o 'href="/assets/[^"]*\.css"' | head -n1 | cut -d'"' -f2 || true)"
+STYLESHEET="$(grep -o 'href="/assets/[^"]*\.css"' <<<"${HOME_EN}" | head -n1 | cut -d'"' -f2 || true)"
 check "the stylesheet is served pre-compressed (brotli)" \
   bash -c "curl -fsSI -H 'Accept-Encoding: br' '${CLIENT}${STYLESHEET}' | tr -d '\r' | grep -qi '^content-encoding: br'"
 check "the web manifest and icons are served" \
