@@ -44,6 +44,8 @@ testem.log
 /test-results
 /.lighthouseci
 /.vitest
+# Design-review screenshots (e2e/visual.spec.ts): per machine, never shared
+/e2e/visual-baseline
 
 # System files
 .DS_Store

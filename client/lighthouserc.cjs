@@ -35,12 +35,15 @@ module.exports = {
         "categories:seo": ["error", { minScore: 1 }],
         "categories:performance": ["warn", { minScore: 0.95 }],
         "cumulative-layout-shift": ["error", { maxNumericValue: 0.1 }],
-        // Transferred bytes. Measured 2026-09-24: scripts ~198 KB on home
+        // Transferred bytes. Measured 2026-09-25: scripts ~204 KB on home
         // (sections below the hero hydrate, and load, as they scroll into
-        // view; the assistant's terminal loads on demand), ~158-167 KB on
-        // subpages; styles ~9.9 KB (admin CSS lives in the admin's chunk).
+        // view; the assistant's terminal loads on demand), ~163-172 KB on
+        // subpages; styles ~9.9 KB (admin CSS lives in the admin's chunk);
+        // fonts 51.8 KB on every page (the Latin Geist and Geist Mono files).
+        // The font budget is that plus 15%: a new family or subset fails it.
         "resource-summary:script:size": ["error", { maxNumericValue: 240 * KB }],
         "resource-summary:stylesheet:size": ["error", { maxNumericValue: 16 * KB }],
+        "resource-summary:font:size": ["error", { maxNumericValue: 60 * KB }],
         "resource-summary:third-party:count": ["error", { maxNumericValue: 0 }],
       },
     },

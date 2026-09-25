@@ -71,11 +71,15 @@ export const test = base.extend<{ problems: PageProblems }>({
  * the contact form). The server-rendered markup is visible long before that,
  * so a visible element proves nothing — until hydration, links are plain
  * links, key handlers do not exist yet, and a form's typing can be lost.
- * Nothing in the DOM marks the moment; the page having stopped fetching code
- * does, which is why this one wait is on the network.
+ *
+ * The app marks the moment on `<html>` (src/app/app-interactive.ts). Waiting
+ * on the network alone was flaky: under parallel load it could go quiet
+ * before the app had even started loading (boot-after-paint). The network
+ * wait stays after the mark for anything a hydrated section fetches next.
  */
 export async function interactive(page: Page): Promise<void> {
-  await page.waitForLoadState("networkidle"); // NOSONAR: hydration has no DOM signal (see above)
+  await page.locator("html[data-hydrated]").waitFor({ state: "attached" });
+  await page.waitForLoadState("networkidle"); // NOSONAR: a floor after the app's own mark (see above)
 }
 
 /** Scripts the browser would execute inline (not `src`, not JSON data blocks). */

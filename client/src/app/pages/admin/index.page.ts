@@ -26,6 +26,7 @@ import {
   type MediaReconcile,
 } from "../../admin/admin-api.service";
 import { PublishDialogComponent } from "../../admin/components/publish-dialog.component";
+import { ReadinessCardComponent } from "../../admin/components/readiness-card.component";
 import { editorLinkForI18n } from "../../admin/editor-links";
 
 /** Shown before "show all" — enough to act on without burying the rest of the page. */
@@ -56,6 +57,7 @@ const KIND_LABELS: Record<I18nItem["kind"], string> = {
     HlmCardTitle,
     HlmSkeleton,
     PublishDialogComponent,
+    ReadinessCardComponent,
     RouterLink,
   ],
   host: { class: "block" },
@@ -102,6 +104,9 @@ const KIND_LABELS: Record<I18nItem["kind"], string> = {
           </div>
         }
       }
+
+      <!-- First: while the site still shows placeholder content, nothing else here matters as much. -->
+      <app-readiness-card />
 
       @if (loading()) {
         <hlm-skeleton class="h-40 w-full" />

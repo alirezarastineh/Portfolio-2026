@@ -3,6 +3,12 @@ import { defineConfig, devices } from "@playwright/test";
 const CI = Boolean(process.env["CI"]);
 const PORT = process.env["E2E_PORT"] ?? "4173";
 const BASE_URL = `http://127.0.0.1:${PORT}`;
+/**
+ * The design-review screenshots (e2e/visual.spec.ts) are a project that only
+ * exists when asked for (`pnpm e2e:visual` sets this), so neither `pnpm e2e`
+ * nor CI runs them. Their baselines stay on the machine that took them.
+ */
+const VISUAL = Boolean(process.env["E2E_VISUAL"]);
 
 /**
  * End-to-end checks against the production build (`pnpm build`, then
@@ -21,9 +27,20 @@ export default defineConfig({
     ...(CI ? {} : { channel: "chrome" }),
   },
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"] } },
+    { name: "desktop", use: { ...devices["Desktop Chrome"] }, testIgnore: /visual\.spec\.ts/ },
     // The phone layout: mobile menu and language switch only.
     { name: "mobile", use: { ...devices["Pixel 7"] }, testMatch: /navigation\.spec\.ts/ },
+    ...(VISUAL
+      ? [
+          {
+            name: "visual",
+            use: { ...devices["Desktop Chrome"] },
+            testMatch: /visual\.spec\.ts/,
+            // Per platform: fonts render differently on Windows and Linux.
+            snapshotPathTemplate: "{testDir}/visual-baseline/{platform}/{arg}{ext}",
+          },
+        ]
+      : []),
   ],
   webServer: {
     command: "node e2e/serve.mjs",

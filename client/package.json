@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "e2e:visual": "node scripts/e2e-visual.mjs",
     "lhci": "node scripts/lhci.mjs",
     "lint": "eslint .",
     "typecheck": "ngc -p tsconfig.app.json --noEmit && tsc -p e2e/tsconfig.json && tsc -p tsconfig.node.json",

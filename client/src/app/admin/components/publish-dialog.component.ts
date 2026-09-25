@@ -27,10 +27,14 @@ import {
 } from "../admin-api.service";
 import { editorLinkFor } from "../editor-links";
 import { diffJson, type DiffEntry } from "../json-diff";
+import { findPlaceholders, type ReadinessHit } from "../readiness";
 import type { Locale } from "../../content/schema";
 
 /** Long values (a case-study body) are shown clipped: the diff says what changed, not all of it. */
 const CLIP = 400;
+
+/** Placeholder fields named in the warning; the dashboard's checklist lists them all. */
+const PLACEHOLDER_PREVIEW = 5;
 
 interface LocaleView {
   locale: Locale;
@@ -39,6 +43,8 @@ interface LocaleView {
   firstPublish: boolean;
   core: DiffEntry[];
   docs: { key: string; change: string; entries: DiffEntry[] }[];
+  /** "TODO" copy the draft would put live: a warning, never a block. */
+  placeholders: ReadinessHit[];
 }
 
 function clip(value: string | undefined): string | undefined {
@@ -61,6 +67,7 @@ function toView(review: LocaleReview): LocaleView {
       change: doc.change,
       entries: doc.change === "changed" ? clipped(diffJson(doc.live, doc.draft)) : [],
     })),
+    placeholders: review.draft ? findPlaceholders(review.draft) : [],
   };
 }
 
@@ -126,6 +133,41 @@ function toView(review: LocaleReview): LocaleView {
                     </span>
                   }
                 </h3>
+
+                @if (!l.issues.length && l.placeholders.length) {
+                  <div
+                    class="rounded-lg border border-accent-orange/50 bg-accent-orange/10 px-3 py-2"
+                    role="note"
+                  >
+                    <p class="m-0 text-[0.8rem]">
+                      <strong class="font-medium">Visitors will see placeholder text</strong>
+                      in {{ l.placeholders.length }}
+                      {{ l.placeholders.length === 1 ? "field" : "fields" }}. Publishing is still
+                      allowed.
+                    </p>
+                    <ul class="m-0 mt-1.5 flex list-none flex-col gap-1 p-0" role="list">
+                      @for (hit of l.placeholders.slice(0, placeholderPreview); track hit.label) {
+                        <li class="flex flex-wrap items-baseline gap-x-2">
+                          <code class="font-mono text-[0.72rem] break-all">{{ hit.label }}</code>
+                          @if (hit.link) {
+                            <a
+                              class="text-[0.78rem] underline underline-offset-4"
+                              [routerLink]="hit.link"
+                              (click)="open.set(false)"
+                              >Fix<span class="sr-only"> {{ hit.label }}</span></a
+                            >
+                          }
+                        </li>
+                      }
+                    </ul>
+                    @if (l.placeholders.length > placeholderPreview) {
+                      <p class="m-0 mt-1 text-[0.72rem] text-muted-foreground">
+                        and {{ l.placeholders.length - placeholderPreview }} more: the dashboard's
+                        launch checklist lists them all.
+                      </p>
+                    }
+                  </div>
+                }
 
                 @if (l.issues.length) {
                   <p class="m-0 text-[0.8rem] text-muted-foreground">
@@ -266,6 +308,8 @@ function toView(review: LocaleReview): LocaleView {
 })
 export class PublishDialogComponent {
   private readonly api = inject(AdminApiService);
+
+  protected readonly placeholderPreview = PLACEHOLDER_PREVIEW;
 
   readonly open = model(false);
   /** After a publish that wrote something. */
