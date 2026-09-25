@@ -151,6 +151,7 @@ export function createAskRouter(): Hono {
           messages: history.messages,
           question: history.question,
           locale: body.locale,
+          language: history.language,
           sessionId: body.sessionId,
           sessionHash,
           source: "terminal",

@@ -13,7 +13,7 @@ import { fixtureConfig } from "../../test/ask-fixtures.js";
 import { resetBreakers } from "../models/circuit.js";
 import { EVAL_CASES } from "./cases.js";
 import { fixtureAskCorpus } from "./fixture.js";
-import { detectLanguage, grade, runEvals } from "./run.js";
+import { grade, runEvals } from "./run.js";
 
 const byId = (id: string) => EVAL_CASES.find((c) => c.id === id)!;
 
@@ -66,14 +66,6 @@ describe("eval graders", () => {
     ).toEqual(['navigate.to was "/en"']);
   });
 
-  it("tells German from English", () => {
-    expect(detectLanguage("Er lebt in Berlin und arbeitet mit Python.")).toBe("de");
-    expect(detectLanguage("He lives in Berlin and works with Python.")).toBe("en");
-    expect(detectLanguage("Alireza lebt in Berlin, Deutschland.")).toBe("de");
-    expect(detectLanguage("His main backend stack includes Python.")).toBe("en");
-    expect(detectLanguage("Berlin")).toBeNull();
-  });
-
   it("accepts the production answers that plainly say information is absent", () => {
     expect(
       grade(byId("unknown-salary"), {
@@ -123,14 +115,30 @@ describe("eval graders", () => {
         tools: [],
       }),
     ).toEqual([]);
+  });
 
+  it("expects the question's language, not the page's", () => {
     expect(
-      grade(byId("de-english-question"), {
+      grade(byId("en-page-german-question"), {
+        text: "Er lebt in Berlin [^profile@en].",
+        cited: ["profile@en"],
+        tools: [],
+      }),
+    ).toEqual([]);
+    expect(
+      grade(byId("de-page-english-question"), {
         text: "Alireza's main backend stack includes Python and PostgreSQL [^skills@en].",
         cited: ["skills@en"],
         tools: [],
       }),
-    ).toContain("answered in the wrong language (expected de)");
+    ).toEqual([]);
+    expect(
+      grade(byId("de-page-english-question"), {
+        text: "Sein Backend-Stack umfasst Python und PostgreSQL [^skills@de].",
+        cited: ["skills@de"],
+        tools: [],
+      }),
+    ).toContain("answered in the wrong language (expected en)");
   });
 
   it("every case refers only to ids the fixture has", () => {
@@ -210,12 +218,12 @@ describe("runEvals", () => {
     expect(waits).toEqual([12_000]);
   });
 
-  it("puts the required locale in both full and answer-only system prompts", async () => {
+  it("puts the visitor's language in both full and answer-only system prompts", async () => {
     const config = fixtureConfig();
     const corpus = fixtureAskCorpus(config);
-    const full = scripted([textTurn("Python.")]);
+    const full = scripted([textTurn("Berlin.")]);
     await runEvals({
-      cases: [byId("de-english-question")],
+      cases: [byId("en-page-german-question")],
       corpus,
       config,
       judge: false,
@@ -226,11 +234,11 @@ describe("runEvals", () => {
 
     const fullPrompt = JSON.stringify(full.calls[0]!.prompt);
     expect(fullPrompt).toContain("Required response language: German (de)");
-    expect(fullPrompt).toContain("even when the question or source documents are in English");
+    expect(fullPrompt).toContain("even when the page or the source documents are in English");
 
-    const compact = scripted([textTurn("Python.")]);
+    const compact = scripted([textTurn("Berlin.")]);
     await runEvals({
-      cases: [byId("de-english-question")],
+      cases: [byId("en-page-german-question")],
       corpus,
       config,
       judge: false,
@@ -241,7 +249,7 @@ describe("runEvals", () => {
 
     const compactPrompt = JSON.stringify(compact.calls[0]!.prompt);
     expect(compactPrompt).toContain("Required response language: German (de)");
-    expect(compactPrompt).toContain("even when the question or source documents are in English");
+    expect(compactPrompt).toContain("even when the page or the source documents are in English");
   });
 
   it("marks a judged case unavailable when the judge exhausts its quota", async () => {

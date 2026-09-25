@@ -30,7 +30,10 @@ export interface EvalCase {
   citeAny?: string[];
   mustInclude?: string[];
   mustNotInclude?: string[];
-  /** The answer's language (defaults to the locale for answerable categories). */
+  /**
+   * The answer's language (defaults, for answerable categories, to the
+   * question's, or the locale when the question has no clear one).
+   */
   language?: Locale;
   expectTool?: { name: ToolName; input?: Record<string, unknown> };
   forbidTools?: ToolName[];
@@ -202,7 +205,7 @@ export const EVAL_CASES: EvalCase[] = [
     judge: true,
   },
 
-  // German: answer in the page's language, whatever the documents are in.
+  // German: answer in the visitor's language, whatever the page and the documents are in.
   {
     id: "de-atlas",
     category: "german",
@@ -236,13 +239,24 @@ export const EVAL_CASES: EvalCase[] = [
     judge: true,
   },
   {
-    id: "de-english-question",
+    id: "de-page-english-question",
     category: "german",
     locale: "de",
     fixtureOnly: true,
     question: "What is his main backend stack?",
-    language: "de",
+    language: "en",
     mustInclude: ["python"],
+    judge: true,
+  },
+  {
+    id: "en-page-german-question",
+    category: "german",
+    locale: "en",
+    fixtureOnly: true,
+    question: "Wo lebt er?",
+    citeAny: ["profile@en", "profile@de"],
+    mustInclude: ["berlin"],
+    language: "de",
     judge: true,
   },
 

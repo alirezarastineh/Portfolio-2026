@@ -75,6 +75,8 @@ export interface AnswerRequest {
   messages: ModelMessage[];
   question: string;
   locale: Locale;
+  /** The language the visitor writes in, when clear; the answer is in it. */
+  language: Locale | null;
   sessionId: string;
   sessionHash: string;
   source: "terminal" | "playground" | "eval";
@@ -142,14 +144,19 @@ export function newMessageId(): string {
 
 const instructionsMemo = new Map<string, { text: string; tokens: number }>();
 
-function instructionsFor(corpus: AskCorpus, locale: Locale): { text: string; tokens: number } {
-  const key = `${corpus.key}:${locale}`;
+function instructionsFor(
+  corpus: AskCorpus,
+  locale: Locale,
+  language: Locale | null,
+): { text: string; tokens: number } {
+  const key = `${corpus.key}:${locale}:${language}`;
   let memo = instructionsMemo.get(key);
   if (!memo) {
-    instructionsMemo.clear();
+    // A few page/visitor language pairs per corpus; a new corpus pushes the old out.
+    if (instructionsMemo.size >= 16) instructionsMemo.clear();
     memo = {
-      text: buildInstructions(corpus.core, locale),
-      tokens: countTokens(buildInstructions("", locale)) + corpus.coreTokens + 16,
+      text: buildInstructions(corpus.core, locale, language),
+      tokens: countTokens(buildInstructions("", locale, language)) + corpus.coreTokens + 16,
     };
     instructionsMemo.set(key, memo);
   }
@@ -167,6 +174,7 @@ export function answerOnlyOptions(
   options: LanguageModelV4CallOptions,
   corpus: AskCorpus,
   locale?: Locale,
+  language: Locale | null = null,
 ): LanguageModelV4CallOptions {
   const turns: LanguageModelV4Prompt = [];
   for (const message of options.prompt) {
@@ -185,7 +193,7 @@ export function answerOnlyOptions(
     tools: undefined,
     toolChoice: undefined,
     prompt: [
-      { role: "system", content: buildAnswerOnlyInstructions(corpus.compact, locale) },
+      { role: "system", content: buildAnswerOnlyInstructions(corpus.compact, locale, language) },
       ...recent,
     ],
   };
@@ -203,13 +211,13 @@ export function streamAnswer(request: AnswerRequest): {
   stream: ReadableStream<UIMessageChunk>;
   done: Promise<AnswerOutcome>;
 } {
-  const { config, corpus, locale } = request;
+  const { config, corpus, locale, language } = request;
   const messageId = newMessageId();
   const trace = newTrace();
   const record = newAnswerRecord();
   const cited = new Set<string>();
   const dropped: string[] = [];
-  const instructions = instructionsFor(corpus, locale);
+  const instructions = instructionsFor(corpus, locale, language);
 
   const model = createFallbackModel({
     entries: request.chain,
@@ -222,7 +230,7 @@ export function streamAnswer(request: AnswerRequest): {
     rateLimitRetry: request.rateLimitRetry,
     acquireRateLimitRetry: request.acquireRateLimitRetry,
     beforeAttempt: request.beforeModelCall,
-    answerOnly: (options) => answerOnlyOptions(options, corpus, locale),
+    answerOnly: (options) => answerOnlyOptions(options, corpus, locale, language),
     estimateTokens: (options) =>
       options.prompt.reduce(
         (sum, message) =>
@@ -340,6 +348,7 @@ export function streamAnswer(request: AnswerRequest): {
         id: messageId,
         sessionHash: request.sessionHash,
         locale,
+        language,
         source: request.source,
         route: answering?.answerOnly ? "answer-only" : request.route.route,
         routeReason: request.route.reason,

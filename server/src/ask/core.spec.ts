@@ -9,10 +9,11 @@ import type { AskCorpus } from "./corpus/index.js";
 import { renderCompact, renderCore, resolveDocument } from "./corpus/index.js";
 import { CorpusSearch } from "./corpus/search.js";
 import { buildHistory, signAnswer, verifyAnswer } from "./history.js";
+import { detectLanguage, visitorLanguage } from "./language.js";
 import { redact } from "./log.js";
 import { costUsd, priceOf } from "./models/prices.js";
 import { shortName } from "./models/registry.js";
-import { wrapVisitor } from "./prompt.js";
+import { responseLanguageInstruction, wrapVisitor } from "./prompt.js";
 import { routeQuestion } from "./router.js";
 import {
   answerText,
@@ -237,6 +238,55 @@ describe("history", () => {
     }));
     const result = await buildHistory({ ...base, historyTurns: 2, messages });
     expect(result.ok && result.messages.length).toBe(5);
+  });
+
+  it("finds the visitor's language, whatever the page's", async () => {
+    const ask = (...texts: string[]) =>
+      buildHistory({
+        ...base,
+        messages: texts.map((text, i) => ({
+          id: `u${i}`,
+          role: "user",
+          parts: [{ type: "text", text }],
+        })),
+      });
+    expect(await ask("was macht er?")).toMatchObject({ ok: true, language: "de" });
+    expect(await ask("Wo lebt er?", "Borealis?")).toMatchObject({ ok: true, language: "de" });
+    expect(await ask("Wo lebt er?", "What is Atlas?")).toMatchObject({ ok: true, language: "en" });
+    expect(await ask("Borealis?")).toMatchObject({ ok: true, language: null });
+  });
+});
+
+describe("language", () => {
+  it("tells German from English in answers and in short questions", () => {
+    expect(detectLanguage("Er lebt in Berlin und arbeitet mit Python.")).toBe("de");
+    expect(detectLanguage("He lives in Berlin and works with Python.")).toBe("en");
+    expect(detectLanguage("Alireza lebt in Berlin, Deutschland.")).toBe("de");
+    expect(detectLanguage("His main backend stack includes Python.")).toBe("en");
+    expect(detectLanguage("was macht er?")).toBe("de");
+    expect(detectLanguage("Was ist sein Backend-Stack?")).toBe("de");
+    expect(detectLanguage("Welche Skills hat er?")).toBe("de");
+    expect(detectLanguage("Wofür steht Atlas?")).toBe("de");
+    expect(detectLanguage("What was his GPA?")).toBe("en");
+    expect(detectLanguage("Tell me about Atlas")).toBe("en");
+  });
+
+  it("stays out of it when a message shows no language", () => {
+    expect(detectLanguage("Berlin")).toBeNull();
+    expect(detectLanguage("Atlas vs Borealis")).toBeNull();
+    expect(detectLanguage("Qu'est-ce qu'il fait ?")).toBeNull();
+    expect(visitorLanguage(["Borealis?"])).toBeNull();
+  });
+});
+
+describe("response language instruction", () => {
+  it("requires the visitor's language, or leaves it to the message with the page's as fallback", () => {
+    expect(responseLanguageInstruction("en", "de")).toContain(
+      "Required response language: German (de)",
+    );
+    const open = responseLanguageInstruction("de", null);
+    expect(open).not.toContain("Required response language");
+    expect(open).toContain("answer in German (de), the page's language");
   });
 });
 

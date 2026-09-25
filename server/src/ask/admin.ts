@@ -577,6 +577,7 @@ adminAskRouter.post("/assistant/playground", async (c) => {
     messages: history.messages,
     question: history.question,
     locale: body.locale,
+    language: history.language,
     sessionId: body.sessionId,
     sessionHash: hashWithSalt("session", body.sessionId),
     source: "playground",

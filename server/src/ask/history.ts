@@ -4,6 +4,7 @@ import { safeValidateUIMessages } from "ai";
 import { z } from "zod";
 
 import type { Locale } from "../content/schema.js";
+import { visitorLanguage } from "./language.js";
 import { wrapVisitor } from "./prompt.js";
 import { countTokens } from "./tokens.js";
 
@@ -74,7 +75,14 @@ export function cleanVisitorText(text: string): string {
 }
 
 export type HistoryResult =
-  | { ok: true; messages: ModelMessage[]; question: string; droppedAnswers: number }
+  | {
+      ok: true;
+      messages: ModelMessage[];
+      question: string;
+      /** The language the visitor writes in, when any of their messages shows it. */
+      language: Locale | null;
+      droppedAnswers: number;
+    }
   | { ok: false; error: "invalid_input" | "too_long" };
 
 function verifyAssistantTurn(
@@ -165,6 +173,9 @@ export async function buildHistory(options: {
   const { turns, droppedAnswers } = replayTurns(incoming, options);
   const current: ModelMessage = { role: "user", content: wrapVisitor(question, options.locale) };
   const kept = trimHistory(turns, current, options);
+  const language = visitorLanguage(
+    incoming.filter((m) => m.role === "user").map((m) => messageText(m)),
+  );
 
-  return { ok: true, messages: [...kept, current], question, droppedAnswers };
+  return { ok: true, messages: [...kept, current], question, language, droppedAnswers };
 }

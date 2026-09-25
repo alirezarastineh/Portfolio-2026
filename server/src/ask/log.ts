@@ -38,6 +38,8 @@ export interface AnswerLog {
   id: string;
   sessionHash: string;
   locale: Locale;
+  /** The visitor's language as detected; the answer's when not null. */
+  language: Locale | null;
   source: "terminal" | "playground" | "eval";
   route: string;
   routeReason: string;
@@ -64,6 +66,7 @@ export async function logAnswer(entry: AnswerLog): Promise<void> {
       id: entry.id,
       session: entry.sessionHash.slice(0, 12),
       locale: entry.locale,
+      language: entry.language,
       source: entry.source,
       route: entry.route,
       routeReason: entry.routeReason,

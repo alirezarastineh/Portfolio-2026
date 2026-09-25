@@ -9,10 +9,10 @@ import type { Locale } from "../content/schema.js";
  *
  * Nothing request-specific belongs in SYSTEM_PROMPT: that text and the corpus
  * after it are the same bytes for every visitor, which is what the provider
- * caches. A short trusted locale instruction is appended per request.
+ * caches. A short trusted language instruction is appended per request.
  */
 
-export const PROMPT_VERSION = "ask-2026-09-25.1";
+export const PROMPT_VERSION = "ask-2026-09-25.2";
 
 export const SYSTEM_PROMPT = `You are the assistant built into the portfolio website of Alireza Rastineh, a senior AI / full-stack engineer. Visitors (often recruiters and engineers) talk to you through a terminal on the site.
 
@@ -32,7 +32,7 @@ export const SYSTEM_PROMPT = `You are the assistant built into the portfolio web
 - Documents cut short end with "continues: get_document(...)"; call that tool when the rest matters. Use search_portfolio when you are not sure where something is.
 
 # Language
-- Each visitor message arrives as <visitor locale="en|de">…</visitor>. The locale is authoritative: answer in that locale (en = English, de = German), even when the visitor writes in another language or the documents use another language. Keep ids unchanged.
+- Each visitor message arrives as <visitor locale="en|de">…</visitor>, where the locale is the language of the page they are on. Answer in the language the visitor writes in, not the page's: a German question on the English page gets a German answer. Documents may be in the other language; translate what you use. Keep ids unchanged.
 
 # Tools
 - search_portfolio, get_document, list_projects, get_resume: read-only lookups. Prefer the documents already below when they suffice.
@@ -47,26 +47,43 @@ export const SYSTEM_PROMPT = `You are the assistant built into the portfolio web
 
 export const PROMPT_HASH = createHash("sha256").update(SYSTEM_PROMPT).digest("hex").slice(0, 12);
 
-/** The instructions: the fixed prompt, then the corpus. */
-export function responseLanguageInstruction(locale: Locale): string {
-  const language = locale === "de" ? "German (de)" : "English (en)";
-  const otherLanguage = locale === "de" ? "English" : "German";
-  return `# Required response language\nRequired response language: ${language}. This trusted page setting overrides the language of visitor text and documents. Write the entire response in ${language}, even when the question or source documents are in ${otherLanguage}.`;
+const LANGUAGE_NAMES: Record<Locale, string> = { en: "English (en)", de: "German (de)" };
+
+/**
+ * The language to answer in: the visitor's (see language.ts) when it is
+ * clear, else whatever they wrote in, with the page's for a bare name.
+ */
+export function responseLanguageInstruction(locale: Locale, language: Locale | null): string {
+  if (!language) {
+    return `# Response language\nAnswer in the language of the visitor's latest message. If it has no clear language (a name, a single term), answer in ${LANGUAGE_NAMES[locale]}, the page's language.`;
+  }
+  const name = LANGUAGE_NAMES[language];
+  const other = language === "de" ? "English" : "German";
+  return `# Required response language\nRequired response language: ${name}. The visitor writes in ${name}: write the entire response in it, even when the page or the source documents are in ${other}.`;
 }
 
-export function buildInstructions(corpusCore: string, locale?: Locale): string {
+/** The instructions: the fixed prompt, the corpus, then the response language. */
+export function buildInstructions(
+  corpusCore: string,
+  locale?: Locale,
+  language: Locale | null = null,
+): string {
   const fixed = `${SYSTEM_PROMPT}\n\n# Portfolio documents\n\n${corpusCore}`;
-  return locale ? `${fixed}\n\n${responseLanguageInstruction(locale)}` : fixed;
+  return locale ? `${fixed}\n\n${responseLanguageInstruction(locale, language)}` : fixed;
 }
 
 /** For models without tools and a small context window. */
-export function buildAnswerOnlyInstructions(compact: string, locale?: Locale): string {
+export function buildAnswerOnlyInstructions(
+  compact: string,
+  locale?: Locale,
+  language: Locale | null = null,
+): string {
   const prompt = SYSTEM_PROMPT.replace(/\n# Tools[\s\S]*?(?=\n# Security)/, "\n").replace(
     /- Documents cut short[^\n]*\n/,
     "",
   );
   const fixed = `${prompt}\n\n# Portfolio documents (summaries)\n\n${compact}`;
-  return locale ? `${fixed}\n\n${responseLanguageInstruction(locale)}` : fixed;
+  return locale ? `${fixed}\n\n${responseLanguageInstruction(locale, language)}` : fixed;
 }
 
 /** A visitor message, fenced so it cannot close its own tag. */

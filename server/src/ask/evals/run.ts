@@ -12,6 +12,7 @@ import {
   type ModelCall,
   type RateLimitRetryOptions,
 } from "../models/fallback.js";
+import { detectLanguage } from "../language.js";
 import type { ChainRole, ModelEntry } from "../models/registry.js";
 import { wrapVisitor } from "../prompt.js";
 import { routeQuestion } from "../router.js";
@@ -110,82 +111,6 @@ export interface EvalOptions {
   timeoutExtraMs?: number;
 }
 
-const GERMAN_WORDS = new Set([
-  "und",
-  "der",
-  "die",
-  "das",
-  "ist",
-  "nicht",
-  "mit",
-  "für",
-  "auf",
-  "ein",
-  "eine",
-  "einen",
-  "einem",
-  "einer",
-  "eines",
-  "sein",
-  "seine",
-  "seinem",
-  "seinen",
-  "seiner",
-  "seines",
-  "hat",
-  "wurde",
-  "sich",
-  "auch",
-  "über",
-  "bei",
-  "lebt",
-  "deutschland",
-  "arbeitet",
-  "verwendet",
-  "projekt",
-  "standort",
-  "verfügbarkeit",
-]);
-
-const ENGLISH_WORDS = new Set([
-  "and",
-  "the",
-  "is",
-  "not",
-  "with",
-  "for",
-  "on",
-  "a",
-  "an",
-  "his",
-  "has",
-  "was",
-  "also",
-  "about",
-  "at",
-  "of",
-  "to",
-  "lives",
-  "works",
-  "uses",
-  "main",
-  "includes",
-  "backend",
-  "stack",
-  "project",
-]);
-
-export function detectLanguage(text: string): "en" | "de" | null {
-  let de = 0;
-  let en = 0;
-  for (const word of text.toLowerCase().match(/\p{L}+/gu) ?? []) {
-    if (GERMAN_WORDS.has(word)) de++;
-    if (ENGLISH_WORDS.has(word)) en++;
-  }
-  if (de === en) return null;
-  return de > en ? "de" : "en";
-}
-
 function percentile(values: number[], p: number): number | null {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -203,7 +128,9 @@ function checkCitations(c: EvalCase, cited: string[], failures: string[]): void 
 
 function expectedLanguage(c: EvalCase): string | null {
   if (c.language) return c.language;
-  if (["fact", "multi-hop", "german"].includes(c.category)) return c.locale;
+  if (["fact", "multi-hop", "german"].includes(c.category)) {
+    return detectLanguage(c.question) ?? c.locale;
+  }
   return null;
 }
 
@@ -494,6 +421,7 @@ async function runCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
     messages: [{ role: "user", content: wrapVisitor(c.question, c.locale) }],
     question: c.question,
     locale: c.locale,
+    language: detectLanguage(c.question),
     sessionId,
     sessionHash: sessionId,
     source: "eval",
