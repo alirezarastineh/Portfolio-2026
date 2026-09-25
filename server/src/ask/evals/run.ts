@@ -3,9 +3,15 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import { streamAnswer } from "../agent.js";
-import type { AskConfig } from "../config.js";
+import type { AskConfig, ProviderName } from "../config.js";
 import type { AskCorpus } from "../corpus/index.js";
-import { createFallbackModel, newTrace, type ModelCall } from "../models/fallback.js";
+import {
+  createFallbackModel,
+  newTrace,
+  type Attempt,
+  type ModelCall,
+  type RateLimitRetryOptions,
+} from "../models/fallback.js";
 import type { ChainRole, ModelEntry } from "../models/registry.js";
 import { wrapVisitor } from "../prompt.js";
 import { routeQuestion } from "../router.js";
@@ -26,6 +32,7 @@ import type { EvalCase, EvalCategory } from "./cases.js";
 export interface CaseResult {
   id: string;
   category: EvalCategory;
+  status: "passed" | "failed" | "unavailable";
   passed: boolean;
   failures: string[];
   answer: string;
@@ -37,20 +44,50 @@ export interface CaseResult {
   totalMs: number;
   usd: number;
   judge: { faithfulness: number; helpfulness: number; unsupported: string[] } | null;
+  attempts: Attempt[];
+}
+
+export interface EvalCategorySummary {
+  cases: number;
+  completed: number;
+  passed: number;
+  unavailable: number;
 }
 
 export interface EvalSummary {
   promptVersion: string;
   corpus: string;
   cases: number;
+  completed: number;
   passed: number;
+  unavailable: number;
+  remaining: number;
+  incomplete: boolean;
   passRate: number;
-  byCategory: Record<string, { cases: number; passed: number }>;
+  byCategory: Record<string, EvalCategorySummary>;
   usd: number;
   p50TtftMs: number | null;
   p95TotalMs: number | null;
   results: CaseResult[];
 }
+
+export interface EvalPacingOptions {
+  requestsPerMinute: Record<ProviderName, number>;
+  now?: () => number;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+}
+
+/** Conservative defaults that fit the configured providers' free tiers. */
+export const FREE_TIER_EVAL_PACING: EvalPacingOptions = {
+  requestsPerMinute: { gemini: 5, openrouter: 20 },
+};
+
+/** A free-tier RPM limit is usually temporary; wait once, but never indefinitely. */
+export const FREE_TIER_RATE_LIMIT_RETRY: RateLimitRetryOptions = {
+  maxRetries: 1,
+  defaultDelayMs: 60_000,
+  maxDelayMs: 60_000,
+};
 
 export interface EvalOptions {
   cases: EvalCase[];
@@ -59,10 +96,18 @@ export interface EvalOptions {
   chain: (role: ChainRole) => ModelEntry[];
   concurrency?: number;
   judge?: boolean;
+  pacing?: EvalPacingOptions;
+  rateLimitRetry?: RateLimitRetryOptions;
+  stopOnUnavailable?: boolean;
+  /** Cancels both answer and judge work, including pacing and retry waits. */
+  abortSignal?: AbortSignal;
   onResult?: (result: CaseResult) => void;
   promptVersion: string;
   /** Every model call made (answers and judge), for the caller's accounting. */
   calls?: ModelCall[];
+  /** Internal hooks populated by runEvals and shared by answer and judge calls. */
+  beforeModelCall?: (entry: ModelEntry, signal?: AbortSignal) => Promise<void>;
+  timeoutExtraMs?: number;
 }
 
 const GERMAN_WORDS = new Set([
@@ -93,6 +138,13 @@ const GERMAN_WORDS = new Set([
   "auch",
   "über",
   "bei",
+  "lebt",
+  "deutschland",
+  "arbeitet",
+  "verwendet",
+  "projekt",
+  "standort",
+  "verfügbarkeit",
 ]);
 
 const ENGLISH_WORDS = new Set([
@@ -113,15 +165,24 @@ const ENGLISH_WORDS = new Set([
   "at",
   "of",
   "to",
+  "lives",
+  "works",
+  "uses",
+  "main",
+  "includes",
+  "backend",
+  "stack",
+  "project",
 ]);
 
-export function detectLanguage(text: string): "en" | "de" {
+export function detectLanguage(text: string): "en" | "de" | null {
   let de = 0;
   let en = 0;
   for (const word of text.toLowerCase().match(/\p{L}+/gu) ?? []) {
     if (GERMAN_WORDS.has(word)) de++;
     if (ENGLISH_WORDS.has(word)) en++;
   }
+  if (de === en) return null;
   return de > en ? "de" : "en";
 }
 
@@ -154,9 +215,78 @@ function checkProse(c: EvalCase, prose: string, failures: string[]): void {
     if (new RegExp(pattern, "im").test(prose)) failures.push(`contains /${pattern}/`);
   }
   const language = expectedLanguage(c);
-  if (language && prose.trim() && detectLanguage(prose) !== language) {
+  const detected = detectLanguage(prose);
+  if (language && detected && detected !== language) {
     failures.push(`answered in the wrong language (expected ${language})`);
   }
+}
+
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(signal.reason ?? new Error("aborted"));
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(done, ms);
+    const onAbort = () => {
+      cleanup();
+      reject(signal?.reason ?? new Error("aborted"));
+    };
+    function cleanup() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    }
+    function done() {
+      cleanup();
+      resolve();
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/** Serializes physical provider calls and spaces their start times. */
+function createModelCallGate(
+  pacing: EvalPacingOptions,
+): (entry: ModelEntry, signal?: AbortSignal) => Promise<void> {
+  const now = pacing.now ?? Date.now;
+  const sleep = pacing.sleep ?? abortableSleep;
+  const nextAt = new Map<ProviderName, number>();
+  const tails = new Map<ProviderName, Promise<void>>();
+
+  return async (entry, signal) => {
+    const provider = entry.provider;
+    const rpm = Math.max(1, pacing.requestsPerMinute[provider]);
+    const intervalMs = Math.ceil(60_000 / rpm);
+    const previous = tails.get(provider) ?? Promise.resolve();
+    const turn = previous
+      .catch(() => undefined)
+      .then(async () => {
+        if (signal?.aborted) throw signal.reason ?? new Error("aborted");
+        const waitMs = Math.max(0, (nextAt.get(provider) ?? now()) - now());
+        if (waitMs > 0) await sleep(waitMs, signal);
+        if (signal?.aborted) throw signal.reason ?? new Error("aborted");
+        nextAt.set(provider, now() + intervalMs);
+      });
+    tails.set(provider, turn);
+    try {
+      await turn;
+    } finally {
+      if (tails.get(provider) === turn) tails.delete(provider);
+    }
+  };
+}
+
+function timeoutAllowance(options: EvalOptions, chainLength: number): number {
+  const rpm = options.pacing ? Object.values(options.pacing.requestsPerMinute) : [];
+  const slowestInterval = rpm.length
+    ? Math.max(...rpm.map((value) => 60_000 / Math.max(1, value)))
+    : 0;
+  const rateLimitRetries = Math.max(0, options.rateLimitRetry?.maxRetries ?? 0);
+  const attemptsPerEntry = 1 + Math.max(0, options.config.maxRetries);
+  const pacedAttempts =
+    Math.max(1, options.config.agentMaxRounds) * Math.max(1, chainLength) * attemptsPerEntry +
+    rateLimitRetries;
+  return Math.ceil(
+    slowestInterval * pacedAttempts + rateLimitRetries * (options.rateLimitRetry?.maxDelayMs ?? 0),
+  );
 }
 
 function checkToolInput(
@@ -231,9 +361,10 @@ async function judgeAnswer(
   c: EvalCase,
   text: string,
   cited: string[],
-): Promise<CaseResult["judge"]> {
+  acquireRateLimitRetry?: () => boolean,
+): Promise<{ value: CaseResult["judge"]; unavailable: boolean; attempts: Attempt[] }> {
   const chain = options.chain("judge");
-  if (!chain.length) return null;
+  if (!chain.length) return { value: null, unavailable: true, attempts: [] };
   const trace = newTrace();
   const model = createFallbackModel({
     entries: chain,
@@ -243,6 +374,9 @@ async function judgeAnswer(
     maxRetries: options.config.maxRetries,
     retryBaseDelayMs: options.config.retryBaseDelayMs,
     retryMaxDelayMs: options.config.retryMaxDelayMs,
+    rateLimitRetry: options.rateLimitRetry,
+    acquireRateLimitRetry,
+    beforeAttempt: options.beforeModelCall,
     estimateTokens: (o) => countTokens(JSON.stringify(o.prompt)),
   });
   const documents = (cited.length ? cited : ["profile@en"])
@@ -253,6 +387,7 @@ async function judgeAnswer(
   try {
     const result = await generateText({
       model,
+      abortSignal: options.abortSignal,
       maxRetries: 0,
       temperature: 0,
       output: Output.object({ schema: judgeSchema }),
@@ -260,13 +395,83 @@ async function judgeAnswer(
         "You grade an AI assistant's answer about a person's portfolio. A claim counts as supported only if the documents state it. Statements that something is not in the portfolio, polite declines and offers to contact are not factual claims. Be strict.",
       prompt: `Question:\n${c.question}\n\nAnswer:\n${text}\n\nDocuments the answer cited:\n${documents}`,
     });
-    return result.output;
+    return { value: result.output, unavailable: false, attempts: trace.attempts };
   } catch (error) {
     console.warn(`[eval] judge failed for ${c.id}`, (error as Error).message);
-    return null;
+    return { value: null, unavailable: true, attempts: trace.attempts };
   } finally {
     options.calls?.push(...trace.calls);
   }
+}
+
+async function applyJudge(
+  options: EvalOptions,
+  c: EvalCase,
+  text: string,
+  citedIds: string[],
+  failures: string[],
+  attempts: Attempt[],
+  acquireRateLimitRetry?: () => boolean,
+): Promise<{ judge: CaseResult["judge"]; unavailable: boolean }> {
+  if (options.judge === false || !c.judge || !text.trim()) {
+    return { judge: null, unavailable: false };
+  }
+  const judged = await judgeAnswer(options, c, text, citedIds, acquireRateLimitRetry);
+  attempts.push(...judged.attempts);
+  if (judged.unavailable) {
+    failures.unshift("judge unavailable");
+    return { judge: judged.value, unavailable: true };
+  }
+  const judge = judged.value;
+  if (judge) {
+    if (judge.faithfulness < 0.8) {
+      failures.push(
+        `faithfulness ${judge.faithfulness.toFixed(2)}: ${judge.unsupported.join("; ")}`,
+      );
+    }
+    if (judge.helpfulness < 3) failures.push(`helpfulness ${judge.helpfulness}`);
+  }
+  return { judge, unavailable: false };
+}
+
+function createRetryAcquirer(retry?: EvalOptions["rateLimitRetry"]): (() => boolean) | undefined {
+  if (!retry) return undefined;
+  let remaining = Math.max(0, retry.maxRetries ?? 0);
+  return () => {
+    if (remaining <= 0) return false;
+    remaining--;
+    return true;
+  };
+}
+
+function createCaseAbortSignal(
+  configTimeoutMs: number,
+  timeoutExtraMs: number,
+  signal?: AbortSignal,
+): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(configTimeoutMs + timeoutExtraMs + 5_000);
+  return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+}
+
+async function drainStream(stream: ReadableStream): Promise<void> {
+  const reader = stream.getReader();
+  while (!(await reader.read()).done) {
+    /* keep reading */
+  }
+}
+
+function collectCaseFailures(
+  c: EvalCase,
+  outcome: { text: string; finishReason: string; citedIds: string[]; droppedCitations: string[] },
+  operationalFailure: boolean,
+  tools: { name: string; input: unknown }[],
+): string[] {
+  if (operationalFailure) return [`stream ${outcome.finishReason}`];
+  const failures = grade(c, { text: outcome.text, cited: outcome.citedIds, tools });
+  if (outcome.droppedCitations.length) {
+    failures.push(`invented citations: ${outcome.droppedCitations.join(", ")}`);
+  }
+  return failures;
 }
 
 async function runCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
@@ -276,6 +481,14 @@ async function runCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
     deepAllowed: true,
     projectNames: corpus.projects.map((p) => p.name),
   });
+  const chain = options.chain(route.route);
+  const timeoutExtraMs = options.timeoutExtraMs ?? timeoutAllowance(options, chain.length);
+  const acquireRateLimitRetry = createRetryAcquirer(options.rateLimitRetry);
+  const abortSignal = createCaseAbortSignal(
+    config.streamTimeoutMs,
+    timeoutExtraMs,
+    options.abortSignal,
+  );
   const sessionId = `eval-${randomBytes(9).toString("base64url")}`;
   const { stream, done } = streamAnswer({
     messages: [{ role: "user", content: wrapVisitor(c.question, c.locale) }],
@@ -287,41 +500,53 @@ async function runCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
     route,
     corpus,
     config,
-    chain: options.chain(route.route),
-    abortSignal: AbortSignal.timeout(config.streamTimeoutMs + 5_000),
+    chain,
+    abortSignal,
+    rateLimitRetry: options.rateLimitRetry,
+    acquireRateLimitRetry,
+    beforeModelCall: options.beforeModelCall,
+    timeoutExtraMs,
     persist: false,
   });
-  // Drain: the outcome is complete once the stream is.
-  const reader = stream.getReader();
-  while (!(await reader.read()).done) {
-    /* keep reading */
-  }
+
+  await drainStream(stream);
   const outcome = await done;
   options.calls?.push(...outcome.trace.calls);
 
   const tools = outcome.toolCalls.map((t) => ({ name: t.name, input: t.input }));
-  const failures = grade(c, { text: outcome.text, cited: outcome.citedIds, tools });
-  if (outcome.finishReason.startsWith("error")) failures.unshift(`stream ${outcome.finishReason}`);
-  if (outcome.droppedCitations.length) {
-    failures.push(`invented citations: ${outcome.droppedCitations.join(", ")}`);
-  }
+  const operationalFailure =
+    outcome.finishReason.startsWith("error") || outcome.finishReason === "aborted";
+  const failures = collectCaseFailures(c, outcome, operationalFailure, tools);
 
+  const attempts = [...outcome.trace.attempts];
   let judge: CaseResult["judge"] = null;
-  if (options.judge !== false && c.judge && outcome.text.trim()) {
-    judge = await judgeAnswer(options, c, outcome.text, outcome.citedIds);
-    if (judge && judge.faithfulness < 0.8) {
-      failures.push(
-        `faithfulness ${judge.faithfulness.toFixed(2)}: ${judge.unsupported.join("; ")}`,
-      );
-    }
-    if (judge && judge.helpfulness < 3) failures.push(`helpfulness ${judge.helpfulness}`);
+  let unavailable = operationalFailure;
+  if (!unavailable) {
+    const judged = await applyJudge(
+      options,
+      c,
+      outcome.text,
+      outcome.citedIds,
+      failures,
+      attempts,
+      acquireRateLimitRetry,
+    );
+    judge = judged.judge;
+    unavailable = judged.unavailable;
   }
 
   const trace = outcome.trace;
+  let status: CaseResult["status"] = "passed";
+  if (unavailable) {
+    status = "unavailable";
+  } else if (failures.length > 0) {
+    status = "failed";
+  }
   return {
     id: c.id,
     category: c.category,
-    passed: failures.length === 0,
+    status,
+    passed: status === "passed",
     failures,
     answer: outcome.text,
     cited: outcome.citedIds,
@@ -332,18 +557,31 @@ async function runCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
     totalMs: Date.now() - trace.startedAt,
     usd: outcome.usd,
     judge,
+    attempts,
   };
 }
 
 export async function runEvals(input: EvalOptions): Promise<EvalSummary> {
-  const options = { ...input, calls: input.calls ?? [] };
+  const options: EvalOptions = {
+    ...input,
+    calls: input.calls ?? [],
+    beforeModelCall: input.pacing ? createModelCallGate(input.pacing) : undefined,
+  };
   const queue = [...options.cases];
   const results: CaseResult[] = [];
-  const workers = Array.from({ length: Math.max(1, options.concurrency ?? 3) }, async () => {
+  let halted = false;
+  const workerCount = options.stopOnUnavailable ? 1 : Math.max(1, options.concurrency ?? 3);
+  const workers = Array.from({ length: workerCount }, async () => {
     for (let c = queue.shift(); c; c = queue.shift()) {
+      if (halted) break;
       const result = await runCase(options, c);
       results.push(result);
       options.onResult?.(result);
+      if (options.stopOnUnavailable && result.status === "unavailable") {
+        halted = true;
+        queue.length = 0;
+        break;
+      }
     }
   });
   await Promise.all(workers);
@@ -352,26 +590,48 @@ export async function runEvals(input: EvalOptions): Promise<EvalSummary> {
   results.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
 
   const byCategory: EvalSummary["byCategory"] = {};
-  for (const r of results) {
-    const row = (byCategory[r.category] ??= { cases: 0, passed: 0 });
+  for (const c of options.cases) {
+    const row = (byCategory[c.category] ??= {
+      cases: 0,
+      completed: 0,
+      passed: 0,
+      unavailable: 0,
+    });
     row.cases++;
+  }
+  for (const r of results) {
+    const row = byCategory[r.category]!;
+    if (r.status === "unavailable") {
+      row.unavailable++;
+      continue;
+    }
+    row.completed++;
     if (r.passed) row.passed++;
   }
   const passed = results.filter((r) => r.passed).length;
+  const completed = results.filter((r) => r.status !== "unavailable").length;
+  const unavailable = results.length - completed;
+  const remaining = options.cases.length - results.length;
+  const incomplete = unavailable > 0 || remaining > 0;
+  const completedResults = results.filter((r) => r.status !== "unavailable");
   return {
     promptVersion: options.promptVersion,
     corpus: options.corpus.key,
-    cases: results.length,
+    cases: options.cases.length,
+    completed,
     passed,
-    passRate: results.length ? passed / results.length : 0,
+    unavailable,
+    remaining,
+    incomplete,
+    passRate: completed ? passed / completed : 0,
     byCategory,
-    usd: summarizeCalls(options.calls).usd,
+    usd: summarizeCalls(options.calls ?? []).usd,
     p50TtftMs: percentile(
-      results.flatMap((r) => (r.ttftMs === null ? [] : [r.ttftMs])),
+      completedResults.flatMap((r) => (r.ttftMs === null ? [] : [r.ttftMs])),
       0.5,
     ),
     p95TotalMs: percentile(
-      results.map((r) => r.totalMs),
+      completedResults.map((r) => r.totalMs),
       0.95,
     ),
     results,

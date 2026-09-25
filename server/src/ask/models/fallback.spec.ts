@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { LanguageModelV4CallOptions, LanguageModelV4StreamPart } from "@ai-sdk/provider";
+import { MockLanguageModelV4 } from "ai/test";
 
 import {
   apiError,
@@ -90,6 +91,62 @@ describe("createFallbackModel", () => {
     expect(state!.state).toBe("open");
     // Retry-After (120 s) outlasts the default pause.
     expect(Date.parse(state!.openUntil!) - Date.now()).toBeGreaterThan(100_000);
+  });
+
+  it("can honor Retry-After once for an eval before opening the breaker", async () => {
+    const recovered = scripted([textTurn("recovered")]);
+    let calls = 0;
+    const flaky = new MockLanguageModelV4({
+      modelId: "flaky-rate-limit",
+      doStream: async (options) => {
+        calls++;
+        if (calls === 1) throw apiError(429, { "retry-after": "120" });
+        return recovered.model.doStream(options);
+      },
+    });
+    const waits: number[] = [];
+    const { model, trace } = fallback([mockEntry("a", flaky)], {
+      rateLimitRetry: { maxRetries: 1, defaultDelayMs: 60_000, maxDelayMs: 30_000 },
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
+    });
+
+    expect(textOf(await drain((await model.doStream(call)).stream))).toBe("recovered");
+    expect(calls).toBe(2);
+    expect(waits).toEqual([30_000]);
+    expect(trace.attempts.map((x) => x.outcome)).toEqual(["ok"]);
+    expect(breakerSnapshot(["a"])[0]!.state).toBe("closed");
+  });
+
+  it("stops a rate-limit wait as soon as the request is aborted", async () => {
+    const controller = new AbortController();
+    const a = failing(apiError(429));
+    const b = scripted([textTurn("unused")]);
+    let waitStarted!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      waitStarted = resolve;
+    });
+    const cancelled = new Error("eval cancelled");
+    const { model } = fallback([mockEntry("a", a.model), mockEntry("b", b.model)], {
+      rateLimitRetry: { maxRetries: 1, defaultDelayMs: 60_000, maxDelayMs: 60_000 },
+      sleep: (_ms, signal?: AbortSignal) =>
+        new Promise<void>((_resolve, reject) => {
+          waitStarted();
+          signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+    });
+
+    const request = model.doStream({ ...call, abortSignal: controller.signal });
+    await waiting;
+    controller.abort(cancelled);
+    const outcome = await Promise.race([
+      Promise.resolve(request).catch((error: unknown) => error),
+      new Promise<string>((resolve) => setTimeout(() => resolve("still waiting"), 25)),
+    ]);
+
+    expect(outcome).toBe(cancelled);
+    expect(b.calls).toHaveLength(0);
   });
 
   it("retries a server error on the same model before falling back", async () => {

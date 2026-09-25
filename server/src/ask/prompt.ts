@@ -7,12 +7,12 @@ import type { Locale } from "../content/schema.js";
  * PROMPT_VERSION, runs the evals (`pnpm ai:eval`), and must not lower the
  * baseline. The version and a hash of the text are logged with every answer.
  *
- * Nothing request-specific belongs here: this text and the corpus after it
- * are the same bytes for every visitor, which is what the provider caches.
- * The page language travels with the visitor's message instead.
+ * Nothing request-specific belongs in SYSTEM_PROMPT: that text and the corpus
+ * after it are the same bytes for every visitor, which is what the provider
+ * caches. A short trusted locale instruction is appended per request.
  */
 
-export const PROMPT_VERSION = "ask-2026-09-24.1";
+export const PROMPT_VERSION = "ask-2026-09-25.1";
 
 export const SYSTEM_PROMPT = `You are the assistant built into the portfolio website of Alireza Rastineh, a senior AI / full-stack engineer. Visitors (often recruiters and engineers) talk to you through a terminal on the site.
 
@@ -32,7 +32,7 @@ export const SYSTEM_PROMPT = `You are the assistant built into the portfolio web
 - Documents cut short end with "continues: get_document(...)"; call that tool when the rest matters. Use search_portfolio when you are not sure where something is.
 
 # Language
-- Each visitor message arrives as <visitor locale="en|de">…</visitor>. Answer in that locale (en = English, de = German), whatever language the documents are in. Keep ids unchanged.
+- Each visitor message arrives as <visitor locale="en|de">…</visitor>. The locale is authoritative: answer in that locale (en = English, de = German), even when the visitor writes in another language or the documents use another language. Keep ids unchanged.
 
 # Tools
 - search_portfolio, get_document, list_projects, get_resume: read-only lookups. Prefer the documents already below when they suffice.
@@ -48,17 +48,25 @@ export const SYSTEM_PROMPT = `You are the assistant built into the portfolio web
 export const PROMPT_HASH = createHash("sha256").update(SYSTEM_PROMPT).digest("hex").slice(0, 12);
 
 /** The instructions: the fixed prompt, then the corpus. */
-export function buildInstructions(corpusCore: string): string {
-  return `${SYSTEM_PROMPT}\n\n# Portfolio documents\n\n${corpusCore}`;
+export function responseLanguageInstruction(locale: Locale): string {
+  const language = locale === "de" ? "German (de)" : "English (en)";
+  const otherLanguage = locale === "de" ? "English" : "German";
+  return `# Required response language\nRequired response language: ${language}. This trusted page setting overrides the language of visitor text and documents. Write the entire response in ${language}, even when the question or source documents are in ${otherLanguage}.`;
+}
+
+export function buildInstructions(corpusCore: string, locale?: Locale): string {
+  const fixed = `${SYSTEM_PROMPT}\n\n# Portfolio documents\n\n${corpusCore}`;
+  return locale ? `${fixed}\n\n${responseLanguageInstruction(locale)}` : fixed;
 }
 
 /** For models without tools and a small context window. */
-export function buildAnswerOnlyInstructions(compact: string): string {
+export function buildAnswerOnlyInstructions(compact: string, locale?: Locale): string {
   const prompt = SYSTEM_PROMPT.replace(/\n# Tools[\s\S]*?(?=\n# Security)/, "\n").replace(
     /- Documents cut short[^\n]*\n/,
     "",
   );
-  return `${prompt}\n\n# Portfolio documents (summaries)\n\n${compact}`;
+  const fixed = `${prompt}\n\n# Portfolio documents (summaries)\n\n${compact}`;
+  return locale ? `${fixed}\n\n${responseLanguageInstruction(locale)}` : fixed;
 }
 
 /** A visitor message, fenced so it cannot close its own tag. */

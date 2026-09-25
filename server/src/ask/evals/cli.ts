@@ -9,16 +9,21 @@ import { PROMPT_HASH, PROMPT_VERSION } from "../prompt.js";
 import { loadEncoder } from "../tokens.js";
 import { EVAL_CASES } from "./cases.js";
 import { fixtureAskCorpus } from "./fixture.js";
-import { runEvals, type EvalSummary } from "./run.js";
+import {
+  FREE_TIER_EVAL_PACING,
+  FREE_TIER_RATE_LIMIT_RETRY,
+  runEvals,
+  type EvalSummary,
+} from "./run.js";
 
 /**
  * `pnpm ai:eval` — runs the eval suite live against the configured models.
- * It spends money (a few cents a run), so it is run by hand, never in CI.
+ * It consumes provider quota, so it is run by hand, never in CI.
  *
  *   --case <id|category>   only matching cases (repeatable)
  *   --corpus live          the published corpus instead of the frozen fixture
  *   --no-judge             skip the LLM judge
- *   --concurrency <n>      parallel questions (default 3; 1 on a free tier)
+ *   --concurrency <n>      parallel questions (default 1; provider calls stay paced)
  *   --update-baseline      store this run as the baseline to beat
  *
  * Exits 1 when the pass rate falls below the baseline.
@@ -63,19 +68,27 @@ const cases = EVAL_CASES.filter(
 );
 
 console.log(
-  `Running ${cases.length} case(s) against ${live ? "the live" : "the fixture"} corpus with ${config.gemini.model}. This calls paid models.\n`,
+  `Running ${cases.length} case(s) against ${live ? "the live" : "the fixture"} corpus with ${config.gemini.model}. Free-tier-safe pacing is enabled.\n`,
 );
+
+function resultMark(status: string, passed: boolean): string {
+  if (status === "unavailable") return "!";
+  return passed ? "✓" : "✗";
+}
 
 const summary = await runEvals({
   cases,
   corpus,
   config,
   chain: (role) => buildChain(config, role),
-  concurrency: Number(values("concurrency")[0] ?? 3),
+  concurrency: Number(values("concurrency")[0] ?? 1),
+  pacing: FREE_TIER_EVAL_PACING,
+  rateLimitRetry: FREE_TIER_RATE_LIMIT_RETRY,
+  stopOnUnavailable: true,
   judge: !flag("no-judge"),
   promptVersion: `${PROMPT_VERSION}+${PROMPT_HASH}`,
   onResult: (r) => {
-    const mark = r.passed ? "✓" : "✗";
+    const mark = resultMark(r.status, r.passed);
     const meta = `${r.model ?? "no model"} · ${(r.totalMs / 1000).toFixed(1)} s`;
     const failures = r.passed ? "" : `\n    ${r.failures.join("\n    ")}`;
     console.log(`${mark} ${r.id.padEnd(22)} ${meta}${failures}`);
@@ -84,17 +97,25 @@ const summary = await runEvals({
 
 console.log("\nBy category:");
 for (const [category, row] of Object.entries(summary.byCategory)) {
-  console.log(`  ${category.padEnd(14)} ${row.passed}/${row.cases}`);
+  const pending = row.cases - row.completed - row.unavailable;
+  const incomplete =
+    row.unavailable || pending ? ` · ${row.unavailable} unavailable, ${pending} pending` : "";
+  console.log(`  ${category.padEnd(14)} ${row.passed}/${row.completed}${incomplete}`);
 }
 console.log(
-  `\nPassed ${summary.passed}/${summary.cases} (${(summary.passRate * 100).toFixed(1)} %) · $${summary.usd.toFixed(4)} · p50 TTFT ${summary.p50TtftMs ?? "–"} ms · p95 total ${summary.p95TotalMs ?? "–"} ms`,
+  `\nPassed ${summary.passed}/${summary.completed} completed (${(summary.passRate * 100).toFixed(1)} %) · ${summary.cases} planned · $${summary.usd.toFixed(4)} estimated · p50 TTFT ${summary.p50TtftMs ?? "–"} ms · p95 total ${summary.p95TotalMs ?? "–"} ms`,
 );
 
 let exitCode = 0;
 const baseline = existsSync(BASELINE)
   ? (JSON.parse(readFileSync(BASELINE, "utf8")) as Baseline)
   : null;
-if (baseline && !filters.length && baseline.corpus === summary.corpus) {
+if (summary.incomplete) {
+  console.error(
+    `Incomplete run: ${summary.unavailable} unavailable, ${summary.remaining} not started. No baseline comparison or update is valid.`,
+  );
+  exitCode = 2;
+} else if (baseline && !filters.length && baseline.corpus === summary.corpus) {
   const delta = summary.passRate - baseline.passRate;
   console.log(
     `Baseline ${(baseline.passRate * 100).toFixed(1)} % (${baseline.promptVersion}, ${baseline.at.slice(0, 10)}): ${delta >= 0 ? "+" : ""}${(delta * 100).toFixed(1)} pts`,
@@ -106,7 +127,10 @@ if (baseline && !filters.length && baseline.corpus === summary.corpus) {
 }
 
 if (flag("update-baseline")) {
-  if (filters.length) {
+  if (summary.incomplete) {
+    console.error("Not updating the baseline from an incomplete run.");
+    exitCode = 2;
+  } else if (filters.length) {
     console.error("Not updating the baseline from a filtered run.");
     exitCode = 2;
   } else {

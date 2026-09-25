@@ -535,7 +535,7 @@ export class AdminApiService {
     );
   }
 
-  /** Runs the eval suite live (paid model calls). */
+  /** Runs the eval suite live against the configured providers. */
   runEvals(cases?: string[]) {
     return this.request<EvalSummary>("POST", "/admin/assistant/evals", cases ? { cases } : {});
   }

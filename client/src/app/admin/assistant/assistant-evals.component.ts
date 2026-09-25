@@ -26,33 +26,46 @@ import { ConfirmService } from "../components/confirm-dialog.component";
         <button hlmBtn size="sm" [disabled]="running()" (click)="run()">
           @if (running()) {
             <hlm-spinner class="size-4" />
-            <span class="ml-2">Running… (a minute or two)</span>
+            <span class="ml-2">Running… (free-tier pacing can take 10–15 minutes)</span>
           } @else {
             Run the evals
           }
         </button>
-        <span class="text-xs text-muted-foreground"
-          >Calls paid models: typically a few cents per run.</span
-        >
+        <span class="text-xs text-muted-foreground">
+          Uses the configured model chain with free-tier-safe pacing.
+        </span>
       </div>
 
       @if (summary(); as s) {
         <div class="flex flex-wrap items-center gap-3 text-sm">
-          <strong class="font-mono text-lg">{{ s.passed }}/{{ s.cases }}</strong>
+          <strong class="font-mono text-lg">{{ s.passed }}/{{ s.completed }}</strong>
           <span>({{ s.passRate * 100 | number: "1.0-1" }} %)</span>
+          <span class="text-muted-foreground">{{ s.cases }} planned</span>
           <span class="text-muted-foreground">
-            \${{ s.usd | number: "1.3-4" }} · p50 first token {{ s.p50TtftMs ?? "–" }} ms · p95
-            total {{ s.p95TotalMs ?? "–" }} ms · {{ s.promptVersion }}
+            \${{ s.usd | number: "1.3-4" }} estimated · p50 first token {{ s.p50TtftMs ?? "–" }} ms
+            · p95 total {{ s.p95TotalMs ?? "–" }} ms ·
+            {{ s.promptVersion }}
           </span>
         </div>
+        @if (s.incomplete) {
+          <p class="m-0 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            Incomplete run: {{ s.unavailable }} unavailable and {{ s.remaining }} not started. These
+            are not counted as answer-quality failures; retry after the provider quota resets.
+          </p>
+        }
         <p class="m-0 flex flex-wrap gap-2">
           @for (c of categories(); track c[0]) {
             <span
               hlmBadge
-              [variant]="c[1].passed === c[1].cases ? 'outline' : 'destructive'"
+              [variant]="
+                c[1].completed > 0 && c[1].passed < c[1].completed ? 'destructive' : 'outline'
+              "
               class="font-mono text-[0.68rem]"
             >
-              {{ c[0] }} {{ c[1].passed }}/{{ c[1].cases }}
+              {{ c[0] }} {{ c[1].passed }}/{{ c[1].completed }}
+              @if (c[1].unavailable || categoryRemaining(c[1])) {
+                · {{ c[1].unavailable }} unavailable · {{ categoryRemaining(c[1]) }} pending
+              }
             </span>
           }
         </p>
@@ -60,11 +73,17 @@ import { ConfirmService } from "../components/confirm-dialog.component";
           @for (r of s.results; track r.id) {
             <li
               class="rounded-lg border border-border p-3 text-sm"
-              [class.border-destructive]="!r.passed"
+              [class.border-destructive]="r.status === 'failed'"
+              [class.border-amber-500]="r.status === 'unavailable'"
             >
               <details>
                 <summary class="flex cursor-pointer flex-wrap items-center gap-2">
-                  <span [class.text-destructive]="!r.passed">{{ r.passed ? "✓" : "✗" }}</span>
+                  <span
+                    [class.text-destructive]="r.status === 'failed'"
+                    [class.text-amber-600]="r.status === 'unavailable'"
+                  >
+                    {{ r.status === "unavailable" ? "!" : r.passed ? "✓" : "✗" }}
+                  </span>
                   <span class="font-mono text-xs">{{ r.id }}</span>
                   <span class="text-xs text-muted-foreground"
                     >{{ r.model ?? "no model" }} · {{ r.totalMs }} ms</span
@@ -76,7 +95,11 @@ import { ConfirmService } from "../components/confirm-dialog.component";
                   }
                 </summary>
                 @if (r.failures.length) {
-                  <ul class="mt-2 text-xs text-destructive">
+                  <ul
+                    class="mt-2 text-xs"
+                    [class.text-destructive]="r.status === 'failed'"
+                    [class.text-amber-700]="r.status === 'unavailable'"
+                  >
                     @for (f of r.failures; track $index) {
                       <li>{{ f }}</li>
                     }
@@ -105,8 +128,19 @@ export class AssistantEvalsComponent {
   protected readonly running = signal(false);
   protected readonly summary = signal<EvalSummary | null>(null);
 
-  protected categories(): [string, { cases: number; passed: number }][] {
+  protected categories(): [
+    string,
+    { cases: number; completed: number; passed: number; unavailable: number },
+  ][] {
     return Object.entries(this.summary()?.byCategory ?? {});
+  }
+
+  protected categoryRemaining(row: {
+    cases: number;
+    completed: number;
+    unavailable: number;
+  }): number {
+    return row.cases - row.completed - row.unavailable;
   }
 
   protected tools(tools: { name: string; input: unknown }[]): string {
@@ -117,7 +151,7 @@ export class AssistantEvalsComponent {
     const go = await this.confirm.ask({
       title: "Run the eval suite?",
       description:
-        "About 40 questions go to the configured models, plus a judge model for the answerable ones. It costs a few cents and counts toward today's budget.",
+        "About 40 questions go to the configured models, plus a judge for answerable cases. Calls are paced for free-tier limits, so a complete run can take 10–15 minutes.",
       confirmLabel: "Run evals",
     });
     if (!go) return;

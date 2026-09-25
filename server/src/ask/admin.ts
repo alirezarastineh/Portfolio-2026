@@ -26,7 +26,7 @@ import { capsOf, configuredModels, shortName, type ChainRole } from "./models/re
 import { buildInstructions, PROMPT_HASH, PROMPT_VERSION } from "./prompt.js";
 import { EVAL_CASES } from "./evals/cases.js";
 import { fixtureAskCorpus } from "./evals/fixture.js";
-import { runEvals } from "./evals/run.js";
+import { FREE_TIER_EVAL_PACING, FREE_TIER_RATE_LIMIT_RETRY, runEvals } from "./evals/run.js";
 import { routeQuestion } from "./router.js";
 import { SESSION_ID, streamsInFlight } from "./route.js";
 import { invalidateAssistantCache, readAiSettings, readFaq } from "./settings.js";
@@ -598,9 +598,9 @@ adminAskRouter.post("/assistant/playground", async (c) => {
 let evalRunning = false;
 
 /**
- * The eval suite on demand, against the frozen fixture corpus (the page asks
- * for confirmation first: it calls paid models). Its cost counts toward the
- * daily budget like any other call.
+ * The eval suite on demand, against the frozen fixture corpus. The page asks
+ * for confirmation because it consumes configured-provider quota. Usage counts
+ * toward the daily budget like any other call.
  */
 adminAskRouter.post(
   "/assistant/evals",
@@ -622,7 +622,11 @@ adminAskRouter.post(
         corpus: fixtureAskCorpus(config),
         config,
         chain: (role) => askChain(config, role),
-        concurrency: 3,
+        concurrency: 1,
+        pacing: FREE_TIER_EVAL_PACING,
+        rateLimitRetry: FREE_TIER_RATE_LIMIT_RETRY,
+        stopOnUnavailable: true,
+        abortSignal: c.req.raw.signal,
         promptVersion: `${PROMPT_VERSION}+${PROMPT_HASH}`,
         calls,
       });

@@ -149,6 +149,7 @@ export interface InsightTopic {
 export interface EvalCaseResult {
   id: string;
   category: string;
+  status: "passed" | "failed" | "unavailable";
   passed: boolean;
   failures: string[];
   answer: string;
@@ -160,15 +161,23 @@ export interface EvalCaseResult {
   totalMs: number;
   usd: number;
   judge: { faithfulness: number; helpfulness: number; unsupported: string[] } | null;
+  attempts: Attempt[];
 }
 
 export interface EvalSummary {
   promptVersion: string;
   corpus: string;
   cases: number;
+  completed: number;
   passed: number;
+  unavailable: number;
+  remaining: number;
+  incomplete: boolean;
   passRate: number;
-  byCategory: Record<string, { cases: number; passed: number }>;
+  byCategory: Record<
+    string,
+    { cases: number; completed: number; passed: number; unavailable: number }
+  >;
   usd: number;
   p50TtftMs: number | null;
   p95TotalMs: number | null;

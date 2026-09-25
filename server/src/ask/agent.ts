@@ -27,6 +27,7 @@ import {
   answeringModel,
   createFallbackModel,
   newTrace,
+  type RateLimitRetryOptions,
   usedFallback,
   type Trace,
 } from "./models/fallback.js";
@@ -36,7 +37,6 @@ import {
   buildInstructions,
   PROMPT_HASH,
   PROMPT_VERSION,
-  SYSTEM_PROMPT,
 } from "./prompt.js";
 import type { RouteDecision } from "./router.js";
 import {
@@ -83,6 +83,14 @@ export interface AnswerRequest {
   config: AskConfig;
   chain: ModelEntry[];
   abortSignal: AbortSignal;
+  /** Bulk evals may wait once for 429; interactive requests leave this unset. */
+  rateLimitRetry?: RateLimitRetryOptions;
+  /** Shares the bounded 429 retry allowance across every model call in one eval case. */
+  acquireRateLimitRetry?: () => boolean;
+  /** Bulk evals pace every physical provider request through this shared gate. */
+  beforeModelCall?: (entry: ModelEntry, signal?: AbortSignal) => Promise<void>;
+  /** Extra total time reserved for deliberate eval pacing and a bounded 429 wait. */
+  timeoutExtraMs?: number;
   droppedAnswers?: number;
   /**
    * Write the log row and the usage totals (default). Off for evals run from
@@ -134,15 +142,16 @@ export function newMessageId(): string {
 
 const instructionsMemo = new Map<string, { text: string; tokens: number }>();
 
-function instructionsFor(corpus: AskCorpus): { text: string; tokens: number } {
-  let memo = instructionsMemo.get(corpus.key);
+function instructionsFor(corpus: AskCorpus, locale: Locale): { text: string; tokens: number } {
+  const key = `${corpus.key}:${locale}`;
+  let memo = instructionsMemo.get(key);
   if (!memo) {
     instructionsMemo.clear();
     memo = {
-      text: buildInstructions(corpus.core),
-      tokens: countTokens(SYSTEM_PROMPT) + corpus.coreTokens + 16,
+      text: buildInstructions(corpus.core, locale),
+      tokens: countTokens(buildInstructions("", locale)) + corpus.coreTokens + 16,
     };
-    instructionsMemo.set(corpus.key, memo);
+    instructionsMemo.set(key, memo);
   }
   return memo;
 }
@@ -157,6 +166,7 @@ function messageTokens(message: LanguageModelV4Message): number {
 export function answerOnlyOptions(
   options: LanguageModelV4CallOptions,
   corpus: AskCorpus,
+  locale?: Locale,
 ): LanguageModelV4CallOptions {
   const turns: LanguageModelV4Prompt = [];
   for (const message of options.prompt) {
@@ -174,7 +184,10 @@ export function answerOnlyOptions(
     ...options,
     tools: undefined,
     toolChoice: undefined,
-    prompt: [{ role: "system", content: buildAnswerOnlyInstructions(corpus.compact) }, ...recent],
+    prompt: [
+      { role: "system", content: buildAnswerOnlyInstructions(corpus.compact, locale) },
+      ...recent,
+    ],
   };
 }
 
@@ -196,7 +209,7 @@ export function streamAnswer(request: AnswerRequest): {
   const record = newAnswerRecord();
   const cited = new Set<string>();
   const dropped: string[] = [];
-  const instructions = instructionsFor(corpus);
+  const instructions = instructionsFor(corpus, locale);
 
   const model = createFallbackModel({
     entries: request.chain,
@@ -206,7 +219,10 @@ export function streamAnswer(request: AnswerRequest): {
     maxRetries: config.maxRetries,
     retryBaseDelayMs: config.retryBaseDelayMs,
     retryMaxDelayMs: config.retryMaxDelayMs,
-    answerOnly: (options) => answerOnlyOptions(options, corpus),
+    rateLimitRetry: request.rateLimitRetry,
+    acquireRateLimitRetry: request.acquireRateLimitRetry,
+    beforeAttempt: request.beforeModelCall,
+    answerOnly: (options) => answerOnlyOptions(options, corpus, locale),
     estimateTokens: (options) =>
       options.prompt.reduce(
         (sum, message) =>
@@ -257,7 +273,10 @@ export function streamAnswer(request: AnswerRequest): {
     .stream({
       messages: request.messages,
       abortSignal: request.abortSignal,
-      timeout: { totalMs: config.streamTimeoutMs, chunkMs: config.chunkTimeoutMs },
+      timeout: {
+        totalMs: config.streamTimeoutMs + (request.timeoutExtraMs ?? 0),
+        chunkMs: config.chunkTimeoutMs,
+      },
       experimental_transform: [
         citationTransform({ corpus, locale, cited, dropped }),
         smoothStream({ chunking: "word" }),

@@ -22,7 +22,8 @@ import type { ModelEntry } from "./registry.js";
  * with an error part and the terminal offers `retry`.
  *
  * The SDK's own retries are off (`maxRetries: 0` on the agent); retries live
- * here, only for 5xx and network errors, a few times, jittered.
+ * here, only for 5xx and network errors, a few times, jittered. Bulk evals
+ * may opt into one bounded 429 retry; visitor requests still fall back at once.
  */
 
 export type AttemptOutcome =
@@ -85,6 +86,12 @@ export class AttemptTimeoutError extends Error {
   }
 }
 
+export interface RateLimitRetryOptions {
+  maxRetries: number;
+  defaultDelayMs: number;
+  maxDelayMs: number;
+}
+
 export interface FallbackOptions {
   entries: ModelEntry[];
   trace: Trace;
@@ -93,6 +100,12 @@ export interface FallbackOptions {
   maxRetries: number;
   retryBaseDelayMs: number;
   retryMaxDelayMs: number;
+  /** Optional, eval-only wait-and-retry policy for provider rate limits. */
+  rateLimitRetry?: RateLimitRetryOptions;
+  /** Optional shared budget; evals use this to allow one 429 retry per case. */
+  acquireRateLimitRetry?: () => boolean;
+  /** Called immediately before each physical provider request, including retries. */
+  beforeAttempt?: (entry: ModelEntry, signal?: AbortSignal) => Promise<void>;
   /**
    * Rebuilds a request for a model without tools (compact corpus, no tools,
    * shorter history). Without it, such models are skipped when tools are needed.
@@ -101,7 +114,7 @@ export interface FallbackOptions {
   /** Prompt size in tokens, to skip models whose context window is too small. */
   estimateTokens: (options: LanguageModelV4CallOptions) => number;
   now?: () => number;
-  sleep?: (ms: number) => Promise<void>;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
 
 interface Classified {
@@ -227,7 +240,22 @@ function assertNotAborted(signal?: AbortSignal, entryId?: string, error?: unknow
   }
 }
 
-const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(signal.reason ?? new Error("request aborted"));
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error("request aborted"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+  });
+}
 
 export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
   const now = options.now ?? Date.now;
@@ -239,6 +267,17 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
     const min = Math.round(exp * 0.5);
     const max = Math.round(exp);
     return min >= max ? min : randomInt(min, max + 1);
+  }
+
+  async function waitBeforeRetry(ms: number, signal: AbortSignal | undefined, entryId: string) {
+    try {
+      await sleep(ms, signal);
+    } catch (error) {
+      assertNotAborted(signal, entryId, error);
+      releaseProbe(entryId);
+      throw error;
+    }
+    assertNotAborted(signal, entryId);
   }
 
   /**
@@ -288,7 +327,16 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
       record: ModelCall,
     ) => Promise<T>,
   ): Promise<{ ok: true; result: T } | { ok: false; attempt: Attempt }> {
-    for (let retry = 0; ; retry++) {
+    let transientRetries = 0;
+    let rateLimitRetries = 0;
+    for (;;) {
+      try {
+        await options.beforeAttempt?.(entry, call.abortSignal);
+        assertNotAborted(call.abortSignal, entry.id);
+      } catch (error) {
+        assertNotAborted(call.abortSignal, entry.id, error);
+        throw error;
+      }
       const started = now();
       const record: ModelCall = {
         model: entry.id,
@@ -311,9 +359,24 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
       } catch (error) {
         assertNotAborted(call.abortSignal, entry.id, error);
         const failure = classifyError(error, now());
-        if (failure.retryable && retry < options.maxRetries) {
-          await sleep(backoff(retry));
-          assertNotAborted(call.abortSignal, entry.id, error);
+        if (
+          failure.outcome === "rate-limited" &&
+          options.rateLimitRetry &&
+          (options.acquireRateLimitRetry?.() ??
+            rateLimitRetries < options.rateLimitRetry.maxRetries)
+        ) {
+          rateLimitRetries++;
+          const requested = failure.retryAfterMs ?? options.rateLimitRetry.defaultDelayMs;
+          await waitBeforeRetry(
+            Math.min(requested, options.rateLimitRetry.maxDelayMs),
+            call.abortSignal,
+            entry.id,
+          );
+          continue;
+        }
+        if (failure.retryable && transientRetries < options.maxRetries) {
+          await waitBeforeRetry(backoff(transientRetries), call.abortSignal, entry.id);
+          transientRetries++;
           continue;
         }
         recordFailure(

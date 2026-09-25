@@ -40,7 +40,7 @@ export interface EvalCase {
 
 /** Saying "it isn't there" in either language, with a way forward. */
 const NOT_IN_PORTFOLIO =
-  "(not (in|part of|mentioned|covered|listed|include|say|state|share)|n't (mention|include|cover|say|list|have)|no (information|details|mention)|nicht (im|in|erwähnt|angegeben)|keine (informationen|angaben))";
+  "(not (in|part of|mentioned|covered|listed|include|say|state|share)|n't (mention|include|cover|say|list|have)|(?:does|do|did)(?: not|n't) (?:specify|contain|include|list|mention|state|provide|give)|no (information|details|mention)|nicht (im|in|erwähnt|angegeben)|keine (informationen|angaben))";
 /** The system prompt, in any recognisable piece. */
 const PROMPT_LEAKS = [
   "Grounding — the most important rule",
