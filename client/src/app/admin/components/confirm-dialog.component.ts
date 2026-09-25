@@ -55,9 +55,15 @@ export class ConfirmDialogComponent {
 @Injectable({ providedIn: "root" })
 export class ConfirmService {
   private readonly dialog = inject(HlmDialogService);
+  private sequence = 0;
 
   async ask(options: ConfirmOptions): Promise<boolean> {
     const ref = this.dialog.open(ConfirmDialogComponent, {
+      // Its own ids: Spartan numbers dialogs opened here and dialogs declared
+      // in templates (a sheet) with two separate counters that both yield
+      // `brn-dialog-<n>`, so asking while a sheet is open could collide
+      // ("Dialog with ID … already exists").
+      id: `confirm-dialog-${++this.sequence}`,
       context: options,
       contentClass: "max-w-md",
       // The plan named `HlmAlertDialog`, but that component is template-only

@@ -21,7 +21,10 @@ import {
   socialInput,
 } from "../content/admin-schema.js";
 import type { DbExecutor } from "../content/build.js";
+import { canonicalJson } from "../content/publish.js";
 import { LOCALES, localeSchema, type Locale } from "../content/schema.js";
+import { expectedToken, parseUiGroups, saveUiGroups } from "../content/sections.js";
+import { toIssues } from "../lib/issues.js";
 import { getDb } from "../db/client.js";
 import {
   experiences,
@@ -117,6 +120,22 @@ function mediaPath(column: AnyColumn): SQL<string | null> {
   >`(select '/media/' || m.filename from ${mediaAssets} m where m.id = ${qualified(column)})`;
 }
 
+/**
+ * When a translation was last really edited: `now` if `next` differs from the
+ * stored row, else the stored time. Saving a page rewrites both languages, so
+ * without this every save would make the German look as fresh as the English,
+ * and the dashboard could never tell that it fell behind.
+ */
+function editedAt(
+  stored: (Record<string, unknown> & { updatedAt: Date }) | undefined,
+  next: Record<string, unknown>,
+  now: Date,
+): Date {
+  if (!stored) return now;
+  const before = Object.fromEntries(Object.keys(next).map((key) => [key, stored[key]]));
+  return canonicalJson(before) === canonicalJson(next) ? stored.updatedAt : now;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Site profile (locale-invariant identity) and CVs                            */
 /* -------------------------------------------------------------------------- */
@@ -166,6 +185,62 @@ adminCollectionsRouter.put("/profile", async (c) => {
     return respond(c, error, "duplicate");
   }
   return c.json({ ok: true });
+});
+
+/**
+ * The whole "Hero & identity" page in one transaction: the identity row and
+ * the `profile`, `hero` and `nav` groups of the `ui` document. Saved in
+ * pieces, a failure halfway left the page half-saved with nothing telling
+ * which half. Both parts carry their own version token.
+ */
+adminCollectionsRouter.put("/hero", async (c) => {
+  let body: { profile?: unknown; ui?: unknown; updatedAt?: unknown; profileUpdatedAt?: unknown };
+  try {
+    body = (await c.req.json()) as typeof body;
+  } catch {
+    return c.json({ error: "invalid_input" }, 400);
+  }
+
+  const profile = profileInput.safeParse(body.profile);
+  const ui = parseUiGroups(body.ui, ["ui"]);
+  if (!profile.success || !ui.ok) {
+    const issues = [
+      ...(profile.success ? [] : toIssues(profile.error.issues, ["profile"])),
+      ...(ui.ok ? [] : ui.issues),
+    ];
+    return c.json({ error: "invalid_input", issues }, 400);
+  }
+  const { siteUrl, ...rest } = profile.data;
+  const userId = c.get("session").userId;
+
+  try {
+    const outcome = await getDb().transaction(async (tx) => {
+      const [current] = await tx
+        .select({ updatedAt: siteProfile.updatedAt })
+        .from(siteProfile)
+        .where(eq(siteProfile.id, true))
+        .for("update");
+      const expected = expectedToken(body.profileUpdatedAt);
+      if (current && expected && current.updatedAt.getTime() !== expected.getTime()) {
+        return { ok: false as const };
+      }
+      await assertMedia(tx, [rest.avatarId], "image");
+
+      const saved = await saveUiGroups(tx, ui.groups, expectedToken(body.updatedAt), userId);
+      if (!saved.ok) return { ok: false as const };
+
+      const now = new Date();
+      await tx
+        .update(siteProfile)
+        .set({ ...rest, siteUrl: siteUrl || null, updatedAt: now, updatedBy: userId })
+        .where(eq(siteProfile.id, true));
+      return { ok: true as const, updatedAt: saved.updatedAt, profileUpdatedAt: now.toISOString() };
+    });
+    if (!outcome.ok) return c.json({ error: "stale" }, 409);
+    return c.json(outcome);
+  } catch (error) {
+    return respond(c, error, "duplicate");
+  }
 });
 
 adminCollectionsRouter.get("/resumes", async (c) => {
@@ -505,8 +580,15 @@ async function writeProject(tx: Tx, id: string | null, data: ProjectData): Promi
     projectId = row.id;
   }
 
+  const storedTexts = id
+    ? await tx.select().from(projectTranslations).where(eq(projectTranslations.projectId, id))
+    : [];
   for (const locale of LOCALES) {
-    const text = { ...data.translations[locale], updatedAt: now };
+    const stored = storedTexts.find((row) => row.locale === locale);
+    const text = {
+      ...data.translations[locale],
+      updatedAt: editedAt(stored, data.translations[locale], now),
+    };
     await tx
       .insert(projectTranslations)
       .values({ projectId, locale, ...text })
@@ -638,8 +720,18 @@ async function writeExperience(
     experienceId = row.id;
   }
 
+  const storedTexts = id
+    ? await tx
+        .select()
+        .from(experienceTranslations)
+        .where(eq(experienceTranslations.experienceId, id))
+    : [];
   for (const locale of LOCALES) {
-    const text = { ...translations[locale], updatedAt: now };
+    const stored = storedTexts.find((row) => row.locale === locale);
+    const text = {
+      ...translations[locale],
+      updatedAt: editedAt(stored, translations[locale], now),
+    };
     await tx
       .insert(experienceTranslations)
       .values({ experienceId, locale, ...text })
@@ -776,10 +868,14 @@ async function writePost(tx: Tx, id: string | null, data: PostData): Promise<str
     postId = row.id;
   }
 
+  const storedTexts = id
+    ? await tx.select().from(postTranslations).where(eq(postTranslations.postId, id))
+    : [];
   for (const locale of LOCALES) {
     const translation = data.translations[locale];
     if (translation) {
-      const text = { ...translation, updatedAt: now };
+      const stored = storedTexts.find((row) => row.locale === locale);
+      const text = { ...translation, updatedAt: editedAt(stored, translation, now) };
       await tx
         .insert(postTranslations)
         .values({ postId, locale, ...text })

@@ -35,7 +35,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   template: `
     <app-ui-group-editor
       group="about"
-      title="Über mich"
+      title="About"
       description="The about section and every line of the animated terminal."
       [fields]="fields"
     />

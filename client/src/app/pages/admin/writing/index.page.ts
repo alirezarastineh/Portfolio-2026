@@ -114,6 +114,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
       title="Writing copy"
       description="Labels on the writing index and around each post."
       [fields]="copyFields"
+      [level]="2"
     />
   `,
 })

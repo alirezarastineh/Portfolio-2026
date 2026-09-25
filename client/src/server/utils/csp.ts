@@ -19,7 +19,12 @@ export interface CspConfig {
   analyticsOrigin: string | null;
   /** Sentry: the error reporter's ingest host, and its CSP report endpoint. */
   sentry: SentryCspEndpoint | null;
+  /** Cloudflare Turnstile on the contact form and the assistant: its script and its frame. */
+  turnstile: boolean;
 }
+
+/** Where Turnstile's script and challenge frame come from. */
+export const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 
 export interface SentryCspEndpoint {
   origin: string;
@@ -95,6 +100,7 @@ export function cspConfigFromEnv(env: Record<string, string | undefined>): CspCo
     apiOrigin: originOf(env["VITE_API_BASE_URL"]),
     analyticsOrigin: originOf(env["VITE_UMAMI_SRC"]),
     sentry: sentryCspEndpoint(env["VITE_SENTRY_DSN"]),
+    turnstile: Boolean(env["VITE_TURNSTILE_SITE_KEY"]?.trim()),
   };
 }
 
@@ -107,9 +113,10 @@ export function buildCsp(nonce: string, config: CspConfig): string {
     [...new Set(values.filter((value): value is string => Boolean(value)))].join(" ");
 
   const nonceSource = `'nonce-${nonce}'`;
+  const turnstile = config.turnstile ? TURNSTILE_ORIGIN : null;
   const directives = [
     "default-src 'self'",
-    `script-src ${sources("'self'", nonceSource, config.analyticsOrigin)}`,
+    `script-src ${sources("'self'", nonceSource, config.analyticsOrigin, turnstile)}`,
     // GSAP and Angular write style attributes; a nonce cannot cover those.
     "style-src 'self' 'unsafe-inline'",
     `img-src ${sources("'self'", "data:", config.apiOrigin)}`,
@@ -120,6 +127,7 @@ export function buildCsp(nonce: string, config: CspConfig): string {
     "form-action 'self'",
     "frame-ancestors 'none'",
   ];
+  if (turnstile) directives.push(`frame-src ${turnstile}`);
   if (config.sentry) {
     // report-uri for browsers without the Reporting API (Firefox, Safari).
     directives.push(`report-uri ${config.sentry.reportUri}`, `report-to ${REPORT_GROUP}`);

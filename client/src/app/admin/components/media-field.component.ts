@@ -4,6 +4,7 @@ import {
   computed,
   inject,
   input,
+  OnInit,
   output,
   signal,
 } from "@angular/core";
@@ -13,7 +14,8 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmSheetImports } from "@spartan-ng/helm/sheet";
 
-import { AdminApiService, type MediaAsset } from "../admin-api.service";
+import type { MediaAsset } from "../admin-api.service";
+import { MediaLibraryService } from "../media-library.service";
 import { MediaPickerComponent } from "./media-picker.component";
 
 /**
@@ -102,8 +104,8 @@ import { MediaPickerComponent } from "./media-picker.component";
     </hlm-sheet>
   `,
 })
-export class MediaFieldComponent {
-  private readonly api = inject(AdminApiService);
+export class MediaFieldComponent implements OnInit {
+  private readonly library = inject(MediaLibraryService);
 
   readonly id = input.required<string>();
   readonly label = input.required<string>();
@@ -116,11 +118,12 @@ export class MediaFieldComponent {
   readonly chosen = output<MediaAsset | null>();
 
   protected readonly open = signal(false);
-  /** Relative paths load from the API host in the admin. */
-  protected readonly preview = computed(() => {
-    const path = this.path();
-    return path?.startsWith("/media/") ? this.api.baseUrl + path : (path ?? "");
-  });
+  /** A small resized copy once the library is loaded; the original (from the API host) before. */
+  protected readonly preview = computed(() => this.library.thumbnail(this.path()));
+
+  ngOnInit(): void {
+    void this.library.load();
+  }
 
   protected pick(asset: MediaAsset): void {
     if (asset.kind !== this.kind()) {

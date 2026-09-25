@@ -2,7 +2,7 @@ import { HttpClient, HttpErrorResponse, HttpEventType } from "@angular/common/ht
 import { inject, Injectable } from "@angular/core";
 import { firstValueFrom } from "rxjs";
 
-import type { AppContent, Locale } from "../content/schema";
+import type { AppContent, AppTranslations, Doc, Locale } from "../content/schema";
 import type {
   ExperienceInput,
   PostInput,
@@ -86,8 +86,27 @@ export interface RevisionDetail {
   live: { id: number; payload: AppContent } | null;
 }
 
+/** A validation problem from the API: the field's path, and what to do about it. */
+export interface ApiIssue {
+  path: (string | number)[];
+  message: string;
+  code?: string;
+  /** Draft problems only: the path with list items named, `projects[atlas].name`. */
+  label?: string;
+}
+
 /** Discriminated so callers handle failure explicitly rather than by try/catch. */
-export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string; status: number };
+export type ApiResult<T> =
+  | { ok: true; data: T }
+  | {
+      ok: false;
+      error: string;
+      status: number;
+      /** Per-field problems of a 400 `invalid_input`. */
+      issues?: ApiIssue[];
+      /** Whatever else the API said (a publish error's per-locale problems). */
+      detail?: unknown;
+    };
 
 /**
  * Talks to the credentialed admin surface on the API. The base URL is the
@@ -124,10 +143,19 @@ export class AdminApiService {
       return { ok: true, data: data as T };
     } catch (error) {
       if (error instanceof HttpErrorResponse) {
-        const code =
-          (error.error as { error?: string } | null)?.error ??
-          (error.status ? `http_${error.status}` : "request_failed");
-        return { ok: false, error: code, status: error.status };
+        const body = error.error as {
+          error?: string;
+          issues?: ApiIssue[];
+          detail?: unknown;
+        } | null;
+        const code = body?.error ?? (error.status ? `http_${error.status}` : "request_failed");
+        return {
+          ok: false,
+          error: code,
+          status: error.status,
+          ...(Array.isArray(body?.issues) ? { issues: body.issues } : {}),
+          ...(body?.detail !== undefined ? { detail: body.detail } : {}),
+        };
       }
       return { ok: false, error: "network_error", status: 0 };
     }
@@ -199,6 +227,16 @@ export class AdminApiService {
     return this.request<AppContent>("GET", `/admin/content/preview/${locale}`);
   }
 
+  /** What publishing now would change in each locale, or what stands in its way. */
+  publishReview() {
+    return this.request<PublishReview>("GET", "/admin/publish/review");
+  }
+
+  /** Empty and out-of-date translations, across every editor. */
+  i18nStatus() {
+    return this.request<{ items: I18nItem[] }>("GET", "/admin/i18n");
+  }
+
   publish(label?: string) {
     return this.request<{
       ok: true;
@@ -267,14 +305,32 @@ export class AdminApiService {
     });
   }
 
+  /** Some groups of the `ui` document, merged into it by the server. */
+  patchUiGroups(groups: Partial<Record<keyof AppTranslations, unknown>>, updatedAt: string | null) {
+    return this.request<{ ok: true; updatedAt: string }>("PATCH", "/admin/sections/ui", {
+      groups,
+      updatedAt,
+    });
+  }
+
   /* ---- identity ---- */
 
   getProfile() {
     return this.request<{ profile: ProfileRow }>("GET", "/admin/profile");
   }
 
-  putProfile(profile: ProfileInput) {
-    return this.request<{ ok: true }>("PUT", "/admin/profile", profile);
+  /** The identity and the hero page's copy, in one transaction. */
+  saveHero(input: {
+    profile: ProfileInput;
+    ui: Partial<Record<keyof AppTranslations, unknown>>;
+    updatedAt: string | null;
+    profileUpdatedAt: string | null;
+  }) {
+    return this.request<{ ok: true; updatedAt: string; profileUpdatedAt: string }>(
+      "PUT",
+      "/admin/hero",
+      input,
+    );
   }
 
   /* ---- collections ---- */
@@ -546,6 +602,16 @@ export class AdminApiService {
     return this.request<{ ok: true }>("DELETE", `/admin/media/${id}${confirm ? "?confirm=1" : ""}`);
   }
 
+  /** Deletes each file that still passes the delete checks; the rest come back as skipped. */
+  cleanupMedia(ids: string[], confirm = false) {
+    return this.request<{
+      ok: true;
+      deleted: string[];
+      skipped: { id: string; error: string }[];
+      freedBytes: number;
+    }>("POST", "/admin/media/cleanup", { ids, confirm });
+  }
+
   mediaReconcile() {
     return this.request<MediaReconcile>("GET", "/admin/media-reconcile");
   }
@@ -572,6 +638,55 @@ export interface MediaAsset {
   path: string;
   /** Resized copies, smallest first per format; empty for GIFs, PDFs and small images. */
   variants: { format: "webp" | "avif"; width: number; height: number; path: string }[];
+  /** What would stop a delete; `draft` empty and both flags false = unused. */
+  usage?: MediaUsage;
+}
+
+export interface MediaUsage {
+  /** Draft places that show it: `project:atlas`, `post:hello`, `profile:avatar`, … */
+  draft: string[];
+  /** Shown by the live site. */
+  live: boolean;
+  /** Shown by one of the last 20 publications (a rollback target). */
+  recent: boolean;
+}
+
+export interface DraftIssue extends ApiIssue {
+  label: string;
+}
+
+export interface DocChange {
+  key: string;
+  change: "added" | "removed" | "changed";
+  draft: Doc | null;
+  live: Doc | null;
+}
+
+export interface LocaleReview {
+  locale: Locale;
+  issues: DraftIssue[];
+  changed: boolean;
+  draft: AppContent | null;
+  live: AppContent | null;
+  liveVersionId: number | null;
+  docs: DocChange[];
+}
+
+export interface PublishReview {
+  locales: LocaleReview[];
+  canPublish: boolean;
+}
+
+export type I18nKind = "project" | "experience" | "post" | "skill" | "faq" | "section";
+
+export interface I18nItem {
+  kind: I18nKind;
+  id: string;
+  label: string;
+  missingDe: string[];
+  missingEn: string[];
+  stale: boolean;
+  absent: Locale | null;
 }
 
 export interface MediaReconcile {

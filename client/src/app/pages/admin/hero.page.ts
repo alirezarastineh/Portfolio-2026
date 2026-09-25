@@ -3,12 +3,19 @@ import {
   Component,
   computed,
   DestroyRef,
+  ElementRef,
   inject,
   OnInit,
   signal,
 } from "@angular/core";
 import type { RouteMeta } from "@analogjs/router";
-import { FormBuilder, FormControl, ReactiveFormsModule } from "@angular/forms";
+import {
+  FormBuilder,
+  FormControl,
+  ReactiveFormsModule,
+  type AbstractControl,
+  type FormGroup,
+} from "@angular/forms";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
 import { HlmInput } from "@spartan-ng/helm/input";
@@ -17,18 +24,23 @@ import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 
 import {
   AdminApiService,
+  type ApiIssue,
   type MediaAsset,
   type ProfileInput,
   type ResumeRow,
 } from "../../admin/admin-api.service";
+import { applyIssues, countServerErrors, focusFirstInvalid } from "../../admin/issues";
+import { toastIssues, toastStale } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import {
+  FieldIssueComponent,
   LocaleToggleComponent,
   SaveBarComponent,
 } from "../../admin/components/editor-chrome.component";
 import { FieldPairComponent, type LocaleView } from "../../admin/components/field-pair.component";
 import { MediaFieldComponent } from "../../admin/components/media-field.component";
 import { UiSectionService } from "../../admin/ui-section.service";
+import { isLocale } from "../../content/locale";
 import type { AppTranslations, Availability, Locale } from "../../content/schema";
 
 type ProfileGroup = AppTranslations["profile"];
@@ -69,6 +81,27 @@ const NAV_FIELDS: Field<keyof NavGroup>[] = [
   { key: "writing", label: "Nav — writing" },
 ];
 
+type IdentityKey = Exclude<keyof ProfileInput, "avatarId" | "availability">;
+
+const IDENTITY_FIELDS: {
+  key: IdentityKey;
+  label: string;
+  type?: string;
+  placeholder?: string;
+  maxLength?: number;
+}[] = [
+  { key: "name", label: "Name" },
+  { key: "handle", label: "Handle" },
+  { key: "contactEmail", label: "Contact email", type: "email" },
+  { key: "siteUrl", label: "Site address", placeholder: "https://alirezarastineh.me" },
+  { key: "primaryCtaHref", label: "Primary button link" },
+  { key: "secondaryCtaHref", label: "Secondary button link" },
+  // The availability select renders just before the time zone.
+  { key: "timezone", label: "Time zone", placeholder: "Europe/Berlin" },
+  { key: "locationCity", label: "City", placeholder: "Berlin" },
+  { key: "locationCountry", label: "Country code", placeholder: "DE", maxLength: 2 },
+];
+
 const AVAILABILITY: { value: Availability; label: string }[] = [
   { value: "open", label: "Open to new roles" },
   { value: "limited", label: "Limited availability" },
@@ -81,6 +114,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   selector: "app-admin-hero",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    FieldIssueComponent,
     FieldPairComponent,
     HlmField,
     HlmFieldLabel,
@@ -119,76 +153,37 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
             Not translated — the same in both languages.
           </p>
           <form [formGroup]="identity" class="grid gap-4 sm:grid-cols-2">
-            <div hlmField>
-              <label hlmFieldLabel for="name">Name</label>
-              <input hlmInput id="name" formControlName="name" />
-            </div>
-            <div hlmField>
-              <label hlmFieldLabel for="handle">Handle</label>
-              <input hlmInput id="handle" formControlName="handle" />
-            </div>
-            <div hlmField>
-              <label hlmFieldLabel for="contactEmail">Contact email</label>
-              <input hlmInput id="contactEmail" type="email" formControlName="contactEmail" />
-            </div>
-            <div hlmField>
-              <label hlmFieldLabel for="siteUrl">Site address</label>
-              <input
-                hlmInput
-                id="siteUrl"
-                formControlName="siteUrl"
-                placeholder="https://alirezarastineh.me"
-              />
-            </div>
-            <div hlmField>
-              <label hlmFieldLabel for="primaryCtaHref">Primary button link</label>
-              <input hlmInput id="primaryCtaHref" formControlName="primaryCtaHref" />
-            </div>
-            <div hlmField>
-              <label hlmFieldLabel for="secondaryCtaHref">Secondary button link</label>
-              <input hlmInput id="secondaryCtaHref" formControlName="secondaryCtaHref" />
-            </div>
-            <div hlmField>
-              <label hlmFieldLabel for="availability">Availability</label>
-              <select
-                id="availability"
-                formControlName="availability"
-                class="h-9 rounded-md border border-border bg-card px-2 text-sm"
-              >
-                @for (option of availability; track option.value) {
-                  <option [value]="option.value">{{ option.label }}</option>
-                }
-              </select>
-            </div>
-            <div hlmField>
-              <label hlmFieldLabel for="timezone">Time zone</label>
-              <input
-                hlmInput
-                id="timezone"
-                formControlName="timezone"
-                placeholder="Europe/Berlin"
-              />
-            </div>
-            <div hlmField>
-              <label hlmFieldLabel for="locationCity">City</label>
-              <input
-                hlmInput
-                id="locationCity"
-                formControlName="locationCity"
-                placeholder="Berlin"
-              />
-            </div>
-            <div hlmField>
-              <label hlmFieldLabel for="locationCountry">Country code</label>
-              <input
-                hlmInput
-                id="locationCountry"
-                formControlName="locationCountry"
-                placeholder="DE"
-                maxlength="2"
-                class="uppercase"
-              />
-            </div>
+            @for (field of identityFields; track field.key) {
+              @if (field.key === "timezone") {
+                <div hlmField>
+                  <label hlmFieldLabel for="availability">Availability</label>
+                  <select
+                    id="availability"
+                    formControlName="availability"
+                    class="h-9 rounded-md border border-border bg-card px-2 text-sm"
+                  >
+                    @for (option of availability; track option.value) {
+                      <option [value]="option.value">{{ option.label }}</option>
+                    }
+                  </select>
+                </div>
+              }
+              <div hlmField>
+                <label hlmFieldLabel [for]="field.key">{{ field.label }}</label>
+                <input
+                  hlmInput
+                  [id]="field.key"
+                  [type]="field.type ?? 'text'"
+                  [formControlName]="field.key"
+                  [placeholder]="field.placeholder ?? ''"
+                  [attr.maxlength]="field.maxLength ?? null"
+                  [class.uppercase]="field.key === 'locationCountry'"
+                  [attr.aria-invalid]="identityIssue(field.key) ? true : null"
+                  [attr.aria-describedby]="identityIssue(field.key) ? field.key + '-issue' : null"
+                />
+                <app-field-issue [id]="field.key + '-issue'" [message]="identityIssue(field.key)" />
+              </div>
+            }
           </form>
 
           <app-media-field
@@ -269,7 +264,13 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           </form>
         </section>
 
-        <app-save-bar [dirty]="dirty()" [saving]="saving()" (save)="save()" (discard)="discard()" />
+        <app-save-bar
+          [dirty]="dirty()"
+          [saving]="saving()"
+          [problems]="problems()"
+          (save)="save()"
+          (discard)="discard()"
+        />
       }
     </div>
   `,
@@ -280,6 +281,9 @@ export default class AdminHeroPage implements OnInit {
   private readonly ui = inject(UiSectionService);
   private readonly unsaved = inject(UnsavedChangesService);
 
+  private readonly host = inject(ElementRef<HTMLElement>);
+
+  protected readonly identityFields = IDENTITY_FIELDS;
   protected readonly profileFields = PROFILE_FIELDS;
   protected readonly heroFields = HERO_FIELDS;
   protected readonly navFields = NAV_FIELDS;
@@ -296,7 +300,9 @@ export default class AdminHeroPage implements OnInit {
   protected readonly avatarPath = signal<string | null>(null);
   protected readonly resumes = signal<Record<Locale, ResumeRow | null>>({ en: null, de: null });
 
+  /** Version tokens of the `ui` document and of the identity row. */
   private uiUpdatedAt: string | null = null;
+  private profileUpdatedAt: string | null = null;
   private pristine: {
     identity: Omit<ProfileInput, "avatarId">;
     avatar: { id: string | null; path: string | null };
@@ -334,6 +340,11 @@ export default class AdminHeroPage implements OnInit {
       this.identity.dirty ||
       (this.pristine !== null && this.avatarId() !== this.pristine.avatar.id)
     );
+  });
+
+  protected readonly problems = computed(() => {
+    this.revision();
+    return countServerErrors(this.form) + countServerErrors(this.identity);
   });
 
   constructor() {
@@ -377,6 +388,7 @@ export default class AdminHeroPage implements OnInit {
 
     const p = profileResult.data.profile;
     this.uiUpdatedAt = profileGroup.updatedAt;
+    this.profileUpdatedAt = p.updatedAt;
     this.pristine = {
       identity: {
         name: p.name,
@@ -447,54 +459,47 @@ export default class AdminHeroPage implements OnInit {
     );
   }
 
+  /** Identity and copy in one request, so the page is never left half-saved. */
   protected async save(): Promise<void> {
     if (this.saving()) return;
     this.saving.set(true);
 
     const raw = this.form.getRawValue();
-    const identity = this.identity.getRawValue();
+    const typed = this.identity.getRawValue();
+    const identity = { ...typed, locationCountry: typed.locationCountry.trim().toUpperCase() };
     const value = {
       profile: { en: raw.profileEn as ProfileGroup, de: raw.profileDe as ProfileGroup },
       hero: { en: raw.heroEn as HeroGroup, de: raw.heroDe as HeroGroup },
       nav: { en: raw.navEn as NavGroup, de: raw.navDe as NavGroup },
     };
 
-    // All three groups live in the same document, so each save must use the
-    // token the previous one just produced.
-    let token = this.uiUpdatedAt;
-    for (const group of ["profile", "hero", "nav"] as const) {
-      const saved = await this.ui.saveGroup(group, value[group] as never, token);
-      if (!saved.ok) {
-        this.saving.set(false);
-        this.reportSaveFailure(saved.reason);
-        return;
-      }
-      token = saved.updatedAt;
-    }
-
-    const identitySave = await this.api.putProfile({
-      ...identity,
-      locationCountry: identity.locationCountry.trim().toUpperCase(),
-      avatarId: this.avatarId(),
+    const result = await this.api.saveHero({
+      profile: { ...identity, avatarId: this.avatarId() },
+      ui: value,
+      updatedAt: this.uiUpdatedAt,
+      profileUpdatedAt: this.profileUpdatedAt,
     });
     this.saving.set(false);
 
-    if (!identitySave.ok) {
-      toast.error("Identity not saved", {
-        description:
-          identitySave.error === "invalid_input"
-            ? "Check the site address (an origin without a path), the country code and the time zone."
-            : identitySave.error,
-      });
+    if (!result.ok) {
+      if (result.status === 409) {
+        toastStale(() => this.reload(), "This page");
+      } else if (result.issues?.length) {
+        this.showIssues(result.issues);
+      } else {
+        toast.error("Save failed", { description: result.error });
+      }
       return;
     }
 
-    this.uiUpdatedAt = token;
+    this.uiUpdatedAt = result.data.updatedAt;
+    this.profileUpdatedAt = result.data.profileUpdatedAt;
     this.pristine = {
-      identity: { ...identity, locationCountry: identity.locationCountry.trim().toUpperCase() },
+      identity,
       avatar: { id: this.avatarId(), path: this.avatarPath() },
       ...value,
     };
+    this.identity.patchValue({ locationCountry: identity.locationCountry }, { emitEvent: false });
     this.form.markAsPristine();
     this.identity.markAsPristine();
     this.revision.update((v) => v + 1);
@@ -502,16 +507,38 @@ export default class AdminHeroPage implements OnInit {
     toast.success("Draft saved");
   }
 
-  private reportSaveFailure(reason: "stale" | "invalid" | "failed"): void {
-    if (reason === "stale") {
-      toast.error("Saved elsewhere", {
-        description: "This section changed in another tab. Reload before saving.",
-      });
-    } else if (reason === "invalid") {
-      toast.error("Check the form", { description: "Some fields are empty or too long." });
-    } else {
-      toast.error("Save failed");
+  /** `profile.<field>` → an identity control; `ui.<group>.<locale>.<field>` → a copy control. */
+  private showIssues(issues: ApiIssue[]): void {
+    const unplaced = applyIssues(issues, (path) => {
+      const [part, group, locale, key] = path;
+      if (part === "profile" && typeof group === "string") {
+        return (this.identity.controls as Record<string, AbstractControl>)[group] ?? null;
+      }
+      if (part === "ui" && isLocale(locale) && typeof key === "string") {
+        const name = `${String(group)}${locale === "en" ? "En" : "De"}`;
+        const controls = this.form.controls as Record<string, FormGroup | undefined>;
+        return controls[name]?.controls[key] ?? null;
+      }
+      return null;
+    });
+    this.revision.update((v) => v + 1);
+    const view = this.view();
+    if (view !== "both" && issues.some((i) => isLocale(i.path[2]) && i.path[2] !== view)) {
+      this.view.set("both");
     }
+    toastIssues(unplaced.length ? unplaced : issues);
+    focusFirstInvalid(this.host.nativeElement);
+  }
+
+  protected identityIssue(key: IdentityKey): string | null {
+    this.revision();
+    return (this.identity.controls[key].errors?.["server"] as string | undefined) ?? null;
+  }
+
+  /** After "Saved elsewhere": the other version, replacing the edits here. */
+  private async reload(): Promise<void> {
+    this.loading.set(true);
+    await this.load();
   }
 }
 

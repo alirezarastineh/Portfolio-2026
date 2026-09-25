@@ -22,6 +22,7 @@ import { CHROME } from "../i18n/chrome";
 import { fmt } from "../i18n/interpolate";
 import { LanguageService } from "../services/language.service";
 import { ContactService } from "../services/contact.service";
+import { TURNSTILE_SITE_KEY, turnstileToken } from "../services/turnstile";
 
 /** The API's own limits; the form's validators say the same in the reader's language. */
 const contactSchema = z.object({
@@ -294,16 +295,8 @@ export class ContactSectionComponent {
     return t.errorInvalid;
   }
 
-  async submit(): Promise<void> {
-    if (this.state() === "submitting" || this.state() === "success") return;
+  private validateForm(): z.infer<typeof contactSchema> | null {
     const raw = this.form.getRawValue();
-
-    // A bot filled the honeypot: look sent, send nothing.
-    if (raw.website) {
-      this.succeed();
-      return;
-    }
-
     this.form.markAllAsTouched();
     const parsed = contactSchema.safeParse({
       name: raw.name.trim(),
@@ -317,19 +310,54 @@ export class ContactSectionComponent {
       for (const issue of parsed.error.issues) {
         const field = issue.path[0] as Field;
         const control = this.form.controls[field];
-        if (control.valid) control.setErrors({ [field === "email" ? "email" : "required"]: true });
+        if (control.valid) {
+          control.setErrors({ [field === "email" ? "email" : "required"]: true });
+        }
       }
     }
     if (this.form.invalid || !parsed.success) {
       this.fail(this.lang.t().contact.errorFixFields);
       this.focusFirstInvalid();
+      return null;
+    }
+    return parsed.data;
+  }
+
+  private async fetchTurnstile(): Promise<string | null> {
+    if (!TURNSTILE_SITE_KEY) return "";
+    try {
+      return await turnstileToken(this.lang.lang());
+    } catch {
+      this.fail(this.humanize("turnstile_failed"));
+      return null;
+    }
+  }
+
+  async submit(): Promise<void> {
+    if (this.state() === "submitting" || this.state() === "success") return;
+    const raw = this.form.getRawValue();
+
+    // A bot filled the honeypot: look sent, send nothing.
+    if (raw.website) {
+      this.succeed();
       return;
     }
 
+    const data = this.validateForm();
+    if (!data) return;
+
     this.state.set("submitting");
     this.errorMsg.set("");
+
+    const turnstile = await this.fetchTurnstile();
+    if (turnstile === null) return;
+
     // The page language, so the inbox shows which language to reply in.
-    const result = await this.contact.send({ ...parsed.data, locale: this.lang.lang() });
+    const result = await this.contact.send({
+      ...data,
+      locale: this.lang.lang(),
+      ...(turnstile ? { turnstileToken: turnstile } : {}),
+    });
     if (result.ok) this.succeed();
     else this.fail(this.humanize(result.error));
   }
@@ -374,6 +402,7 @@ export class ContactSectionComponent {
       case "mailer_unavailable":
         return t.errorMailerUnavailable;
       case "send_failed":
+      case "turnstile_failed":
         return t.errorSendFailed;
       default:
         return t.errorNetwork;

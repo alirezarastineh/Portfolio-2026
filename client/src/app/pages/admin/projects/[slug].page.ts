@@ -4,6 +4,7 @@ import {
   computed,
   DestroyRef,
   effect,
+  ElementRef,
   inject,
   OnInit,
   signal,
@@ -30,9 +31,13 @@ import {
 } from "../../../admin/admin-api.service";
 import type { MetricInput } from "../../../admin/admin-schema";
 import {
+  FieldIssueComponent,
   LocaleToggleComponent,
   SaveBarComponent,
 } from "../../../admin/components/editor-chrome.component";
+import { FieldIssues, focusFirstInvalid } from "../../../admin/issues";
+import { toastIssues } from "../../../admin/save-feedback";
+import { isLocale } from "../../../content/locale";
 import { CopilotSuggestComponent } from "../../../admin/components/copilot-suggest.component";
 import type { LocaleView } from "../../../admin/components/field-pair.component";
 import {
@@ -104,6 +109,14 @@ const CARD_FIELDS: TextFieldDef[] = [
   },
 ];
 
+type LinkKey = "linkLive" | "linkRepo" | "linkCaseStudy";
+
+const LINK_FIELDS: { key: LinkKey; label: string }[] = [
+  { key: "linkLive", label: "Live URL" },
+  { key: "linkRepo", label: "Repository URL" },
+  { key: "linkCaseStudy", label: "External case study URL" },
+];
+
 function filledMetrics(metrics: MetricInput[]): MetricInput[] {
   return metrics.filter((m) => m.value.trim() !== "" && m.label.trim() !== "");
 }
@@ -114,6 +127,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   selector: "app-admin-project-editor",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    FieldIssueComponent,
     FormsModule,
     GalleryEditorComponent,
     HlmButton,
@@ -164,9 +178,13 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
             <input
               hlmInput
               id="slug"
+              maxlength="80"
               [ngModel]="p.slug"
               (ngModelChange)="patch({ slug: $event })"
+              [attr.aria-invalid]="issues.get('slug') ? true : null"
+              [attr.aria-describedby]="issues.get('slug') ? 'slug-issue' : null"
             />
+            <app-field-issue id="slug-issue" [message]="issues.get('slug')" />
           </div>
           <div hlmField>
             <label hlmFieldLabel for="category">Category key</label>
@@ -174,9 +192,13 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
               hlmInput
               id="category"
               placeholder="ai-platform"
+              maxlength="40"
               [ngModel]="p.category"
               (ngModelChange)="patch({ category: $event })"
+              [attr.aria-invalid]="issues.get('category') ? true : null"
+              [attr.aria-describedby]="issues.get('category') ? 'category-issue' : null"
             />
+            <app-field-issue id="category-issue" [message]="issues.get('category')" />
           </div>
           <div hlmField>
             <label hlmFieldLabel for="periodStart">Started</label>
@@ -186,7 +208,10 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
               type="date"
               [ngModel]="p.periodStart ?? ''"
               (ngModelChange)="patch({ periodStart: $event || null })"
+              [attr.aria-invalid]="issues.get('periodStart') ? true : null"
+              [attr.aria-describedby]="issues.get('periodStart') ? 'periodStart-issue' : null"
             />
+            <app-field-issue id="periodStart-issue" [message]="issues.get('periodStart')" />
           </div>
           <div hlmField>
             <label hlmFieldLabel for="periodEnd">Ended</label>
@@ -196,39 +221,31 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
               type="date"
               [ngModel]="p.periodEnd ?? ''"
               (ngModelChange)="patch({ periodEnd: $event || null })"
-              aria-describedby="periodEnd-hint"
+              [attr.aria-invalid]="issues.get('periodEnd') ? true : null"
+              [attr.aria-describedby]="
+                issues.get('periodEnd') ? 'periodEnd-issue periodEnd-hint' : 'periodEnd-hint'
+              "
             />
             <span id="periodEnd-hint" class="text-[0.72rem] text-muted-foreground"
               >Empty = ongoing.</span
             >
+            <app-field-issue id="periodEnd-issue" [message]="issues.get('periodEnd')" />
           </div>
-          <div hlmField>
-            <label hlmFieldLabel for="linkLive">Live URL</label>
-            <input
-              hlmInput
-              id="linkLive"
-              [ngModel]="p.linkLive"
-              (ngModelChange)="patch({ linkLive: $event })"
-            />
-          </div>
-          <div hlmField>
-            <label hlmFieldLabel for="linkRepo">Repository URL</label>
-            <input
-              hlmInput
-              id="linkRepo"
-              [ngModel]="p.linkRepo"
-              (ngModelChange)="patch({ linkRepo: $event })"
-            />
-          </div>
-          <div hlmField>
-            <label hlmFieldLabel for="linkCaseStudy">External case study URL</label>
-            <input
-              hlmInput
-              id="linkCaseStudy"
-              [ngModel]="p.linkCaseStudy"
-              (ngModelChange)="patch({ linkCaseStudy: $event })"
-            />
-          </div>
+          @for (link of linkFields; track link.key) {
+            <div hlmField>
+              <label hlmFieldLabel [for]="link.key">{{ link.label }}</label>
+              <input
+                hlmInput
+                maxlength="500"
+                [id]="link.key"
+                [ngModel]="p[link.key]"
+                (ngModelChange)="patchLink(link.key, $event)"
+                [attr.aria-invalid]="issues.get(link.key) ? true : null"
+                [attr.aria-describedby]="issues.get(link.key) ? link.key + '-issue' : null"
+              />
+              <app-field-issue [id]="link.key + '-issue'" [message]="issues.get(link.key)" />
+            </div>
+          }
           <label class="flex items-center gap-3 self-end pb-2 font-mono text-[0.8rem]">
             <hlm-switch [checked]="p.featured" (checkedChange)="patch({ featured: $event })" />
             <span>Featured on the home page</span>
@@ -256,22 +273,28 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
         }
 
         <div class="grid gap-6 sm:grid-cols-2">
-          <app-string-list
-            label="Tech stack"
-            singular="technology"
-            emptyText="No stack entries yet."
-            [max]="40"
-            [value]="p.stack"
-            (valueChange)="patch({ stack: $event })"
-          />
-          <app-string-list
-            label="Tags"
-            singular="tag"
-            emptyText="No tags yet."
-            [max]="20"
-            [value]="p.tags"
-            (valueChange)="patch({ tags: $event })"
-          />
+          <div class="flex flex-col">
+            <app-string-list
+              label="Tech stack"
+              singular="technology"
+              emptyText="No stack entries yet."
+              [max]="40"
+              [value]="p.stack"
+              (valueChange)="patch({ stack: $event })"
+            />
+            <app-field-issue id="stack-issue" [message]="issues.under('stack')" />
+          </div>
+          <div class="flex flex-col">
+            <app-string-list
+              label="Tags"
+              singular="tag"
+              emptyText="No tags yet."
+              [max]="20"
+              [value]="p.tags"
+              (valueChange)="patch({ tags: $event })"
+            />
+            <app-field-issue id="tags-issue" [message]="issues.under('tags')" />
+          </div>
         </div>
 
         <hlm-separator />
@@ -306,6 +329,10 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                       [ngModel]="p.translations[locale][field.key]"
                       (ngModelChange)="patchText(locale, field.key, $event)"
                       [attr.aria-label]="field.label + ' (' + locale + ')'"
+                      [attr.aria-invalid]="textIssue(locale, field.key) ? true : null"
+                      [attr.aria-describedby]="
+                        textIssue(locale, field.key) ? field.key + '-' + locale + '-issue' : null
+                      "
                     ></textarea>
                     @if (field.key === "seoDescription") {
                       <app-copilot-suggest
@@ -322,8 +349,16 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                       [ngModel]="p.translations[locale][field.key]"
                       (ngModelChange)="patchText(locale, field.key, $event)"
                       [attr.aria-label]="field.label + ' (' + locale + ')'"
+                      [attr.aria-invalid]="textIssue(locale, field.key) ? true : null"
+                      [attr.aria-describedby]="
+                        textIssue(locale, field.key) ? field.key + '-' + locale + '-issue' : null
+                      "
                     />
                   }
+                  <app-field-issue
+                    [id]="field.key + '-' + locale + '-issue'"
+                    [message]="textIssue(locale, field.key)"
+                  />
                 </div>
               }
             </div>
@@ -333,14 +368,20 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
         <div [class]="columns()">
           @for (locale of visibleLocales(); track locale) {
-            <app-string-list
-              [label]="'Outcomes (' + locale + ')'"
-              singular="outcome"
-              emptyText="No outcomes yet."
-              [max]="20"
-              [value]="p.translations[locale].outcomes"
-              (valueChange)="patchTranslation(locale, { outcomes: $event })"
-            />
+            <div class="flex flex-col">
+              <app-string-list
+                [label]="'Outcomes (' + locale + ')'"
+                singular="outcome"
+                emptyText="No outcomes yet."
+                [max]="20"
+                [value]="p.translations[locale].outcomes"
+                (valueChange)="patchTranslation(locale, { outcomes: $event })"
+              />
+              <app-field-issue
+                [id]="'outcomes-' + locale + '-issue'"
+                [message]="issues.under('translations.' + locale + '.outcomes')"
+              />
+            </div>
           }
         </div>
 
@@ -348,11 +389,17 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
         <div [class]="columns()">
           @for (locale of visibleLocales(); track locale) {
-            <app-metrics-editor
-              [label]="'Metrics (' + locale + ')'"
-              [value]="p.translations[locale].metrics"
-              (valueChange)="patchMetrics(locale, $event)"
-            />
+            <div class="flex flex-col">
+              <app-metrics-editor
+                [label]="'Metrics (' + locale + ')'"
+                [value]="p.translations[locale].metrics"
+                (valueChange)="patchMetrics(locale, $event)"
+              />
+              <app-field-issue
+                [id]="'metrics-' + locale + '-issue'"
+                [message]="issues.under('translations.' + locale + '.metrics')"
+              />
+            </div>
           }
         </div>
 
@@ -383,6 +430,10 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                 (ngModelChange)="patchText(locale, 'body', $event)"
                 [label]="'Case study (' + locale + ')'"
               />
+              <app-field-issue
+                [id]="'body-' + locale + '-issue'"
+                [message]="textIssue(locale, 'body')"
+              />
             </div>
           }
         </section>
@@ -390,8 +441,15 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
         <hlm-separator />
 
         <app-gallery-editor [value]="gallery()" (valueChange)="patchGallery($event)" />
+        <app-field-issue id="gallery-issue" [message]="issues.under('gallery')" />
 
-        <app-save-bar [dirty]="dirty()" [saving]="saving()" (save)="save()" (discard)="discard()" />
+        <app-save-bar
+          [dirty]="dirty()"
+          [saving]="saving()"
+          [problems]="issues.count()"
+          (save)="save()"
+          (discard)="discard()"
+        />
       }
     </div>
   `,
@@ -402,8 +460,13 @@ export default class AdminProjectEditorPage implements OnInit {
   private readonly router = inject(Router);
   private readonly unsaved = inject(UnsavedChangesService);
 
+  private readonly host = inject(ElementRef<HTMLElement>);
+
   protected readonly cardFields = CARD_FIELDS;
+  protected readonly linkFields = LINK_FIELDS;
   protected readonly view = signal<LocaleView>("both");
+  /** The last save's problems, by the input's path (`translations.de.name`). */
+  protected readonly issues = new FieldIssues();
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
 
@@ -475,6 +538,15 @@ export default class AdminProjectEditorPage implements OnInit {
   protected patch(change: Partial<ProjectRow>): void {
     this.project.update((p) => (p ? { ...p, ...change } : p));
     this.revision.update((v) => v + 1);
+    for (const key of Object.keys(change)) this.issues.resolve(key);
+  }
+
+  protected patchLink(key: LinkKey, value: string): void {
+    this.patch({ [key]: value } as Partial<ProjectRow>);
+  }
+
+  protected textIssue(locale: Locale, key: string): string | null {
+    return this.issues.get(`translations.${locale}.${key}`);
   }
 
   protected patchGallery(gallery: GalleryItem[]): void {
@@ -504,11 +576,13 @@ export default class AdminProjectEditorPage implements OnInit {
         : p,
     );
     this.revision.update((v) => v + 1);
+    for (const key of Object.keys(change)) this.issues.resolve(`translations.${locale}.${key}`);
   }
 
   protected discard(): void {
     this.project.set(this.pristine ? structuredClone(this.pristine) : null);
     this.revision.update((v) => v + 1);
+    this.issues.clear();
   }
 
   protected async save(): Promise<void> {
@@ -540,18 +614,30 @@ export default class AdminProjectEditorPage implements OnInit {
     this.saving.set(false);
 
     if (!result.ok) {
-      const descriptions: Record<string, string> = {
-        duplicate_slug: "Another project already uses that slug.",
-        invalid_input:
-          "Check the dates (the end cannot come before the start), metrics and field lengths.",
-      };
-      toast.error("Save failed", { description: descriptions[result.error] ?? result.error });
+      if (result.error === "duplicate_slug") {
+        this.issues.add("slug", "Another project already uses this slug");
+        focusFirstInvalid(this.host.nativeElement);
+      } else if (result.issues?.length) {
+        this.issues.set(result.issues);
+        const hidden = this.view();
+        if (
+          hidden !== "both" &&
+          result.issues.some((i) => isLocale(i.path[1]) && i.path[1] !== hidden)
+        ) {
+          this.view.set("both");
+        }
+        toastIssues(result.issues);
+        focusFirstInvalid(this.host.nativeElement);
+      } else {
+        toast.error("Save failed", { description: result.error });
+      }
       return;
     }
 
     const slugChanged = this.pristine?.slug !== current.slug;
     this.pristine = structuredClone(current);
     this.revision.update((v) => v + 1);
+    this.issues.clear();
     toast.success("Draft saved");
 
     // The route is keyed by slug, so keep the URL in step after a rename.

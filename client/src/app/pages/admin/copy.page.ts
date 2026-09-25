@@ -1,12 +1,13 @@
-import { ChangeDetectionStrategy, Component, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
 import type { RouteMeta } from "@analogjs/router";
 import { HlmTabsImports } from "@spartan-ng/helm/tabs";
 
+import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import {
   UiGroupEditorComponent,
   type UiFieldDef,
 } from "../../admin/components/ui-group-editor.component";
-import { unsavedChangesGuard } from "../../admin/unsaved-changes.service";
+import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import type { UiGroup } from "../../admin/ui-section.service";
 
 interface GroupDef {
@@ -87,7 +88,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   host: { class: "block" },
   template: `
     <div class="mx-auto mb-6 flex max-w-4xl flex-col gap-4">
-      <div hlmTabs [tab]="active()" (tabActivated)="active.set($any($event))">
+      <div hlmTabs [tab]="tab()" (tabActivated)="select($any($event))">
         <div hlmTabsList aria-label="Copy group">
           @for (def of groups; track def.group) {
             <button [hlmTabsTrigger]="def.group">{{ def.title }}</button>
@@ -109,6 +110,36 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   `,
 })
 export default class AdminCopyPage {
+  private readonly unsaved = inject(UnsavedChangesService);
+  private readonly confirm = inject(ConfirmService);
+
   protected readonly groups = GROUPS;
+  /** The editor shown. */
   protected readonly active = signal<UiGroup>("caseStudy");
+  /**
+   * The tab strip's own state. Kept apart from `active` so that a refused
+   * switch can put the strip back: the editor below is destroyed on a switch,
+   * and with it any unsaved edits.
+   */
+  protected readonly tab = signal<UiGroup>("caseStudy");
+
+  protected async select(group: UiGroup): Promise<void> {
+    const current = this.active();
+    if (group === current) return;
+    this.tab.set(group);
+    if (this.unsaved.isDirty(`ui:${current}`)) {
+      const leave = await this.confirm.ask({
+        title: "Discard unsaved changes?",
+        description: "This group has edits that have not been saved. Switching loses them.",
+        confirmLabel: "Discard and switch",
+        cancelLabel: "Stay",
+        destructive: true,
+      });
+      if (!leave) {
+        this.tab.set(current);
+        return;
+      }
+    }
+    this.active.set(group);
+  }
 }

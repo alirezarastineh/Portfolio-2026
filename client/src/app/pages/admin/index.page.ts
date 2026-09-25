@@ -1,6 +1,12 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  OnInit,
+  signal,
+} from "@angular/core";
 import { RouterLink } from "@angular/router";
-import { toast } from "@spartan-ng/brain/sonner";
 import { HlmAlert, HlmAlertDescription, HlmAlertTitle } from "@spartan-ng/helm/alert";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
@@ -11,16 +17,28 @@ import {
   HlmCardHeader,
   HlmCardTitle,
 } from "@spartan-ng/helm/card";
-import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
-import { HlmSpinner } from "@spartan-ng/helm/spinner";
 
-import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import {
   AdminApiService,
   type AdminStatus,
+  type I18nItem,
   type MediaReconcile,
 } from "../../admin/admin-api.service";
+import { PublishDialogComponent } from "../../admin/components/publish-dialog.component";
+import { editorLinkForI18n } from "../../admin/editor-links";
+
+/** Shown before "show all" — enough to act on without burying the rest of the page. */
+const I18N_PREVIEW = 6;
+
+const KIND_LABELS: Record<I18nItem["kind"], string> = {
+  project: "project",
+  experience: "experience",
+  post: "post",
+  skill: "skill card",
+  faq: "FAQ",
+  section: "page copy",
+};
 
 @Component({
   selector: "app-admin-dashboard",
@@ -36,9 +54,8 @@ import {
     HlmCardDescription,
     HlmCardHeader,
     HlmCardTitle,
-    HlmInput,
     HlmSkeleton,
-    HlmSpinner,
+    PublishDialogComponent,
     RouterLink,
   ],
   host: { class: "block" },
@@ -52,27 +69,25 @@ import {
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <!-- Optional; shown in Publications, so a rollback target is easy to find later. -->
-          <input
-            #labelInput
-            hlmInput
-            class="h-9 w-56"
-            maxlength="200"
-            placeholder="What changed? (optional)"
-            aria-label="Label for this publish"
-            [value]="label()"
-            (input)="label.set(labelInput.value)"
-            (keydown.enter)="publish()"
-          />
-          <button hlmBtn [disabled]="publishing()" (click)="publish()">
-            @if (publishing()) {
-              <hlm-spinner class="size-4" />
-            } @else {
-              Publish
-            }
+          <a hlmBtn variant="outline" routerLink="/admin/preview">Preview draft</a>
+          <button
+            hlmBtn
+            [disabled]="!canReview()"
+            [attr.aria-describedby]="canReview() ? null : 'publish-hint'"
+            (click)="publishOpen.set(true)"
+          >
+            Review &amp; publish
           </button>
         </div>
       </header>
+      @if (status() && !canReview()) {
+        <p
+          id="publish-hint"
+          class="-mt-4 m-0 text-right font-mono text-[0.72rem] text-muted-foreground"
+        >
+          nothing to publish — the draft matches what is live
+        </p>
+      }
 
       @if (reconcile(); as r) {
         @if (r.missingFiles.length || r.orphanFiles.length) {
@@ -109,7 +124,7 @@ import {
               }}
             </p>
           </div>
-          <div hlmCardContent class="grid gap-4 sm:grid-cols-2">
+          <div hlmCardContent class="grid gap-4 sm:grid-cols-3">
             <div>
               <p
                 class="m-0 font-mono text-[0.7rem] uppercase tracking-[0.2em] text-muted-foreground"
@@ -126,21 +141,86 @@ import {
               </p>
               <p class="m-0 mt-1 text-sm">{{ s.lastPublish ? formatDate(s.lastPublish) : "—" }}</p>
             </div>
+            <div>
+              <p
+                class="m-0 font-mono text-[0.7rem] uppercase tracking-[0.2em] text-muted-foreground"
+              >
+                Live versions
+              </p>
+              <p class="m-0 mt-1 font-mono text-sm">
+                @for (p of s.pointers; track p.locale; let last = $last) {
+                  {{ p.locale }} v{{ p.versionId }}{{ last ? "" : " · " }}
+                } @empty {
+                  —
+                }
+              </p>
+            </div>
           </div>
         </section>
 
-        <section hlmCard>
+        <section hlmCard aria-labelledby="i18n-title">
           <div hlmCardHeader>
-            <h2 hlmCardTitle class="font-mono text-base">Live versions</h2>
+            <h2 hlmCardTitle id="i18n-title" class="flex items-center gap-2 font-mono text-base">
+              Translations
+              @if (i18n(); as items) {
+                @if (items.length) {
+                  <span
+                    hlmBadge
+                    variant="outline"
+                    class="border-accent-orange/50 text-accent-orange"
+                  >
+                    {{ items.length }} to check
+                  </span>
+                } @else {
+                  <span hlmBadge variant="secondary">complete</span>
+                }
+              }
+            </h2>
+            <p hlmCardDescription>
+              German left empty where English has text (or the reverse), and German last edited
+              before the English changed.
+            </p>
           </div>
-          <div hlmCardContent class="flex flex-wrap gap-3">
-            @for (p of s.pointers; track p.locale) {
-              <div class="rounded-lg border border-border px-4 py-3">
-                <p class="m-0 font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  {{ p.locale }}
-                </p>
-                <p class="m-0 mt-1 font-mono text-sm">v{{ p.versionId }}</p>
-              </div>
+          <div hlmCardContent>
+            @if (i18n(); as items) {
+              @if (!items.length) {
+                <p class="m-0 text-sm text-muted-foreground">Both languages are in step.</p>
+              } @else {
+                <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list">
+                  @for (item of shownI18n(); track item.kind + item.id) {
+                    <li
+                      class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
+                    >
+                      <div class="min-w-0">
+                        <p class="m-0 truncate text-sm">
+                          {{ item.label }}
+                          <span class="ml-1 font-mono text-[0.68rem] text-muted-foreground">{{
+                            kindLabel(item)
+                          }}</span>
+                        </p>
+                        <p class="m-0 mt-0.5 font-mono text-[0.72rem] text-muted-foreground">
+                          {{ problemText(item) }}
+                        </p>
+                      </div>
+                      <a hlmBtn variant="outline" size="sm" [routerLink]="link(item)">Edit</a>
+                    </li>
+                  }
+                </ul>
+                @if (items.length > preview) {
+                  <button
+                    hlmBtn
+                    variant="ghost"
+                    size="sm"
+                    class="mt-2"
+                    [attr.aria-expanded]="showAllI18n()"
+                    (click)="showAllI18n.set(!showAllI18n())"
+                  >
+                    {{ showAllI18n() ? "Show fewer" : "Show all " + items.length }}
+                  </button>
+                }
+              }
+            } @else {
+              <hlm-skeleton class="h-16 w-full" />
             }
           </div>
         </section>
@@ -160,15 +240,16 @@ import {
         <p class="text-sm text-muted-foreground">Could not load status.</p>
       }
     </div>
+
+    <app-publish-dialog [(open)]="publishOpen" (published)="refresh()" />
   `,
 })
 export default class AdminDashboardPage implements OnInit {
   private readonly api = inject(AdminApiService);
-  private readonly confirm = inject(ConfirmService);
 
   protected readonly quickLinks = [
     { path: "/admin/hero", label: "Hero & identity" },
-    { path: "/admin/about", label: "Über mich" },
+    { path: "/admin/about", label: "About" },
     { path: "/admin/projects", label: "Projects" },
     { path: "/admin/experience", label: "Experience" },
     { path: "/admin/writing", label: "Writing" },
@@ -180,15 +261,26 @@ export default class AdminDashboardPage implements OnInit {
     { path: "/admin/publications", label: "Publications" },
   ];
 
+  protected readonly preview = I18N_PREVIEW;
   protected readonly status = signal<AdminStatus | null>(null);
   protected readonly reconcile = signal<MediaReconcile | null>(null);
+  protected readonly i18n = signal<I18nItem[] | null>(null);
+  protected readonly showAllI18n = signal(false);
   protected readonly loading = signal(true);
-  protected readonly publishing = signal(false);
-  protected readonly label = signal("");
+  protected readonly publishOpen = signal(false);
+
+  /** A draft that fails validation also counts: the review lists its problems. */
+  protected readonly canReview = computed(() => this.status()?.hasUnpublishedChanges === true);
+
+  protected readonly shownI18n = computed(() => {
+    const items = this.i18n() ?? [];
+    return this.showAllI18n() ? items : items.slice(0, I18N_PREVIEW);
+  });
 
   ngOnInit(): void {
     void this.load();
     void this.loadReconcile();
+    void this.loadI18n();
   }
 
   /** Surfaced here because a restore mismatch is invisible until an image 404s. */
@@ -197,8 +289,30 @@ export default class AdminDashboardPage implements OnInit {
     if (result.ok) this.reconcile.set(result.data);
   }
 
+  private async loadI18n(): Promise<void> {
+    const result = await this.api.i18nStatus();
+    this.i18n.set(result.ok ? result.data.items : []);
+  }
+
   protected formatDate(value: string): string {
     return new Date(value).toLocaleString();
+  }
+
+  protected kindLabel(item: I18nItem): string {
+    return KIND_LABELS[item.kind];
+  }
+
+  protected link(item: I18nItem): string {
+    return editorLinkForI18n(item);
+  }
+
+  protected problemText(item: I18nItem): string {
+    if (item.absent) return item.absent === "de" ? "English only" : "German only";
+    const parts: string[] = [];
+    if (item.missingDe.length) parts.push(`DE empty: ${item.missingDe.join(", ")}`);
+    if (item.missingEn.length) parts.push(`EN empty: ${item.missingEn.join(", ")}`);
+    if (item.stale) parts.push("English changed after the German was last edited");
+    return parts.join(" · ");
   }
 
   private async load(): Promise<void> {
@@ -207,39 +321,7 @@ export default class AdminDashboardPage implements OnInit {
     this.loading.set(false);
   }
 
-  protected async publish(): Promise<void> {
-    if (this.publishing()) return;
-
-    // Publishing is what visitors see; make it a deliberate act rather than a
-    // stray click, and say plainly what it does.
-    const go = await this.confirm.ask({
-      title: "Publish the draft?",
-      description:
-        "Both languages go live immediately. The current version is kept, so you can roll back from Publications.",
-      confirmLabel: "Publish",
-    });
-    if (!go) return;
-
-    this.publishing.set(true);
-
-    const result = await this.api.publish(this.label().trim() || undefined);
-    this.publishing.set(false);
-
-    if (!result.ok) {
-      toast.error("Publish failed", { description: result.error });
-      return;
-    }
-
-    if (result.data.unchanged) {
-      toast.info("Nothing to publish", {
-        description: "The draft already matches what is live, so no new revision was made.",
-      });
-      return;
-    }
-
-    const versions = result.data.published.map((p) => `${p.locale} v${p.versionId}`).join(", ");
-    toast.success("Published", { description: versions });
-    this.label.set("");
+  protected async refresh(): Promise<void> {
     await this.load();
   }
 }

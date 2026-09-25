@@ -4,6 +4,7 @@ import {
   computed,
   DestroyRef,
   effect,
+  ElementRef,
   inject,
   OnInit,
   signal,
@@ -29,7 +30,12 @@ import {
   type PostTranslationInput,
 } from "../../../admin/admin-api.service";
 import { CopilotSuggestComponent } from "../../../admin/components/copilot-suggest.component";
-import { SaveBarComponent } from "../../../admin/components/editor-chrome.component";
+import {
+  FieldIssueComponent,
+  SaveBarComponent,
+} from "../../../admin/components/editor-chrome.component";
+import { FieldIssues, focusFirstInvalid } from "../../../admin/issues";
+import { toastIssues } from "../../../admin/save-feedback";
 import { MediaFieldComponent } from "../../../admin/components/media-field.component";
 import { RichTextComponent } from "../../../admin/components/rich-text.component";
 import { StringListComponent } from "../../../admin/components/string-list.component";
@@ -57,6 +63,7 @@ type PostDraft = PostRow;
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     CopilotSuggestComponent,
+    FieldIssueComponent,
     FormsModule,
     HlmButton,
     HlmField,
@@ -100,9 +107,13 @@ type PostDraft = PostRow;
             <input
               hlmInput
               id="post-slug"
+              maxlength="80"
               [ngModel]="p.slug"
               (ngModelChange)="patch({ slug: $event })"
+              [attr.aria-invalid]="issues.get('slug') ? true : null"
+              [attr.aria-describedby]="issues.get('slug') ? 'post-slug-issue' : null"
             />
+            <app-field-issue id="post-slug-issue" [message]="issues.get('slug')" />
           </div>
           <div hlmField>
             <label hlmFieldLabel for="post-date">Publish date</label>
@@ -112,11 +123,15 @@ type PostDraft = PostRow;
               type="datetime-local"
               [ngModel]="localDate()"
               (ngModelChange)="setDate($event)"
-              aria-describedby="post-date-hint"
+              [attr.aria-invalid]="issues.get('publishedAt') ? true : null"
+              [attr.aria-describedby]="
+                issues.get('publishedAt') ? 'post-date-issue post-date-hint' : 'post-date-hint'
+              "
             />
             <span id="post-date-hint" class="text-[0.72rem] text-muted-foreground">
               In the future = scheduled: it appears with the first publish after this time.
             </span>
+            <app-field-issue id="post-date-issue" [message]="issues.get('publishedAt')" />
           </div>
           <label class="flex items-center gap-3 font-mono text-[0.8rem]">
             <hlm-switch
@@ -132,11 +147,16 @@ type PostDraft = PostRow;
             <input
               hlmInput
               id="post-canonical"
+              maxlength="500"
               [ngModel]="p.canonicalUrl"
               (ngModelChange)="patch({ canonicalUrl: $event })"
+              [attr.aria-invalid]="issues.get('canonicalUrl') ? true : null"
+              [attr.aria-describedby]="issues.get('canonicalUrl') ? 'post-canonical-issue' : null"
             />
+            <app-field-issue id="post-canonical-issue" [message]="issues.get('canonicalUrl')" />
           </div>
         </section>
+        <app-field-issue id="post-translations-issue" [message]="issues.get('translations')" />
 
         <app-media-field
           id="post-cover"
@@ -153,6 +173,7 @@ type PostDraft = PostRow;
           [value]="p.tags"
           (valueChange)="patch({ tags: $event })"
         />
+        <app-field-issue id="post-tags-issue" [message]="issues.under('tags')" />
 
         @for (locale of locales; track locale) {
           <hlm-separator />
@@ -176,6 +197,14 @@ type PostDraft = PostRow;
                   maxlength="200"
                   [ngModel]="t.title"
                   (ngModelChange)="patchText(locale, { title: $event })"
+                  [attr.aria-invalid]="textIssue(locale, 'title') ? true : null"
+                  [attr.aria-describedby]="
+                    textIssue(locale, 'title') ? 'post-title-' + locale + '-issue' : null
+                  "
+                />
+                <app-field-issue
+                  [id]="'post-title-' + locale + '-issue'"
+                  [message]="textIssue(locale, 'title')"
                 />
               </div>
               <div hlmField>
@@ -194,6 +223,10 @@ type PostDraft = PostRow;
                 [label]="'Body (' + locale + ')'"
                 [ngModel]="t.body"
                 (ngModelChange)="patchText(locale, { body: $event })"
+              />
+              <app-field-issue
+                [id]="'post-body-' + locale + '-issue'"
+                [message]="textIssue(locale, 'body')"
               />
               <div class="grid gap-4 sm:grid-cols-2">
                 <div hlmField>
@@ -236,7 +269,13 @@ type PostDraft = PostRow;
           </section>
         }
 
-        <app-save-bar [dirty]="dirty()" [saving]="saving()" (save)="save()" (discard)="discard()" />
+        <app-save-bar
+          [dirty]="dirty()"
+          [saving]="saving()"
+          [problems]="issues.count()"
+          (save)="save()"
+          (discard)="discard()"
+        />
       }
     </div>
   `,
@@ -247,10 +286,18 @@ export default class AdminPostEditorPage implements OnInit {
   private readonly router = inject(Router);
   private readonly unsaved = inject(UnsavedChangesService);
 
+  private readonly host = inject(ElementRef<HTMLElement>);
+
   protected readonly locales: Locale[] = ["en", "de"];
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
   protected readonly post = signal<PostDraft | null>(null);
+  /** The last save's problems, by the input's path (`translations.de.title`). */
+  protected readonly issues = new FieldIssues();
+
+  protected textIssue(locale: Locale, key: string): string | null {
+    return this.issues.get(`translations.${locale}.${key}`);
+  }
 
   /** What the copilot describes when asked for a search description. */
   protected readonly seoSources: Record<Locale, () => string> = {
@@ -304,6 +351,10 @@ export default class AdminPostEditorPage implements OnInit {
   protected patch(change: Partial<PostDraft>): void {
     this.post.update((p) => (p ? { ...p, ...change } : p));
     this.revision.update((v) => v + 1);
+    // `translations` is patched whole; its per-field messages clear in patchText.
+    for (const key of Object.keys(change)) {
+      if (key !== "translations") this.issues.resolve(key);
+    }
   }
 
   protected setDate(value: string): void {
@@ -325,6 +376,7 @@ export default class AdminPostEditorPage implements OnInit {
   protected setLocale(locale: Locale, exists: boolean): void {
     const current = this.post();
     if (!current) return;
+    this.issues.resolve("translations");
     this.patch({
       translations: {
         ...current.translations,
@@ -340,6 +392,7 @@ export default class AdminPostEditorPage implements OnInit {
     this.patch({
       translations: { ...current.translations, [locale]: { ...translation, ...change } },
     });
+    for (const key of Object.keys(change)) this.issues.resolve(`translations.${locale}.${key}`);
   }
 
   protected chooseCover(asset: MediaAsset | null): void {
@@ -349,6 +402,7 @@ export default class AdminPostEditorPage implements OnInit {
   protected discard(): void {
     this.post.set(this.pristine ? structuredClone(this.pristine) : null);
     this.revision.update((v) => v + 1);
+    this.issues.clear();
   }
 
   protected async save(): Promise<void> {
@@ -368,18 +422,23 @@ export default class AdminPostEditorPage implements OnInit {
     this.saving.set(false);
 
     if (!result.ok) {
-      const description: Record<string, string> = {
-        duplicate_slug: "Another post already uses that slug.",
-        invalid_input:
-          "A title is empty, a published post has no date, or no language is switched on.",
-      };
-      toast.error("Save failed", { description: description[result.error] ?? result.error });
+      if (result.error === "duplicate_slug") {
+        this.issues.add("slug", "Another post already uses this slug");
+        focusFirstInvalid(this.host.nativeElement);
+      } else if (result.issues?.length) {
+        this.issues.set(result.issues);
+        toastIssues(result.issues);
+        focusFirstInvalid(this.host.nativeElement);
+      } else {
+        toast.error("Save failed", { description: result.error });
+      }
       return;
     }
 
     const slugChanged = this.pristine?.slug !== current.slug;
     this.pristine = structuredClone(current);
     this.revision.update((v) => v + 1);
+    this.issues.clear();
     toast.success("Draft saved");
     if (slugChanged)
       void this.router.navigate(["/admin/writing", current.slug], { replaceUrl: true });

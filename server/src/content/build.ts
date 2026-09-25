@@ -13,6 +13,7 @@ import {
   type Locale,
   type Metric,
 } from "./schema.js";
+import { DraftInvalidError, draftIssues } from "./draft-issues.js";
 import { bodyMediaFilenames, readingMinutes, renderBody, type BodyMedia } from "./rich-body.js";
 import { withUiDefaults } from "./ui-defaults.js";
 import type { Database } from "../db/client.js";
@@ -42,6 +43,14 @@ export type DbExecutor = Database | Parameters<Parameters<Database["transaction"
 export interface BuiltLocale {
   core: AppContent;
   docs: Map<string, Doc>;
+}
+
+export interface BuildOptions {
+  /**
+   * Draft and scheduled posts too, as if published now — for the admin's
+   * preview only. A publish never sets it.
+   */
+  unpublishedPosts?: boolean;
 }
 
 type AssetRow = typeof mediaAssets.$inferSelect;
@@ -285,6 +294,7 @@ async function buildPosts(
   media: MediaIndex,
   bodyMedia: Map<string, BodyMedia>,
   locale: Locale,
+  now: Date,
 ): Promise<{ postsOut: AppContent["posts"]; docs: [string, Doc][] }> {
   const postsOut: AppContent["posts"] = [];
   const docs: [string, Doc][] = [];
@@ -295,7 +305,8 @@ async function buildPosts(
       slug: post.slug,
       title: translation.title,
       excerpt: translation.excerpt,
-      publishedAt: post.publishedAt!.toISOString(),
+      // Only an undated draft in the preview has no date: it reads as "now".
+      publishedAt: (post.publishedAt ?? now).toISOString(),
       updatedAt: latest(post.updatedAt, translation.updatedAt),
       tags: post.tags,
       cover: media.image(post.coverId, locale, translation.title),
@@ -361,6 +372,7 @@ export async function buildLocale(
   db: DbExecutor,
   locale: Locale,
   now: Date = new Date(),
+  options: BuildOptions = {},
 ): Promise<BuiltLocale> {
   const [profileRow] = await db.select().from(siteProfile).limit(1);
   if (!profileRow) {
@@ -457,6 +469,7 @@ export async function buildLocale(
     .orderBy(asc(experiences.position), asc(experiences.id));
 
   // Published and due. A post missing in this language simply is not listed.
+  // (DESC puts undated drafts first, which only the preview includes.)
   const postRows = await db
     .select({ post: posts, translation: postTranslations })
     .from(posts)
@@ -465,7 +478,13 @@ export async function buildLocale(
       and(eq(postTranslations.postId, posts.id), eq(postTranslations.locale, locale)),
     )
     .where(
-      and(eq(posts.status, "published"), isNotNull(posts.publishedAt), lte(posts.publishedAt, now)),
+      options.unpublishedPosts
+        ? undefined
+        : and(
+            eq(posts.status, "published"),
+            isNotNull(posts.publishedAt),
+            lte(posts.publishedAt, now),
+          ),
     )
     .orderBy(desc(posts.publishedAt), asc(posts.slug));
   const postIds = postRows.map((r) => r.post.id);
@@ -517,6 +536,7 @@ export async function buildLocale(
     media,
     bodyMedia,
     locale,
+    now,
   );
   const { legalOut, docs: legalDocs } = await buildLegal(legalRows, bodyMedia);
 
@@ -524,9 +544,7 @@ export async function buildLocale(
 
   const resumeAsset = media.asset(resume?.mediaId ?? null);
 
-  // parse() is the gate: an invalid payload throws here, inside the publish
-  // transaction, so the live pointer never moves to broken content.
-  const core = appContentSchema.parse({
+  const input = {
     version: CONTENT_SCHEMA_VERSION,
     locale,
     ui: withUiDefaults(ui, locale),
@@ -572,13 +590,28 @@ export async function buildLocale(
     posts: postsOut,
     legal: legalOut,
     seo,
-  });
+  };
 
-  for (const [key, doc] of docs) docs.set(key, docSchema.parse(doc));
-  return { core, docs };
+  // Validation is the gate: an invalid payload throws here, inside the publish
+  // transaction, so the live pointer never moves to broken content. Every
+  // problem is collected first, so the admin can fix them in one pass.
+  const core = appContentSchema.safeParse(input);
+  const issues = core.success ? [] : draftIssues(input, core.error.issues);
+  const parsedDocs = new Map<string, Doc>();
+  for (const [key, doc] of docs) {
+    const parsed = docSchema.safeParse(doc);
+    if (parsed.success) parsedDocs.set(key, parsed.data);
+    else {
+      issues.push(
+        ...draftIssues(doc, parsed.error.issues, { path: ["docs", key], label: `docs[${key}]` }),
+      );
+    }
+  }
+  if (!core.success || issues.length > 0) throw new DraftInvalidError(locale, issues);
+  return { core: core.data, docs: parsedDocs };
 }
 
-/** The core payload only — preview and anything that needs no bodies. */
+/** The core payload only — anything that needs no bodies. */
 export async function buildContent(db: DbExecutor, locale: Locale): Promise<AppContent> {
   return (await buildLocale(db, locale)).core;
 }

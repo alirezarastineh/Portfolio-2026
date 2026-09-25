@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, inject, input, model, signal } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  inject,
+  input,
+  model,
+  OnInit,
+  signal,
+} from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucidePlus, lucideTrash2 } from "@ng-icons/lucide";
@@ -7,7 +15,8 @@ import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmSheetImports } from "@spartan-ng/helm/sheet";
 
-import { AdminApiService, type MediaAsset } from "../admin-api.service";
+import type { MediaAsset } from "../admin-api.service";
+import { MediaLibraryService } from "../media-library.service";
 import { MediaPickerComponent } from "./media-picker.component";
 import { SortableListComponent, SortableRowDirective } from "./sortable-list.component";
 
@@ -123,8 +132,8 @@ const MAX = 30;
     </hlm-sheet>
   `,
 })
-export class GalleryEditorComponent {
-  private readonly api = inject(AdminApiService);
+export class GalleryEditorComponent implements OnInit {
+  private readonly library = inject(MediaLibraryService);
 
   readonly value = model.required<GalleryItem[]>();
   readonly label = input("Gallery");
@@ -133,8 +142,13 @@ export class GalleryEditorComponent {
 
   protected readonly track = (item: GalleryItem): string => item.mediaId;
 
+  ngOnInit(): void {
+    void this.library.load();
+  }
+
+  /** A small resized copy, not the full screenshot. */
   protected preview(path: string): string {
-    return path.startsWith("/media/") ? this.api.baseUrl + path : path;
+    return this.library.thumbnail(path);
   }
 
   protected add(asset: MediaAsset): void {

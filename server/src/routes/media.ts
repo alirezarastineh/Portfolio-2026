@@ -240,6 +240,100 @@ export async function findMediaUsage(
   return [...usedBy];
 }
 
+/** An uploaded original's name (`<uuid>.<ext>`) wherever it appears in a text. */
+const ORIGINAL_NAME = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]+/gi;
+
+/**
+ * `findMediaUsage` for every asset at once, for the library's "unused" filter:
+ * a handful of queries instead of eight per asset. Texts are scanned for file
+ * names once, rather than once per asset.
+ */
+export async function mediaUsageAll(db: DbExecutor = getDb()): Promise<Map<string, string[]>> {
+  const assets = await db
+    .select({ id: mediaAssets.id, filename: mediaAssets.filename })
+    .from(mediaAssets);
+  const usage = new Map(assets.map((a) => [a.id, new Set<string>()]));
+  const idByName = new Map(assets.map((a) => [a.filename.toLowerCase(), a.id]));
+
+  const byId = (id: string | null, label: string) => {
+    if (id) usage.get(id)?.add(label);
+  };
+  const byText = (text: string | null, label: string) => {
+    for (const match of (text ?? "").matchAll(ORIGINAL_NAME)) {
+      byId(idByName.get(match[0].toLowerCase()) ?? null, label);
+    }
+  };
+
+  for (const p of await db
+    .select({
+      slug: projects.slug,
+      coverId: projects.coverId,
+      imageId: projects.imageId,
+      imagePath: projects.imagePath,
+    })
+    .from(projects)) {
+    byId(p.coverId, `project:${p.slug}`);
+    byId(p.imageId, `project:${p.slug}`);
+    byText(p.imagePath, `project:${p.slug}`);
+  }
+
+  for (const g of await db
+    .select({ slug: projects.slug, mediaId: projectGallery.mediaId })
+    .from(projectGallery)
+    .innerJoin(projects, eq(projects.id, projectGallery.projectId))) {
+    byId(g.mediaId, `project:${g.slug} (gallery)`);
+  }
+
+  for (const t of await db
+    .select({
+      slug: projects.slug,
+      body: projectTranslations.body,
+      problem: projectTranslations.problem,
+      aiArchitecture: projectTranslations.aiArchitecture,
+      fullStackInfra: projectTranslations.fullStackInfra,
+    })
+    .from(projectTranslations)
+    .innerJoin(projects, eq(projects.id, projectTranslations.projectId))) {
+    byText([t.body, t.problem, t.aiArchitecture, t.fullStackInfra].join("\n"), `project:${t.slug}`);
+  }
+
+  for (const p of await db.select({ avatarId: siteProfile.avatarId }).from(siteProfile)) {
+    byId(p.avatarId, "profile:avatar");
+  }
+  for (const r of await db
+    .select({ locale: profileResumes.locale, mediaId: profileResumes.mediaId })
+    .from(profileResumes)) {
+    byId(r.mediaId, `resume:${r.locale}`);
+  }
+  for (const e of await db
+    .select({ orgName: experiences.orgName, logoId: experiences.logoId })
+    .from(experiences)) {
+    byId(e.logoId, `experience:${e.orgName}`);
+  }
+
+  for (const p of await db.select({ slug: posts.slug, coverId: posts.coverId }).from(posts)) {
+    byId(p.coverId, `post:${p.slug}`);
+  }
+  for (const t of await db
+    .select({ slug: posts.slug, body: postTranslations.body })
+    .from(postTranslations)
+    .innerJoin(posts, eq(posts.id, postTranslations.postId))) {
+    byText(t.body, `post:${t.slug}`);
+  }
+
+  for (const d of await db
+    .select({
+      section: contentDocuments.section,
+      locale: contentDocuments.locale,
+      data: sql<string>`${contentDocuments.data}::text`,
+    })
+    .from(contentDocuments)) {
+    byText(d.data, `${d.section}:${d.locale}`);
+  }
+
+  return new Map([...usage].map(([id, labels]) => [id, [...labels]]));
+}
+
 export async function listMediaAssets() {
   return getDb().select().from(mediaAssets).orderBy(desc(mediaAssets.createdAt));
 }

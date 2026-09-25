@@ -18,6 +18,7 @@ import { fmt } from "../i18n/interpolate";
 import { apiBaseUrl } from "../services/api-base";
 import { ContactService } from "../services/contact.service";
 import { LanguageService } from "../services/language.service";
+import { TURNSTILE_SITE_KEY, turnstileToken } from "../services/turnstile";
 import { ASK_COPY } from "./ask-copy";
 import { ASK_STORAGE_KEY } from "./ask-storage";
 import type { AskMessage, Entry, Failure, RemoteConfig } from "./ask-types";
@@ -169,6 +170,34 @@ function failureFrom(error: Error): { failure: Failure; retryAfter?: number } {
   return { failure: "error" };
 }
 
+interface TurnstileState {
+  turnstileToken: string;
+  verified: boolean;
+}
+
+/**
+ * While Turnstile is on, the server checks a session once, on its first
+ * question: fetch a token for it. False when no token could be had.
+ */
+async function readyToAsk(next: TurnstileState, locale: Locale): Promise<boolean> {
+  if (!TURNSTILE_SITE_KEY || next.verified) return true;
+  try {
+    next.turnstileToken = await turnstileToken(locale);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** A question the server answered took the check; one it refused needs a new token. */
+function settleCheck(next: TurnstileState, entries: readonly Entry[], entryId: string): void {
+  if (next.turnstileToken) {
+    const entry = entries.find((e) => e.id === entryId);
+    next.verified = entry?.kind === "ask" && !entry.failure;
+  }
+  next.turnstileToken = "";
+}
+
 export const AskStore = signalStore(
   { providedIn: "root" },
   withState<AskState>(() => {
@@ -191,7 +220,13 @@ export const AskStore = signalStore(
     _contact: inject(ContactService),
     _doc: inject(DOCUMENT),
     /** The request being prepared: set just before `sendMessage`. */
-    _next: { deep: false, entryId: null as string | null },
+    _next: {
+      deep: false,
+      entryId: null as string | null,
+      /** Turnstile, while on: a single-use token for this session's first question. */
+      turnstileToken: "",
+      verified: false,
+    },
   })),
   withComputed((store) => ({
     copy: computed(() => ASK_COPY[store._lang.lang()]),
@@ -232,6 +267,7 @@ export const AskStore = signalStore(
             sessionId: store.sessionId(),
             locale: locale(),
             ...(store._next.deep ? { deep: true } : {}),
+            ...(store._next.turnstileToken ? { turnstileToken: store._next.turnstileToken } : {}),
             messages: forRequest(messages),
           },
         }),
@@ -371,7 +407,12 @@ export const AskStore = signalStore(
       track("ask_send");
       store._next.deep = deep;
       store._next.entryId = entryId;
+      if (!(await readyToAsk(store._next, locale()))) {
+        store._updateEntry(entryId, { failure: "error" });
+        return;
+      }
       await store.chat.sendMessage({ id: userId, role: "user", parts: [{ type: "text", text }] });
+      settleCheck(store._next, store.entries(), entryId);
     }
 
     function toContact(): void {
@@ -575,7 +616,12 @@ export const AskStore = signalStore(
         });
         store._next.deep = entry.deep;
         store._next.entryId = entryId;
+        if (!(await readyToAsk(store._next, store._lang.lang()))) {
+          store._updateEntry(entryId, { failure: "error" });
+          return;
+        }
         await store.chat.regenerate();
+        settleCheck(store._next, store.entries(), entryId);
       },
 
       /** Clears the screen; the conversation goes on. */

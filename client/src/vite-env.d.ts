@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   /** Umami tracker script URL and website id; analytics are off unless both are set. */
   readonly VITE_UMAMI_SRC?: string;
   readonly VITE_UMAMI_WEBSITE_ID?: string;
+  /** Cloudflare Turnstile site key; the contact form and the assistant skip it when unset. */
+  readonly VITE_TURNSTILE_SITE_KEY?: string;
 }
 
 interface ImportMeta {

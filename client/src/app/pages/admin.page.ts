@@ -52,6 +52,8 @@ import { adminAuthGuard } from "../admin/admin-auth.guard";
 import { AdminApiService } from "../admin/admin-api.service";
 import { addAdminStyles } from "../admin/admin-styles";
 import { AdminSessionService } from "../admin/admin-session.service";
+import { isSaveShortcut } from "../admin/components/editor-chrome.component";
+import { MediaLibraryService } from "../admin/media-library.service";
 import { UiSectionService } from "../admin/ui-section.service";
 import { UnsavedChangesService } from "../admin/unsaved-changes.service";
 
@@ -71,6 +73,7 @@ export const routeMeta: RouteMeta = {
     provideHttpClient(withInterceptors([adminApiInterceptor]), withRequestsMadeViaParent()),
     AdminApiService,
     AdminSessionService,
+    MediaLibraryService,
     UiSectionService,
   ],
 };
@@ -89,7 +92,7 @@ const NAV: NavItem[] = [
   { path: "/admin/inbox", label: "Inbox", icon: "lucideInbox", group: "Overview" },
   { path: "/admin/assistant", label: "Assistant", icon: "lucideSparkles", group: "Overview" },
   { path: "/admin/hero", label: "Hero & identity", icon: "lucideSquareUser", group: "Content" },
-  { path: "/admin/about", label: "Über mich", icon: "lucideFileText", group: "Content" },
+  { path: "/admin/about", label: "About", icon: "lucideFileText", group: "Content" },
   { path: "/admin/skills", label: "Skills", icon: "lucideLayers", group: "Content" },
   { path: "/admin/projects", label: "Projects", icon: "lucideImage", group: "Content" },
   { path: "/admin/experience", label: "Experience", icon: "lucideBriefcase", group: "Content" },
@@ -159,7 +162,8 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
         <hlm-skeleton class="h-4 w-72" />
         <hlm-skeleton class="h-64 w-full" />
       </div>
-    } @else if (isLogin()) {
+    } @else if (isLogin() || isPreviewFrame()) {
+      <!-- The login screen, and the draft preview: the public site's own pages. -->
       <router-outlet />
     } @else {
       <div hlmSidebarWrapper>
@@ -379,6 +383,9 @@ export default class AdminLayout {
 
   protected readonly isLogin = computed(() => this.url().startsWith("/admin/login"));
 
+  /** `/admin/preview/<locale>/…` renders the public site without the admin around it. */
+  protected readonly isPreviewFrame = computed(() => /^\/admin\/preview\/[^/?#]+/.test(this.url()));
+
   /**
    * The chrome stays hidden until the session has resolved, so a populated
    * sidebar never flashes at someone about to be bounced to the login screen.
@@ -403,7 +410,13 @@ export default class AdminLayout {
   }
 
   protected onKeydown(event: KeyboardEvent): void {
-    if (this.isLogin() || !this.ready()) return;
+    if (this.isLogin() || this.isPreviewFrame() || !this.ready()) return;
+    // Ctrl+S / ⌘S saves in an editor (its save bar handles it); elsewhere in
+    // the admin it does nothing rather than offer to save the page as HTML.
+    if (isSaveShortcut(event)) {
+      event.preventDefault();
+      return;
+    }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
       this.paletteOpen.update((open) => !open);

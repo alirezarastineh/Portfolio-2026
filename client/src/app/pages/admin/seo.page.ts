@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  ElementRef,
   inject,
   OnInit,
   signal,
@@ -14,13 +15,16 @@ import { HlmSeparator } from "@spartan-ng/helm/separator";
 import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 
 import { AdminApiService } from "../../admin/admin-api.service";
+import { applyIssues, countServerErrors, focusFirstInvalid } from "../../admin/issues";
+import { toastIssues, toastStale } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import {
   LocaleToggleComponent,
   SaveBarComponent,
 } from "../../admin/components/editor-chrome.component";
 import { FieldPairComponent, type LocaleView } from "../../admin/components/field-pair.component";
-import { seoSchema, type Locale, type Seo } from "../../content/schema";
+import { isLocale } from "../../content/locale";
+import type { Locale, Seo } from "../../content/schema";
 
 interface FieldDef {
   key: keyof Seo;
@@ -29,15 +33,23 @@ interface FieldDef {
   hint?: string;
   /** Offer the AI copilot; off for URLs, names and codes. */
   ai?: boolean;
+  /** Where search results and cards start cutting it off. */
+  softMax?: number;
 }
 
 const FIELDS: FieldDef[] = [
-  { key: "title", label: "Page title", hint: "Shown in the browser tab and search results." },
+  {
+    key: "title",
+    label: "Page title",
+    hint: "Shown in the browser tab and search results.",
+    softMax: 60,
+  },
   {
     key: "description",
     label: "Meta description",
     multiline: true,
     hint: "Roughly 150–160 characters.",
+    softMax: 160,
   },
   { key: "author", label: "Author", ai: false },
   { key: "siteName", label: "Site name", ai: false },
@@ -53,14 +65,14 @@ const FIELDS: FieldDef[] = [
     hint: "Hex value used by mobile browser chrome.",
     ai: false,
   },
-  { key: "ogTitle", label: "OG title" },
-  { key: "ogDescription", label: "OG description", multiline: true },
+  { key: "ogTitle", label: "OG title", softMax: 60 },
+  { key: "ogDescription", label: "OG description", multiline: true, softMax: 200 },
   { key: "ogImage", label: "OG image URL", ai: false },
   { key: "ogUrl", label: "OG URL", ai: false },
   { key: "ogLocale", label: "OG locale", hint: "e.g. en_US / de_DE.", ai: false },
   { key: "twitterCard", label: "Twitter card type", ai: false },
-  { key: "twitterTitle", label: "Twitter title" },
-  { key: "twitterDescription", label: "Twitter description", multiline: true },
+  { key: "twitterTitle", label: "Twitter title", softMax: 70 },
+  { key: "twitterDescription", label: "Twitter description", multiline: true, softMax: 200 },
   { key: "twitterImage", label: "Twitter image URL", ai: false },
 ];
 
@@ -108,6 +120,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
               [rows]="2"
               [view]="view()"
               [ai]="field.ai ?? true"
+              [softMax]="field.softMax ?? 0"
               [controlEn]="controlFor('en', field.key)"
               [controlDe]="controlFor('de', field.key)"
             />
@@ -115,7 +128,13 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           }
         </form>
 
-        <app-save-bar [dirty]="dirty()" [saving]="saving()" (save)="save()" (discard)="reset()" />
+        <app-save-bar
+          [dirty]="dirty()"
+          [saving]="saving()"
+          [problems]="problems()"
+          (save)="save()"
+          (discard)="reset()"
+        />
       }
     </div>
   `,
@@ -147,6 +166,13 @@ export default class AdminSeoPage implements OnInit {
     return this.form.dirty;
   });
 
+  protected readonly problems = computed(() => {
+    this.formVersion();
+    return countServerErrors(this.form);
+  });
+
+  private readonly host = inject(ElementRef<HTMLElement>);
+
   constructor() {
     this.form.valueChanges.subscribe(() => {
       this.formVersion.update((v) => v + 1);
@@ -167,6 +193,7 @@ export default class AdminSeoPage implements OnInit {
     return (this.form.controls[locale].controls as SeoGroup)[key];
   }
 
+  /** (Re)loads from the server, dropping local edits. */
   private async load(): Promise<void> {
     const result = await this.api.getSection<Seo>("seo");
     this.loading.set(false);
@@ -196,41 +223,37 @@ export default class AdminSeoPage implements OnInit {
   protected async save(): Promise<void> {
     if (this.saving()) return;
 
-    const raw = this.form.getRawValue();
-    // Validate with the shared schema before the round trip, so a missing
-    // field is reported inline rather than as a 400 from the API.
-    const parsed = seoSchema.safeParse(raw.en);
-    const parsedDe = seoSchema.safeParse(raw.de);
-
-    if (!parsed.success || !parsedDe.success) {
-      const issue = (parsed.success ? parsedDe : parsed).error?.issues[0];
-      toast.error("Check the form", {
-        description: issue ? `${issue.path.join(".")}: ${issue.message}` : "Invalid values.",
-      });
-      return;
-    }
-
+    const raw = this.form.getRawValue() as Record<Locale, Seo>;
     this.saving.set(true);
-    const result = await this.api.putSection<Seo>(
-      "seo",
-      { en: parsed.data, de: parsedDe.data },
-      this.updatedAt,
-    );
+    const result = await this.api.putSection<Seo>("seo", raw, this.updatedAt);
     this.saving.set(false);
 
     if (!result.ok) {
       if (result.status === 409) {
-        toast.error("Saved elsewhere", {
-          description: "This section changed in another tab. Reload before saving.",
-        });
-        return;
+        toastStale(() => this.load());
+      } else if (result.issues?.length) {
+        // `[locale, field]`, straight onto the pair's control.
+        const issues = result.issues;
+        const unplaced = applyIssues(issues, ([locale, key]) =>
+          isLocale(locale) && typeof key === "string"
+            ? ((this.form.controls[locale].controls as Record<string, FormControl>)[key] ?? null)
+            : null,
+        );
+        this.formVersion.update((v) => v + 1);
+        const view = this.view();
+        if (view !== "both" && issues.some((i) => isLocale(i.path[0]) && i.path[0] !== view)) {
+          this.view.set("both");
+        }
+        toastIssues(unplaced.length ? unplaced : issues);
+        focusFirstInvalid(this.host.nativeElement);
+      } else {
+        toast.error("Save failed", { description: result.error });
       }
-      toast.error("Save failed", { description: result.error });
       return;
     }
 
     this.updatedAt = result.data.updatedAt;
-    this.pristine = { en: parsed.data, de: parsedDe.data };
+    this.pristine = raw;
     this.form.markAsPristine();
     this.formVersion.update((v) => v + 1);
     this.unsaved.clear("seo");

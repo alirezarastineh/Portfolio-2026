@@ -1,4 +1,14 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  inject,
+  OnInit,
+  signal,
+} from "@angular/core";
+import type { RouteMeta } from "@analogjs/router";
 import { FormsModule } from "@angular/forms";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucidePencil, lucidePlus, lucideTrash2 } from "@ng-icons/lucide";
@@ -20,6 +30,10 @@ import {
   type MediaAsset,
 } from "../../admin/admin-api.service";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
+import {
+  FieldIssueComponent,
+  isSaveShortcut,
+} from "../../admin/components/editor-chrome.component";
 import { MediaFieldComponent } from "../../admin/components/media-field.component";
 import {
   SortableListComponent,
@@ -30,7 +44,12 @@ import {
   UiGroupEditorComponent,
   type UiFieldDef,
 } from "../../admin/components/ui-group-editor.component";
+import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
+import { toastIssues } from "../../admin/save-feedback";
+import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import type { Locale } from "../../content/schema";
+
+export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
 const COPY_FIELDS: UiFieldDef[] = [
   { key: "heading", label: "Section heading" },
@@ -93,6 +112,7 @@ function blankDraft(): Draft {
   selector: "app-admin-experience",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    FieldIssueComponent,
     FormsModule,
     HlmBadge,
     HlmButton,
@@ -186,16 +206,29 @@ function blankDraft(): Draft {
       title="Timeline copy"
       description="The section's heading and the labels around each entry."
       [fields]="copyFields"
+      [level]="2"
     />
 
-    <hlm-sheet side="right" [state]="draft() ? 'open' : 'closed'" (stateChanged)="onSheet($event)">
+    <hlm-sheet
+      side="right"
+      [state]="sheetOpen() ? 'open' : 'closed'"
+      (stateChanged)="onSheet($event)"
+    >
       <hlm-sheet-content *hlmSheetPortal="let ctx" class="w-full overflow-y-auto sm:max-w-2xl">
         @if (draft(); as d) {
           <hlm-sheet-header>
             <h2 hlmSheetTitle>{{ d.id ? "Edit entry" : "New entry" }}</h2>
-            <p hlmSheetDescription>Saved to the draft; publish from the dashboard.</p>
+            <p hlmSheetDescription>
+              Saved to the draft with the button below or {{ shortcut }}; publish from the
+              dashboard.
+            </p>
           </hlm-sheet-header>
-          <form class="flex flex-col gap-4 px-4 pb-6" (ngSubmit)="save()">
+          <form
+            #entryForm
+            class="flex flex-col gap-4 px-4 pb-6"
+            (ngSubmit)="save(entryForm)"
+            (keydown)="onFormKeydown($event, entryForm)"
+          >
             <div class="grid gap-4 sm:grid-cols-2">
               <div hlmField>
                 <label hlmFieldLabel for="exp-kind">Kind</label>
@@ -232,9 +265,13 @@ function blankDraft(): Draft {
                   id="exp-org"
                   name="orgName"
                   required
+                  maxlength="160"
                   [ngModel]="d.orgName"
                   (ngModelChange)="patch({ orgName: $event })"
+                  [attr.aria-invalid]="issues.get('orgName') ? true : null"
+                  [attr.aria-describedby]="issues.get('orgName') ? 'exp-org-issue' : null"
                 />
+                <app-field-issue id="exp-org-issue" [message]="issues.get('orgName')" />
               </div>
               <div hlmField>
                 <label hlmFieldLabel for="exp-url">Organisation URL</label>
@@ -242,9 +279,13 @@ function blankDraft(): Draft {
                   hlmInput
                   id="exp-url"
                   name="orgUrl"
+                  maxlength="500"
                   [ngModel]="d.orgUrl"
                   (ngModelChange)="patch({ orgUrl: $event })"
+                  [attr.aria-invalid]="issues.get('orgUrl') ? true : null"
+                  [attr.aria-describedby]="issues.get('orgUrl') ? 'exp-url-issue' : null"
                 />
+                <app-field-issue id="exp-url-issue" [message]="issues.get('orgUrl')" />
               </div>
               <div hlmField>
                 <label hlmFieldLabel for="exp-start">Start</label>
@@ -256,7 +297,10 @@ function blankDraft(): Draft {
                   required
                   [ngModel]="d.startDate"
                   (ngModelChange)="patch({ startDate: $event })"
+                  [attr.aria-invalid]="issues.get('startDate') ? true : null"
+                  [attr.aria-describedby]="issues.get('startDate') ? 'exp-start-issue' : null"
                 />
+                <app-field-issue id="exp-start-issue" [message]="issues.get('startDate')" />
               </div>
               <div hlmField>
                 <label hlmFieldLabel for="exp-end">End (empty = present)</label>
@@ -267,7 +311,10 @@ function blankDraft(): Draft {
                   type="date"
                   [ngModel]="d.endDate ?? ''"
                   (ngModelChange)="patch({ endDate: $event || null })"
+                  [attr.aria-invalid]="issues.get('endDate') ? true : null"
+                  [attr.aria-describedby]="issues.get('endDate') ? 'exp-end-issue' : null"
                 />
+                <app-field-issue id="exp-end-issue" [message]="issues.get('endDate')" />
               </div>
               <div hlmField>
                 <label hlmFieldLabel for="exp-precision">Dates mean</label>
@@ -308,9 +355,15 @@ function blankDraft(): Draft {
                   hlmInput
                   id="exp-cred-url"
                   name="credentialUrl"
+                  maxlength="500"
                   [ngModel]="d.credentialUrl"
                   (ngModelChange)="patch({ credentialUrl: $event })"
+                  [attr.aria-invalid]="issues.get('credentialUrl') ? true : null"
+                  [attr.aria-describedby]="
+                    issues.get('credentialUrl') ? 'exp-cred-url-issue' : null
+                  "
                 />
+                <app-field-issue id="exp-cred-url-issue" [message]="issues.get('credentialUrl')" />
               </div>
             </div>
 
@@ -344,8 +397,17 @@ function blankDraft(): Draft {
                   [id]="'exp-title-' + locale"
                   [name]="'title-' + locale"
                   required
+                  maxlength="200"
                   [ngModel]="d.translations[locale].title"
                   (ngModelChange)="patchText(locale, { title: $event })"
+                  [attr.aria-invalid]="textIssue(locale, 'title') ? true : null"
+                  [attr.aria-describedby]="
+                    textIssue(locale, 'title') ? 'exp-title-' + locale + '-issue' : null
+                  "
+                />
+                <app-field-issue
+                  [id]="'exp-title-' + locale + '-issue'"
+                  [message]="textIssue(locale, 'title')"
                 />
               </div>
               <div hlmField>
@@ -370,8 +432,15 @@ function blankDraft(): Draft {
             }
 
             <div class="flex justify-end gap-2 pt-2">
-              <button hlmBtn variant="ghost" type="button" (click)="draft.set(null)">Cancel</button>
-              <button hlmBtn type="submit" [disabled]="saving()">
+              <button hlmBtn variant="ghost" type="button" (click)="onSheet('closed')">
+                Cancel
+              </button>
+              <button
+                hlmBtn
+                type="submit"
+                [disabled]="saving()"
+                [attr.aria-keyshortcuts]="ariaShortcut"
+              >
                 {{ d.id ? "Save entry" : "Add entry" }}
               </button>
             </div>
@@ -384,21 +453,52 @@ function blankDraft(): Draft {
 export default class AdminExperiencePage implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly confirm = inject(ConfirmService);
+  private readonly unsaved = inject(UnsavedChangesService);
 
   protected readonly copyFields = COPY_FIELDS;
   protected readonly kinds = KINDS;
   protected readonly employment = EMPLOYMENT;
   protected readonly locales: Locale[] = ["en", "de"];
 
+  private readonly isMac =
+    typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform ?? "");
+  protected readonly shortcut = this.isMac ? "⌘S" : "Ctrl+S";
+  protected readonly ariaShortcut = this.isMac ? "Meta+S" : "Control+S";
+
   protected readonly rows = signal<ExperienceRow[]>([]);
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
   protected readonly draft = signal<Draft | null>(null);
+  protected readonly sheetOpen = signal(false);
+  /** The entry as it was when the sheet opened, to tell whether closing loses anything. */
+  private readonly opened = signal("");
+  /** The last save's problems, by the input's path. */
+  protected readonly issues = new FieldIssues();
+
+  private readonly draftDirty = computed(() => {
+    const d = this.draft();
+    return d !== null && JSON.stringify(d) !== this.opened();
+  });
 
   protected readonly trackRow = (row: ExperienceRow): string => row.id;
 
+  constructor() {
+    effect(() => this.unsaved.set("experience-entry", this.draftDirty()));
+    inject(DestroyRef).onDestroy(() => this.unsaved.clear("experience-entry"));
+  }
+
   ngOnInit(): void {
     void this.load();
+  }
+
+  protected textIssue(locale: Locale, key: string): string | null {
+    return this.issues.get(`translations.${locale}.${key}`);
+  }
+
+  protected onFormKeydown(event: KeyboardEvent, form: HTMLElement): void {
+    if (!isSaveShortcut(event)) return;
+    event.preventDefault();
+    void this.save(form);
   }
 
   private async load(): Promise<void> {
@@ -412,26 +512,47 @@ export default class AdminExperiencePage implements OnInit {
   }
 
   protected edit(row: ExperienceRow | null): void {
-    if (!row) {
-      this.draft.set(blankDraft());
-      return;
-    }
     const empty = { title: "", summary: "", highlights: [] as string[] };
-    this.draft.set({
-      ...structuredClone(row),
-      translations: {
-        en: row.translations.en ?? { ...empty },
-        de: row.translations.de ?? { ...empty },
-      },
-    });
+    const draft: Draft = row
+      ? {
+          ...structuredClone(row),
+          translations: {
+            en: row.translations.en ?? { ...empty },
+            de: row.translations.de ?? { ...empty },
+          },
+        }
+      : blankDraft();
+    this.draft.set(draft);
+    this.opened.set(JSON.stringify(draft));
+    this.issues.clear();
+    this.sheetOpen.set(true);
   }
 
-  protected onSheet(state: string): void {
-    if (state !== "open") this.draft.set(null);
+  /** Closing with unsaved edits asks first, like leaving any other editor. */
+  protected async onSheet(state: string): Promise<void> {
+    // The sheet reports "closed" again once its state input follows: only
+    // the first report (while still open here) is a request to close.
+    if (state === "open" || !this.sheetOpen()) return;
+    this.sheetOpen.set(false);
+    if (this.draftDirty()) {
+      const discard = await this.confirm.ask({
+        title: "Discard this entry's changes?",
+        description: "They have not been saved to the draft.",
+        confirmLabel: "Discard",
+        cancelLabel: "Keep editing",
+        destructive: true,
+      });
+      if (!discard) {
+        this.sheetOpen.set(true);
+        return;
+      }
+    }
+    this.draft.set(null);
   }
 
   protected patch(change: Partial<Draft>): void {
     this.draft.update((d) => (d ? { ...d, ...change } : d));
+    for (const key of Object.keys(change)) this.issues.resolve(key);
   }
 
   protected patchText(locale: Locale, change: Partial<Draft["translations"]["en"]>): void {
@@ -443,13 +564,14 @@ export default class AdminExperiencePage implements OnInit {
           }
         : d,
     );
+    for (const key of Object.keys(change)) this.issues.resolve(`translations.${locale}.${key}`);
   }
 
   protected chooseLogo(asset: MediaAsset | null): void {
     this.patch({ logoId: asset?.id ?? null, logoPath: asset?.path ?? null });
   }
 
-  protected async save(): Promise<void> {
+  protected async save(form?: HTMLElement): Promise<void> {
     const d = this.draft();
     if (!d || this.saving()) return;
 
@@ -486,14 +608,17 @@ export default class AdminExperiencePage implements OnInit {
     this.saving.set(false);
 
     if (!result.ok) {
-      toast.error("Not saved", {
-        description:
-          result.error === "invalid_input"
-            ? "Check the dates (the end cannot come before the start) and that both titles are filled in."
-            : result.error,
-      });
+      if (result.issues?.length) {
+        this.issues.set(result.issues);
+        toastIssues(result.issues);
+        focusFirstInvalid(form);
+      } else {
+        toast.error("Not saved", { description: result.error });
+      }
       return;
     }
+    this.opened.set(JSON.stringify(d));
+    this.sheetOpen.set(false);
     this.draft.set(null);
     toast.success(d.id ? "Entry saved" : "Entry added");
     await this.load();

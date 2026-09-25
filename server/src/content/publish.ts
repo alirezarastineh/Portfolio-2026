@@ -16,6 +16,7 @@ import {
 import { pgErrorCode } from "../lib/http-errors.js";
 import { buildLocale, type BuiltLocale, type DbExecutor } from "./build.js";
 import { invalidateContentCache } from "./cache.js";
+import { DraftInvalidError, type DraftIssue } from "./draft-issues.js";
 import { CONTENT_SCHEMA_VERSION, LOCALES, type Locale } from "./schema.js";
 import { payloadVersion, upcast, upcastDocs } from "./upcast.js";
 
@@ -235,16 +236,27 @@ async function writeVersion(
   return version.id;
 }
 
-/** Builds every locale from the draft at one moment (which scheduled posts are due). */
+/**
+ * Builds every locale from the draft at one moment (which scheduled posts are
+ * due). A draft that does not validate is refused with every locale's
+ * problems, not just the first one met — so one pass fixes them all.
+ */
 export async function buildAll(
   db: DbExecutor,
   now: Date = new Date(),
 ): Promise<{ locale: Locale; built: BuiltLocale; checksum: string }[]> {
   const out: { locale: Locale; built: BuiltLocale; checksum: string }[] = [];
+  const invalid: { locale: Locale; issues: DraftIssue[] }[] = [];
   for (const locale of LOCALES) {
-    const built = await buildLocale(db, locale, now);
-    out.push({ locale, built, checksum: builtChecksum(built) });
+    try {
+      const built = await buildLocale(db, locale, now);
+      out.push({ locale, built, checksum: builtChecksum(built) });
+    } catch (error) {
+      if (!(error instanceof DraftInvalidError)) throw error;
+      invalid.push({ locale, issues: error.issues });
+    }
   }
+  if (invalid.length > 0) throw new PublicationError(422, "invalid_draft", { locales: invalid });
   return out;
 }
 

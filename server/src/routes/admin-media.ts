@@ -28,7 +28,8 @@ import {
   storeMedia,
   writeMediaFile,
 } from "../lib/media-store.js";
-import { findMediaUsage, listMediaAssets } from "./media.js";
+import { readJson } from "./admin-inputs.js";
+import { findMediaUsage, listMediaAssets, mediaUsageAll } from "./media.js";
 
 export const adminMediaRouter = new Hono();
 
@@ -78,22 +79,66 @@ function toResponse(row: typeof mediaAssets.$inferSelect, variants: VariantRow[]
   };
 }
 
-adminMediaRouter.get("/media", async (c) => {
-  const rows = await listMediaAssets();
-  const variants = rows.length
-    ? await getDb()
-        .select()
-        .from(mediaVariants)
+/** Assets shown by the live site, and by any of the last `RECENT_PUBLICATIONS`. */
+async function publishedAssetIds(): Promise<{ live: Set<string>; recent: Set<string> }> {
+  const db = getDb();
+  const live = await db
+    .selectDistinct({ assetId: versionMediaRefs.assetId })
+    .from(versionMediaRefs)
+    .innerJoin(contentPointers, eq(contentPointers.versionId, versionMediaRefs.versionId));
+  const publications = await db
+    .select({ id: contentPublications.id })
+    .from(contentPublications)
+    .orderBy(desc(contentPublications.id))
+    .limit(RECENT_PUBLICATIONS);
+  const recent = publications.length
+    ? await db
+        .selectDistinct({ assetId: versionMediaRefs.assetId })
+        .from(versionMediaRefs)
+        .innerJoin(contentVersions, eq(contentVersions.id, versionMediaRefs.versionId))
         .where(
           inArray(
-            mediaVariants.assetId,
-            rows.map((r) => r.id),
+            contentVersions.publicationId,
+            publications.map((p) => p.id),
           ),
         )
-        // Smallest first, so the admin grid can take the first as a thumbnail.
-        .orderBy(asc(mediaVariants.width))
     : [];
-  return c.json({ media: rows.map((row) => toResponse(row, variants)) });
+  return {
+    live: new Set(live.map((r) => r.assetId)),
+    recent: new Set(recent.map((r) => r.assetId)),
+  };
+}
+
+adminMediaRouter.get("/media", async (c) => {
+  const rows = await listMediaAssets();
+  const [variants, drafts, published] = await Promise.all([
+    rows.length
+      ? getDb()
+          .select()
+          .from(mediaVariants)
+          .where(
+            inArray(
+              mediaVariants.assetId,
+              rows.map((r) => r.id),
+            ),
+          )
+          // Smallest first, so the admin grid can take the first as a thumbnail.
+          .orderBy(asc(mediaVariants.width))
+      : Promise.resolve([]),
+    mediaUsageAll(),
+    publishedAssetIds(),
+  ]);
+  return c.json({
+    media: rows.map((row) => ({
+      ...toResponse(row, variants),
+      // What deleting it would run into; empty and false = unused, safe to clean up.
+      usage: {
+        draft: drafts.get(row.id) ?? [],
+        live: published.live.has(row.id),
+        recent: published.recent.has(row.id),
+      },
+    })),
+  });
 });
 
 type ParsedUpload =
@@ -355,13 +400,18 @@ adminMediaRouter.patch("/media/:id", async (c) => {
  * All in one transaction that locks the asset row, so a publish cannot start
  * referencing it between the check and the delete.
  */
-adminMediaRouter.delete("/media/:id", async (c) => {
-  const id = c.req.param("id");
-  const confirmed = c.req.query("confirm") === "1";
+type DeleteOutcome =
+  | { status: 200; body: { ok: true }; bytes: number }
+  | { status: 404 | 409; body: { error: string } & Record<string, unknown> };
 
+async function deleteAsset(id: string, confirmed: boolean): Promise<DeleteOutcome> {
   const result = await getDb().transaction(async (tx) => {
     const [asset] = await tx
-      .select({ id: mediaAssets.id, filename: mediaAssets.filename })
+      .select({
+        id: mediaAssets.id,
+        filename: mediaAssets.filename,
+        byteSize: mediaAssets.byteSize,
+      })
       .from(mediaAssets)
       .where(eq(mediaAssets.id, id))
       .limit(1)
@@ -418,15 +468,16 @@ adminMediaRouter.delete("/media/:id", async (c) => {
     }
 
     const variants = await tx
-      .select({ filename: mediaVariants.filename })
+      .select({ filename: mediaVariants.filename, byteSize: mediaVariants.byteSize })
       .from(mediaVariants)
       .where(eq(mediaVariants.assetId, asset.id));
     // Variants and version refs go with it (ON DELETE CASCADE).
     await tx.delete(mediaAssets).where(eq(mediaAssets.id, asset.id));
     return {
       status: 200 as const,
-      body: { ok: true },
+      body: { ok: true as const },
       files: [asset.filename, ...variants.map((v) => v.filename)],
+      bytes: asset.byteSize + variants.reduce((sum, v) => sum + v.byteSize, 0),
     };
   });
 
@@ -434,8 +485,44 @@ adminMediaRouter.delete("/media/:id", async (c) => {
   // not leave rows pointing at deleted files.
   if (result.status === 200) {
     for (const name of result.files) await deleteMedia(name);
+    return { status: 200, body: result.body, bytes: result.bytes };
   }
-  return c.json(result.body, result.status);
+  return result;
+}
+
+adminMediaRouter.delete("/media/:id", async (c) => {
+  const outcome = await deleteAsset(c.req.param("id"), c.req.query("confirm") === "1");
+  return c.json(outcome.body, outcome.status);
+});
+
+const cleanupInput = z.object({
+  ids: z.array(z.uuid()).min(1).max(500),
+  /** Also delete files that only recent publications show (a rollback to one would then fail). */
+  confirm: z.boolean().default(false),
+});
+
+/**
+ * Deletes the files the library shows as unused. Each one passes the same
+ * checks as a single delete, in its own transaction, so a file that became
+ * used since the list was loaded is skipped rather than broken.
+ */
+adminMediaRouter.post("/media/cleanup", async (c) => {
+  const parsed = await readJson(c, cleanupInput);
+  if (!parsed.ok) return parsed.response;
+
+  const deleted: string[] = [];
+  const skipped: { id: string; error: string }[] = [];
+  let freedBytes = 0;
+  for (const id of new Set(parsed.data.ids)) {
+    const outcome = await deleteAsset(id, parsed.data.confirm);
+    if (outcome.status === 200) {
+      deleted.push(id);
+      freedBytes += outcome.bytes;
+    } else {
+      skipped.push({ id, error: outcome.body.error });
+    }
+  }
+  return c.json({ ok: true, deleted, skipped, freedBytes });
 });
 
 /**

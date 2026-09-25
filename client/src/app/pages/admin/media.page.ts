@@ -41,7 +41,7 @@ import { MediaPickerComponent } from "../../admin/components/media-picker.compon
         <p class="mt-1 text-sm text-muted-foreground">
           Images for projects, and PDFs such as your CV. Uploaded photos are straightened, stripped
           of location data and resized automatically. Deleting is blocked while the draft or the
-          live site still uses a file.
+          live site still uses a file; "Unused" lists the files nothing uses.
         </p>
       </header>
 
@@ -67,7 +67,12 @@ import { MediaPickerComponent } from "../../admin/components/media-picker.compon
         </p>
       }
 
-      <app-media-picker [deletable]="true" [allowDocuments]="true" (chosen)="select($event)" />
+      <app-media-picker
+        [deletable]="true"
+        [allowDocuments]="true"
+        (chosen)="select($event)"
+        (changed)="loadReconcile()"
+      />
 
       <!-- Clicking a thumbnail opens its alt text (or, for a PDF, its link) in a
            dialog rather than an inline form below the grid, which was easy to
@@ -156,7 +161,7 @@ export default class AdminMediaPage implements OnInit {
       : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
-  private async loadReconcile(): Promise<void> {
+  protected async loadReconcile(): Promise<void> {
     const result = await this.api.mediaReconcile();
     if (result.ok) this.reconcile.set(result.data);
   }

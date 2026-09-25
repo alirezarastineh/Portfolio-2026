@@ -18,6 +18,7 @@ import { hasStoredConversation } from "../ask/ask-storage";
 import { TerminalShellComponent } from "../ask/terminal-shell.component";
 import { SectionHeadingComponent } from "../components/section-heading.component";
 import { TerminalWindowComponent } from "../components/terminal-window.component";
+import { CONTENT_PREVIEW } from "../content/content-source";
 import { CHROME } from "../i18n/chrome";
 import { prefersReducedMotion, runFrames } from "../motion/frames";
 import { LanguageService } from "../services/language.service";
@@ -147,6 +148,8 @@ export class AboutSectionComponent {
 
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  /** The admin's draft preview: the text in full, no typing, and no live assistant. */
+  private readonly preview = inject(CONTENT_PREVIEW);
   private observer?: IntersectionObserver;
   private shellObserver?: IntersectionObserver;
 
@@ -172,7 +175,7 @@ export class AboutSectionComponent {
       if (!launcher.focusPending()) return;
       untracked(() => {
         this.skip();
-        this.loadShell.set(true);
+        if (!this.preview) this.loadShell.set(true);
       });
     });
 
@@ -217,7 +220,7 @@ export class AboutSectionComponent {
    */
   /** Loads the prompt's code a little before the section scrolls into view. */
   private watchForShell(): void {
-    if (!this.isBrowser) return;
+    if (!this.isBrowser || this.preview) return;
     if (hasStoredConversation()) {
       this.loadShell.set(true);
       return;
@@ -236,7 +239,9 @@ export class AboutSectionComponent {
   private arm(): void {
     // Render hooks run during the server render here too. A tab that already
     // talked to the assistant has seen the intro.
-    if (!this.isBrowser || prefersReducedMotion() || hasStoredConversation()) return;
+    if (!this.isBrowser || this.preview || prefersReducedMotion() || hasStoredConversation()) {
+      return;
+    }
     let first = true;
     this.observer = new IntersectionObserver(
       (entries) => {

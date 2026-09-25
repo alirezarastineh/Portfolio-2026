@@ -8,6 +8,7 @@ import { clientIp } from "../auth/middleware.js";
 import { getDb } from "../db/client.js";
 import { contactMessages } from "../db/schema.js";
 import { isMailerConfigured, sendContactEmail } from "../lib/mailer.js";
+import { verifyTurnstile } from "../lib/turnstile.js";
 
 const contactSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -15,6 +16,8 @@ const contactSchema = z.object({
   message: z.string().trim().min(10).max(4000),
   website: z.string().max(200).optional(),
   locale: z.enum(["en", "de"]).optional(),
+  /** Required only while Turnstile is on (TURNSTILE_SECRET_KEY). */
+  turnstileToken: z.string().max(2048).optional(),
 });
 
 /** Per sender: survives restarts and deploys, unlike the old in-memory limiter. */
@@ -66,6 +69,10 @@ contactRouter.post(
     // A bot that fills the hidden field is told it worked, so it does not adapt.
     if (typeof body.website === "string" && body.website.length > 0) {
       return c.json({ ok: true });
+    }
+
+    if (!(await verifyTurnstile(body.turnstileToken, clientIp(c)))) {
+      return c.json({ ok: false, error: "turnstile_failed" }, 403);
     }
 
     const ipHash = hashIp(clientIp(c));

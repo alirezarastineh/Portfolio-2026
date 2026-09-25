@@ -165,14 +165,26 @@ describe("buildCsp", () => {
       apiOrigin: null,
       analyticsOrigin: null,
       sentry: null,
+      turnstile: false,
     };
     const policy = directives(buildCsp("n", config));
 
     expect(policy.get("script-src")).toEqual(["'self'", "'nonce-n'"]);
     expect(policy.get("connect-src")).toEqual(["'self'"]);
     expect(policy.get("img-src")).toEqual(["'self'", "data:"]);
+    expect(policy.has("frame-src")).toBe(false);
     expect(policy.has("report-uri")).toBe(false);
     expect(policy.has("report-to")).toBe(false);
+  });
+
+  it("opens Turnstile's script and frame only when a site key is set", () => {
+    const off = directives(buildCsp("n", cspConfigFromEnv({ VITE_TURNSTILE_SITE_KEY: " " })));
+    expect(off.has("frame-src")).toBe(false);
+
+    const on = directives(buildCsp("n", cspConfigFromEnv({ VITE_TURNSTILE_SITE_KEY: "0x4AAA" })));
+    expect(on.get("script-src")).toContain("https://challenges.cloudflare.com");
+    expect(on.get("frame-src")).toEqual(["https://challenges.cloudflare.com"]);
+    expect(on.get("frame-ancestors")).toEqual(["'none'"]);
   });
 
   it("lists an origin once when two services share it", () => {
@@ -181,6 +193,7 @@ describe("buildCsp", () => {
       apiOrigin: "https://x.example",
       analyticsOrigin: "https://x.example",
       sentry: null,
+      turnstile: false,
     };
     expect(directives(buildCsp("n", config)).get("connect-src")).toEqual([
       "'self'",

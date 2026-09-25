@@ -1,9 +1,21 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  ElementRef,
+  inject,
+  OnInit,
+  signal,
+  viewChild,
+} from "@angular/core";
 import type { RouteMeta } from "@analogjs/router";
 import { FormsModule } from "@angular/forms";
 import { toast } from "@spartan-ng/brain/sonner";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucidePlus, lucideTrash2 } from "@ng-icons/lucide";
+import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
@@ -11,12 +23,21 @@ import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmSwitch } from "@spartan-ng/helm/switch";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
-import { unsavedChangesGuard } from "../../admin/unsaved-changes.service";
+import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 
-import { AdminApiService, type SkillInput, type SkillRow } from "../../admin/admin-api.service";
+import {
+  AdminApiService,
+  type ApiIssue,
+  type SkillInput,
+  type SkillRow,
+} from "../../admin/admin-api.service";
 import { ICON_KEYS } from "../../icons/icon-registry";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
-import { LocaleToggleComponent } from "../../admin/components/editor-chrome.component";
+import {
+  FieldIssueComponent,
+  LocaleToggleComponent,
+  SaveBarComponent,
+} from "../../admin/components/editor-chrome.component";
 import type { LocaleView } from "../../admin/components/field-pair.component";
 import {
   SortableListComponent,
@@ -27,6 +48,8 @@ import {
   UiGroupEditorComponent,
   type UiFieldDef,
 } from "../../admin/components/ui-group-editor.component";
+import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
+import { toastIssues } from "../../admin/save-feedback";
 import type { Locale } from "../../content/schema";
 
 /** Any registry key; the capability icons first. */
@@ -46,11 +69,24 @@ const HEADING_FIELDS: UiFieldDef[] = [
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
+function toInput(row: SkillRow): SkillInput {
+  return {
+    id: row.id,
+    icon: row.icon,
+    span: row.span,
+    items: row.items.filter((item) => item.trim() !== ""),
+    isVisible: row.isVisible,
+    translations: row.translations,
+  };
+}
+
 @Component({
   selector: "app-admin-skills",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    FieldIssueComponent,
     FormsModule,
+    HlmBadge,
     HlmButton,
     HlmInput,
     HlmSeparator,
@@ -59,6 +95,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
     HlmTextarea,
     LocaleToggleComponent,
     NgIcon,
+    SaveBarComponent,
     SortableListComponent,
     SortableRowDirective,
     StringListComponent,
@@ -72,16 +109,18 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
       title="Skills"
       description="Section heading and the bento cards."
       [fields]="headingFields"
+      [saveBar]="false"
     />
 
-    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
+    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28 pt-6">
       <hlm-separator />
 
       <header class="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 class="m-0 font-mono text-lg tracking-tight">Cards</h2>
           <p class="mt-1 text-sm text-muted-foreground">
-            Drag to reorder. Card edits save automatically.
+            Edits are kept until you save. Adding, deleting and reordering a card take effect at
+            once.
           </p>
         </div>
         <div class="flex items-center gap-3">
@@ -109,6 +148,14 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                 <code class="rounded bg-muted px-2 py-1 font-mono text-[0.72rem]">{{
                   row.id
                 }}</code>
+                @if (isChanged(row.id)) {
+                  <span
+                    hlmBadge
+                    variant="outline"
+                    class="border-accent-orange/50 font-mono text-[0.6rem] text-accent-orange"
+                    >unsaved</span
+                  >
+                }
                 <select
                   class="h-8 rounded-md border border-border bg-card px-2 font-mono text-[0.75rem]"
                   [ngModel]="row.icon"
@@ -161,22 +208,41 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                     <input
                       hlmInput
                       class="h-8"
+                      maxlength="120"
                       [ngModel]="row.translations[locale].title"
                       (ngModelChange)="patchTranslation(row.id, locale, { title: $event })"
                       [attr.aria-label]="'Title (' + locale + ')'"
+                      [attr.aria-invalid]="issue(row.id, locale, 'title') ? true : null"
+                      [attr.aria-describedby]="
+                        issue(row.id, locale, 'title') ? issueId(row.id, locale, 'title') : null
+                      "
                       placeholder="Title"
+                    />
+                    <app-field-issue
+                      [id]="issueId(row.id, locale, 'title')"
+                      [message]="issue(row.id, locale, 'title')"
                     />
                     <input
                       hlmInput
                       class="h-8"
+                      maxlength="160"
                       [ngModel]="row.translations[locale].caption"
                       (ngModelChange)="patchTranslation(row.id, locale, { caption: $event })"
                       [attr.aria-label]="'Caption (' + locale + ')'"
+                      [attr.aria-invalid]="issue(row.id, locale, 'caption') ? true : null"
+                      [attr.aria-describedby]="
+                        issue(row.id, locale, 'caption') ? issueId(row.id, locale, 'caption') : null
+                      "
                       placeholder="// caption"
+                    />
+                    <app-field-issue
+                      [id]="issueId(row.id, locale, 'caption')"
+                      [message]="issue(row.id, locale, 'caption')"
                     />
                     <textarea
                       hlmTextarea
                       rows="3"
+                      maxlength="2000"
                       [ngModel]="row.translations[locale].narrative"
                       (ngModelChange)="patchTranslation(row.id, locale, { narrative: $event })"
                       [attr.aria-label]="'Narrative (' + locale + ')'"
@@ -194,16 +260,30 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                 [value]="row.items"
                 (valueChange)="patch(row.id, { items: $event })"
               />
+              <app-field-issue [id]="row.id + '-items-issue'" [message]="itemsIssue(row.id)" />
             </div>
           </ng-template>
         </app-sortable-list>
       }
     </div>
+
+    @if (!loading()) {
+      <app-save-bar
+        [dirty]="dirty()"
+        [saving]="saving()"
+        [problems]="problems()"
+        (save)="save()"
+        (discard)="discard()"
+      />
+    }
   `,
 })
 export default class AdminSkillsPage implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly confirm = inject(ConfirmService);
+  private readonly unsaved = inject(UnsavedChangesService);
+  private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly heading = viewChild.required(UiGroupEditorComponent);
 
   protected readonly icons = ICONS;
   protected readonly spans = SPANS;
@@ -211,9 +291,31 @@ export default class AdminSkillsPage implements OnInit {
   protected readonly view = signal<LocaleView>("both");
 
   protected readonly rows = signal<SkillRow[]>([]);
+  /** Each card as last saved, by id: what Discard restores and what "changed" compares with. */
+  private readonly saved = signal<ReadonlyMap<string, SkillRow>>(new Map());
   protected readonly loading = signal(true);
+  private readonly savingCards = signal(false);
+  /** Keyed `<card id>.<path of the skill input>`. */
+  private readonly issues = new FieldIssues();
 
-  private readonly pending = new Map<string, ReturnType<typeof setTimeout>>();
+  protected readonly changedIds = computed(() => {
+    const saved = this.saved();
+    return this.rows()
+      .filter((row) => {
+        const before = saved.get(row.id);
+        return !before || JSON.stringify(toInput(row)) !== JSON.stringify(toInput(before));
+      })
+      .map((row) => row.id);
+  });
+
+  protected readonly dirty = computed(() => this.changedIds().length > 0 || this.heading().dirty());
+  protected readonly saving = computed(() => this.savingCards() || this.heading().saving());
+  protected readonly problems = computed(() => this.issues.count() + this.heading().problems());
+
+  constructor() {
+    effect(() => this.unsaved.set("skills", this.changedIds().length > 0));
+    inject(DestroyRef).onDestroy(() => this.unsaved.clear("skills"));
+  }
 
   ngOnInit(): void {
     void this.load();
@@ -225,6 +327,22 @@ export default class AdminSkillsPage implements OnInit {
     return this.view() === "both" ? ["en", "de"] : [this.view() as Locale];
   }
 
+  protected isChanged(id: string): boolean {
+    return this.changedIds().includes(id);
+  }
+
+  protected issue(id: string, locale: Locale, field: string): string | null {
+    return this.issues.get(`${id}.translations.${locale}.${field}`);
+  }
+
+  protected issueId(id: string, locale: Locale, field: string): string {
+    return `${id}-${locale}-${field}-issue`;
+  }
+
+  protected itemsIssue(id: string): string | null {
+    return this.issues.under(`${id}.items`);
+  }
+
   private async load(): Promise<void> {
     const result = await this.api.listSkills();
     this.loading.set(false);
@@ -234,11 +352,12 @@ export default class AdminSkillsPage implements OnInit {
       return;
     }
     this.rows.set(result.data.skills);
+    this.saved.set(new Map(result.data.skills.map((row) => [row.id, structuredClone(row)])));
   }
 
   protected patch(id: string, change: Partial<SkillInput>): void {
     this.rows.update((list) => list.map((r) => (r.id === id ? { ...r, ...change } : r)));
-    this.schedule(id);
+    for (const key of Object.keys(change)) this.issues.resolve(`${id}.${key}`);
   }
 
   protected patchTranslation(
@@ -259,34 +378,54 @@ export default class AdminSkillsPage implements OnInit {
           : r,
       ),
     );
-    this.schedule(id);
-  }
-
-  /** Debounced so typing a narrative is one request, not one per keystroke. */
-  private schedule(id: string): void {
-    clearTimeout(this.pending.get(id));
-    this.pending.set(
-      id,
-      setTimeout(() => void this.persist(id), 700),
-    );
-  }
-
-  private async persist(id: string): Promise<void> {
-    const row = this.rows().find((r) => r.id === id);
-    if (!row) return;
-
-    const result = await this.api.updateSkill(id, {
-      id: row.id,
-      icon: row.icon,
-      span: row.span,
-      items: row.items,
-      isVisible: row.isVisible,
-      translations: row.translations,
-    });
-
-    if (!result.ok) {
-      toast.error("Not saved", { description: result.error });
+    for (const key of Object.keys(change)) {
+      this.issues.resolve(`${id}.translations.${locale}.${key}`);
     }
+  }
+
+  protected discard(): void {
+    const saved = this.saved();
+    this.rows.update((list) => list.map((row) => structuredClone(saved.get(row.id) ?? row)));
+    this.issues.clear();
+    this.heading().discard();
+  }
+
+  /** Every changed card, then the heading. A card that fails keeps its edits. */
+  protected async save(): Promise<void> {
+    if (this.saving()) return;
+    this.savingCards.set(true);
+
+    const failed: { id: string; issues: ApiIssue[] }[] = [];
+    let error = "";
+    for (const id of this.changedIds()) {
+      const row = this.rows().find((r) => r.id === id);
+      if (!row) continue;
+      const result = await this.api.updateSkill(id, toInput(row));
+      if (result.ok) {
+        this.saved.update((map) => new Map(map).set(id, structuredClone(row)));
+      } else if (result.issues?.length) {
+        failed.push({ id, issues: result.issues });
+      } else {
+        error = result.error;
+      }
+    }
+    this.savingCards.set(false);
+
+    if (failed.length > 0) {
+      this.issues.set(
+        failed.flatMap(({ id, issues }) => issues.map((i) => ({ ...i, path: [id, ...i.path] }))),
+      );
+      if (this.view() !== "both") this.view.set("both");
+      toastIssues(failed.flatMap((f) => f.issues));
+      focusFirstInvalid(this.host.nativeElement);
+      return;
+    }
+    if (error) {
+      toast.error("Not saved", { description: error });
+      return;
+    }
+    this.issues.clear();
+    if (await this.heading().save()) toast.success("Draft saved");
   }
 
   protected async add(): Promise<void> {
@@ -306,7 +445,12 @@ export default class AdminSkillsPage implements OnInit {
       toast.error("Could not add card", { description: result.error });
       return;
     }
-    await this.load();
+    // Only the new card: edits waiting on the others stay as they are.
+    const list = await this.api.listSkills();
+    const added = list.ok ? list.data.skills.find((row) => row.id === id) : undefined;
+    if (!added) return;
+    this.rows.update((rows) => [...rows, added]);
+    this.saved.update((map) => new Map(map).set(id, structuredClone(added)));
   }
 
   protected async remove(row: SkillRow): Promise<void> {
@@ -327,9 +471,17 @@ export default class AdminSkillsPage implements OnInit {
     if (!result.ok) {
       this.rows.set(previous);
       toast.error("Could not delete", { description: result.error });
+      return;
     }
+    this.issues.resolve(row.id);
+    this.saved.update((map) => {
+      const next = new Map(map);
+      next.delete(row.id);
+      return next;
+    });
   }
 
+  /** Optimistic and immediate: reorder is idempotent and trivially reversible. */
   protected async onReorder(next: SkillRow[]): Promise<void> {
     const previous = this.rows();
     this.rows.set(next);

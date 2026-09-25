@@ -2,6 +2,7 @@ import { HttpClient } from "@angular/common/http";
 import { inject, Injectable, signal, type Signal, type WritableSignal } from "@angular/core";
 import { firstValueFrom } from "rxjs";
 
+import { CONTENT_SOURCE } from "./content-source";
 import { appContentSchema, type AppContent, type Locale } from "./schema";
 
 /**
@@ -16,6 +17,7 @@ import { appContentSchema, type AppContent, type Locale } from "./schema";
 @Injectable({ providedIn: "root" })
 export class ContentStore {
   private readonly http = inject(HttpClient);
+  private readonly source = inject(CONTENT_SOURCE);
 
   private readonly state: Record<Locale, WritableSignal<AppContent | null>> = {
     en: signal<AppContent | null>(null),
@@ -33,10 +35,10 @@ export class ContentStore {
    * Rejects only when there is nothing at all to show — the BFF falls back to
    * the bundled content itself, so that means the site's own server is down.
    *
-   * Relative URL on purpose: it is identical on the server and in the browser,
-   * which lets Angular's HTTP transfer cache replay the SSR response during
-   * hydration instead of fetching again. During SSR, Analog's
-   * `requestContextInterceptor` routes it through Nitro in-process.
+   * The live source's URL is relative on purpose: it is identical on the
+   * server and in the browser, which lets Angular's HTTP transfer cache replay
+   * the SSR response during hydration instead of fetching again. During SSR,
+   * Analog's `requestContextInterceptor` routes it through Nitro in-process.
    */
   ensure(locale: Locale): Promise<AppContent> {
     const loaded = this.state[locale]();
@@ -51,7 +53,7 @@ export class ContentStore {
   }
 
   private async fetchLocale(locale: Locale): Promise<AppContent> {
-    const raw = await firstValueFrom(this.http.get<unknown>(`/api/v2/content/${locale}`));
+    const raw = await firstValueFrom(this.http.get<unknown>(this.source.core(locale)));
 
     // Network data is never trusted blindly: a payload that does not match the
     // schema this build was made for is an error, not something to render.

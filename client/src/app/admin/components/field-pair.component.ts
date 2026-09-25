@@ -18,6 +18,7 @@ import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
 import { AdminApiService } from "../admin-api.service";
+import { FieldIssueComponent } from "./editor-chrome.component";
 
 export type LocaleView = "en" | "de" | "both";
 
@@ -29,6 +30,7 @@ export type LocaleView = "en" | "de" | "both";
   selector: "app-field-pair",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    FieldIssueComponent,
     HlmBadge,
     HlmButton,
     HlmField,
@@ -139,6 +141,8 @@ export type LocaleView = "en" | "de" | "both";
                 [id]="id() + '-en'"
                 [rows]="rows()"
                 [attr.maxlength]="maxLength() || null"
+                [attr.aria-invalid]="errorEn() ? true : null"
+                [attr.aria-describedby]="errorEn() ? id() + '-en-issue' : null"
                 [formControl]="controlEn()"
               ></textarea>
             } @else {
@@ -147,12 +151,18 @@ export type LocaleView = "en" | "de" | "both";
                 [id]="id() + '-en'"
                 type="text"
                 [attr.maxlength]="maxLength() || null"
+                [attr.aria-invalid]="errorEn() ? true : null"
+                [attr.aria-describedby]="errorEn() ? id() + '-en-issue' : null"
                 [formControl]="controlEn()"
               />
             }
-            @if (maxLength()) {
-              <span class="mt-1 self-end font-mono text-[0.62rem] text-muted-foreground">
-                {{ lengthEn() }} / {{ maxLength() }}
+            <app-field-issue [id]="id() + '-en-issue'" [message]="errorEn()" />
+            @if (limit()) {
+              <span
+                class="mt-1 self-end font-mono text-[0.62rem]"
+                [class]="lengthEn() > limit() ? 'text-accent-orange' : 'text-muted-foreground'"
+              >
+                {{ lengthEn() }} / {{ limit() }}
               </span>
             }
           </div>
@@ -173,6 +183,8 @@ export type LocaleView = "en" | "de" | "both";
                 [id]="id() + '-de'"
                 [rows]="rows()"
                 [attr.maxlength]="maxLength() || null"
+                [attr.aria-invalid]="errorDe() ? true : null"
+                [attr.aria-describedby]="errorDe() ? id() + '-de-issue' : null"
                 [formControl]="controlDe()"
               ></textarea>
             } @else {
@@ -181,12 +193,18 @@ export type LocaleView = "en" | "de" | "both";
                 [id]="id() + '-de'"
                 type="text"
                 [attr.maxlength]="maxLength() || null"
+                [attr.aria-invalid]="errorDe() ? true : null"
+                [attr.aria-describedby]="errorDe() ? id() + '-de-issue' : null"
                 [formControl]="controlDe()"
               />
             }
-            @if (maxLength()) {
-              <span class="mt-1 self-end font-mono text-[0.62rem] text-muted-foreground">
-                {{ lengthDe() }} / {{ maxLength() }}
+            <app-field-issue [id]="id() + '-de-issue'" [message]="errorDe()" />
+            @if (limit()) {
+              <span
+                class="mt-1 self-end font-mono text-[0.62rem]"
+                [class]="lengthDe() > limit() ? 'text-accent-orange' : 'text-muted-foreground'"
+              >
+                {{ lengthDe() }} / {{ limit() }}
               </span>
             }
           </div>
@@ -206,6 +224,12 @@ export class FieldPairComponent {
   readonly hint = input("");
   /** 0 = no limit. Shows a counter and caps input at the browser level. */
   readonly maxLength = input(0);
+  /**
+   * A recommended length (a meta description's ~160 characters): a counter
+   * that turns orange past it, without stopping anyone typing.
+   */
+  readonly softMax = input(0);
+  protected readonly limit = computed(() => this.maxLength() || this.softMax());
   /** Offer the AI copilot (translate, tighten). Off for names, URLs and the like. */
   readonly ai = input(true);
 
@@ -225,6 +249,10 @@ export class FieldPairComponent {
 
   protected readonly lengthEn = signal(0);
   protected readonly lengthDe = signal(0);
+
+  /** The last save's problem with each language's value, until it is edited. */
+  protected readonly errorEn = signal<string | null>(null);
+  protected readonly errorDe = signal<string | null>(null);
 
   /**
    * The English copy changed after the German one was last touched — the
@@ -259,10 +287,21 @@ export class FieldPairComponent {
         else this.editedDe.set(0);
       });
 
+      // A save's `server` error arrives through setErrors, which emits a
+      // status change; the next edit recomputes the errors and clears it.
+      const serverError = (control: FormControl<string>) =>
+        (control.errors?.["server"] as string | undefined) ?? null;
+      this.errorEn.set(serverError(en));
+      this.errorDe.set(serverError(de));
+      const c = en.statusChanges.subscribe(() => this.errorEn.set(serverError(en)));
+      const d = de.statusChanges.subscribe(() => this.errorDe.set(serverError(de)));
+
       // Runs on rebind and on destroy alike.
       onCleanup(() => {
         a.unsubscribe();
         b.unsubscribe();
+        c.unsubscribe();
+        d.unsubscribe();
       });
     });
   }

@@ -99,6 +99,18 @@ describe("citations", () => {
     expect(sources).toEqual(["project:atlas@en"]);
   });
 
+  it("reads full-width brackets as markers, even split across chunks", async () => {
+    const { text, sources } = await throughCitations([
+      "Atlas uses pgvector【^project:atlas@en】. Fast ［^project:nope@en］ and 【",
+      "^project:atl",
+      "as@en】 again.",
+    ]);
+    expect(text).toBe(
+      "Atlas uses pgvector[^project:atlas@en]. Fast and [^project:atlas@en] again.",
+    );
+    expect(sources).toEqual(["project:atlas@en"]);
+  });
+
   it("fills in the page language for an id without one", async () => {
     const { text } = await throughCitations(["Siehe [^project:atlas]."], "de");
     expect(text).toBe("Siehe [^project:atlas@de].");

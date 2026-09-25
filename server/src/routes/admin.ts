@@ -7,7 +7,9 @@ import { requireAdmin } from "../auth/middleware.js";
 import { adminCollectionsRouter } from "./admin-collections.js";
 import { adminMediaRouter } from "./admin-media.js";
 import { adminMessagesRouter } from "./admin-messages.js";
-import { buildContent } from "../content/build.js";
+import { buildLocale } from "../content/build.js";
+import { DraftInvalidError } from "../content/draft-issues.js";
+import { i18nStatus } from "../content/i18n-status.js";
 import {
   buildAll,
   PublicationError,
@@ -15,8 +17,18 @@ import {
   rollbackToPublication,
 } from "../content/publish.js";
 import { restoreDraftFromPublication } from "../content/restore.js";
-import { LOCALES, localeSchema, seoSchema, uiSchema, type Locale } from "../content/schema.js";
+import { reviewDraft } from "../content/review.js";
+import {
+  docKey,
+  isDocKind,
+  localeSchema,
+  seoSchema,
+  uiSchema,
+  type Locale,
+} from "../content/schema.js";
+import { expectedToken, parseUiGroups, saveSection, saveUiGroups } from "../content/sections.js";
 import { upcast } from "../content/upcast.js";
+import { toIssues } from "../lib/issues.js";
 import { getDb } from "../db/client.js";
 import {
   contentDocuments,
@@ -141,20 +153,64 @@ adminRouter.get("/status", async (c) => {
   });
 });
 
-/** Renders the draft without persisting — same builder the publish uses. */
+/** Where the two languages disagree: empty fields, and German older than English. */
+adminRouter.get("/i18n", async (c) => {
+  return c.json({ items: await i18nStatus(getDb()) });
+});
+
+/**
+ * The draft as the site would show it — same builder the publish uses, plus
+ * draft and scheduled posts, so they can be read before they go out. Nothing
+ * is persisted. A draft that fails validation is a 422 with its problems: it
+ * is the content that is wrong, not the server.
+ */
+async function buildPreview(locale: Locale) {
+  try {
+    return { ok: true as const, built: await buildLocale(getDb(), locale, new Date(), PREVIEW) };
+  } catch (error) {
+    if (error instanceof DraftInvalidError) {
+      return { ok: false as const, body: { error: "invalid_draft", issues: error.issues } };
+    }
+    throw error;
+  }
+}
+
+const PREVIEW = { unpublishedPosts: true };
+
 adminRouter.get("/content/preview/:locale", async (c) => {
   const parsed = localeSchema.safeParse(c.req.param("locale"));
-  if (!parsed.success) {
-    return c.json({ error: "unsupported_locale" }, 400);
-  }
+  if (!parsed.success) return c.json({ error: "unsupported_locale" }, 400);
 
-  try {
-    return c.json(await buildContent(getDb(), parsed.data));
-  } catch (error) {
-    // A draft that fails validation is a 422, not a 500 — it is the editor's
-    // content that is wrong, not the server.
-    return c.json({ error: "invalid_draft", detail: String(error) }, 422);
-  }
+  const preview = await buildPreview(parsed.data);
+  if (!preview.ok) return c.json(preview.body, 422);
+  c.header("Cache-Control", "no-store");
+  return c.json(preview.built.core);
+});
+
+adminRouter.get("/content/preview/:locale/:kind/:slug", async (c) => {
+  const locale = localeSchema.safeParse(c.req.param("locale"));
+  const kind = c.req.param("kind");
+  if (!locale.success) return c.json({ error: "unsupported_locale" }, 400);
+  if (!isDocKind(kind)) return c.json({ error: "unknown_kind" }, 404);
+
+  const preview = await buildPreview(locale.data);
+  if (!preview.ok) return c.json(preview.body, 422);
+  const doc = preview.built.docs.get(docKey(kind, c.req.param("slug")));
+  if (!doc) return c.json({ error: "not_found" }, 404);
+  c.header("Cache-Control", "no-store");
+  return c.json(doc);
+});
+
+/** What publishing now would change, per locale, and whatever stands in its way. */
+adminRouter.get("/publish/review", async (c) => {
+  const locales = await getDb().transaction((tx) => reviewDraft(tx), {
+    isolationLevel: "repeatable read",
+    accessMode: "read only",
+  });
+  return c.json({
+    locales,
+    canPublish: locales.every((l) => l.issues.length === 0) && locales.some((l) => l.changed),
+  });
 });
 
 adminRouter.post("/publish", async (c) => {
@@ -177,6 +233,10 @@ adminRouter.post("/publish", async (c) => {
       published: outcome.results,
     });
   } catch (error) {
+    // An invalid draft is the editor's to fix: every locale's problems, as-is.
+    if (error instanceof PublicationError) {
+      return c.json(publicationErrorResponse(error), error.status);
+    }
     console.error("[admin] publish failed", error);
     return c.json({ error: "publish_failed", detail: String(error) }, 422);
   }
@@ -241,49 +301,45 @@ adminRouter.put("/sections/:section", async (c) => {
     .safeParse(body.data);
 
   if (!parsed.success) {
-    return c.json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+    return c.json({ error: "invalid_input", issues: toIssues(parsed.error.issues) }, 400);
   }
-
-  const db = getDb();
-  const session = c.get("session");
-
-  const current = await db
-    .select({ updatedAt: contentDocuments.updatedAt })
-    .from(contentDocuments)
-    .where(eq(contentDocuments.section, section));
-
-  const latest = current.reduce<Date | null>(
-    (acc, r) => (acc === null || r.updatedAt > acc ? r.updatedAt : acc),
-    null,
-  );
 
   // Optimistic concurrency: refuse a save built on a stale read rather than
-  // silently clobbering an edit made in another tab.
-  const expected = typeof body.updatedAt === "string" ? new Date(body.updatedAt) : null;
-  if (latest && expected && latest.getTime() !== expected.getTime()) {
-    return c.json({ error: "stale", current: latest.toISOString() }, 409);
+  // silently clobbering an edit made in another tab. Checked under a row lock.
+  const saved = await getDb().transaction((tx) =>
+    saveSection(
+      tx,
+      section,
+      () => parsed.data,
+      expectedToken(body.updatedAt),
+      c.get("session").userId,
+    ),
+  );
+  if (!saved.ok) return c.json({ error: "stale", current: saved.current }, 409);
+  return c.json({ ok: true, updatedAt: saved.updatedAt });
+});
+
+/**
+ * Saves some groups of the `ui` document, merged into it on the server. The
+ * editors own one or a few groups each; sending only those means a save can
+ * never carry another editor's stale copy of the rest.
+ */
+adminRouter.patch("/sections/ui", async (c) => {
+  let body: { groups?: unknown; updatedAt?: unknown };
+  try {
+    body = (await c.req.json()) as typeof body;
+  } catch {
+    return c.json({ error: "invalid_input" }, 400);
   }
 
-  const now = new Date();
-  await db.transaction(async (tx) => {
-    for (const locale of LOCALES) {
-      await tx
-        .insert(contentDocuments)
-        .values({
-          section,
-          locale,
-          data: parsed.data[locale],
-          updatedAt: now,
-          updatedBy: session.userId,
-        })
-        .onConflictDoUpdate({
-          target: [contentDocuments.section, contentDocuments.locale],
-          set: { data: parsed.data[locale], updatedAt: now, updatedBy: session.userId },
-        });
-    }
-  });
+  const parsed = parseUiGroups(body.groups, ["groups"]);
+  if (!parsed.ok) return c.json({ error: "invalid_input", issues: parsed.issues }, 400);
 
-  return c.json({ ok: true, updatedAt: now.toISOString() });
+  const saved = await getDb().transaction((tx) =>
+    saveUiGroups(tx, parsed.groups, expectedToken(body.updatedAt), c.get("session").userId),
+  );
+  if (!saved.ok) return c.json({ error: "stale", current: saved.current }, 409);
+  return c.json({ ok: true, updatedAt: saved.updatedAt });
 });
 
 adminRouter.get("/revisions", async (c) => {

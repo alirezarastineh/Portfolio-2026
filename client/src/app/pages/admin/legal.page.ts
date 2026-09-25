@@ -3,9 +3,11 @@ import {
   Component,
   computed,
   DestroyRef,
+  ElementRef,
   inject,
   OnInit,
   signal,
+  viewChild,
 } from "@angular/core";
 import type { RouteMeta } from "@analogjs/router";
 import { FormsModule } from "@angular/forms";
@@ -18,12 +20,17 @@ import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmTabsImports } from "@spartan-ng/helm/tabs";
 
 import { AdminApiService, type LegalSectionInput } from "../../admin/admin-api.service";
-import { SaveBarComponent } from "../../admin/components/editor-chrome.component";
+import {
+  FieldIssueComponent,
+  SaveBarComponent,
+} from "../../admin/components/editor-chrome.component";
 import { RichTextComponent } from "../../admin/components/rich-text.component";
 import {
   UiGroupEditorComponent,
   type UiFieldDef,
 } from "../../admin/components/ui-group-editor.component";
+import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
+import { toastIssues, toastStale } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import type { LegalDoc, Locale } from "../../content/schema";
 
@@ -52,6 +59,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   selector: "app-admin-legal",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    FieldIssueComponent,
     FormsModule,
     HlmAlert,
     HlmAlertDescription,
@@ -68,7 +76,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   ],
   host: { class: "block" },
   template: `
-    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
+    <div class="mx-auto flex max-w-4xl flex-col gap-6">
       <header>
         <h1 class="m-0 font-mono text-2xl tracking-tight">Legal pages</h1>
         <p class="mt-1 text-sm text-muted-foreground">
@@ -108,6 +116,14 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                 [id]="'legal-title-' + locale"
                 [ngModel]="d[active()][locale].title"
                 (ngModelChange)="patch(locale, { title: $event })"
+                [attr.aria-invalid]="issue(locale, 'title') ? true : null"
+                [attr.aria-describedby]="
+                  issue(locale, 'title') ? 'legal-title-' + locale + '-issue' : null
+                "
+              />
+              <app-field-issue
+                [id]="'legal-title-' + locale + '-issue'"
+                [message]="issue(locale, 'title')"
               />
             </div>
             <app-rich-text
@@ -116,40 +132,64 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
               [ngModel]="d[active()][locale].body"
               (ngModelChange)="patch(locale, { body: $event })"
             />
+            <app-field-issue
+              [id]="'legal-body-' + locale + '-issue'"
+              [message]="issue(locale, 'body')"
+            />
           </section>
           <hlm-separator />
         }
-
-        <app-save-bar [dirty]="dirty()" [saving]="saving()" (save)="save()" (discard)="discard()" />
       }
     </div>
 
-    <app-ui-group-editor
-      group="legal"
-      title="Legal labels"
-      description="The footer links and the “last updated” label."
-      [fields]="labelFields"
-    />
+    <div class="mt-6 pb-28">
+      <app-ui-group-editor
+        #labels
+        group="legal"
+        title="Legal labels"
+        description="The footer links and the “last updated” label."
+        [fields]="labelFields"
+        [saveBar]="false"
+        [level]="2"
+      />
+    </div>
+
+    @if (!loading() && docs()) {
+      <app-save-bar
+        [dirty]="dirty()"
+        [saving]="saving()"
+        [problems]="problems()"
+        (save)="save()"
+        (discard)="discard()"
+      />
+    }
   `,
 })
 export default class AdminLegalPage implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly unsaved = inject(UnsavedChangesService);
+  private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly labels = viewChild.required(UiGroupEditorComponent);
 
   protected readonly docList = DOCS;
   protected readonly labelFields = LABEL_FIELDS;
   protected readonly locales: Locale[] = ["en", "de"];
   protected readonly active = signal<LegalDoc>("imprint");
   protected readonly loading = signal(true);
-  protected readonly saving = signal(false);
+  private readonly savingDocs = signal(false);
   protected readonly docs = signal<Docs | null>(null);
+  private readonly pristine = signal<Docs | null>(null);
+  /** Keyed `<doc>.<locale>.<field>`. */
+  private readonly issues = new FieldIssues();
 
-  private pristine: Docs | null = null;
   private readonly tokens: Record<LegalDoc, string | null> = { imprint: null, privacy: null };
 
-  protected readonly dirty = computed(
-    () => JSON.stringify(this.docs()) !== JSON.stringify(this.pristine),
+  private readonly docsDirty = computed(
+    () => JSON.stringify(this.docs()) !== JSON.stringify(this.pristine()),
   );
+  protected readonly dirty = computed(() => this.docsDirty() || this.labels().dirty());
+  protected readonly saving = computed(() => this.savingDocs() || this.labels().saving());
+  protected readonly problems = computed(() => this.issues.count() + this.labels().problems());
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.unsaved.clear("legal"));
@@ -159,6 +199,11 @@ export default class AdminLegalPage implements OnInit {
     void this.load();
   }
 
+  protected issue(locale: Locale, field: keyof LegalSectionInput): string | null {
+    return this.issues.get(`${this.active()}.${locale}.${field}`);
+  }
+
+  /** (Re)loads both documents, dropping local edits to them. */
   private async load(): Promise<void> {
     const [imprint, privacy] = await Promise.all(
       DOCS.map((doc) => this.api.getSection<LegalSectionInput>(doc.id)),
@@ -177,7 +222,9 @@ export default class AdminLegalPage implements OnInit {
     this.tokens.imprint = imprint.data.updatedAt;
     this.tokens.privacy = privacy.data.updatedAt;
     this.docs.set(structuredClone(docs));
-    this.pristine = docs;
+    this.pristine.set(docs);
+    this.issues.clear();
+    this.unsaved.clear("legal");
   }
 
   protected patch(locale: Locale, change: Partial<LegalSectionInput>): void {
@@ -185,39 +232,49 @@ export default class AdminLegalPage implements OnInit {
     this.docs.update((d) =>
       d ? { ...d, [doc]: { ...d[doc], [locale]: { ...d[doc][locale], ...change } } } : d,
     );
-    this.unsaved.set("legal", this.dirty());
+    for (const field of Object.keys(change)) this.issues.resolve(`${doc}.${locale}.${field}`);
+    this.unsaved.set("legal", this.docsDirty());
   }
 
   protected discard(): void {
-    this.docs.set(this.pristine ? structuredClone(this.pristine) : null);
+    const pristine = this.pristine();
+    this.docs.set(pristine ? structuredClone(pristine) : null);
+    this.issues.clear();
     this.unsaved.clear("legal");
+    this.labels().discard();
   }
 
+  /** The documents that changed, then the labels: one save bar, one Ctrl+S. */
   protected async save(): Promise<void> {
     const docs = this.docs();
-    if (!docs || !this.pristine || this.saving()) return;
-    this.saving.set(true);
+    const pristine = this.pristine();
+    if (!docs || !pristine || this.saving()) return;
+    this.savingDocs.set(true);
 
     for (const { id } of DOCS) {
-      if (JSON.stringify(docs[id]) === JSON.stringify(this.pristine[id])) continue;
+      if (JSON.stringify(docs[id]) === JSON.stringify(pristine[id])) continue;
       const result = await this.api.putSection(id, docs[id], this.tokens[id]);
       if (!result.ok) {
-        this.saving.set(false);
-        toast.error("Not saved", {
-          description:
-            result.status === 409
-              ? "This page changed in another tab. Reload before saving."
-              : "Every title needs text in both languages.",
-        });
+        this.savingDocs.set(false);
+        if (result.status === 409) {
+          toastStale(() => this.load(), "This page");
+        } else if (result.issues?.length) {
+          // `[locale, field]` of this document.
+          this.issues.set(result.issues.map((i) => ({ ...i, path: [id, ...i.path] })));
+          this.active.set(id);
+          toastIssues(result.issues);
+          focusFirstInvalid(this.host.nativeElement);
+        } else {
+          toast.error("Not saved", { description: result.error });
+        }
         return;
       }
       this.tokens[id] = result.data.updatedAt;
+      this.pristine.update((p) => (p ? { ...p, [id]: structuredClone(docs[id]) } : p));
     }
-
-    this.saving.set(false);
-    this.pristine = structuredClone(docs);
-    this.docs.set(structuredClone(docs));
+    this.savingDocs.set(false);
     this.unsaved.clear("legal");
-    toast.success("Draft saved");
+
+    if (await this.labels().save()) toast.success("Draft saved");
   }
 }

@@ -9,17 +9,22 @@ import { resolveDocument, type AskCorpus } from "./corpus/index.js";
  * once as a source part (the terminal turns it into a footnote); an unknown id
  * is removed, so an invented reference never reaches the visitor. A marker
  * split across chunks is held back until it closes.
+ *
+ * Some models write the brackets full-width, `【^profile@en】` or
+ * `［^profile@en］` (a habit from their own citation format); those are read
+ * the same way and come out as `[^…]`.
  */
 
-const MARKER = / ?\[\^([^\]\s]{1,160})\]/g;
+const OPENERS = ["[", "【", "［"];
+const MARKER = / ?[[【［]\^([^\]】］\s]{1,160})[\]】］]/g;
 /** A tail that may still grow into a marker: `[`, `[^`, `[^proj…`. */
-const OPEN_TAIL = /^ ?\[(\^[^\]\s]{0,160})?$/;
-const DANGLING = / ?\[\^[^\]\s]*$/;
+const OPEN_TAIL = /^ ?[[【［](\^[^\]】］\s]{0,160})?$/;
+const DANGLING = / ?[[【［]\^[^\]】］\s]*$/;
 
 type TextDeltaPart = { type: "text-delta"; id: string; text: string };
 
 function findPendingCut(text: string): number {
-  const open = text.lastIndexOf("[");
+  const open = Math.max(...OPENERS.map((opener) => text.lastIndexOf(opener)));
   if (open === -1) return text.length;
   const start = open > 0 && text[open - 1] === " " ? open - 1 : open;
   return OPEN_TAIL.test(text.slice(start)) ? start : text.length;

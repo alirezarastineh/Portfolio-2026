@@ -2,6 +2,7 @@ import { HttpClient, HttpErrorResponse } from "@angular/common/http";
 import { inject, Injectable } from "@angular/core";
 import { firstValueFrom } from "rxjs";
 
+import { CONTENT_SOURCE } from "./content-source";
 import { docSchema, type Doc, type DocKind, type Locale } from "./schema";
 
 /**
@@ -27,16 +28,13 @@ export function statusOf(error: unknown): number | null {
 @Injectable({ providedIn: "root" })
 export class DocStore {
   private readonly http = inject(HttpClient);
+  private readonly source = inject(CONTENT_SOURCE);
   private readonly loaded = new Map<string, Doc | null>();
   private readonly inFlight = new Map<string, Promise<Doc | null>>();
 
-  static url(locale: Locale, kind: DocKind, slug: string): string {
-    return `/api/v2/content/${locale}/${kind}/${slug}`;
-  }
-
   /** The doc, or null when this locale has none by that slug. Rejects only on a real failure. */
   ensure(locale: Locale, kind: DocKind, slug: string): Promise<Doc | null> {
-    const url = DocStore.url(locale, kind, slug);
+    const url = this.source.doc(locale, kind, slug);
     if (this.loaded.has(url)) return Promise.resolve(this.loaded.get(url) ?? null);
 
     const existing = this.inFlight.get(url);

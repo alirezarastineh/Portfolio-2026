@@ -8,6 +8,8 @@ export interface ContactPayload {
   message: string;
   website?: string;
   locale?: "en" | "de";
+  /** Only while Turnstile is on. */
+  turnstileToken?: string;
 }
 
 export type ContactResult = { ok: true } | { ok: false; error: string };

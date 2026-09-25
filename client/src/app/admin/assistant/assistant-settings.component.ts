@@ -3,6 +3,8 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
+  effect,
   inject,
   OnInit,
   signal,
@@ -20,6 +22,7 @@ import type { Locale } from "../../content/schema";
 import { AdminApiService } from "../admin-api.service";
 import type { AssistantEnv, AssistantSettings, AssistantSettingsInput } from "../assistant-types";
 import { SaveBarComponent } from "../components/editor-chrome.component";
+import { UnsavedChangesService } from "../unsaved-changes.service";
 
 const LOCALES: Locale[] = ["en", "de"];
 
@@ -193,7 +196,7 @@ function toDraft(s: AssistantSettings): Draft {
         [dirty]="dirty()"
         [saving]="saving()"
         saveLabel="Save"
-        hint="saved — live immediately, no publish needed"
+        hint="live immediately, no publish needed"
         (save)="save()"
         (discard)="discard()"
       />
@@ -214,6 +217,12 @@ export class AssistantSettingsComponent implements OnInit {
   protected readonly dirty = computed(
     () => JSON.stringify(this.draft()) !== JSON.stringify(this.saved()),
   );
+
+  constructor() {
+    const unsaved = inject(UnsavedChangesService);
+    effect(() => unsaved.set("assistant-settings", this.dirty()));
+    inject(DestroyRef).onDestroy(() => unsaved.clear("assistant-settings"));
+  }
 
   ngOnInit(): void {
     void this.load();

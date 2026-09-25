@@ -18,6 +18,7 @@ import { HlmProgressImports } from "@spartan-ng/helm/progress";
 import { HlmSpinner } from "@spartan-ng/helm/spinner";
 
 import { AdminApiService, type MediaAsset } from "../admin-api.service";
+import { isUnused, MediaLibraryService } from "../media-library.service";
 import { ConfirmService } from "./confirm-dialog.component";
 
 /** Matches the API's MEDIA_MAX_BYTES (10 MiB). */
@@ -91,6 +92,43 @@ export const UPLOAD_ERRORS: Record<string, string> = {
         />
       </div>
 
+      @if (deletable() && !loading()) {
+        <!-- The library's own tools: which files nothing uses, and removing them. -->
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-1" role="group" aria-label="Show">
+            @for (option of filters; track option.id) {
+              <button
+                hlmBtn
+                size="sm"
+                type="button"
+                [variant]="filter() === option.id ? 'secondary' : 'ghost'"
+                [attr.aria-pressed]="filter() === option.id"
+                (click)="filter.set(option.id)"
+              >
+                {{ option.label }}
+                <span class="ml-1.5 font-mono text-[0.68rem] text-muted-foreground">{{
+                  option.id === "unused" ? unused().length : offeredCount()
+                }}</span>
+              </button>
+            }
+          </div>
+          <button
+            hlmBtn
+            variant="outline"
+            size="sm"
+            type="button"
+            [disabled]="!unused().length || cleaning()"
+            (click)="cleanup()"
+          >
+            @if (cleaning()) {
+              <hlm-spinner class="size-4" />
+            } @else {
+              Clean up unused ({{ formatSize(unusedBytes()) }})
+            }
+          </button>
+        </div>
+      }
+
       @if (loading()) {
         <hlm-spinner class="size-5 self-center" />
       } @else if (!visible().length) {
@@ -99,8 +137,13 @@ export const UPLOAD_ERRORS: Record<string, string> = {
             <div hlmEmptyMedia variant="icon">
               <ng-icon name="lucideImage" size="20" aria-hidden="true" />
             </div>
-            <h3 hlmEmptyTitle>{{ documentsOnly() ? "No PDFs yet" : "No images yet" }}</h3>
-            <p hlmEmptyDescription>Upload {{ accepts() }} above to use it here.</p>
+            @if (filter() === "unused") {
+              <h3 hlmEmptyTitle>Nothing unused</h3>
+              <p hlmEmptyDescription>Every file is used by the draft or the live site.</p>
+            } @else {
+              <h3 hlmEmptyTitle>{{ documentsOnly() ? "No PDFs yet" : "No images yet" }}</h3>
+              <p hlmEmptyDescription>Upload {{ accepts() }} above to use it here.</p>
+            }
           </div>
         </div>
       } @else {
@@ -131,7 +174,7 @@ export const UPLOAD_ERRORS: Record<string, string> = {
                     </span>
                   } @else {
                     <img
-                      [src]="thumbnail(asset)"
+                      [src]="library.thumbnailOf(asset)"
                       [alt]="asset.altEn || asset.originalName"
                       loading="lazy"
                       decoding="async"
@@ -157,16 +200,25 @@ export const UPLOAD_ERRORS: Record<string, string> = {
                     />
                   }
                 </span>
-                <span class="block px-2 pb-1.5 font-mono text-[0.62rem] text-muted-foreground">
-                  {{
-                    asset.width && asset.height
-                      ? asset.width + "×" + asset.height
-                      : asset.kind === "document"
-                        ? "PDF"
-                        : "—"
-                  }}
-                  ·
-                  {{ formatSize(asset.byteSize) }}
+                <span
+                  class="flex items-center justify-between gap-2 px-2 pb-1.5 font-mono text-[0.62rem] text-muted-foreground"
+                >
+                  <span>
+                    {{
+                      asset.width && asset.height
+                        ? asset.width + "×" + asset.height
+                        : asset.kind === "document"
+                          ? "PDF"
+                          : "—"
+                    }}
+                    ·
+                    {{ formatSize(asset.byteSize) }}
+                  </span>
+                  @if (deletable() && asset.usage) {
+                    <span [class]="usageClass(asset)" [title]="usageTitle(asset)">{{
+                      usageLabel(asset)
+                    }}</span>
+                  }
                 </span>
               </button>
 
@@ -193,64 +245,142 @@ export const UPLOAD_ERRORS: Record<string, string> = {
 export class MediaPickerComponent implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly confirm = inject(ConfirmService);
+  protected readonly library = inject(MediaLibraryService);
 
   /** The currently chosen `/media/<file>` path, when used as a picker. */
   readonly selected = input<string | null>(null);
+  /** The media library itself: delete buttons, usage, the unused filter and cleanup. */
   readonly deletable = input(false);
   /** PDFs too (the media library); off where only an image makes sense. */
   readonly allowDocuments = input(false);
   /** Only PDFs — for choosing a CV. */
   readonly documentsOnly = input(false);
   readonly chosen = output<MediaAsset>();
+  /** After files were added or deleted (the page's totals are then out of date). */
+  readonly changed = output<void>();
+
+  protected readonly filters: { id: MediaFilter; label: string }[] = [
+    { id: "all", label: "All" },
+    { id: "unused", label: "Unused" },
+  ];
+  protected readonly filter = signal<MediaFilter>("all");
 
   protected readonly accepted = computed(() => {
     if (this.documentsOnly()) return "application/pdf";
     return this.allowDocuments() ? `${IMAGE_TYPES},application/pdf` : IMAGE_TYPES;
   });
-  protected readonly assets = signal<MediaAsset[]>([]);
-  protected readonly visible = computed(() => {
-    if (this.documentsOnly()) return this.assets().filter((a) => a.kind === "document");
-    return this.allowDocuments()
-      ? this.assets()
-      : this.assets().filter((a) => a.kind !== "document");
+  /** The kinds this picker offers, before the unused filter. */
+  private readonly offered = computed(() => {
+    const assets = this.library.assets();
+    if (this.documentsOnly()) return assets.filter((a) => a.kind === "document");
+    return this.allowDocuments() ? assets : assets.filter((a) => a.kind !== "document");
   });
+  protected readonly offeredCount = computed(() => this.offered().length);
+  protected readonly unused = computed(() => this.offered().filter(isUnused));
+  protected readonly unusedBytes = computed(() =>
+    this.unused().reduce((sum, a) => sum + a.byteSize, 0),
+  );
+  protected readonly visible = computed(() =>
+    this.filter() === "unused" ? this.unused() : this.offered(),
+  );
   protected readonly accepts = computed(() => {
     if (this.documentsOnly()) return "a PDF";
     return this.allowDocuments() ? "an image or a PDF" : "an image";
   });
-  protected readonly loading = signal(true);
+  protected readonly loading = computed(() => !this.library.loaded());
   protected readonly uploading = signal(false);
+  protected readonly cleaning = signal(false);
   protected readonly progress = signal(0);
   protected readonly dragging = signal(false);
 
   protected readonly selectedPath = computed(() => this.selected());
 
   ngOnInit(): void {
-    void this.load();
+    // The library page always wants current usage; a picker can reuse the list.
+    void this.library.load(this.deletable());
   }
 
-  /**
-   * The smallest WebP copy when there is one: a grid of full-size originals is
-   * tens of MB. Resolved against the original's absolute URL, so it loads from
-   * the same host as the original does.
-   */
-  protected thumbnail(asset: MediaAsset): string {
-    const small = asset.variants.find((v) => v.format === "webp");
-    if (!small) return asset.url;
-    const file = small.path.slice(small.path.lastIndexOf("/") + 1);
-    return asset.url.slice(0, asset.url.lastIndexOf("/") + 1) + file;
+  protected usageLabel(asset: MediaAsset): string {
+    if (asset.usage?.live) return "live";
+    if (asset.usage?.draft.length) return "in draft";
+    return "unused";
+  }
+
+  protected usageClass(asset: MediaAsset): string {
+    return isUnused(asset) ? "text-muted-foreground/70" : "text-accent-indigo";
+  }
+
+  protected usageTitle(asset: MediaAsset): string {
+    const usage = asset.usage;
+    if (!usage) return "";
+    const parts = [
+      ...usage.draft,
+      ...(usage.live ? ["the live site"] : []),
+      ...(usage.recent ? ["a recent publication"] : []),
+    ];
+    return parts.length ? `Used by ${parts.join(", ")}` : "Not used anywhere";
   }
 
   protected formatSize(bytes: number): string {
-    return bytes < 1024 * 1024
-      ? `${Math.round(bytes / 1024)} KB`
-      : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    return formatBytes(bytes);
   }
 
   async load(): Promise<void> {
-    const result = await this.api.listMedia();
-    this.loading.set(false);
-    if (result.ok) this.assets.set(result.data.media);
+    await this.library.load(true);
+  }
+
+  /**
+   * Deletes what nothing uses. Files that only recent publications show are
+   * asked about separately: deleting them makes a rollback to those refuse.
+   */
+  protected async cleanup(): Promise<void> {
+    const unused = this.unused();
+    const safe = unused.filter((a) => !a.usage?.recent);
+    const inHistory = unused.filter((a) => a.usage?.recent);
+    const ids: string[] = [];
+
+    if (safe.length > 0) {
+      const go = await this.confirm.ask({
+        title: `Delete ${safe.length} unused ${safe.length === 1 ? "file" : "files"}?`,
+        description: `Neither the draft nor the live site uses them. ${formatBytes(
+          safe.reduce((sum, a) => sum + a.byteSize, 0),
+        )} of originals, plus their resized copies. This cannot be undone.`,
+        confirmLabel: "Delete",
+        destructive: true,
+      });
+      if (!go) return;
+      ids.push(...safe.map((a) => a.id));
+    }
+    let includeHistory = false;
+    if (inHistory.length > 0) {
+      includeHistory = await this.confirm.ask({
+        title: `Also delete ${inHistory.length} kept for rollbacks?`,
+        description:
+          "One of the last 20 publications still shows them. Once deleted, rolling back to those publications will be refused.",
+        confirmLabel: "Delete them too",
+        cancelLabel: "Keep them",
+        destructive: true,
+      });
+      if (includeHistory) ids.push(...inHistory.map((a) => a.id));
+    }
+    if (ids.length === 0) return;
+
+    this.cleaning.set(true);
+    const result = await this.api.cleanupMedia(ids, includeHistory);
+    this.cleaning.set(false);
+    if (!result.ok) {
+      toast.error("Cleanup failed", { description: result.error });
+      return;
+    }
+
+    await this.library.load(true);
+    this.changed.emit();
+    const { deleted, skipped, freedBytes } = result.data;
+    toast.success(`Deleted ${deleted.length} ${deleted.length === 1 ? "file" : "files"}`, {
+      description:
+        `${formatBytes(freedBytes)} freed.` +
+        (skipped.length ? ` ${skipped.length} became used meanwhile and were kept.` : ""),
+    });
   }
 
   protected onDragOver(event: DragEvent): void {
@@ -295,6 +425,7 @@ export class MediaPickerComponent implements OnInit {
     }
 
     await this.load();
+    this.changed.emit();
     if (result.data.deduped) {
       toast.info("Already uploaded", { description: "Reusing the existing copy." });
     } else {
@@ -340,7 +471,16 @@ export class MediaPickerComponent implements OnInit {
       return;
     }
 
-    this.assets.update((list) => list.filter((a) => a.id !== asset.id));
+    await this.library.load(true);
+    this.changed.emit();
     toast.success("Deleted");
   }
+}
+
+type MediaFilter = "all" | "unused";
+
+function formatBytes(bytes: number): string {
+  return bytes < 1024 * 1024
+    ? `${Math.round(bytes / 1024)} KB`
+    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }

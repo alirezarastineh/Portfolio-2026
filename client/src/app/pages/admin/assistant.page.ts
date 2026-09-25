@@ -1,5 +1,9 @@
-import { ChangeDetectionStrategy, Component, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
+import type { RouteMeta } from "@analogjs/router";
 import { HlmTabsImports } from "@spartan-ng/helm/tabs";
+
+import { ConfirmService } from "../../admin/components/confirm-dialog.component";
+import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 
 import { AssistantConversationsComponent } from "../../admin/assistant/assistant-conversations.component";
 import { AssistantEvalsComponent } from "../../admin/assistant/assistant-evals.component";
@@ -10,6 +14,8 @@ import { AssistantPlaygroundComponent } from "../../admin/assistant/assistant-pl
 import { AssistantSettingsComponent } from "../../admin/assistant/assistant-settings.component";
 
 type Tab = "overview" | "settings" | "faq" | "conversations" | "insights" | "playground" | "evals";
+
+export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -49,7 +55,7 @@ const TABS: { id: Tab; label: string }[] = [
         </p>
       </header>
 
-      <div hlmTabs [tab]="tab()" (tabActivated)="tab.set($any($event))">
+      <div hlmTabs [tab]="strip()" (tabActivated)="select($any($event))">
         <div hlmTabsList aria-label="Assistant sections" class="flex-wrap">
           @for (option of tabs; track option.id) {
             <button [hlmTabsTrigger]="option.id">{{ option.label }}</button>
@@ -84,12 +90,39 @@ const TABS: { id: Tab; label: string }[] = [
   `,
 })
 export default class AdminAssistantPage {
+  private readonly unsaved = inject(UnsavedChangesService);
+  private readonly confirm = inject(ConfirmService);
+
   protected readonly tabs = TABS;
+  /** The section shown; the settings tab's edits die with it on a switch. */
   protected readonly tab = signal<Tab>("overview");
+  /** The tab strip's own state, put back when a switch is refused. */
+  protected readonly strip = signal<Tab>("overview");
   protected readonly faqSeed = signal<string | null>(null);
+
+  protected async select(next: Tab): Promise<void> {
+    const current = this.tab();
+    if (next === current) return;
+    this.strip.set(next);
+    if (this.unsaved.hasAny()) {
+      const leave = await this.confirm.ask({
+        title: "Discard unsaved changes?",
+        description: "The settings have edits that have not been saved. Switching loses them.",
+        confirmLabel: "Discard and switch",
+        cancelLabel: "Stay",
+        destructive: true,
+      });
+      if (!leave) {
+        this.strip.set(current);
+        return;
+      }
+      this.unsaved.clearAll();
+    }
+    this.tab.set(next);
+  }
 
   protected toFaq(question: string): void {
     this.faqSeed.set(question);
-    this.tab.set("faq");
+    void this.select("faq");
   }
 }

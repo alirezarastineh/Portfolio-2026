@@ -7,6 +7,7 @@ import { z } from "zod";
 import { clientIp } from "../auth/middleware.js";
 import { getDb } from "../db/client.js";
 import { aiFeedback, aiMessages } from "../db/schema.js";
+import { turnstileEnabled, verifyTurnstile, VerifiedSessions } from "../lib/turnstile.js";
 import { streamAnswer } from "./agent.js";
 import { askChain, askConfig, askCorpus } from "./deps.js";
 import { availability, checkRate, ConcurrencyGate, hashWithSalt, recordRequest } from "./guard.js";
@@ -34,8 +35,12 @@ const askBody = z.object({
   deep: z.boolean().optional(),
   /** Hidden from people; a bot that fills it gets nothing. */
   website: z.string().max(200).optional(),
+  /** While Turnstile is on: needed once per session, on its first question. */
+  turnstileToken: z.string().max(2048).optional(),
   messages: z.array(z.unknown()).min(1).max(40),
 });
+
+const verifiedSessions = new VerifiedSessions();
 
 const feedbackBody = z.object({
   sessionId: z.string().regex(SESSION_ID),
@@ -63,6 +68,19 @@ async function readJson(c: Context): Promise<unknown> {
   }
 }
 
+async function checkTurnstile(
+  sessionId: string,
+  token: string | undefined,
+  ip: string,
+): Promise<boolean> {
+  if (!turnstileEnabled()) return true;
+  const session = hashWithSalt("session", sessionId);
+  if (verifiedSessions.has(session)) return true;
+  if (!(await verifyTurnstile(token, ip))) return false;
+  verifiedSessions.add(session);
+  return true;
+}
+
 export function createAskRouter(): Hono {
   const router = new Hono();
 
@@ -72,15 +90,17 @@ export function createAskRouter(): Hono {
     bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: "too_large" }, 413) }),
     async (c) => {
       const parsed = askBody.safeParse(await readJson(c));
-      if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
+      if (!parsed.success || parsed.data.website) return c.json({ error: "invalid_input" }, 400);
       const body = parsed.data;
-      if (body.website) return c.json({ error: "invalid_input" }, 400);
+
+      if (!(await checkTurnstile(body.sessionId, body.turnstileToken, clientIp(c)))) {
+        return c.json({ error: "turnstile_required" }, 403);
+      }
 
       const config = askConfig();
       const { settings } = await assistantState();
       const state = await availability(config, settings);
-      if (state.state === "off") return c.json({ error: "assistant_off" }, 503);
-      if (state.state === "resting") return c.json({ error: "assistant_resting" }, 503);
+      if (state.state !== "ok") return c.json({ error: `assistant_${state.state}` }, 503);
 
       const history = await buildHistory({
         messages: body.messages,

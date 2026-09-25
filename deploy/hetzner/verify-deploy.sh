@@ -222,6 +222,18 @@ check "publications are locked without a session" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${API}/admin/publications')\" = 401 ]"
 check "contact inbox is locked without a session" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${API}/admin/messages')\" = 401 ]"
+# Admin tools (Phase 8): the publish review, the translation report and the
+# draft preview show unpublished content, so none may answer without a session.
+check "the publish review is locked without a session" \
+  bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${API}/admin/publish/review')\" = 401 ]"
+check "the translation report is locked without a session" \
+  bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${API}/admin/i18n')\" = 401 ]"
+check "the draft preview's content is locked without a session" \
+  bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${API}/admin/content/preview/en/legal/imprint')\" = 401 ]"
+# The page itself renders only the admin skeleton on the server; the draft
+# loads in the browser, with the session.
+check "the draft preview page renders (skeleton, noindex)" \
+  bash -c "curl -fsS '${CLIENT}/admin/preview/en' | grep -q 'noindex, nofollow'"
 
 echo "== media =="
 check "media route rejects traversal" \
@@ -234,6 +246,9 @@ else
 fi
 # sharp is a native module: the Alpine (musl) build must load, or every image
 # upload fails with a 500 while everything else looks healthy.
+# With the site's own Origin, so the refusal comes from the session check.
+check "media cleanup is locked without a session" \
+  bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://${CLIENT_PUBLIC_DOMAIN:-alirezarastineh.me}' -H 'Content-Type: application/json' -d '{\"ids\":[]}' '${API}/admin/media/cleanup')\" = 401 ]"
 check "sharp loads in the api container (image processing works)" \
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T api \
   node -e "import('sharp').then((m) => process.exit(m.default.versions.vips ? 0 : 1), () => process.exit(1))"

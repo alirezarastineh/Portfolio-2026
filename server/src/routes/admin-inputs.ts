@@ -9,6 +9,7 @@ import {
   type ProjectTranslationInput,
 } from "../content/admin-schema.js";
 import { sanitizeRichText } from "../content/sanitize.js";
+import { toIssues } from "../lib/issues.js";
 
 /**
  * The shared admin schemas plus sanitizing: rich-text fields are cleaned as
@@ -72,7 +73,7 @@ export async function readJson<T extends z.ZodType>(
   if (!parsed.success) {
     return {
       ok: false,
-      response: c.json({ error: "invalid_input", issues: parsed.error.issues }, 400),
+      response: c.json({ error: "invalid_input", issues: toIssues(parsed.error.issues) }, 400),
     };
   }
   return { ok: true, data: parsed.data };
