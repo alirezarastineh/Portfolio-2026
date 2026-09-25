@@ -85,7 +85,6 @@ interface FullProject {
   slug: string;
   coverId: string | null;
   coverPath: string | null;
-  imagePath: string;
   periodStart: string | null;
   category: string;
   gallery: { mediaId: string; caption: { en: string; de: string }; path: string }[];
@@ -143,7 +142,7 @@ describe("projects", () => {
     expect(full.translations["en"]!.body).toBe('<p>x</p><img src="/media/a.png" />');
   });
 
-  it("stores the cover, period, category and gallery, and mirrors the cover into the v1 columns", async () => {
+  it("stores the cover, period, category and gallery", async () => {
     const cover = await asset();
     const shot = await asset();
     const id = await createProject("alpha", {
@@ -166,7 +165,6 @@ describe("projects", () => {
       category: "ai-platform",
     });
     expect(full.coverPath).toMatch(/^\/media\/.+\.png$/);
-    expect(full.imagePath).toBe(full.coverPath);
     expect(full.gallery).toEqual([
       {
         mediaId: shot,
@@ -401,36 +399,15 @@ describe("posts", () => {
 });
 
 describe("profile and CVs", () => {
-  it("keeps the extended identity and refuses an invalid time zone or country", async () => {
-    const base = {
+  it("saves the identity only with the hero copy (PUT /admin/hero)", async () => {
+    const res = await client.put("/admin/profile", {
       name: "A",
       handle: "a",
       contactEmail: "a@example.com",
       primaryCtaHref: "#projects",
       secondaryCtaHref: "#contact",
-    };
-    const avatar = await asset();
-    const ok = await client.put("/admin/profile", {
-      ...base,
-      siteUrl: "https://alirezarastineh.me",
-      availability: "limited",
-      locationCity: "Berlin",
-      locationCountry: "DE",
-      timezone: "Europe/Berlin",
-      avatarId: avatar,
     });
-    // No profile row yet in an empty database: nothing to update, still valid input.
-    expect(ok.status).toBe(200);
-
-    expect((await client.put("/admin/profile", { ...base, timezone: "Mars/Olympus" })).status).toBe(
-      400,
-    );
-    expect(
-      (await client.put("/admin/profile", { ...base, locationCountry: "germany" })).status,
-    ).toBe(400);
-    expect(
-      (await client.put("/admin/profile", { ...base, siteUrl: "https://x.example/path" })).status,
-    ).toBe(400);
+    expect(res.status).toBe(404);
   });
 
   it("sets a CV per language from a PDF, and only from a PDF", async () => {

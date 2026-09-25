@@ -255,22 +255,10 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
         <app-media-field
           id="cover"
           label="Cover image"
-          hint="Shown on the card and at the top of the case study."
+          hint="Shown on the card and at the top of the case study. Without one, the card has no picture."
           [path]="p.coverPath"
           (chosen)="chooseCover($event)"
         />
-        @if (!p.coverId) {
-          <div hlmField>
-            <label hlmFieldLabel for="imagePath">Placeholder path (legacy)</label>
-            <input
-              hlmInput
-              id="imagePath"
-              placeholder="/projects/example.svg"
-              [ngModel]="p.imagePath"
-              (ngModelChange)="patch({ imagePath: $event })"
-            />
-          </div>
-        }
 
         <div class="grid gap-6 sm:grid-cols-2">
           <div class="flex flex-col">
@@ -593,7 +581,6 @@ export default class AdminProjectEditorPage implements OnInit {
     const result = await this.api.updateProject(current.id, {
       slug: current.slug,
       coverId: current.coverId,
-      imagePath: current.coverId ? "" : current.imagePath,
       stack: current.stack.filter((s) => s.trim() !== ""),
       linkLive: current.linkLive,
       linkRepo: current.linkRepo,

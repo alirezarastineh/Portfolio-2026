@@ -75,8 +75,6 @@ export async function runMigrations(): Promise<boolean> {
   try {
     // Serializes concurrent boots; the second waits, then finds nothing to do.
     await lockClient.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_ID]);
-    // citext backs the case-insensitive unique on admin_users.email.
-    await lockClient.query("CREATE EXTENSION IF NOT EXISTS citext");
     await migrate(db, { migrationsFolder });
     console.log("[db] migrations applied");
     return true;

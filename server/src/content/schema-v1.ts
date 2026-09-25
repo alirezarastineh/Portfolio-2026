@@ -1,10 +1,9 @@
 /**
  * FROZEN: the v1 content contract, exactly as it was before content model v2.
  *
- * Never edit. It exists for three jobs until Phase 9 removes them: reading
- * snapshots published before v2 (`upcast.ts`), serving the temporary
- * `/v1/content/:locale` route (`downcastV1`), and validating what that route
- * returns. The live contract is `schema.ts`.
+ * Never edit. Its one job is reading snapshots published before v2
+ * (`upcast.ts`), which stay in the history and can be rolled back to. Nothing
+ * serves this shape any more; the live contract is `schema.ts`.
  */
 import { z } from "zod";
 

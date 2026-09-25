@@ -69,19 +69,19 @@ export interface AdminSessionRow {
   current: boolean;
 }
 
-export interface RevisionRow {
-  id: number;
-  locale: Locale;
-  checksum: string;
-  label: string | null;
-  /** The publish (or rollback) this version belongs to, with the other locale's version. */
-  publicationId: number | null;
-  createdAt: string;
-  live: boolean;
-}
-
+/** One locale's version of a publication, in full, and what is live beside it. */
 export interface RevisionDetail {
-  revision: RevisionRow & { payload: AppContent };
+  revision: {
+    id: number;
+    locale: Locale;
+    checksum: string;
+    label: string | null;
+    /** The publish (or rollback) this version belongs to, with the other locale's version. */
+    publicationId: number;
+    createdAt: string;
+    live: boolean;
+    payload: AppContent;
+  };
   /** What is live for the same locale right now; null before the first publish. */
   live: { id: number; payload: AppContent } | null;
 }
@@ -247,23 +247,9 @@ export class AdminApiService {
     }>("POST", "/admin/publish", label ? { label } : {});
   }
 
-  revisions() {
-    return this.request<{ revisions: RevisionRow[] }>("GET", "/admin/revisions");
-  }
-
+  /** One version of a publication, by its id, for the Publications page's diff. */
   revision(id: number) {
     return this.request<RevisionDetail>("GET", `/admin/revisions/${id}`);
-  }
-
-  /** Rolls back the whole publication `id` belongs to — every locale moves together. */
-  rollback(id: number) {
-    return this.request<{
-      ok: true;
-      locale: Locale;
-      versionId: number;
-      publicationId: number;
-      rolledBack: { locale: Locale; versionId: number }[];
-    }>("POST", `/admin/revisions/${id}/rollback`, {});
   }
 
   publications() {

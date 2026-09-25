@@ -132,8 +132,6 @@ export const projectInput = z
     slug: slugSchema,
     /** The cover from the media library. */
     coverId: z.uuid().nullable().default(null),
-    /** Legacy: a bundled `/projects/*.svg`, published only when there is no cover. */
-    imagePath: z.string().max(500).default(""),
     stack: z.array(nonEmpty.max(60)).max(40),
     linkLive: z.string().max(500),
     linkRepo: z.string().max(500),

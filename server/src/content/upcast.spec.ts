@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { appContentSchema, type AppContent } from "./schema.js";
 import * as v1 from "./schema-v1.js";
 import { UI_V2_ADDITIONS, fillMissing, withUiDefaults } from "./ui-defaults.js";
-import { downcastV1, payloadVersion, upcast, upcastDocs } from "./upcast.js";
+import { payloadVersion, upcast, upcastDocs } from "./upcast.js";
 
 /** A real v1 payload: the seed as it was published before v2. */
 function v1Payload(): v1.AppContent {
@@ -88,24 +88,6 @@ describe("upcast", () => {
     const docs = await upcastDocs(1, "de", []);
     expect([...docs.keys()]).toEqual(["legal:imprint", "legal:privacy"]);
     expect(docs.get("legal:imprint")).toMatchObject({ kind: "legal", title: "Impressum" });
-  });
-});
-
-describe("downcastV1", () => {
-  it("serves v2 content in the v1 shape, dropping what v1 cannot show", () => {
-    const v2 = (upcast(v1Payload(), "2026-01-01T00:00:00.000Z") as { content: AppContent }).content;
-    const withNew: AppContent = {
-      ...v2,
-      socials: [...v2.socials, { label: "Mastodon", href: "https://m.example", icon: "mastodon" }],
-      skills: v2.skills.map((s, i) => (i === 0 ? { ...s, icon: "sparkles" } : s)),
-    };
-
-    const old = downcastV1(withNew);
-    expect(v1.appContentSchema.safeParse(old).success).toBe(true);
-    expect(old.socials.some((s) => s.label === "Mastodon")).toBe(false);
-    expect(old.skills[0]!.icon).toBe("cpu");
-    expect(old.projects[0]!.image).toBe("/media/abc.webp");
-    expect(Object.keys(old.ui.nav)).toEqual(["skills", "projects", "about", "contact"]);
   });
 });
 

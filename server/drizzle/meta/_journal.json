@@ -64,6 +64,13 @@
       "when": 1790233278677,
       "tag": "0008_ask_assistant",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790336306412,
+      "tag": "0009_contract_cleanup",
+      "breakpoints": true
     }
   ]
 }

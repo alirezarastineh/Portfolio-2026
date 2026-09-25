@@ -3,13 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createApp } from "../app.js";
 import { invalidateContentCache } from "../content/cache.js";
-import { publishAll } from "../content/publish.js";
 import type { AppContent, Doc } from "../content/schema.js";
-import * as v1 from "../content/schema-v1.js";
 import { getDb } from "../db/client.js";
 import { contentPointers, contentPublications, contentVersions } from "../db/schema.js";
 import { seed } from "../db/seed.js";
 import { createAdmin, resetDb, TestClient } from "../test/helpers.js";
+import { v1Snapshot } from "../test/v1-snapshot.js";
 
 const app = createApp();
 
@@ -73,38 +72,16 @@ describe("public content API (v2)", () => {
   });
 });
 
-describe("public content API (v1, downcast)", () => {
-  it("serves the live content in the v1 shape for clients built before v2", async () => {
-    const res = await app.request("/v1/content/en");
-    expect(res.status).toBe(200);
-    expect(res.headers.get("etag")).toMatch(/^W\/"en-\d+-v1"$/);
-    const body = (await res.json()) as unknown;
-    const parsed = v1.appContentSchema.safeParse(body);
-    expect(parsed.error?.issues ?? []).toEqual([]);
-    expect(parsed.data?.version).toBe(1);
-  });
-
-  it("drops the socials a v1 client cannot draw", async () => {
-    const client = new TestClient(app);
-    await client.login();
-    await client.post("/admin/socials", {
-      label: "Mastodon",
-      href: "https://m.example",
-      icon: "mastodon",
-    });
-    await publishAll();
-
-    const v2 = await liveContent();
-    expect(v2.socials.some((s) => s.icon === "mastodon")).toBe(true);
-    const old = (await (await app.request("/v1/content/en")).json()) as v1.AppContent;
-    expect(old.socials.some((s) => s.label === "Mastodon")).toBe(false);
+describe("the retired v1 contract", () => {
+  it("is no longer served", async () => {
+    expect((await app.request("/v1/content/en")).status).toBe(404);
   });
 });
 
 describe("a live snapshot published before v2", () => {
   /** What the first request after deploying v2 sees, until the next publish. */
   async function pointAtV1Snapshot() {
-    const v1Payload = (await (await app.request("/v1/content/en")).json()) as v1.AppContent;
+    const v1Payload = v1Snapshot("en");
     const [pub] = await getDb()
       .insert(contentPublications)
       .values({ kind: "publish", schemaVersion: 1 })
@@ -128,6 +105,8 @@ describe("a live snapshot published before v2", () => {
     const body = (await res.json()) as AppContent;
     expect(body.version).toBe(2);
     expect(body.experiences).toEqual([]);
+    // Its placeholder images live in the payload, not in the (dropped) v1 columns.
+    expect(body.projects[0]!.cover).toMatchObject({ src: "/projects/project-one.svg" });
 
     const imprint = await app.request("/v2/content/en/legal/imprint");
     expect(imprint.status).toBe(200);
@@ -179,7 +158,7 @@ describe("publish and rollback", () => {
     expect(res.status).toBe(200);
   });
 
-  it("rolls a locale back to an earlier payload", async () => {
+  it("rolls back to an earlier publication", async () => {
     const client = new TestClient(app);
     await client.login();
     const original = (await liveContent()).projects[0]!.name;
@@ -188,19 +167,29 @@ describe("publish and rollback", () => {
     await client.post("/admin/publish", {});
     expect((await liveContent()).projects[0]!.name).toBe("Regrettable edit");
 
-    const revisions = (await (await client.get("/admin/revisions")).json()) as {
-      revisions: { id: number; locale: string; live: boolean }[];
+    const { publications } = (await (await client.get("/admin/publications")).json()) as {
+      publications: { id: number; live: boolean }[];
     };
-    const earlierEn = revisions.revisions.find((r) => r.locale === "en" && !r.live)!;
+    const earlier = publications.find((p) => !p.live)!;
 
-    const rollback = await client.post(`/admin/revisions/${earlierEn.id}/rollback`, {});
+    const rollback = await client.post(`/admin/publications/${earlier.id}/rollback`, {});
     expect(rollback.status).toBe(200);
     expect((await liveContent()).projects[0]!.name).toBe(original);
   });
 
-  it("rejects a malformed revision id", async () => {
+  it("rejects a malformed publication id", async () => {
     const client = new TestClient(app);
     await client.login();
-    expect((await client.post("/admin/revisions/abc/rollback", {})).status).toBe(400);
+    expect((await client.post("/admin/publications/abc/rollback", {})).status).toBe(400);
+  });
+
+  it("no longer offers the per-version rollback or the revisions list", async () => {
+    const client = new TestClient(app);
+    await client.login();
+    const [version] = await getDb().select({ id: contentVersions.id }).from(contentVersions);
+    expect((await client.post(`/admin/revisions/${version!.id}/rollback`, {})).status).toBe(404);
+    expect((await client.get("/admin/revisions")).status).toBe(404);
+    // One version in full stays: the Publications page's diff reads it.
+    expect((await client.get(`/admin/revisions/${version!.id}`)).status).toBe(200);
   });
 });

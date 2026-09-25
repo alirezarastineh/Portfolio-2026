@@ -10,7 +10,7 @@ describe("sanitizeRichText", () => {
   });
 
   /**
-   * This is the whole point of sanitizing on write: `/v1/content/:locale` is
+   * This is the whole point of sanitizing on write: `/v2/content/:locale` is
    * public, so the API must never *serve* untrusted markup, whatever the
    * consumer does with it.
    */

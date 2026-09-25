@@ -238,7 +238,6 @@ export default class AdminProjectsPage implements OnInit {
     const result = await this.api.createProject({
       slug,
       coverId: null,
-      imagePath: "",
       stack: [],
       linkLive: "",
       linkRepo: "",

@@ -163,35 +163,12 @@ adminCollectionsRouter.get("/profile", async (c) => {
   return c.json({ profile: row });
 });
 
-adminCollectionsRouter.put("/profile", async (c) => {
-  const parsed = await readJson(c, profileInput);
-  if (!parsed.ok) return parsed.response;
-  const { siteUrl, ...rest } = parsed.data;
-
-  try {
-    await getDb().transaction(async (tx) => {
-      await assertMedia(tx, [rest.avatarId], "image");
-      await tx
-        .update(siteProfile)
-        .set({
-          ...rest,
-          siteUrl: siteUrl || null,
-          updatedAt: new Date(),
-          updatedBy: c.get("session").userId,
-        })
-        .where(eq(siteProfile.id, true));
-    });
-  } catch (error) {
-    return respond(c, error, "duplicate");
-  }
-  return c.json({ ok: true });
-});
-
 /**
- * The whole "Hero & identity" page in one transaction: the identity row and
- * the `profile`, `hero` and `nav` groups of the `ui` document. Saved in
- * pieces, a failure halfway left the page half-saved with nothing telling
- * which half. Both parts carry their own version token.
+ * The identity is saved only here, with the "Hero & identity" page: the
+ * identity row and the `profile`, `hero` and `nav` groups of the `ui`
+ * document, in one transaction. Saved in pieces, a failure halfway left the
+ * page half-saved with nothing telling which half. Both parts carry their own
+ * version token.
  */
 adminCollectionsRouter.put("/hero", async (c) => {
   let body: { profile?: unknown; ui?: unknown; updatedAt?: unknown; profileUpdatedAt?: unknown };
@@ -465,7 +442,6 @@ const projectColumns = {
   slug: projects.slug,
   coverId: projects.coverId,
   coverPath: mediaPath(projects.coverId),
-  imagePath: sql<string>`coalesce(${projects.imagePath}, '')`,
   stack: projects.stack,
   linkLive: sql<string>`coalesce(${projects.linkLive}, '')`,
   linkRepo: sql<string>`coalesce(${projects.linkRepo}, '')`,
@@ -536,20 +512,12 @@ async function writeProject(tx: Tx, id: string | null, data: ProjectData): Promi
     );
   if (clash) throw new InputError(409, "duplicate_slug");
 
-  const covers = await assertMedia(tx, [data.coverId], "image");
-  await assertMedia(
-    tx,
-    data.gallery.map((g) => g.mediaId),
-    "image",
-  );
+  await assertMedia(tx, [data.coverId, ...data.gallery.map((g) => g.mediaId)], "image");
 
   const now = new Date();
   const values = {
     slug: data.slug,
     coverId: data.coverId,
-    // The v1 columns follow the cover, so a downcast and an old rollback agree.
-    imageId: data.coverId,
-    imagePath: data.coverId ? `/media/${covers.get(data.coverId)}` : data.imagePath || null,
     stack: data.stack,
     linkLive: data.linkLive,
     linkRepo: data.linkRepo,

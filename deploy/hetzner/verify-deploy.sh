@@ -60,10 +60,15 @@ if [[ "${MIGRATIONS_APPLIED}" == "${MIGRATIONS_ON_DISK}" ]]; then
 else
   fail "migrations applied: '${MIGRATIONS_APPLIED}', in the checkout: ${MIGRATIONS_ON_DISK}"
 fi
-if [[ "$(db_value 'select count(*) from content_versions where publication_id is null')" == "0" ]]; then
-  pass "every published version belongs to a publication"
+if [[ "$(db_value "select is_nullable from information_schema.columns where table_name = 'content_versions' and column_name = 'publication_id'")" == "NO" ]]; then
+  pass "every published version belongs to a publication (NOT NULL)"
 else
-  fail "published versions without a publication (migration 0003 not applied?)"
+  fail "content_versions.publication_id is still nullable (migration 0009 not applied?)"
+fi
+if [[ "$(db_value "select count(*) from information_schema.columns where table_name = 'projects' and column_name in ('image_id', 'image_path')")" == "0" ]]; then
+  pass "the v1 project image columns are gone"
+else
+  fail "projects still has image_id/image_path (migration 0009 not applied?)"
 fi
 # The content v2 backfill runs at API boot, after the migrations.
 if [[ "$(db_value "select count(*) from content_documents where section in ('imprint', 'privacy')")" == "4" ]]; then
@@ -84,8 +89,8 @@ check "api serves the v2 core (en)" bash -c "curl -fsS '${API}/v2/content/en' | 
 check "api serves the v2 core (de)" bash -c "curl -fsS '${API}/v2/content/de' | grep -q '\"version\":2'"
 check "api serves a doc (the German imprint)" \
   bash -c "curl -fsS '${API}/v2/content/de/legal/imprint' | grep -q '\"kind\":\"legal\"'"
-check "api still serves v1 for clients built before v2" \
-  bash -c "curl -fsS '${API}/v1/content/en' | grep -q '\"version\":1'"
+check "api no longer serves the v1 contract" \
+  bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${API}/v1/content/en')\" = 404 ]"
 check "api rejects an unknown locale" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${API}/v2/content/fr')\" = 400 ]"
 

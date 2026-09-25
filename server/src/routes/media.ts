@@ -173,13 +173,7 @@ export async function findMediaUsage(
   const projectRefs = await db
     .select({ slug: projects.slug })
     .from(projects)
-    .where(
-      or(
-        eq(projects.coverId, id),
-        eq(projects.imageId, id),
-        sql`${projects.imagePath} like ${"%" + filename + "%"}`,
-      ),
-    );
+    .where(eq(projects.coverId, id));
   for (const row of projectRefs) usedBy.add(`project:${row.slug}`);
 
   const gallery = await db
@@ -265,16 +259,9 @@ export async function mediaUsageAll(db: DbExecutor = getDb()): Promise<Map<strin
   };
 
   for (const p of await db
-    .select({
-      slug: projects.slug,
-      coverId: projects.coverId,
-      imageId: projects.imageId,
-      imagePath: projects.imagePath,
-    })
+    .select({ slug: projects.slug, coverId: projects.coverId })
     .from(projects)) {
     byId(p.coverId, `project:${p.slug}`);
-    byId(p.imageId, `project:${p.slug}`);
-    byText(p.imagePath, `project:${p.slug}`);
   }
 
   for (const g of await db

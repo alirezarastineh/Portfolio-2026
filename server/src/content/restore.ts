@@ -323,12 +323,10 @@ async function restoreProjects(
 
   const existingProjects = await tx.select({ id: projects.id, slug: projects.slug }).from(projects);
   for (const [position, project] of base.projects.entries()) {
-    const coverId = project.cover ? (media.get(project.cover.src) ?? null) : null;
     const shared = {
-      coverId,
-      imageId: coverId,
-      // A cover without an asset is a legacy bundled path; keep it publishable.
-      imagePath: project.cover?.src ?? null,
+      // A cover without an asset (a pre-v2 `/projects/*.svg` placeholder) has
+      // nowhere to go in the draft; the project comes back without one.
+      coverId: project.cover ? (media.get(project.cover.src) ?? null) : null,
       stack: project.stack,
       linkLive: project.links.live,
       linkRepo: project.links.repo,

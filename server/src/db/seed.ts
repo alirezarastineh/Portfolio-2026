@@ -36,7 +36,6 @@ interface SeedFile {
   }[];
   projects: {
     slug: string;
-    imagePath: string;
     stack: string[];
     linkLive: string;
     linkRepo: string;
@@ -109,7 +108,6 @@ async function seedProjects(db: Database, projectsData: SeedFile["projects"]): P
       .insert(projects)
       .values({
         slug: project.slug,
-        imagePath: project.imagePath,
         stack: project.stack,
         linkLive: project.linkLive,
         linkRepo: project.linkRepo,

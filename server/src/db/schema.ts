@@ -155,10 +155,10 @@ export const contentVersions = pgTable(
     /** sha256 of the canonical JSON, so identical republishes are detectable. */
     checksum: text("checksum").notNull(),
     label: text("label"),
-    /** Nullable only until the backfill migration has run; every new version gets one. */
-    publicationId: bigint("publication_id", { mode: "number" }).references(
-      () => contentPublications.id,
-    ),
+    /** The publish or rollback that wrote it, together with the other locales' versions. */
+    publicationId: bigint("publication_id", { mode: "number" })
+      .notNull()
+      .references(() => contentPublications.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by").references(() => adminUsers.id, { onDelete: "set null" }),
   },
@@ -398,14 +398,7 @@ export const projects = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     slug: text("slug").notNull().unique(),
-    /** Legacy (v1): kept in step with `cover_id` until Phase 9 drops it. */
-    imageId: uuid("image_id").references(() => mediaAssets.id, { onDelete: "set null" }),
-    /**
-     * Legacy (v1). A `/media/…` path mirrors `cover_id`; a `/projects/*.svg`
-     * path is a bundled placeholder and is published as-is when there is no cover.
-     */
-    imagePath: text("image_path"),
-    /** The cover image; the only image column the v2 build reads. */
+    /** The cover image, from the media library. None: the card shows no picture. */
     coverId: uuid("cover_id").references(() => mediaAssets.id, { onDelete: "restrict" }),
     stack: jsonb("stack").$type<string[]>().notNull().default([]),
     linkLive: text("link_live"),
@@ -425,7 +418,6 @@ export const projects = pgTable(
   },
   (t) => [
     index("projects_position_idx").on(t.position, t.id),
-    index("projects_image_idx").on(t.imageId),
     index("projects_cover_idx").on(t.coverId),
   ],
 );

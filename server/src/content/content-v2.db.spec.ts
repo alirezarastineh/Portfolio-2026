@@ -18,11 +18,11 @@ import {
 } from "../db/schema.js";
 import { seed } from "../db/seed.js";
 import { createAdmin, resetDb, TestClient } from "../test/helpers.js";
+import { v1Snapshot } from "../test/v1-snapshot.js";
 import { buildLocale } from "./build.js";
 import { publishAll, rollbackToPublication } from "./publish.js";
 import { restoreDraftFromPublication } from "./restore.js";
 import type { AppContent, Doc } from "./schema.js";
-import * as v1 from "./schema-v1.js";
 
 const app = createApp();
 let client: TestClient;
@@ -289,8 +289,8 @@ describe("the admin flow end to end", () => {
 
 describe("rollback and restore across versions", () => {
   it("rolls back to a publication made before v2, writing it as v2", async () => {
-    const pre = (await (await app.request("/v1/content/en")).json()) as v1.AppContent;
-    const preDe = (await (await app.request("/v1/content/de")).json()) as v1.AppContent;
+    const pre = v1Snapshot("en");
+    const preDe = v1Snapshot("de");
     const [old] = await getDb()
       .insert(contentPublications)
       .values({ kind: "publish", schemaVersion: 1 })
@@ -317,8 +317,33 @@ describe("rollback and restore across versions", () => {
     const core = await live();
     expect(core.version).toBe(2);
     expect(core.projects[0]!.name).toBe("Old name");
+    // The payload carries its placeholder picture; no project column is needed.
+    expect(core.projects[0]!.cover).toMatchObject({ src: "/projects/project-one.svg" });
     // v1 carried no legal pages; the rollback still has them.
     expect((await doc("en/legal/privacy")).status).toBe(200);
+  });
+
+  it("restores a publication made before v2 into the draft, minus its placeholder pictures", async () => {
+    const [old] = await getDb()
+      .insert(contentPublications)
+      .values({ kind: "publish", schemaVersion: 1 })
+      .returning({ id: contentPublications.id });
+    const en = v1Snapshot("en");
+    await getDb()
+      .insert(contentVersions)
+      .values([
+        {
+          locale: "en",
+          payload: { ...en, projects: en.projects.map((p) => ({ ...p, name: `Old ${p.slug}` })) },
+          checksum: "a",
+          publicationId: old!.id,
+        },
+        { locale: "de", payload: v1Snapshot("de"), checksum: "b", publicationId: old!.id },
+      ]);
+
+    await restoreDraftFromPublication(old!.id);
+    const draft = await buildLocale(getDb(), "en");
+    expect(draft.core.projects[0]).toMatchObject({ name: "Old project-one", cover: null });
   });
 
   it("restores a v2 publication into the draft, bodies, gallery and all", async () => {

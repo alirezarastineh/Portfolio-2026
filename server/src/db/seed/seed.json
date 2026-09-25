@@ -131,7 +131,6 @@
   "projects": [
     {
       "slug": "project-one",
-      "imagePath": "/projects/project-one.svg",
       "stack": ["TypeScript", "Python", "FastAPI", "Postgres"],
       "linkLive": "",
       "linkRepo": "",
@@ -168,7 +167,6 @@
     },
     {
       "slug": "project-two",
-      "imagePath": "/projects/project-two.svg",
       "stack": ["Angular", "Node.js", "Redis"],
       "linkLive": "",
       "linkRepo": "",
@@ -197,7 +195,6 @@
     },
     {
       "slug": "project-three",
-      "imagePath": "/projects/project-three.svg",
       "stack": ["React", "PyTorch", "Docker"],
       "linkLive": "",
       "linkRepo": "",

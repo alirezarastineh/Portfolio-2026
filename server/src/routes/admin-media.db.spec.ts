@@ -237,18 +237,12 @@ describe("media delete", () => {
     /** Puts the asset on the first project in the draft. */
     async function useOnFirstProject(media: MediaResponse["media"]): Promise<string> {
       const [first] = await getDb().select().from(projects).orderBy(projects.position).limit(1);
-      await getDb()
-        .update(projects)
-        .set({ imageId: media.id, imagePath: `/media/${media.filename}` })
-        .where(eq(projects.id, first!.id));
+      await getDb().update(projects).set({ coverId: media.id }).where(eq(projects.id, first!.id));
       return first!.id;
     }
 
     async function removeFromProject(projectId: string): Promise<void> {
-      await getDb()
-        .update(projects)
-        .set({ imageId: null, imagePath: null })
-        .where(eq(projects.id, projectId));
+      await getDb().update(projects).set({ coverId: null }).where(eq(projects.id, projectId));
     }
 
     it("refuses to delete an image the draft still uses", async () => {

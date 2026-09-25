@@ -17,10 +17,10 @@ import { withUiDefaults } from "./ui-defaults.js";
 /**
  * Bridges snapshots published before content model v2.
  *
- * Every reader of published content — the public API, the revisions diff,
+ * Every reader of published content — the public API, the publications diff,
  * rollback, restore, the assistant's corpus — goes through `upcast`, so the
  * rest of the code only ever sees v2. Old rows are never rewritten; they are
- * converted on the way out.
+ * converted on the way out. The conversion is one-way: nothing serves v1.
  */
 
 export function payloadVersion(payload: unknown): number | null {
@@ -145,32 +145,4 @@ export async function upcastDocs(
     docs.set(row.key, docSchema.parse(row.payload));
   }
   return docs;
-}
-
-const V1_SOCIAL_ICONS = new Set<string>(v1.socialIconSchema.options);
-const V1_SKILL_ICONS = new Set<string>(v1.skillIconSchema.options);
-
-/**
- * v2 → v1, for the temporary `/v1/content/:locale` route that clients built
- * before v2 still call during a rolling deploy. Parsing through the frozen v1
- * schema drops every field v1 does not know. Socials whose icon v1 cannot draw
- * are dropped; skills keep their card with a generic icon.
- */
-export function downcastV1(content: AppContent): v1.AppContent {
-  return v1.appContentSchema.parse({
-    version: 1,
-    locale: content.locale,
-    ui: content.ui,
-    identity: {
-      name: content.identity.name,
-      handle: content.identity.handle,
-      contactEmail: content.identity.contactEmail,
-      primaryCtaHref: content.identity.primaryCtaHref,
-      secondaryCtaHref: content.identity.secondaryCtaHref,
-    },
-    socials: content.socials.filter((s) => V1_SOCIAL_ICONS.has(s.icon)),
-    skills: content.skills.map((s) => (V1_SKILL_ICONS.has(s.icon) ? s : { ...s, icon: "cpu" })),
-    projects: content.projects.map((p) => ({ ...p, image: p.cover?.src ?? "" })),
-    seo: content.seo,
-  });
 }

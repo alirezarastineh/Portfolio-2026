@@ -6,8 +6,8 @@
  * build contexts and no pnpm workspace, so a genuinely shared module is not
  * importable; `schema-parity.spec.ts` fails the build if the copies drift.
  *
- * v1 is frozen in `schema-v1.ts` (server only) for old snapshots and the
- * temporary `/v1` route.
+ * v1 is frozen in `schema-v1.ts` (server only), to read snapshots published
+ * before v2.
  */
 // ─── SHARED CONTENT SCHEMA — everything below this line is mirrored verbatim ───
 import { z } from "zod";

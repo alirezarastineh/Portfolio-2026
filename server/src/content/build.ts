@@ -158,21 +158,6 @@ class MediaIndex {
   }
 }
 
-/** A `/projects/*.svg` placeholder (or any path without an asset) as an image. */
-function legacyImage(path: string | null, alt: string): Image | null {
-  if (!path) return null;
-  const match = /\/media\/([^/?#]+)$/.exec(path);
-  return {
-    src: match ? `/media/${match[1]}` : path,
-    srcset: "",
-    sources: [],
-    width: null,
-    height: null,
-    alt,
-    blur: null,
-  };
-}
-
 function latest(...dates: (Date | null | undefined)[]): string {
   const times = dates.filter((d): d is Date => d instanceof Date).map((d) => d.getTime());
   return new Date(Math.max(0, ...times)).toISOString();
@@ -240,9 +225,7 @@ async function buildProjects(
         repo: project.linkRepo ?? "",
         caseStudy: project.linkCaseStudy ?? "",
       },
-      cover:
-        media.image(project.coverId, locale, translation.name) ??
-        (project.coverId ? null : legacyImage(project.imagePath, translation.name)),
+      cover: media.image(project.coverId, locale, translation.name),
       featured: project.featured,
       period: project.periodStart ? { start: project.periodStart, end: project.periodEnd } : null,
       role: translation.role,

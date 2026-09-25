@@ -17,7 +17,7 @@ import {
   type Doc,
   type Locale,
 } from "../content/schema.js";
-import { downcastV1, upcast, upcastDocs } from "../content/upcast.js";
+import { upcast, upcastDocs } from "../content/upcast.js";
 import { getDb } from "../db/client.js";
 import { contentPointers, contentVersionDocs, contentVersions } from "../db/schema.js";
 
@@ -156,20 +156,4 @@ contentV2Router.get("/:locale/:kind/:slug", async (c) => {
 
   if (versionHeaders(c, entry, `W/"${locale}-${entry.versionId}-${key}"`)) return c.body(null, 304);
   return c.json(doc);
-});
-
-/**
- * The v1 contract, downcast from the live v2 content, for a client built
- * before v2 during a rolling deploy (API first, then client). Removed in
- * Phase 9.
- */
-export const contentV1Router = new Hono();
-
-contentV1Router.get("/:locale", async (c) => {
-  const resolved = await resolveLocale(c);
-  if (!resolved.ok) return resolved.response;
-  const { locale, entry } = resolved;
-
-  if (versionHeaders(c, entry, `W/"${locale}-${entry.versionId}-v1"`)) return c.body(null, 304);
-  return c.json(downcastV1(entry.payload));
 });

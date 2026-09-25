@@ -237,6 +237,50 @@ describe("PUT /admin/hero", () => {
     const [row] = await getDb().select({ handle: siteProfile.handle }).from(siteProfile);
     expect(row?.handle).not.toBe("@lost");
   });
+
+  it("keeps the extended identity and refuses a malformed country or site URL", async () => {
+    const [avatar] = await getDb()
+      .insert(mediaAssets)
+      .values({
+        filename: "00000000-0000-4000-8000-0000000000a1.png",
+        originalName: "me.png",
+        mime: "image/png",
+        byteSize: 10,
+        checksumSha256: Buffer.alloc(32, 0xa1),
+      })
+      .returning({ id: mediaAssets.id });
+    const { ui, input, profileUpdatedAt, groups } = await load();
+    const identity = {
+      ...input,
+      siteUrl: "https://alirezarastineh.me",
+      availability: "limited",
+      locationCity: "Berlin",
+      locationCountry: "DE",
+      timezone: "Europe/Berlin",
+      avatarId: avatar!.id,
+    };
+    const save = (profile: Record<string, unknown>) =>
+      client.put("/admin/hero", { profile, ui: groups, updatedAt: ui.updatedAt, profileUpdatedAt });
+
+    for (const [field, value] of [
+      ["locationCountry", "germany"],
+      ["siteUrl", "https://x.example/path"],
+    ] as const) {
+      const res = await save({ ...identity, [field]: value });
+      expect(res.status).toBe(400);
+      const { issues } = await json<{ issues: Issue[] }>(res);
+      expect(issues.map((i) => i.path.join("."))).toEqual([`profile.${field}`]);
+    }
+
+    expect((await save(identity)).status).toBe(200);
+    const { profile } = await json<{ profile: Record<string, unknown> }>(
+      await client.get("/admin/profile"),
+    );
+    expect(profile).toMatchObject({
+      ...identity,
+      avatarPath: "/media/00000000-0000-4000-8000-0000000000a1.png",
+    });
+  });
 });
 
 describe("publish review", () => {

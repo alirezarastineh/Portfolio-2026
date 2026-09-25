@@ -29,7 +29,7 @@ beforeEach(async () => {
 });
 
 async function liveContent(locale: "en" | "de" = "en"): Promise<AppContent> {
-  const res = await app.request(`/v1/content/${locale}`);
+  const res = await app.request(`/v2/content/${locale}`);
   return (await res.json()) as AppContent;
 }
 
@@ -110,10 +110,7 @@ describe("publishAll", () => {
       })
       .returning({ id: mediaAssets.id });
     const [first] = await getDb().select().from(projects).orderBy(projects.position).limit(1);
-    await getDb()
-      .update(projects)
-      .set({ imageId: asset!.id, imagePath: "/media/00000000-0000-4000-8000-000000000001.png" })
-      .where(eq(projects.id, first!.id));
+    await getDb().update(projects).set({ coverId: asset!.id }).where(eq(projects.id, first!.id));
 
     const outcome = await publishAll();
     const refs = await getDb().select().from(versionMediaRefs);
@@ -186,16 +183,10 @@ describe("rollbackToPublication", () => {
       })
       .returning({ id: mediaAssets.id });
     const [first] = await getDb().select().from(projects).orderBy(projects.position).limit(1);
-    await getDb()
-      .update(projects)
-      .set({ imageId: asset!.id, imagePath: "/media/00000000-0000-4000-8000-000000000002.png" })
-      .where(eq(projects.id, first!.id));
+    await getDb().update(projects).set({ coverId: asset!.id }).where(eq(projects.id, first!.id));
     const withImage = await publishAll();
 
-    await getDb()
-      .update(projects)
-      .set({ imageId: null, imagePath: null })
-      .where(eq(projects.id, first!.id));
+    await getDb().update(projects).set({ coverId: null }).where(eq(projects.id, first!.id));
     await publishAll();
     await getDb().delete(mediaAssets).where(eq(mediaAssets.id, asset!.id));
 
@@ -278,25 +269,23 @@ describe("restoreDraftFromPublication", () => {
 });
 
 describe("admin routes", () => {
-  it("rolls back both locales through the old per-version route", async () => {
+  it("rolls back every locale of a publication", async () => {
     await createAdmin();
     const client = new TestClient(app);
     await client.login();
 
     const originalDe = (await liveContent("de")).projects[0]!.name;
-    const [enV1] = await getDb()
-      .select({ id: contentVersions.id })
-      .from(contentVersions)
-      .where(eq(contentVersions.locale, "en"))
+    const [original] = await getDb()
+      .select({ id: contentPublications.id })
+      .from(contentPublications)
       .limit(1);
 
     await renameFirstProject("Changed DE", "de");
     await client.post("/admin/publish", {});
 
-    const res = await client.post(`/admin/revisions/${enV1!.id}/rollback`, {});
+    const res = await client.post(`/admin/publications/${original!.id}/rollback`, {});
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ ok: true, locale: "en" });
-    // Asked about EN; DE moved with it.
+    expect(await res.json()).toMatchObject({ ok: true, restoredFrom: original!.id });
     expect((await liveContent("de")).projects[0]!.name).toBe(originalDe);
   });
 
@@ -323,33 +312,75 @@ describe("admin routes", () => {
   });
 });
 
+function migrationStatements(file: string): string[] {
+  return readFileSync(resolve(process.cwd(), "drizzle", file), "utf8").split(
+    "--> statement-breakpoint",
+  );
+}
+
+/**
+ * Runs `fn` against the schema as it was before 0009 (v1 image columns, and
+ * versions without a publication), then empties the tables and puts the
+ * current shape back — the DB specs run one file at a time, so no other test
+ * sees the detour.
+ */
+async function withPre0009Schema(fn: () => Promise<void>): Promise<void> {
+  const db = getDb();
+  for (const statement of [
+    `ALTER TABLE "projects" ADD COLUMN "image_id" uuid`,
+    `ALTER TABLE "projects" ADD COLUMN "image_path" text`,
+    `ALTER TABLE "projects" ADD CONSTRAINT "projects_image_id_media_assets_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."media_assets"("id") ON DELETE set null`,
+    `CREATE INDEX "projects_image_idx" ON "projects" USING btree ("image_id")`,
+    `ALTER TABLE "content_versions" ALTER COLUMN "publication_id" DROP NOT NULL`,
+  ]) {
+    await db.execute(sql.raw(statement));
+  }
+  try {
+    await fn();
+  } finally {
+    await resetDb();
+    for (const statement of [
+      `ALTER TABLE "projects" DROP COLUMN IF EXISTS "image_id"`,
+      `ALTER TABLE "projects" DROP COLUMN IF EXISTS "image_path"`,
+      `ALTER TABLE "content_versions" ALTER COLUMN "publication_id" SET NOT NULL`,
+    ]) {
+      await db.execute(sql.raw(statement));
+    }
+  }
+}
+
+/** A version as written before publications existed (no `publication_id`). */
+type LegacyVersion = Omit<typeof contentVersions.$inferInsert, "publicationId">;
+
+async function insertLegacyVersions(rows: LegacyVersion[]): Promise<void> {
+  await getDb()
+    .insert(contentVersions)
+    .values(rows as (typeof contentVersions.$inferInsert)[]);
+}
+
 describe("0003_backfill_publications", () => {
-  const backfill = readFileSync(
-    resolve(process.cwd(), "drizzle/0003_backfill_publications.sql"),
-    "utf8",
-  ).split("--> statement-breakpoint");
+  const backfill = migrationStatements("0003_backfill_publications.sql");
 
   it("groups legacy versions by publish and records their images", async () => {
     await resetDb();
-    const payload = { version: 1, projects: [{ image: "https://api.test/media/legacy.png" }] };
-    const [asset] = await getDb()
-      .insert(mediaAssets)
-      .values({
-        filename: "legacy.png",
-        originalName: "legacy.png",
-        mime: "image/png",
-        byteSize: 1,
-        checksumSha256: Buffer.alloc(32, 3),
-      })
-      .returning({ id: mediaAssets.id });
+    await withPre0009Schema(async () => {
+      const payload = { version: 1, projects: [{ image: "https://api.test/media/legacy.png" }] };
+      const [asset] = await getDb()
+        .insert(mediaAssets)
+        .values({
+          filename: "legacy.png",
+          originalName: "legacy.png",
+          mime: "image/png",
+          byteSize: 1,
+          checksumSha256: Buffer.alloc(32, 3),
+        })
+        .returning({ id: mediaAssets.id });
 
-    // Two publishes (EN+DE sharing a timestamp), then one old single-locale rollback.
-    const t1 = new Date("2026-01-01T10:00:00Z");
-    const t2 = new Date("2026-01-02T10:00:00Z");
-    const t3 = new Date("2026-01-03T10:00:00Z");
-    await getDb()
-      .insert(contentVersions)
-      .values([
+      // Two publishes (EN+DE sharing a timestamp), then one old single-locale rollback.
+      const t1 = new Date("2026-01-01T10:00:00Z");
+      const t2 = new Date("2026-01-02T10:00:00Z");
+      const t3 = new Date("2026-01-03T10:00:00Z");
+      await insertLegacyVersions([
         { locale: "en", payload, checksum: "a", createdAt: t1 },
         { locale: "de", payload, checksum: "b", createdAt: t1 },
         { locale: "en", payload: {}, checksum: "c", createdAt: t2 },
@@ -357,27 +388,81 @@ describe("0003_backfill_publications", () => {
         { locale: "en", payload: {}, checksum: "e", label: "rollback to #1", createdAt: t3 },
       ]);
 
-    for (const statement of backfill) await getDb().execute(sql.raw(statement));
+      for (const statement of backfill) await getDb().execute(sql.raw(statement));
 
-    const pubs = await getDb()
-      .select()
-      .from(contentPublications)
-      .orderBy(contentPublications.createdAt);
-    expect(pubs.map((p) => p.kind)).toEqual(["publish", "publish", "rollback"]);
-    const versions = await getDb().select().from(contentVersions);
-    expect(versions.every((v) => v.publicationId !== null)).toBe(true);
-    expect(
-      new Set(
-        versions.filter((v) => v.createdAt.getTime() === t1.getTime()).map((v) => v.publicationId),
-      ).size,
-    ).toBe(1);
+      const pubs = await getDb()
+        .select()
+        .from(contentPublications)
+        .orderBy(contentPublications.createdAt);
+      expect(pubs.map((p) => p.kind)).toEqual(["publish", "publish", "rollback"]);
+      const versions = await getDb().select().from(contentVersions);
+      expect(versions.every((v) => v.publicationId !== null)).toBe(true);
+      expect(
+        new Set(
+          versions
+            .filter((v) => v.createdAt.getTime() === t1.getTime())
+            .map((v) => v.publicationId),
+        ).size,
+      ).toBe(1);
 
-    const refs = await getDb().select().from(versionMediaRefs);
-    expect(refs).toHaveLength(2);
-    expect(refs.every((r) => r.assetId === asset!.id)).toBe(true);
+      const refs = await getDb().select().from(versionMediaRefs);
+      expect(refs).toHaveLength(2);
+      expect(refs.every((r) => r.assetId === asset!.id)).toBe(true);
 
-    // Idempotent: a second run changes nothing.
-    for (const statement of backfill) await getDb().execute(sql.raw(statement));
-    expect(await publicationCount()).toBe(3);
+      // Idempotent: a second run changes nothing.
+      for (const statement of backfill) await getDb().execute(sql.raw(statement));
+      expect(await publicationCount()).toBe(3);
+    });
+  });
+});
+
+describe("0009_contract_cleanup", () => {
+  const cleanup = migrationStatements("0009_contract_cleanup.sql");
+
+  it("keeps uploaded images as covers before dropping the v1 columns", async () => {
+    await resetDb();
+    await withPre0009Schema(async () => {
+      const [byId, byPath] = await getDb()
+        .insert(mediaAssets)
+        .values(
+          [1, 2].map((n) => ({
+            filename: `00000000-0000-4000-8000-00000000009${n}.png`,
+            originalName: "shot.png",
+            mime: "image/png",
+            byteSize: 1,
+            checksumSha256: Buffer.alloc(32, 90 + n),
+          })),
+        )
+        .returning({ id: mediaAssets.id, filename: mediaAssets.filename });
+      await getDb().execute(sql`
+        insert into ${projects} (slug, position, image_id, image_path) values
+          ('by-id', 0, ${byId!.id}, null),
+          ('by-path', 1, null, ${`/media/${byPath!.filename}`}),
+          ('placeholder', 2, null, '/projects/placeholder.svg')`);
+      // A version that never got a publication (a restored old dump).
+      await insertLegacyVersions([{ locale: "en", payload: {}, checksum: "x" }]);
+
+      for (const statement of cleanup) await getDb().execute(sql.raw(statement));
+
+      const covers = await getDb()
+        .select({ slug: projects.slug, coverId: projects.coverId })
+        .from(projects)
+        .orderBy(projects.position);
+      expect(covers).toEqual([
+        { slug: "by-id", coverId: byId!.id },
+        { slug: "by-path", coverId: byPath!.id },
+        { slug: "placeholder", coverId: null },
+      ]);
+
+      const [version] = await getDb().select().from(contentVersions);
+      const [publication] = await getDb().select().from(contentPublications);
+      expect(version!.publicationId).toBe(publication!.id);
+
+      const { rows } = await getDb().execute<{ column_name: string; is_nullable: string }>(sql`
+        select column_name, is_nullable from information_schema.columns
+        where (table_name = 'projects' and column_name like 'image%')
+           or (table_name = 'content_versions' and column_name = 'publication_id')`);
+      expect(rows).toEqual([{ column_name: "publication_id", is_nullable: "NO" }]);
+    });
   });
 });

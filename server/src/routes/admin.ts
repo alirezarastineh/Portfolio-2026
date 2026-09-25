@@ -342,31 +342,10 @@ adminRouter.patch("/sections/ui", async (c) => {
   return c.json({ ok: true, updatedAt: saved.updatedAt });
 });
 
-adminRouter.get("/revisions", async (c) => {
-  const rows = await getDb()
-    .select({
-      id: contentVersions.id,
-      locale: contentVersions.locale,
-      checksum: contentVersions.checksum,
-      label: contentVersions.label,
-      publicationId: contentVersions.publicationId,
-      createdAt: contentVersions.createdAt,
-    })
-    .from(contentVersions)
-    .orderBy(desc(contentVersions.id))
-    .limit(50);
-
-  const pointers = await getDb().select().from(contentPointers);
-  const live = new Set(pointers.map((p) => `${p.locale}:${p.versionId}`));
-
-  return c.json({
-    revisions: rows.map((r) => ({ ...r, live: live.has(`${r.locale}:${r.id}`) })),
-  });
-});
-
 /**
- * One revision's full payload, plus whatever is live for the same locale, so
- * the admin can show exactly what a rollback would change in one round trip.
+ * One version of a publication, in full, plus whatever is live for the same
+ * locale, so the Publications page can show exactly what a rollback would
+ * change in one round trip.
  */
 adminRouter.get("/revisions/:id", async (c) => {
   const id = parseVersionId(c.req.param("id"));
@@ -415,42 +394,6 @@ adminRouter.get("/revisions/:id", async (c) => {
     },
     live: live ? { id: live.id, payload: asV2(live.payload, live.createdAt) } : null,
   });
-});
-
-/**
- * Kept for the current Revisions page, which picks one locale's version: it
- * now rolls back that version's whole publication, so the other locale moves
- * with it instead of being left pointing at a different moment. `locale` and
- * `versionId` describe the requested locale, as the page expects.
- */
-adminRouter.post("/revisions/:id/rollback", async (c) => {
-  const id = parseVersionId(c.req.param("id"));
-  if (id === null) return c.json({ error: "invalid_id" }, 400);
-
-  const [source] = await getDb()
-    .select({ locale: contentVersions.locale, publicationId: contentVersions.publicationId })
-    .from(contentVersions)
-    .where(eq(contentVersions.id, id))
-    .limit(1);
-  if (!source) return c.json({ error: "not_found" }, 404);
-  if (source.publicationId === null) return c.json({ error: "not_migrated" }, 409);
-
-  try {
-    const outcome = await rollbackToPublication(source.publicationId, c.get("session").userId);
-    const requested = outcome.results.find((r) => r.locale === source.locale);
-    return c.json({
-      ok: true,
-      locale: source.locale,
-      versionId: requested?.versionId ?? null,
-      publicationId: outcome.publicationId,
-      rolledBack: outcome.results,
-    });
-  } catch (error) {
-    if (error instanceof PublicationError) {
-      return c.json(publicationErrorResponse(error), error.status);
-    }
-    throw error;
-  }
 });
 
 /* -------------------------------------------------------------------------- */
