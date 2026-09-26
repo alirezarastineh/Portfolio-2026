@@ -84,7 +84,7 @@ export class MagneticButtonComponent {
 
   readonly buttonClass = computed(() =>
     [
-      "relative inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border px-6 font-mono text-sm font-medium tracking-[0.02em] transition-colors duration-200 ease-in-out disabled:cursor-not-allowed disabled:opacity-60",
+      "relative inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border px-6 font-mono text-sm font-medium transition-colors duration-200 ease-in-out disabled:cursor-not-allowed disabled:opacity-60",
       this.variant() === "primary"
         ? "border-transparent bg-accent-orange text-accent-orange-foreground hover:bg-accent-orange-hover"
         : "border-border bg-transparent text-foreground hover:border-accent-orange/60",

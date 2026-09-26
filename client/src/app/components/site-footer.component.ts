@@ -14,23 +14,20 @@ import { LanguageService } from "../services/language.service";
     class: "block",
   },
   template: `
-    <footer class="mt-24 border-t border-border px-6 py-8">
-      <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-4">
-        <span class="font-mono text-[0.78rem] text-muted-foreground">
+    <footer class="mt-24 border-t border-border py-8">
+      <div class="container-site flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+        <span class="font-mono text-meta text-muted-foreground">
           © {{ year() }} {{ identity().name }}
           @if (buildRef()) {
             <span class="text-muted-foreground/75"> · {{ buildRef() }}</span>
           }
         </span>
-        <span class="font-mono text-[0.78rem] text-muted-foreground"
+        <span class="font-mono text-meta text-muted-foreground"
           >{{ lang.t().profile.role }} · {{ lang.t().profile.location }}</span
         >
         <!-- Impressum and Datenschutz: required for a site run from Germany,
              and reachable from every page. -->
-        <nav
-          class="inline-flex gap-4 font-mono text-[0.78rem]"
-          [attr.aria-label]="lang.t().legal.nav"
-        >
+        <nav class="inline-flex gap-4 font-mono text-meta" [attr.aria-label]="lang.t().legal.nav">
           <a
             class="text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
             [routerLink]="['/', lang.lang(), 'legal', 'imprint']"

@@ -32,13 +32,17 @@ const port = Number(values.port ?? process.env.PORT ?? "4173");
 const appPort = port + 10000;
 process.env.PORT = String(appPort);
 process.env.CSP_MODE ??= "enforce";
-// The API origin the build was made with, as compose passes it to the
-// container: the CSP must allow what the bundle actually calls, or the
-// browser blocks the contact form's POST. CI sets VITE_API_BASE_URL for the
-// whole e2e job; locally it comes from .env.production, when there is one.
-// Tests still never reach it (see fixtures.ts).
+// The API and analytics origins the build was made with, as compose passes
+// them to the container: the CSP must allow what the bundle actually calls,
+// or the browser blocks the contact form's POST and the tracker (and every
+// page logs a violation). CI sets VITE_API_BASE_URL for the whole e2e job;
+// locally both come from .env.production, when there is one. Tests still
+// never reach either (see fixtures.ts; Lighthouse blocks the tracker in
+// lighthouserc.cjs).
 const buildEnv = loadEnv("production", fileURLToPath(new URL("..", import.meta.url)), "VITE_");
-if (buildEnv.VITE_API_BASE_URL) process.env.VITE_API_BASE_URL ??= buildEnv.VITE_API_BASE_URL;
+for (const key of ["VITE_API_BASE_URL", "VITE_UMAMI_SRC"]) {
+  if (buildEnv[key]) process.env[key] ??= buildEnv[key];
+}
 // Never live content, whatever the shell has set: the fixture API, on loopback.
 process.env.API_INTERNAL_BASE_URL = await startFixtureApi();
 

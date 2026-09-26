@@ -19,9 +19,9 @@ import { LanguageService } from "../services/language.service";
     <section
       id="projects"
       aria-labelledby="projects-heading"
-      class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32"
+      class="container-site section-y relative"
     >
-      <div class="mx-auto flex max-w-7xl flex-col gap-12">
+      <div class="flex flex-col gap-12">
         <app-section-heading
           headingId="projects-heading"
           [heading]="lang.t().projects.heading"

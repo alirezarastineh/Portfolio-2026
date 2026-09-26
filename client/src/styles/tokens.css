@@ -5,84 +5,119 @@
  * first paint, and ThemeService (services/theme.service.ts) switches them.
  * Without JavaScript the markup's own `data-theme="dark"` applies.
  *
- * Text contrast (WCAG): foreground and muted text pass AAA on every surface in
- * both themes; orange passes AA as text (≥ 4.5:1 on background, card and
- * muted). Indigo is decoration only: it falls just short on cards in the dark
- * theme.
+ * Surfaces, lowest first: background (the page), card (cards, terminal,
+ * fields), surface-2 (popovers, hovered rows), muted/secondary/accent (chips,
+ * pressed states). A slight cool tint (hue 265) gives the orange depth.
+ *
+ * Text contrast (WCAG), computed from these values: foreground and muted text
+ * pass AAA (≥ 7:1) on every surface in both themes; orange passes AA as text
+ * (≥ 4.5:1) on every surface. `--input-line` is ≥ 3:1 against every surface
+ * (1.4.11), for a field whose line is its only boundary. Indigo is decoration
+ * only: it falls short of 4.5:1 on surface-2 and muted in the dark theme.
  */
 :root {
   color-scheme: dark;
 
   --font-sans:
-    "Geist Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
-    "Noto Color Emoji";
+    "Geist Variable", "Geist Fallback", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", "Noto Color Emoji";
   --font-mono:
-    "Geist Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
+    "Geist Mono Variable", "Geist Mono Fallback", "JetBrains Mono", ui-monospace, SFMono-Regular,
+    Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
   --radius: 0.625rem;
 
+  /* One container and one left edge (styles/primitives.css). */
+  --container: 80rem;
+  --gutter: clamp(1.25rem, 0.75rem + 2.5vw, 3rem);
+  --col-gap: clamp(1rem, 0.5rem + 1.5vw, 2rem);
+  --section-y: clamp(5rem, 3.5rem + 6vw, 9rem);
+
   /* Near-black graphite: deep enough that orange and indigo read clearly. */
-  --background: oklch(0.18 0 0);
+  --background: oklch(0.175 0.004 265);
   --foreground: oklch(0.97 0 0);
-  --card: oklch(0.22 0 0);
+  --card: oklch(0.205 0.005 265);
   --card-foreground: oklch(0.97 0 0);
-  --popover: oklch(0.22 0 0);
+  --surface-2: oklch(0.235 0.006 265);
+  --popover: oklch(0.205 0.005 265);
   --popover-foreground: oklch(0.97 0 0);
   --primary: oklch(0.97 0 0);
-  --primary-foreground: oklch(0.18 0 0);
-  --secondary: oklch(0.27 0 0);
+  --primary-foreground: oklch(0.175 0.004 265);
+  --secondary: oklch(0.27 0.006 265);
   --secondary-foreground: oklch(0.97 0 0);
-  --muted: oklch(0.27 0 0);
-  --muted-foreground: oklch(0.8 0 0);
-  --accent: oklch(0.27 0 0);
+  --muted: oklch(0.27 0.006 265);
+  --muted-foreground: oklch(0.8 0.005 265);
+  --accent: oklch(0.27 0.006 265);
   --accent-foreground: oklch(0.97 0 0);
   --destructive: oklch(0.74 0.19 22.216);
-  --border: oklch(1 0 0 / 13%);
+  --border: oklch(1 0 0 / 11%);
+  --border-strong: oklch(1 0 0 / 20%);
   --input: oklch(1 0 0 / 16%);
+  --input-line: oklch(1 0 0 / 42%);
   --ring: oklch(0.7 0 0);
+  --scrim: oklch(0.1 0 0 / 65%);
 
-  /* Brand accents: TensorFlow orange and neural indigo. */
+  /* Brand accents: TensorFlow orange (act, live) and neural indigo (ambient). */
   --accent-orange: oklch(0.72 0.2 45);
   --accent-orange-foreground: oklch(0.16 0 0);
   --accent-orange-hover: oklch(0.78 0.2 45);
+  --accent-orange-soft: color-mix(in oklab, var(--accent-orange) 14%, transparent);
   --accent-indigo: oklch(0.62 0.19 280);
+  --accent-indigo-soft: color-mix(in oklab, var(--accent-indigo) 16%, transparent);
   --available: oklch(0.78 0.17 150);
-  --terminal-bar: oklch(0.15 0 0);
-  --shadow-elevated: 0 24px 60px -30px oklch(0 0 0 / 70%);
+  --terminal-bar: oklch(0.155 0.004 265);
+  --term-red: #ff5f56;
+  --term-amber: #ffbd2e;
+  --term-green: #27c93f;
 
-  --sidebar: oklch(0.22 0 0);
+  /* Elevation: e1 cards at rest, e2 hovered cards, e3 dialogs and panels
+     that float, glow the one focused primary control. */
+  --shadow-e1: inset 0 1px 0 oklch(1 0 0 / 5%), 0 1px 2px oklch(0 0 0 / 40%);
+  --shadow-e2:
+    inset 0 1px 0 oklch(1 0 0 / 5%), 0 1px 2px oklch(0 0 0 / 40%),
+    0 16px 40px -20px oklch(0 0 0 / 70%);
+  --shadow-e3: 0 24px 60px -30px oklch(0 0 0 / 70%);
+  --shadow-glow:
+    0 0 0 1px color-mix(in oklab, var(--accent-orange) 40%, transparent),
+    0 8px 30px -10px color-mix(in oklab, var(--accent-orange) 45%, transparent);
+  --shadow-elevated: var(--shadow-e3);
+
+  --sidebar: oklch(0.205 0.005 265);
   --sidebar-foreground: oklch(0.97 0 0);
   --sidebar-primary: oklch(0.97 0 0);
-  --sidebar-primary-foreground: oklch(0.18 0 0);
-  --sidebar-accent: oklch(0.27 0 0);
+  --sidebar-primary-foreground: oklch(0.175 0.004 265);
+  --sidebar-accent: oklch(0.27 0.006 265);
   --sidebar-accent-foreground: oklch(0.97 0 0);
-  --sidebar-border: oklch(1 0 0 / 13%);
+  --sidebar-border: oklch(1 0 0 / 11%);
   --sidebar-ring: oklch(0.7 0 0);
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.2 0 0);
+  --background: oklch(0.985 0.002 265);
+  --foreground: oklch(0.2 0.005 265);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0 0);
+  --card-foreground: oklch(0.2 0.005 265);
+  --surface-2: oklch(0.97 0.003 265);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0 0);
-  --primary: oklch(0.2 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.955 0 0);
-  --secondary-foreground: oklch(0.2 0 0);
-  --muted: oklch(0.955 0 0);
-  --muted-foreground: oklch(0.46 0 0);
-  --accent: oklch(0.955 0 0);
-  --accent-foreground: oklch(0.2 0 0);
+  --popover-foreground: oklch(0.2 0.005 265);
+  --primary: oklch(0.2 0.005 265);
+  --primary-foreground: oklch(0.985 0.002 265);
+  --secondary: oklch(0.955 0.003 265);
+  --secondary-foreground: oklch(0.2 0.005 265);
+  --muted: oklch(0.955 0.003 265);
+  --muted-foreground: oklch(0.43 0.005 265);
+  --accent: oklch(0.955 0.003 265);
+  --accent-foreground: oklch(0.2 0.005 265);
   --destructive: oklch(0.55 0.22 27);
-  --border: oklch(0 0 0 / 12%);
+  --border: oklch(0 0 0 / 10%);
+  --border-strong: oklch(0 0 0 / 18%);
   --input: oklch(0 0 0 / 16%);
+  --input-line: oklch(0 0 0 / 45%);
   --ring: oklch(0.55 0 0);
+  --scrim: oklch(0.2 0 0 / 35%);
 
   /* Darker than in the dark theme, so orange still passes as text on white. */
   --accent-orange: oklch(0.54 0.18 42);
@@ -90,15 +125,24 @@
   --accent-orange-hover: oklch(0.49 0.17 42);
   --accent-indigo: oklch(0.5 0.2 280);
   --available: oklch(0.52 0.15 150);
-  --terminal-bar: oklch(0.945 0 0);
-  --shadow-elevated: 0 24px 60px -30px oklch(0.2 0 0 / 22%);
+  --terminal-bar: oklch(0.945 0.003 265);
+  --term-red: #ec4f46;
+  --term-amber: #e9a620;
+  --term-green: #1fae36;
 
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.2 0 0);
-  --sidebar-primary: oklch(0.2 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.955 0 0);
-  --sidebar-accent-foreground: oklch(0.2 0 0);
-  --sidebar-border: oklch(0 0 0 / 12%);
+  --shadow-e1: 0 1px 2px oklch(0.2 0 0 / 6%);
+  --shadow-e2: 0 1px 2px oklch(0.2 0 0 / 6%), 0 12px 32px -16px oklch(0.2 0 0 / 18%);
+  --shadow-e3: 0 24px 60px -30px oklch(0.2 0 0 / 22%);
+  --shadow-glow:
+    0 0 0 1px color-mix(in oklab, var(--accent-orange) 40%, transparent),
+    0 8px 30px -10px color-mix(in oklab, var(--accent-orange) 25%, transparent);
+
+  --sidebar: oklch(0.985 0.002 265);
+  --sidebar-foreground: oklch(0.2 0.005 265);
+  --sidebar-primary: oklch(0.2 0.005 265);
+  --sidebar-primary-foreground: oklch(0.985 0.002 265);
+  --sidebar-accent: oklch(0.955 0.003 265);
+  --sidebar-accent-foreground: oklch(0.2 0.005 265);
+  --sidebar-border: oklch(0 0 0 / 10%);
   --sidebar-ring: oklch(0.55 0 0);
 }

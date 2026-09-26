@@ -28,12 +28,8 @@ const SPAN_MAP: Record<BentoSpan, string> = {
     class: "block",
   },
   template: `
-    <section
-      id="skills"
-      aria-labelledby="skills-heading"
-      class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32"
-    >
-      <div class="mx-auto flex max-w-7xl flex-col gap-12">
+    <section id="skills" aria-labelledby="skills-heading" class="container-site section-y relative">
+      <div class="flex flex-col gap-12">
         <app-section-heading
           headingId="skills-heading"
           [heading]="lang.t().skills.heading"
@@ -50,9 +46,7 @@ const SPAN_MAP: Record<BentoSpan, string> = {
                   <header class="flex items-start justify-between gap-3">
                     <div class="flex flex-col gap-1.5">
                       @if (card.caption.text) {
-                        <p
-                          class="m-0 font-mono text-[0.68rem] uppercase tracking-[0.22em] text-muted-foreground"
-                        >
+                        <p class="eyebrow m-0 text-muted-foreground">
                           @if (card.caption.marked) {
                             <span aria-hidden="true">// </span>
                           }
@@ -72,11 +66,7 @@ const SPAN_MAP: Record<BentoSpan, string> = {
                   </header>
                   <ul class="m-0 flex list-none flex-wrap gap-2 p-0" role="list">
                     @for (item of card.items; track item) {
-                      <li
-                        class="rounded-md border border-border bg-muted/50 px-2.5 py-1 font-mono text-[0.72rem] text-foreground/85"
-                      >
-                        {{ item }}
-                      </li>
+                      <li class="chip">{{ item }}</li>
                     }
                   </ul>
                   @if (card.narrative) {

@@ -18,11 +18,11 @@ import { ScrambleTextComponent } from "./scramble-text.component";
   template: `
     <header class="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
       <div class="flex flex-col gap-3">
-        <p class="m-0 font-mono text-xs uppercase tracking-[0.22em] text-accent-orange">
+        <p class="eyebrow m-0 text-accent-orange">
           <span aria-hidden="true">// </span><app-scramble-text [text]="eyebrow()" />
         </p>
         <h2
-          class="m-0 text-balance text-4xl font-semibold leading-[1.05] tracking-tight text-foreground first-letter:uppercase sm:text-5xl"
+          class="m-0 text-balance text-h2 text-foreground hyphens-auto first-letter:uppercase"
           [id]="headingId()"
         >
           {{ title() }}

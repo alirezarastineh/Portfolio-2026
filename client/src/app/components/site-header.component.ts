@@ -85,9 +85,9 @@ const iconButton =
       [class]="open() ? 'bg-background' : 'bg-background/80'"
       (keydown)="trapFocus($event)"
     >
-      <div class="mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-4 px-6 py-3">
+      <div class="container-site grid grid-cols-[auto_1fr_auto] items-center gap-4 py-3">
         <a
-          class="inline-flex items-center gap-[0.4rem] font-mono text-[0.95rem] font-semibold tracking-[0.04em] text-foreground"
+          class="inline-flex items-center gap-1.5 font-mono text-base font-semibold tracking-wide text-foreground"
           [routerLink]="home()"
           fragment="hero"
           [attr.aria-label]="labels().home"
@@ -103,7 +103,7 @@ const iconButton =
         >
           @for (link of links(); track link.key) {
             <a
-              class="relative inline-flex items-center font-mono text-[0.8rem] transition-colors duration-200 ease-in-out hover:text-foreground"
+              class="relative inline-flex items-center font-mono text-meta transition-colors duration-200 ease-in-out hover:text-foreground"
               [class.text-foreground]="isActive(link)"
               [class.text-muted-foreground]="!isActive(link)"
               [attr.aria-current]="isActive(link) ? 'true' : null"
@@ -131,12 +131,12 @@ const iconButton =
             (click)="palette.show()"
           >
             <ng-icon name="lucideSearch" size="15" aria-hidden="true" />
-            <kbd class="hidden font-mono text-[0.7rem] md:inline" aria-hidden="true">⌘K</kbd>
+            <kbd class="hidden font-mono text-meta md:inline" aria-hidden="true">⌘K</kbd>
           </button>
           <!-- A file, not a page: a plain link the router leaves alone. -->
           @if (resumeHref(); as href) {
             <a
-              class="hidden h-9 items-center gap-1.5 rounded-md border border-border px-2.5 font-mono text-[0.8rem] text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground md:inline-flex"
+              class="hidden h-9 items-center gap-1.5 rounded-md border border-border px-2.5 font-mono text-meta text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground md:inline-flex"
               [href]="href"
               download
             >
@@ -163,7 +163,7 @@ const iconButton =
                without JavaScript, and remembered for the next visit to "/".
                Its name keeps the visible "DE" and adds the language's name. -->
           <a
-            class="hidden h-9 items-center justify-center rounded-md border border-border px-2.5 font-mono text-[0.8rem] text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground md:inline-flex"
+            class="hidden h-9 items-center justify-center rounded-md border border-border px-2.5 font-mono text-meta text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground md:inline-flex"
             [routerLink]="lang.alternates()[other()]"
             [attr.hreflang]="other()"
             [attr.lang]="other()"
@@ -188,12 +188,12 @@ const iconButton =
       @if (open()) {
         <nav
           id="mobile-nav"
-          class="flex max-h-[calc(100svh-4rem)] flex-col gap-1 overflow-y-auto border-t border-border px-6 pb-5 pt-2 md:hidden"
+          class="flex max-h-[calc(100svh-4rem)] flex-col gap-1 overflow-y-auto border-t border-border px-(--gutter) pb-5 pt-2 md:hidden"
           [attr.aria-label]="labels().mobile"
         >
           @for (link of links(); track link.key) {
             <a
-              class="flex items-center gap-2 px-1 py-2.5 font-mono text-[0.95rem]"
+              class="flex items-center gap-2 px-1 py-2.5 font-mono text-base"
               [class.text-foreground]="isActive(link)"
               [class.text-muted-foreground]="!isActive(link)"
               [attr.aria-current]="isActive(link) ? 'true' : null"
@@ -212,7 +212,7 @@ const iconButton =
           }
           @if (resumeHref(); as href) {
             <a
-              class="flex items-center gap-2 px-1 py-2.5 font-mono text-[0.95rem] text-muted-foreground"
+              class="flex items-center gap-2 px-1 py-2.5 font-mono text-base text-muted-foreground"
               [href]="href"
               download
               (click)="closeMenu()"
@@ -222,7 +222,7 @@ const iconButton =
             </a>
           }
           <a
-            class="mt-1 flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 font-mono text-[0.85rem] text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground"
+            class="mt-1 flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 font-mono text-sm text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground"
             [routerLink]="lang.alternates()[other()]"
             [attr.hreflang]="other()"
             [attr.lang]="other()"

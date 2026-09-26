@@ -26,16 +26,16 @@ const LATEST = 3;
       <section
         id="writing"
         aria-labelledby="writing-heading"
-        class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32"
+        class="container-site section-y relative"
       >
-        <div class="mx-auto flex max-w-7xl flex-col gap-12">
+        <div class="flex flex-col gap-12">
           <app-section-heading
             headingId="writing-heading"
             [heading]="lang.t().writing.heading"
             [eyebrow]="lang.t().writing.subtitle"
           >
             <a
-              class="inline-flex items-center gap-2 font-mono text-sm text-foreground underline decoration-accent-orange/60 underline-offset-4 transition-colors hover:decoration-accent-orange"
+              class="link-underline inline-flex items-center gap-2 font-mono text-sm"
               [routerLink]="['/', lang.lang(), 'writing']"
             >
               {{ lang.t().writing.allPosts }}
@@ -47,7 +47,7 @@ const LATEST = 3;
             @for (post of posts(); track post.slug) {
               <li>
                 <article
-                  class="relative flex h-full flex-col gap-3 rounded-2xl border border-border bg-card p-6 transition-colors duration-200 hover:border-accent-orange/40"
+                  class="surface-card relative flex h-full flex-col gap-3 p-6 transition-[border-color,box-shadow] duration-200 hover:border-accent-orange/40 hover:shadow-e2"
                 >
                   <p class="m-0 font-mono text-xs text-muted-foreground">
                     <time [attr.datetime]="post.publishedAt">{{ day(post.publishedAt) }}</time>
@@ -56,7 +56,7 @@ const LATEST = 3;
                   <h3 class="m-0 text-xl font-semibold leading-snug tracking-tight text-foreground">
                     <!-- The whole card is the link's hit area (after:inset-0). -->
                     <a
-                      class="after:absolute after:inset-0 after:rounded-2xl"
+                      class="after:absolute after:inset-0 after:rounded-xl"
                       [routerLink]="['/', lang.lang(), 'writing', post.slug]"
                       >{{ post.title }}</a
                     >

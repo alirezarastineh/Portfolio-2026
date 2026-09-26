@@ -29,12 +29,7 @@ export interface TocItem {
   host: { class: "block" },
   template: `
     <nav [attr.aria-label]="label()">
-      <p
-        class="m-0 mb-3 font-mono text-[0.7rem] uppercase tracking-[0.22em] text-muted-foreground"
-        aria-hidden="true"
-      >
-        // {{ label() }}
-      </p>
+      <p class="eyebrow m-0 mb-3 text-muted-foreground" aria-hidden="true">// {{ label() }}</p>
       <ol class="m-0 flex list-none flex-col gap-1 border-l border-border p-0">
         @for (item of items(); track item.id) {
           <li>

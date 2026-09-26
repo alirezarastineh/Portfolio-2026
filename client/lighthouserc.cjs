@@ -8,14 +8,25 @@
 // performance score is close to what visitors get.
 //
 // Hard gates: accessibility, best practices and SEO stay at 100, no layout
-// shift, no third-party requests, and byte budgets on scripts and styles.
+// shift, no third-party requests (the analytics tracker is blocked, below),
+// and byte budgets on scripts and styles.
 // Performance only warns: measured 2026-09-24, with the app starting after
 // the first paint (vite-plugins/boot-after-paint.ts), 0.94-0.97 home,
 // 0.99-1 case study, 1 legal page. Home's total blocking time varies from
 // run to run (~190-270 ms): its hydration is the most work.
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- lhci require()s this CommonJS file
+const { loadEnv } = require("vite");
+
 const PORT = process.env.LHCI_PORT || "4174";
 const BASE = `http://127.0.0.1:${PORT}`;
 const KB = 1024;
+
+// The analytics tracker the build loads, if one is set (VITE_UMAMI_SRC, read
+// the way the build reads it; serve.mjs lets it through the CSP). Blocked
+// rather than counted: Lighthouse measures the site itself, offline and
+// repeatable, and the third-party gate below still fails on anything else.
+const tracker = loadEnv("production", __dirname, "VITE_").VITE_UMAMI_SRC;
+const blockedUrlPatterns = tracker ? [`${new URL(tracker).origin}/*`] : [];
 
 module.exports = {
   ci: {
@@ -26,6 +37,7 @@ module.exports = {
       numberOfRuns: 3,
       settings: {
         chromeFlags: "--headless=new --no-sandbox",
+        blockedUrlPatterns,
       },
     },
     assert: {
@@ -44,7 +56,14 @@ module.exports = {
         "resource-summary:script:size": ["error", { maxNumericValue: 240 * KB }],
         "resource-summary:stylesheet:size": ["error", { maxNumericValue: 16 * KB }],
         "resource-summary:font:size": ["error", { maxNumericValue: 60 * KB }],
-        "resource-summary:third-party:count": ["error", { maxNumericValue: 0 }],
+        // A blocked request still counts as one (0 bytes), so the tracker's
+        // own is allowed; any other third-party request, and any byte from
+        // one (a block that stopped matching), fails.
+        "resource-summary:third-party:count": [
+          "error",
+          { maxNumericValue: blockedUrlPatterns.length },
+        ],
+        "resource-summary:third-party:size": ["error", { maxNumericValue: 0 }],
       },
     },
     upload: {

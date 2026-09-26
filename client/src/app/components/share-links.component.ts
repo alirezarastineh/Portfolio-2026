@@ -19,10 +19,7 @@ import { brandLinkedin, brandX } from "../icons/brand-icons";
   host: { class: "block" },
   template: `
     <div class="flex flex-wrap items-center gap-2" role="group" [attr.aria-label]="labels().share">
-      <span
-        class="mr-1 font-mono text-xs uppercase tracking-[0.22em] text-muted-foreground"
-        aria-hidden="true"
-      >
+      <span class="eyebrow mr-1 text-muted-foreground" aria-hidden="true">
         {{ labels().share }}
       </span>
       <button type="button" [class]="control" (click)="copy()">
@@ -54,7 +51,7 @@ export class ShareLinksComponent {
   protected readonly labels = computed(() => CHROME[this.locale()].share);
 
   protected readonly control =
-    "inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-transparent px-3 font-mono text-[0.78rem] text-foreground transition-colors duration-200 hover:border-accent-orange/50";
+    "inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-transparent px-3 font-mono text-meta text-foreground transition-colors duration-200 hover:border-accent-orange/50";
 
   protected readonly networks = computed(() => {
     const url = encodeURIComponent(this.url());

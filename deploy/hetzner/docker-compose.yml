@@ -178,10 +178,11 @@ services:
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://api.alirezarastineh.me}
         API_INTERNAL_BASE_URL: http://api:${API_PORT:-3000}
-        # Baked into the browser bundle; each feature stays off while empty.
+        # Baked into the browser bundle; Sentry and Turnstile stay off while
+        # empty, while public analytics uses the Cloud Umami website by default.
         VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
-        VITE_UMAMI_SRC: ${VITE_UMAMI_SRC:-}
-        VITE_UMAMI_WEBSITE_ID: ${VITE_UMAMI_WEBSITE_ID:-}
+        VITE_UMAMI_SRC: ${VITE_UMAMI_SRC:-https://cloud.umami.is/script.js}
+        VITE_UMAMI_WEBSITE_ID: ${VITE_UMAMI_WEBSITE_ID:-7078523a-c7f5-41f9-a397-0e0eb30dcb43}
         VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
     restart: unless-stopped
     init: true
@@ -209,7 +210,7 @@ services:
       # reads the same public values the build bakes in (the API above, plus
       # these). The Sentry DSN also gives the CSP report endpoint.
       VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
-      VITE_UMAMI_SRC: ${VITE_UMAMI_SRC:-}
+      VITE_UMAMI_SRC: ${VITE_UMAMI_SRC:-https://cloud.umami.is/script.js}
       # Opens Cloudflare's script and frame in the policy; empty = Turnstile off.
       VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
     ports:

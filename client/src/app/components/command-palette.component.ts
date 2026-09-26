@@ -78,7 +78,7 @@ interface Group {
   template: `
     <dialog
       #dialog
-      class="mx-auto mt-[12vh] w-[min(36rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-popover p-0 text-popover-foreground shadow-elevated backdrop:bg-black/50 backdrop:backdrop-blur-sm"
+      class="mx-auto mt-[12vh] w-[min(36rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-popover p-0 text-popover-foreground shadow-e3 backdrop:bg-scrim backdrop:backdrop-blur-sm"
       [attr.aria-label]="labels().title"
       (close)="palette.hide()"
       (click)="closeOnBackdrop($event)"
@@ -102,11 +102,7 @@ interface Group {
           (input)="search($event)"
           (keydown)="onKey($event)"
         />
-        <kbd
-          class="rounded border border-border px-1.5 py-0.5 font-mono text-[0.65rem] text-muted-foreground"
-          aria-hidden="true"
-          >esc</kbd
-        >
+        <kbd class="kbd" aria-hidden="true">esc</kbd>
       </div>
 
       @if (flat().length) {
@@ -118,10 +114,7 @@ interface Group {
         >
           @for (group of groups(); track group.label; let g = $index) {
             <div role="group" [attr.aria-labelledby]="'palette-group-' + g">
-              <div
-                [id]="'palette-group-' + g"
-                class="px-3 pb-1 pt-3 font-mono text-[0.68rem] uppercase tracking-[0.22em] text-muted-foreground"
-              >
+              <div [id]="'palette-group-' + g" class="eyebrow px-3 pb-1 pt-3 text-muted-foreground">
                 {{ group.label }}
               </div>
               @for (command of group.commands; track command.id) {
@@ -156,7 +149,7 @@ interface Group {
       }
 
       <p
-        class="m-0 border-t border-border px-4 py-2 font-mono text-[0.7rem] text-muted-foreground"
+        class="m-0 border-t border-border px-4 py-2 font-mono text-meta text-muted-foreground"
         aria-hidden="true"
       >
         {{ labels().hint }}

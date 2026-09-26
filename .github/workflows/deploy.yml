@@ -20,6 +20,10 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io/alirezarastineh/portfolio-2026
+  # Public analytics configuration. Repository Variables override the Cloud
+  # defaults, and the same resolved values reach the browser bundle and SSR CSP.
+  VITE_UMAMI_SRC: ${{ vars.VITE_UMAMI_SRC || 'https://cloud.umami.is/script.js' }}
+  VITE_UMAMI_WEBSITE_ID: ${{ vars.VITE_UMAMI_WEBSITE_ID || '7078523a-c7f5-41f9-a397-0e0eb30dcb43' }}
 
 jobs:
   images:
@@ -54,8 +58,8 @@ jobs:
             VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL || 'https://api.alirezarastineh.me' }}
             API_INTERNAL_BASE_URL=http://api:${{ vars.API_PORT || '3000' }}
             VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}
-            VITE_UMAMI_SRC=${{ vars.VITE_UMAMI_SRC }}
-            VITE_UMAMI_WEBSITE_ID=${{ vars.VITE_UMAMI_WEBSITE_ID }}
+            VITE_UMAMI_SRC=${{ env.VITE_UMAMI_SRC }}
+            VITE_UMAMI_WEBSITE_ID=${{ env.VITE_UMAMI_WEBSITE_ID }}
             VITE_TURNSTILE_SITE_KEY=${{ vars.VITE_TURNSTILE_SITE_KEY }}
           tags: |
             ${{ env.REGISTRY }}/client:${{ github.sha }}
@@ -86,7 +90,7 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
-            "DEPLOY_PATH=$DEPLOY_PATH IMAGE_TAG=$SHA bash -s" <<'REMOTE'
+            "DEPLOY_PATH=$DEPLOY_PATH IMAGE_TAG=$SHA VITE_UMAMI_SRC='$VITE_UMAMI_SRC' VITE_UMAMI_WEBSITE_ID='$VITE_UMAMI_WEBSITE_ID' bash -s" <<'REMOTE'
           set -euo pipefail
           cd "${DEPLOY_PATH/#\~/$HOME}"
 
@@ -106,6 +110,8 @@ jobs:
               -f deploy/hetzner/docker-compose.yml \
               -f deploy/hetzner/docker-compose.images.yml "$@"
           }
+          # Keep the SSR CSP aligned with the tracker baked into the image,
+          # even if the host's older .env has different analytics values.
           compose pull api client
           compose up -d --no-build api client
           ./deploy/hetzner/verify-deploy.sh

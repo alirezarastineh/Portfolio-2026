@@ -1,5 +1,5 @@
 export interface UmamiConfig {
-  /** Tracker script URL, e.g. https://analytics.alirezarastineh.me/script.js */
+  /** Tracker script URL, e.g. https://cloud.umami.is/script.js */
   src: string | undefined;
   websiteId: string | undefined;
   /** Only this hostname is counted, so local dev and previews never are. */

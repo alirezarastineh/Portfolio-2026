@@ -86,7 +86,7 @@ export const routeMeta: RouteMeta = {
       <main id="main" class="mx-auto max-w-3xl px-6 pb-24 pt-32 sm:px-8">
         <article class="flex flex-col gap-10">
           <header class="flex flex-col gap-3">
-            <p class="m-0 font-mono text-xs uppercase tracking-[0.22em] text-muted-foreground">
+            <p class="eyebrow m-0 text-muted-foreground">
               <span aria-hidden="true">// </span>{{ lang.t().legal.updated }}
               <time [attr.datetime]="page.updatedAt">{{ updated() }}</time>
             </p>

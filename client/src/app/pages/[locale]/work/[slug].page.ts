@@ -150,13 +150,11 @@ interface Section {
 
             <div class="flex flex-col gap-4">
               @if (s.project.descriptor) {
-                <p class="m-0 font-mono text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                <p class="eyebrow m-0 text-muted-foreground">
                   {{ s.project.descriptor }}
                 </p>
               }
-              <h1
-                class="m-0 text-balance text-4xl font-semibold leading-[1.05] tracking-tight text-foreground sm:text-6xl"
-              >
+              <h1 class="m-0 text-balance text-h1 text-foreground hyphens-auto">
                 {{ s.project.name }}
               </h1>
               @if (s.project.hook) {
@@ -172,11 +170,7 @@ interface Section {
               <dl class="m-0 grid grid-cols-2 gap-x-6 gap-y-4 sm:flex sm:flex-wrap sm:gap-x-10">
                 @for (fact of facts(); track fact.label) {
                   <div class="flex flex-col gap-1">
-                    <dt
-                      class="font-mono text-[0.68rem] uppercase tracking-[0.22em] text-muted-foreground"
-                    >
-                      {{ fact.label }}
-                    </dt>
+                    <dt class="eyebrow text-muted-foreground">{{ fact.label }}</dt>
                     <dd class="m-0 text-sm text-foreground">{{ fact.value }}</dd>
                   </div>
                 }
@@ -190,11 +184,7 @@ interface Section {
                 [attr.aria-label]="lang.t().projectCard.techStackAriaLabel"
               >
                 @for (tech of s.project.stack; track tech) {
-                  <li
-                    class="rounded-md border border-border bg-muted/50 px-2 py-1 font-mono text-[0.7rem] text-foreground/85"
-                  >
-                    {{ tech }}
-                  </li>
+                  <li class="chip">{{ tech }}</li>
                 }
               </ul>
             }
@@ -204,7 +194,7 @@ interface Section {
                 @for (link of links(); track link.href) {
                   <li>
                     <a
-                      class="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 font-mono text-[0.78rem] text-foreground transition-colors duration-200 hover:border-accent-orange/50"
+                      class="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 font-mono text-meta text-foreground transition-colors duration-200 hover:border-accent-orange/50"
                       [href]="link.href"
                       target="_blank"
                       rel="noreferrer noopener"
@@ -319,9 +309,7 @@ interface Section {
             >
               @if (neighbours().previous; as previous) {
                 <a [class]="neighbourLink" [routerLink]="workLink(previous.slug)">
-                  <span
-                    class="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground"
-                  >
+                  <span class="eyebrow flex items-center gap-2 text-muted-foreground">
                     <ng-icon name="lucideArrowLeft" size="14" aria-hidden="true" />
                     {{ lang.t().caseStudy.previous }}
                   </span>
@@ -333,9 +321,7 @@ interface Section {
                   [class]="neighbourLink + ' sm:col-start-2 sm:items-end sm:text-right'"
                   [routerLink]="workLink(next.slug)"
                 >
-                  <span
-                    class="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground"
-                  >
+                  <span class="eyebrow flex items-center gap-2 text-muted-foreground">
                     {{ lang.t().caseStudy.next }}
                     <ng-icon name="lucideArrowRight" size="14" aria-hidden="true" />
                   </span>
@@ -379,9 +365,9 @@ export default class CaseStudyPageComponent {
   );
 
   protected readonly sectionHeading =
-    "m-0 font-mono text-sm uppercase tracking-[0.22em] text-accent-orange";
+    "m-0 font-mono text-sm uppercase tracking-label text-accent-orange";
   protected readonly neighbourLink =
-    "flex flex-col gap-2 rounded-2xl border border-border p-6 transition-colors duration-200 hover:border-accent-orange/40";
+    "flex flex-col gap-2 rounded-xl border border-border p-6 transition-colors duration-200 hover:border-accent-orange/40";
 
   protected readonly transitionName = computed(() => {
     const s = this.study();

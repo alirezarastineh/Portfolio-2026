@@ -62,17 +62,17 @@ export const routeMeta: RouteMeta = {
   template: `
     <main id="main" class="mx-auto flex max-w-4xl flex-col gap-12 px-6 pb-24 pt-32 sm:px-8">
       <header class="flex flex-col gap-4">
-        <p class="m-0 font-mono text-xs uppercase tracking-[0.22em] text-muted-foreground">
+        <p class="eyebrow m-0 text-muted-foreground">
           <span aria-hidden="true">// </span>{{ lang.t().writing.subtitle }}
         </p>
         <div class="flex flex-wrap items-end justify-between gap-4">
-          <h1 class="m-0 text-4xl font-medium tracking-tight text-foreground sm:text-5xl">
+          <h1 class="m-0 text-h1 text-foreground hyphens-auto">
             {{ lang.t().writing.heading }}
           </h1>
           @if (posts().length) {
             <!-- A file, not a page: a plain link, so the router leaves it alone. -->
             <a
-              class="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 font-mono text-[0.78rem] text-foreground transition-colors duration-200 hover:border-accent-orange/50 hover:text-accent-orange"
+              class="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 font-mono text-meta text-foreground transition-colors duration-200 hover:border-accent-orange/50 hover:text-accent-orange"
               [href]="'/' + lang.lang() + '/rss.xml'"
               type="application/rss+xml"
             >
@@ -119,7 +119,7 @@ export const routeMeta: RouteMeta = {
           @for (post of visible(); track post.slug) {
             <li>
               <article
-                class="group relative grid gap-5 rounded-2xl border border-border bg-card/40 p-6 transition-colors duration-200 hover:border-accent-indigo/50 sm:grid-cols-[minmax(0,1fr)_10rem] sm:p-8"
+                class="group relative grid gap-5 rounded-xl border border-border bg-card/40 p-6 transition-colors duration-200 hover:border-accent-indigo/50 sm:grid-cols-[minmax(0,1fr)_10rem] sm:p-8"
               >
                 <div class="flex flex-col gap-3">
                   <p class="m-0 font-mono text-xs text-muted-foreground">
@@ -131,7 +131,7 @@ export const routeMeta: RouteMeta = {
                   >
                     <!-- The whole card is the link's hit area (after:inset-0). -->
                     <a
-                      class="after:absolute after:inset-0 after:rounded-2xl"
+                      class="after:absolute after:inset-0 after:rounded-xl"
                       [routerLink]="['/', lang.lang(), 'writing', post.slug]"
                       >{{ post.title }}</a
                     >
@@ -181,8 +181,9 @@ export const routeMeta: RouteMeta = {
 export default class WritingPageComponent {
   protected readonly lang = inject(LanguageService);
 
+  /** A tag filter: a chip with a 32px target; the active one is outlined in orange. */
   protected readonly chip =
-    "inline-flex h-8 items-center rounded-full border border-border px-3 font-mono text-xs text-muted-foreground transition-colors duration-200 hover:border-accent-orange/60 hover:text-foreground";
+    "chip h-8 px-3 text-muted-foreground transition-colors duration-200 hover:border-accent-orange/60 hover:text-foreground";
 
   protected readonly tag = toSignal(
     inject(ActivatedRoute).queryParamMap.pipe(map((params) => params.get("tag"))),

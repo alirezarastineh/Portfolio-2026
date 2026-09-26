@@ -56,7 +56,7 @@ const CARD_METRICS = 3;
   },
   template: `
     <article
-      class="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-elevated transition-colors duration-200 hover:border-accent-orange/40"
+      class="surface-card flex h-full flex-col overflow-hidden transition-[border-color,box-shadow] duration-200 hover:border-accent-orange/40 hover:shadow-e2"
       [class]="featured() ? 'lg:flex-row' : ''"
     >
       <!-- Shares its view-transition name with the case study's cover, so
@@ -74,7 +74,7 @@ const CARD_METRICS = 3;
           imgClass="block size-full object-cover"
         />
         <span
-          class="absolute left-4 top-4 rounded-md border border-border bg-card/80 px-2.5 py-1 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted-foreground backdrop-blur-sm"
+          class="eyebrow absolute left-4 top-4 rounded-sm border border-border bg-card/80 px-2.5 py-1 text-muted-foreground backdrop-blur-sm"
         >
           {{ indexLabel() }}
         </span>
@@ -82,7 +82,7 @@ const CARD_METRICS = 3;
 
       <div class="flex flex-1 flex-col gap-5 p-6 sm:p-8">
         @if (project().descriptor) {
-          <p class="m-0 font-mono text-[0.72rem] uppercase tracking-[0.22em] text-muted-foreground">
+          <p class="eyebrow m-0 text-muted-foreground">
             {{ project().descriptor }}
           </p>
         }
@@ -119,11 +119,7 @@ const CARD_METRICS = 3;
             [attr.aria-label]="lang.t().projectCard.techStackAriaLabel"
           >
             @for (tech of project().stack; track tech) {
-              <li
-                class="rounded-md border border-border bg-muted/50 px-2 py-1 font-mono text-[0.7rem] text-foreground/85"
-              >
-                {{ tech }}
-              </li>
+              <li class="chip">{{ tech }}</li>
             }
           </ul>
         }
@@ -131,7 +127,7 @@ const CARD_METRICS = 3;
         @if (!project().hasCaseStudy && hasDetails()) {
           <details class="group/details rounded-xl border border-border">
             <summary
-              class="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 font-mono text-[0.78rem] text-foreground [&::-webkit-details-marker]:hidden"
+              class="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 font-mono text-meta text-foreground [&::-webkit-details-marker]:hidden"
             >
               {{ chrome().details }}
               <ng-icon
@@ -144,11 +140,7 @@ const CARD_METRICS = 3;
             <dl class="m-0 grid gap-4 border-t border-border px-4 py-4">
               @for (block of blocks(); track block.label) {
                 <div class="flex flex-col gap-1.5">
-                  <dt
-                    class="font-mono text-[0.68rem] uppercase tracking-[0.22em] text-accent-orange"
-                  >
-                    {{ block.label }}
-                  </dt>
+                  <dt class="eyebrow text-accent-orange">{{ block.label }}</dt>
                   @if (block.list) {
                     <dd class="m-0">
                       <ul class="m-0 flex list-none flex-col gap-1 p-0" role="list">
@@ -178,7 +170,7 @@ const CARD_METRICS = 3;
         <div class="mt-auto flex flex-wrap items-center gap-2 pt-2">
           @if (project().hasCaseStudy) {
             <a
-              class="inline-flex h-10 items-center gap-2 rounded-lg bg-accent-orange px-4 font-mono text-[0.8rem] font-medium text-accent-orange-foreground transition-colors duration-200 hover:bg-accent-orange-hover"
+              class="inline-flex h-10 items-center gap-2 rounded-lg bg-accent-orange px-4 font-mono text-meta font-medium text-accent-orange-foreground transition-colors duration-200 hover:bg-accent-orange-hover"
               [routerLink]="caseStudyLink()"
             >
               <span
@@ -193,7 +185,7 @@ const CARD_METRICS = 3;
               @for (link of links(); track link.href) {
                 <li>
                   <a
-                    class="inline-flex h-10 items-center gap-2 rounded-lg border border-border px-3 font-mono text-[0.78rem] text-foreground transition-colors duration-200 hover:border-accent-orange/50"
+                    class="inline-flex h-10 items-center gap-2 rounded-lg border border-border px-3 font-mono text-meta text-foreground transition-colors duration-200 hover:border-accent-orange/50"
                     [href]="link.href"
                     target="_blank"
                     rel="noreferrer noopener"

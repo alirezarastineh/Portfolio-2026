@@ -56,7 +56,7 @@ import { PictureComponent } from "./picture.component";
 
     <dialog
       #dialog
-      class="m-0 h-dvh max-h-none w-screen max-w-none bg-transparent p-0 text-white backdrop:bg-black/90"
+      class="m-0 h-dvh max-h-none w-screen max-w-none bg-background/90 p-0 text-foreground backdrop:bg-scrim"
       [attr.aria-label]="label()"
       (close)="current.set(null)"
       (click)="closeOnBackdrop($event)"
@@ -73,7 +73,7 @@ import { PictureComponent } from "./picture.component";
               sizes="100vw"
               imgClass="block max-h-[78vh] w-auto max-w-full rounded-lg object-contain"
             />
-            <figcaption class="max-w-2xl text-center font-mono text-sm text-white/85">
+            <figcaption class="max-w-2xl text-center font-mono text-sm text-muted-foreground">
               <span>{{ (current() ?? 0) + 1 }} / {{ images().length }}</span>
               @if (image.caption) {
                 <span> · {{ image.caption }}</span>
@@ -130,7 +130,7 @@ export class GalleryComponent {
   protected readonly labels = computed(() => CHROME[this.locale()].gallery);
 
   protected readonly button =
-    "inline-flex size-11 cursor-pointer items-center justify-center rounded-lg border border-white/25 bg-black/40 text-white transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
+    "inline-flex size-11 cursor-pointer items-center justify-center rounded-lg border border-border-strong bg-card/60 text-foreground transition-colors hover:bg-muted";
 
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>("dialog");
 
@@ -170,7 +170,7 @@ export class GalleryComponent {
     event.preventDefault();
   }
 
-  /** A click on the dark area around the image, not on the image or a button. */
+  /** A click on the area around the image, not on the image or a button. */
   protected closeOnBackdrop(event: MouseEvent): void {
     const target = event.target as Element | null;
     if (target === event.currentTarget || target?.hasAttribute("data-dismiss")) this.close();

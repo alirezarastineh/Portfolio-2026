@@ -41,12 +41,8 @@ import { typingAt, type TerminalLine, type TypingState } from "./about-typing";
     class: "block",
   },
   template: `
-    <section
-      id="about"
-      aria-labelledby="about-heading"
-      class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32"
-    >
-      <div class="mx-auto flex max-w-205 flex-col gap-12">
+    <section id="about" aria-labelledby="about-heading" class="container-site section-y relative">
+      <div class="flex max-w-205 flex-col gap-12">
         <app-section-heading
           headingId="about-heading"
           [heading]="lang.t().about.heading"

@@ -29,7 +29,7 @@ const DOT: Record<Availability, string> = {
     <section
       id="hero"
       aria-labelledby="hero-heading"
-      class="relative grid min-h-svh grid-cols-12 items-center gap-x-8 gap-y-12 px-6 pb-20 pt-28 sm:px-8 lg:px-12 lg:pt-32"
+      class="container-site relative grid min-h-svh grid-cols-12 items-center gap-x-8 gap-y-12 pb-20 pt-28 lg:pt-32"
     >
       <div class="col-span-12 flex flex-col gap-7 lg:col-span-7">
         <p
@@ -60,7 +60,7 @@ const DOT: Record<Availability, string> = {
               />
             </div>
           }
-          <p class="m-0 font-mono text-xs uppercase tracking-[0.22em] text-muted-foreground">
+          <p class="eyebrow m-0 text-muted-foreground">
             {{ identity().handle }} · {{ lang.t().profile.role }}
           </p>
         </div>

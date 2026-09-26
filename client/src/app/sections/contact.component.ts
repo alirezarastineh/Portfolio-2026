@@ -36,11 +36,15 @@ type SubmitState = "idle" | "submitting" | "success" | "error";
 
 const FIELDS: readonly Field[] = ["name", "email", "message"];
 
-/** An underlined "IDE" field. Focus thickens the line (a shadow, so nothing moves). */
+/**
+ * An underlined "IDE" field. The line is its only boundary, so it keeps 3:1
+ * against the page (`input-line`, WCAG 1.4.11). Focus thickens it (a shadow,
+ * so nothing moves).
+ */
 const fieldClass =
-  "block w-full border-0 border-b border-border bg-transparent px-0 py-2 text-base text-foreground transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground selection:bg-accent-indigo/25 focus:border-accent-orange focus:shadow-[0_1px_0_0_var(--accent-orange)] focus-visible:outline-none aria-[invalid=true]:border-destructive";
-const labelClass = "font-mono text-[0.7rem] uppercase tracking-[0.22em] text-muted-foreground";
-const errorClass = "m-0 font-mono text-[0.72rem] text-destructive";
+  "block w-full border-0 border-b border-input-line bg-transparent px-0 py-2 text-base text-foreground transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground selection:bg-accent-indigo/25 focus:border-accent-orange focus:shadow-[0_1px_0_0_var(--accent-orange)] focus-visible:outline-none aria-[invalid=true]:border-destructive";
+const labelClass = "eyebrow text-muted-foreground";
+const errorClass = "m-0 font-mono text-meta text-destructive";
 
 @Component({
   selector: "app-contact-section",
@@ -53,9 +57,9 @@ const errorClass = "m-0 font-mono text-[0.72rem] text-destructive";
     <section
       id="contact"
       aria-labelledby="contact-heading"
-      class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32"
+      class="container-site section-y relative"
     >
-      <div class="mx-auto flex max-w-150 flex-col gap-12">
+      <div class="flex max-w-150 flex-col gap-12">
         <app-section-heading
           headingId="contact-heading"
           [heading]="lang.t().contact.heading"
@@ -70,24 +74,18 @@ const errorClass = "m-0 font-mono text-[0.72rem] text-destructive";
           <div
             #success
             tabindex="-1"
-            class="flex flex-col gap-4 rounded-xl border border-border bg-card px-6 py-7 font-mono text-sm leading-relaxed shadow-elevated"
+            class="flex flex-col gap-4 rounded-xl border border-border bg-card px-6 py-7 font-mono text-sm leading-relaxed shadow-e3"
           >
             <div>
               <p class="m-0 text-accent-orange">{{ lang.t().contact.successLine1 }}</p>
               <p class="m-0 mt-1 text-muted-foreground">
                 {{ lang.t().contact.successLine2 }}
-                <a
-                  class="text-foreground underline decoration-accent-orange/60 underline-offset-4 transition-colors hover:decoration-accent-orange"
-                  [href]="'mailto:' + contactEmail()"
-                  >{{ contactEmail() }}</a
-                >
+                <a class="link-underline" [href]="'mailto:' + contactEmail()">{{
+                  contactEmail()
+                }}</a>
               </p>
             </div>
-            <button
-              type="button"
-              class="w-fit cursor-pointer text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-accent-orange"
-              (click)="reset()"
-            >
+            <button type="button" class="link-underline w-fit cursor-pointer" (click)="reset()">
               {{ chrome().sendAnother }}
             </button>
           </div>

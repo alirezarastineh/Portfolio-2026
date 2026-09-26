@@ -10,6 +10,7 @@
 @import "@spartan-ng/brain/hlm-tailwind-preset.css";
 
 @import "./styles/theme.css";
+@import "./styles/primitives.css";
 
 /* `@import "tailwindcss/utilities.css" source(none)`, as a plain at-rule so
    editors' CSS parsers accept it: only the `@source` paths below. */

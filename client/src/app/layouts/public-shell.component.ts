@@ -36,7 +36,7 @@ import { LanguageService } from "../services/language.service";
     @if (!onHome()) {
       <button
         type="button"
-        class="fixed bottom-4 right-4 z-40 inline-flex size-11 cursor-pointer items-center justify-center rounded-full border border-border bg-card font-mono text-sm text-accent-orange shadow-elevated transition-colors hover:border-accent-orange"
+        class="fixed bottom-4 right-4 z-40 inline-flex size-11 cursor-pointer items-center justify-center rounded-full border border-border bg-card font-mono text-sm text-accent-orange shadow-e3 transition-colors hover:border-accent-orange"
         [attr.aria-label]="lang.t().ask.title"
         [attr.aria-expanded]="launcher.sheetOpen()"
         (click)="launcher.openSheet()"

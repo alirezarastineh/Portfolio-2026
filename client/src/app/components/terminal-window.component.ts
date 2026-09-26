@@ -7,13 +7,13 @@ import { ChangeDetectionStrategy, Component, input } from "@angular/core";
     class: "block w-full",
   },
   template: `
-    <div class="overflow-hidden rounded-xl border border-border bg-card shadow-elevated">
+    <div class="overflow-hidden rounded-2xl border border-border bg-card shadow-e3">
       <header
         class="grid grid-cols-[auto_auto_auto_1fr_auto] items-center gap-2 border-b border-border bg-terminal-bar px-3.5 py-2.5"
       >
-        <span class="inline-block size-3 rounded-full bg-[#ff5f56]" aria-hidden="true"></span>
-        <span class="inline-block size-3 rounded-full bg-[#ffbd2e]" aria-hidden="true"></span>
-        <span class="inline-block size-3 rounded-full bg-[#27c93f]" aria-hidden="true"></span>
+        <span class="inline-block size-3 rounded-full bg-term-red" aria-hidden="true"></span>
+        <span class="inline-block size-3 rounded-full bg-term-amber" aria-hidden="true"></span>
+        <span class="inline-block size-3 rounded-full bg-term-green" aria-hidden="true"></span>
         <span class="justify-self-center text-center font-mono text-xs text-muted-foreground">{{
           title()
         }}</span>

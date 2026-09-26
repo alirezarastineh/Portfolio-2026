@@ -1,0 +1,68 @@
+/*
+ * The design system's shared pieces, as Tailwind `@utility` blocks: each one
+ * compiles only into a build whose sources use it. Imported after the theme by
+ * the public stylesheet (src/styles.css) and the admin's (src/admin.css).
+ */
+
+/* The one container. Every section's content starts at the same left edge;
+   narrower content keeps that edge and ends sooner, never re-centred. */
+@utility container-site {
+  max-width: var(--container);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* A home section's vertical rhythm. */
+@utility section-y {
+  padding-block: var(--section-y);
+}
+
+/* A mono, uppercase label: eyebrows, `dt`s, badges. Colour comes from the use. */
+@utility eyebrow {
+  @apply font-mono text-label uppercase;
+}
+
+/* A static tag: a technology, a skill, a post's topic. */
+@utility chip {
+  @apply inline-flex items-center rounded-sm border border-border bg-muted/50 px-2 py-0.5 font-mono text-meta text-foreground/85;
+}
+
+/* A key, as in "esc" or "⌘K". */
+@utility kbd {
+  @apply inline-flex items-center rounded-sm border border-border px-1.5 py-px font-mono text-meta text-muted-foreground;
+}
+
+/* A card at rest (e1); hover states add e2 and `border-border-strong`. */
+@utility surface-card {
+  @apply rounded-xl border border-border bg-card shadow-e1;
+}
+
+/* A text link in running copy: indigo underline, thicker and orange on hover. */
+@utility link-underline {
+  color: var(--foreground);
+  text-decoration-line: underline;
+  text-decoration-color: var(--accent-indigo);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  transition:
+    text-decoration-color 200ms,
+    text-decoration-thickness 200ms;
+}
+
+/* Its hover lives outside the @utility: nested there, ESLint's CSS parser
+   rejects it beside declarations, and Sonar flags `&` without a style rule
+   around it. Always emitted (a few bytes); as Tailwind's `hover:`, only where
+   hovering is possible. */
+@layer utilities {
+  @media (hover: hover) {
+    .link-underline:hover {
+      text-decoration-color: var(--accent-orange);
+      text-decoration-thickness: 2px;
+    }
+  }
+}
+
+/* A full-width 1px rule. */
+@utility hairline {
+  @apply h-px w-full border-0 bg-border;
+}

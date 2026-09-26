@@ -25,7 +25,7 @@ import { TerminalShellComponent } from "./terminal-shell.component";
   template: `
     <dialog
       #dialog
-      class="ask-sheet m-0 max-h-none max-w-none bg-transparent p-0 backdrop:bg-background/60 backdrop:backdrop-blur-sm"
+      class="ask-sheet m-0 max-h-none max-w-none bg-transparent p-0 backdrop:bg-scrim backdrop:backdrop-blur-sm"
       [attr.aria-label]="lang.t().ask.title"
       (close)="launcher.closeSheet()"
       (click)="onBackdrop($event)"

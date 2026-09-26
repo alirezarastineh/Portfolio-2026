@@ -54,9 +54,9 @@ const KIND_ICON: Record<ExperienceKind, string> = {
       <section
         id="experience"
         aria-labelledby="experience-heading"
-        class="relative px-6 py-24 sm:px-8 sm:py-28 lg:px-12 lg:py-32"
+        class="container-site section-y relative"
       >
-        <div class="mx-auto flex max-w-5xl flex-col gap-12">
+        <div class="flex max-w-5xl flex-col gap-12">
           <app-section-heading
             headingId="experience-heading"
             [heading]="lang.t().experience.heading"
@@ -65,9 +65,7 @@ const KIND_ICON: Record<ExperienceKind, string> = {
 
           @for (group of groups(); track group.kind) {
             <div class="flex flex-col gap-6">
-              <h3
-                class="m-0 flex items-center gap-2 font-mono text-xs uppercase tracking-[0.22em] text-accent-orange"
-              >
+              <h3 class="eyebrow m-0 flex items-center gap-2 text-accent-orange">
                 <ng-icon [name]="group.icon" size="14" aria-hidden="true" />
                 {{ group.label }}
               </h3>
@@ -107,7 +105,7 @@ const KIND_ICON: Record<ExperienceKind, string> = {
                         <p class="m-0 text-sm text-muted-foreground">
                           @if (entry.experience.org.url) {
                             <a
-                              class="text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-accent-indigo"
+                              class="link-underline"
                               [href]="entry.experience.org.url"
                               target="_blank"
                               rel="noreferrer noopener"
@@ -151,17 +149,13 @@ const KIND_ICON: Record<ExperienceKind, string> = {
                         @if (entry.experience.skills.length) {
                           <ul class="m-0 mt-1 flex list-none flex-wrap gap-2 p-0" role="list">
                             @for (skill of entry.experience.skills; track skill) {
-                              <li
-                                class="rounded-md border border-border bg-muted/50 px-2 py-0.5 font-mono text-[0.7rem] text-foreground/85"
-                              >
-                                {{ skill }}
-                              </li>
+                              <li class="chip">{{ skill }}</li>
                             }
                           </ul>
                         }
                         @if (entry.experience.credential?.url; as url) {
                           <a
-                            class="inline-flex w-fit items-center gap-1.5 font-mono text-xs text-foreground underline decoration-accent-orange/60 underline-offset-4 transition-colors hover:decoration-accent-indigo"
+                            class="link-underline inline-flex w-fit items-center gap-1.5 font-mono text-xs"
                             [href]="url"
                             target="_blank"
                             rel="noreferrer noopener"

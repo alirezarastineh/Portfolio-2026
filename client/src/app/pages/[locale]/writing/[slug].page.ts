@@ -131,9 +131,7 @@ export const routeMeta: RouteMeta = {
         <article class="mx-auto flex max-w-6xl flex-col gap-10">
           <header class="flex max-w-3xl flex-col gap-5">
             <app-breadcrumb [items]="crumbs()" [locale]="lang.lang()" />
-            <h1
-              class="m-0 text-balance text-4xl font-medium leading-tight tracking-tight text-foreground sm:text-5xl"
-            >
+            <h1 class="m-0 text-balance text-h1 text-foreground hyphens-auto">
               {{ p.title }}
             </h1>
             @if (p.excerpt) {
