@@ -84,7 +84,7 @@
       "previous": "Vorheriges Projekt",
       "next": "Nächstes Projekt",
       "ctaHeading": "Sie planen etwas Ähnliches?",
-      "ctaBody": "Erzählen Sie mir, woran Sie arbeiten — ich antworte innerhalb von zwei Werktagen.",
+      "ctaBody": "Erzählen Sie mir, woran Sie arbeiten — ich antworte innerhalb von 24 Stunden.",
       "ctaButton": "Ähnliches Projekt besprechen"
     },
     "contact": {
@@ -111,7 +111,7 @@
       "errorMailerUnavailable": "E-Mail-Dienst nicht verfügbar. Bitte direkt per E-Mail kontaktieren.",
       "errorSendFailed": "Senden fehlgeschlagen. Bitte direkt per E-Mail kontaktieren.",
       "errorNetwork": "Netzwerkfehler. Bitte erneut versuchen.",
-      "replyTime": "Ich antworte innerhalb von zwei Werktagen."
+      "replyTime": "Ich antworte innerhalb von 24 Stunden."
     },
     "projectCard": {
       "problem": "PROBLEM",

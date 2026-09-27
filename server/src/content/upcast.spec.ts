@@ -117,7 +117,7 @@ describe("fillMissing", () => {
     expect(ui["about"]).toMatchObject({ heading: "about", bio: "Written in the admin." });
     expect(ui["contact"]).toMatchObject({
       heading: "x",
-      replyTime: "Ich antworte innerhalb von zwei Werktagen.",
+      replyTime: "Ich antworte innerhalb von 24 Stunden.",
     });
     expect((withUiDefaults({}, "en") as { about: { bio: string } }).about.bio).toBe("");
   });

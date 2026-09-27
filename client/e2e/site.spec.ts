@@ -290,7 +290,7 @@ test.describe("contact form", () => {
     await expect(
       contact.getByRole("link", { name: /^GitHub\s*github\.com\/alirezarastineh$/ }),
     ).toHaveAttribute("href", "https://github.com/alirezarastineh");
-    await expect(contact).toContainText("I reply within two working days.");
+    await expect(contact).toContainText("I reply within 24 hours.");
 
     await contact.getByRole("button", { name: "Copy the email address" }).click();
     await expect(contact.getByRole("button", { name: /^Copied ✓/ })).toBeVisible();

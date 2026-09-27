@@ -84,7 +84,7 @@
       "previous": "Previous project",
       "next": "Next project",
       "ctaHeading": "Building something similar?",
-      "ctaBody": "Tell me what you are working on — I reply within two working days.",
+      "ctaBody": "Tell me what you are working on — I reply within 24 hours.",
       "ctaButton": "Discuss a similar project"
     },
     "contact": {
@@ -111,7 +111,7 @@
       "errorMailerUnavailable": "Email service unavailable. Please email me directly.",
       "errorSendFailed": "Could not send. Please email me directly.",
       "errorNetwork": "Network error. Please try again.",
-      "replyTime": "I reply within two working days."
+      "replyTime": "I reply within 24 hours."
     },
     "projectCard": {
       "problem": "PROBLEM",

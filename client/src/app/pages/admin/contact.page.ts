@@ -22,7 +22,7 @@ const FIELDS: UiFieldDef[] = [
   {
     key: "replyTime",
     label: "Reply time",
-    hint: "Optional. Shown beside the form, e.g. “I reply within two working days.”",
+    hint: "Optional. Shown beside the form, e.g. “I reply within 24 hours.”",
   },
   { key: "successLine1", label: "Success — line 1" },
   { key: "successLine2", label: "Success — line 2" },

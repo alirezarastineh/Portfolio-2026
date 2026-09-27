@@ -23,7 +23,7 @@ export const UI_V2_ADDITIONS: Record<Locale, Additions> = {
     // Empty until written in the admin: a bio is the owner's own words.
     about: { bio: "" },
     // The same promise as `caseStudy.ctaBody`.
-    contact: { replyTime: "I reply within two working days." },
+    contact: { replyTime: "I reply within 24 hours." },
     hero: {
       availabilityOpen: "Open to senior AI / full-stack roles",
       availabilityLimited: "Limited availability",
@@ -70,7 +70,7 @@ export const UI_V2_ADDITIONS: Record<Locale, Additions> = {
       previous: "Previous project",
       next: "Next project",
       ctaHeading: "Building something similar?",
-      ctaBody: "Tell me what you are working on — I reply within two working days.",
+      ctaBody: "Tell me what you are working on — I reply within 24 hours.",
       ctaButton: "Discuss a similar project",
     },
     legal: { nav: "Legal", imprint: "Imprint", privacy: "Privacy", updated: "Last updated" },
@@ -90,7 +90,7 @@ export const UI_V2_ADDITIONS: Record<Locale, Additions> = {
   de: {
     nav: { work: "Projekte", experience: "Werdegang", writing: "Artikel" },
     about: { bio: "" },
-    contact: { replyTime: "Ich antworte innerhalb von zwei Werktagen." },
+    contact: { replyTime: "Ich antworte innerhalb von 24 Stunden." },
     hero: {
       availabilityOpen: "Offen für Senior-Rollen in AI / Full-Stack",
       availabilityLimited: "Eingeschränkt verfügbar",
@@ -137,7 +137,7 @@ export const UI_V2_ADDITIONS: Record<Locale, Additions> = {
       previous: "Vorheriges Projekt",
       next: "Nächstes Projekt",
       ctaHeading: "Sie planen etwas Ähnliches?",
-      ctaBody: "Erzählen Sie mir, woran Sie arbeiten — ich antworte innerhalb von zwei Werktagen.",
+      ctaBody: "Erzählen Sie mir, woran Sie arbeiten — ich antworte innerhalb von 24 Stunden.",
       ctaButton: "Ähnliches Projekt besprechen",
     },
     legal: { nav: "Rechtliches", imprint: "Impressum", privacy: "Datenschutz", updated: "Stand" },
