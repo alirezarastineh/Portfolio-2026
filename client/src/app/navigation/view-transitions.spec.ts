@@ -69,6 +69,30 @@ describe("animatePageChangesOnly", () => {
     expect(transitionBetween("/en", "/en/work/atlas")).toHaveBeenCalledOnce();
   });
 
+  it("never reads the site's content on a move that is not between case studies", () => {
+    // As the real service does outside a locale route (the admin): it throws.
+    const content = () => {
+      throw new Error('[i18n] "en" content read before the locale route loaded it');
+    };
+    TestBed.resetTestingModule().configureTestingModule({
+      providers: [{ provide: LanguageService, useValue: { content } }],
+    });
+    const types = new Set<string>();
+    const move = (from: string, to: string) =>
+      TestBed.runInInjectionContext(() =>
+        animatePageChangesOnly({
+          transition: { skipTransition: vi.fn(), types } as unknown as ViewTransition,
+          from: snapshot(from),
+          to: snapshot(to),
+        } as ViewTransitionInfo),
+      );
+
+    expect(() => move("/admin/login", "/admin")).not.toThrow();
+    expect(() => move("/admin", "/admin/about")).not.toThrow();
+    expect(() => move("/admin", "/en")).not.toThrow();
+    expect([...types]).toEqual([]);
+  });
+
   it("gives a move between case studies its direction in the home page's order", () => {
     expect(typesBetween("/en/work/atlas", "/en/work/comet")).toEqual(["forward"]);
     expect(typesBetween("/en/work/comet", "/en/work/beacon")).toEqual(["back"]);

@@ -71,6 +71,10 @@ export function animatePageChangesOnly({ transition, from, to }: ViewTransitionI
     return;
   }
   if (!("types" in transition)) return;
+  // Only a move between two case studies has a direction, and only then is
+  // the site's content sure to be loaded: the admin has none (reading it
+  // there throws, which broke the move from the admin's login to its dashboard).
+  if (!studySlug(fromPath) || !studySlug(toPath)) return;
 
   const order = inject(LanguageService)
     .content()
