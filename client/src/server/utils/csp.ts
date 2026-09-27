@@ -5,8 +5,9 @@ import { randomBytes } from "node:crypto";
  * Caddy: Angular's event replay needs an inline script, so an enforced policy
  * needs a nonce that is new on every request, which only the renderer knows.
  *
- * Everything else is an allowlist of origins, read once from the container's
- * environment — the same public values the browser bundle is built with.
+ * Everything else is an allowlist derived from the container's environment —
+ * the same public values the browser bundle is built with — and the configured
+ * services' known endpoints.
  */
 
 export type CspMode = "enforce" | "report-only" | "off";
@@ -15,7 +16,7 @@ export interface CspConfig {
   mode: CspMode;
   /** The API: admin requests, contact form, and media the admin shows from it. */
   apiOrigin: string | null;
-  /** Umami: the tracker script and its beacon. */
+  /** Umami's tracker origin; Cloud sends beacons to a separate gateway. */
   analyticsOrigin: string | null;
   /** Sentry: the error reporter's ingest host, and its CSP report endpoint. */
   sentry: SentryCspEndpoint | null;
@@ -114,6 +115,10 @@ export function buildCsp(nonce: string, config: CspConfig): string {
 
   const nonceSource = `'nonce-${nonce}'`;
   const turnstile = config.turnstile ? TURNSTILE_ORIGIN : null;
+  // Umami Cloud serves the script and collects events on different origins.
+  // Self-hosted trackers continue sending to their configured origin.
+  const analyticsGateway =
+    config.analyticsOrigin === "https://cloud.umami.is" ? "https://gateway.umami.is" : null;
   const directives = [
     "default-src 'self'",
     `script-src ${sources("'self'", nonceSource, config.analyticsOrigin, turnstile)}`,
@@ -121,7 +126,7 @@ export function buildCsp(nonce: string, config: CspConfig): string {
     "style-src 'self' 'unsafe-inline'",
     `img-src ${sources("'self'", "data:", config.apiOrigin)}`,
     "font-src 'self' data:",
-    `connect-src ${sources("'self'", config.apiOrigin, config.analyticsOrigin, config.sentry?.origin ?? null)}`,
+    `connect-src ${sources("'self'", config.apiOrigin, config.analyticsOrigin, analyticsGateway, config.sentry?.origin ?? null)}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

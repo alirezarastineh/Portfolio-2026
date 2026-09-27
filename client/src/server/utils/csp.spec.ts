@@ -153,6 +153,31 @@ describe("buildCsp", () => {
     expect(policy.get("report-to")).toEqual(["csp-endpoint"]);
   });
 
+  it("allows Umami Cloud's separate collection gateway only for connections", () => {
+    const policy = directives(
+      buildCsp(
+        "n0nce",
+        cspConfigFromEnv({
+          ...PROD_ENV,
+          VITE_UMAMI_SRC: "https://cloud.umami.is/script.js",
+        }),
+      ),
+    );
+
+    expect(policy.get("script-src")).toEqual([
+      "'self'",
+      "'nonce-n0nce'",
+      "https://cloud.umami.is",
+    ]);
+    expect(policy.get("connect-src")).toEqual([
+      "'self'",
+      "https://api.alirezarastineh.me",
+      "https://cloud.umami.is",
+      "https://gateway.umami.is",
+      "https://o4501.ingest.de.sentry.io",
+    ]);
+  });
+
   it("never allows inline or eval'd script without the nonce", () => {
     const script = directives(buildCsp("n", cspConfigFromEnv(PROD_ENV))).get("script-src") ?? [];
     expect(script).not.toContain("'unsafe-inline'");
