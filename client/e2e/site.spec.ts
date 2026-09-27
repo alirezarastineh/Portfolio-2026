@@ -68,6 +68,18 @@ test.describe("home", () => {
     expect(html).toContain("Building AI applications in a Jupyter notebook is easy");
   });
 
+  test("beside the About terminal, the person: a bio and a few facts", async ({ page }) => {
+    await page.goto("/en");
+    const about = page.locator("#about");
+    await expect(about).toContainText("I turn language models into products");
+    await expect(about.locator("dt")).toHaveText(["Based in", "Shipping since", "Status"]);
+    await expect(about.locator("dd")).toHaveText([
+      "Remote",
+      "2021",
+      "Open to senior AI / full-stack roles",
+    ]);
+  });
+
   test("the latest posts, with a link to all of them", async ({ page }) => {
     await page.goto("/en");
     const writing = page.locator("#writing");
@@ -266,6 +278,24 @@ test.describe("contact form", () => {
     await expect(page.locator("#contact-email")).toHaveAttribute("aria-invalid", "true");
     await expect(page.locator("#contact [role=status]")).toHaveText(
       "Please fix the highlighted fields.",
+    );
+  });
+
+  test("beside it: the email to copy, profiles by handle, and a reply time", async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const contact = page.locator("#contact");
+    await expect(
+      contact.getByRole("link", { name: /^GitHub\s*github\.com\/alirezarastineh$/ }),
+    ).toHaveAttribute("href", "https://github.com/alirezarastineh");
+    await expect(contact).toContainText("I reply within two working days.");
+
+    await contact.getByRole("button", { name: "Copy the email address" }).click();
+    await expect(contact.getByRole("button", { name: /^Copied ✓/ })).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      "contact@alirezarastineh.me",
     );
   });
 

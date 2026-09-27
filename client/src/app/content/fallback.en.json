@@ -38,7 +38,8 @@
       "terminalPrompt": "user@portfolio:~$",
       "terminalOutputWhoami": "Alireza Rastineh — Full Stack AI Software Engineer",
       "terminalOutputLs": "core-architecture/   ai-ml-stack/   devops/   data-pipelines/",
-      "terminalOutputContact": "Open to senior full-stack and AI engineering roles. Reach out via the contact form below or email directly."
+      "terminalOutputContact": "Open to senior full-stack and AI engineering roles. Reach out via the contact form below or email directly.",
+      "bio": ""
     },
     "projects": {
       "heading": "// projects",
@@ -109,7 +110,8 @@
       "errorInvalidInput": "Form data was rejected by the server.",
       "errorMailerUnavailable": "Email service unavailable. Please email me directly.",
       "errorSendFailed": "Could not send. Please email me directly.",
-      "errorNetwork": "Network error. Please try again."
+      "errorNetwork": "Network error. Please try again.",
+      "replyTime": "I reply within two working days."
     },
     "projectCard": {
       "problem": "PROBLEM",

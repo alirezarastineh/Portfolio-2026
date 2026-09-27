@@ -108,8 +108,31 @@
   pointer-events: none;
 }
 
+/* A contact field's focus: a 2px orange line over its own, drawn from the
+   left (at once under reduced motion). On a wrapper: a field has no ::after. */
+.field-line {
+  position: relative;
+}
+
+.field-line::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent-orange);
+  transform-origin: left;
+  scale: 0 1;
+  pointer-events: none;
+}
+
+.field-line:focus-within::after {
+  scale: 1;
+}
+
 @media (prefers-reduced-motion: no-preference) {
-  .nav-link::after {
+  .nav-link::after,
+  .field-line::after {
     transition: scale var(--dur-3) var(--ease-out);
   }
 
@@ -153,6 +176,11 @@
     transition: translate var(--dur-3) var(--ease-out);
   }
 
+  /* A skill card's chips rise 2px under the pointer, one after another. */
+  .skill-card .chip {
+    transition: translate var(--dur-3) var(--ease-spring) calc(var(--i, 0) * 20ms);
+  }
+
   .project-card[data-link]:has(a:focus-visible) .card-media img {
     scale: 1.03;
   }
@@ -172,6 +200,10 @@
 
     .project-card[data-link]:hover .card-arrow {
       translate: 4px 0;
+    }
+
+    .skill-card:hover .chip {
+      translate: 0 -2px;
     }
   }
 }

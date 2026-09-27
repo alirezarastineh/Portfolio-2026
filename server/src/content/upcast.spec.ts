@@ -108,4 +108,17 @@ describe("fillMissing", () => {
     expect(ui["nav"]!["skills"]).toBe(v1Payload().ui.nav.skills);
     expect(ui["ask"]).toEqual(UI_V2_ADDITIONS.en.ask);
   });
+
+  it("adds the optional keys added since, keeping any already written", () => {
+    const ui = withUiDefaults(
+      { about: { heading: "about", bio: "Written in the admin." }, contact: { heading: "x" } },
+      "de",
+    ) as Record<string, Record<string, string>>;
+    expect(ui["about"]).toMatchObject({ heading: "about", bio: "Written in the admin." });
+    expect(ui["contact"]).toMatchObject({
+      heading: "x",
+      replyTime: "Ich antworte innerhalb von zwei Werktagen.",
+    });
+    expect((withUiDefaults({}, "en") as { about: { bio: string } }).about.bio).toBe("");
+  });
 });

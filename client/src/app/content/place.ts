@@ -10,6 +10,13 @@ export function regionName(code: string, locale: Locale): string {
   }
 }
 
+/** `Berlin, Germany`: the city and the country's name, whichever are set; empty for neither. */
+export function placeName(location: { city: string; country: string }, locale: Locale): string {
+  return [location.city.trim(), location.country ? regionName(location.country, locale) : ""]
+    .filter(Boolean)
+    .join(", ");
+}
+
 /** The time in an IANA zone as a 24-hour `09:05`; empty for an unknown zone. */
 export function clockTime(timeZone: string, locale: Locale, at = new Date()): string {
   if (!timeZone) return "";

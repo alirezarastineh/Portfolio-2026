@@ -23,6 +23,14 @@ const FIELDS: UiFieldDef[] = [
   { key: "terminalOutputWhoami", label: "Output — whoami", multiline: true, rows: 2 },
   { key: "terminalOutputLs", label: "Output — ls skills/", multiline: true, rows: 2 },
   { key: "terminalOutputContact", label: "Output — cat contact.txt", multiline: true, rows: 3 },
+  {
+    key: "bio",
+    label: "Bio",
+    multiline: true,
+    rows: 3,
+    softMax: 200,
+    hint: "Optional. One or two sentences on the card beside the terminal, under your name.",
+  },
 ];
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
@@ -36,7 +44,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
     <app-ui-group-editor
       group="about"
       title="About"
-      description="The about section and every line of the animated terminal."
+      description="The about section, every line of the animated terminal, and the bio beside it."
       [fields]="fields"
     />
   `,

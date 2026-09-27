@@ -108,6 +108,24 @@ describe("AboutSectionComponent", () => {
     expect(heading().textContent?.trim()).toBe("über mich");
   });
 
+  it("shows the person beside the terminal, leaving out what the content lacks", async () => {
+    // The seed: no bio, no photo, no experience, no city.
+    const fixture = TestBed.createComponent(AboutSectionComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const root: HTMLElement = fixture.nativeElement;
+
+    expect(root.textContent).toContain("@alirezarastineh");
+    expect(root.querySelector(".rounded-full span[aria-hidden]")?.textContent?.trim()).toBe("AR");
+    expect([...root.querySelectorAll("dt")].map((dt) => dt.textContent?.trim())).toEqual([
+      "Based in",
+      "Status",
+    ]);
+    expect(root.querySelector("dd")?.textContent?.trim()).toBe("Remote");
+    // No status in the title bar until the assistant's code says whether it answers.
+    expect(root.querySelector("app-terminal-window header")?.textContent).not.toContain("online");
+  });
+
   it("renders every line in full before any typing, as the server does", async () => {
     const fixture = TestBed.createComponent(AboutSectionComponent);
     fixture.detectChanges();

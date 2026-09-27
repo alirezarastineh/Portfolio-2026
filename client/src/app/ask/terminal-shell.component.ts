@@ -243,6 +243,13 @@ export class TerminalShellComponent {
       );
     });
 
+    // What the About window's title bar says: the server's word, once it has
+    // one (a failed answer can put the assistant to rest mid-conversation).
+    effect(() => {
+      const state = this.store.remote()?.state;
+      if (state) this.launcher.assistant.set(state === "ok" ? "online" : "resting");
+    });
+
     // Keep the newest output in view while it streams.
     afterRenderEffect(() => {
       this.store.entries();

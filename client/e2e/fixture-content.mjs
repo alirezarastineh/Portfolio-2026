@@ -34,6 +34,7 @@ const CODE =
 
 const COPY = {
   en: {
+    bio: "I turn language models into products that keep working after the demo.",
     role: "Lead engineer",
     category: "AI platform",
     metrics: [
@@ -63,7 +64,13 @@ const COPY = {
       senior: {
         title: "Senior AI Engineer",
         summary: "Builds the retrieval and evaluation platform behind three products.",
-        highlights: ["Cut p95 latency by 42%", "Introduced evals as a release gate"],
+        highlights: [
+          "Cut p95 latency by 42%",
+          "Introduced evals as a release gate",
+          "Moved ingestion to a queue with retries",
+          "Runs the on-call rotation",
+          "Mentors two engineers",
+        ],
       },
       fullStack: {
         title: "Full-stack Engineer",
@@ -91,6 +98,7 @@ const COPY = {
     },
   },
   de: {
+    bio: "Ich mache aus Sprachmodellen Produkte, die auch nach der Demo funktionieren.",
     role: "Leitender Engineer",
     category: "KI-Plattform",
     metrics: [
@@ -119,7 +127,13 @@ const COPY = {
       senior: {
         title: "Senior AI Engineer",
         summary: "Baut die Retrieval- und Evaluationsplattform hinter drei Produkten.",
-        highlights: ["p95-Latenz um 42 % gesenkt", "Evals als Release-Gate eingeführt"],
+        highlights: [
+          "p95-Latenz um 42 % gesenkt",
+          "Evals als Release-Gate eingeführt",
+          "Ingestion auf eine Queue mit Wiederholungen umgestellt",
+          "Leitet die Rufbereitschaft",
+          "Betreut zwei Engineers",
+        ],
       },
       fullStack: {
         title: "Full-Stack-Engineer",
@@ -224,6 +238,7 @@ export function fixtureCore(locale) {
   const [one, two, ...rest] = base.projects;
   return {
     ...base,
+    ui: { ...base.ui, about: { ...base.ui.about, bio: copy.bio } },
     identity: { ...base.identity, resume: { href: "/media/fixture-cv.pdf", bytes: 48_213 } },
     projects: [
       {

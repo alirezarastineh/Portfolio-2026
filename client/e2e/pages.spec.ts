@@ -357,6 +357,18 @@ test.describe("home: experience", () => {
     );
   });
 
+  test("past three highlights, the rest fold behind “N more”", async ({ page }) => {
+    await page.goto("/en");
+    const entry = page.locator("#experience article").first();
+    const more = entry.locator("details");
+    await expect(more.locator("summary")).toHaveText(/2 more/);
+    await expect(entry.getByText("Runs the on-call rotation")).toBeHidden();
+    await more.locator("summary").click();
+    await expect(entry.getByText("Runs the on-call rotation")).toBeVisible();
+    // Two highlights and one entry: nothing to fold.
+    await expect(page.locator("#experience details")).toHaveCount(1);
+  });
+
   test("the header links to it, and to the writing index", async ({ page }) => {
     await page.goto("/de");
     const nav = page.getByRole("navigation", { name: "Hauptnavigation" });
@@ -377,6 +389,22 @@ test.describe("404", () => {
     await expect(page.getByRole("link", { name: /frag mein Portfolio/ })).toHaveAttribute(
       "href",
       "/de#about",
+    );
+    // Nothing on the site is near that address, so nothing is suggested.
+    await expect(page.locator("main")).not.toContainText("Meinten Sie");
+  });
+
+  test("repeats the address as a shell would, and suggests what it most likely meant", async ({
+    page,
+  }) => {
+    const res = await page.goto("/en/work/project-on");
+    expect(res?.status()).toBe(404);
+    const main = page.locator("main");
+    await expect(main).toContainText("zsh: command not found: /en/work/project-on");
+    await expect(main).toContainText("Did you mean");
+    await expect(main.getByRole("link", { name: "/en/work/project-one" })).toHaveAttribute(
+      "href",
+      "/en/work/project-one",
     );
   });
 });

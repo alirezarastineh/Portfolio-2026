@@ -1,13 +1,9 @@
-import { isPlatformBrowser } from "@angular/common";
 import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
-  DestroyRef,
   inject,
-  PLATFORM_ID,
-  signal,
   viewChild,
 } from "@angular/core";
 import { NgIcon, provideIcons } from "@ng-icons/core";
@@ -16,18 +12,13 @@ import { lucideArrowDown, lucideDownload } from "@ng-icons/lucide";
 import { AskBarComponent } from "../ask/ask-bar.component";
 import { MagneticButtonComponent } from "../components/magnetic-button.component";
 import { PictureComponent } from "../components/picture.component";
-import { clockTime, regionName, timeZoneLabel } from "../content/place";
-import type { Availability } from "../content/schema";
+import { AVAILABILITY_DOT, availabilityLabel } from "../content/availability";
+import { regionName, timeZoneLabel } from "../content/place";
 import { CHROME } from "../i18n/chrome";
+import { ClockService } from "../services/clock.service";
 import { LanguageService } from "../services/language.service";
 import { GridCanvasComponent } from "../visuals/grid-canvas.component";
 import { TracePanelComponent } from "../visuals/trace-panel.component";
-
-const DOT: Record<Availability, string> = {
-  open: "bg-available",
-  limited: "bg-accent-orange",
-  closed: "bg-muted-foreground",
-};
 
 /** Orgs named in the proof strip, at most. */
 const MAX_ORGS = 5;
@@ -222,17 +213,11 @@ export class HeroSectionComponent {
   protected readonly chrome = computed(() => CHROME[this.lang.lang()].hero);
   protected readonly grid = viewChild.required(GridCanvasComponent);
 
-  protected readonly dot = computed(() => DOT[this.identity().availability]);
+  protected readonly dot = computed(() => AVAILABILITY_DOT[this.identity().availability]);
 
-  protected readonly availability = computed(() => {
-    const t = this.lang.t().hero;
-    const labels: Record<Availability, string> = {
-      open: t.availabilityOpen,
-      limited: t.availabilityLimited,
-      closed: t.availabilityClosed,
-    };
-    return labels[this.identity().availability];
-  });
+  protected readonly availability = computed(() =>
+    availabilityLabel(this.lang.t().hero, this.identity().availability),
+  );
 
   /** City and country, whichever are set. */
   protected readonly whereabouts = computed(() => {
@@ -248,12 +233,9 @@ export class HeroSectionComponent {
     timeZoneLabel(this.identity().timezone, this.lang.lang()),
   );
 
-  /** Now, in the browser only: the server leaves the time to the reader's clock. */
-  private readonly now = signal<Date | null>(null);
-  protected readonly time = computed(() => {
-    const now = this.now();
-    return now ? clockTime(this.identity().timezone, this.lang.lang(), now) : "";
-  });
+  /** Empty on the server: it leaves the time to the reader's clock. */
+  private readonly clock = inject(ClockService);
+  protected readonly time = computed(() => this.clock.time(this.identity().timezone));
 
   /** Where he has worked, most recent first, each once. */
   protected readonly orgs = computed(() => {
@@ -273,18 +255,6 @@ export class HeroSectionComponent {
   protected readonly metrics = computed(() => this.proofProject()?.metrics.slice(0, 3) ?? []);
 
   constructor() {
-    const isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    afterNextRender(() => {
-      if (!isBrowser) return;
-      // On the minute, every minute.
-      const tick = () => {
-        const now = new Date();
-        this.now.set(now);
-        timer = setTimeout(tick, 60_000 - (now.getTime() % 60_000));
-      };
-      tick();
-    });
-    inject(DestroyRef).onDestroy(() => clearTimeout(timer));
+    afterNextRender(() => this.clock.start());
   }
 }

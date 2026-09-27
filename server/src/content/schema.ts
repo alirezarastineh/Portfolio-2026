@@ -144,6 +144,8 @@ export const uiSchema = z.object({
     terminalOutputWhoami: nonEmpty,
     terminalOutputLs: nonEmpty,
     terminalOutputContact: nonEmpty,
+    /** One or two sentences on the card beside the terminal; nothing shows while empty. */
+    bio: z.string().optional(),
   }),
   projects: z.object({
     heading: nonEmpty,
@@ -216,6 +218,8 @@ export const uiSchema = z.object({
     errorMailerUnavailable: nonEmpty,
     errorSendFailed: nonEmpty,
     errorNetwork: nonEmpty,
+    /** How soon a message is answered, beside the form; nothing shows while empty. */
+    replyTime: z.string().optional(),
   }),
   projectCard: z.object({
     problem: nonEmpty,

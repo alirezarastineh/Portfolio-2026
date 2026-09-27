@@ -102,6 +102,33 @@ test.describe("site navigation", () => {
     await expect(legal.getByRole("link").last()).toHaveAttribute("href", "/de/legal/privacy");
   });
 
+  test("the footer lists the case studies, writing and profiles, and the stack", async ({
+    page,
+  }) => {
+    await page.goto("/en/legal/imprint");
+    const work = page.getByRole("navigation", { name: "Work", exact: true });
+    await expect(work.getByRole("link", { name: "TODO: Project One" })).toHaveAttribute(
+      "href",
+      "/en/work/project-one",
+    );
+    await expect(work.getByRole("link", { name: "All work" })).toHaveAttribute(
+      "href",
+      "/en#projects",
+    );
+    const writing = page.getByRole("navigation", { name: "Writing", exact: true });
+    await expect(writing.getByRole("link", { name: "RSS feed" })).toHaveAttribute(
+      "href",
+      "/en/rss.xml",
+    );
+    const elsewhere = page.getByRole("navigation", { name: "Elsewhere" });
+    await expect(elsewhere.getByRole("link", { name: "GitHub" })).toHaveAttribute(
+      "target",
+      "_blank",
+    );
+    await expect(elsewhere.getByRole("link", { name: "Email" })).not.toHaveAttribute("target");
+    await expect(page.locator("footer")).toContainText(/Built with Angular \d+, Analog and Hono/);
+  });
+
   test("the mobile menu opens and closes", async ({ page, isMobile }) => {
     // The mobile navigation drawer and hamburger toggle are only rendered on mobile viewports.
     if (!isMobile) return;

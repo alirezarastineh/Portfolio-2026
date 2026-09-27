@@ -151,6 +151,18 @@ test.describe("assistant terminal", () => {
     expect(html).not.toContain('id="ask-input');
   });
 
+  test("the window's title bar says whether the assistant answers", async ({ page }) => {
+    const bar = page.locator("#about app-terminal-window header").first();
+    await mockAsk(page, () => undefined);
+    await openPrompt(page);
+    await expect(bar).toContainText("online");
+
+    await page.unrouteAll({ behavior: "wait" });
+    await mockAsk(page, () => undefined, { state: "resting" });
+    await openPrompt(page, "/de");
+    await expect(bar).toContainText("pausiert");
+  });
+
   test("shell commands answer locally, with history and Tab completion", async ({ page }) => {
     const mock = await mockAsk(page, () => undefined);
     const prompt = await openPrompt(page);

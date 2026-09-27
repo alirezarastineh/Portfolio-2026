@@ -1,7 +1,8 @@
 import type { AppTranslations, Locale } from "./schema.js";
 
 /**
- * The copy content model v2 added to the `ui` tree, in both languages.
+ * The copy content model v2 added to the `ui` tree, in both languages, and
+ * the optional keys added since.
  *
  * Two jobs: the boot backfill merges it into the stored `ui` documents (filling
  * only keys that are missing, so nothing edited in the admin is overwritten),
@@ -10,11 +11,19 @@ import type { AppTranslations, Locale } from "./schema.js";
 type Additions = Pick<
   AppTranslations,
   "hero" | "experience" | "writing" | "caseStudy" | "legal" | "notFound" | "ask"
-> & { nav: Pick<AppTranslations["nav"], "work" | "experience" | "writing"> };
+> & {
+  nav: Pick<AppTranslations["nav"], "work" | "experience" | "writing">;
+  about: Required<Pick<AppTranslations["about"], "bio">>;
+  contact: Required<Pick<AppTranslations["contact"], "replyTime">>;
+};
 
 export const UI_V2_ADDITIONS: Record<Locale, Additions> = {
   en: {
     nav: { work: "Work", experience: "Experience", writing: "Writing" },
+    // Empty until written in the admin: a bio is the owner's own words.
+    about: { bio: "" },
+    // The same promise as `caseStudy.ctaBody`.
+    contact: { replyTime: "I reply within two working days." },
     hero: {
       availabilityOpen: "Open to senior AI / full-stack roles",
       availabilityLimited: "Limited availability",
@@ -80,6 +89,8 @@ export const UI_V2_ADDITIONS: Record<Locale, Additions> = {
   },
   de: {
     nav: { work: "Projekte", experience: "Werdegang", writing: "Artikel" },
+    about: { bio: "" },
+    contact: { replyTime: "Ich antworte innerhalb von zwei Werktagen." },
     hero: {
       availabilityOpen: "Offen für Senior-Rollen in AI / Full-Stack",
       availabilityLimited: "Eingeschränkt verfügbar",

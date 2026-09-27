@@ -23,18 +23,18 @@
     "ai:eval": "tsx src/ask/evals/cli.ts"
   },
   "dependencies": {
-    "@ai-sdk/google": "^4.0.79",
+    "@ai-sdk/google": "^4.0.82",
     "@ai-sdk/provider": "^4.0.18",
     "@hono/node-server": "^2.1.1",
     "@hono/zod-validator": "^0.9.1",
-    "@langchain/core": "^1.2.12",
+    "@langchain/core": "^1.2.13",
     "@langchain/google-genai": "^2.3.2",
-    "@langchain/langgraph": "^1.4.17",
+    "@langchain/langgraph": "^1.4.18",
     "@node-rs/argon2": "^2.2.1",
     "@openrouter/ai-sdk-provider": "^3.1.0",
     "@sentry/node": "^11.0.0",
-    "ai": "^7.0.113",
-    "dotenv": "^18.0.3",
+    "ai": "^7.0.118",
+    "dotenv": "^18.0.4",
     "drizzle-orm": "^0.45.3",
     "hono": "^4.13.9",
     "js-tiktoken": "^1.0.21",
@@ -43,7 +43,7 @@
     "pdf-parse": "^2.4.5",
     "pg": "^8.23.0",
     "qrcode": "^1.5.4",
-    "resend": "^6.28.1",
+    "resend": "^6.30.0",
     "sanitize-html": "^2.17.7",
     "sharp": "^0.35.4",
     "shiki": "^4.4.3",
@@ -53,7 +53,7 @@
     "@eslint/js": "^10.0.1",
     "@eslint/json": "^2.1.0",
     "@eslint/markdown": "^8.0.3",
-    "@types/node": "^26.6.2",
+    "@types/node": "^26.6.3",
     "@types/pdf-parse": "^1.1.5",
     "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
@@ -67,6 +67,6 @@
     "tsx": "^4.23.15",
     "typescript": "6.0.3",
     "typescript-eslint": "^8.70.1",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.2"
   }
 }

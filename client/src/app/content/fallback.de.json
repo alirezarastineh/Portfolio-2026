@@ -38,7 +38,8 @@
       "terminalPrompt": "user@portfolio:~$",
       "terminalOutputWhoami": "Alireza Rastineh — Fullstack-KI-Softwareingenieur",
       "terminalOutputLs": "kernarchitektur/   ki-ml-stack/   devops/   datenpipelines/",
-      "terminalOutputContact": "Offen für Senior-Fullstack- und KI-Engineering-Rollen. Kontaktaufnahme über das Kontaktformular oder direkt per E-Mail."
+      "terminalOutputContact": "Offen für Senior-Fullstack- und KI-Engineering-Rollen. Kontaktaufnahme über das Kontaktformular oder direkt per E-Mail.",
+      "bio": ""
     },
     "projects": {
       "heading": "// projekte",
@@ -109,7 +110,8 @@
       "errorInvalidInput": "Formulardaten wurden vom Server abgelehnt.",
       "errorMailerUnavailable": "E-Mail-Dienst nicht verfügbar. Bitte direkt per E-Mail kontaktieren.",
       "errorSendFailed": "Senden fehlgeschlagen. Bitte direkt per E-Mail kontaktieren.",
-      "errorNetwork": "Netzwerkfehler. Bitte erneut versuchen."
+      "errorNetwork": "Netzwerkfehler. Bitte erneut versuchen.",
+      "replyTime": "Ich antworte innerhalb von zwei Werktagen."
     },
     "projectCard": {
       "problem": "PROBLEM",

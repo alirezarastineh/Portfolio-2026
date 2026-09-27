@@ -42,7 +42,7 @@ const SPAN_MAP: Record<BentoSpan, string> = {
         >
           @for (card of cards(); track card.id) {
             <li [class]="card.layout">
-              <app-spotlight-card class="h-full">
+              <app-spotlight-card class="skill-card h-full">
                 <article class="flex h-full flex-col gap-5 p-6">
                   <header class="flex items-start justify-between gap-3">
                     <div class="flex flex-col gap-1.5">
@@ -54,20 +54,21 @@ const SPAN_MAP: Record<BentoSpan, string> = {
                           {{ card.caption.text }}
                         </p>
                       }
-                      <h3 class="m-0 text-lg font-semibold tracking-tight text-foreground">
+                      <h3 class="m-0 text-h4 text-foreground">
                         {{ card.title }}
                       </h3>
                     </div>
-                    <ng-icon
-                      [name]="card.icon"
-                      size="22"
-                      class="shrink-0 text-accent-indigo"
+                    <span
+                      class="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-indigo-soft text-accent-indigo"
                       aria-hidden="true"
-                    />
+                    >
+                      <ng-icon [name]="card.icon" size="20" />
+                    </span>
                   </header>
+                  <!-- The chips rise one after another as the card is hovered (motion.css). -->
                   <ul class="m-0 flex list-none flex-wrap gap-2 p-0" role="list">
-                    @for (item of card.items; track item) {
-                      <li class="chip">{{ item }}</li>
+                    @for (item of card.items; track item; let i = $index) {
+                      <li class="chip" [style.--i]="i">{{ item }}</li>
                     }
                   </ul>
                   @if (card.narrative) {

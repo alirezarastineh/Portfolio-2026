@@ -46,8 +46,35 @@ export interface ChromeLabels {
   breadcrumb: string;
   gallery: { open: string; close: string; previous: string; next: string };
   share: { share: string; copy: string; copied: string; on: string };
-  contact: { sendAnother: string };
-  about: { skip: string; skipLabel: string };
+  contact: {
+    sendAnother: string;
+    email: string;
+    /** Read after the copy button's visible "Copy". */
+    copyWhat: string;
+    elsewhere: string;
+    localTime: string;
+  };
+  about: {
+    skip: string;
+    skipLabel: string;
+    /** The terminal's title bar, once the assistant's state is known. */
+    online: string;
+    resting: string;
+    based: string;
+    since: string;
+    status: string;
+  };
+  /** A timeline entry's highlights past the third, `{n}` how many. */
+  experience: { more: string };
+  footer: {
+    /** A shell comment after `exit`. */
+    signOff: string;
+    elsewhere: string;
+    /** `{angular}` is the framework's major version. */
+    colophon: string;
+    build: string;
+  };
+  notFound: { command: string; didYouMean: string };
   projectCard: { details: string; links: string };
   caseStudy: {
     /** The end block's action, `{name}` the project's. */
@@ -98,8 +125,31 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       next: "Next image",
     },
     share: { share: "Share", copy: "Copy link", copied: "Link copied", on: "Share on {site}" },
-    contact: { sendAnother: "Send another message" },
-    about: { skip: "skip", skipLabel: "show the whole text" },
+    contact: {
+      sendAnother: "Send another message",
+      email: "Email",
+      copyWhat: "the email address",
+      elsewhere: "Elsewhere",
+      localTime: "local time",
+    },
+    about: {
+      skip: "skip",
+      skipLabel: "show the whole text",
+      online: "online",
+      resting: "resting",
+      based: "Based in",
+      since: "Shipping since",
+      status: "Status",
+    },
+    experience: { more: "{n} more" },
+    footer: {
+      signOff: "thanks for reading",
+      elsewhere: "Elsewhere",
+      colophon:
+        "Built with Angular {angular}, Analog and Hono. Server-rendered, fonts self-hosted.",
+      build: "build",
+    },
+    notFound: { command: "command not found", didYouMean: "Did you mean" },
     projectCard: { details: "Details", links: "Project links" },
     caseStudy: { ask: "Ask about {name}", question: "What did he build in {name}, and how?" },
     code: { copy: "Copy", copied: "Copied" },
@@ -147,8 +197,31 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       copied: "Link kopiert",
       on: "Auf {site} teilen",
     },
-    contact: { sendAnother: "Weitere Nachricht senden" },
-    about: { skip: "überspringen", skipLabel: "ganzen Text anzeigen" },
+    contact: {
+      sendAnother: "Weitere Nachricht senden",
+      email: "E-Mail",
+      copyWhat: "die E-Mail-Adresse",
+      elsewhere: "Im Netz",
+      localTime: "Ortszeit",
+    },
+    about: {
+      skip: "überspringen",
+      skipLabel: "ganzen Text anzeigen",
+      online: "online",
+      resting: "pausiert",
+      based: "Standort",
+      since: "Im Beruf seit",
+      status: "Status",
+    },
+    experience: { more: "{n} weitere" },
+    footer: {
+      signOff: "danke fürs Lesen",
+      elsewhere: "Im Netz",
+      colophon:
+        "Gebaut mit Angular {angular}, Analog und Hono. Serverseitig gerendert, Schriften selbst gehostet.",
+      build: "Build",
+    },
+    notFound: { command: "Befehl nicht gefunden", didYouMean: "Meinten Sie" },
     projectCard: { details: "Details", links: "Projektlinks" },
     caseStudy: { ask: "Zu {name} fragen", question: "Was hat er bei {name} gebaut – und wie?" },
     code: { copy: "Kopieren", copied: "Kopiert" },

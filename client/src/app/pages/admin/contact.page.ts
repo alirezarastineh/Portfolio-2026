@@ -19,6 +19,11 @@ const FIELDS: UiFieldDef[] = [
   { key: "placeholderMessage", label: "Placeholder — message", multiline: true, rows: 2 },
   { key: "submit", label: "Submit button" },
   { key: "sending", label: "Submit button while sending" },
+  {
+    key: "replyTime",
+    label: "Reply time",
+    hint: "Optional. Shown beside the form, e.g. “I reply within two working days.”",
+  },
   { key: "successLine1", label: "Success — line 1" },
   { key: "successLine2", label: "Success — line 2" },
   { key: "errorRequired", label: "Error — required" },
@@ -53,7 +58,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
     <app-ui-group-editor
       group="contact"
       title="Contact copy"
-      description="Every label, placeholder and error message on the contact form."
+      description="Every label, placeholder and error message on the contact form, and the reply time beside it."
       [fields]="fields"
     />
   `,

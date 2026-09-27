@@ -52,6 +52,22 @@ const PLACEHOLDER = /\bTODO\b/;
 /** The seed's covers: the SVG stubs in `public/projects/`. Uploads live under `/media/`. */
 const STAND_IN_COVER_PREFIX = "/projects/";
 
+/**
+ * The skill captions the seed content ships with, in both languages
+ * (`content/fallback.*.json`; the spec keeps the two equal). Some describe
+ * another card — the AI / ML card is captioned "database + API + AI" — so
+ * each one still there is worth a look.
+ */
+export const STARTER_SKILL_CAPTIONS: ReadonlySet<string> = new Set([
+  "// frontend + backend + AI",
+  "// database + API + AI",
+  "// data + ML + cloud",
+  "// storage + streams",
+  "// frontend + backend + KI",
+  "// datenbank + API + KI",
+  "// speicher + streams",
+]);
+
 const SEVERITY_ORDER: Record<ReadinessSeverity, number> = { blocker: 0, warn: 1, tip: 2 };
 
 /** How much of a placeholder's text a hit shows. */
@@ -227,6 +243,26 @@ const CHECKS: CheckDef[] = [
     link: "/admin/writing",
     listsPlaces: false,
     find: (content) => (content.posts.length === 0 ? missing(["posts"]) : []),
+  },
+  {
+    id: "skill-captions",
+    severity: "tip",
+    title: "Starter skill captions",
+    why: "They came with the site, and some describe another card: check each fits its own.",
+    link: "/admin/skills",
+    listsPlaces: true,
+    find: (content) =>
+      content.skills.flatMap((skill, i) =>
+        STARTER_SKILL_CAPTIONS.has(skill.caption.trim())
+          ? [
+              {
+                path: ["skills", i, "caption"],
+                label: `skills[${skill.id}].caption`,
+                detail: `${skill.title}: ${skill.caption}`,
+              },
+            ]
+          : [],
+      ),
   },
 ];
 

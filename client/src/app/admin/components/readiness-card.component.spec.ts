@@ -48,7 +48,7 @@ describe("ReadinessCardComponent", () => {
     });
     const root: HTMLElement = fixture.nativeElement;
 
-    expect(text(fixture)).toMatch(/\d+ \/ 11 ready/);
+    expect(text(fixture)).toMatch(/\d+ \/ 12 ready/);
     const titles = [...root.querySelectorAll("li .font-medium")].map((el) => el.textContent);
     expect(titles[0]).toBe("Placeholder text");
     expect(titles).toContain("No experience");

@@ -36,6 +36,12 @@ export class AskLauncherService {
   readonly sheetRequested = this._sheetRequested.asReadonly();
   /** A question waiting for the prompt that takes the focus request. */
   readonly pendingQuestion = this._question.asReadonly();
+  /**
+   * Whether the assistant answers (`online`) or the offline shell does
+   * (`resting`), as the terminal's code learns it from the server; null until
+   * then. For the About terminal's title bar, which cannot load that code.
+   */
+  readonly assistant = signal<"online" | "resting" | null>(null);
 
   focusPrompt(source?: AskSource): void {
     if (source) this.source = source;

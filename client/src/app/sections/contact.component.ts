@@ -4,6 +4,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -19,8 +20,12 @@ import { z } from "zod";
 
 import { MagneticButtonComponent } from "../components/magnetic-button.component";
 import { SectionHeadingComponent } from "../components/section-heading.component";
+import { AVAILABILITY_DOT, availabilityLabel } from "../content/availability";
+import { placeName, timeZoneLabel } from "../content/place";
+import { isWebLink, socialHandle } from "../content/social";
 import { CHROME } from "../i18n/chrome";
 import { fmt } from "../i18n/interpolate";
+import { ClockService } from "../services/clock.service";
 import { LanguageService } from "../services/language.service";
 import { ContactService } from "../services/contact.service";
 import { TURNSTILE_SITE_KEY, turnstileToken } from "../services/turnstile";
@@ -37,16 +42,24 @@ type SubmitState = "idle" | "submitting" | "success" | "error";
 
 const FIELDS: readonly Field[] = ["name", "email", "message"];
 
+/** How long the copy button says "Copied". */
+const COPIED_MS = 1500;
+
 /**
  * An underlined "IDE" field. The line is its only boundary, so it keeps 3:1
- * against the page (`input-line`, WCAG 1.4.11). Focus thickens it (a shadow,
- * so nothing moves).
+ * against the page (`input-line`, WCAG 1.4.11). Focus draws a 2px orange line
+ * over it from the left (`field-line` on the wrapper, motion.css).
  */
 const fieldClass =
-  "block w-full border-0 border-b border-input-line bg-transparent px-0 py-2 text-base text-foreground transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground selection:bg-accent-indigo/25 focus:border-accent-orange focus:shadow-[0_1px_0_0_var(--accent-orange)] focus-visible:outline-none aria-[invalid=true]:border-destructive";
+  "block w-full border-0 border-b border-input-line bg-transparent px-0 py-2 text-base text-foreground transition-colors duration-200 placeholder:text-muted-foreground selection:bg-accent-indigo/25 focus-visible:outline-none aria-[invalid=true]:border-destructive";
 const labelClass = "eyebrow text-muted-foreground";
 const errorClass = "m-0 font-mono text-meta text-destructive";
 
+/**
+ * The last section: from `lg`, the ways to reach him at the left (the email,
+ * to copy; profiles by their handles; availability, local time and how soon
+ * he replies) and the form at the right. Below `lg` they stack.
+ */
 @Component({
   selector: "app-contact-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -60,7 +73,7 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
       aria-labelledby="contact-heading"
       class="container-site section-y relative"
     >
-      <div class="flex max-w-150 flex-col gap-12">
+      <div class="flex flex-col gap-12">
         <app-section-heading
           headingId="contact-heading"
           [index]="index()"
@@ -72,132 +85,225 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
              to its message instead, which then reads itself. -->
         <p class="sr-only" role="status">{{ announcement() }}</p>
 
-        @if (state() === "success") {
-          <div
-            #success
-            tabindex="-1"
-            class="flex flex-col gap-4 rounded-xl border border-border bg-card px-6 py-7 font-mono text-sm leading-relaxed shadow-e3"
-          >
-            <div>
-              <p class="m-0 text-accent-orange">{{ lang.t().contact.successLine1 }}</p>
-              <p class="m-0 mt-1 text-muted-foreground">
-                {{ lang.t().contact.successLine2 }}
-                <a class="link-underline" [href]="'mailto:' + contactEmail()">{{
-                  contactEmail()
-                }}</a>
-              </p>
-            </div>
-            <button type="button" class="link-underline w-fit cursor-pointer" (click)="reset()">
-              {{ chrome().sendAnother }}
-            </button>
-          </div>
-        } @else {
-          <form
-            [formGroup]="form"
-            (ngSubmit)="submit()"
-            novalidate
-            class="relative flex flex-col gap-6"
-            [attr.aria-busy]="state() === 'submitting' ? 'true' : null"
-            [attr.data-ready]="ready() ? '' : null"
-          >
-            <div class="flex flex-col gap-1.5">
-              <label for="contact-name" [class]="labelClass">{{
-                lang.t().contact.labelName
-              }}</label>
-              <input
-                #field
-                id="contact-name"
-                type="text"
-                autocomplete="name"
-                required
-                maxlength="120"
-                formControlName="name"
-                [placeholder]="lang.t().contact.placeholderName"
-                [class]="fieldClass"
-                [attr.aria-invalid]="showError('name') ? 'true' : null"
-                [attr.aria-describedby]="showError('name') ? 'contact-name-error' : null"
-              />
-              @if (showError("name")) {
-                <p id="contact-name-error" [class]="errorClass">{{ fieldError("name") }}</p>
-              }
+        <div class="grid grid-cols-12 gap-x-(--col-gap) gap-y-12">
+          <div class="col-span-12 flex flex-col gap-8 lg:col-span-5">
+            <div class="flex flex-col gap-2">
+              <p class="eyebrow m-0 text-muted-foreground">{{ chrome().email }}</p>
+              <!-- The button under the address: "Copied ✓" is wider than "Copy", and beside it would jump a line. -->
+              <div class="flex flex-col items-start gap-2">
+                <a
+                  class="link-underline break-all font-mono text-h3"
+                  [href]="'mailto:' + contactEmail()"
+                  >{{ contactEmail() }}</a
+                >
+                <!-- Its name starts with the visible word. -->
+                <button
+                  type="button"
+                  class="kbd min-h-6 cursor-pointer transition-colors duration-(--dur-2) hover:border-border-strong hover:text-foreground"
+                  (click)="copyEmail()"
+                >
+                  {{ copied() ? copyLabels().copied + " ✓" : copyLabels().copy
+                  }}<span class="sr-only"> {{ chrome().copyWhat }}</span>
+                </button>
+                <!-- Not a second role=status: that one is the form's. -->
+                <span class="sr-only" aria-live="polite">{{
+                  copied() ? copyLabels().copied : ""
+                }}</span>
+              </div>
             </div>
 
-            <div class="flex flex-col gap-1.5">
-              <label for="contact-email" [class]="labelClass">{{
-                lang.t().contact.labelEmail
-              }}</label>
-              <input
-                #field
-                id="contact-email"
-                type="email"
-                autocomplete="email"
-                required
-                maxlength="200"
-                formControlName="email"
-                [placeholder]="lang.t().contact.placeholderEmail"
-                [class]="fieldClass"
-                [attr.aria-invalid]="showError('email') ? 'true' : null"
-                [attr.aria-describedby]="showError('email') ? 'contact-email-error' : null"
-              />
-              @if (showError("email")) {
-                <p id="contact-email-error" [class]="errorClass">{{ fieldError("email") }}</p>
-              }
-            </div>
-
-            <div class="flex flex-col gap-1.5">
-              <label for="contact-message" [class]="labelClass">{{
-                lang.t().contact.labelMessage
-              }}</label>
-              <textarea
-                #field
-                id="contact-message"
-                rows="5"
-                required
-                maxlength="4000"
-                formControlName="message"
-                [placeholder]="lang.t().contact.placeholderMessage"
-                [class]="fieldClass + ' min-h-32 resize-y leading-relaxed'"
-                [attr.aria-invalid]="showError('message') ? 'true' : null"
-                [attr.aria-describedby]="showError('message') ? 'contact-message-error' : null"
-              ></textarea>
-              @if (showError("message")) {
-                <p id="contact-message-error" [class]="errorClass">
-                  {{ fieldError("message") }}
-                </p>
-              }
-            </div>
-
-            <!-- Honeypot: invisible to people, tempting to bots. -->
-            <div
-              aria-hidden="true"
-              class="pointer-events-none absolute left-[-9999px] top-auto size-px overflow-hidden"
-            >
-              <label for="contact-website">website</label>
-              <input
-                id="contact-website"
-                type="text"
-                tabindex="-1"
-                autocomplete="off"
-                formControlName="website"
-              />
-            </div>
-
-            @if (state() === "error" && errorMsg()) {
-              <p class="m-0 font-mono text-sm text-destructive">{{ errorMsg() }}</p>
+            @if (socials().length) {
+              <div class="flex flex-col gap-3">
+                <p class="eyebrow m-0 text-muted-foreground">{{ chrome().elsewhere }}</p>
+                <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list">
+                  @for (social of socials(); track social.href) {
+                    <li>
+                      <!-- The label in a column of its own; a long handle wraps, the arrow after it. -->
+                      <a
+                        class="grid grid-cols-[4.5rem_1fr] items-baseline gap-x-3 font-mono text-meta"
+                        [href]="social.href"
+                        [attr.target]="social.web ? '_blank' : null"
+                        [attr.rel]="social.web ? 'noreferrer noopener' : null"
+                      >
+                        <span class="text-muted-foreground">{{ social.label }}</span>
+                        <span class="min-w-0 break-all"
+                          ><span class="link-underline">{{ social.handle }}</span>
+                          @if (social.web) {
+                            <span class="text-muted-foreground" aria-hidden="true"> ↗</span>
+                          }
+                        </span>
+                      </a>
+                    </li>
+                  }
+                </ul>
+              </div>
             }
 
-            <div class="flex items-center gap-3">
-              <app-magnetic-button
-                variant="primary"
-                buttonType="submit"
-                [disabled]="state() === 'submitting'"
-                [busy]="state() === 'submitting'"
-              >
-                {{ state() === "submitting" ? lang.t().contact.sending : lang.t().contact.submit }}
-              </app-magnetic-button>
+            <div
+              class="flex flex-col gap-2 border-t border-border pt-6 font-mono text-meta text-muted-foreground"
+            >
+              <p class="m-0 flex items-center gap-2">
+                <span
+                  class="size-2 shrink-0 rounded-full"
+                  [class]="dot()"
+                  aria-hidden="true"
+                ></span>
+                <span class="text-foreground">{{ availability() }}</span>
+              </p>
+              <!-- The zone from the server; the time in the browser, in space kept for it. -->
+              <p class="m-0">
+                {{ where() }}
+                @if (zone(); as zone) {
+                  <span aria-hidden="true"> · </span>{{ zone }}
+                  <span class="sr-only">{{ chrome().localTime }}</span>
+                  <time class="inline-block min-w-[5ch] tabular-nums">{{ time() }}</time>
+                }
+              </p>
+              @if (replyTime()) {
+                <p class="m-0">{{ replyTime() }}</p>
+              }
             </div>
-          </form>
-        }
+          </div>
+
+          <div class="col-span-12 lg:col-span-7">
+            @if (state() === "success") {
+              <div
+                #success
+                tabindex="-1"
+                class="flex flex-col gap-4 rounded-xl border border-border bg-card px-6 py-7 font-mono text-sm leading-relaxed shadow-e3"
+              >
+                <div>
+                  <p class="m-0 text-accent-orange">{{ lang.t().contact.successLine1 }}</p>
+                  <p class="m-0 mt-1 text-muted-foreground">
+                    {{ lang.t().contact.successLine2 }}
+                    <a class="link-underline" [href]="'mailto:' + contactEmail()">{{
+                      contactEmail()
+                    }}</a>
+                  </p>
+                </div>
+                <button type="button" class="link-underline w-fit cursor-pointer" (click)="reset()">
+                  {{ chrome().sendAnother }}
+                </button>
+              </div>
+            } @else {
+              <form
+                [formGroup]="form"
+                (ngSubmit)="submit()"
+                novalidate
+                class="relative flex flex-col gap-6"
+                [attr.aria-busy]="state() === 'submitting' ? 'true' : null"
+                [attr.data-ready]="ready() ? '' : null"
+              >
+                <div class="flex flex-col gap-1.5">
+                  <label for="contact-name" [class]="labelClass">{{
+                    lang.t().contact.labelName
+                  }}</label>
+                  <div class="field-line">
+                    <input
+                      #field
+                      id="contact-name"
+                      type="text"
+                      autocomplete="name"
+                      required
+                      maxlength="120"
+                      formControlName="name"
+                      [placeholder]="lang.t().contact.placeholderName"
+                      [class]="fieldClass"
+                      [attr.aria-invalid]="showError('name') ? 'true' : null"
+                      [attr.aria-describedby]="showError('name') ? 'contact-name-error' : null"
+                    />
+                  </div>
+                  @if (showError("name")) {
+                    <p id="contact-name-error" [class]="errorClass">{{ fieldError("name") }}</p>
+                  }
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                  <label for="contact-email" [class]="labelClass">{{
+                    lang.t().contact.labelEmail
+                  }}</label>
+                  <div class="field-line">
+                    <input
+                      #field
+                      id="contact-email"
+                      type="email"
+                      autocomplete="email"
+                      required
+                      maxlength="200"
+                      formControlName="email"
+                      [placeholder]="lang.t().contact.placeholderEmail"
+                      [class]="fieldClass"
+                      [attr.aria-invalid]="showError('email') ? 'true' : null"
+                      [attr.aria-describedby]="showError('email') ? 'contact-email-error' : null"
+                    />
+                  </div>
+                  @if (showError("email")) {
+                    <p id="contact-email-error" [class]="errorClass">{{ fieldError("email") }}</p>
+                  }
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                  <label for="contact-message" [class]="labelClass">{{
+                    lang.t().contact.labelMessage
+                  }}</label>
+                  <div class="field-line">
+                    <textarea
+                      #field
+                      id="contact-message"
+                      rows="5"
+                      required
+                      maxlength="4000"
+                      formControlName="message"
+                      [placeholder]="lang.t().contact.placeholderMessage"
+                      [class]="fieldClass + ' min-h-32 resize-y leading-relaxed'"
+                      [attr.aria-invalid]="showError('message') ? 'true' : null"
+                      [attr.aria-describedby]="
+                        showError('message') ? 'contact-message-error' : null
+                      "
+                    ></textarea>
+                  </div>
+                  @if (showError("message")) {
+                    <p id="contact-message-error" [class]="errorClass">
+                      {{ fieldError("message") }}
+                    </p>
+                  }
+                </div>
+
+                <!-- Honeypot: invisible to people, tempting to bots. -->
+                <div
+                  aria-hidden="true"
+                  class="pointer-events-none absolute left-[-9999px] top-auto size-px overflow-hidden"
+                >
+                  <label for="contact-website">website</label>
+                  <input
+                    id="contact-website"
+                    type="text"
+                    tabindex="-1"
+                    autocomplete="off"
+                    formControlName="website"
+                  />
+                </div>
+
+                @if (state() === "error" && errorMsg()) {
+                  <p class="m-0 font-mono text-sm text-destructive">{{ errorMsg() }}</p>
+                }
+
+                <div class="flex items-center gap-3">
+                  <app-magnetic-button
+                    variant="primary"
+                    buttonType="submit"
+                    [disabled]="state() === 'submitting'"
+                    [busy]="state() === 'submitting'"
+                  >
+                    {{
+                      state() === "submitting" ? lang.t().contact.sending : lang.t().contact.submit
+                    }}
+                  </app-magnetic-button>
+                </div>
+              </form>
+            }
+          </div>
+        </div>
       </div>
     </section>
   `,
@@ -225,8 +331,36 @@ export class ContactSectionComponent {
   protected readonly labelClass = labelClass;
   protected readonly errorClass = errorClass;
   protected readonly chrome = computed(() => CHROME[this.lang.lang()].contact);
+  protected readonly copyLabels = computed(() => CHROME[this.lang.lang()].code);
 
   readonly contactEmail = computed(() => this.lang.content().identity.contactEmail);
+
+  /** True for a moment after the email address was copied. */
+  protected readonly copied = signal(false);
+  private copiedTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Profiles by their handles; the email is shown on its own above them. */
+  protected readonly socials = computed(() =>
+    this.lang
+      .content()
+      .socials.filter((s) => !s.href.startsWith("mailto:"))
+      .map((s) => ({ ...s, handle: socialHandle(s.href), web: isWebLink(s.href) })),
+  );
+
+  private readonly identity = computed(() => this.lang.content().identity);
+  protected readonly dot = computed(() => AVAILABILITY_DOT[this.identity().availability]);
+  protected readonly availability = computed(() =>
+    availabilityLabel(this.lang.t().hero, this.identity().availability),
+  );
+  protected readonly where = computed(
+    () => placeName(this.identity().location, this.lang.lang()) || this.lang.t().profile.location,
+  );
+  protected readonly zone = computed(() =>
+    timeZoneLabel(this.identity().timezone, this.lang.lang()),
+  );
+  private readonly clock = inject(ClockService);
+  protected readonly time = computed(() => this.clock.time(this.identity().timezone));
+  protected readonly replyTime = computed(() => this.lang.t().contact.replyTime?.trim() ?? "");
   readonly state = signal<SubmitState>("idle");
   readonly errorMsg = signal<string>("");
 
@@ -254,7 +388,11 @@ export class ContactSectionComponent {
   });
 
   constructor() {
-    afterNextRender(() => this.ready.set(this.isBrowser));
+    afterNextRender(() => {
+      this.ready.set(this.isBrowser);
+      this.clock.start();
+    });
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.copiedTimer));
 
     // The assistant's hand-off (after the visitor confirmed it): the summary
     // becomes the message, and the visitor adds their name and email.
@@ -280,6 +418,17 @@ export class ContactSectionComponent {
     if (!this.isBrowser) return "";
     const el = this.doc.getElementById(`contact-${field}`);
     return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.value : "";
+  }
+
+  protected copyEmail(): void {
+    void navigator.clipboard?.writeText(this.contactEmail()).then(
+      () => {
+        clearTimeout(this.copiedTimer);
+        this.copied.set(true);
+        this.copiedTimer = setTimeout(() => this.copied.set(false), COPIED_MS);
+      },
+      () => undefined,
+    );
   }
 
   showError(name: Field): boolean {
