@@ -1,14 +1,24 @@
+import { isPlatformBrowser } from "@angular/common";
 import {
   type AfterViewChecked,
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   ElementRef,
+  inject,
   input,
+  PLATFORM_ID,
   viewChild,
 } from "@angular/core";
 
 import type { TocEntry } from "../content/schema";
+import { CHROME } from "../i18n/chrome";
+import { LanguageService } from "../services/language.service";
+
+/** How long a copy button says "Copied" before it goes back. */
+const COPIED_MS = 1500;
 
 /**
  * Gives the body's headings the ids the build assigned (listed in `toc`).
@@ -42,10 +52,44 @@ export function withoutHeadingIds(html: string): string {
 }
 
 /**
+ * Puts each highlighted code block in a frame with its language (from the
+ * build's `code-lang-ts` class) and a copy button, in the band prose.css
+ * reserves at the top of the block, so nothing moves when they appear. Blocks
+ * already framed are left alone.
+ */
+export function frameCodeBlocks(root: Element, copyLabel: string): void {
+  const doc = root.ownerDocument;
+  for (const pre of Array.from(root.querySelectorAll("pre.code-block"))) {
+    if (pre.parentElement?.classList.contains("code-frame")) continue;
+    const frame = doc.createElement("div");
+    frame.className = "code-frame";
+    pre.replaceWith(frame);
+
+    const tools = doc.createElement("div");
+    tools.className = "code-tools";
+    const lang = /(?:^|\s)code-lang-(\S+)/.exec(pre.className)?.[1];
+    if (lang) {
+      const label = doc.createElement("span");
+      label.textContent = lang;
+      tools.append(label);
+    }
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "code-copy";
+    button.textContent = copyLabel;
+    tools.append(button);
+
+    frame.append(pre, tools);
+  }
+}
+
+/**
  * A published long-form body: a case study, a post, a legal page. Sanitized
  * on write by the API; Angular sanitizes it again here, and the table of
  * contents' anchors are put back afterwards — in the server render too, so a
- * shared `#section` link works before the app has loaded.
+ * shared `#section` link works before the app has loaded. In the browser,
+ * code blocks get a copy button, handled by one listener on the body (no
+ * inline script, so the CSP holds).
  */
 @Component({
   selector: "app-prose-body",
@@ -60,9 +104,44 @@ export class ProseBodyComponent implements AfterViewChecked {
   protected readonly sanitizable = computed(() => withoutHeadingIds(this.html()));
 
   private readonly body = viewChild.required<ElementRef<HTMLElement>>("body");
+  private readonly lang = inject(LanguageService);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
-  /** After every check: a new `html` replaces the headings, ids and all. */
+  constructor() {
+    if (!this.isBrowser) return;
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    const onClick = (event: MouseEvent) => {
+      const button = (event.target as Element | null)?.closest?.("button.code-copy");
+      const code = button?.closest(".code-frame")?.querySelector("code");
+      if (!button || !code) return;
+      void navigator.clipboard?.writeText(code.textContent ?? "").then(
+        () => {
+          const labels = CHROME[this.lang.lang()].code;
+          button.textContent = `${labels.copied} ✓`;
+          const timer = setTimeout(() => {
+            timers.delete(timer);
+            button.textContent = labels.copy;
+          }, COPIED_MS);
+          timers.add(timer);
+        },
+        () => undefined,
+      );
+    };
+    let el: HTMLElement | undefined;
+    afterNextRender(() => {
+      el = this.body().nativeElement;
+      el.addEventListener("click", onClick);
+    });
+    inject(DestroyRef).onDestroy(() => {
+      el?.removeEventListener("click", onClick);
+      for (const timer of timers) clearTimeout(timer);
+    });
+  }
+
+  /** After every check: a new `html` replaces the headings and code blocks, ids and all. */
   ngAfterViewChecked(): void {
-    if (this.toc().length > 0) restoreHeadingIds(this.body().nativeElement, this.toc());
+    const root = this.body().nativeElement;
+    if (this.toc().length > 0) restoreHeadingIds(root, this.toc());
+    if (this.isBrowser) frameCodeBlocks(root, CHROME[this.lang.lang()].code.copy);
   }
 }

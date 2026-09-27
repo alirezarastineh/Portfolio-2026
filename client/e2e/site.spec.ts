@@ -99,6 +99,29 @@ test.describe("home", () => {
     await expect(details).toHaveAttribute("open", "");
     await expect(details).toContainText("PROBLEM");
   });
+
+  test("a featured project spans the row; the others go two across", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/en");
+    const widths = await page
+      .locator("#projects > div > ul > li")
+      .evaluateAll((items) => items.map((li) => Math.round(li.getBoundingClientRect().width)));
+    expect(widths).toHaveLength(3);
+    expect(widths[0]).toBeGreaterThan(widths[1]! * 1.9);
+    expect(widths[1]).toBe(widths[2]);
+  });
+
+  test("a card with a case study is one link, as large as the card", async ({ page }) => {
+    await page.goto("/en");
+    await interactive(page);
+    const card = page.locator("#projects li").first();
+    await expect(card.getByRole("link")).toHaveCount(1);
+    // Its image, well away from the link's text, is part of the link too.
+    await card.scrollIntoViewIfNeeded();
+    const image = (await card.locator(".card-media").boundingBox())!;
+    await page.mouse.click(image.x + image.width / 2, image.y + image.height / 2);
+    await expect(page).toHaveURL(/\/en\/work\/project-one$/);
+  });
 });
 
 test.describe("theme", () => {

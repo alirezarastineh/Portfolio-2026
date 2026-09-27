@@ -8,6 +8,8 @@ import {
 } from "@angular/core";
 import { isPlatformBrowser } from "@angular/common";
 
+import { trackPointer } from "../motion/pointer";
+
 @Component({
   selector: "app-spotlight-card",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -23,12 +25,6 @@ export class SpotlightCardComponent {
 
   @HostListener("pointermove", ["$event"])
   onMove(event: PointerEvent): void {
-    if (!this.isBrowser || event.pointerType !== "mouse") return;
-    const el = this.host.nativeElement;
-    const rect = el.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 100;
-    const y = ((event.clientY - rect.top) / rect.height) * 100;
-    el.style.setProperty("--mx", `${x}%`);
-    el.style.setProperty("--my", `${y}%`);
+    if (this.isBrowser) trackPointer(this.host.nativeElement, event);
   }
 }

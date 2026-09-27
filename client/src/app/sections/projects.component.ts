@@ -1,12 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 
 import { ProjectCardComponent } from "../components/project-card.component";
+import { cardLayouts } from "../components/project-layout";
 import { SectionHeadingComponent } from "../components/section-heading.component";
 import { LanguageService } from "../services/language.service";
 
 /**
  * Selected work: every project, in the admin's order, as cards that lead to
- * their case studies. Featured projects span the row.
+ * their case studies. Featured projects span the row; the rest go two across,
+ * and a card that would be left alone on its row spans it too.
  */
 @Component({
   selector: "app-projects-section",
@@ -31,12 +33,12 @@ import { LanguageService } from "../services/language.service";
 
         <ul class="m-0 grid list-none gap-6 p-0 lg:grid-cols-2" role="list">
           @for (project of projects(); track project.slug; let i = $index) {
-            <li [class]="project.featured ? 'lg:col-span-2' : ''">
+            <li [class]="layouts()[i] === 'half' ? '' : 'lg:col-span-2'">
               <app-project-card
                 class="h-full"
                 [project]="project"
                 [index]="i"
-                [featured]="project.featured"
+                [layout]="layouts()[i] ?? 'half'"
               />
             </li>
           }
@@ -51,4 +53,5 @@ export class ProjectsSectionComponent {
 
   readonly lang = inject(LanguageService);
   readonly projects = computed(() => this.lang.content().projects);
+  protected readonly layouts = computed(() => cardLayouts(this.projects()));
 }

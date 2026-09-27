@@ -9,7 +9,7 @@ import { LanguageService } from "../services/language.service";
 export const ASK_BAR_ID = "ask-bar";
 
 /** Where a visitor opened the assistant from, reported once with `ask_open`. */
-export type AskSource = "hero" | "starter" | "palette" | "button" | "terminal";
+export type AskSource = "hero" | "starter" | "palette" | "button" | "terminal" | "case-study";
 
 /**
  * How the rest of the site reaches the assistant without loading it: the

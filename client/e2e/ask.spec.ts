@@ -438,6 +438,19 @@ test.describe("assistant terminal", () => {
     await page.keyboard.press("Escape");
     await expect(sheet).toBeHidden();
   });
+
+  test("a case study's end block asks the assistant about that project", async ({ page }) => {
+    const mock = await mockAsk(page, (route) =>
+      sse(route, answer({ text: "A retrieval platform, built in TypeScript." })),
+    );
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    await page.getByRole("button", { name: "Ask about TODO: Project One" }).click();
+    const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
+    await expect(sheet).toContainText("What did he build in TODO: Project One, and how?");
+    await expect(sheet).toContainText("A retrieval platform, built in TypeScript.");
+    expect(mock.bodies).toHaveLength(1);
+  });
 });
 
 async function axeViolations(page: Page) {

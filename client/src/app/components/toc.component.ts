@@ -33,14 +33,12 @@ export interface TocItem {
       <ol class="m-0 flex list-none flex-col gap-1 border-l border-border p-0">
         @for (item of items(); track item.id) {
           <li>
+            <!-- Styled in prose.css: one short class per link, the current
+                 one marked by aria-current alone. -->
             <a
-              class="-ml-px block border-l py-1 text-sm leading-snug transition-colors duration-200 hover:text-foreground"
+              class="toc-link"
               [class.pl-4]="item.level === 2"
               [class.pl-7]="item.level === 3"
-              [class.border-accent-orange]="active() === item.id"
-              [class.text-foreground]="active() === item.id"
-              [class.border-transparent]="active() !== item.id"
-              [class.text-muted-foreground]="active() !== item.id"
               [attr.aria-current]="active() === item.id ? 'location' : null"
               [routerLink]="[]"
               [fragment]="item.id"

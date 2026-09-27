@@ -49,6 +49,14 @@ export interface ChromeLabels {
   contact: { sendAnother: string };
   about: { skip: string; skipLabel: string };
   projectCard: { details: string; links: string };
+  caseStudy: {
+    /** The end block's action, `{name}` the project's. */
+    ask: string;
+    /** What that action asks the assistant. */
+    question: string;
+  };
+  /** A code block's copy button (components/prose-body.component.ts). */
+  code: { copy: string; copied: string };
 }
 
 export const CHROME: Record<Locale, ChromeLabels> = {
@@ -93,6 +101,8 @@ export const CHROME: Record<Locale, ChromeLabels> = {
     contact: { sendAnother: "Send another message" },
     about: { skip: "skip", skipLabel: "show the whole text" },
     projectCard: { details: "Details", links: "Project links" },
+    caseStudy: { ask: "Ask about {name}", question: "What did he build in {name}, and how?" },
+    code: { copy: "Copy", copied: "Copied" },
   },
   de: {
     header: {
@@ -140,5 +150,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
     contact: { sendAnother: "Weitere Nachricht senden" },
     about: { skip: "überspringen", skipLabel: "ganzen Text anzeigen" },
     projectCard: { details: "Details", links: "Projektlinks" },
+    caseStudy: { ask: "Zu {name} fragen", question: "Was hat er bei {name} gebaut – und wie?" },
+    code: { copy: "Kopieren", copied: "Kopiert" },
   },
 };

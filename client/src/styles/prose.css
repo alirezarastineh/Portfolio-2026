@@ -78,10 +78,13 @@
   margin-top: 0.35rem;
 }
 
+/* A callout: set apart on a card, not in italics. */
 .prose-body blockquote {
   border-left: 2px solid var(--color-accent-orange);
-  padding-left: 1rem;
-  font-style: italic;
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  background: var(--color-card);
+  padding: 1rem 1.25rem;
+  color: var(--color-foreground);
 }
 
 .prose-body hr {
@@ -103,17 +106,113 @@
   border: 1px solid var(--color-border);
 }
 
-/* Highlighted at publish time; colours come from code.css. */
+/* A diagram spans the column and draws its own edges. */
+.prose-body img[src$=".svg"] {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+/* Highlighted at publish time; colours come from code.css. The top band is
+   kept free for the language and copy button the browser adds (.code-tools),
+   so nothing moves when they appear. */
 .prose-body pre.code-block {
   overflow-x: auto;
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   background: var(--code-bg);
   color: var(--code-fg);
-  padding: 1rem 1.25rem;
+  padding: 2.5rem 1.25rem 1rem;
   font-family: var(--font-mono);
   font-size: 0.85rem;
   line-height: 1.6;
+}
+
+.code-frame {
+  position: relative;
+}
+
+.code-tools {
+  position: absolute;
+  inset: 0.5rem 0.75rem auto;
+  display: flex;
+  align-items: center;
+  font: 500 var(--text-label) / 1 var(--font-mono);
+  color: var(--color-muted-foreground);
+}
+
+.code-copy {
+  margin-left: auto;
+  min-height: 1.5rem;
+  padding-inline: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    color var(--dur-2),
+    border-color var(--dur-2);
+}
+
+.code-copy:hover {
+  color: var(--color-foreground);
+  border-color: var(--color-border-strong);
+}
+
+/* A table of contents' link (components/toc.component.ts), on the list's
+   left rule; the section being read (`aria-current`) takes it in orange. */
+.toc-link {
+  display: block;
+  margin-left: -1px;
+  border-left: 1px solid transparent;
+  padding-block: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.375;
+  color: var(--color-muted-foreground);
+  transition:
+    color var(--dur-2),
+    border-color var(--dur-2);
+}
+
+.toc-link:hover,
+.toc-link[aria-current] {
+  color: var(--color-foreground);
+}
+
+.toc-link[aria-current] {
+  border-color: var(--color-accent-orange);
+}
+
+/*
+ * A case study's narrative (.case-flow, pages/[locale]/work/[slug].page.ts).
+ * Its fixed sections' headings (.case-h) and the body's top-level ones share
+ * one look and one count: `01`, `02`… The number is decoration; `/ ""` keeps it
+ * out of the heading's accessible name, and a browser without that syntax
+ * shows the heading without it.
+ */
+.case-flow {
+  counter-reset: case-h;
+}
+
+.case-h,
+.case-flow app-prose-body > .prose-body > h2 {
+  counter-increment: case-h;
+  font-size: var(--text-h3);
+  font-weight: var(--text-h3--font-weight);
+  line-height: var(--text-h3--line-height);
+  letter-spacing: var(--text-h3--letter-spacing);
+  color: var(--color-foreground);
+}
+
+.case-h::before,
+.case-flow app-prose-body > .prose-body > h2::before {
+  content: counter(case-h, decimal-leading-zero) / "";
+  display: inline-block;
+  min-width: 2ch;
+  margin-right: 0.75rem;
+  font: 500 var(--text-label) / 1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: normal;
+  color: var(--color-accent-orange);
 }
 
 .prose-body pre.code-block .line {

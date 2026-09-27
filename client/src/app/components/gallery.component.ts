@@ -38,11 +38,7 @@ import { PictureComponent } from "./picture.component";
               [attr.aria-label]="openLabel(i)"
               (click)="open(i, $event)"
             >
-              <app-picture
-                [image]="image"
-                sizes="(min-width: 1024px) 26rem, (min-width: 640px) 50vw, 100vw"
-                imgClass="block size-full object-cover transition-transform duration-300 group-hover:scale-[1.02] motion-reduce:transition-none"
-              />
+              <app-picture [image]="image" [sizes]="thumb.sizes" [imgClass]="thumb.img" />
             </a>
             @if (image.caption) {
               <figcaption class="text-sm leading-relaxed text-muted-foreground">
@@ -117,6 +113,15 @@ import { PictureComponent } from "./picture.component";
   `,
 })
 export class GalleryComponent {
+  /**
+   * A thumbnail's picture inputs. Bound rather than written as static
+   * attributes, which the server would also print on every `<app-picture>`.
+   */
+  protected readonly thumb = {
+    sizes: "(min-width: 1024px) 26rem, (min-width: 640px) 50vw, 100vw",
+    img: "block size-full object-cover transition-transform duration-300 group-hover:scale-[1.02] motion-reduce:transition-none",
+  };
+
   readonly images = input.required<readonly GalleryImage[]>();
   /** The dialog's accessible name, e.g. "Gallery". */
   readonly label = input.required<string>();

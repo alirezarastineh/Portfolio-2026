@@ -98,6 +98,37 @@ test.describe("case study", () => {
     expect(html).toContain('<span class="shd-ff7b72 shl-cf222e">const</span>');
   });
 
+  test("the narrative's headings are numbered for the eye, not for screen readers", async ({
+    page,
+  }) => {
+    await page.goto("/en/work/project-one");
+    const main = page.locator("main");
+    // The fixed sections read as headings, not the card's capitals (PROBLEM).
+    await expect(
+      main.getByRole("heading", { level: 2, name: "Problem", exact: true }),
+    ).toBeVisible();
+    // The body's own headings join the same count, and keep their names too.
+    await expect(
+      main.getByRole("heading", { level: 2, name: "Architecture decisions", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "On this page" }).getByRole("link", { name: "Problem" }),
+    ).toBeVisible();
+  });
+
+  test("a code block names its language and copies its code", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    const frame = page.locator("main .code-frame");
+    await expect(frame.locator(".code-tools")).toContainText("ts");
+    await frame.getByRole("button", { name: "Copy" }).click();
+    await expect(frame.getByRole("button", { name: "Copied ✓" })).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      'const answer = await retrieve("query");',
+    );
+  });
+
   test("a table-of-contents link scrolls to its section without leaving the page", async ({
     page,
   }) => {

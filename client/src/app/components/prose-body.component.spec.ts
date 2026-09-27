@@ -1,8 +1,15 @@
+import { signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import type { TocEntry } from "../content/schema";
-import { ProseBodyComponent, restoreHeadingIds, withoutHeadingIds } from "./prose-body.component";
+import { LanguageService } from "../services/language.service";
+import {
+  frameCodeBlocks,
+  ProseBodyComponent,
+  restoreHeadingIds,
+  withoutHeadingIds,
+} from "./prose-body.component";
 
 const TOC: TocEntry[] = [
   { id: "why", text: "Why it matters", level: 2 },
@@ -35,8 +42,34 @@ describe("withoutHeadingIds", () => {
   });
 });
 
+describe("frameCodeBlocks", () => {
+  it("frames each code block once, with its language when the build named one", () => {
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre class="code-block code-lang-ts"><code>x</code></pre><pre class="code-block"><code>y</code></pre>';
+    frameCodeBlocks(root, "Copy");
+    frameCodeBlocks(root, "Copy");
+
+    const frames = [...root.querySelectorAll(".code-frame")];
+    expect(frames).toHaveLength(2);
+    expect(frames.map((frame) => frame.querySelector(".code-tools")?.textContent)).toEqual([
+      "tsCopy",
+      "Copy",
+    ]);
+    expect(frames.every((frame) => frame.firstElementChild?.matches("pre.code-block"))).toBe(true);
+  });
+});
+
 describe("ProseBodyComponent", () => {
-  afterEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [{ provide: LanguageService, useValue: { lang: signal("en") } }],
+    });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
 
   function render(html: string, toc: TocEntry[]) {
     const fixture = TestBed.createComponent(ProseBodyComponent);
@@ -72,5 +105,31 @@ describe("ProseBodyComponent", () => {
 
     expect((fixture.nativeElement as HTMLElement).querySelector("h2")?.id).toBe("why");
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("copies a code block's text, then says so for a moment", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    onTestFinished(() => {
+      if (original) Object.defineProperty(navigator, "clipboard", original);
+      else Reflect.deleteProperty(navigator, "clipboard");
+    });
+    const fixture = render(
+      '<pre class="code-block code-lang-ts"><code><span class="line">const a = 1;</span>\n<span class="line">a;</span></code></pre>',
+      [],
+    );
+    await fixture.whenStable();
+
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      "button.code-copy",
+    );
+    expect(button?.textContent).toBe("Copy");
+    vi.useFakeTimers();
+    button?.click();
+    await vi.waitFor(() => expect(button?.textContent).toBe("Copied ✓"));
+    expect(writeText).toHaveBeenCalledWith("const a = 1;\na;");
+    vi.advanceTimersByTime(1500);
+    expect(button?.textContent).toBe("Copy");
   });
 });

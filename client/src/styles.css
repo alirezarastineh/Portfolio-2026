@@ -81,20 +81,84 @@ a {
   }
 }
 
-/* Page transitions (`withViewTransitions`, app.config.ts): a quick cross-fade,
-   and a project card's image morphing into its case study's cover — the two
-   share `view-transition-name: project-<slug>`. Reduced motion skips them in
-   script (navigation/view-transitions.ts); this only sets their pace. */
+/*
+ * Page transitions (`withViewTransitions`, app.config.ts; reduced motion skips
+ * them in script, navigation/view-transitions.ts):
+ * - the old page fades out quickly (120ms) and the new one fades in, rising 8px;
+ * - the header and the ask button hold still: they are on both pages;
+ * - a project card's image and title morph into its case study's cover and
+ *   `<h1>` (they share `project-<slug>` and `project-title-<slug>`);
+ * - a named element on one side only (another card's image) leaves or arrives
+ *   with its page (`:only-child`);
+ * - between case studies (types `forward` / `back`) the pages slide 24px the
+ *   way the reader is going. Without types, the plain fade.
+ */
 /* eslint-disable css/use-baseline -- progressive enhancement: a browser
    without view transitions ignores these and navigates without animation. */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 180ms;
+.site-header {
+  view-transition-name: site-header;
+}
+
+.ask-fab {
+  view-transition-name: ask-fab;
+}
+
+:root {
+  --vt-x: 0px;
+  --vt-y: 8px;
+  --vt-in: 240ms;
+}
+
+:root:active-view-transition-type(forward) {
+  --vt-x: 24px;
+  --vt-y: 0px;
+  --vt-in: var(--dur-4);
+}
+
+:root:active-view-transition-type(back) {
+  --vt-x: -24px;
+  --vt-y: 0px;
+  --vt-in: var(--dur-4);
 }
 
 ::view-transition-group(*) {
-  animation-duration: 320ms;
-  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  animation-duration: var(--dur-4);
+  animation-timing-function: var(--ease-out);
+}
+
+/* The header shows its new state at once, moved from where the old one was:
+   a cross-fade would double its text while the scrolled look (8px higher)
+   gives way to the top of the next page. */
+::view-transition-old(site-header) {
+  display: none;
+}
+
+::view-transition-new(site-header) {
+  animation: none;
+}
+
+::view-transition-old(root),
+::view-transition-old(*):only-child {
+  animation: vt-out 120ms var(--ease-in) both;
+}
+
+::view-transition-new(root),
+::view-transition-new(*):only-child {
+  animation: vt-in var(--vt-in) var(--ease-emph) both;
+}
+
+@keyframes vt-out {
+  to {
+    opacity: 0;
+    translate: calc(var(--vt-x) * -1) 0;
+  }
+}
+
+@keyframes vt-in {
+  from {
+    opacity: 0;
+    translate: var(--vt-x) var(--vt-y);
+  }
 }
 /* eslint-enable css/use-baseline */
 
