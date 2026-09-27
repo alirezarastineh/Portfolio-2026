@@ -10,6 +10,21 @@ export function regionName(code: string, locale: Locale): string {
   }
 }
 
+/** The time in an IANA zone as a 24-hour `09:05`; empty for an unknown zone. */
+export function clockTime(timeZone: string, locale: Locale, at = new Date()): string {
+  if (!timeZone) return "";
+  try {
+    return new Intl.DateTimeFormat(locale === "de" ? "de-DE" : "en-GB", {
+      timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(at);
+  } catch {
+    return "";
+  }
+}
+
 /**
  * A short name for an IANA time zone right now: `CEST`, `MESZ`, else an
  * offset like `GMT-4`. British English names European zones (US English gives

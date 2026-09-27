@@ -13,6 +13,7 @@
 @import "./styles/tokens.css";
 @import "./styles/theme.css";
 @import "./styles/primitives.css";
+@import "./styles/motion.css";
 
 @import "./styles/prose.css";
 @import "./styles/code.css";

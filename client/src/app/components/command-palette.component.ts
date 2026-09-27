@@ -234,10 +234,10 @@ export class CommandPaletteComponent {
         // Home has the terminal in its About section; elsewhere it opens in a sheet.
         run: () => {
           if (this.lang.page() === "/") {
-            this.launcher.focusPrompt();
+            this.launcher.focusPrompt("palette");
             void this.router.navigate(["/", l], { fragment: "about" });
           } else {
-            this.launcher.openSheet();
+            this.launcher.openSheet("palette");
           }
         },
       },

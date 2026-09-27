@@ -1,7 +1,7 @@
 import { DOCUMENT } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
 
-import { AskLauncherService } from "../ask/ask-launcher.service";
+import { ASK_BAR_ID, AskLauncherService } from "../ask/ask-launcher.service";
 import { AskSheetComponent } from "../ask/ask-sheet.component";
 import { CommandPaletteComponent } from "../components/command-palette.component";
 import { SiteFooterComponent } from "../components/site-footer.component";
@@ -39,7 +39,7 @@ import { LanguageService } from "../services/language.service";
         class="fixed bottom-4 right-4 z-40 inline-flex size-11 cursor-pointer items-center justify-center rounded-full border border-border bg-card font-mono text-sm text-accent-orange shadow-e3 transition-colors hover:border-accent-orange"
         [attr.aria-label]="lang.t().ask.title"
         [attr.aria-expanded]="launcher.sheetOpen()"
-        (click)="launcher.openSheet()"
+        (click)="launcher.openSheet('button')"
       >
         <span aria-hidden="true">&gt;_</span>
       </button>
@@ -54,23 +54,39 @@ export class PublicShellComponent {
   protected readonly launcher = inject(AskLauncherService);
   protected readonly lang = inject(LanguageService);
   protected readonly onHome = computed(() => this.lang.page() === "/");
+  private readonly doc = inject(DOCUMENT);
 
   constructor() {
     // Here rather than in App, so the admin is never tracked.
-    injectUmami(inject(DOCUMENT), {
+    injectUmami(this.doc, {
       src: import.meta.env.VITE_UMAMI_SRC,
       websiteId: import.meta.env.VITE_UMAMI_WEBSITE_ID,
       hostname: canonicalHostname(this.lang.content().seo.canonical),
     });
   }
 
-  /** ⌘K / Ctrl+K opens the palette from anywhere on the site. */
+  /**
+   * ⌘K / Ctrl+K opens the palette from anywhere on the site. `/` focuses the
+   * hero's ask bar on home, unless the visitor is typing somewhere.
+   */
   protected onKeydown(event: KeyboardEvent): void {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
       this.palette.toggle();
+      return;
     }
+    if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.defaultPrevented || isTyping(event.target)) return;
+    const bar = this.doc.getElementById(ASK_BAR_ID);
+    if (!bar) return;
+    event.preventDefault();
+    bar.focus();
   }
+}
+
+function isTyping(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
 }
 
 function canonicalHostname(canonical: string): string {

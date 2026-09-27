@@ -1,0 +1,290 @@
+/*
+ * Motion: the durations and easings every animation uses, and the site's CSS
+ * animations. Only transform, opacity and clip-path move. Everything runs only
+ * for readers who have not asked for reduced motion; the scroll-linked parts
+ * also need a browser with scroll timelines. Everywhere else an element simply
+ * shows in its resting state, which is always complete and readable.
+ */
+:root {
+  --dur-1: 90ms; /* press */
+  --dur-2: 160ms; /* colour and border on hover */
+  --dur-3: 240ms; /* a component's state: chip, menu item, underline */
+  --dur-4: 360ms; /* panels, dialogs */
+  --dur-5: 640ms; /* reveals, the hero's entrance */
+
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1); /* exits, at 70% of the entrance's duration */
+  --ease-emph: cubic-bezier(0.05, 0.7, 0.1, 1); /* entrances */
+  --ease-spring: var(--ease-out);
+
+  --stagger: 60ms;
+}
+
+/* Without `linear()` the spring is a plain ease-out. */
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: linear(0, 0.35 8%, 0.8 18%, 1.02 30%, 1.01 45%, 1);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}
+
+@keyframes pulse-ring {
+  from {
+    opacity: 0.5;
+    scale: 1;
+  }
+  to {
+    opacity: 0;
+    scale: 2.2;
+  }
+}
+
+@keyframes draw {
+  from {
+    scale: 0 1;
+  }
+}
+
+/* The header's current link: an orange bar under it that grows from the left.
+   One rule rather than a dozen utilities on each of six links, which every
+   page's HTML would repeat. */
+.nav-link::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0.125rem;
+  height: 2px;
+  border-radius: 9999px;
+  background: var(--accent-orange);
+  transform-origin: left;
+  scale: 0 1;
+}
+
+.nav-link[aria-current="true"]::after {
+  scale: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .nav-link::after {
+    transition: scale var(--dur-3) var(--ease-out);
+  }
+
+  /* The hero's supporting lines, one after another (`--i`), shortly after
+     load. Never the headline: it is the LCP element and paints at once. */
+  .hero-rise {
+    animation: rise var(--dur-5) var(--ease-emph) both;
+    animation-delay: calc(120ms + var(--i, 0) * var(--stagger));
+  }
+
+  /* The mobile menu's links, as it opens. */
+  .menu-rise {
+    animation: rise var(--dur-4) var(--ease-emph) both;
+    animation-delay: calc(var(--i, 0) * 40ms);
+  }
+
+  /* A live status dot: a ring that grows from it and fades. */
+  .pulse-ring::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: inherit;
+    animation: pulse-ring 2s var(--ease-out) infinite;
+  }
+
+  /* The wordmark's `_` blinks three times after load, then rests. */
+  .wordmark-caret {
+    animation: terminal-caret-blink 1s steps(2, jump-none) 3;
+  }
+}
+
+/*
+ * The trace panel (visuals/trace-panel.component.ts). At rest every step is
+ * done and nothing moves. In motion, a request (the packet) travels the
+ * connector; each step lights up as it arrives (`--i`), then shows its check.
+ * The example loops every 6s; a real answer plays once and stays done.
+ */
+.trace-node::before {
+  content: "";
+  position: absolute;
+  inset: 0.25rem 0.5rem;
+  border-radius: var(--radius-md);
+  background: var(--accent-orange-soft);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.trace-packet {
+  opacity: 0;
+}
+
+@keyframes trace-flash {
+  0% {
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  12%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes trace-check {
+  0%,
+  4% {
+    opacity: 0;
+  }
+  6%,
+  70% {
+    opacity: 1;
+  }
+  75%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Node i lights at i × 0.7s: the packet covers the five gaps in 3.5s. */
+@keyframes trace-packet {
+  0% {
+    opacity: 1;
+    translate: 0 0;
+  }
+  58% {
+    opacity: 1;
+    translate: 0 100%;
+  }
+  63%,
+  100% {
+    opacity: 0;
+    translate: 0 100%;
+  }
+}
+
+@keyframes trace-flash-once {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+@keyframes trace-check-once {
+  0%,
+  25% {
+    opacity: 0;
+  }
+  40%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Node i lights at i × 0.35s: 1.75s for the five gaps, 85% of 2.06s. */
+@keyframes trace-packet-once {
+  0% {
+    opacity: 1;
+    translate: 0 0;
+  }
+  85% {
+    opacity: 1;
+    translate: 0 100%;
+  }
+  100% {
+    opacity: 0;
+    translate: 0 100%;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .trace-node::before {
+    animation: trace-flash 6s linear infinite backwards;
+    animation-delay: calc(var(--i, 0) * 0.7s);
+  }
+
+  .trace-node .trace-check {
+    animation: trace-check 6s linear infinite backwards;
+    animation-delay: calc(var(--i, 0) * 0.7s);
+  }
+
+  .trace-packet {
+    animation: trace-packet 6s linear infinite;
+  }
+
+  .trace[data-once] .trace-node::before {
+    animation: trace-flash-once 1s linear both;
+    animation-delay: calc(var(--i, 0) * 0.35s);
+  }
+
+  .trace[data-once] .trace-node .trace-check {
+    animation: trace-check-once 1s linear both;
+    animation-delay: calc(var(--i, 0) * 0.35s);
+  }
+
+  .trace[data-once] .trace-packet {
+    animation: trace-packet-once 2.06s linear both;
+  }
+}
+
+/* eslint-disable css/use-baseline -- progressive enhancement: without scroll
+   timelines the header keeps its solid look and hairlines are drawn in full. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: scroll()) {
+    /* The header: see-through at the top of the page, then over the first
+       64px of scroll a raised surface that looks 8px shorter (moved, never
+       resized, so nothing reflows). Not while the menu is open: that needs
+       its solid background. */
+    .site-header:not([data-open]) {
+      animation: header-settle linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 64px;
+    }
+
+    .site-header:not([data-open]) > .site-header-row {
+      animation: header-row-settle linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 64px;
+    }
+
+    /* A section heading's rule draws from the left as it comes into view. */
+    .hairline-draw {
+      transform-origin: left;
+      animation: draw linear both;
+      animation-timeline: view();
+      animation-range: entry 20% cover 35%;
+    }
+  }
+}
+
+@keyframes header-settle {
+  from {
+    background-color: transparent;
+    border-bottom-color: transparent;
+    box-shadow: none;
+    backdrop-filter: blur(0);
+  }
+  to {
+    background-color: color-mix(in oklab, var(--surface-2) 80%, transparent);
+    border-bottom-color: var(--border);
+    box-shadow: var(--shadow-e2);
+    backdrop-filter: blur(12px);
+    translate: 0 -8px;
+  }
+}
+
+@keyframes header-row-settle {
+  to {
+    translate: 0 4px;
+  }
+}
+/* eslint-enable css/use-baseline */

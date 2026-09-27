@@ -75,9 +75,10 @@ export class AskSheetComponent {
       if (open && !dialog.open) {
         this.returnFocus = document.activeElement as HTMLElement | null;
         dialog.showModal();
-        // A modal focuses its first control (the close button); the prompt is the point.
+        // A modal focuses its first control (the close button); the prompt is
+        // the point, and a question sent from the page goes in at once.
         this.launcher.takeFocus();
-        this.shell().focusInput();
+        this.shell().claim();
       } else if (!open && dialog.open) {
         dialog.close();
         this.returnFocus?.focus();

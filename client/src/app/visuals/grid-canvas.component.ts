@@ -15,12 +15,16 @@ import {
 import { approach, prefersReducedMotion, runFrames } from "../motion/frames";
 import { ThemeService } from "../services/theme.service";
 
+/** The canvas's size in device pixels, at most: the hero's is full width. */
+const MAX_PIXELS = 4_000_000;
+
 /**
  * The hero's dot grid, which bends away from the pointer (or a tap). It draws
  * only when something changed — a move, the bend easing in or out, a resize,
  * a theme switch — and not at all while scrolled out of view. Server and
  * browser render the same markup: static SVG dots, with the canvas on top
- * taking over once it has drawn.
+ * taking over once it has drawn. A parent covering it can pass its own
+ * pointer events to `onPointer` and `onLeave`.
  */
 @Component({
   selector: "app-grid-canvas",
@@ -74,6 +78,7 @@ export class GridCanvasComponent {
   private spacing = 0;
   private offsetX = 0;
   private offsetY = 0;
+  private maxDpr = 1;
   private dpr = 1;
 
   private readonly cursor = { x: -9999, y: -9999 };
@@ -122,7 +127,7 @@ export class GridCanvasComponent {
     this.ctx = canvas?.getContext("2d") ?? null;
     if (!this.ctx) return;
 
-    this.dpr = Math.min(globalThis.devicePixelRatio || 1, 2);
+    this.maxDpr = Math.min(globalThis.devicePixelRatio || 1, 2);
     this.still = prefersReducedMotion();
     this.readColor();
 
@@ -182,6 +187,10 @@ export class GridCanvasComponent {
     const rect = this.host.nativeElement.getBoundingClientRect();
     this.width = Math.max(1, rect.width);
     this.height = Math.max(1, rect.height);
+    this.dpr = Math.max(
+      1,
+      Math.min(this.maxDpr, Math.sqrt(MAX_PIXELS / (this.width * this.height))),
+    );
     canvas.width = Math.floor(this.width * this.dpr);
     canvas.height = Math.floor(this.height * this.dpr);
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);

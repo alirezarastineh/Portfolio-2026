@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { NgIcon } from "@ng-icons/core";
 
 import { SectionHeadingComponent } from "../components/section-heading.component";
@@ -32,6 +32,7 @@ const SPAN_MAP: Record<BentoSpan, string> = {
       <div class="flex flex-col gap-12">
         <app-section-heading
           headingId="skills-heading"
+          [index]="index()"
           [heading]="lang.t().skills.heading"
           [eyebrow]="lang.t().skills.subtitle"
         />
@@ -86,6 +87,9 @@ const SPAN_MAP: Record<BentoSpan, string> = {
   `,
 })
 export class SkillsSectionComponent {
+  /** The section's number on the home page, `01`; set by the page. */
+  readonly index = input("");
+
   readonly lang = inject(LanguageService);
 
   /**

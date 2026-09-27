@@ -111,7 +111,20 @@ test.describe("site navigation", () => {
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await expect(page.getByRole("navigation", { name: "Mobile" })).toBeVisible();
+    const menu = page.getByRole("navigation", { name: "Mobile" });
+    await expect(menu).toBeVisible();
+    // The CV, and the language and theme switches, live in the menu below lg.
+    await expect(menu.locator('a[href="/en/resume.pdf"][download]')).toBeVisible();
+    await expect(
+      menu.getByRole("group", { name: "Language" }).getByRole("link", { name: /DE/ }),
+    ).toHaveAttribute("href", "/de");
+    const theme = menu.getByRole("group", { name: "Theme" });
+    await theme.getByRole("button", { name: "Light" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(theme.getByRole("button", { name: "Light" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
 
     await page
       .getByRole("navigation", { name: "Mobile" })
@@ -120,7 +133,7 @@ test.describe("site navigation", () => {
     await expect(page.getByRole("navigation", { name: "Mobile" })).toBeHidden();
   });
 
-  test("the mobile menu keeps focus inside and closes on Escape or outside", async ({
+  test("the mobile menu keeps focus inside and closes on Escape or its toggle", async ({
     page,
     isMobile,
   }) => {
@@ -145,11 +158,10 @@ test.describe("site navigation", () => {
     await expect(menu).toBeHidden();
     await expect(toggle).toBeFocused();
 
-    // A tap below the open menu, on the page.
+    // The menu covers the page below the bar, so there is no outside to tap.
     await toggle.click();
     await expect(menu).toBeVisible();
-    const viewport = page.viewportSize()!;
-    await page.mouse.click(viewport.width / 2, viewport.height - 20);
+    await toggle.click();
     await expect(menu).toBeHidden();
   });
 

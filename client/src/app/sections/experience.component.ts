@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import {
   lucideAward,
@@ -59,6 +59,7 @@ const KIND_ICON: Record<ExperienceKind, string> = {
         <div class="flex max-w-5xl flex-col gap-12">
           <app-section-heading
             headingId="experience-heading"
+            [index]="index()"
             [heading]="lang.t().experience.heading"
             [eyebrow]="lang.t().experience.subtitle"
           />
@@ -177,6 +178,9 @@ const KIND_ICON: Record<ExperienceKind, string> = {
   `,
 })
 export class ExperienceSectionComponent {
+  /** The section's number on the home page, `01`; set by the page. */
+  readonly index = input("");
+
   protected readonly lang = inject(LanguageService);
 
   /** Durations of ongoing entries count to today — the day this page is rendered. */

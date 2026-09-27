@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { regionName, timeZoneLabel } from "./place";
+import { clockTime, regionName, timeZoneLabel } from "./place";
+
+describe("clockTime", () => {
+  const at = new Date("2026-07-01T07:05:00Z");
+
+  it("gives the 24-hour time in the zone", () => {
+    expect(clockTime("Europe/Berlin", "en", at)).toBe("09:05");
+    expect(clockTime("America/New_York", "de", at)).toBe("03:05");
+  });
+
+  it("is empty for no zone or an unknown one", () => {
+    expect(clockTime("", "en", at)).toBe("");
+    expect(clockTime("Mars/Olympus", "en", at)).toBe("");
+  });
+});
 
 describe("regionName", () => {
   it("names a country code in the page's language", () => {

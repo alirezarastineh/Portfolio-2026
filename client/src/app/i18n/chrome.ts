@@ -19,6 +19,17 @@ export interface ChromeLabels {
     toLight: string;
     toDark: string;
     search: string;
+    /** The header's call to action, to the contact section. */
+    talk: string;
+    language: string;
+    theme: string;
+    dark: string;
+    light: string;
+  };
+  hero: {
+    /** Read before the visitor's local time in the status line. */
+    localTime: string;
+    shippedAt: string;
   };
   palette: {
     title: string;
@@ -52,7 +63,13 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       toLight: "Switch to the light theme",
       toDark: "Switch to the dark theme",
       search: "Search the site",
+      talk: "Let's talk",
+      language: "Language",
+      theme: "Theme",
+      dark: "Dark",
+      light: "Light",
     },
+    hero: { localTime: "local time", shippedAt: "Shipped at" },
     palette: {
       title: "Command palette",
       placeholder: "Search pages, or run a command…",
@@ -88,7 +105,13 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       toLight: "Zum hellen Design wechseln",
       toDark: "Zum dunklen Design wechseln",
       search: "Website durchsuchen",
+      talk: "Lass uns reden",
+      language: "Sprache",
+      theme: "Design",
+      dark: "Dunkel",
+      light: "Hell",
     },
+    hero: { localTime: "Ortszeit", shippedAt: "Gearbeitet bei" },
     palette: {
       title: "Befehlspalette",
       placeholder: "Seiten suchen oder Befehl ausführen…",

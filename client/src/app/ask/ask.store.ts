@@ -19,8 +19,10 @@ import { apiBaseUrl } from "../services/api-base";
 import { ContactService } from "../services/contact.service";
 import { LanguageService } from "../services/language.service";
 import { TURNSTILE_SITE_KEY, turnstileToken } from "../services/turnstile";
+import { answerTrace } from "./answer-trace";
 import { ASK_COPY } from "./ask-copy";
 import { ASK_STORAGE_KEY } from "./ask-storage";
+import { AskTraceService } from "./ask-trace.service";
 import type { AskMessage, Entry, Failure, RemoteConfig } from "./ask-types";
 import {
   helpLines,
@@ -219,6 +221,7 @@ export const AskStore = signalStore(
     _lang: inject(LanguageService),
     _contact: inject(ContactService),
     _doc: inject(DOCUMENT),
+    _trace: inject(AskTraceService),
     /** The request being prepared: set just before `sendMessage`. */
     _next: {
       deep: false,
@@ -305,6 +308,14 @@ export const AskStore = signalStore(
         persist();
         if (isAbort || isError || message.role !== "assistant") return;
         track("ask_answer");
+        // For the hero's trace panel: what this answer did, replayed there.
+        const entry = store.entries().find((e) => e.id === store._next.entryId);
+        if (entry?.kind === "ask") {
+          const parsed = parseInput(entry.input);
+          store._trace.record(
+            answerTrace(parsed.kind === "ask" ? parsed.text : entry.input, message),
+          );
+        }
         const text = message.parts
           .filter((p) => p.type === "text")
           .map((p) => p.text)

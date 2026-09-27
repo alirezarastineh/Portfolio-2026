@@ -34,8 +34,22 @@ test.describe("home", () => {
     await expect(page.locator("h1")).toContainText("Alireza Rastineh");
     await expect(page.locator("#hero")).toContainText("Open to senior AI / full-stack roles");
     await expect(
-      page.locator("#hero").getByRole("link", { name: /ask my portfolio/ }),
-    ).toHaveAttribute("href", "/en#about");
+      page.locator("#hero").getByRole("textbox", { name: "ask my portfolio" }),
+    ).toBeVisible();
+    // Before the app is interactive, sending still leads to the terminal.
+    await expect(page.locator("#hero form")).toHaveAttribute("action", "/en#about");
+  });
+
+  test("the hero shows proof only when there is some: orgs and a project's numbers", async ({
+    page,
+  }) => {
+    await page.goto("/en");
+    const hero = page.locator("#hero");
+    await expect(hero).toContainText("Shipped at");
+    await expect(hero).toContainText("Example GmbH");
+    // Education and certifications are not "shipped at".
+    await expect(hero).not.toContainText("TU Example");
+    await expect(hero.locator("dd")).toHaveText(["−42%", "3.1×", "99.95%"]);
   });
 
   test("section headings are real text; the comment slashes are decoration", async ({ page }) => {
@@ -43,6 +57,9 @@ test.describe("home", () => {
     const heading = page.getByRole("heading", { level: 2, name: "projects", exact: true });
     await expect(heading).toBeVisible();
     await expect(page.locator("#projects")).toHaveAttribute("aria-labelledby", "projects-heading");
+    // Numbered in page order, counting only the sections that render.
+    await expect(page.locator("#projects header span[aria-hidden]").first()).toHaveText("01");
+    await expect(page.locator("#contact header span[aria-hidden]").first()).toHaveText("06");
   });
 
   test("the server sends the About terminal's whole text", async ({ request }) => {

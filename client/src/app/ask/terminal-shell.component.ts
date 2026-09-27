@@ -19,7 +19,7 @@ import {
 import { LanguageService } from "../services/language.service";
 import { AskAnswerComponent } from "./ask-answer.component";
 import { answersByQuestion } from "./answers";
-import { AskLauncherService } from "./ask-launcher.service";
+import { AskLauncherService, type AskSource } from "./ask-launcher.service";
 import { AskLinesComponent } from "./ask-lines.component";
 import { AskStore } from "./ask.store";
 import type { Entry } from "./ask-types";
@@ -228,15 +228,15 @@ export class TerminalShellComponent {
   );
 
   constructor() {
-    // A request from the hero link or the palette, once the prompt can take
-    // it (after this render; the sheet focuses its own after opening).
+    // A request from the hero or the palette, once the prompt can take it
+    // (after this render; the sheet claims its own after opening).
     const injector = inject(Injector);
     effect(() => {
       if (!this.launcher.focusPending() || !this.active() || this.inSheet()) return;
       untracked(() =>
         afterNextRender(
           () => {
-            if (this.launcher.takeFocus()) this.focusInput();
+            if (this.launcher.takeFocus()) this.claim();
           },
           { injector },
         ),
@@ -278,6 +278,21 @@ export class TerminalShellComponent {
   focusInput(): void {
     const el = this.inputRef().nativeElement;
     el.focus({ preventScroll: false });
+  }
+
+  /** Takes a request from elsewhere on the site: the focus, and its question if it brought one. */
+  claim(): void {
+    this.reportOpen(this.launcher.takeSource());
+    this.focusInput();
+    const question = this.launcher.takeQuestion();
+    if (question) this.send(question);
+  }
+
+  /** `ask_open`, once per prompt, with where the visitor came from. */
+  private reportOpen(source: AskSource): void {
+    if (this.opened) return;
+    this.opened = true;
+    track("ask_open", { source });
   }
 
   /** Runs what is in the prompt. */
@@ -367,10 +382,7 @@ export class TerminalShellComponent {
 
   protected onFocus(): void {
     this.focused.set(true);
-    if (!this.opened) {
-      this.opened = true;
-      track("ask_open");
-    }
+    this.reportOpen("terminal");
     const narrow = this.doc.defaultView?.matchMedia("(max-width: 639px)").matches;
     if (narrow && !this.inSheet() && !this.expanded()) {
       this.expanded.set(true);

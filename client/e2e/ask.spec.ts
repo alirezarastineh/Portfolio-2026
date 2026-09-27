@@ -374,11 +374,54 @@ test.describe("assistant terminal", () => {
     await expect(page.locator("#contact-name")).toBeFocused();
   });
 
-  test("“ask my portfolio” in the hero goes to the prompt and focuses it", async ({ page }) => {
+  test("a question asked in the hero is answered in the About terminal, and traced", async ({
+    page,
+  }) => {
+    const mock = await mockAsk(page, (route) =>
+      sse(route, answer({ text: "He ships evals first.", tools: SEARCH_STEP })),
+    );
+    await page.goto("/en");
+    await interactive(page);
+    const bar = page.getByRole("textbox", { name: "ask my portfolio" });
+    await bar.fill("How does he test?");
+    await bar.press("Enter");
+
+    const log = page.locator("#about [role=log]");
+    await expect(log).toContainText("How does he test?");
+    await expect(log).toContainText("He ships evals first.");
+    await expect(page.locator("#about textarea")).toBeFocused();
+    expect(mock.bodies).toHaveLength(1);
+    // The hero's trace panel replays that answer instead of the example.
+    const trace = page.locator("#hero figure");
+    await expect(trace).toContainText("your last question · 1.3 s");
+    await expect(trace).toContainText("search_portfolio");
+    await expect(trace).not.toContainText("example trace");
+  });
+
+  test("“/” focuses the ask bar, unless typing; a starter question sends at once", async ({
+    page,
+  }) => {
+    await mockAsk(page, (route) => sse(route, answer({ text: "Hybrid search." })));
+    await page.goto("/en");
+    await interactive(page);
+    const bar = page.getByRole("textbox", { name: "ask my portfolio" });
+    await page.keyboard.press("/");
+    await expect(bar).toBeFocused();
+    await bar.pressSequentially("a/b");
+    await expect(bar).toHaveValue("a/b");
+
+    await page
+      .getByRole("group", { name: "Suggested questions" })
+      .getByRole("button", { name: "What has he shipped with RAG?" })
+      .click();
+    await expect(page.locator("#about [role=log]")).toContainText("Hybrid search.");
+  });
+
+  test("an empty ask bar still goes to the prompt", async ({ page }) => {
     await mockAsk(page, () => undefined);
     await page.goto("/en");
     await interactive(page);
-    await page.getByRole("link", { name: "ask my portfolio" }).click();
+    await page.getByRole("button", { name: "Ask", exact: true }).click();
     await expect(page.locator("#about textarea")).toBeFocused();
   });
 

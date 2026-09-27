@@ -8,6 +8,7 @@ import {
   ElementRef,
   inject,
   Injector,
+  input,
   PLATFORM_ID,
   signal,
   untracked,
@@ -62,6 +63,7 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
       <div class="flex max-w-150 flex-col gap-12">
         <app-section-heading
           headingId="contact-heading"
+          [index]="index()"
           [heading]="lang.t().contact.heading"
           [eyebrow]="lang.t().contact.subtitle"
         />
@@ -201,6 +203,9 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
   `,
 })
 export class ContactSectionComponent {
+  /** The section's number on the home page, `01`; set by the page. */
+  readonly index = input("");
+
   private readonly fb = inject(FormBuilder);
   private readonly contact = inject(ContactService);
   private readonly injector = inject(Injector);

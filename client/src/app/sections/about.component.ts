@@ -8,6 +8,7 @@ import {
   effect,
   ElementRef,
   inject,
+  input,
   PLATFORM_ID,
   signal,
   untracked,
@@ -45,6 +46,7 @@ import { typingAt, type TerminalLine, type TypingState } from "./about-typing";
       <div class="flex max-w-205 flex-col gap-12">
         <app-section-heading
           headingId="about-heading"
+          [index]="index()"
           [heading]="lang.t().about.heading"
           [eyebrow]="lang.t().about.subtitle"
         />
@@ -123,6 +125,9 @@ import { typingAt, type TerminalLine, type TypingState } from "./about-typing";
   `,
 })
 export class AboutSectionComponent {
+  /** The section's number on the home page, `01`; set by the page. */
+  readonly index = input("");
+
   readonly lang = inject(LanguageService);
 
   readonly lines = computed<TerminalLine[]>(() => {

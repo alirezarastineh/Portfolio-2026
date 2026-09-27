@@ -24,23 +24,12 @@ import {
   lucideX,
 } from "@ng-icons/lucide";
 
-import { otherLocale } from "../content/locale";
+import { homeSections, type HomeSection as SectionId } from "../content/home-sections";
+import { LOCALES, otherLocale } from "../content/locale";
 import { CHROME } from "../i18n/chrome";
 import { CommandPaletteService } from "../services/command-palette.service";
 import { LanguageService } from "../services/language.service";
 import { ThemeService } from "../services/theme.service";
-
-/** The home sections, in page order; the header highlights the one in view. */
-const SECTION_IDS = [
-  "hero",
-  "projects",
-  "experience",
-  "skills",
-  "writing",
-  "about",
-  "contact",
-] as const;
-type SectionId = (typeof SECTION_IDS)[number];
 
 /** A home section (`/en#projects`) or a page of its own (`/en/writing`). */
 interface NavLink {
@@ -50,11 +39,18 @@ interface NavLink {
   fragment?: SectionId;
 }
 
-/** Tailwind's `md`: the desktop navigation takes over from the menu. */
-const DESKTOP = "(min-width: 768px)";
+/**
+ * Tailwind's `lg`: the desktop navigation takes over from the menu. Below it
+ * six links, the CTA and the controls do not fit (German especially).
+ */
+const DESKTOP = "(min-width: 1024px)";
 
 const iconButton =
-  "inline-flex size-9 cursor-pointer items-center justify-center rounded-md border border-border text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground";
+  "inline-flex size-9 cursor-pointer items-center justify-center rounded-md border border-border text-muted-foreground transition-colors duration-(--dur-2) hover:border-accent-orange/50 hover:text-foreground";
+
+/** One option of the mobile menu's language and theme switches. */
+const segment =
+  "inline-flex h-9 min-w-11 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 transition-colors duration-(--dur-2)";
 
 @Component({
   selector: "app-site-header",
@@ -66,7 +62,6 @@ const iconButton =
   host: {
     class: "contents",
     "(document:keydown.escape)": "onEscape()",
-    "(document:click)": "onDocumentClick($event)",
   },
   template: `
     <!-- First stop for keyboard users. A real link to this page's <main>, so
@@ -78,50 +73,51 @@ const iconButton =
       >{{ labels().skip }}</a
     >
 
-    <!-- Solid while the menu is open, so the page does not show through it. -->
+    <!-- See-through over the top of the page, a raised surface once scrolled
+         (styles/motion.css; without scroll timelines it stays as styled here).
+         Solid while the menu is open, so the page does not show through it. -->
     <header
       #bar
-      class="fixed inset-x-0 top-0 z-40 border-b border-border backdrop-blur-md"
+      class="site-header fixed inset-x-0 top-0 z-40 border-b border-border backdrop-blur-md"
       [class]="open() ? 'bg-background' : 'bg-background/80'"
+      [attr.data-open]="open() ? '' : null"
       (keydown)="trapFocus($event)"
     >
-      <div class="container-site grid grid-cols-[auto_1fr_auto] items-center gap-4 py-3">
+      <div
+        class="site-header-row container-site grid h-16 grid-cols-[auto_1fr_auto] items-center gap-4"
+      >
+        <!-- The favicon's mark. Its name starts with the visible word. -->
         <a
-          class="inline-flex items-center gap-1.5 font-mono text-base font-semibold tracking-wide text-foreground"
+          class="inline-flex h-9 items-center font-mono text-sm font-semibold text-foreground"
           [routerLink]="home()"
           fragment="hero"
-          [attr.aria-label]="labels().home"
           (click)="closeMenu()"
         >
-          <span aria-hidden="true">{{ initials() }}</span>
-          <span class="size-1.5 rounded-full bg-accent-orange" aria-hidden="true"></span>
+          <span class="text-accent-orange" aria-hidden="true">&gt;</span
+          ><span class="wordmark-caret" aria-hidden="true">_</span>
+          <span class="ml-2">{{ wordmark() }}</span
+          ><span class="sr-only"> – {{ labels().home }}</span>
         </a>
 
         <nav
-          class="hidden justify-center gap-5 md:inline-flex lg:gap-7"
+          class="hidden justify-center gap-5 lg:inline-flex xl:gap-7"
           [attr.aria-label]="labels().primary"
         >
           @for (link of links(); track link.key) {
             <a
-              class="relative inline-flex items-center font-mono text-meta transition-colors duration-200 ease-in-out hover:text-foreground"
+              class="nav-link relative inline-flex h-9 items-center font-mono text-meta transition-colors duration-(--dur-2) hover:text-foreground"
               [class.text-foreground]="isActive(link)"
               [class.text-muted-foreground]="!isActive(link)"
               [attr.aria-current]="isActive(link) ? 'true' : null"
               [routerLink]="link.commands"
               [fragment]="link.fragment"
             >
-              @if (isActive(link)) {
-                <span
-                  class="mr-1.5 inline-block size-1 rounded-full bg-accent-orange"
-                  aria-hidden="true"
-                ></span>
-              }
-              <span>{{ link.label }}</span>
+              {{ link.label }}
             </a>
           }
         </nav>
 
-        <!-- Pinned to the last column: on phones the navigation before it is hidden. -->
+        <!-- Pinned to the last column: below lg the navigation before it is hidden. -->
         <div class="col-start-3 flex items-center justify-self-end gap-2">
           <button
             type="button"
@@ -131,24 +127,23 @@ const iconButton =
             (click)="palette.show()"
           >
             <ng-icon name="lucideSearch" size="15" aria-hidden="true" />
-            <kbd class="hidden font-mono text-meta md:inline" aria-hidden="true">⌘K</kbd>
+            <kbd class="hidden font-mono text-meta lg:inline" aria-hidden="true">⌘K</kbd>
           </button>
-          <!-- A file, not a page: a plain link the router leaves alone. -->
-          @if (resumeHref(); as href) {
-            <a
-              class="hidden h-9 items-center gap-1.5 rounded-md border border-border px-2.5 font-mono text-meta text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground md:inline-flex"
-              [href]="href"
-              download
-            >
-              <ng-icon name="lucideDownload" size="13" aria-hidden="true" />
-              CV
-            </a>
-          }
+          <!-- The one call to action that is always in view. The CV stays in
+               the hero, the palette and the mobile menu. -->
+          <a
+            class="hidden h-9 items-center rounded-md bg-accent-orange px-3 font-mono text-meta font-medium text-accent-orange-foreground transition-colors duration-(--dur-2) hover:bg-accent-orange-hover lg:inline-flex"
+            [routerLink]="home()"
+            fragment="contact"
+          >
+            {{ labels().talk }}
+          </a>
           <!-- The server renders dark; the icon for the other theme is picked
-               in CSS, so hydration never meets different markup. -->
+               in CSS, so hydration never meets different markup. Below lg the
+               menu has the switch. -->
           <button
             type="button"
-            [class]="iconButton"
+            [class]="iconButton + ' max-lg:hidden'"
             [attr.aria-label]="theme.theme() === 'dark' ? labels().toLight : labels().toDark"
             (click)="theme.toggle()"
           >
@@ -163,7 +158,7 @@ const iconButton =
                without JavaScript, and remembered for the next visit to "/".
                Its name keeps the visible "DE" and adds the language's name. -->
           <a
-            class="hidden h-9 items-center justify-center rounded-md border border-border px-2.5 font-mono text-meta text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground md:inline-flex"
+            class="hidden h-9 items-center justify-center rounded-md border border-border px-2.5 font-mono text-meta text-muted-foreground transition-colors duration-(--dur-2) hover:border-accent-orange/50 hover:text-foreground lg:inline-flex"
             [routerLink]="lang.alternates()[other()]"
             [attr.hreflang]="other()"
             [attr.lang]="other()"
@@ -174,7 +169,7 @@ const iconButton =
           <button
             #toggle
             type="button"
-            [class]="iconButton + ' md:hidden'"
+            [class]="iconButton + ' lg:hidden'"
             aria-controls="mobile-nav"
             [attr.aria-expanded]="open()"
             [attr.aria-label]="labels().menu"
@@ -185,34 +180,38 @@ const iconButton =
         </div>
       </div>
 
+      <!-- The rest of the screen: large links, then the CV, then language and
+           theme as switches at the bottom. -->
       @if (open()) {
         <nav
           id="mobile-nav"
-          class="flex max-h-[calc(100svh-4rem)] flex-col gap-1 overflow-y-auto border-t border-border px-(--gutter) pb-5 pt-2 md:hidden"
+          class="flex h-[calc(100svh-4rem)] flex-col overflow-y-auto overscroll-contain border-t border-border px-(--gutter) pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-4 lg:hidden"
           [attr.aria-label]="labels().mobile"
         >
-          @for (link of links(); track link.key) {
-            <a
-              class="flex items-center gap-2 px-1 py-2.5 font-mono text-base"
-              [class.text-foreground]="isActive(link)"
-              [class.text-muted-foreground]="!isActive(link)"
-              [attr.aria-current]="isActive(link) ? 'true' : null"
-              [routerLink]="link.commands"
-              [fragment]="link.fragment"
-              (click)="closeMenu()"
-            >
-              @if (isActive(link)) {
-                <span
-                  class="inline-block size-1 rounded-full bg-accent-orange"
-                  aria-hidden="true"
-                ></span>
-              }
-              <span>{{ link.label }}</span>
-            </a>
-          }
+          <ul class="m-0 flex list-none flex-col p-0" role="list">
+            @for (link of links(); track link.key; let i = $index) {
+              <li class="menu-rise" [style.--i]="i">
+                <a
+                  class="flex items-center gap-3 py-2.5 text-h3 transition-colors duration-(--dur-2) hover:text-foreground"
+                  [class.text-foreground]="isActive(link)"
+                  [class.text-muted-foreground]="!isActive(link)"
+                  [attr.aria-current]="isActive(link) ? 'true' : null"
+                  [routerLink]="link.commands"
+                  [fragment]="link.fragment"
+                  (click)="closeMenu()"
+                >
+                  {{ link.label }}
+                  @if (isActive(link)) {
+                    <span class="size-1.5 rounded-full bg-accent-orange" aria-hidden="true"></span>
+                  }
+                </a>
+              </li>
+            }
+          </ul>
           @if (resumeHref(); as href) {
             <a
-              class="flex items-center gap-2 px-1 py-2.5 font-mono text-base text-muted-foreground"
+              class="menu-rise mt-4 inline-flex w-fit items-center gap-2 py-2 font-mono text-meta text-muted-foreground transition-colors duration-(--dur-2) hover:text-foreground"
+              [style.--i]="links().length"
               [href]="href"
               download
               (click)="closeMenu()"
@@ -221,15 +220,65 @@ const iconButton =
               {{ lang.t().hero.downloadCv }}
             </a>
           }
-          <a
-            class="mt-1 flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 font-mono text-sm text-muted-foreground transition-colors duration-200 ease-in-out hover:border-accent-orange/50 hover:text-foreground"
-            [routerLink]="lang.alternates()[other()]"
-            [attr.hreflang]="other()"
-            [attr.lang]="other()"
-            (click)="lang.remember(other()); closeMenu()"
+
+          <div
+            class="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5 font-mono text-meta"
           >
-            {{ other().toUpperCase() }} – {{ labels().switchTo }}
-          </a>
+            <div
+              class="inline-flex rounded-lg border border-border p-1"
+              role="group"
+              [attr.aria-label]="labels().language"
+            >
+              @for (locale of locales; track locale) {
+                @if (locale === lang.lang()) {
+                  <span [class]="segment + ' bg-muted text-foreground'" aria-current="true">{{
+                    locale.toUpperCase()
+                  }}</span>
+                } @else {
+                  <a
+                    [class]="segment + ' text-muted-foreground hover:text-foreground'"
+                    [routerLink]="lang.alternates()[locale]"
+                    [attr.hreflang]="locale"
+                    [attr.lang]="locale"
+                    (click)="lang.remember(locale); closeMenu()"
+                  >
+                    {{ locale.toUpperCase()
+                    }}<span class="sr-only"> – {{ labels().switchTo }}</span>
+                  </a>
+                }
+              }
+            </div>
+            <div
+              class="inline-flex rounded-lg border border-border p-1"
+              role="group"
+              [attr.aria-label]="labels().theme"
+            >
+              <button
+                type="button"
+                [class]="
+                  segment +
+                  ' text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground'
+                "
+                [attr.aria-pressed]="theme.theme() === 'dark'"
+                (click)="theme.set('dark')"
+              >
+                <ng-icon name="lucideMoon" size="14" aria-hidden="true" />
+                {{ labels().dark }}
+              </button>
+              <button
+                type="button"
+                [class]="
+                  segment +
+                  ' text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground'
+                "
+                [attr.aria-pressed]="theme.theme() === 'light'"
+                (click)="theme.set('light')"
+              >
+                <ng-icon name="lucideSun" size="14" aria-hidden="true" />
+                {{ labels().light }}
+              </button>
+            </div>
+          </div>
         </nav>
       }
     </header>
@@ -242,29 +291,20 @@ export class SiteHeaderComponent {
   private readonly doc = inject(DOCUMENT);
 
   protected readonly iconButton = iconButton;
-  protected readonly searchClass = `${iconButton} md:w-auto md:gap-1.5 md:px-2.5`;
+  protected readonly segment = segment;
+  protected readonly searchClass = `${iconButton} lg:w-auto lg:gap-1.5 lg:px-2.5`;
+  protected readonly locales = LOCALES;
 
   private readonly bar = viewChild.required<ElementRef<HTMLElement>>("bar");
   private readonly toggleButton = viewChild.required<ElementRef<HTMLElement>>("toggle");
 
-  readonly initials = computed(() =>
-    this.lang
-      .content()
-      .identity.name.split(" ")
-      .map((p) => p[0])
-      .join("")
-      .toUpperCase(),
+  /** The wordmark: the first name, as a shell would print it. */
+  readonly wordmark = computed(() =>
+    this.lang.content().identity.name.split(" ")[0]!.toLowerCase(),
   );
 
   /** Home sections that exist in this language's content. */
-  private readonly sections = computed<SectionId[]>(() => {
-    const content = this.lang.content();
-    return SECTION_IDS.filter(
-      (id) =>
-        (id !== "experience" || content.experiences.length > 0) &&
-        (id !== "writing" || content.posts.length > 0),
-    );
-  });
+  private readonly sections = computed(() => homeSections(this.lang.content()));
 
   /** Writing links to its own page; on home it lights up while its section is in view. */
   readonly links = computed<NavLink[]>(() => {
@@ -360,10 +400,6 @@ export class SiteHeaderComponent {
     if (!this.open()) return;
     this.closeMenu();
     this.toggleButton().nativeElement.focus();
-  }
-
-  onDocumentClick(event: MouseEvent): void {
-    if (this.open() && !this.bar().nativeElement.contains(event.target as Node)) this.closeMenu();
   }
 
   /** While the menu is open, Tab cycles through the header rather than the page behind it. */

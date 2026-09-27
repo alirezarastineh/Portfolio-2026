@@ -283,10 +283,14 @@ test.describe("feeds and files", () => {
     expect(res.headers()["content-security-policy"]).toBeUndefined();
   });
 
-  test("the hero and the header offer the CV", async ({ page }) => {
+  test("the hero offers the CV; the header's one action is getting in touch", async ({ page }) => {
     await page.goto("/en");
     await expect(page.locator('#hero a[href="/en/resume.pdf"][download]')).toBeVisible();
-    await expect(page.locator('header a[href="/en/resume.pdf"][download]')).toBeVisible();
+    await expect(page.locator('header a[href="/en/resume.pdf"]')).toHaveCount(0);
+    await expect(page.locator("header").getByRole("link", { name: "Let's talk" })).toHaveAttribute(
+      "href",
+      "/en#contact",
+    );
   });
 
   test("the sitemap lists case studies and posts only where they exist", async ({ request }) => {
