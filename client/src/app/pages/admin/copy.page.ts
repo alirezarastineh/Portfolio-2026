@@ -1,8 +1,10 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
 import type { RouteMeta } from "@analogjs/router";
+import { BrnTabsContent } from "@spartan-ng/brain/tabs";
 import { HlmTabsImports } from "@spartan-ng/helm/tabs";
 
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
+import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 import {
   UiGroupEditorComponent,
   type UiFieldDef,
@@ -84,29 +86,38 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 @Component({
   selector: "app-admin-copy",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmTabsImports, UiGroupEditorComponent],
+  imports: [AdminPageHeaderComponent, BrnTabsContent, HlmTabsImports, UiGroupEditorComponent],
   host: { class: "block" },
   template: `
-    <div class="mx-auto mb-6 flex max-w-4xl flex-col gap-4">
-      <div hlmTabs [tab]="tab()" (tabActivated)="select($any($event))">
-        <div hlmTabsList aria-label="Copy group">
+    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
+      <app-page-header
+        title="Page copy"
+        description="The words that belong to no single section: case-study pages, project cards, the 404 page and the assistant."
+      />
+
+      <div hlmTabs class="gap-6" [tab]="tab()" (tabActivated)="select($any($event))">
+        <div hlmTabsList aria-label="Copy group" class="flex-wrap">
           @for (def of groups; track def.group) {
             <button [hlmTabsTrigger]="def.group">{{ def.title }}</button>
           }
         </div>
+
+        <!-- A panel per tab, for the tabs to point at; only the active one holds its editor. -->
+        @for (def of groups; track def.group) {
+          <div [brnTabsContent]="def.group">
+            @if (def.group === active()) {
+              <app-ui-group-editor
+                [group]="def.group"
+                [title]="def.title"
+                [description]="def.description"
+                [fields]="def.fields"
+                [level]="2"
+              />
+            }
+          </div>
+        }
       </div>
     </div>
-
-    @for (def of groups; track def.group) {
-      @if (def.group === active()) {
-        <app-ui-group-editor
-          [group]="def.group"
-          [title]="def.title"
-          [description]="def.description"
-          [fields]="def.fields"
-        />
-      }
-    }
   `,
 })
 export default class AdminCopyPage {

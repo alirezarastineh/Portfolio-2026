@@ -8,9 +8,11 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   PLATFORM_ID,
   signal,
+  untracked,
 } from "@angular/core";
 import { toSignal } from "@angular/core/rxjs-interop";
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from "@angular/router";
@@ -28,7 +30,9 @@ import {
   lucideLayers,
   lucideLogOut,
   lucideNewspaper,
+  lucideCircleCheck,
   lucidePenLine,
+  lucideRocket,
   lucideScale,
   lucideSearch,
   lucideSend,
@@ -53,7 +57,10 @@ import { AdminApiService } from "../admin/admin-api.service";
 import { addAdminStyles } from "../admin/admin-styles";
 import { AdminSessionService } from "../admin/admin-session.service";
 import { isSaveShortcut } from "../admin/components/editor-chrome.component";
+import { PublishDialogComponent } from "../admin/components/publish-dialog.component";
 import { MediaLibraryService } from "../admin/media-library.service";
+import { changesLabel } from "../admin/publish-summary";
+import { AdminPulseService } from "../admin/pulse.service";
 import { UiSectionService } from "../admin/ui-section.service";
 import { UnsavedChangesService } from "../admin/unsaved-changes.service";
 
@@ -72,6 +79,7 @@ export const routeMeta: RouteMeta = {
   providers: [
     provideHttpClient(withInterceptors([adminApiInterceptor]), withRequestsMadeViaParent()),
     AdminApiService,
+    AdminPulseService,
     AdminSessionService,
     MediaLibraryService,
     UiSectionService,
@@ -83,6 +91,14 @@ interface NavItem {
   label: string;
   icon: string;
   group: "Overview" | "Content" | "Library";
+}
+
+/** Something a sidebar entry reports: a count, or an alert, with the words for it. */
+interface NavBadge {
+  count: number;
+  alert: boolean;
+  /** Read after the entry's name: "Inbox, 2 new". */
+  words: string;
 }
 
 const NAV: NavItem[] = [
@@ -119,12 +135,14 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
     HlmSkeleton,
     HlmToaster,
     NgIcon,
+    PublishDialogComponent,
     RouterLink,
     RouterOutlet,
   ],
   viewProviders: [
     provideIcons({
       lucideBriefcase,
+      lucideCircleCheck,
       lucideEye,
       lucideFileText,
       lucideHistory,
@@ -136,6 +154,7 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
       lucideLogOut,
       lucideNewspaper,
       lucidePenLine,
+      lucideRocket,
       lucideScale,
       lucideSearch,
       lucideSend,
@@ -167,15 +186,19 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
       <router-outlet />
     } @else {
       <div hlmSidebarWrapper>
-        <hlm-sidebar collapsible="icon">
+        <!-- A landmark of its own: everything in it is the admin's navigation. -->
+        <hlm-sidebar collapsible="icon" role="navigation" aria-label="Admin">
           <div hlmSidebarHeader>
-            <a routerLink="/admin" class="flex items-center gap-2 px-2 py-1.5">
-              <span class="size-2 shrink-0 rounded-full bg-accent-orange"></span>
-              <span
-                class="font-mono text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden"
+            <!-- The public site's mark; collapsed to icons, the mark alone. -->
+            <a
+              routerLink="/admin"
+              class="flex h-8 items-center gap-2 px-2 font-mono text-sm font-semibold text-foreground group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center"
+            >
+              <span aria-hidden="true"
+                ><span class="text-accent-orange">&gt;</span
+                ><span class="wordmark-caret">_</span></span
               >
-                admin
-              </span>
+              <span class="group-data-[collapsible=icon]:sr-only">admin</span>
             </a>
           </div>
 
@@ -186,23 +209,42 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
                 <div hlmSidebarGroupContent>
                   <ul hlmSidebarMenu>
                     @for (item of itemsIn(group); track item.path) {
+                      @let badge = badges()[item.path];
+                      @let dirty = unsaved.hasAny() && isCurrent(item.path);
                       <li hlmSidebarMenuItem>
+                        <!-- Named in full, so it keeps a name collapsed to icons, where the words hide. -->
                         <a
                           hlmSidebarMenuButton
+                          class="relative group-has-data-[sidebar=menu-badge]/menu-item:pr-9"
                           [routerLink]="item.path"
                           [isActive]="isCurrent(item.path)"
+                          [tooltip]="item.label"
+                          [attr.aria-label]="navName(item.label, badge, dirty)"
                           [attr.aria-current]="isCurrent(item.path) ? 'page' : null"
                         >
                           <ng-icon [name]="item.icon" size="16" aria-hidden="true" />
                           <span>{{ item.label }}</span>
+                          @if (badge || dirty) {
+                            <i
+                              class="absolute right-1 top-1 hidden size-1.5 rounded-full group-data-[collapsible=icon]:block"
+                              [class]="badge?.alert ? 'bg-destructive' : 'bg-accent-orange'"
+                              aria-hidden="true"
+                            ></i>
+                          }
                         </a>
-                        @if (unsaved.hasAny() && isCurrent(item.path)) {
-                          <span
-                            hlmSidebarMenuBadge
-                            title="Unsaved changes"
-                            aria-label="Unsaved changes"
-                          >
-                            <span class="size-1.5 rounded-full bg-accent-orange"></span>
+                        @if (badge || dirty) {
+                          <span hlmSidebarMenuBadge class="gap-1.5" aria-hidden="true">
+                            @if (dirty) {
+                              <span
+                                class="size-1.5 rounded-full bg-accent-orange"
+                                title="Unsaved changes"
+                              ></span>
+                            }
+                            @if (badge?.alert) {
+                              <span class="size-2 rounded-full bg-destructive"></span>
+                            } @else if (badge?.count) {
+                              <span class="font-mono text-xs">{{ badge?.count }}</span>
+                            }
                           </span>
                         }
                       </li>
@@ -215,18 +257,61 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
 
           <div hlmSidebarFooter>
             <ul hlmSidebarMenu>
+              <!-- Always in reach: publishing needs no trip to the dashboard. -->
+              <li hlmSidebarMenuItem>
+                <button
+                  hlmSidebarMenuButton
+                  variant="outline"
+                  class="relative"
+                  [disabled]="!pulse.unpublished()"
+                  [tooltip]="publishName()"
+                  [attr.aria-label]="publishName()"
+                  (click)="pulse.publishOpen.set(true)"
+                >
+                  <ng-icon
+                    [name]="pulse.unpublished() ? 'lucideRocket' : 'lucideCircleCheck'"
+                    size="16"
+                    aria-hidden="true"
+                  />
+                  <span>{{ pulse.unpublished() ? "Publish" : "All published" }}</span>
+                  @if (pulse.unpublished()) {
+                    @if (pendingCount(); as n) {
+                      <span
+                        class="ml-auto rounded-full px-1.5 font-mono text-xs"
+                        [class]="
+                          pulse.review()?.issues
+                            ? 'bg-destructive/15 text-destructive'
+                            : 'bg-accent-orange-soft text-foreground'
+                        "
+                        >{{ n }}</span
+                      >
+                    }
+                    <i
+                      class="absolute right-1 top-1 hidden size-1.5 rounded-full bg-accent-orange group-data-[collapsible=icon]:block"
+                      aria-hidden="true"
+                    ></i>
+                  }
+                </button>
+              </li>
               <li hlmSidebarMenuItem>
                 <a
                   hlmSidebarMenuButton
                   routerLink="/admin/account"
                   [isActive]="isCurrent('/admin/account')"
+                  [tooltip]="email()"
+                  [attr.aria-label]="'Account: ' + email()"
                 >
                   <ng-icon name="lucideUser" size="16" aria-hidden="true" />
                   <span class="truncate">{{ email() }}</span>
                 </a>
               </li>
               <li hlmSidebarMenuItem>
-                <button hlmSidebarMenuButton (click)="logout()">
+                <button
+                  hlmSidebarMenuButton
+                  tooltip="Sign out"
+                  aria-label="Sign out"
+                  (click)="logout()"
+                >
                   <ng-icon name="lucideLogOut" size="16" aria-hidden="true" />
                   <span>Sign out</span>
                 </button>
@@ -235,7 +320,8 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
           </div>
         </hlm-sidebar>
 
-        <main hlmSidebarInset class="min-w-0">
+        <!-- Clipped sideways: a stuck page header's surface reaches past the column to both edges. -->
+        <main hlmSidebarInset class="min-w-0 overflow-x-clip">
           <header class="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
             <button hlmSidebarTrigger aria-label="Toggle sidebar"></button>
             <hlm-separator orientation="vertical" class="h-4" />
@@ -264,17 +350,19 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
               hlmBtn
               variant="outline"
               size="sm"
-              class="ml-auto hidden gap-2 font-mono text-[0.72rem] text-muted-foreground sm:inline-flex"
+              class="ml-auto hidden gap-2 text-muted-foreground sm:inline-flex"
+              aria-haspopup="dialog"
+              aria-keyshortcuts="Control+K Meta+K"
               (click)="paletteOpen.set(true)"
-              aria-label="Open the command palette"
             >
-              <ng-icon name="lucideSearch" size="13" aria-hidden="true" />
+              <ng-icon name="lucideSearch" size="14" aria-hidden="true" />
               <span>Jump to…</span>
-              <kbd class="rounded border border-border px-1 text-[0.65rem]">⌘K</kbd>
+              <kbd class="kbd" aria-hidden="true">⌘K</kbd>
             </button>
           </header>
 
-          <div class="px-6 py-8">
+          <!-- The page header's own padding makes up the top. -->
+          <div class="px-6 pb-8 pt-5">
             @if (needsTotp()) {
               <div
                 class="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent-orange/40 bg-accent-orange/10 px-4 py-3"
@@ -323,6 +411,13 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
           </hlm-command-list>
         </hlm-command>
       </hlm-command-dialog>
+
+      <!-- The one review dialog: the sidebar's Publish and the dashboard both open it. -->
+      <app-publish-dialog
+        [open]="pulse.publishOpen()"
+        (openChange)="pulse.publishOpen.set($event)"
+        (published)="pulse.published()"
+      />
     }
   `,
 })
@@ -332,6 +427,7 @@ export default class AdminLayout {
   protected readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   protected readonly session = inject(AdminSessionService);
   protected readonly unsaved = inject(UnsavedChangesService);
+  protected readonly pulse = inject(AdminPulseService);
 
   protected readonly groups = GROUPS;
   protected readonly email = computed(() => this.session.user()?.email ?? "account");
@@ -339,6 +435,57 @@ export default class AdminLayout {
 
   constructor() {
     addAdminStyles(inject(DOCUMENT));
+
+    // The counts load once the admin shows, and are dropped at the sign-in screen.
+    effect(() => {
+      const login = this.isLogin();
+      const chrome = this.ready() && !login && !this.isPreviewFrame();
+      untracked(() => {
+        if (chrome) this.pulse.start();
+        else if (login) this.pulse.reset();
+      });
+    });
+  }
+
+  /** Per sidebar entry: what needs a look there. */
+  protected readonly badges = computed<Partial<Record<string, NavBadge>>>(() => {
+    const badges: Partial<Record<string, NavBadge>> = {};
+    const translations = this.pulse.i18n()?.length ?? 0;
+    if (translations) {
+      badges["/admin"] = {
+        count: translations,
+        alert: false,
+        words: `${translations} ${translations === 1 ? "translation" : "translations"} to check`,
+      };
+    }
+    const fresh = this.pulse.newMessages();
+    if (fresh) badges["/admin/inbox"] = { count: fresh, alert: false, words: `${fresh} new` };
+    const alert = this.pulse.assistantAlert();
+    if (alert) badges["/admin/assistant"] = { count: 0, alert: true, words: alert };
+    return badges;
+  });
+
+  /** The number on the Publish button: changes, or the problems that stop them. */
+  protected readonly pendingCount = computed(() => {
+    const review = this.pulse.review();
+    if (!review) return 0;
+    return review.issues || review.total;
+  });
+
+  protected readonly publishName = computed(() => {
+    if (!this.pulse.unpublished()) return "All published";
+    const review = this.pulse.review();
+    if (review?.issues) {
+      return `Publish: ${review.issues} ${review.issues === 1 ? "problem" : "problems"} to fix first`;
+    }
+    return review?.total ? `Publish: ${changesLabel(review.total)} unpublished` : "Publish";
+  });
+
+  protected navName(label: string, badge: NavBadge | undefined, dirty: boolean): string {
+    const parts = [label];
+    if (badge) parts.push(badge.words);
+    if (dirty) parts.push("unsaved changes");
+    return parts.join(", ");
   }
 
   /** `router.url` is not reactive, so re-read it whenever navigation settles. */
@@ -435,6 +582,7 @@ export default class AdminLayout {
 
   protected async logout(): Promise<void> {
     await this.api.logout();
+    this.pulse.reset();
     this.session.clear();
     void this.router.navigate(["/admin/login"]);
   }

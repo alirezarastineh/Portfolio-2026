@@ -10,7 +10,6 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmDialogImports } from "@spartan-ng/helm/dialog";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmSpinner } from "@spartan-ng/helm/spinner";
 import { HlmTabsImports } from "@spartan-ng/helm/tabs";
 
@@ -20,6 +19,11 @@ import {
   type RevisionDetail,
 } from "../../admin/admin-api.service";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
+import {
+  FormSkeletonComponent,
+  LoadErrorComponent,
+} from "../../admin/components/load-state.component";
+import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 import { diffJson } from "../../admin/json-diff";
 
 type DetailTab = "changes" | "json";
@@ -32,33 +36,46 @@ type DetailTab = "changes" | "json";
 @Component({
   selector: "app-admin-publications",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmBadge, HlmButton, HlmDialogImports, HlmSkeleton, HlmSpinner, HlmTabsImports],
+  imports: [
+    AdminPageHeaderComponent,
+    FormSkeletonComponent,
+    HlmBadge,
+    HlmButton,
+    HlmDialogImports,
+    HlmSpinner,
+    HlmTabsImports,
+    LoadErrorComponent,
+  ],
   host: { class: "block" },
   template: `
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
-      <header>
-        <h1 class="m-0 font-mono text-2xl tracking-tight">Publications</h1>
-        <p class="mt-1 text-sm text-muted-foreground">
-          Every publish is kept, with <strong>both languages</strong> together. Rolling back makes
-          one live again as a new publication, so nothing is ever lost. "Restore into draft" loads
-          it into the editors instead, to change before publishing again.
-        </p>
-      </header>
+      <app-page-header
+        title="Publications"
+        description="Every publish is kept, both languages together. Rolling back makes one live again as a new publication, so nothing is ever lost. “Restore into draft” loads it into the editors instead, to change before publishing again."
+      />
 
       @if (loading()) {
-        <hlm-skeleton class="h-64 w-full" />
+        <app-form-skeleton kind="list" [rows]="4" label="Loading publications…" />
+      } @else if (loadError(); as reason) {
+        <app-load-error
+          title="Could not load the publications"
+          [reason]="reason"
+          (retry)="reload()"
+        />
       } @else if (!rows().length) {
-        <p class="text-sm text-muted-foreground">Nothing published yet.</p>
+        <p class="m-0 text-sm text-muted-foreground">Nothing published yet.</p>
       } @else {
         <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list">
           @for (row of rows(); track row.id) {
             <li class="flex flex-wrap items-center gap-3 rounded-lg border border-border px-4 py-3">
               <div class="min-w-0 flex-1">
-                <p class="m-0 truncate font-mono text-sm">
-                  #{{ row.id }} ·
-                  {{ row.label || (row.kind === "rollback" ? "rollback" : "unlabelled") }}
+                <p class="m-0 truncate text-sm">
+                  <span class="font-mono text-muted-foreground">#{{ row.id }}</span>
+                  <span class="ml-2 font-medium">{{
+                    row.label || (row.kind === "rollback" ? "Rollback" : "Unlabelled")
+                  }}</span>
                 </p>
-                <p class="m-0 mt-0.5 font-mono text-[0.72rem] text-muted-foreground">
+                <p class="m-0 mt-0.5 font-mono text-xs text-muted-foreground">
                   {{ formatDate(row.createdAt) }} · schema v{{ row.schemaVersion }}
                   @if (row.restoredFrom) {
                     · from #{{ row.restoredFrom }}
@@ -66,14 +83,14 @@ type DetailTab = "changes" | "json";
                 </p>
               </div>
               @if (row.live) {
-                <span hlmBadge variant="secondary" class="font-mono text-[0.65rem]">live</span>
+                <span hlmBadge variant="secondary" class="font-mono">live</span>
               }
               @for (version of row.versions; track version.id) {
                 <button
                   hlmBtn
                   variant="ghost"
                   size="sm"
-                  class="font-mono text-[0.72rem] uppercase"
+                  class="font-mono text-xs uppercase"
                   [disabled]="viewing() !== null"
                   [attr.aria-label]="'View ' + version.locale + ' of publication ' + row.id"
                   (click)="view(row, version.id)"
@@ -147,7 +164,7 @@ type DetailTab = "changes" | "json";
                   publish, not here.)
                 </p>
               } @else {
-                <p class="m-0 mb-3 text-[0.8rem] text-muted-foreground">
+                <p class="m-0 mb-3 text-sm text-muted-foreground">
                   Rolling back would change {{ changes().length }}
                   {{ changes().length === 1 ? "field" : "fields" }} in this language:
                 </p>
@@ -155,24 +172,17 @@ type DetailTab = "changes" | "json";
                   @for (entry of changes(); track entry.path) {
                     <li class="rounded-lg border border-border p-3">
                       <div class="mb-2 flex items-start justify-between gap-2">
-                        <code class="font-mono text-[0.72rem] break-all text-foreground">{{
+                        <code class="font-mono text-xs break-all text-foreground">{{
                           entry.path
                         }}</code>
-                        <span
-                          hlmBadge
-                          variant="outline"
-                          class="shrink-0 font-mono text-[0.62rem]"
-                          >{{ entry.kind }}</span
-                        >
+                        <span hlmBadge variant="outline" class="shrink-0 font-mono">{{
+                          entry.kind
+                        }}</span>
                       </div>
-                      <dl class="m-0 grid gap-1.5 text-[0.78rem] leading-relaxed">
+                      <dl class="m-0 grid gap-1.5 text-meta leading-relaxed">
                         @if (entry.before !== undefined) {
                           <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2">
-                            <dt
-                              class="font-mono text-[0.66rem] uppercase tracking-wider text-destructive"
-                            >
-                              live
-                            </dt>
+                            <dt class="eyebrow text-destructive">live</dt>
                             <dd
                               class="m-0 whitespace-pre-wrap wrap-break-word text-muted-foreground"
                             >
@@ -182,9 +192,7 @@ type DetailTab = "changes" | "json";
                         }
                         @if (entry.after !== undefined) {
                           <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2">
-                            <dt
-                              class="font-mono text-[0.66rem] uppercase tracking-wider text-accent-indigo"
-                            >
+                            <dt class="eyebrow text-accent-orange">
                               #{{ detailPublication()?.id }}
                             </dt>
                             <dd class="m-0 whitespace-pre-wrap wrap-break-word text-foreground">
@@ -201,7 +209,7 @@ type DetailTab = "changes" | "json";
 
             <div hlmTabsContent="json" class="min-w-0">
               <pre
-                class="m-0 max-h-[60vh] overflow-auto rounded-lg border border-border bg-card/40 p-3 font-mono text-[0.72rem] leading-relaxed"
+                class="m-0 max-h-[60vh] overflow-auto rounded-lg border border-border bg-card/40 p-3 font-mono text-xs leading-relaxed"
                 >{{ json() }}</pre>
             </div>
           </div>
@@ -220,6 +228,8 @@ export default class AdminPublicationsPage implements OnInit {
 
   protected readonly rows = signal<PublicationRow[]>([]);
   protected readonly loading = signal(true);
+  /** The API's reason when the list did not arrive. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly busy = signal<number | null>(null);
   protected readonly viewing = signal<number | null>(null);
   protected readonly detail = signal<RevisionDetail | null>(null);
@@ -246,14 +256,16 @@ export default class AdminPublicationsPage implements OnInit {
     return new Date(value).toLocaleString();
   }
 
+  protected reload(): void {
+    this.loading.set(true);
+    void this.load();
+  }
+
   private async load(): Promise<void> {
     const result = await this.api.publications();
     this.loading.set(false);
-    if (!result.ok) {
-      toast.error("Could not load publications", { description: result.error });
-      return;
-    }
-    this.rows.set(result.data.publications);
+    this.loadError.set(result.ok ? null : result.error);
+    if (result.ok) this.rows.set(result.data.publications);
   }
 
   protected async view(row: PublicationRow, versionId: number): Promise<void> {
@@ -308,7 +320,7 @@ export default class AdminPublicationsPage implements OnInit {
       return;
     }
     toast.success("Draft restored", {
-      description: "Review it in the editors, then publish from the dashboard.",
+      description: "Review it in the editors, then publish.",
     });
   }
 }

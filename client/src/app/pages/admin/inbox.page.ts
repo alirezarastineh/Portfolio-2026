@@ -2,14 +2,18 @@ import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@ang
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
-import { HlmTabsImports } from "@spartan-ng/helm/tabs";
+import { HlmToggleGroupImports } from "@spartan-ng/helm/toggle-group";
 
 import {
   AdminApiService,
   type MessageRow,
   type MessageStatus,
 } from "../../admin/admin-api.service";
+import {
+  FormSkeletonComponent,
+  LoadErrorComponent,
+} from "../../admin/components/load-state.component";
+import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 
 type Filter = "inbox" | MessageStatus;
 
@@ -29,29 +33,44 @@ const FILTERS: { id: Filter; label: string }[] = [
 @Component({
   selector: "app-admin-inbox",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmBadge, HlmButton, HlmSkeleton, HlmTabsImports],
+  imports: [
+    AdminPageHeaderComponent,
+    FormSkeletonComponent,
+    HlmBadge,
+    HlmButton,
+    HlmToggleGroupImports,
+    LoadErrorComponent,
+  ],
   host: { class: "block" },
   template: `
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
-      <header>
-        <h1 class="m-0 font-mono text-2xl tracking-tight">Inbox</h1>
-        <p class="mt-1 text-sm text-muted-foreground">
-          Contact-form messages, newest first. Kept for 180 days.
-        </p>
-      </header>
+      <app-page-header
+        title="Inbox"
+        description="Contact-form messages, newest first. Kept for 180 days."
+      />
 
-      <div hlmTabs [tab]="filter()" (tabActivated)="setFilter($any($event))">
-        <div hlmTabsList aria-label="Message filter">
-          @for (option of filters; track option.id) {
-            <button [hlmTabsTrigger]="option.id">{{ option.label }}</button>
-          }
-        </div>
+      <!-- A filter over one list, not tabs: there are no panels to switch between. -->
+      <div
+        hlmToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        aria-label="Message filter"
+        [nullable]="false"
+        [value]="filter()"
+        (valueChange)="onFilter($event)"
+      >
+        @for (option of filters; track option.id) {
+          <button hlmToggleGroupItem type="button" [value]="option.id">{{ option.label }}</button>
+        }
       </div>
 
       @if (loading()) {
-        <hlm-skeleton class="h-64 w-full" />
+        <app-form-skeleton kind="list" [rows]="3" label="Loading messages…" />
+      } @else if (loadError(); as reason) {
+        <app-load-error title="Could not load the messages" [reason]="reason" (retry)="load()" />
       } @else if (!messages().length) {
-        <p class="text-sm text-muted-foreground">Nothing here.</p>
+        <p class="m-0 text-sm text-muted-foreground">Nothing here.</p>
       } @else {
         <ul class="m-0 flex list-none flex-col gap-3 p-0" role="list">
           @for (message of messages(); track message.id) {
@@ -61,7 +80,7 @@ const FILTERS: { id: Filter; label: string }[] = [
                   <strong class="font-medium">{{ message.name }}</strong>
                   <span class="text-muted-foreground"> &lt;{{ message.email }}&gt;</span>
                 </p>
-                <p class="m-0 font-mono text-[0.72rem] text-muted-foreground">
+                <p class="m-0 font-mono text-xs text-muted-foreground">
                   {{ formatDate(message.createdAt)
                   }}{{ message.locale ? " · " + message.locale.toUpperCase() : "" }}
                 </p>
@@ -71,7 +90,7 @@ const FILTERS: { id: Filter; label: string }[] = [
                 <span
                   hlmBadge
                   [variant]="message.status === 'new' ? 'default' : 'outline'"
-                  class="font-mono text-[0.65rem]"
+                  class="font-mono"
                 >
                   {{ message.status }}
                 </span>
@@ -79,7 +98,7 @@ const FILTERS: { id: Filter; label: string }[] = [
                   <span
                     hlmBadge
                     variant="destructive"
-                    class="font-mono text-[0.65rem]"
+                    class="font-mono"
                     [title]="message.mailError ?? ''"
                   >
                     email failed
@@ -113,9 +132,16 @@ export default class AdminInboxPage implements OnInit {
   protected readonly filter = signal<Filter>("inbox");
   protected readonly messages = signal<MessageRow[]>([]);
   protected readonly loading = signal(true);
+  /** The API's reason when the list did not arrive. */
+  protected readonly loadError = signal<string | null>(null);
 
   ngOnInit(): void {
     void this.load();
+  }
+
+  protected onFilter(value: unknown): void {
+    const filter = FILTERS.find((f) => f.id === value)?.id;
+    if (filter) this.setFilter(filter);
   }
 
   protected setFilter(filter: Filter): void {
@@ -123,16 +149,15 @@ export default class AdminInboxPage implements OnInit {
     void this.load();
   }
 
-  private async load(): Promise<void> {
+  protected async load(): Promise<void> {
     this.loading.set(true);
     const filter = this.filter();
     const result = await this.api.listMessages(filter === "inbox" ? undefined : filter);
+    // A later filter's answer wins over an earlier one arriving late.
+    if (filter !== this.filter()) return;
     this.loading.set(false);
-    if (!result.ok) {
-      toast.error("Could not load messages", { description: result.error });
-      return;
-    }
-    this.messages.set(result.data.messages);
+    this.loadError.set(result.ok ? null : result.error);
+    if (result.ok) this.messages.set(result.data.messages);
   }
 
   protected formatDate(value: string): string {

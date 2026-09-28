@@ -15,13 +15,17 @@ import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmDropdownMenuImports } from "@spartan-ng/helm/dropdown-menu";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmSwitch } from "@spartan-ng/helm/switch";
 
 import { unsavedChangesGuard } from "../../../admin/unsaved-changes.service";
 
 import { AdminApiService, type ProjectListRow } from "../../../admin/admin-api.service";
 import { ConfirmService } from "../../../admin/components/confirm-dialog.component";
+import {
+  FormSkeletonComponent,
+  LoadErrorComponent,
+} from "../../../admin/components/load-state.component";
+import { AdminPageHeaderComponent } from "../../../admin/components/page-header.component";
 import {
   SortableListComponent,
   SortableRowDirective,
@@ -42,12 +46,14 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   selector: "app-admin-projects",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AdminPageHeaderComponent,
+    FormSkeletonComponent,
     HlmBadge,
     HlmButton,
     HlmDropdownMenuImports,
     HlmSeparator,
-    HlmSkeleton,
     HlmSwitch,
+    LoadErrorComponent,
     NgIcon,
     RouterLink,
     SortableListComponent,
@@ -66,20 +72,27 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   ],
   host: { class: "block" },
   template: `
-    <app-ui-group-editor
-      group="projects"
-      title="Projects"
-      description="Section heading and the case-study cards."
-      [fields]="headingFields"
-    />
+    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
+      <app-page-header
+        title="Projects"
+        description="The section's heading, and the case-study cards in the order they stack on the page."
+        preview="/admin/preview/en#projects"
+      />
 
-    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
+      <app-ui-group-editor
+        group="projects"
+        title="Above the cards"
+        description="The section's heading and subtitle on the home page."
+        [fields]="headingFields"
+        [level]="2"
+      />
+
       <hlm-separator />
 
       <header class="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 class="m-0 font-mono text-lg tracking-tight">Case studies</h2>
-          <p class="mt-1 text-sm text-muted-foreground">
+          <h2 class="m-0 text-h4">Case studies</h2>
+          <p class="m-0 mt-1 text-sm text-muted-foreground">
             Order here is the order they stack on the page.
           </p>
         </div>
@@ -90,7 +103,9 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
       </header>
 
       @if (loading()) {
-        <hlm-skeleton class="h-64 w-full" />
+        <app-form-skeleton kind="list" [rows]="3" label="Loading projects…" />
+      } @else if (loadError(); as reason) {
+        <app-load-error title="Could not load the projects" [reason]="reason" (retry)="reload()" />
       } @else {
         <app-sortable-list
           [items]="rows()"
@@ -102,10 +117,10 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           <ng-template appSortableRow let-row>
             <div class="flex flex-wrap items-center gap-3">
               <div class="min-w-0 flex-1">
-                <p class="m-0 truncate font-mono text-sm">
+                <p class="m-0 truncate text-sm font-medium">
                   {{ row.translations.en?.name || row.slug }}
                 </p>
-                <p class="m-0 mt-0.5 truncate font-mono text-[0.72rem] text-muted-foreground">
+                <p class="m-0 mt-0.5 truncate font-mono text-xs text-muted-foreground">
                   /{{ row.slug }}
                 </p>
               </div>
@@ -114,18 +129,16 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                 !row.translations.de?.name ||
                 row.translations.de?.name === row.translations.en?.name
               ) {
-                <span hlmBadge variant="outline" class="font-mono text-[0.65rem]">DE todo</span>
+                <span hlmBadge variant="outline" class="font-mono">DE todo</span>
               }
               @if (row.translations.en?.hasCaseStudy || row.translations.de?.hasCaseStudy) {
-                <span hlmBadge variant="secondary" class="font-mono text-[0.65rem]"
-                  >case study</span
-                >
+                <span hlmBadge variant="secondary" class="font-mono">case study</span>
               }
               @if (row.featured) {
-                <span hlmBadge variant="secondary" class="font-mono text-[0.65rem]">featured</span>
+                <span hlmBadge variant="secondary" class="font-mono">featured</span>
               }
 
-              <label class="flex items-center gap-2 font-mono text-[0.72rem] text-muted-foreground">
+              <label class="flex items-center gap-2 text-xs text-muted-foreground">
                 <hlm-switch
                   [checked]="row.isVisible"
                   (checkedChange)="toggleVisible(row, $event)"
@@ -189,6 +202,8 @@ export default class AdminProjectsPage implements OnInit {
   protected readonly headingFields = HEADING_FIELDS;
   protected readonly rows = signal<ProjectListRow[]>([]);
   protected readonly loading = signal(true);
+  /** The API's reason when the list did not arrive. */
+  protected readonly loadError = signal<string | null>(null);
 
   ngOnInit(): void {
     void this.load();
@@ -196,15 +211,16 @@ export default class AdminProjectsPage implements OnInit {
 
   protected readonly trackRow = (row: ProjectListRow): string => row.id;
 
+  protected reload(): void {
+    this.loading.set(true);
+    void this.load();
+  }
+
   private async load(): Promise<void> {
     const result = await this.api.listProjects();
     this.loading.set(false);
-
-    if (!result.ok) {
-      toast.error("Could not load projects", { description: result.error });
-      return;
-    }
-    this.rows.set(result.data.projects);
+    this.loadError.set(result.ok ? null : result.error);
+    if (result.ok) this.rows.set(result.data.projects);
   }
 
   protected async toggleVisible(row: ProjectListRow, isVisible: boolean): Promise<void> {

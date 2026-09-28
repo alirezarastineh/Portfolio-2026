@@ -60,7 +60,7 @@ import { ConfirmService } from "../components/confirm-dialog.component";
               [variant]="
                 c[1].completed > 0 && c[1].passed < c[1].completed ? 'destructive' : 'outline'
               "
-              class="font-mono text-[0.68rem]"
+              class="font-mono"
             >
               {{ c[0] }} {{ c[1].passed }}/{{ c[1].completed }}
               @if (c[1].unavailable || categoryRemaining(c[1])) {
@@ -109,7 +109,7 @@ import { ConfirmService } from "../components/confirm-dialog.component";
                   {{ r.answer || "(no text)" }}
                 </p>
                 @if (r.tools.length) {
-                  <p class="m-0 mt-1 font-mono text-[0.68rem] text-muted-foreground">
+                  <p class="m-0 mt-1 font-mono text-xs text-muted-foreground">
                     tools: {{ tools(r.tools) }}
                   </p>
                 }

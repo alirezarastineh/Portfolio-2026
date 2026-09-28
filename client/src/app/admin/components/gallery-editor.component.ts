@@ -48,8 +48,8 @@ const MAX = 30;
   template: `
     <div class="flex flex-col gap-3">
       <div class="flex items-baseline justify-between">
-        <span class="font-mono text-[0.8rem]">{{ label() }}</span>
-        <span class="font-mono text-[0.7rem] text-muted-foreground"
+        <span class="text-sm font-medium">{{ label() }}</span>
+        <span class="font-mono text-xs text-muted-foreground"
           >{{ value().length }} / {{ max }}</span
         >
       </div>

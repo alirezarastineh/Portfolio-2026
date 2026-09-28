@@ -46,14 +46,19 @@ export type LocaleView = "en" | "de" | "both";
     <div class="flex flex-col gap-2">
       <div class="flex items-baseline justify-between gap-3">
         <span class="flex items-baseline gap-2">
-          <label [attr.for]="id() + '-en'" hlmFieldLabel class="font-mono text-[0.8rem]">
+          <!-- Through Spartan's label input: its host binding owns the for attribute. -->
+          <label
+            hlmFieldLabel
+            [id]="id() + '-label'"
+            [for]="view() === 'de' ? id() + '-de' : id() + '-en'"
+          >
             {{ label() }}
           </label>
           @if (germanStale()) {
             <span
               hlmBadge
               variant="outline"
-              class="border-accent-orange/50 font-mono text-[0.6rem] text-accent-orange"
+              class="border-accent-orange/50 font-mono text-accent-orange"
               title="The English text changed after the German one was last edited."
             >
               DE may be stale
@@ -67,7 +72,7 @@ export type LocaleView = "en" | "de" | "both";
               variant="ghost"
               size="sm"
               type="button"
-              class="h-6 px-2 font-mono text-[0.68rem] text-muted-foreground"
+              class="h-6 px-2 font-mono text-xs text-muted-foreground"
               (click)="copyToGerman()"
               [attr.aria-label]="'Copy English ' + label() + ' to German'"
             >
@@ -82,7 +87,7 @@ export type LocaleView = "en" | "de" | "both";
                 variant="ghost"
                 size="sm"
                 type="button"
-                class="h-6 px-2 font-mono text-[0.68rem] text-muted-foreground"
+                class="h-6 px-2 font-mono text-xs text-muted-foreground"
                 [disabled]="!!aiBusy()"
                 (click)="aiTranslate('en')"
                 [attr.aria-label]="'Translate the English ' + label() + ' into German with AI'"
@@ -95,7 +100,7 @@ export type LocaleView = "en" | "de" | "both";
                 variant="ghost"
                 size="sm"
                 type="button"
-                class="h-6 px-2 font-mono text-[0.68rem] text-muted-foreground"
+                class="h-6 px-2 font-mono text-xs text-muted-foreground"
                 [disabled]="!!aiBusy()"
                 (click)="aiTranslate('de')"
                 [attr.aria-label]="'Translate the German ' + label() + ' into English with AI'"
@@ -109,7 +114,7 @@ export type LocaleView = "en" | "de" | "both";
               variant="ghost"
               size="sm"
               type="button"
-              class="h-6 px-2 font-mono text-[0.68rem] text-muted-foreground"
+              class="h-6 px-2 font-mono text-xs text-muted-foreground"
               [disabled]="!!aiBusy()"
               (click)="aiTighten()"
               [attr.aria-label]="'Tighten the ' + label() + ' with AI'"
@@ -122,23 +127,20 @@ export type LocaleView = "en" | "de" | "both";
       </div>
 
       @if (hint()) {
-        <p class="m-0 text-[0.75rem] leading-snug text-muted-foreground">{{ hint() }}</p>
+        <p class="m-0 text-xs leading-snug text-muted-foreground">{{ hint() }}</p>
       }
 
       <div [class]="view() === 'both' ? 'grid gap-3 lg:grid-cols-2' : 'grid gap-3'">
         @if (view() === "en" || view() === "both") {
           <div hlmField>
             @if (view() === "both") {
-              <span
-                class="mb-1 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
-              >
-                EN
-              </span>
+              <span [id]="id() + '-en-tag'" class="eyebrow mb-1 text-muted-foreground">EN</span>
             }
             @if (multiline()) {
               <textarea
                 hlmTextarea
                 [id]="id() + '-en'"
+                [attr.aria-labelledby]="labelledBy('en')"
                 [rows]="rows()"
                 [attr.maxlength]="maxLength() || null"
                 [attr.aria-invalid]="errorEn() ? true : null"
@@ -149,6 +151,7 @@ export type LocaleView = "en" | "de" | "both";
               <input
                 hlmInput
                 [id]="id() + '-en'"
+                [attr.aria-labelledby]="labelledBy('en')"
                 type="text"
                 [attr.maxlength]="maxLength() || null"
                 [attr.aria-invalid]="errorEn() ? true : null"
@@ -159,7 +162,7 @@ export type LocaleView = "en" | "de" | "both";
             <app-field-issue [id]="id() + '-en-issue'" [message]="errorEn()" />
             @if (limit()) {
               <span
-                class="mt-1 self-end font-mono text-[0.62rem]"
+                class="mt-1 self-end font-mono text-xs tabular-nums"
                 [class]="lengthEn() > limit() ? 'text-accent-orange' : 'text-muted-foreground'"
               >
                 {{ lengthEn() }} / {{ limit() }}
@@ -171,16 +174,13 @@ export type LocaleView = "en" | "de" | "both";
         @if (view() === "de" || view() === "both") {
           <div hlmField>
             @if (view() === "both") {
-              <span
-                class="mb-1 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
-              >
-                DE
-              </span>
+              <span [id]="id() + '-de-tag'" class="eyebrow mb-1 text-muted-foreground">DE</span>
             }
             @if (multiline()) {
               <textarea
                 hlmTextarea
                 [id]="id() + '-de'"
+                [attr.aria-labelledby]="labelledBy('de')"
                 [rows]="rows()"
                 [attr.maxlength]="maxLength() || null"
                 [attr.aria-invalid]="errorDe() ? true : null"
@@ -191,6 +191,7 @@ export type LocaleView = "en" | "de" | "both";
               <input
                 hlmInput
                 [id]="id() + '-de'"
+                [attr.aria-labelledby]="labelledBy('de')"
                 type="text"
                 [attr.maxlength]="maxLength() || null"
                 [attr.aria-invalid]="errorDe() ? true : null"
@@ -201,7 +202,7 @@ export type LocaleView = "en" | "de" | "both";
             <app-field-issue [id]="id() + '-de-issue'" [message]="errorDe()" />
             @if (limit()) {
               <span
-                class="mt-1 self-end font-mono text-[0.62rem]"
+                class="mt-1 self-end font-mono text-xs tabular-nums"
                 [class]="lengthDe() > limit() ? 'text-accent-orange' : 'text-muted-foreground'"
               >
                 {{ lengthDe() }} / {{ limit() }}
@@ -230,6 +231,14 @@ export class FieldPairComponent {
    */
   readonly softMax = input(0);
   protected readonly limit = computed(() => this.maxLength() || this.softMax());
+
+  /**
+   * Side by side, each field is its label and its language ("Hook DE"); one
+   * language alone, the `<label for>` names the field shown.
+   */
+  protected labelledBy(locale: "en" | "de"): string | null {
+    return this.view() === "both" ? `${this.id()}-label ${this.id()}-${locale}-tag` : null;
+  }
   /** Offer the AI copilot (translate, tighten). Off for names, URLs and the like. */
   readonly ai = input(true);
 

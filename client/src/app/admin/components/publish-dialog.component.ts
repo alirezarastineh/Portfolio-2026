@@ -16,7 +16,6 @@ import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmDialogImports } from "@spartan-ng/helm/dialog";
 import { HlmInput } from "@spartan-ng/helm/input";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmSpinner } from "@spartan-ng/helm/spinner";
 
 import {
@@ -27,7 +26,10 @@ import {
 } from "../admin-api.service";
 import { editorLinkFor } from "../editor-links";
 import { diffJson, type DiffEntry } from "../json-diff";
+import { changesLabel, contentDiff, countChanges } from "../publish-summary";
 import { findPlaceholders, type ReadinessHit } from "../readiness";
+import { UnsavedChangesService } from "../unsaved-changes.service";
+import { FormSkeletonComponent, LoadErrorComponent } from "./load-state.component";
 import type { Locale } from "../../content/schema";
 
 /** Long values (a case-study body) are shown clipped: the diff says what changed, not all of it. */
@@ -61,7 +63,7 @@ function toView(review: LocaleReview): LocaleView {
     issues: review.issues.map((issue) => ({ ...issue, link: editorLinkFor(issue) })),
     changed: review.changed,
     firstPublish: review.live === null,
-    core: review.draft ? clipped(diffJson(review.live ?? {}, review.draft)) : [],
+    core: review.draft ? clipped(contentDiff(review.live, review.draft)) : [],
     docs: review.docs.map((doc) => ({
       key: doc.key,
       change: doc.change,
@@ -85,7 +87,8 @@ function toView(review: LocaleReview): LocaleView {
     HlmButton,
     HlmDialogImports,
     HlmInput,
-    HlmSkeleton,
+    FormSkeletonComponent,
+    LoadErrorComponent,
     HlmSpinner,
     NgTemplateOutlet,
     RouterLink,
@@ -101,8 +104,18 @@ function toView(review: LocaleReview): LocaleView {
           </p>
         </hlm-dialog-header>
 
+        @if (unsaved.hasAny()) {
+          <p
+            class="m-0 rounded-lg border border-accent-orange/50 bg-accent-orange/10 px-3 py-2 text-sm"
+            role="note"
+          >
+            <strong class="font-medium">This page has unsaved edits.</strong>
+            They are not part of this publish: save them first to include them.
+          </p>
+        }
+
         @if (loading()) {
-          <hlm-skeleton class="h-48 w-full" />
+          <app-form-skeleton kind="list" [rows]="3" label="Loading the review…" />
         } @else if (views(); as locales) {
           <div class="flex max-h-[60vh] min-w-0 flex-col gap-6 overflow-y-auto pr-1">
             @for (l of locales; track l.locale) {
@@ -110,26 +123,27 @@ function toView(review: LocaleReview): LocaleView {
                 class="flex min-w-0 flex-col gap-3"
                 [attr.aria-labelledby]="'review-' + l.locale"
               >
-                <h3
-                  [id]="'review-' + l.locale"
-                  class="m-0 flex items-center gap-2 font-mono text-sm uppercase tracking-[0.2em]"
-                >
+                <h3 [id]="'review-' + l.locale" class="eyebrow m-0 flex items-center gap-2">
                   {{ l.locale }}
                   @if (l.issues.length) {
                     <span
                       hlmBadge
                       variant="destructive"
-                      class="font-mono text-[0.62rem] normal-case"
+                      class="font-mono normal-case tracking-normal"
                     >
                       {{ l.issues.length }} {{ l.issues.length === 1 ? "problem" : "problems" }}
                     </span>
                   } @else if (!l.changed) {
-                    <span hlmBadge variant="secondary" class="font-mono text-[0.62rem] normal-case">
+                    <span
+                      hlmBadge
+                      variant="secondary"
+                      class="font-mono normal-case tracking-normal"
+                    >
                       no changes
                     </span>
                   } @else {
-                    <span hlmBadge variant="default" class="font-mono text-[0.62rem] normal-case">
-                      {{ changeCount(l) }} {{ changeCount(l) === 1 ? "change" : "changes" }}
+                    <span hlmBadge variant="default" class="font-mono normal-case tracking-normal">
+                      {{ changeCount(l) }}
                     </span>
                   }
                 </h3>
@@ -139,7 +153,7 @@ function toView(review: LocaleReview): LocaleView {
                     class="rounded-lg border border-accent-orange/50 bg-accent-orange/10 px-3 py-2"
                     role="note"
                   >
-                    <p class="m-0 text-[0.8rem]">
+                    <p class="m-0 text-sm">
                       <strong class="font-medium">Visitors will see placeholder text</strong>
                       in {{ l.placeholders.length }}
                       {{ l.placeholders.length === 1 ? "field" : "fields" }}. Publishing is still
@@ -148,10 +162,10 @@ function toView(review: LocaleReview): LocaleView {
                     <ul class="m-0 mt-1.5 flex list-none flex-col gap-1 p-0" role="list">
                       @for (hit of l.placeholders.slice(0, placeholderPreview); track hit.label) {
                         <li class="flex flex-wrap items-baseline gap-x-2">
-                          <code class="font-mono text-[0.72rem] break-all">{{ hit.label }}</code>
+                          <code class="font-mono text-xs break-all">{{ hit.label }}</code>
                           @if (hit.link) {
                             <a
-                              class="text-[0.78rem] underline underline-offset-4"
+                              class="inline-flex min-h-6 items-center text-xs underline underline-offset-4"
                               [routerLink]="hit.link"
                               (click)="open.set(false)"
                               >Fix<span class="sr-only"> {{ hit.label }}</span></a
@@ -161,7 +175,7 @@ function toView(review: LocaleReview): LocaleView {
                       }
                     </ul>
                     @if (l.placeholders.length > placeholderPreview) {
-                      <p class="m-0 mt-1 text-[0.72rem] text-muted-foreground">
+                      <p class="m-0 mt-1 text-xs text-muted-foreground">
                         and {{ l.placeholders.length - placeholderPreview }} more: the dashboard's
                         launch checklist lists them all.
                       </p>
@@ -170,7 +184,7 @@ function toView(review: LocaleReview): LocaleView {
                 }
 
                 @if (l.issues.length) {
-                  <p class="m-0 text-[0.8rem] text-muted-foreground">
+                  <p class="m-0 text-sm text-muted-foreground">
                     This language cannot be published until these are fixed:
                   </p>
                   <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list">
@@ -179,8 +193,8 @@ function toView(review: LocaleReview): LocaleView {
                         class="flex flex-wrap items-baseline justify-between gap-2 rounded-lg border border-destructive/40 px-3 py-2"
                       >
                         <span class="min-w-0">
-                          <code class="font-mono text-[0.72rem] break-all">{{ issue.label }}</code>
-                          <span class="ml-2 text-[0.8rem]">{{ issue.message }}</span>
+                          <code class="font-mono text-xs break-all">{{ issue.label }}</code>
+                          <span class="ml-2 text-sm">{{ issue.message }}</span>
                         </span>
                         @if (issue.link) {
                           <a
@@ -198,7 +212,7 @@ function toView(review: LocaleReview): LocaleView {
                   </ul>
                 } @else if (l.changed) {
                   @if (l.firstPublish) {
-                    <p class="m-0 text-[0.8rem] text-muted-foreground">
+                    <p class="m-0 text-sm text-muted-foreground">
                       Nothing is live in this language yet: everything is new.
                     </p>
                   }
@@ -213,12 +227,8 @@ function toView(review: LocaleReview): LocaleView {
                     @for (doc of l.docs; track doc.key) {
                       <li class="rounded-lg border border-border p-3">
                         <div class="flex items-start justify-between gap-2">
-                          <code class="font-mono text-[0.72rem] break-all">{{ doc.key }}</code>
-                          <span
-                            hlmBadge
-                            variant="outline"
-                            class="shrink-0 font-mono text-[0.62rem]"
-                          >
+                          <code class="font-mono text-xs break-all">{{ doc.key }}</code>
+                          <span hlmBadge variant="outline" class="shrink-0 font-mono">
                             page {{ doc.change }}
                           </span>
                         </div>
@@ -269,32 +279,27 @@ function toView(review: LocaleReview): LocaleView {
             </button>
           </hlm-dialog-footer>
         } @else {
-          <p class="m-0 text-sm text-muted-foreground">Could not load the review.</p>
+          <app-load-error compact title="Could not load the review" (retry)="load()" />
         }
 
         <ng-template #diffEntry let-entry>
           <div class="mb-1.5 flex items-start justify-between gap-2">
-            <code class="font-mono text-[0.72rem] break-all text-foreground">{{ entry.path }}</code>
-            <span hlmBadge variant="outline" class="shrink-0 font-mono text-[0.62rem]">{{
-              entry.kind
-            }}</span>
+            <code class="font-mono text-xs break-all text-foreground">{{ entry.path }}</code>
+            <span hlmBadge variant="outline" class="shrink-0 font-mono">{{ entry.kind }}</span>
           </div>
-          <dl class="m-0 grid gap-1 text-[0.78rem] leading-relaxed">
+          <dl class="m-0 grid gap-1 text-meta leading-relaxed">
             @if (entry.before !== undefined) {
-              <div class="grid grid-cols-[3rem_minmax(0,1fr)] gap-2">
-                <dt class="font-mono text-[0.66rem] uppercase tracking-wider text-destructive">
-                  live
-                </dt>
+              <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2">
+                <dt class="eyebrow text-destructive">live</dt>
                 <dd class="m-0 whitespace-pre-wrap wrap-break-word text-muted-foreground">
                   {{ entry.before }}
                 </dd>
               </div>
             }
             @if (entry.after !== undefined) {
-              <div class="grid grid-cols-[3rem_minmax(0,1fr)] gap-2">
-                <dt class="font-mono text-[0.66rem] uppercase tracking-wider text-accent-indigo">
-                  draft
-                </dt>
+              <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2">
+                <!-- Indigo is for ambient marks, never text: the draft side reads in the orange of "live next". -->
+                <dt class="eyebrow text-accent-orange">draft</dt>
                 <dd class="m-0 whitespace-pre-wrap wrap-break-word text-foreground">
                   {{ entry.after }}
                 </dd>
@@ -308,6 +313,7 @@ function toView(review: LocaleReview): LocaleView {
 })
 export class PublishDialogComponent {
   private readonly api = inject(AdminApiService);
+  protected readonly unsaved = inject(UnsavedChangesService);
 
   protected readonly placeholderPreview = PLACEHOLDER_PREVIEW;
 
@@ -330,20 +336,19 @@ export class PublishDialogComponent {
     });
   }
 
-  protected changeCount(view: LocaleView): number {
-    return view.core.filter((e) => !e.path.endsWith("(order)")).length + view.docs.length;
+  protected changeCount(view: LocaleView): string {
+    return changesLabel(countChanges(view.core, view.docs.length, view.changed));
   }
 
   protected onState(state: string): void {
     if (state === "closed") this.open.set(false);
   }
 
-  private async load(): Promise<void> {
+  protected async load(): Promise<void> {
     this.loading.set(true);
     const result = await this.api.publishReview();
     this.loading.set(false);
     this.review.set(result.ok ? result.data : null);
-    if (!result.ok) toast.error("Could not load the review", { description: result.error });
   }
 
   protected async publish(): Promise<void> {

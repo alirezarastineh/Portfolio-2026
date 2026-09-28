@@ -38,8 +38,8 @@ let counter = 0;
   template: `
     <div class="flex flex-col gap-3">
       <div class="flex items-baseline justify-between gap-3">
-        <span class="font-mono text-[0.8rem]">{{ label() }}</span>
-        <span class="font-mono text-[0.7rem] text-muted-foreground">
+        <span class="text-sm font-medium">{{ label() }}</span>
+        <span class="font-mono text-xs text-muted-foreground">
           {{ entries().length }}{{ max() ? " / " + max() : "" }}
         </span>
       </div>

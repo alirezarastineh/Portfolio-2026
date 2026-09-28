@@ -63,9 +63,7 @@ export const UPLOAD_ERRORS: Record<string, string> = {
             <hlm-progress [value]="progress()" aria-label="Upload progress">
               <hlm-progress-indicator />
             </hlm-progress>
-            <p class="m-0 font-mono text-[0.72rem] text-muted-foreground">
-              uploading… {{ progress() }}%
-            </p>
+            <p class="m-0 font-mono text-xs text-muted-foreground">uploading… {{ progress() }}%</p>
           </div>
         } @else {
           <ng-icon name="lucideUpload" size="20" class="text-muted-foreground" aria-hidden="true" />
@@ -73,7 +71,7 @@ export const UPLOAD_ERRORS: Record<string, string> = {
           <button hlmBtn variant="outline" size="sm" type="button" (click)="fileInput.click()">
             Choose a file
           </button>
-          <p class="m-0 font-mono text-[0.7rem] text-muted-foreground">
+          <p class="m-0 font-mono text-xs text-muted-foreground">
             {{
               documentsOnly()
                 ? "PDF"
@@ -106,7 +104,7 @@ export const UPLOAD_ERRORS: Record<string, string> = {
                 (click)="filter.set(option.id)"
               >
                 {{ option.label }}
-                <span class="ml-1.5 font-mono text-[0.68rem] text-muted-foreground">{{
+                <span class="ml-1.5 font-mono text-xs text-muted-foreground">{{
                   option.id === "unused" ? unused().length : offeredCount()
                 }}</span>
               </button>
@@ -170,7 +168,7 @@ export const UPLOAD_ERRORS: Record<string, string> = {
                         class="text-muted-foreground"
                         aria-hidden="true"
                       />
-                      <span class="font-mono text-[0.62rem] text-muted-foreground">PDF</span>
+                      <span class="font-mono text-xs text-muted-foreground">PDF</span>
                     </span>
                   } @else {
                     <img
@@ -186,9 +184,7 @@ export const UPLOAD_ERRORS: Record<string, string> = {
                   }
                 </div>
                 <span class="flex items-center justify-between gap-2 px-2 py-1.5">
-                  <span
-                    class="min-w-0 flex-1 truncate font-mono text-[0.68rem] text-muted-foreground"
-                  >
+                  <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
                     {{ asset.originalName }}
                   </span>
                   @if (selectedPath() === asset.path) {
@@ -201,7 +197,7 @@ export const UPLOAD_ERRORS: Record<string, string> = {
                   }
                 </span>
                 <span
-                  class="flex items-center justify-between gap-2 px-2 pb-1.5 font-mono text-[0.62rem] text-muted-foreground"
+                  class="flex items-center justify-between gap-2 px-2 pb-1.5 font-mono text-xs text-muted-foreground"
                 >
                   <span>
                     {{

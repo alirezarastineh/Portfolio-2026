@@ -19,11 +19,13 @@ import {
   type MediaReconcile,
 } from "../../admin/admin-api.service";
 import { MediaPickerComponent } from "../../admin/components/media-picker.component";
+import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 
 @Component({
   selector: "app-admin-media",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AdminPageHeaderComponent,
     FormsModule,
     HlmAlert,
     HlmAlertDescription,
@@ -36,14 +38,10 @@ import { MediaPickerComponent } from "../../admin/components/media-picker.compon
   host: { class: "block" },
   template: `
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
-      <header>
-        <h1 class="m-0 font-mono text-2xl tracking-tight">Media</h1>
-        <p class="mt-1 text-sm text-muted-foreground">
-          Images for projects, and PDFs such as your CV. Uploaded photos are straightened, stripped
-          of location data and resized automatically. Deleting is blocked while the draft or the
-          live site still uses a file; "Unused" lists the files nothing uses.
-        </p>
-      </header>
+      <app-page-header
+        title="Media"
+        description="Images for projects, and PDFs such as your CV. Uploaded photos are straightened, stripped of location data and resized automatically. Deleting is blocked while the draft or the live site still uses a file; “Unused” lists the files nothing uses."
+      />
 
       @if (reconcile(); as r) {
         @if (r.missingFiles.length || r.orphanFiles.length) {
@@ -62,7 +60,7 @@ import { MediaPickerComponent } from "../../admin/components/media-picker.compon
             </div>
           </div>
         }
-        <p class="m-0 font-mono text-[0.72rem] text-muted-foreground">
+        <p class="m-0 font-mono text-meta text-muted-foreground">
           {{ r.totalAssets }} file(s) · {{ formatSize(r.totalBytes) }} in originals
         </p>
       }
@@ -88,7 +86,7 @@ import { MediaPickerComponent } from "../../admin/components/media-picker.compon
                 <h2 hlmDialogTitle>{{ asset.originalName }}</h2>
                 <p hlmDialogDescription>
                   PDF · {{ formatSize(asset.byteSize) }} — served at
-                  <code class="font-mono text-[0.72rem]">{{ asset.path }}</code>
+                  <code class="font-mono text-xs">{{ asset.path }}</code>
                 </p>
               </hlm-dialog-header>
               <hlm-dialog-footer>
@@ -114,17 +112,11 @@ import { MediaPickerComponent } from "../../admin/components/media-picker.compon
 
               <div class="grid gap-3">
                 <label class="flex flex-col gap-1">
-                  <span
-                    class="font-mono text-[0.68rem] uppercase tracking-[0.2em] text-muted-foreground"
-                    >EN</span
-                  >
+                  <span class="eyebrow text-muted-foreground">EN</span>
                   <input hlmInput [(ngModel)]="altEn" aria-label="Alt text (English)" />
                 </label>
                 <label class="flex flex-col gap-1">
-                  <span
-                    class="font-mono text-[0.68rem] uppercase tracking-[0.2em] text-muted-foreground"
-                    >DE</span
-                  >
+                  <span class="eyebrow text-muted-foreground">DE</span>
                   <input hlmInput [(ngModel)]="altDe" aria-label="Alt text (German)" />
                 </label>
               </div>

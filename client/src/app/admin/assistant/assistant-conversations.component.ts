@@ -2,10 +2,10 @@ import { DecimalPipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@angular/core";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmBadge } from "@spartan-ng/helm/badge";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
-import { HlmTabsImports } from "@spartan-ng/helm/tabs";
+import { HlmToggleGroupImports } from "@spartan-ng/helm/toggle-group";
 
 import { AdminApiService } from "../admin-api.service";
+import { FormSkeletonComponent } from "../components/load-state.component";
 import type { ConversationFilter, ConversationRow } from "../assistant-types";
 
 const FILTERS: { id: ConversationFilter; label: string }[] = [
@@ -23,17 +23,24 @@ const FILTERS: { id: ConversationFilter; label: string }[] = [
 @Component({
   selector: "app-assistant-conversations",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, HlmBadge, HlmSkeleton, HlmTabsImports],
+  imports: [DecimalPipe, FormSkeletonComponent, HlmBadge, HlmToggleGroupImports],
   host: { class: "block" },
   template: `
     <div class="flex flex-col gap-4">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <div hlmTabs [tab]="filter()" (tabActivated)="setFilter($any($event))">
-          <div hlmTabsList aria-label="Conversation filter">
-            @for (option of filters; track option.id) {
-              <button [hlmTabsTrigger]="option.id">{{ option.label }}</button>
-            }
-          </div>
+        <div
+          hlmToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          aria-label="Conversation filter"
+          [nullable]="false"
+          [value]="filter()"
+          (valueChange)="onFilter($event)"
+        >
+          @for (option of filters; track option.id) {
+            <button hlmToggleGroupItem type="button" [value]="option.id">{{ option.label }}</button>
+          }
         </div>
         <label class="flex items-center gap-2 text-xs text-muted-foreground">
           <input type="checkbox" [checked]="source() === 'playground'" (change)="toggleSource()" />
@@ -42,14 +49,14 @@ const FILTERS: { id: ConversationFilter; label: string }[] = [
       </div>
 
       @if (loading()) {
-        <hlm-skeleton class="h-64 w-full" />
+        <app-form-skeleton kind="list" [rows]="3" label="Loading conversations…" />
       } @else {
         <ul class="m-0 flex list-none flex-col gap-3 p-0" role="list">
           @for (row of rows(); track row.id) {
             <li class="flex flex-col gap-2 rounded-lg border border-border p-4 text-sm">
               <div class="flex flex-wrap items-baseline justify-between gap-2">
                 <p class="m-0 font-medium">{{ row.question }}</p>
-                <p class="m-0 font-mono text-[0.7rem] text-muted-foreground">
+                <p class="m-0 font-mono text-xs text-muted-foreground">
                   {{ when(row.createdAt) }} · {{ row.locale.toUpperCase() }} · session
                   {{ row.session }}
                 </p>
@@ -58,7 +65,7 @@ const FILTERS: { id: ConversationFilter; label: string }[] = [
                 {{ row.answer || "(no answer)" }}
               </p>
               <div
-                class="flex flex-wrap items-center gap-2 font-mono text-[0.68rem] text-muted-foreground"
+                class="flex flex-wrap items-center gap-2 font-mono text-xs text-muted-foreground"
               >
                 <span hlmBadge variant="outline">{{ row.model ?? "no model" }}</span>
                 <span hlmBadge variant="outline">{{ row.route }}</span>
@@ -89,7 +96,7 @@ const FILTERS: { id: ConversationFilter; label: string }[] = [
                 }
               </div>
               @if (row.citedIds.length) {
-                <p class="m-0 font-mono text-[0.68rem] text-muted-foreground">
+                <p class="m-0 font-mono text-xs text-muted-foreground">
                   cited: {{ row.citedIds.join(", ") }}
                 </p>
               }
@@ -113,6 +120,11 @@ export class AssistantConversationsComponent implements OnInit {
 
   ngOnInit(): void {
     void this.load();
+  }
+
+  protected onFilter(value: unknown): void {
+    const filter = FILTERS.find((f) => f.id === value)?.id;
+    if (filter) this.setFilter(filter);
   }
 
   protected setFilter(filter: ConversationFilter): void {

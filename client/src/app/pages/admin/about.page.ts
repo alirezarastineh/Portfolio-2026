@@ -45,6 +45,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
       group="about"
       title="About"
       description="The about section, every line of the animated terminal, and the bio beside it."
+      preview="/admin/preview/en#about"
       [fields]="fields"
     />
   `,

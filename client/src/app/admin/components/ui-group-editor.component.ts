@@ -11,7 +11,6 @@ import {
 import { FormBuilder, FormControl, ReactiveFormsModule } from "@angular/forms";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 
 import { applyIssues, countServerErrors, focusFirstInvalid } from "../issues";
 import { toastIssues, toastStale } from "../save-feedback";
@@ -21,6 +20,8 @@ import { isLocale } from "../../content/locale";
 import type { Locale } from "../../content/schema";
 import { LocaleToggleComponent, SaveBarComponent } from "./editor-chrome.component";
 import { FieldPairComponent, type LocaleView } from "./field-pair.component";
+import { FormSkeletonComponent, LoadErrorComponent } from "./load-state.component";
+import { AdminPageHeaderComponent } from "./page-header.component";
 
 export interface UiFieldDef {
   key: string;
@@ -52,34 +53,41 @@ type StringRecord = Record<string, string>;
   selector: "app-ui-group-editor",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AdminPageHeaderComponent,
     FieldPairComponent,
+    FormSkeletonComponent,
     HlmSeparator,
-    HlmSkeleton,
+    LoadErrorComponent,
     LocaleToggleComponent,
     ReactiveFormsModule,
     SaveBarComponent,
   ],
   host: { class: "block" },
   template: `
-    <div class="mx-auto flex max-w-4xl flex-col gap-6" [class.pb-24]="saveBar()">
-      <header class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          @if (level() === 1) {
-            <h1 class="m-0 font-mono text-2xl tracking-tight">{{ title() }}</h1>
-          } @else {
-            <h2 class="m-0 font-mono text-lg tracking-tight">{{ title() }}</h2>
-          }
-          @if (description()) {
-            <p class="mt-1 text-sm text-muted-foreground">{{ description() }}</p>
-          }
-        </div>
-        <app-locale-toggle [(view)]="view" />
-      </header>
+    <div class="mx-auto flex max-w-4xl flex-col gap-6" [class.pb-24]="saveBar() && level() === 1">
+      @if (level() === 1) {
+        <app-page-header
+          [title]="title()"
+          [description]="description()"
+          [preview]="preview()"
+          [(view)]="view"
+        />
+      } @else {
+        <header class="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 class="m-0 text-h4">{{ title() }}</h2>
+            @if (description()) {
+              <p class="m-0 mt-1 text-sm text-muted-foreground">{{ description() }}</p>
+            }
+          </div>
+          <app-locale-toggle [(view)]="view" />
+        </header>
+      }
 
       @if (loading()) {
-        <hlm-skeleton class="h-96 w-full" />
+        <app-form-skeleton [rows]="skeletonRows()" />
       } @else if (!loaded()) {
-        <p class="text-sm text-muted-foreground">Could not load this section.</p>
+        <app-load-error (retry)="reload()" />
       } @else {
         <form [formGroup]="form" class="flex flex-col gap-6">
           @for (field of fields(); track field.key; let last = $last) {
@@ -124,6 +132,11 @@ export class UiGroupEditorComponent {
   readonly saveBar = input(true);
   /** 1 when this editor is the page (or tops it); 2 below the page's own heading. */
   readonly level = input<1 | 2>(1);
+  /** At level 1: where the page header's Preview opens the draft. */
+  readonly preview = input<string | null>(null);
+
+  /** As many placeholder fields as the form will have, up to a screenful. */
+  protected readonly skeletonRows = computed(() => Math.min(this.fields().length, 6));
 
   private readonly fb = inject(FormBuilder);
   private readonly ui = inject(UiSectionService);
@@ -168,15 +181,19 @@ export class UiGroupEditorComponent {
     return this.form.controls[locale].controls[key] as FormControl<string>;
   }
 
+  /** After a failed load: asks again, with the placeholder back meanwhile. */
+  protected reload(): void {
+    this.loading.set(true);
+    void this.load();
+  }
+
   /** (Re)loads the group from the server, dropping any local edits. */
   async load(): Promise<void> {
     const loaded = await this.ui.loadGroup(this.group());
     this.loading.set(false);
 
-    if (!loaded) {
-      toast.error("Could not load this section");
-      return;
-    }
+    // The page says so, with a retry; `loaded` stays false.
+    if (!loaded) return;
 
     // Controls are added here rather than declared up front because the field
     // list is an input and is not known until the caller binds it.

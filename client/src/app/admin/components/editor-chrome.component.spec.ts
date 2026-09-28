@@ -94,7 +94,7 @@ describe("SaveBarComponent", () => {
     host.saving.set(false);
     host.dirty.set(false);
     fixture.detectChanges();
-    expect(status()).toMatch(/^saved at .+ — publish from the dashboard/);
+    expect(status()).toMatch(/^saved at .+ — publish to go live/);
 
     host.problems.set(2);
     fixture.detectChanges();

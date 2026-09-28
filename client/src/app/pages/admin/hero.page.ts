@@ -20,7 +20,6 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
 import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 
 import {
   AdminApiService,
@@ -34,11 +33,15 @@ import { toastIssues, toastStale } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import {
   FieldIssueComponent,
-  LocaleToggleComponent,
   SaveBarComponent,
 } from "../../admin/components/editor-chrome.component";
 import { FieldPairComponent, type LocaleView } from "../../admin/components/field-pair.component";
+import {
+  FormSkeletonComponent,
+  LoadErrorComponent,
+} from "../../admin/components/load-state.component";
 import { MediaFieldComponent } from "../../admin/components/media-field.component";
+import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 import { UiSectionService } from "../../admin/ui-section.service";
 import { isLocale } from "../../content/locale";
 import type { AppTranslations, Availability, Locale } from "../../content/schema";
@@ -114,14 +117,15 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   selector: "app-admin-hero",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AdminPageHeaderComponent,
     FieldIssueComponent,
     FieldPairComponent,
+    FormSkeletonComponent,
     HlmField,
     HlmFieldLabel,
     HlmInput,
     HlmSeparator,
-    HlmSkeleton,
-    LocaleToggleComponent,
+    LoadErrorComponent,
     MediaFieldComponent,
     ReactiveFormsModule,
     SaveBarComponent,
@@ -129,28 +133,22 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   host: { class: "block" },
   template: `
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-24">
-      <header class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 class="m-0 font-mono text-2xl tracking-tight">Hero &amp; identity</h1>
-          <p class="mt-1 text-sm text-muted-foreground">
-            Who you are, where, whether you are available — plus the headline, button labels and
-            navigation wording.
-          </p>
-        </div>
-        <app-locale-toggle [(view)]="view" />
-      </header>
+      <app-page-header
+        title="Hero & identity"
+        description="Who you are, where, whether you are available, plus the headline, button labels and navigation wording."
+        preview="/admin/preview/en"
+        [(view)]="view"
+      />
 
       @if (loading()) {
-        <hlm-skeleton class="h-96 w-full" />
+        <app-form-skeleton [rows]="6" />
       } @else if (!loaded()) {
-        <p class="text-sm text-muted-foreground">Could not load this section.</p>
+        <app-load-error (retry)="reload()" />
       } @else {
         <section class="flex flex-col gap-4">
-          <h2 class="m-0 font-mono text-sm uppercase tracking-[0.2em] text-muted-foreground">
-            Identity
-          </h2>
-          <p class="m-0 -mt-2 text-[0.78rem] text-muted-foreground">
-            Not translated — the same in both languages.
+          <h2 class="m-0 text-h4">Identity</h2>
+          <p class="m-0 -mt-3 text-sm text-muted-foreground">
+            Not translated: the same in both languages.
           </p>
           <form [formGroup]="identity" class="grid gap-4 sm:grid-cols-2">
             @for (field of identityFields; track field.key) {
@@ -198,8 +196,8 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
         <hlm-separator />
 
         <section class="flex flex-col gap-4">
-          <h2 class="m-0 font-mono text-sm uppercase tracking-[0.2em] text-muted-foreground">CV</h2>
-          <p class="m-0 -mt-2 text-[0.78rem] text-muted-foreground">
+          <h2 class="m-0 text-h4">CV</h2>
+          <p class="m-0 -mt-3 text-sm text-muted-foreground">
             A PDF per language, behind the "Download CV" button. Saved immediately; live after the
             next publish.
           </p>
@@ -220,9 +218,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
         <hlm-separator />
 
         <section class="flex flex-col gap-6">
-          <h2 class="m-0 font-mono text-sm uppercase tracking-[0.2em] text-muted-foreground">
-            Hero copy
-          </h2>
+          <h2 class="m-0 text-h4">Hero copy</h2>
           <form [formGroup]="form" class="flex flex-col gap-6">
             @for (field of profileFields; track field.key) {
               <app-field-pair
@@ -248,9 +244,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
             }
 
             <hlm-separator />
-            <h2 class="m-0 font-mono text-sm uppercase tracking-[0.2em] text-muted-foreground">
-              Navigation labels
-            </h2>
+            <h2 class="m-0 text-h4">Navigation labels</h2>
 
             @for (field of navFields; track field.key) {
               <app-field-pair
@@ -380,10 +374,8 @@ export default class AdminHeroPage implements OnInit {
     ]);
     this.loading.set(false);
 
-    if (!profileResult.ok || !profileGroup || !heroGroup || !navGroup) {
-      toast.error("Could not load hero section");
-      return;
-    }
+    // The page says so, with a retry; `loaded` stays false.
+    if (!profileResult.ok || !profileGroup || !heroGroup || !navGroup) return;
     if (resumes.ok) this.resumes.set(resumes.data.resumes);
 
     const p = profileResult.data.profile;
@@ -535,8 +527,8 @@ export default class AdminHeroPage implements OnInit {
     return (this.identity.controls[key].errors?.["server"] as string | undefined) ?? null;
   }
 
-  /** After "Saved elsewhere": the other version, replacing the edits here. */
-  private async reload(): Promise<void> {
+  /** After "Saved elsewhere", or a load that failed: the stored version, replacing any edits here. */
+  protected async reload(): Promise<void> {
     this.loading.set(true);
     await this.load();
   }

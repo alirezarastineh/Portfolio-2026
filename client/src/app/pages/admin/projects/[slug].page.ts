@@ -15,11 +15,11 @@ import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { toast } from "@spartan-ng/brain/sonner";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideArrowLeft } from "@ng-icons/lucide";
+import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
 import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmSwitch } from "@spartan-ng/helm/switch";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
@@ -32,9 +32,14 @@ import {
 import type { MetricInput } from "../../../admin/admin-schema";
 import {
   FieldIssueComponent,
-  LocaleToggleComponent,
   SaveBarComponent,
 } from "../../../admin/components/editor-chrome.component";
+import {
+  FormSkeletonComponent,
+  LoadErrorComponent,
+  NotFoundStateComponent,
+} from "../../../admin/components/load-state.component";
+import { AdminPageHeaderComponent } from "../../../admin/components/page-header.component";
 import { FieldIssues, focusFirstInvalid } from "../../../admin/issues";
 import { toastIssues } from "../../../admin/save-feedback";
 import { isLocale } from "../../../content/locale";
@@ -127,22 +132,25 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   selector: "app-admin-project-editor",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AdminPageHeaderComponent,
     FieldIssueComponent,
+    FormSkeletonComponent,
     FormsModule,
     GalleryEditorComponent,
+    HlmBadge,
     HlmButton,
     HlmField,
     HlmFieldLabel,
     HlmInput,
     HlmSeparator,
-    HlmSkeleton,
     HlmSwitch,
     HlmTextarea,
-    LocaleToggleComponent,
     CopilotSuggestComponent,
+    LoadErrorComponent,
     MediaFieldComponent,
     MetricsEditorComponent,
     NgIcon,
+    NotFoundStateComponent,
     RichTextComponent,
     RouterLink,
     SaveBarComponent,
@@ -158,19 +166,35 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
       </a>
 
       @if (loading()) {
-        <hlm-skeleton class="h-96 w-full" />
+        <app-form-skeleton [rows]="8" />
+      } @else if (loadError(); as reason) {
+        <app-load-error title="Could not load the project" [reason]="reason" (retry)="reload()" />
       } @else if (!project()) {
-        <p class="text-sm text-muted-foreground">Project not found.</p>
+        <app-not-found-state what="project" back="/admin/projects" backLabel="All projects" />
       } @else if (project(); as p) {
-        <header class="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 class="m-0 font-mono text-2xl tracking-tight">
-              {{ p.translations.en.name || p.slug }}
-            </h1>
-            <p class="mt-1 font-mono text-sm text-muted-foreground">/{{ p.slug }}</p>
-          </div>
-          <app-locale-toggle [(view)]="view" />
-        </header>
+        <app-page-header
+          [title]="p.translations.en.name || p.slug"
+          [meta]="'/work/' + p.slug"
+          [preview]="previewPath()"
+          [(view)]="view"
+        >
+          <span headerStatus class="flex flex-wrap gap-1.5">
+            @if (p.featured) {
+              <span hlmBadge variant="secondary" class="font-mono">featured</span>
+            }
+            @if (!p.isVisible) {
+              <span hlmBadge variant="outline" class="font-mono">hidden</span>
+            }
+            @if (dirty()) {
+              <span
+                hlmBadge
+                variant="outline"
+                class="border-accent-orange/50 font-mono text-accent-orange"
+                >unsaved</span
+              >
+            }
+          </span>
+        </app-page-header>
 
         <section class="grid gap-4 sm:grid-cols-2">
           <div hlmField>
@@ -226,9 +250,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                 issues.get('periodEnd') ? 'periodEnd-issue periodEnd-hint' : 'periodEnd-hint'
               "
             />
-            <span id="periodEnd-hint" class="text-[0.72rem] text-muted-foreground"
-              >Empty = ongoing.</span
-            >
+            <span id="periodEnd-hint" class="text-xs text-muted-foreground">Empty = ongoing.</span>
             <app-field-issue id="periodEnd-issue" [message]="issues.get('periodEnd')" />
           </div>
           @for (link of linkFields; track link.key) {
@@ -246,7 +268,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
               <app-field-issue [id]="link.key + '-issue'" [message]="issues.get(link.key)" />
             </div>
           }
-          <label class="flex items-center gap-3 self-end pb-2 font-mono text-[0.8rem]">
+          <label class="flex items-center gap-3 self-end pb-2 text-sm font-medium">
             <hlm-switch [checked]="p.featured" (checkedChange)="patch({ featured: $event })" />
             <span>Featured on the home page</span>
           </label>
@@ -289,19 +311,15 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
         @for (field of cardFields; track field.key) {
           <div class="flex flex-col gap-2">
-            <span class="font-mono text-[0.8rem]">{{ field.label }}</span>
+            <span class="text-sm font-medium">{{ field.label }}</span>
             @if (field.hint) {
-              <p class="m-0 text-[0.75rem] text-muted-foreground">{{ field.hint }}</p>
+              <p class="m-0 text-xs text-muted-foreground">{{ field.hint }}</p>
             }
             <div [class]="columns()">
               @for (locale of visibleLocales(); track locale) {
                 <div class="flex flex-col gap-1">
                   @if (view() === "both") {
-                    <span
-                      class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
-                    >
-                      {{ locale }}
-                    </span>
+                    <span class="eyebrow text-muted-foreground">{{ locale }}</span>
                   }
                   @if (field.rich) {
                     <app-rich-text
@@ -395,10 +413,8 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
         <section class="flex flex-col gap-3">
           <div>
-            <h2 class="m-0 font-mono text-sm uppercase tracking-[0.2em] text-muted-foreground">
-              Case study
-            </h2>
-            <p class="m-0 mt-1 text-[0.78rem] text-muted-foreground">
+            <h2 class="m-0 text-h4">Case study</h2>
+            <p class="m-0 mt-1 text-sm text-muted-foreground">
               The long read at /work/{{ p.slug }}. Empty in a language = no case-study page in that
               language.
             </p>
@@ -406,11 +422,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           @for (locale of visibleLocales(); track locale) {
             <div class="flex flex-col gap-1">
               @if (view() === "both") {
-                <span
-                  class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
-                >
-                  {{ locale }}
-                </span>
+                <span class="eyebrow text-muted-foreground">{{ locale }}</span>
               }
               <app-rich-text
                 mode="long"
@@ -456,9 +468,25 @@ export default class AdminProjectEditorPage implements OnInit {
   /** The last save's problems, by the input's path (`translations.de.name`). */
   protected readonly issues = new FieldIssues();
   protected readonly loading = signal(true);
+  /** The API's reason when the project did not arrive. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly saving = signal(false);
 
   protected readonly project = signal<ProjectRow | null>(null);
+
+  /**
+   * The case study's draft, or the card on the home page when there is none.
+   * From the saved slug: a renamed, unsaved one has no page yet.
+   */
+  protected readonly previewPath = computed(() => {
+    this.revision();
+    const saved = this.pristine;
+    if (!saved) return null;
+    const hasStudy = Boolean(saved.translations.en.body || saved.translations.de.body);
+    return hasStudy
+      ? `/admin/preview/en/work/${encodeURIComponent(saved.slug)}`
+      : "/admin/preview/en#projects";
+  });
 
   /** What the copilot describes when asked for a search description. */
   protected readonly seoSources: Record<Locale, () => string> = {
@@ -501,6 +529,11 @@ export default class AdminProjectEditorPage implements OnInit {
     return this.view() === "both" ? ["en", "de"] : [this.view() as Locale];
   }
 
+  protected reload(): void {
+    this.loading.set(true);
+    void this.load();
+  }
+
   private async load(): Promise<void> {
     const slug = this.route.snapshot.paramMap.get("slug");
     const list = await this.api.listProjects();
@@ -508,10 +541,15 @@ export default class AdminProjectEditorPage implements OnInit {
     const result = id ? await this.api.getProject(id) : null;
     this.loading.set(false);
 
-    if (!list.ok || (result && !result.ok)) {
-      toast.error("Could not load project", { description: list.ok ? "" : list.error });
+    if (!list.ok) {
+      this.loadError.set(list.error);
       return;
     }
+    if (result && !result.ok) {
+      this.loadError.set(result.error);
+      return;
+    }
+    this.loadError.set(null);
 
     const found = result?.ok ? result.data.project : null;
     this.project.set(found ? structuredClone(found) : null);

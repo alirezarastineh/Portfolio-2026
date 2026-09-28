@@ -18,11 +18,11 @@ import {
   HlmCardTitle,
 } from "@spartan-ng/helm/card";
 import { HlmProgressImports } from "@spartan-ng/helm/progress";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 
 import { LOCALES } from "../../content/locale";
 import type { AppContent, Locale } from "../../content/schema";
 import { AdminApiService } from "../admin-api.service";
+import { FormSkeletonComponent } from "./load-state.component";
 import {
   checkReadiness,
   type ReadinessCheck,
@@ -65,7 +65,7 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
     HlmCardHeader,
     HlmCardTitle,
     HlmProgressImports,
-    HlmSkeleton,
+    FormSkeletonComponent,
     NgTemplateOutlet,
     RouterLink,
   ],
@@ -73,11 +73,7 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
   template: `
     <section hlmCard aria-labelledby="readiness-title">
       <div hlmCardHeader>
-        <h2
-          hlmCardTitle
-          id="readiness-title"
-          class="flex flex-wrap items-center gap-2 font-mono text-base"
-        >
+        <h2 hlmCardTitle id="readiness-title" class="flex flex-wrap items-center gap-2">
           Launch readiness
           @if (report(); as r) {
             <span hlmBadge [variant]="badgeVariant()" class="font-mono">
@@ -93,14 +89,14 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
 
       <div hlmCardContent class="flex flex-col gap-4">
         @if (loading()) {
-          <hlm-skeleton class="h-32 w-full" />
+          <app-form-skeleton kind="list" [rows]="3" label="Checking the draft…" />
         } @else if (report(); as r) {
           <hlm-progress [value]="percent()" aria-label="Readiness checks passed">
             <hlm-progress-indicator />
           </hlm-progress>
 
           @if (skipped().length) {
-            <p class="m-0 text-[0.78rem] text-muted-foreground">
+            <p class="m-0 text-xs text-muted-foreground">
               The {{ skippedNames() }} draft does not build, so it was not checked. Review &amp;
               publish lists what stops it.
             </p>
@@ -117,7 +113,7 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
           <!-- Folded while anything more urgent is open, so the list leads with what matters. -->
           @if (tips().length) {
             <details [open]="!urgent().length">
-              <summary class="cursor-pointer font-mono text-[0.72rem] text-muted-foreground">
+              <summary class="cursor-pointer font-mono text-xs text-muted-foreground">
                 {{ tips().length }} nice to have
               </summary>
               <ul class="m-0 mt-2 flex list-none flex-col gap-2 p-0" role="list">
@@ -150,15 +146,15 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
                     ></span>
                     <span class="font-medium">{{ check.title }}</span>
                     @if (check.listsPlaces) {
-                      <span hlmBadge variant="outline" class="font-mono text-[0.62rem]">
+                      <span hlmBadge variant="outline" class="font-mono">
                         {{ check.hits.length }}
                       </span>
                     }
-                    <span class="font-mono text-[0.68rem] text-muted-foreground">
+                    <span class="font-mono text-xs text-muted-foreground">
                       {{ severityOf(check) }}{{ onlyIn(check) }}
                     </span>
                   </p>
-                  <p class="m-0 mt-0.5 text-[0.78rem] text-muted-foreground">
+                  <p class="m-0 mt-0.5 text-xs text-muted-foreground">
                     {{ check.why }}
                   </p>
                 </div>
@@ -173,14 +169,13 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
                   role="list"
                 >
                   @for (hit of shownHits(check); track hit.label) {
-                    <li class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[0.78rem]">
-                      <code class="font-mono text-[0.7rem] break-all text-foreground">{{
+                    <li class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
+                      <code class="font-mono text-xs break-all text-foreground">{{
                         hit.label
                       }}</code>
-                      <span
-                        class="font-mono text-[0.62rem] uppercase tracking-wider text-muted-foreground"
-                        >{{ hit.locales.join(" · ") }}</span
-                      >
+                      <span class="eyebrow text-muted-foreground">{{
+                        hit.locales.join(" · ")
+                      }}</span>
                       @if (hit.detail) {
                         <span class="min-w-0 wrap-break-word text-muted-foreground">{{
                           hit.detail
@@ -188,7 +183,7 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
                       }
                       @if (hit.link) {
                         <a
-                          class="ml-auto shrink-0 underline underline-offset-4 hover:text-accent-orange"
+                          class="ml-auto inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center underline underline-offset-4 hover:text-accent-orange"
                           [routerLink]="hit.link"
                           >Edit<span class="sr-only"> {{ hit.label }}</span></a
                         >
@@ -202,7 +197,7 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
                     variant="ghost"
                     size="sm"
                     type="button"
-                    class="mt-1 h-7 px-2 font-mono text-[0.72rem]"
+                    class="mt-1 h-7 px-2 text-xs"
                     [attr.aria-expanded]="isExpanded(check)"
                     (click)="toggle(check)"
                   >
@@ -215,12 +210,12 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
 
           @if (passing().length) {
             <details>
-              <summary class="cursor-pointer font-mono text-[0.72rem] text-muted-foreground">
+              <summary class="cursor-pointer font-mono text-xs text-muted-foreground">
                 {{ passing().length }} passing
               </summary>
               <ul class="m-0 mt-2 flex list-none flex-col gap-1 p-0" role="list">
                 @for (check of passing(); track check.id) {
-                  <li class="flex items-center gap-2 text-[0.78rem] text-muted-foreground">
+                  <li class="flex items-center gap-2 text-xs text-muted-foreground">
                     <span class="text-available" aria-hidden="true">✓</span>{{ check.title }}
                   </li>
                 }

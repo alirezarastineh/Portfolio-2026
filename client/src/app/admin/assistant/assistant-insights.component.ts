@@ -46,13 +46,9 @@ import type { InsightTopic } from "../assistant-types";
             <li class="flex flex-col gap-2 rounded-lg border border-border p-4 text-sm">
               <div class="flex flex-wrap items-center gap-2">
                 <strong class="font-medium">{{ topic.title }}</strong>
-                <span hlmBadge variant="outline" class="font-mono text-[0.65rem]"
-                  >{{ topic.questions }}×</span
-                >
+                <span hlmBadge variant="outline" class="font-mono">{{ topic.questions }}×</span>
                 @if (topic.unanswered) {
-                  <span hlmBadge variant="destructive" class="font-mono text-[0.65rem]"
-                    >not answered</span
-                  >
+                  <span hlmBadge variant="destructive" class="font-mono">not answered</span>
                 }
               </div>
               <p class="m-0 text-muted-foreground">{{ topic.summary }}</p>

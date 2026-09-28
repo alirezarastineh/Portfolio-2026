@@ -264,12 +264,10 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
           </button>
         }
         @if (inCodeBlock()) {
-          <label
-            class="ml-1 flex items-center gap-1 font-mono text-[0.68rem] text-muted-foreground"
-          >
+          <label class="ml-1 flex items-center gap-1 font-mono text-xs text-muted-foreground">
             <span>language</span>
             <select
-              class="h-7 rounded border border-border bg-card px-1 font-mono text-[0.7rem] text-foreground"
+              class="h-7 rounded border border-border bg-card px-1 font-mono text-xs text-foreground"
               [ngModel]="codeLanguage()"
               (ngModelChange)="setCodeLanguage($event)"
               aria-label="Code block language"
@@ -299,7 +297,7 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
     >
       <hlm-dialog-content *hlmDialogPortal="let ctx" class="sm:max-w-md">
         <hlm-dialog-header>
-          <h2 hlmDialogTitle class="font-mono text-base">Link</h2>
+          <h2 hlmDialogTitle>Link</h2>
           <p hlmDialogDescription>
             A web address, a mailto: address, or a path on this site (/en/…).
           </p>

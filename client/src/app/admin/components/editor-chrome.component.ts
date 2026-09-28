@@ -9,29 +9,42 @@ import {
   signal,
 } from "@angular/core";
 import { HlmButton } from "@spartan-ng/helm/button";
-import { HlmTabsImports } from "@spartan-ng/helm/tabs";
 import { HlmSpinner } from "@spartan-ng/helm/spinner";
+import { HlmToggleGroupImports } from "@spartan-ng/helm/toggle-group";
 
 import type { LocaleView } from "./field-pair.component";
 
-/** EN / DE / both switch, shared by every bilingual editor. */
+/**
+ * EN / DE / both switch, shared by every bilingual editor. A toggle group
+ * (`aria-pressed`), not tabs: it changes which fields show, and has no panels
+ * for tabs to point at.
+ */
 @Component({
   selector: "app-locale-toggle",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmTabsImports],
+  imports: [HlmToggleGroupImports],
   host: { class: "inline-block" },
   template: `
-    <div hlmTabs [tab]="view()" (tabActivated)="onTab($event)">
-      <div hlmTabsList aria-label="Language view">
-        @for (option of options; track option) {
-          <button
-            [hlmTabsTrigger]="option"
-            class="font-mono text-[0.75rem] uppercase tracking-widest"
-          >
-            {{ option }}
-          </button>
-        }
-      </div>
+    <div
+      hlmToggleGroup
+      type="single"
+      variant="outline"
+      size="sm"
+      aria-label="Language view"
+      [nullable]="false"
+      [value]="view()"
+      (valueChange)="onChange($event)"
+    >
+      @for (option of options; track option) {
+        <button
+          hlmToggleGroupItem
+          type="button"
+          class="font-mono text-xs uppercase tracking-label"
+          [value]="option"
+        >
+          {{ option }}
+        </button>
+      }
     </div>
   `,
 })
@@ -39,8 +52,8 @@ export class LocaleToggleComponent {
   readonly view = model.required<LocaleView>();
   protected readonly options: LocaleView[] = ["en", "de", "both"];
 
-  protected onTab(tab: string | number): void {
-    this.view.set(tab as LocaleView);
+  protected onChange(value: unknown): void {
+    if (value === "en" || value === "de" || value === "both") this.view.set(value);
   }
 }
 
@@ -51,7 +64,7 @@ export class LocaleToggleComponent {
   host: { class: "contents" },
   template: `
     @if (message()) {
-      <p [id]="id()" class="m-0 mt-1 text-[0.75rem] leading-snug text-destructive">
+      <p [id]="id()" class="m-0 mt-1 text-xs leading-snug text-destructive">
         {{ message() }}
       </p>
     }
@@ -91,12 +104,12 @@ export function isSaveShortcut(event: KeyboardEvent): boolean {
       class="sticky bottom-0 z-20 -mx-6 border-t border-border bg-card/95 px-6 py-3 backdrop-blur"
     >
       <div class="mx-auto flex max-w-4xl items-center justify-between gap-4">
-        <p class="m-0 font-mono text-[0.75rem]" [class]="statusClass()" role="status">
+        <p class="m-0 font-mono text-meta" [class]="statusClass()" role="status">
           {{ status() }}
         </p>
         <div class="flex items-center gap-2">
           <kbd
-            class="hidden rounded border border-border px-1.5 py-0.5 font-mono text-[0.65rem] text-muted-foreground sm:inline"
+            class="hidden rounded-sm border border-border px-1.5 py-px font-mono text-xs text-muted-foreground sm:inline"
             aria-hidden="true"
             >{{ shortcut }}</kbd
           >
@@ -133,7 +146,7 @@ export class SaveBarComponent {
   /** Fields the last save flagged, still unfixed. */
   readonly problems = input(0);
   readonly saveLabel = input("Save draft");
-  readonly hint = input("publish from the dashboard to go live");
+  readonly hint = input("publish to go live");
 
   readonly save = output<void>();
   readonly discard = output<void>();

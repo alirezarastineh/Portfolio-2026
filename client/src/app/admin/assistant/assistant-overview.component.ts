@@ -10,8 +10,8 @@ import {
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 
+import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
 import { AdminApiService } from "../admin-api.service";
 import type { AnswersRow, AssistantHealth, UsageRow } from "../assistant-types";
 
@@ -32,11 +32,17 @@ interface ModelTotal {
 @Component({
   selector: "app-assistant-overview",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, HlmBadge, HlmButton, HlmSkeleton],
+  imports: [DecimalPipe, FormSkeletonComponent, HlmBadge, HlmButton, LoadErrorComponent],
   host: { class: "block" },
   template: `
-    @if (!health()) {
-      <hlm-skeleton class="h-64 w-full" />
+    @if (loadError(); as reason) {
+      <app-load-error
+        title="Could not load the assistant's health"
+        [reason]="reason"
+        (retry)="reload()"
+      />
+    } @else if (!health()) {
+      <app-form-skeleton kind="list" [rows]="3" label="Loading the assistant's health…" />
     } @else {
       @let h = health()!;
       <section class="grid gap-4 sm:grid-cols-3">
@@ -107,7 +113,7 @@ interface ModelTotal {
                     <span
                       hlmBadge
                       [variant]="b.state === 'closed' ? 'outline' : 'destructive'"
-                      class="font-mono text-[0.65rem]"
+                      class="font-mono"
                       >{{ b.state }}</span
                     >
                   </td>
@@ -136,7 +142,7 @@ interface ModelTotal {
           <h2 class="m-0 text-sm font-medium">What it knows</h2>
           <div class="flex flex-wrap items-center gap-2 text-sm">
             @for (kind of kinds(); track kind[0]) {
-              <span hlmBadge variant="outline" class="font-mono text-[0.7rem]"
+              <span hlmBadge variant="outline" class="font-mono"
                 >{{ kind[0] }} × {{ kind[1] }}</span
               >
             }
@@ -229,6 +235,8 @@ export class AssistantOverviewComponent implements OnInit {
   protected readonly health = signal<AssistantHealth | null>(null);
   protected readonly usage = signal<{ models: UsageRow[]; answers: AnswersRow[] } | null>(null);
   protected readonly counting = signal(false);
+  /** The API's reason when the health did not arrive. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly geminiCount = signal<number | null>(null);
 
   protected readonly spentShare = computed(() => {
@@ -284,13 +292,18 @@ export class AssistantOverviewComponent implements OnInit {
     void this.load();
   }
 
+  protected reload(): void {
+    this.loadError.set(null);
+    void this.load();
+  }
+
   async load(): Promise<void> {
     const [health, usage] = await Promise.all([
       this.api.assistantHealth(),
       this.api.assistantUsage(30),
     ]);
+    this.loadError.set(health.ok ? null : health.error);
     if (health.ok) this.health.set(health.data);
-    else toast.error("Could not load the assistant's health", { description: health.error });
     if (usage.ok) this.usage.set(usage.data);
   }
 

@@ -15,11 +15,11 @@ import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideArrowLeft } from "@ng-icons/lucide";
 import { toast } from "@spartan-ng/brain/sonner";
+import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
 import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmSwitch } from "@spartan-ng/helm/switch";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
@@ -34,6 +34,12 @@ import {
   FieldIssueComponent,
   SaveBarComponent,
 } from "../../../admin/components/editor-chrome.component";
+import {
+  FormSkeletonComponent,
+  LoadErrorComponent,
+  NotFoundStateComponent,
+} from "../../../admin/components/load-state.component";
+import { AdminPageHeaderComponent } from "../../../admin/components/page-header.component";
 import { FieldIssues, focusFirstInvalid } from "../../../admin/issues";
 import { toastIssues } from "../../../admin/save-feedback";
 import { MediaFieldComponent } from "../../../admin/components/media-field.component";
@@ -62,19 +68,23 @@ type PostDraft = PostRow;
   selector: "app-admin-post-editor",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AdminPageHeaderComponent,
     CopilotSuggestComponent,
     FieldIssueComponent,
+    FormSkeletonComponent,
     FormsModule,
+    HlmBadge,
     HlmButton,
     HlmField,
     HlmFieldLabel,
     HlmInput,
     HlmSeparator,
-    HlmSkeleton,
     HlmSwitch,
     HlmTextarea,
+    LoadErrorComponent,
     MediaFieldComponent,
     NgIcon,
+    NotFoundStateComponent,
     RichTextComponent,
     RouterLink,
     SaveBarComponent,
@@ -90,16 +100,29 @@ type PostDraft = PostRow;
       </a>
 
       @if (loading()) {
-        <hlm-skeleton class="h-96 w-full" />
+        <app-form-skeleton [rows]="7" />
+      } @else if (loadError(); as reason) {
+        <app-load-error title="Could not load the post" [reason]="reason" (retry)="reload()" />
       } @else if (!post()) {
-        <p class="text-sm text-muted-foreground">Post not found.</p>
+        <app-not-found-state what="post" back="/admin/writing" backLabel="All posts" />
       } @else if (post(); as p) {
-        <header>
-          <h1 class="m-0 font-mono text-2xl tracking-tight">
-            {{ p.translations.en?.title || p.translations.de?.title || p.slug }}
-          </h1>
-          <p class="mt-1 font-mono text-sm text-muted-foreground">/writing/{{ p.slug }}</p>
-        </header>
+        <app-page-header
+          [title]="p.translations.en?.title || p.translations.de?.title || p.slug"
+          [meta]="'/writing/' + p.slug"
+          [preview]="previewPath()"
+        >
+          <span headerStatus class="flex flex-wrap gap-1.5">
+            <span hlmBadge [variant]="statusVariant()" class="font-mono">{{ statusLabel() }}</span>
+            @if (dirty()) {
+              <span
+                hlmBadge
+                variant="outline"
+                class="border-accent-orange/50 font-mono text-accent-orange"
+                >unsaved</span
+              >
+            }
+          </span>
+        </app-page-header>
 
         <section class="grid gap-4 sm:grid-cols-2">
           <div hlmField>
@@ -128,12 +151,12 @@ type PostDraft = PostRow;
                 issues.get('publishedAt') ? 'post-date-issue post-date-hint' : 'post-date-hint'
               "
             />
-            <span id="post-date-hint" class="text-[0.72rem] text-muted-foreground">
+            <span id="post-date-hint" class="text-xs text-muted-foreground">
               In the future = scheduled: it appears with the first publish after this time.
             </span>
             <app-field-issue id="post-date-issue" [message]="issues.get('publishedAt')" />
           </div>
-          <label class="flex items-center gap-3 font-mono text-[0.8rem]">
+          <label class="flex items-center gap-3 text-sm font-medium">
             <hlm-switch
               [checked]="p.status === 'published'"
               (checkedChange)="setPublished($event)"
@@ -178,14 +201,12 @@ type PostDraft = PostRow;
         @for (locale of locales; track locale) {
           <hlm-separator />
           <section class="flex flex-col gap-4">
-            <label
-              class="flex items-center gap-3 font-mono text-[0.8rem] uppercase tracking-[0.15em]"
-            >
+            <label class="flex items-center gap-3 text-h4">
               <hlm-switch
                 [checked]="p.translations[locale] !== null"
                 (checkedChange)="setLocale(locale, $event)"
               />
-              <span>{{ locale }} version</span>
+              <span>{{ locale === "en" ? "English" : "German" }} version</span>
             </label>
 
             @if (p.translations[locale]; as t) {
@@ -290,8 +311,35 @@ export default class AdminPostEditorPage implements OnInit {
 
   protected readonly locales: Locale[] = ["en", "de"];
   protected readonly loading = signal(true);
+  /** The API's reason when the post did not arrive. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly saving = signal(false);
   protected readonly post = signal<PostDraft | null>(null);
+
+  /** As saved: a draft, scheduled for later, or published. */
+  protected readonly statusLabel = computed(() => {
+    this.revision();
+    const saved = this.pristine;
+    if (!saved || saved.status === "draft") return "draft";
+    return saved.publishedAt && Date.parse(saved.publishedAt) > Date.now()
+      ? "scheduled"
+      : "published";
+  });
+
+  protected readonly statusVariant = computed(() => {
+    const label = this.statusLabel();
+    if (label === "published") return "default";
+    return label === "scheduled" ? "secondary" : "outline";
+  });
+
+  /** The saved post's draft page, in English when it has one. */
+  protected readonly previewPath = computed(() => {
+    this.revision();
+    const saved = this.pristine;
+    if (!saved) return null;
+    const locale = saved.translations.en ? "en" : "de";
+    return `/admin/preview/${locale}/writing/${encodeURIComponent(saved.slug)}`;
+  });
   /** The last save's problems, by the input's path (`translations.de.title`). */
   protected readonly issues = new FieldIssues();
 
@@ -331,6 +379,11 @@ export default class AdminPostEditorPage implements OnInit {
     void this.load();
   }
 
+  protected reload(): void {
+    this.loading.set(true);
+    void this.load();
+  }
+
   private async load(): Promise<void> {
     const slug = this.route.snapshot.paramMap.get("slug");
     const list = await this.api.listPosts();
@@ -338,10 +391,15 @@ export default class AdminPostEditorPage implements OnInit {
     const result = id ? await this.api.getPost(id) : null;
     this.loading.set(false);
 
-    if (!list.ok || (result && !result.ok)) {
-      toast.error("Could not load the post");
+    if (!list.ok) {
+      this.loadError.set(list.error);
       return;
     }
+    if (result && !result.ok) {
+      this.loadError.set(result.error);
+      return;
+    }
+    this.loadError.set(null);
     const found = result?.ok ? result.data.post : null;
     this.post.set(found ? structuredClone(found) : null);
     this.pristine = found ? structuredClone(found) : null;

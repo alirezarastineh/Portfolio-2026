@@ -14,11 +14,11 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
 import { HlmInput } from "@spartan-ng/helm/input";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmSwitch } from "@spartan-ng/helm/switch";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
 import type { Locale } from "../../content/schema";
+import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
 import { AdminApiService } from "../admin-api.service";
 import type { AssistantEnv, AssistantSettings, AssistantSettingsInput } from "../assistant-types";
 import { SaveBarComponent } from "../components/editor-chrome.component";
@@ -59,15 +59,18 @@ function toDraft(s: AssistantSettings): Draft {
     HlmField,
     HlmFieldLabel,
     HlmInput,
-    HlmSkeleton,
+    FormSkeletonComponent,
+    LoadErrorComponent,
     HlmSwitch,
     HlmTextarea,
     SaveBarComponent,
   ],
   host: { class: "block" },
   template: `
-    @if (!draft()) {
-      <hlm-skeleton class="h-64 w-full" />
+    @if (loadError(); as reason) {
+      <app-load-error title="Could not load the settings" [reason]="reason" (retry)="reload()" />
+    } @else if (!draft()) {
+      <app-form-skeleton [rows]="5" label="Loading the settings…" />
     } @else {
       @let d = draft()!;
       <div class="flex flex-col gap-6">
@@ -213,6 +216,8 @@ export class AssistantSettingsComponent implements OnInit {
   private readonly saved = signal<Draft | null>(null);
   protected readonly draft = signal<Draft | null>(null);
   protected readonly env = signal<AssistantEnv | null>(null);
+  /** The API's reason when the settings did not arrive. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly saving = signal(false);
   protected readonly dirty = computed(
     () => JSON.stringify(this.draft()) !== JSON.stringify(this.saved()),
@@ -228,10 +233,17 @@ export class AssistantSettingsComponent implements OnInit {
     void this.load();
   }
 
+  protected reload(): void {
+    this.loadError.set(null);
+    void this.load();
+  }
+
   private async load(): Promise<void> {
     const result = await this.api.assistantSettings();
     if (!result.ok) {
-      toast.error("Could not load the settings", { description: result.error });
+      // With settings on screen (a reload after a save), a toast; before, the page says so.
+      if (this.draft()) toast.error("Could not load the settings", { description: result.error });
+      else this.loadError.set(result.error);
       return;
     }
     const draft = toDraft(result.data.settings);

@@ -1,5 +1,5 @@
 import { HttpClient, HttpErrorResponse, HttpEventType } from "@angular/common/http";
-import { inject, Injectable } from "@angular/core";
+import { inject, Injectable, signal } from "@angular/core";
 import { firstValueFrom } from "rxjs";
 
 import type { AppContent, AppTranslations, Doc, Locale } from "../content/schema";
@@ -95,6 +95,12 @@ export interface ApiIssue {
   label?: string;
 }
 
+/**
+ * Requests that are not GETs but change nothing stored: signing in and out,
+ * model calls (the copilot, insights, evals, a token count).
+ */
+const READ_ONLY_POSTS = /^\/(?:auth\/|admin\/ai\/|admin\/assistant\/(?:insights|evals|corpus))/;
+
 /** Discriminated so callers handle failure explicitly rather than by try/catch. */
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -123,6 +129,13 @@ export class AdminApiService {
 
   readonly baseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/$/, "");
 
+  /**
+   * Counts the writes that went through: a save, a delete, a publish, a
+   * message marked read. What summarises the draft (the sidebar's counts)
+   * watches it to know when to look again.
+   */
+  readonly writes = signal(0);
+
   private url(path: string): string {
     return `${this.baseUrl}${path}`;
   }
@@ -140,6 +153,7 @@ export class AdminApiService {
           responseType: "json",
         }),
       );
+      if (method !== "GET" && !READ_ONLY_POSTS.test(path)) this.writes.update((n) => n + 1);
       return { ok: true, data: data as T };
     } catch (error) {
       if (error instanceof HttpErrorResponse) {

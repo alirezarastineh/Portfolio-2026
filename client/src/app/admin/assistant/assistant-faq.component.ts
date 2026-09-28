@@ -14,11 +14,11 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
 import { HlmInput } from "@spartan-ng/helm/input";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmSwitch } from "@spartan-ng/helm/switch";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
 import type { Locale } from "../../content/schema";
+import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
 import { AdminApiService } from "../admin-api.service";
 import type { FaqEntry, FaqInput } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
@@ -53,7 +53,8 @@ function emptyForm(question = ""): Form {
     HlmField,
     HlmFieldLabel,
     HlmInput,
-    HlmSkeleton,
+    FormSkeletonComponent,
+    LoadErrorComponent,
     HlmSwitch,
     HlmTextarea,
   ],
@@ -127,7 +128,9 @@ function emptyForm(question = ""): Form {
       }
 
       @if (loading()) {
-        <hlm-skeleton class="h-40 w-full" />
+        <app-form-skeleton kind="list" [rows]="3" label="Loading the FAQ…" />
+      } @else if (loadError(); as reason) {
+        <app-load-error title="Could not load the FAQ" [reason]="reason" (retry)="reload()" />
       } @else {
         <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list">
           @for (entry of entries(); track entry.id; let i = $index, last = $last) {
@@ -136,7 +139,7 @@ function emptyForm(question = ""): Form {
             >
               <span class="min-w-0 flex-1" [class.text-muted-foreground]="!entry.isVisible">
                 {{ entry.translations.en?.question ?? entry.translations.de?.question }}
-                <span class="font-mono text-[0.7rem] text-muted-foreground">
+                <span class="font-mono text-xs text-muted-foreground">
                   {{ langs(entry) }}{{ entry.isVisible ? "" : " · hidden" }}
                 </span>
               </span>
@@ -182,6 +185,8 @@ export class AssistantFaqComponent implements OnInit {
   protected readonly locales = LOCALES;
   protected readonly entries = signal<FaqEntry[]>([]);
   protected readonly loading = signal(true);
+  /** The API's reason when the entries did not arrive. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly form = signal<Form | null>(null);
   protected readonly saving = signal(false);
   protected readonly drafting = signal(false);
@@ -201,11 +206,16 @@ export class AssistantFaqComponent implements OnInit {
     void this.load();
   }
 
+  protected reload(): void {
+    this.loading.set(true);
+    void this.load();
+  }
+
   private async load(): Promise<void> {
     const result = await this.api.listFaq();
     this.loading.set(false);
+    this.loadError.set(result.ok ? null : result.error);
     if (result.ok) this.entries.set(result.data.faq);
-    else toast.error("Could not load the FAQ", { description: result.error });
   }
 
   protected langs(entry: FaqEntry): string {

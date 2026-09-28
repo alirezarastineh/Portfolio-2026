@@ -59,6 +59,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
       group="contact"
       title="Contact copy"
       description="Every label, placeholder and error message on the contact form, and the reply time beside it."
+      preview="/admin/preview/en#contact"
       [fields]="fields"
     />
   `,

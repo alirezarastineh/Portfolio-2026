@@ -20,3 +20,9 @@
 @source "./app/pages/admin";
 @source "./app/pages/admin.page.ts";
 @source "../libs/ui";
+
+/* A page with the sticky header on top and the sticky save bar below: a
+   focused field, or a jump to an anchor, stops clear of both (WCAG 2.4.11). */
+:root:has(app-page-header) {
+  scroll-padding-block: 5rem 5.5rem;
+}

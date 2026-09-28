@@ -16,7 +16,7 @@ import { HlmAlert, HlmAlertDescription, HlmAlertTitle } from "@spartan-ng/helm/a
 import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
 import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
+import { BrnTabsContent } from "@spartan-ng/brain/tabs";
 import { HlmTabsImports } from "@spartan-ng/helm/tabs";
 
 import { AdminApiService, type LegalSectionInput } from "../../admin/admin-api.service";
@@ -24,6 +24,11 @@ import {
   FieldIssueComponent,
   SaveBarComponent,
 } from "../../admin/components/editor-chrome.component";
+import {
+  FormSkeletonComponent,
+  LoadErrorComponent,
+} from "../../admin/components/load-state.component";
+import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 import { RichTextComponent } from "../../admin/components/rich-text.component";
 import {
   UiGroupEditorComponent,
@@ -59,7 +64,10 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   selector: "app-admin-legal",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AdminPageHeaderComponent,
+    BrnTabsContent,
     FieldIssueComponent,
+    FormSkeletonComponent,
     FormsModule,
     HlmAlert,
     HlmAlertDescription,
@@ -68,21 +76,21 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
     HlmFieldLabel,
     HlmInput,
     HlmSeparator,
-    HlmSkeleton,
     HlmTabsImports,
+    LoadErrorComponent,
     RichTextComponent,
     SaveBarComponent,
     UiGroupEditorComponent,
   ],
   host: { class: "block" },
   template: `
-    <div class="mx-auto flex max-w-4xl flex-col gap-6">
-      <header>
-        <h1 class="m-0 font-mono text-2xl tracking-tight">Legal pages</h1>
-        <p class="mt-1 text-sm text-muted-foreground">
-          /legal/imprint and /legal/privacy, in both languages. Live after the next publish.
-        </p>
-      </header>
+    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
+      <app-page-header
+        title="Legal pages"
+        meta="/legal/imprint · /legal/privacy"
+        description="Both pages, in both languages. Live after the next publish."
+        preview="/admin/preview/en/legal/imprint"
+      />
 
       <div hlmAlert>
         <h2 hlmAlertTitle>Your responsibility</h2>
@@ -93,56 +101,65 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
       </div>
 
       @if (loading()) {
-        <hlm-skeleton class="h-96 w-full" />
+        <app-form-skeleton [rows]="4" />
+      } @else if (loadError(); as reason) {
+        <app-load-error
+          title="Could not load the legal pages"
+          [reason]="reason"
+          (retry)="reload()"
+        />
       } @else if (docs(); as d) {
-        <div hlmTabs [tab]="active()" (tabActivated)="active.set($any($event))">
+        <div hlmTabs class="gap-6" [tab]="active()" (tabActivated)="active.set($any($event))">
           <div hlmTabsList aria-label="Legal page">
             @for (doc of docList; track doc.id) {
               <button [hlmTabsTrigger]="doc.id">{{ doc.label }}</button>
             }
           </div>
-        </div>
 
-        @for (locale of locales; track locale) {
-          <section class="flex flex-col gap-3">
-            <p class="m-0 font-mono text-[0.7rem] uppercase tracking-[0.2em] text-muted-foreground">
-              {{ locale }}
-            </p>
-            <div hlmField>
-              <label hlmFieldLabel [for]="'legal-title-' + locale">Title</label>
-              <input
-                hlmInput
-                maxlength="120"
-                [id]="'legal-title-' + locale"
-                [ngModel]="d[active()][locale].title"
-                (ngModelChange)="patch(locale, { title: $event })"
-                [attr.aria-invalid]="issue(locale, 'title') ? true : null"
-                [attr.aria-describedby]="
-                  issue(locale, 'title') ? 'legal-title-' + locale + '-issue' : null
-                "
-              />
-              <app-field-issue
-                [id]="'legal-title-' + locale + '-issue'"
-                [message]="issue(locale, 'title')"
-              />
+          <!-- A panel per tab, for the tabs to point at; the active page's fields fill it. -->
+          @for (doc of docList; track doc.id) {
+            <div [brnTabsContent]="doc.id" class="flex flex-col gap-6">
+              @if (doc.id === active()) {
+                @for (locale of locales; track locale) {
+                  <section class="flex flex-col gap-3">
+                    <p class="eyebrow m-0 text-muted-foreground">{{ locale }}</p>
+                    <div hlmField>
+                      <label hlmFieldLabel [for]="'legal-title-' + locale">Title</label>
+                      <input
+                        hlmInput
+                        maxlength="120"
+                        [id]="'legal-title-' + locale"
+                        [ngModel]="d[active()][locale].title"
+                        (ngModelChange)="patch(locale, { title: $event })"
+                        [attr.aria-invalid]="issue(locale, 'title') ? true : null"
+                        [attr.aria-describedby]="
+                          issue(locale, 'title') ? 'legal-title-' + locale + '-issue' : null
+                        "
+                      />
+                      <app-field-issue
+                        [id]="'legal-title-' + locale + '-issue'"
+                        [message]="issue(locale, 'title')"
+                      />
+                    </div>
+                    <app-rich-text
+                      mode="long"
+                      [label]="'Text (' + locale + ')'"
+                      [ngModel]="d[active()][locale].body"
+                      (ngModelChange)="patch(locale, { body: $event })"
+                    />
+                    <app-field-issue
+                      [id]="'legal-body-' + locale + '-issue'"
+                      [message]="issue(locale, 'body')"
+                    />
+                  </section>
+                  <hlm-separator />
+                }
+              }
             </div>
-            <app-rich-text
-              mode="long"
-              [label]="'Text (' + locale + ')'"
-              [ngModel]="d[active()][locale].body"
-              (ngModelChange)="patch(locale, { body: $event })"
-            />
-            <app-field-issue
-              [id]="'legal-body-' + locale + '-issue'"
-              [message]="issue(locale, 'body')"
-            />
-          </section>
-          <hlm-separator />
-        }
+          }
+        </div>
       }
-    </div>
 
-    <div class="mt-6 pb-28">
       <app-ui-group-editor
         #labels
         group="legal"
@@ -176,6 +193,8 @@ export default class AdminLegalPage implements OnInit {
   protected readonly locales: Locale[] = ["en", "de"];
   protected readonly active = signal<LegalDoc>("imprint");
   protected readonly loading = signal(true);
+  /** The API's reason when the pages did not arrive. */
+  protected readonly loadError = signal<string | null>(null);
   private readonly savingDocs = signal(false);
   protected readonly docs = signal<Docs | null>(null);
   private readonly pristine = signal<Docs | null>(null);
@@ -203,6 +222,11 @@ export default class AdminLegalPage implements OnInit {
     return this.issues.get(`${this.active()}.${locale}.${field}`);
   }
 
+  protected reload(): void {
+    this.loading.set(true);
+    void this.load();
+  }
+
   /** (Re)loads both documents, dropping local edits to them. */
   private async load(): Promise<void> {
     const [imprint, privacy] = await Promise.all(
@@ -210,9 +234,14 @@ export default class AdminLegalPage implements OnInit {
     );
     this.loading.set(false);
     if (!imprint?.ok || !privacy?.ok) {
-      toast.error("Could not load the legal pages");
+      const failed = [imprint, privacy].find((r) => r && !r.ok);
+      const reason = failed && !failed.ok ? failed.error : "request_failed";
+      // With the pages on screen (a reload after "Saved elsewhere"), they stay.
+      if (this.docs()) toast.error("Could not load the legal pages", { description: reason });
+      else this.loadError.set(reason);
       return;
     }
+    this.loadError.set(null);
 
     const empty = (): LegalSectionInput => ({ title: "", body: "" });
     const docs: Docs = {

@@ -31,9 +31,9 @@ import { MediaPickerComponent } from "./media-picker.component";
   host: { class: "block" },
   template: `
     <div class="flex flex-col gap-2">
-      <span class="font-mono text-[0.8rem]" [id]="id() + '-label'">{{ label() }}</span>
+      <span class="text-sm font-medium" [id]="id() + '-label'">{{ label() }}</span>
       @if (hint()) {
-        <p class="m-0 text-[0.75rem] text-muted-foreground">{{ hint() }}</p>
+        <p class="m-0 text-xs text-muted-foreground">{{ hint() }}</p>
       }
       <div class="flex items-center gap-3" role="group" [attr.aria-labelledby]="id() + '-label'">
         <div
@@ -58,7 +58,7 @@ import { MediaPickerComponent } from "./media-picker.component";
           }
         </div>
         <div class="flex min-w-0 flex-col gap-1.5">
-          <span class="truncate font-mono text-[0.7rem] text-muted-foreground">
+          <span class="truncate font-mono text-xs text-muted-foreground">
             {{ caption() || path() || "none" }}
           </span>
           <div class="flex gap-2">

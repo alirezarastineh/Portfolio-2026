@@ -19,7 +19,6 @@ import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
 import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
 import { HlmSheetImports } from "@spartan-ng/helm/sheet";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmSwitch } from "@spartan-ng/helm/switch";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
@@ -34,7 +33,12 @@ import {
   FieldIssueComponent,
   isSaveShortcut,
 } from "../../admin/components/editor-chrome.component";
+import {
+  FormSkeletonComponent,
+  LoadErrorComponent,
+} from "../../admin/components/load-state.component";
 import { MediaFieldComponent } from "../../admin/components/media-field.component";
+import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 import {
   SortableListComponent,
   SortableRowDirective,
@@ -112,7 +116,9 @@ function blankDraft(): Draft {
   selector: "app-admin-experience",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AdminPageHeaderComponent,
     FieldIssueComponent,
+    FormSkeletonComponent,
     FormsModule,
     HlmBadge,
     HlmButton,
@@ -121,9 +127,9 @@ function blankDraft(): Draft {
     HlmInput,
     HlmSeparator,
     HlmSheetImports,
-    HlmSkeleton,
     HlmSwitch,
     HlmTextarea,
+    LoadErrorComponent,
     MediaFieldComponent,
     NgIcon,
     SortableListComponent,
@@ -134,23 +140,22 @@ function blankDraft(): Draft {
   viewProviders: [provideIcons({ lucidePencil, lucidePlus, lucideTrash2 })],
   host: { class: "block" },
   template: `
-    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
-      <header class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 class="m-0 font-mono text-2xl tracking-tight">Experience</h1>
-          <p class="mt-1 text-sm text-muted-foreground">
-            Work, education and certifications for the timeline. Drag to reorder — saved
-            immediately; the site shows them after the next publish.
-          </p>
-        </div>
-        <button hlmBtn variant="outline" (click)="edit(null)">
+    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
+      <app-page-header
+        title="Experience"
+        description="Work, education and certifications for the timeline. Drag to reorder: saved at once, and on the site after the next publish."
+        preview="/admin/preview/en#experience"
+      >
+        <button headerActions hlmBtn variant="outline" size="sm" (click)="edit(null)">
           <ng-icon name="lucidePlus" size="14" aria-hidden="true" />
           <span class="ml-1.5">Add entry</span>
         </button>
-      </header>
+      </app-page-header>
 
       @if (loading()) {
-        <hlm-skeleton class="h-64 w-full" />
+        <app-form-skeleton kind="list" [rows]="4" label="Loading the timeline…" />
+      } @else if (loadError(); as reason) {
+        <app-load-error title="Could not load the timeline" [reason]="reason" (retry)="reload()" />
       } @else {
         <app-sortable-list
           [items]="rows()"
@@ -162,17 +167,15 @@ function blankDraft(): Draft {
           <ng-template appSortableRow let-row>
             <div class="flex flex-wrap items-center gap-3">
               <div class="min-w-0 flex-1">
-                <p class="m-0 truncate font-mono text-sm">
+                <p class="m-0 truncate text-sm font-medium">
                   {{ row.translations.en.title || "(untitled)" }} · {{ row.orgName }}
                 </p>
-                <p class="m-0 mt-0.5 font-mono text-[0.72rem] text-muted-foreground">
+                <p class="m-0 mt-0.5 font-mono text-xs text-muted-foreground">
                   {{ row.startDate }} – {{ row.endDate ?? "present" }}
                 </p>
               </div>
-              <span hlmBadge variant="outline" class="font-mono text-[0.65rem]">{{
-                row.kind
-              }}</span>
-              <label class="flex items-center gap-2 font-mono text-[0.72rem] text-muted-foreground">
+              <span hlmBadge variant="outline" class="font-mono">{{ row.kind }}</span>
+              <label class="flex items-center gap-2 text-xs text-muted-foreground">
                 <hlm-switch
                   [checked]="row.isVisible"
                   (checkedChange)="toggleVisible(row, $event)"
@@ -199,15 +202,15 @@ function blankDraft(): Draft {
       }
 
       <hlm-separator />
-    </div>
 
-    <app-ui-group-editor
-      group="experience"
-      title="Timeline copy"
-      description="The section's heading and the labels around each entry."
-      [fields]="copyFields"
-      [level]="2"
-    />
+      <app-ui-group-editor
+        group="experience"
+        title="Timeline copy"
+        description="The section's heading and the labels around each entry."
+        [fields]="copyFields"
+        [level]="2"
+      />
+    </div>
 
     <hlm-sheet
       side="right"
@@ -219,8 +222,8 @@ function blankDraft(): Draft {
           <hlm-sheet-header>
             <h2 hlmSheetTitle>{{ d.id ? "Edit entry" : "New entry" }}</h2>
             <p hlmSheetDescription>
-              Saved to the draft with the button below or {{ shortcut }}; publish from the
-              dashboard.
+              Saved to the draft with the button below or {{ shortcut }}; live after the next
+              publish.
             </p>
           </hlm-sheet-header>
           <form
@@ -385,11 +388,7 @@ function blankDraft(): Draft {
 
             @for (locale of locales; track locale) {
               <hlm-separator />
-              <p
-                class="m-0 font-mono text-[0.7rem] uppercase tracking-[0.2em] text-muted-foreground"
-              >
-                {{ locale }}
-              </p>
+              <p class="eyebrow m-0 text-muted-foreground">{{ locale }}</p>
               <div hlmField>
                 <label hlmFieldLabel [for]="'exp-title-' + locale">Title</label>
                 <input
@@ -467,6 +466,8 @@ export default class AdminExperiencePage implements OnInit {
 
   protected readonly rows = signal<ExperienceRow[]>([]);
   protected readonly loading = signal(true);
+  /** The API's reason when the list did not arrive. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly saving = signal(false);
   protected readonly draft = signal<Draft | null>(null);
   protected readonly sheetOpen = signal(false);
@@ -501,14 +502,16 @@ export default class AdminExperiencePage implements OnInit {
     void this.save(form);
   }
 
+  protected reload(): void {
+    this.loading.set(true);
+    void this.load();
+  }
+
   private async load(): Promise<void> {
     const result = await this.api.listExperiences();
     this.loading.set(false);
-    if (!result.ok) {
-      toast.error("Could not load experience", { description: result.error });
-      return;
-    }
-    this.rows.set(result.data.experiences);
+    this.loadError.set(result.ok ? null : result.error);
+    if (result.ok) this.rows.set(result.data.experiences);
   }
 
   protected edit(row: ExperienceRow | null): void {

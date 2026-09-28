@@ -90,6 +90,24 @@ describe("FieldPairComponent", () => {
     expect(input.getAttribute("maxlength")).toBe("20");
   });
 
+  /** Spartan's label owns `for`: a plain `[attr.for]` binding was overwritten, and nothing was named. */
+  it("names each field by its label, and its language when both show", () => {
+    const root: HTMLElement = ctx.fixture.nativeElement;
+    const name = (id: string) =>
+      (root.querySelector(`#${id}`)?.getAttribute("aria-labelledby") ?? "")
+        .split(" ")
+        .map((ref) => root.querySelector(`#${ref}`)?.textContent?.trim())
+        .join(" ");
+
+    expect(name("greeting-en")).toBe("Greeting EN");
+    expect(name("greeting-de")).toBe("Greeting DE");
+
+    ctx.fixture.componentRef.setInput("view", "de");
+    ctx.fixture.detectChanges();
+    expect(root.querySelector("label")?.getAttribute("for")).toBe("greeting-de");
+    expect(root.querySelector("#greeting-de")?.hasAttribute("aria-labelledby")).toBe(false);
+  });
+
   it("renders no counter or cap without maxLength", () => {
     const input = ctx.fixture.nativeElement.querySelector("#greeting-en") as HTMLInputElement;
     expect(input.getAttribute("maxlength")).toBeNull();

@@ -1,8 +1,13 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
 import type { RouteMeta } from "@analogjs/router";
+import { BrnTabsContent } from "@spartan-ng/brain/tabs";
 import { HlmTabsImports } from "@spartan-ng/helm/tabs";
 
+import { HlmBadge } from "@spartan-ng/helm/badge";
+
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
+import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
+import { AdminPulseService } from "../../admin/pulse.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 
 import { AssistantConversationsComponent } from "../../admin/assistant/assistant-conversations.component";
@@ -36,6 +41,7 @@ const TABS: { id: Tab; label: string }[] = [
   selector: "app-admin-assistant",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AdminPageHeaderComponent,
     AssistantConversationsComponent,
     AssistantEvalsComponent,
     AssistantFaqComponent,
@@ -43,55 +49,71 @@ const TABS: { id: Tab; label: string }[] = [
     AssistantOverviewComponent,
     AssistantPlaygroundComponent,
     AssistantSettingsComponent,
+    BrnTabsContent,
+    HlmBadge,
     HlmTabsImports,
   ],
   host: { class: "block" },
   template: `
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
-      <header>
-        <h1 class="m-0 font-mono text-2xl tracking-tight">Assistant</h1>
-        <p class="mt-1 text-sm text-muted-foreground">
-          The About terminal's AI: answers from the published portfolio, with citations.
-        </p>
-      </header>
+      <app-page-header
+        title="Assistant"
+        description="The About terminal's AI: answers from the published portfolio, with citations."
+      >
+        <span headerStatus>
+          @if (pulse.assistantAlert(); as alert) {
+            <span hlmBadge variant="destructive" class="font-mono">
+              needs a look<span class="sr-only">: {{ alert }}</span>
+            </span>
+          }
+        </span>
+      </app-page-header>
 
-      <div hlmTabs [tab]="strip()" (tabActivated)="select($any($event))">
+      <div hlmTabs class="gap-6" [tab]="strip()" (tabActivated)="select($any($event))">
         <div hlmTabsList aria-label="Assistant sections" class="flex-wrap">
           @for (option of tabs; track option.id) {
             <button [hlmTabsTrigger]="option.id">{{ option.label }}</button>
           }
         </div>
-      </div>
 
-      @switch (tab()) {
-        @case ("overview") {
-          <app-assistant-overview class="flex flex-col gap-6" />
+        <!-- A panel per tab, for the tabs to point at; only the shown one holds its section. -->
+        @for (option of tabs; track option.id) {
+          <div [brnTabsContent]="option.id">
+            @if (option.id === tab()) {
+              @switch (tab()) {
+                @case ("overview") {
+                  <app-assistant-overview class="flex flex-col gap-6" />
+                }
+                @case ("settings") {
+                  <app-assistant-settings />
+                }
+                @case ("faq") {
+                  <app-assistant-faq [seed]="faqSeed()" (seedTaken)="faqSeed.set(null)" />
+                }
+                @case ("conversations") {
+                  <app-assistant-conversations />
+                }
+                @case ("insights") {
+                  <app-assistant-insights (toFaq)="toFaq($event)" />
+                }
+                @case ("playground") {
+                  <app-assistant-playground />
+                }
+                @case ("evals") {
+                  <app-assistant-evals />
+                }
+              }
+            }
+          </div>
         }
-        @case ("settings") {
-          <app-assistant-settings />
-        }
-        @case ("faq") {
-          <app-assistant-faq [seed]="faqSeed()" (seedTaken)="faqSeed.set(null)" />
-        }
-        @case ("conversations") {
-          <app-assistant-conversations />
-        }
-        @case ("insights") {
-          <app-assistant-insights (toFaq)="toFaq($event)" />
-        }
-        @case ("playground") {
-          <app-assistant-playground />
-        }
-        @case ("evals") {
-          <app-assistant-evals />
-        }
-      }
+      </div>
     </div>
   `,
 })
 export default class AdminAssistantPage {
   private readonly unsaved = inject(UnsavedChangesService);
   private readonly confirm = inject(ConfirmService);
+  protected readonly pulse = inject(AdminPulseService);
 
   protected readonly tabs = TABS;
   /** The section shown; the settings tab's edits die with it on a switch. */

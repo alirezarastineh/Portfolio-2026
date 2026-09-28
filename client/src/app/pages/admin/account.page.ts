@@ -13,15 +13,22 @@ import {
 } from "@spartan-ng/helm/card";
 import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
 import { HlmInput } from "@spartan-ng/helm/input";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 
 import { AdminApiService, type AdminSessionRow } from "../../admin/admin-api.service";
 import { AdminSessionService } from "../../admin/admin-session.service";
+import {
+  FormSkeletonComponent,
+  LoadErrorComponent,
+} from "../../admin/components/load-state.component";
+import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 
 @Component({
   selector: "app-admin-account",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AdminPageHeaderComponent,
+    FormSkeletonComponent,
+    LoadErrorComponent,
     HlmAlert,
     HlmAlertDescription,
     HlmAlertTitle,
@@ -35,25 +42,25 @@ import { AdminSessionService } from "../../admin/admin-session.service";
     HlmField,
     HlmFieldLabel,
     HlmInput,
-    HlmSkeleton,
     ReactiveFormsModule,
   ],
   host: { class: "block" },
   template: `
     <div class="mx-auto flex max-w-3xl flex-col gap-6 pb-12">
-      <header>
-        <h1 class="m-0 font-mono text-2xl tracking-tight">Account</h1>
-        <p class="mt-1 text-sm text-muted-foreground">{{ session.user()?.email }}</p>
-      </header>
+      <app-page-header
+        title="Account"
+        [meta]="session.user()?.email ?? ''"
+        description="Your password, two-factor authentication and the devices signed in."
+      />
 
       <section hlmCard>
         <div hlmCardHeader>
-          <h2 hlmCardTitle class="flex items-center gap-2 font-mono text-base">
+          <h2 hlmCardTitle class="flex items-center gap-2">
             Two-factor authentication
             @if (session.user()?.totpEnrolled) {
-              <span hlmBadge variant="secondary">enabled</span>
+              <span hlmBadge variant="secondary" class="font-mono">enabled</span>
             } @else {
-              <span hlmBadge variant="destructive">not enrolled</span>
+              <span hlmBadge variant="destructive" class="font-mono">not enrolled</span>
             }
           </h2>
           <p hlmCardDescription>
@@ -66,7 +73,7 @@ import { AdminSessionService } from "../../admin/admin-session.service";
               <h3 hlmAlertTitle>Save these recovery codes</h3>
               <div hlmAlertDescription>
                 <p class="m-0 mb-2">Each works once. They are shown only now.</p>
-                <ul class="m-0 grid list-none grid-cols-2 gap-1 p-0 font-mono text-[0.8rem]">
+                <ul class="m-0 grid list-none grid-cols-2 gap-1 p-0 font-mono text-meta">
                   @for (code of recoveryCodes(); track code) {
                     <li>{{ code }}</li>
                   }
@@ -80,7 +87,7 @@ import { AdminSessionService } from "../../admin/admin-session.service";
                 alt="Authenticator QR code"
                 class="h-44 w-44 rounded-lg bg-white p-2"
               />
-              <p class="m-0 break-all font-mono text-[0.7rem] text-muted-foreground">
+              <p class="m-0 break-all font-mono text-xs text-muted-foreground">
                 {{ otpauthUri() }}
               </p>
               <form
@@ -113,7 +120,7 @@ import { AdminSessionService } from "../../admin/admin-session.service";
 
       <section hlmCard>
         <div hlmCardHeader>
-          <h2 hlmCardTitle class="font-mono text-base">Change password</h2>
+          <h2 hlmCardTitle>Change password</h2>
         </div>
         <div hlmCardContent>
           <form
@@ -128,7 +135,7 @@ import { AdminSessionService } from "../../admin/admin-session.service";
             <div hlmField>
               <label hlmFieldLabel for="next">New password</label>
               <input hlmInput id="next" type="password" formControlName="newPassword" />
-              <p class="m-0 mt-1 text-[0.75rem] text-muted-foreground">
+              <p class="m-0 mt-1 text-xs text-muted-foreground">
                 At least 12 characters. All other sessions are signed out.
               </p>
             </div>
@@ -141,24 +148,30 @@ import { AdminSessionService } from "../../admin/admin-session.service";
 
       <section hlmCard>
         <div hlmCardHeader>
-          <h2 hlmCardTitle class="font-mono text-base">Active sessions</h2>
+          <h2 hlmCardTitle>Active sessions</h2>
         </div>
         <div hlmCardContent class="flex flex-col gap-3">
           @if (loadingSessions()) {
-            <hlm-skeleton class="h-24 w-full" />
+            <app-form-skeleton kind="list" [rows]="2" label="Loading sessions…" />
+          } @else if (sessionsError(); as reason) {
+            <app-load-error
+              compact
+              [title]="'Could not load the sessions (' + reason + ')'"
+              (retry)="reloadSessions()"
+            />
           } @else {
             @for (row of sessions(); track row.id) {
               <div
                 class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
               >
                 <div class="min-w-0">
-                  <p class="m-0 font-mono text-[0.78rem]">
+                  <p class="m-0 font-mono text-meta">
                     {{ row.ip || "unknown IP" }}
                     @if (row.current) {
-                      <span hlmBadge variant="secondary" class="ml-2">this device</span>
+                      <span hlmBadge variant="secondary" class="ml-2 font-sans">this device</span>
                     }
                   </p>
-                  <p class="m-0 mt-0.5 truncate text-[0.72rem] text-muted-foreground">
+                  <p class="m-0 mt-0.5 truncate text-xs text-muted-foreground">
                     {{ row.userAgent || "unknown device" }} · last seen
                     {{ formatDate(row.lastSeenAt) }}
                   </p>
@@ -194,6 +207,7 @@ export default class AdminAccountPage implements OnInit {
   protected readonly recoveryCodes = signal<string[]>([]);
   protected readonly sessions = signal<AdminSessionRow[]>([]);
   protected readonly loadingSessions = signal(true);
+  protected readonly sessionsError = signal<string | null>(null);
 
   protected readonly setupForm = this.fb.nonNullable.group({
     password: ["", Validators.required],
@@ -214,9 +228,15 @@ export default class AdminAccountPage implements OnInit {
     return new Date(value).toLocaleString();
   }
 
+  protected reloadSessions(): void {
+    this.loadingSessions.set(true);
+    void this.loadSessions();
+  }
+
   private async loadSessions(): Promise<void> {
     const result = await this.api.sessions();
     this.loadingSessions.set(false);
+    this.sessionsError.set(result.ok ? null : result.error);
     if (result.ok) this.sessions.set(result.data.sessions);
   }
 

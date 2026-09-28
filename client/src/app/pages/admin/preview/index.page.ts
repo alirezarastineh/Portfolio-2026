@@ -5,9 +5,10 @@ import { lucideExternalLink } from "@ng-icons/lucide";
 import { HlmAlert, HlmAlertDescription, HlmAlertTitle } from "@spartan-ng/helm/alert";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 
 import { AdminApiService, type ApiIssue } from "../../../admin/admin-api.service";
+import { FormSkeletonComponent } from "../../../admin/components/load-state.component";
+import { AdminPageHeaderComponent } from "../../../admin/components/page-header.component";
 import { editorLinkFor } from "../../../admin/editor-links";
 import { PREVIEW_PREFIX } from "../../../admin/preview/preview-links";
 import type { AppContent, Locale } from "../../../content/schema";
@@ -63,12 +64,13 @@ function pagesOf(locale: Locale, content: AppContent, livePosts: Set<string>) {
   selector: "app-admin-preview",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AdminPageHeaderComponent,
+    FormSkeletonComponent,
     HlmAlert,
     HlmAlertDescription,
     HlmAlertTitle,
     HlmBadge,
     HlmButton,
-    HlmSkeleton,
     NgIcon,
     RouterLink,
   ],
@@ -76,33 +78,27 @@ function pagesOf(locale: Locale, content: AppContent, livePosts: Set<string>) {
   host: { class: "block" },
   template: `
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
-      <header class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 class="m-0 font-mono text-2xl tracking-tight">Preview draft</h1>
-          <p class="mt-1 text-sm text-muted-foreground">
-            The site as the next publish would make it — the real pages, draft posts included. Each
-            opens in a new tab; refresh it there after saving an edit.
-          </p>
-        </div>
-        <div class="flex items-center gap-2">
-          <button hlmBtn variant="outline" (click)="load()">Refresh</button>
-        </div>
-      </header>
+      <app-page-header
+        title="Preview draft"
+        description="The site as the next publish would make it: the real pages, draft posts included. Each opens in a new tab; refresh it there after saving an edit."
+      >
+        <button headerActions hlmBtn variant="outline" size="sm" (click)="load()">Refresh</button>
+      </app-page-header>
 
       @if (loading()) {
-        <hlm-skeleton class="h-64 w-full" />
+        <div class="grid gap-6 lg:grid-cols-2">
+          <app-form-skeleton kind="list" [rows]="4" label="Loading the English draft…" />
+          <app-form-skeleton kind="list" [rows]="4" label="Loading the German draft…" />
+        </div>
       } @else {
         <div class="grid gap-6 lg:grid-cols-2">
           @for (l of locales(); track l.locale) {
             <section
-              class="flex flex-col gap-4 rounded-xl border border-border p-4"
+              class="surface-card flex flex-col gap-4 p-4"
               [attr.aria-labelledby]="'preview-' + l.locale"
             >
               <div class="flex items-center justify-between gap-2">
-                <h2
-                  [id]="'preview-' + l.locale"
-                  class="m-0 font-mono text-sm uppercase tracking-[0.2em]"
-                >
+                <h2 [id]="'preview-' + l.locale" class="m-0 text-h4">
                   {{ l.locale === "en" ? "English" : "Deutsch" }}
                 </h2>
                 @if (l.ok) {
@@ -116,10 +112,11 @@ function pagesOf(locale: Locale, content: AppContent, livePosts: Set<string>) {
                     Open
                     <ng-icon
                       name="lucideExternalLink"
-                      size="13"
+                      size="14"
                       class="ml-1.5"
                       aria-hidden="true"
                     />
+                    <span class="sr-only">(opens in a new tab)</span>
                   </a>
                 }
               </div>
@@ -127,11 +124,7 @@ function pagesOf(locale: Locale, content: AppContent, livePosts: Set<string>) {
               @if (l.ok) {
                 @for (group of l.groups; track group.title) {
                   <div>
-                    <p
-                      class="m-0 font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
-                    >
-                      {{ group.title }}
-                    </p>
+                    <p class="eyebrow m-0 text-muted-foreground">{{ group.title }}</p>
                     <ul class="m-0 mt-1.5 flex list-none flex-col gap-1 p-0" role="list">
                       @for (page of group.pages; track page.path) {
                         <li class="flex items-center gap-2">
@@ -143,7 +136,7 @@ function pagesOf(locale: Locale, content: AppContent, livePosts: Set<string>) {
                             >{{ page.label }}</a
                           >
                           @if (page.note) {
-                            <span hlmBadge variant="outline" class="font-mono text-[0.6rem]">{{
+                            <span hlmBadge variant="outline" class="font-mono">{{
                               page.note
                             }}</span>
                           }
@@ -161,7 +154,7 @@ function pagesOf(locale: Locale, content: AppContent, livePosts: Set<string>) {
                       <ul class="m-0 mt-2 flex list-none flex-col gap-1.5 p-0" role="list">
                         @for (issue of l.issues; track $index) {
                           <li>
-                            <code class="font-mono text-[0.72rem]">{{ issue.label }}</code>
+                            <code class="font-mono text-xs">{{ issue.label }}</code>
                             {{ issue.message }}
                             @if (issue.link) {
                               <a class="ml-1 underline underline-offset-4" [routerLink]="issue.link"

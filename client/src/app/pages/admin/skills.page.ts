@@ -19,7 +19,6 @@ import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmSwitch } from "@spartan-ng/helm/switch";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
@@ -39,6 +38,11 @@ import {
   SaveBarComponent,
 } from "../../admin/components/editor-chrome.component";
 import type { LocaleView } from "../../admin/components/field-pair.component";
+import {
+  FormSkeletonComponent,
+  LoadErrorComponent,
+} from "../../admin/components/load-state.component";
+import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 import {
   SortableListComponent,
   SortableRowDirective,
@@ -90,9 +94,11 @@ function toInput(row: SkillRow): SkillInput {
     HlmButton,
     HlmInput,
     HlmSeparator,
-    HlmSkeleton,
+    AdminPageHeaderComponent,
+    FormSkeletonComponent,
     HlmSwitch,
     HlmTextarea,
+    LoadErrorComponent,
     LocaleToggleComponent,
     NgIcon,
     SaveBarComponent,
@@ -104,21 +110,28 @@ function toInput(row: SkillRow): SkillInput {
   viewProviders: [provideIcons({ lucidePlus, lucideTrash2 })],
   host: { class: "block" },
   template: `
-    <app-ui-group-editor
-      group="skills"
-      title="Skills"
-      description="Section heading and the bento cards."
-      [fields]="headingFields"
-      [saveBar]="false"
-    />
+    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
+      <app-page-header
+        title="Skills"
+        description="The section's heading and the bento cards. One Save covers both."
+        preview="/admin/preview/en#skills"
+      />
 
-    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28 pt-6">
+      <app-ui-group-editor
+        group="skills"
+        title="Above the cards"
+        description="The section's heading and subtitle on the home page."
+        [fields]="headingFields"
+        [saveBar]="false"
+        [level]="2"
+      />
+
       <hlm-separator />
 
       <header class="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 class="m-0 font-mono text-lg tracking-tight">Cards</h2>
-          <p class="mt-1 text-sm text-muted-foreground">
+          <h2 class="m-0 text-h4">Cards</h2>
+          <p class="m-0 mt-1 text-sm text-muted-foreground">
             Edits are kept until you save. Adding, deleting and reordering a card take effect at
             once.
           </p>
@@ -133,7 +146,13 @@ function toInput(row: SkillRow): SkillInput {
       </header>
 
       @if (loading()) {
-        <hlm-skeleton class="h-96 w-full" />
+        <app-form-skeleton kind="list" [rows]="3" label="Loading skill cards…" />
+      } @else if (loadError(); as reason) {
+        <app-load-error
+          title="Could not load the skill cards"
+          [reason]="reason"
+          (retry)="reload()"
+        />
       } @else {
         <app-sortable-list
           [items]="rows()"
@@ -145,19 +164,17 @@ function toInput(row: SkillRow): SkillInput {
           <ng-template appSortableRow let-row>
             <div class="flex flex-col gap-4">
               <div class="flex flex-wrap items-center gap-3">
-                <code class="rounded bg-muted px-2 py-1 font-mono text-[0.72rem]">{{
-                  row.id
-                }}</code>
+                <code class="rounded bg-muted px-2 py-1 font-mono text-xs">{{ row.id }}</code>
                 @if (isChanged(row.id)) {
                   <span
                     hlmBadge
                     variant="outline"
-                    class="border-accent-orange/50 font-mono text-[0.6rem] text-accent-orange"
+                    class="border-accent-orange/50 font-mono text-accent-orange"
                     >unsaved</span
                   >
                 }
                 <select
-                  class="h-8 rounded-md border border-border bg-card px-2 font-mono text-[0.75rem]"
+                  class="h-8 rounded-md border border-border bg-card px-2 font-mono text-xs"
                   [ngModel]="row.icon"
                   (ngModelChange)="patch(row.id, { icon: $event })"
                   aria-label="Icon"
@@ -167,7 +184,7 @@ function toInput(row: SkillRow): SkillInput {
                   }
                 </select>
                 <select
-                  class="h-8 rounded-md border border-border bg-card px-2 font-mono text-[0.75rem]"
+                  class="h-8 rounded-md border border-border bg-card px-2 font-mono text-xs"
                   [ngModel]="row.span"
                   (ngModelChange)="patch(row.id, { span: $event })"
                   aria-label="Card size"
@@ -176,9 +193,7 @@ function toInput(row: SkillRow): SkillInput {
                     <option [value]="span">{{ span }}</option>
                   }
                 </select>
-                <label
-                  class="flex items-center gap-2 font-mono text-[0.72rem] text-muted-foreground"
-                >
+                <label class="flex items-center gap-2 text-xs text-muted-foreground">
                   <hlm-switch
                     [checked]="row.isVisible"
                     (checkedChange)="patch(row.id, { isVisible: $event })"
@@ -200,11 +215,7 @@ function toInput(row: SkillRow): SkillInput {
               <div [class]="view() === 'both' ? 'grid gap-4 lg:grid-cols-2' : 'grid gap-4'">
                 @for (locale of visibleLocales(); track locale) {
                   <div class="flex flex-col gap-2 rounded-lg border border-border/60 p-3">
-                    <span
-                      class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground"
-                    >
-                      {{ locale }}
-                    </span>
+                    <span class="eyebrow text-muted-foreground">{{ locale }}</span>
                     <input
                       hlmInput
                       class="h-8"
@@ -294,6 +305,8 @@ export default class AdminSkillsPage implements OnInit {
   /** Each card as last saved, by id: what Discard restores and what "changed" compares with. */
   private readonly saved = signal<ReadonlyMap<string, SkillRow>>(new Map());
   protected readonly loading = signal(true);
+  /** The API's reason when the cards did not arrive. */
+  protected readonly loadError = signal<string | null>(null);
   private readonly savingCards = signal(false);
   /** Keyed `<card id>.<path of the skill input>`. */
   private readonly issues = new FieldIssues();
@@ -343,14 +356,16 @@ export default class AdminSkillsPage implements OnInit {
     return this.issues.under(`${id}.items`);
   }
 
+  protected reload(): void {
+    this.loading.set(true);
+    void this.load();
+  }
+
   private async load(): Promise<void> {
     const result = await this.api.listSkills();
     this.loading.set(false);
-
-    if (!result.ok) {
-      toast.error("Could not load skills", { description: result.error });
-      return;
-    }
+    this.loadError.set(result.ok ? null : result.error);
+    if (!result.ok) return;
     this.rows.set(result.data.skills);
     this.saved.set(new Map(result.data.skills.map((row) => [row.id, structuredClone(row)])));
   }

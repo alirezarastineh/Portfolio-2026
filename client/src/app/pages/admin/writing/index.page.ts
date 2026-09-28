@@ -7,10 +7,14 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 
 import { AdminApiService, type PostListRow } from "../../../admin/admin-api.service";
 import { ConfirmService } from "../../../admin/components/confirm-dialog.component";
+import {
+  FormSkeletonComponent,
+  LoadErrorComponent,
+} from "../../../admin/components/load-state.component";
+import { AdminPageHeaderComponent } from "../../../admin/components/page-header.component";
 import {
   UiGroupEditorComponent,
   type UiFieldDef,
@@ -35,10 +39,12 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   selector: "app-admin-writing",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AdminPageHeaderComponent,
+    FormSkeletonComponent,
     HlmBadge,
     HlmButton,
     HlmSeparator,
-    HlmSkeleton,
+    LoadErrorComponent,
     NgIcon,
     RouterLink,
     UiGroupEditorComponent,
@@ -46,45 +52,42 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   viewProviders: [provideIcons({ lucidePencil, lucidePlus, lucideTrash2 })],
   host: { class: "block" },
   template: `
-    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
-      <header class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 class="m-0 font-mono text-2xl tracking-tight">Writing</h1>
-          <p class="mt-1 text-sm text-muted-foreground">
-            Posts appear once they are published, their date has passed, and the site has been
-            published after that.
-          </p>
-        </div>
-        <button hlmBtn variant="outline" (click)="add()">
+    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
+      <app-page-header
+        title="Writing"
+        description="Posts appear once they are published, their date has passed, and the site has been published after that."
+        preview="/admin/preview/en/writing"
+      >
+        <button headerActions hlmBtn variant="outline" size="sm" (click)="add()">
           <ng-icon name="lucidePlus" size="14" aria-hidden="true" />
           <span class="ml-1.5">New post</span>
         </button>
-      </header>
+      </app-page-header>
 
       @if (loading()) {
-        <hlm-skeleton class="h-48 w-full" />
+        <app-form-skeleton kind="list" [rows]="3" label="Loading posts…" />
+      } @else if (loadError(); as reason) {
+        <app-load-error title="Could not load the posts" [reason]="reason" (retry)="reload()" />
       } @else if (!rows().length) {
-        <p class="text-sm text-muted-foreground">No posts yet.</p>
+        <p class="m-0 text-sm text-muted-foreground">No posts yet.</p>
       } @else {
         <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list">
           @for (row of rows(); track row.id) {
             <li class="flex flex-wrap items-center gap-3 rounded-lg border border-border px-4 py-3">
               <div class="min-w-0 flex-1">
-                <p class="m-0 truncate font-mono text-sm">
+                <p class="m-0 truncate text-sm font-medium">
                   {{ row.translations.en?.title || row.translations.de?.title || row.slug }}
                 </p>
-                <p class="m-0 mt-0.5 font-mono text-[0.72rem] text-muted-foreground">
+                <p class="m-0 mt-0.5 font-mono text-xs text-muted-foreground">
                   /{{ row.slug }} · {{ row.publishedAt ? formatDate(row.publishedAt) : "no date" }}
                 </p>
               </div>
               @for (locale of ["en", "de"]; track locale) {
                 @if (hasLocale(row, locale)) {
-                  <span hlmBadge variant="outline" class="font-mono text-[0.65rem] uppercase">{{
-                    locale
-                  }}</span>
+                  <span hlmBadge variant="outline" class="font-mono uppercase">{{ locale }}</span>
                 }
               }
-              <span hlmBadge [variant]="statusVariant(row)" class="font-mono text-[0.65rem]">{{
+              <span hlmBadge [variant]="statusVariant(row)" class="font-mono">{{
                 statusLabel(row)
               }}</span>
               <a hlmBtn variant="outline" size="sm" [routerLink]="['/admin/writing', row.slug]">
@@ -107,15 +110,15 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
       }
 
       <hlm-separator />
-    </div>
 
-    <app-ui-group-editor
-      group="writing"
-      title="Writing copy"
-      description="Labels on the writing index and around each post."
-      [fields]="copyFields"
-      [level]="2"
-    />
+      <app-ui-group-editor
+        group="writing"
+        title="Writing copy"
+        description="Labels on the writing index and around each post."
+        [fields]="copyFields"
+        [level]="2"
+      />
+    </div>
   `,
 })
 export default class AdminWritingPage implements OnInit {
@@ -126,19 +129,23 @@ export default class AdminWritingPage implements OnInit {
   protected readonly copyFields = COPY_FIELDS;
   protected readonly rows = signal<PostListRow[]>([]);
   protected readonly loading = signal(true);
+  /** The API's reason when the list did not arrive. */
+  protected readonly loadError = signal<string | null>(null);
 
   ngOnInit(): void {
+    void this.load();
+  }
+
+  protected reload(): void {
+    this.loading.set(true);
     void this.load();
   }
 
   private async load(): Promise<void> {
     const result = await this.api.listPosts();
     this.loading.set(false);
-    if (!result.ok) {
-      toast.error("Could not load posts", { description: result.error });
-      return;
-    }
-    this.rows.set(result.data.posts);
+    this.loadError.set(result.ok ? null : result.error);
+    if (result.ok) this.rows.set(result.data.posts);
   }
 
   protected formatDate(value: string): string {

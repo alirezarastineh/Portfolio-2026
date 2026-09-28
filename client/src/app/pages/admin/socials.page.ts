@@ -16,7 +16,6 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucidePlus, lucideTrash2 } from "@ng-icons/lucide";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmInput } from "@spartan-ng/helm/input";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmSwitch } from "@spartan-ng/helm/switch";
 
 import {
@@ -31,6 +30,11 @@ import {
   FieldIssueComponent,
   SaveBarComponent,
 } from "../../admin/components/editor-chrome.component";
+import {
+  FormSkeletonComponent,
+  LoadErrorComponent,
+} from "../../admin/components/load-state.component";
+import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 import {
   SortableListComponent,
   SortableRowDirective,
@@ -68,12 +72,14 @@ function toInput(row: SocialRow): SocialInput {
   selector: "app-admin-socials",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AdminPageHeaderComponent,
     FieldIssueComponent,
+    FormSkeletonComponent,
     FormsModule,
     HlmButton,
     HlmInput,
-    HlmSkeleton,
     HlmSwitch,
+    LoadErrorComponent,
     NgIcon,
     SaveBarComponent,
     SortableListComponent,
@@ -83,22 +89,21 @@ function toInput(row: SocialRow): SocialInput {
   host: { class: "block" },
   template: `
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
-      <header class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 class="m-0 font-mono text-2xl tracking-tight">Socials</h1>
-          <p class="mt-1 text-sm text-muted-foreground">
-            Footer links. Edits are kept until you save; adding, deleting and reordering take effect
-            at once.
-          </p>
-        </div>
-        <button hlmBtn variant="outline" (click)="add()">
+      <app-page-header
+        title="Socials"
+        description="Links in the footer and beside the contact form. Edits are kept until you save; adding, deleting and reordering take effect at once."
+        preview="/admin/preview/en#contact"
+      >
+        <button headerActions hlmBtn variant="outline" size="sm" (click)="add()">
           <ng-icon name="lucidePlus" size="14" aria-hidden="true" />
           <span class="ml-1.5">Add link</span>
         </button>
-      </header>
+      </app-page-header>
 
       @if (loading()) {
-        <hlm-skeleton class="h-64 w-full" />
+        <app-form-skeleton kind="list" [rows]="4" label="Loading links…" />
+      } @else if (loadError(); as reason) {
+        <app-load-error title="Could not load the links" [reason]="reason" (retry)="reload()" />
       } @else {
         <app-sortable-list
           [items]="rows()"
@@ -150,7 +155,7 @@ function toInput(row: SocialRow): SocialInput {
                 />
               </div>
               <select
-                class="h-9 rounded-md border border-border bg-card px-2 font-mono text-[0.78rem]"
+                class="h-9 rounded-md border border-border bg-card px-2 font-mono text-xs"
                 [ngModel]="row.icon"
                 (ngModelChange)="patch(row.id, { icon: $event })"
                 aria-label="Icon"
@@ -159,9 +164,7 @@ function toInput(row: SocialRow): SocialInput {
                   <option [value]="icon">{{ icon }}</option>
                 }
               </select>
-              <label
-                class="flex h-9 items-center gap-2 font-mono text-[0.72rem] text-muted-foreground"
-              >
+              <label class="flex h-9 items-center gap-2 text-xs text-muted-foreground">
                 <hlm-switch
                   [checked]="row.isVisible"
                   (checkedChange)="patch(row.id, { isVisible: $event })"
@@ -208,6 +211,8 @@ export default class AdminSocialsPage implements OnInit {
   /** Each link as last saved, by id. */
   private readonly saved = signal<ReadonlyMap<string, SocialRow>>(new Map());
   protected readonly loading = signal(true);
+  /** The API's reason when the list did not arrive. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly saving = signal(false);
   /** Keyed `<link id>.<field>`. */
   protected readonly issues = new FieldIssues();
@@ -237,14 +242,16 @@ export default class AdminSocialsPage implements OnInit {
     return this.changedIds().includes(id);
   }
 
+  protected reload(): void {
+    this.loading.set(true);
+    void this.load();
+  }
+
   private async load(): Promise<void> {
     const result = await this.api.listSocials();
     this.loading.set(false);
-
-    if (!result.ok) {
-      toast.error("Could not load socials", { description: result.error });
-      return;
-    }
+    this.loadError.set(result.ok ? null : result.error);
+    if (!result.ok) return;
     this.rows.set(result.data.socials);
     this.saved.set(new Map(result.data.socials.map((row) => [row.id, structuredClone(row)])));
   }

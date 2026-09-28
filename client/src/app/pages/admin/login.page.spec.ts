@@ -110,6 +110,42 @@ describe("AdminLoginPage", () => {
     expect(text(fixture)).not.toContain("invalid_credentials");
   });
 
+  it("is a terminal window named for the step it is on", async () => {
+    const { fixture, api } = setup();
+    const title = () =>
+      fixture.nativeElement.querySelector("app-terminal-window header")?.textContent ?? "";
+    expect(title()).toContain("admin@portfolio — login");
+
+    api.loginResult = { ok: true, data: { ok: true, totpRequired: true, user: null } };
+    fixture.componentInstance["credentials"].setValue({
+      email: "admin@example.com",
+      password: "hunter2hunter2",
+    });
+    await fixture.componentInstance["submitCredentials"]();
+    fixture.detectChanges();
+    expect(title()).toContain("admin@portfolio — two-factor");
+  });
+
+  /** The CSS runs it only without reduced motion; the class is set either way. */
+  it("shakes on a refused attempt, and is still again once the shake ends", async () => {
+    const { fixture, api } = setup();
+    api.loginResult = { ok: false, error: "invalid_credentials", status: 401 };
+    fixture.componentInstance["credentials"].setValue({
+      email: "admin@example.com",
+      password: "wrong-password",
+    });
+    await fixture.componentInstance["submitCredentials"]();
+    fixture.detectChanges();
+
+    const frame: HTMLElement =
+      fixture.nativeElement.querySelector("app-terminal-window").parentElement;
+    expect(frame.classList).toContain("shake");
+
+    frame.dispatchEvent(new Event("animationend"));
+    fixture.detectChanges();
+    expect(frame.classList).not.toContain("shake");
+  });
+
   it("falls back to a generic message for an unrecognised error", async () => {
     const { fixture, api } = setup();
     api.loginResult = { ok: false, error: "teapot", status: 418 };

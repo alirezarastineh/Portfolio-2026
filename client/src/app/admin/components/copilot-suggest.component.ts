@@ -23,7 +23,7 @@ import { AdminApiService } from "../admin-api.service";
       variant="ghost"
       size="sm"
       type="button"
-      class="h-6 px-2 font-mono text-[0.68rem] text-muted-foreground"
+      class="h-6 px-2 font-mono text-xs text-muted-foreground"
       [disabled]="busy()"
       (click)="run()"
       [attr.aria-label]="'Suggest a search description in ' + locale().toUpperCase() + ' with AI'"

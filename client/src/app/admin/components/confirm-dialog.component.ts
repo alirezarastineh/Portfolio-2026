@@ -20,7 +20,7 @@ export interface ConfirmOptions {
   template: `
     <div class="flex flex-col gap-4">
       <div class="flex flex-col gap-1.5">
-        <h2 class="m-0 font-mono text-base font-medium">{{ context.title }}</h2>
+        <h2 class="m-0 text-base font-semibold">{{ context.title }}</h2>
         <p class="m-0 text-sm text-muted-foreground">{{ context.description }}</p>
       </div>
       <div class="flex justify-end gap-2">

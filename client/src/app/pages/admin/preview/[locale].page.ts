@@ -47,7 +47,7 @@ export const routeMeta: RouteMeta = {
       <app-site-footer />
     } @else if (state.error()) {
       <main id="main" class="mx-auto flex max-w-3xl flex-col gap-4 px-6 py-24">
-        <h1 class="m-0 font-mono text-2xl tracking-tight">This draft cannot be previewed</h1>
+        <h1 class="m-0 text-h3">This draft cannot be previewed</h1>
         @if (state.issues().length) {
           <p class="m-0 text-sm text-muted-foreground">
             Publishing would refuse it for the same reasons. Fix these, then refresh.
@@ -58,17 +58,13 @@ export const routeMeta: RouteMeta = {
                 class="flex flex-wrap items-baseline justify-between gap-2 rounded-lg border border-border px-3 py-2"
               >
                 <span class="min-w-0">
-                  <code class="font-mono text-[0.75rem] break-all">{{
+                  <code class="font-mono text-xs break-all">{{
                     issue.label ?? issue.path.join(".")
                   }}</code>
                   <span class="ml-2 text-sm">{{ issue.message }}</span>
                 </span>
                 @if (issue.link) {
-                  <a
-                    class="font-mono text-[0.78rem] underline underline-offset-4"
-                    [routerLink]="issue.link"
-                    >Fix</a
-                  >
+                  <a class="text-sm underline underline-offset-4" [routerLink]="issue.link">Fix</a>
                 }
               </li>
             }
@@ -86,7 +82,7 @@ export const routeMeta: RouteMeta = {
     }
 
     <aside
-      class="fixed bottom-4 left-4 z-50 flex items-center gap-1 rounded-full border border-border bg-card/95 py-1 pl-3 pr-1 font-mono text-[0.72rem] text-foreground shadow-lg backdrop-blur"
+      class="fixed bottom-4 left-4 z-50 flex items-center gap-1 rounded-full border border-border bg-card/95 py-1 pl-3 pr-1 font-mono text-xs text-foreground shadow-lg backdrop-blur"
       aria-label="Draft preview"
     >
       <span class="flex items-center gap-2 pr-1">

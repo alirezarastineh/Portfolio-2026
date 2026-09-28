@@ -12,17 +12,18 @@ import type { RouteMeta } from "@analogjs/router";
 import { FormBuilder, FormControl, ReactiveFormsModule } from "@angular/forms";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 
 import { AdminApiService } from "../../admin/admin-api.service";
 import { applyIssues, countServerErrors, focusFirstInvalid } from "../../admin/issues";
 import { toastIssues, toastStale } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
-import {
-  LocaleToggleComponent,
-  SaveBarComponent,
-} from "../../admin/components/editor-chrome.component";
+import { SaveBarComponent } from "../../admin/components/editor-chrome.component";
 import { FieldPairComponent, type LocaleView } from "../../admin/components/field-pair.component";
+import {
+  FormSkeletonComponent,
+  LoadErrorComponent,
+} from "../../admin/components/load-state.component";
+import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 import { isLocale } from "../../content/locale";
 import type { Locale, Seo } from "../../content/schema";
 
@@ -84,32 +85,28 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   selector: "app-admin-seo",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AdminPageHeaderComponent,
     FieldPairComponent,
+    FormSkeletonComponent,
     HlmSeparator,
-    HlmSkeleton,
-    LocaleToggleComponent,
+    LoadErrorComponent,
     ReactiveFormsModule,
     SaveBarComponent,
   ],
   host: { class: "block" },
   template: `
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-24">
-      <header class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 class="m-0 font-mono text-2xl tracking-tight">SEO &amp; meta</h1>
-          <p class="mt-1 text-sm text-muted-foreground">
-            Title, description and social cards, per language.
-          </p>
-        </div>
-
-        <app-locale-toggle [(view)]="view" />
-      </header>
+      <app-page-header
+        title="SEO & meta"
+        description="Title, description and social cards, per language."
+        [(view)]="view"
+      />
 
       @if (loading()) {
-        <hlm-skeleton class="h-96 w-full" />
-      } @else if (!loaded()) {
-        <p class="text-sm text-muted-foreground">Could not load this section.</p>
-      } @else {
+        <app-form-skeleton [rows]="6" />
+      } @else if (loadError() !== null) {
+        <app-load-error [reason]="loadError() ?? ''" (retry)="reload()" />
+      } @else if (loaded()) {
         <form [formGroup]="form" class="flex flex-col gap-6">
           @for (field of fields; track field.key) {
             <app-field-pair
@@ -149,6 +146,8 @@ export default class AdminSeoPage implements OnInit {
 
   protected readonly loading = signal(true);
   protected readonly loaded = signal(false);
+  /** The API's reason when the first load failed. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly saving = signal(false);
   private readonly formVersion = signal(0);
 
@@ -193,13 +192,20 @@ export default class AdminSeoPage implements OnInit {
     return (this.form.controls[locale].controls as SeoGroup)[key];
   }
 
+  protected reload(): void {
+    this.loading.set(true);
+    void this.load();
+  }
+
   /** (Re)loads from the server, dropping local edits. */
   private async load(): Promise<void> {
     const result = await this.api.getSection<Seo>("seo");
     this.loading.set(false);
+    // A failed reload after "Saved elsewhere" keeps the form: only a first load shows the error.
+    if (!this.loaded()) this.loadError.set(result.ok ? null : result.error);
 
     if (!result.ok) {
-      toast.error("Could not load SEO", { description: result.error });
+      if (this.loaded()) toast.error("Could not load SEO", { description: result.error });
       return;
     }
 
@@ -257,6 +263,6 @@ export default class AdminSeoPage implements OnInit {
     this.form.markAsPristine();
     this.formVersion.update((v) => v + 1);
     this.unsaved.clear("seo");
-    toast.success("Draft saved", { description: "Publish from the dashboard to go live." });
+    toast.success("Draft saved", { description: "Publish to go live." });
   }
 }
