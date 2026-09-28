@@ -83,7 +83,7 @@ function knownPages(locale: Locale, content: AppContent): PageSuggestion[] {
               <ul class="m-0 flex list-none flex-col gap-1.5 p-0" role="list">
                 @for (page of entry.suggestions; track page.path) {
                   <li class="flex flex-wrap items-baseline gap-x-3">
-                    <a [class]="link" [routerLink]="page.path">{{ page.path }}</a>
+                    <a class="link-underline" [routerLink]="page.path">{{ page.path }}</a>
                     <span class="font-sans text-muted-foreground">{{ page.label }}</span>
                   </li>
                 }
@@ -92,10 +92,12 @@ function knownPages(locale: Locale, content: AppContent): PageSuggestion[] {
           }
           <ul class="m-0 flex list-none flex-wrap gap-x-6 gap-y-2 p-0 text-sm" role="list">
             <li>
-              <a [class]="link" [routerLink]="['/', entry.locale]">← {{ entry.copy.home }}</a>
+              <a class="link-underline" [routerLink]="['/', entry.locale]"
+                >← {{ entry.copy.home }}</a
+              >
             </li>
             <li>
-              <a [class]="link" [routerLink]="['/', entry.locale]" fragment="about"
+              <a class="link-underline" [routerLink]="['/', entry.locale]" fragment="about"
                 >&gt;_ {{ entry.copy.ask }}</a
               >
             </li>
@@ -112,9 +114,6 @@ export class NotFoundComponent {
   private readonly store = inject(ContentStore);
   private readonly router = inject(Router);
   private readonly lang = inject(LanguageService);
-
-  protected readonly link =
-    "text-foreground underline decoration-accent-orange/60 underline-offset-4 transition-colors hover:decoration-accent-orange";
 
   /**
    * The address asked for. The page signal re-reads it after a navigation:

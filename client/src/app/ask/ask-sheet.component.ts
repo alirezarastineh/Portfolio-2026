@@ -41,7 +41,7 @@ import { TerminalShellComponent } from "./terminal-shell.component";
         <button
           windowAction
           type="button"
-          class="-my-1 -mr-1.5 inline-flex min-h-6 cursor-pointer items-center rounded-md px-1.5 text-muted-foreground hover:text-foreground"
+          class="press -my-1 -mr-1.5 inline-flex min-h-6 cursor-pointer items-center rounded-md px-1.5 text-muted-foreground hover:text-foreground"
           [attr.aria-label]="store.copy().close"
           (click)="launcher.closeSheet()"
         >

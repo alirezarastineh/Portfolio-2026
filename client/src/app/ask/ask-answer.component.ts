@@ -63,7 +63,7 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
           }
           @case ("link") {
             <a
-              class="underline decoration-accent-indigo underline-offset-4 hover:decoration-accent-orange"
+              class="link-underline"
               [href]="node.href"
               [attr.rel]="node.internal ? null : 'noopener'"
               (click)="follow($event, node.href, node.internal)"
@@ -194,7 +194,7 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
           @for (item of followups(); track item) {
             <button
               type="button"
-              class="cursor-pointer rounded-md border border-border px-2 py-1 text-left text-foreground/85 transition-colors hover:border-accent-orange hover:text-foreground"
+              class="press cursor-pointer rounded-md border border-border px-2 py-1 text-left text-foreground/85 hover:border-accent-orange hover:text-foreground"
               (click)="ask.emit(item)"
             >
               {{ item }}
@@ -212,7 +212,7 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
           <span class="-ml-1.5 flex items-center gap-1">
             <button
               type="button"
-              class="feedback"
+              class="feedback press"
               [attr.aria-pressed]="rating() === 1"
               [attr.aria-label]="copy().helpful"
               [class.text-accent-orange]="rating() === 1"
@@ -222,7 +222,7 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
             </button>
             <button
               type="button"
-              class="feedback"
+              class="feedback press"
               [attr.aria-pressed]="rating() === -1"
               [attr.aria-label]="copy().notHelpful"
               [class.text-accent-orange]="rating() === -1"
@@ -230,7 +230,7 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
             >
               -1
             </button>
-            <button type="button" class="feedback" (click)="copyAnswer()">
+            <button type="button" class="feedback press" (click)="copyAnswer()">
               @if (copied()) {
                 {{ copy().copied }}<span aria-hidden="true"> ✓</span>
               } @else {

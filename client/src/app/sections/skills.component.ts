@@ -41,7 +41,8 @@ const SPAN_MAP: Record<BentoSpan, string> = {
           role="list"
         >
           @for (card of cards(); track card.id) {
-            <li [class]="card.layout">
+            <!-- Rises into view (motion.css), one card after another. -->
+            <li class="reveal" [class]="card.layout">
               <app-spotlight-card class="skill-card h-full">
                 <article class="flex h-full flex-col gap-5 p-6">
                   <header class="flex items-start justify-between gap-3">

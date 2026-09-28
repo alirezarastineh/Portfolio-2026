@@ -45,8 +45,8 @@
   text-decoration-thickness: 1px;
   text-underline-offset: 4px;
   transition:
-    text-decoration-color 200ms,
-    text-decoration-thickness 200ms;
+    text-decoration-color var(--dur-2),
+    text-decoration-thickness var(--dur-2);
 }
 
 /* Its hover lives outside the @utility: nested there, ESLint's CSS parser

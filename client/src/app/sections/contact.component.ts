@@ -99,7 +99,7 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                 <!-- Its name starts with the visible word. -->
                 <button
                   type="button"
-                  class="kbd min-h-6 cursor-pointer transition-colors duration-(--dur-2) hover:border-border-strong hover:text-foreground"
+                  class="kbd press min-h-6 cursor-pointer hover:border-border-strong hover:text-foreground"
                   (click)="copyEmail()"
                 >
                   {{ copied() ? copyLabels().copied + " ✓" : copyLabels().copy

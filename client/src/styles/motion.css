@@ -34,6 +34,13 @@
   }
 }
 
+@keyframes reveal {
+  from {
+    opacity: 0;
+    translate: 0 16px;
+  }
+}
+
 @keyframes pulse-ring {
   from {
     opacity: 0.5;
@@ -130,10 +137,25 @@
   scale: 1;
 }
 
+/* A button, or a link drawn as one: its colours change on hover, and a press
+   sinks it a little, springing back on release. In place of Tailwind's
+   `transition-colors`, which would drop the scale. */
+.press {
+  transition:
+    color var(--dur-2) var(--ease-out),
+    background-color var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out),
+    scale var(--dur-1) var(--ease-spring);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .nav-link::after,
   .field-line::after {
     transition: scale var(--dur-3) var(--ease-out);
+  }
+
+  .press:active {
+    scale: 0.98;
   }
 
   /* The hero's supporting lines, one after another (`--i`), shortly after
@@ -345,8 +367,8 @@
 }
 
 /* eslint-disable css/use-baseline -- progressive enhancement: without scroll
-   timelines the header keeps its solid look, hairlines are drawn in full and
-   there is no reading progress. */
+   timelines the header keeps its solid look, content and hairlines show in
+   full and there is no reading progress. */
 @media (prefers-reduced-motion: no-preference) {
   @supports (animation-timeline: scroll()) {
     /* The header: see-through at the top of the page, then over the first
@@ -363,6 +385,31 @@
       animation: header-row-settle linear both;
       animation-timeline: scroll(root);
       animation-range: 0 64px;
+    }
+
+    /* Headings, cards, list rows and metric bands fade in and rise as they
+       come into view: done once a third of the element is in. Never the
+       hero, whose headline is the LCP element. */
+    .reveal {
+      --reveal-at: calc(var(--i, 0) * 10%);
+      animation: reveal var(--ease-emph) both;
+      animation-timeline: view();
+      animation-range: entry var(--reveal-at) entry calc(var(--reveal-at) + 35%);
+    }
+
+    /* Items side by side (a grid's) follow one another by their place, at
+       most three steps; a template can set `--i` itself (the project pairs).
+       A stacked list (a flex column) needs none: its rows arrive in turn. */
+    .grid > .reveal:nth-child(2) {
+      --i: 1;
+    }
+
+    .grid > .reveal:nth-child(3) {
+      --i: 2;
+    }
+
+    .grid > .reveal:nth-child(n + 4) {
+      --i: 3;
     }
 
     /* A section heading's rule draws from the left as it comes into view. */

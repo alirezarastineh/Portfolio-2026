@@ -262,3 +262,20 @@
   text-decoration-color: var(--color-accent-indigo);
   text-underline-offset: 2px;
 }
+
+/* As `link-underline` (primitives.css): thicker and orange on hover. */
+.prose-body a,
+.prose-compact a {
+  text-decoration-thickness: 1px;
+  transition:
+    text-decoration-color var(--dur-2),
+    text-decoration-thickness var(--dur-2);
+}
+
+@media (hover: hover) {
+  .prose-body a:hover,
+  .prose-compact a:hover {
+    text-decoration-color: var(--color-accent-orange);
+    text-decoration-thickness: 2px;
+  }
+}

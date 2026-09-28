@@ -9,7 +9,27 @@ declare global {
   interface Window {
     /** Whether `<body>` existed when the theme first changed (see below). */
     __themeSetWithBody?: boolean;
+    /** The view transitions' types, and what each circle clip animated (see below). */
+    __reveals?: { types: string[]; clips: string[] };
   }
+}
+
+/** An init script: records the types of each view transition and each circle clip's target. */
+function recordReveals() {
+  const log = { types: [] as string[], clips: [] as string[] };
+  window.__reveals = log;
+  const start = document.startViewTransition.bind(document);
+  document.startViewTransition = (options) => {
+    if (typeof options === "object") log.types.push(...(options.types ?? []));
+    return start(options);
+  };
+  const animate = Element.prototype.animate;
+  Element.prototype.animate = function (keyframes, options) {
+    if (typeof options === "object" && JSON.stringify(keyframes).includes("circle(")) {
+      log.clips.push(options.pseudoElement ?? "");
+    }
+    return animate.call(this, keyframes, options);
+  };
 }
 
 test.describe("home", () => {
@@ -169,6 +189,74 @@ test.describe("theme", () => {
     await expect(html).toHaveAttribute("data-theme", "light");
     expect(await page.evaluate(() => window.__themeSetWithBody)).toBe(false);
     await expect(page.getByRole("button", { name: "Switch to the dark theme" })).toBeVisible();
+  });
+
+  test("the new theme grows from the button; under reduced motion it switches at once", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.addInitScript(recordReveals);
+    await page.goto("/en");
+    await interactive(page);
+    const html = page.locator("html");
+
+    await page.getByRole("button", { name: "Switch to the light theme" }).click();
+    await expect(html).toHaveAttribute("data-theme", "light");
+    await expect
+      .poll(() => page.evaluate(() => window.__reveals))
+      .toEqual({ types: ["theme"], clips: ["::view-transition-new(root)"] });
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.getByRole("button", { name: "Switch to the dark theme" }).click();
+    await expect(html).toHaveAttribute("data-theme", "dark");
+    expect(await page.evaluate(() => window.__reveals?.types)).toEqual(["theme"]);
+  });
+});
+
+test.describe("motion", () => {
+  test("a card below the fold rises in as it is reached; under reduced motion it is just there", async ({
+    page,
+  }) => {
+    await page.goto("/en");
+    await interactive(page);
+    const card = page.locator("#projects > div > ul > li").first();
+    const opacity = () => card.evaluate((el) => getComputedStyle(el).opacity);
+
+    expect(await opacity()).toBe("0");
+    await card.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }));
+    await expect.poll(opacity).toBe("1");
+
+    await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
+    await expect.poll(opacity).toBe("0");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect.poll(opacity).toBe("1");
+  });
+
+  test("a held button sinks a little; not under reduced motion", async ({ page }) => {
+    await page.goto("/en");
+    await interactive(page);
+    const talk = page.getByRole("link", { name: "Let's talk" });
+    const scale = () => talk.evaluate((el) => getComputedStyle(el).scale);
+    const hold = async () => {
+      const box = (await talk.boundingBox())!;
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+    };
+    // Moved off before the release, so nothing is clicked.
+    const letGo = async () => {
+      await page.mouse.move(0, 0);
+      await page.mouse.up();
+    };
+
+    await hold();
+    await expect.poll(scale).toBe("0.98");
+    await letGo();
+    await expect.poll(scale).toBe("none");
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await hold();
+    expect(await scale()).toBe("none");
+    await letGo();
   });
 });
 

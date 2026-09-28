@@ -46,11 +46,11 @@ interface NavLink {
 const DESKTOP = "(min-width: 1024px)";
 
 const iconButton =
-  "inline-flex size-9 cursor-pointer items-center justify-center rounded-md border border-border text-muted-foreground transition-colors duration-(--dur-2) hover:border-accent-orange/50 hover:text-foreground";
+  "press inline-flex size-9 cursor-pointer items-center justify-center rounded-md border border-border text-muted-foreground hover:border-accent-orange/50 hover:text-foreground";
 
-/** One option of the mobile menu's language and theme switches. */
+/** One option of the mobile menu's language and theme switches (`press` on those that act). */
 const segment =
-  "inline-flex h-9 min-w-11 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 transition-colors duration-(--dur-2)";
+  "inline-flex h-9 min-w-11 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3";
 
 @Component({
   selector: "app-site-header",
@@ -132,7 +132,7 @@ const segment =
           <!-- The one call to action that is always in view. The CV stays in
                the hero, the palette and the mobile menu. -->
           <a
-            class="hidden h-9 items-center rounded-md bg-accent-orange px-3 font-mono text-meta font-medium text-accent-orange-foreground transition-colors duration-(--dur-2) hover:bg-accent-orange-hover lg:inline-flex"
+            class="press hidden h-9 items-center rounded-md bg-accent-orange px-3 font-mono text-meta font-medium text-accent-orange-foreground hover:bg-accent-orange-hover lg:inline-flex"
             [routerLink]="home()"
             fragment="contact"
           >
@@ -140,12 +140,13 @@ const segment =
           </a>
           <!-- The server renders dark; the icon for the other theme is picked
                in CSS, so hydration never meets different markup. Below lg the
-               menu has the switch. -->
+               menu has the switch. The new theme grows from the button. -->
           <button
+            #themeButton
             type="button"
             [class]="iconButton + ' max-lg:hidden'"
             [attr.aria-label]="theme.theme() === 'dark' ? labels().toLight : labels().toDark"
-            (click)="theme.toggle()"
+            (click)="theme.toggle(themeButton)"
           >
             <span class="inline-flex in-data-[theme=light]:hidden" aria-hidden="true">
               <ng-icon name="lucideSun" size="16" />
@@ -158,7 +159,7 @@ const segment =
                without JavaScript, and remembered for the next visit to "/".
                Its name keeps the visible "DE" and adds the language's name. -->
           <a
-            class="hidden h-9 items-center justify-center rounded-md border border-border px-2.5 font-mono text-meta text-muted-foreground transition-colors duration-(--dur-2) hover:border-accent-orange/50 hover:text-foreground lg:inline-flex"
+            class="press hidden h-9 items-center justify-center rounded-md border border-border px-2.5 font-mono text-meta text-muted-foreground hover:border-accent-orange/50 hover:text-foreground lg:inline-flex"
             [routerLink]="lang.alternates()[other()]"
             [attr.hreflang]="other()"
             [attr.lang]="other()"
@@ -236,7 +237,7 @@ const segment =
                   }}</span>
                 } @else {
                   <a
-                    [class]="segment + ' text-muted-foreground hover:text-foreground'"
+                    [class]="segment + ' press text-muted-foreground hover:text-foreground'"
                     [routerLink]="lang.alternates()[locale]"
                     [attr.hreflang]="locale"
                     [attr.lang]="locale"
@@ -254,25 +255,27 @@ const segment =
               [attr.aria-label]="labels().theme"
             >
               <button
+                #darkButton
                 type="button"
                 [class]="
                   segment +
-                  ' text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground'
+                  ' press text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground'
                 "
                 [attr.aria-pressed]="theme.theme() === 'dark'"
-                (click)="theme.set('dark')"
+                (click)="theme.set('dark', darkButton)"
               >
                 <ng-icon name="lucideMoon" size="14" aria-hidden="true" />
                 {{ labels().dark }}
               </button>
               <button
+                #lightButton
                 type="button"
                 [class]="
                   segment +
-                  ' text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground'
+                  ' press text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground'
                 "
                 [attr.aria-pressed]="theme.theme() === 'light'"
-                (click)="theme.set('light')"
+                (click)="theme.set('light', lightButton)"
               >
                 <ng-icon name="lucideSun" size="14" aria-hidden="true" />
                 {{ labels().light }}

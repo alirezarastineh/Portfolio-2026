@@ -18,7 +18,7 @@ import { ScrambleTextComponent } from "./scramble-text.component";
   imports: [ScrambleTextComponent],
   host: { class: "block" },
   template: `
-    <header class="flex flex-col gap-6">
+    <header class="reveal flex flex-col gap-6">
       <div class="flex items-center gap-4">
         @if (index()) {
           <span class="font-mono text-label tabular-nums text-accent-orange" aria-hidden="true">{{

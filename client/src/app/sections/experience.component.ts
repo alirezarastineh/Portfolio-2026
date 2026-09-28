@@ -85,7 +85,7 @@ const HIGHLIGHTS = 3;
 
               <ol class="m-0 flex list-none flex-col border-l border-border p-0" role="list">
                 @for (entry of group.entries; track entry.experience.id) {
-                  <li class="relative pb-10 pl-8 last:pb-0">
+                  <li class="reveal relative pb-10 pl-8 last:pb-0">
                     <!-- Filled while ongoing; a role still held pulses (motion.css). -->
                     <span
                       class="absolute -left-1.25 top-1.5 size-2.25 rounded-full border border-accent-orange"

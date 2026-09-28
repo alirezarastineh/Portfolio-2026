@@ -46,7 +46,7 @@ const LATEST = 3;
 
           <ol class="m-0 grid list-none gap-4 p-0 md:grid-cols-3" role="list">
             @for (post of posts(); track post.slug) {
-              <li>
+              <li class="reveal">
                 <article
                   class="surface-card relative flex h-full flex-col gap-3 p-6 transition-[border-color,box-shadow] duration-200 hover:border-accent-orange/40 hover:shadow-e2"
                 >

@@ -66,7 +66,7 @@ import { placeholderSteps } from "./placeholder-typing";
         />
         <button
           type="submit"
-          class="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-(--dur-2) hover:text-foreground"
+          class="press inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
           [attr.aria-label]="copy().send"
         >
           <span class="kbd">↵</span>
@@ -85,7 +85,7 @@ import { placeholderSteps } from "./placeholder-typing";
       @for (question of copy().starters; track question) {
         <button
           type="button"
-          class="chip min-h-8 cursor-pointer px-2.5 text-left transition-colors duration-(--dur-2) hover:border-border-strong hover:text-foreground"
+          class="chip press min-h-8 cursor-pointer px-2.5 text-left hover:border-border-strong hover:text-foreground"
           (click)="ask(question, 'starter')"
         >
           {{ question }}

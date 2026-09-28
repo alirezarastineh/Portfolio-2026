@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 
 import { ProjectCardComponent } from "../components/project-card.component";
-import { cardLayouts } from "../components/project-layout";
+import { cardColumns, cardLayouts } from "../components/project-layout";
 import { SectionHeadingComponent } from "../components/section-heading.component";
 import { LanguageService } from "../services/language.service";
 
@@ -33,7 +33,12 @@ import { LanguageService } from "../services/language.service";
 
         <ul class="m-0 grid list-none gap-6 p-0 lg:grid-cols-2" role="list">
           @for (project of projects(); track project.slug; let i = $index) {
-            <li [class]="layouts()[i] === 'half' ? '' : 'lg:col-span-2'">
+            <!-- Rises into view (motion.css), the second of a pair a little after the first. -->
+            <li
+              class="reveal"
+              [class]="layouts()[i] === 'half' ? '' : 'lg:col-span-2'"
+              [style.--i]="columns()[i]"
+            >
               <app-project-card
                 class="h-full"
                 [project]="project"
@@ -54,4 +59,5 @@ export class ProjectsSectionComponent {
   readonly lang = inject(LanguageService);
   readonly projects = computed(() => this.lang.content().projects);
   protected readonly layouts = computed(() => cardLayouts(this.projects()));
+  protected readonly columns = computed(() => cardColumns(this.layouts()));
 }

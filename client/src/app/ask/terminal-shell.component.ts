@@ -54,7 +54,7 @@ const MAX_INPUT_LINES = 6;
           <span class="text-xs text-muted-foreground">{{ lang.t().ask.title }}</span>
           <button
             type="button"
-            class="-mr-3 inline-flex size-11 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+            class="press -mr-3 inline-flex size-11 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
             [attr.aria-label]="copy().close"
             (click)="collapse()"
           >
@@ -99,14 +99,14 @@ const MAX_INPUT_LINES = 6;
             <span class="text-accent-orange">{{ copy().handoff.ask }}</span>
             <button
               type="button"
-              class="min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
+              class="press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
               (click)="store.answerHandoff(true)"
             >
               {{ copy().handoff.yes }}
             </button>
             <button
               type="button"
-              class="min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
+              class="press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
               (click)="store.answerHandoff(false)"
             >
               {{ copy().handoff.no }}
@@ -165,7 +165,7 @@ const MAX_INPUT_LINES = 6;
           @for (question of starters().starters; track question) {
             <button
               type="button"
-              class="chip min-h-8 cursor-pointer px-2.5 text-left transition-colors duration-(--dur-2) hover:border-border-strong hover:text-foreground"
+              class="chip press min-h-8 cursor-pointer px-2.5 text-left hover:border-border-strong hover:text-foreground"
               (click)="start(question)"
             >
               {{ question }}

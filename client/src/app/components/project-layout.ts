@@ -26,3 +26,18 @@ export function cardLayouts(projects: readonly { featured: boolean }[]): CardLay
   }
   return layouts;
 }
+
+/**
+ * Each card's column in its row: 1 for the second of two `half` cards, 0 for
+ * every other card. Staggers the cards' reveal across a row (`--i`).
+ */
+export function cardColumns(layouts: readonly CardLayout[]): number[] {
+  let run = 0;
+  return layouts.map((layout) => {
+    if (layout !== "half") {
+      run = 0;
+      return 0;
+    }
+    return run++ % 2;
+  });
+}

@@ -205,7 +205,7 @@ export const routeMeta: RouteMeta = {
           >
             <app-share-links [url]="url()" [title]="p.title" [locale]="lang.lang()" />
             <a
-              class="inline-flex items-center gap-2 font-mono text-sm text-foreground underline decoration-accent-orange/60 underline-offset-4 transition-colors hover:decoration-accent-orange"
+              class="link-underline inline-flex items-center gap-2 font-mono text-sm"
               [routerLink]="['/', lang.lang(), 'writing']"
             >
               <ng-icon name="lucideArrowLeft" size="14" aria-hidden="true" />

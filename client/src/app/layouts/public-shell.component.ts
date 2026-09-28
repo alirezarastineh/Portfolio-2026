@@ -38,7 +38,7 @@ import { LanguageService } from "../services/language.service";
     @if (!onHome()) {
       <button
         type="button"
-        class="ask-fab fixed bottom-4 right-4 z-40 inline-flex h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-full border border-border bg-card font-mono text-sm shadow-e3 hover:border-accent-orange lg:px-4"
+        class="ask-fab press fixed bottom-4 right-4 z-40 inline-flex h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-full border border-border bg-card font-mono text-sm shadow-e3 hover:border-accent-orange lg:px-4"
         [attr.aria-label]="lang.t().ask.title"
         [attr.aria-expanded]="launcher.sheetOpen()"
         aria-keyshortcuts="/"

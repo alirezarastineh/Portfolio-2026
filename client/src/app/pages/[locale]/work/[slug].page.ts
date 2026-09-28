@@ -214,7 +214,7 @@ interface Section {
                     @for (link of links(); track link.href) {
                       <li>
                         <a
-                          class="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 font-mono text-meta text-foreground transition-colors duration-(--dur-2) hover:border-border-strong"
+                          class="press inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 font-mono text-meta text-foreground hover:border-border-strong"
                           [href]="link.href"
                           target="_blank"
                           rel="noreferrer noopener"
@@ -237,7 +237,7 @@ interface Section {
                 class="m-0 grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-[repeat(auto-fit,minmax(11rem,1fr))]"
               >
                 @for (metric of s.project.metrics; track $index) {
-                  <div class="flex flex-col gap-1.5 border-t-2 border-accent-orange pt-4">
+                  <div class="reveal flex flex-col gap-1.5 border-t-2 border-accent-orange pt-4">
                     <dt class="order-2 text-sm text-muted-foreground">{{ metric.label }}</dt>
                     <dd class="order-1 m-0 text-metric tabular-nums text-foreground">
                       {{ metric.value }}
@@ -352,7 +352,9 @@ interface Section {
           }
 
           <!-- The end, as terminal output: what to do next. -->
-          <section class="surface-card flex flex-col items-start gap-4 rounded-2xl p-6 sm:p-10">
+          <section
+            class="reveal surface-card flex flex-col items-start gap-4 rounded-2xl p-6 sm:p-10"
+          >
             <p class="m-0 font-mono text-meta text-muted-foreground" aria-hidden="true">
               <span class="text-accent-orange">&gt;</span> next
             </p>
@@ -362,7 +364,7 @@ interface Section {
             </p>
             <div class="mt-2 flex flex-wrap gap-3">
               <a
-                class="inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent-orange px-5 py-2 font-mono text-meta font-medium text-accent-orange-foreground transition-colors duration-(--dur-2) hover:bg-accent-orange-hover"
+                class="press inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent-orange px-5 py-2 font-mono text-meta font-medium text-accent-orange-foreground hover:bg-accent-orange-hover"
                 [routerLink]="['/', lang.lang()]"
                 fragment="contact"
               >
@@ -371,7 +373,7 @@ interface Section {
               </a>
               <button
                 type="button"
-                class="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-border px-5 py-2 text-left font-mono text-meta text-foreground transition-colors duration-(--dur-2) hover:border-border-strong"
+                class="press inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-border px-5 py-2 text-left font-mono text-meta text-foreground hover:border-border-strong"
                 (click)="askAbout(s.project.name)"
               >
                 <span class="text-accent-orange" aria-hidden="true">&gt;_</span>
@@ -396,7 +398,7 @@ export default class CaseStudyPageComponent {
   );
 
   protected readonly neighbourLink =
-    "flex flex-col gap-2 rounded-xl border border-border p-6 transition-colors duration-200 hover:border-accent-orange/40";
+    "reveal flex flex-col gap-2 rounded-xl border border-border p-6 transition-colors duration-200 hover:border-accent-orange/40";
 
   /** Shared with the home page's card, which morphs into these. */
   protected readonly transitionName = computed(() => {

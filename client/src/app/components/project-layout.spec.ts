@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cardLayouts } from "./project-layout";
+import { cardColumns, cardLayouts } from "./project-layout";
 
 const of = (...featured: boolean[]) => cardLayouts(featured.map((f) => ({ featured: f })));
 
@@ -31,5 +31,17 @@ describe("cardLayouts", () => {
   it("handles featured-only and empty lists", () => {
     expect(of(true, true)).toEqual(["featured", "featured"]);
     expect(of()).toEqual([]);
+  });
+});
+
+describe("cardColumns", () => {
+  it("puts the second card of each pair in column 1", () => {
+    expect(cardColumns(["half", "half", "half", "half"])).toEqual([0, 1, 0, 1]);
+    expect(cardColumns(of(false, false, true, false, false, false))).toEqual([0, 1, 0, 0, 1, 0]);
+  });
+
+  it("starts every row that spans on its own in column 0", () => {
+    expect(cardColumns(["featured", "wide"])).toEqual([0, 0]);
+    expect(cardColumns([])).toEqual([]);
   });
 });

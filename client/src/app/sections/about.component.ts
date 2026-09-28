@@ -131,7 +131,7 @@ import { typingAt, type TerminalLine, type TypingState } from "./about-typing";
                     @for (question of starters().starters; track question) {
                       <button
                         type="button"
-                        class="chip min-h-8 cursor-pointer px-2.5 text-left transition-colors duration-(--dur-2) hover:border-border-strong hover:text-foreground"
+                        class="chip press min-h-8 cursor-pointer px-2.5 text-left hover:border-border-strong hover:text-foreground"
                         (click)="launcher.ask(question, 'starter')"
                       >
                         {{ question }}
@@ -149,7 +149,7 @@ import { typingAt, type TerminalLine, type TypingState } from "./about-typing";
               <!-- Its name starts with the visible word, so voice control finds it. -->
               <button
                 type="button"
-                class="absolute right-3 top-1.5 cursor-pointer rounded-md px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
+                class="press absolute right-3 top-1.5 cursor-pointer rounded-md px-2 py-1 font-mono text-xs text-muted-foreground hover:text-foreground"
                 (click)="skip()"
               >
                 {{ chrome().skip }}<span class="sr-only">: {{ chrome().skipLabel }}</span

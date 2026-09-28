@@ -135,7 +135,7 @@ export class GalleryComponent {
   protected readonly labels = computed(() => CHROME[this.locale()].gallery);
 
   protected readonly button =
-    "inline-flex size-11 cursor-pointer items-center justify-center rounded-lg border border-border-strong bg-card/60 text-foreground transition-colors hover:bg-muted";
+    "press inline-flex size-11 cursor-pointer items-center justify-center rounded-lg border border-border-strong bg-card/60 text-foreground hover:bg-muted";
 
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>("dialog");
 

@@ -51,7 +51,7 @@ export class ShareLinksComponent {
   protected readonly labels = computed(() => CHROME[this.locale()].share);
 
   protected readonly control =
-    "inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-transparent px-3 font-mono text-meta text-foreground transition-colors duration-200 hover:border-accent-orange/50";
+    "press inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-transparent px-3 font-mono text-meta text-foreground hover:border-accent-orange/50";
 
   protected readonly networks = computed(() => {
     const url = encodeURIComponent(this.url());

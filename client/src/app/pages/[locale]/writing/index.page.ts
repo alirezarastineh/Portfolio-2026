@@ -72,7 +72,7 @@ export const routeMeta: RouteMeta = {
           @if (posts().length) {
             <!-- A file, not a page: a plain link, so the router leaves it alone. -->
             <a
-              class="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 font-mono text-meta text-foreground transition-colors duration-200 hover:border-accent-orange/50 hover:text-accent-orange"
+              class="press inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 font-mono text-meta text-foreground hover:border-accent-orange/50 hover:text-accent-orange"
               [href]="'/' + lang.lang() + '/rss.xml'"
               type="application/rss+xml"
             >
@@ -117,7 +117,7 @@ export const routeMeta: RouteMeta = {
       @if (visible().length) {
         <ol class="m-0 flex list-none flex-col gap-4 p-0" role="list">
           @for (post of visible(); track post.slug) {
-            <li>
+            <li class="reveal">
               <article
                 class="group relative grid gap-5 rounded-xl border border-border bg-card/40 p-6 transition-colors duration-200 hover:border-accent-indigo/50 sm:grid-cols-[minmax(0,1fr)_10rem] sm:p-8"
               >
@@ -183,7 +183,7 @@ export default class WritingPageComponent {
 
   /** A tag filter: a chip with a 32px target; the active one is outlined in orange. */
   protected readonly chip =
-    "chip h-8 px-3 text-muted-foreground transition-colors duration-200 hover:border-accent-orange/60 hover:text-foreground";
+    "chip press h-8 px-3 text-muted-foreground hover:border-accent-orange/60 hover:text-foreground";
 
   protected readonly tag = toSignal(
     inject(ActivatedRoute).queryParamMap.pipe(map((params) => params.get("tag"))),

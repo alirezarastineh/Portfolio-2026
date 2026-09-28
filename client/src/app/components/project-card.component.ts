@@ -227,7 +227,7 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
                 @for (link of links(); track link.href) {
                   <li>
                     <a
-                      class="relative z-10 inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-2.5 font-mono text-meta text-muted-foreground transition-colors duration-(--dur-2) hover:border-border-strong hover:text-foreground"
+                      class="press relative z-10 inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-2.5 font-mono text-meta text-muted-foreground hover:border-border-strong hover:text-foreground"
                       [href]="link.href"
                       target="_blank"
                       rel="noreferrer noopener"
