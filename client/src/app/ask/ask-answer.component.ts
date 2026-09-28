@@ -73,6 +73,7 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
           @case ("cite") {
             <a
               class="cite"
+              [attr.data-n]="node.n"
               [href]="footnoteHref(node.id)"
               [attr.aria-label]="citeLabel(node.id)"
               (click)="followCite($event, node.id)"
@@ -86,10 +87,14 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
     <div class="flex flex-col gap-1.5 pb-3 text-foreground/90">
       @for (piece of pieces(); track $index) {
         @if (piece.kind === "step") {
+          <!-- Running: a spinner (a static … under reduced motion). Done: a check.
+               Stopped before its result: neither. -->
           <p class="m-0 text-muted-foreground">
             <span aria-hidden="true">› </span>{{ piece.text }}
-            @if (piece.pending) {
-              <span aria-hidden="true">…</span>
+            @if (!piece.pending) {
+              <span class="text-available" aria-hidden="true">✓</span>
+            } @else if (!done()) {
+              <span class="step-spin" aria-hidden="true"></span>
             }
           </p>
         } @else {
@@ -142,18 +147,22 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
         </p>
       }
 
+      <!-- The sources, as chips; a citation [n] in the text lights up chip n. -->
       @if (footnotes().length) {
-        <div class="mt-1 border-t border-dashed border-border pt-2 text-xs">
-          <span class="sr-only">{{ copy().sources }}</span>
-          <ol class="m-0 list-none p-0">
+        <div
+          class="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-2 border-t border-dashed border-border pt-2 text-xs"
+        >
+          <span class="text-muted-foreground">{{ copy().sources }}:</span>
+          <ol class="m-0 flex min-w-0 list-none flex-wrap gap-2 p-0">
             @for (note of footnotes(); track note.id) {
-              <li [id]="noteId(note.id)" class="flex gap-2">
-                <span class="text-muted-foreground" aria-hidden="true">[{{ note.n }}]</span>
+              <li [id]="noteId(note.id)" class="max-w-full">
                 <a
-                  class="underline decoration-border underline-offset-4 hover:decoration-accent-orange"
+                  class="note chip min-h-6 max-w-full gap-1.5 hover:border-border-strong hover:text-foreground"
+                  [attr.data-n]="note.n"
                   [href]="note.url"
                   (click)="followSource($event, note.url)"
-                  >{{ note.title }}</a
+                  ><span class="text-muted-foreground" aria-hidden="true">[{{ note.n }}]</span
+                  ><span class="min-w-0 wrap-break-word">{{ note.title }}</span></a
                 >
               </li>
             }
@@ -169,7 +178,7 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
         @if (retryable()) {
           <button
             type="button"
-            class="w-fit cursor-pointer font-mono text-xs text-accent-orange underline underline-offset-4"
+            class="min-h-6 w-fit cursor-pointer font-mono text-xs text-accent-orange underline underline-offset-4"
             (click)="retry.emit()"
           >
             ↻ {{ copy().retry }}
@@ -199,10 +208,11 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
           @if (meta(); as m) {
             <span>── {{ m }} ──</span>
           }
-          <span class="flex items-center gap-1">
+          <!-- Pulled left by the buttons' padding, so "+1" lines up with the text. -->
+          <span class="-ml-1.5 flex items-center gap-1">
             <button
               type="button"
-              class="cursor-pointer rounded px-1 hover:text-foreground"
+              class="feedback"
               [attr.aria-pressed]="rating() === 1"
               [attr.aria-label]="copy().helpful"
               [class.text-accent-orange]="rating() === 1"
@@ -212,7 +222,7 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
             </button>
             <button
               type="button"
-              class="cursor-pointer rounded px-1 hover:text-foreground"
+              class="feedback"
               [attr.aria-pressed]="rating() === -1"
               [attr.aria-label]="copy().notHelpful"
               [class.text-accent-orange]="rating() === -1"
@@ -220,12 +230,12 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
             >
               -1
             </button>
-            <button
-              type="button"
-              class="cursor-pointer rounded px-1 hover:text-foreground"
-              (click)="copyAnswer()"
-            >
-              {{ copied() ? copy().copied : copy().copy }}
+            <button type="button" class="feedback" (click)="copyAnswer()">
+              @if (copied()) {
+                {{ copy().copied }}<span aria-hidden="true"> ✓</span>
+              } @else {
+                {{ copy().copy }}
+              }
             </button>
             @if (rating()) {
               <span>{{ copy().thanks }}</span>
@@ -248,6 +258,94 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
     .cite:hover sup,
     .cite:focus-visible sup {
       text-decoration: underline;
+    }
+
+    /* Hovering or focusing citation [n] lights up source chip n. Numbered
+       rules, as CSS cannot compare two elements' attributes; an answer cites
+       a handful of sources, and past nine a chip simply stays unlit. */
+    :host:has(.cite[data-n="1"]:is(:hover, :focus-visible)) .note[data-n="1"],
+    :host:has(.cite[data-n="2"]:is(:hover, :focus-visible)) .note[data-n="2"],
+    :host:has(.cite[data-n="3"]:is(:hover, :focus-visible)) .note[data-n="3"],
+    :host:has(.cite[data-n="4"]:is(:hover, :focus-visible)) .note[data-n="4"],
+    :host:has(.cite[data-n="5"]:is(:hover, :focus-visible)) .note[data-n="5"],
+    :host:has(.cite[data-n="6"]:is(:hover, :focus-visible)) .note[data-n="6"],
+    :host:has(.cite[data-n="7"]:is(:hover, :focus-visible)) .note[data-n="7"],
+    :host:has(.cite[data-n="8"]:is(:hover, :focus-visible)) .note[data-n="8"],
+    :host:has(.cite[data-n="9"]:is(:hover, :focus-visible)) .note[data-n="9"] {
+      border-color: var(--accent-orange);
+      background-color: var(--accent-orange-soft);
+      color: var(--foreground);
+    }
+
+    /* +1, -1 and copy: small words, 24px targets. */
+    .feedback {
+      display: inline-flex;
+      min-width: 1.5rem;
+      min-height: 1.5rem;
+      align-items: center;
+      justify-content: center;
+      padding-inline: 0.375rem;
+      border-radius: 0.25rem;
+      cursor: pointer;
+    }
+    .feedback:hover {
+      color: var(--foreground);
+    }
+
+    /* A tool step at work: a braille spinner, 80ms a frame. */
+    .step-spin {
+      display: inline-block;
+      width: 1ch;
+      line-height: 1;
+    }
+    .step-spin::after {
+      content: "…";
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .note {
+        transition:
+          border-color var(--dur-2),
+          background-color var(--dur-2),
+          color var(--dur-2);
+      }
+      .step-spin::after {
+        content: "⠋";
+        animation: step-spin 0.8s steps(1) infinite;
+      }
+    }
+
+    @keyframes step-spin {
+      0% {
+        content: "⠋";
+      }
+      10% {
+        content: "⠙";
+      }
+      20% {
+        content: "⠹";
+      }
+      30% {
+        content: "⠸";
+      }
+      40% {
+        content: "⠼";
+      }
+      50% {
+        content: "⠴";
+      }
+      60% {
+        content: "⠦";
+      }
+      70% {
+        content: "⠧";
+      }
+      80% {
+        content: "⠇";
+      }
+      90% {
+        content: "⠏";
+      }
     }
   `,
 })

@@ -32,16 +32,20 @@ import { LanguageService } from "../services/language.service";
       <app-command-palette />
     }
     <!-- The assistant lives in the About terminal on home; elsewhere this
-         opens it in a sheet (loaded on first use). -->
+         opens it in a sheet (loaded on first use). A 44px circle on phones,
+         a \`>_ ask\` pill from lg. Its press, and hiding it while the mobile
+         menu is open, are in styles.css. -->
     @if (!onHome()) {
       <button
         type="button"
-        class="ask-fab fixed bottom-4 right-4 z-40 inline-flex size-11 cursor-pointer items-center justify-center rounded-full border border-border bg-card font-mono text-sm text-accent-orange shadow-e3 transition-colors hover:border-accent-orange"
+        class="ask-fab fixed bottom-4 right-4 z-40 inline-flex h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-full border border-border bg-card font-mono text-sm shadow-e3 hover:border-accent-orange lg:px-4"
         [attr.aria-label]="lang.t().ask.title"
         [attr.aria-expanded]="launcher.sheetOpen()"
+        aria-keyshortcuts="/"
         (click)="launcher.openSheet('button')"
       >
-        <span aria-hidden="true">&gt;_</span>
+        <span class="text-accent-orange" aria-hidden="true">&gt;_</span
+        ><span class="max-lg:hidden">{{ fabWord() }}</span>
       </button>
     }
     @defer (when launcher.sheetRequested()) {
@@ -54,6 +58,11 @@ export class PublicShellComponent {
   protected readonly launcher = inject(AskLauncherService);
   protected readonly lang = inject(LanguageService);
   protected readonly onHome = computed(() => this.lang.page() === "/");
+  /**
+   * The pill's word, the first of the button's accessible name ("ask",
+   * "frag"): the name then always contains what the button says.
+   */
+  protected readonly fabWord = computed(() => this.lang.t().ask.title.trim().split(/\s+/)[0] ?? "");
   private readonly doc = inject(DOCUMENT);
 
   constructor() {
@@ -66,8 +75,9 @@ export class PublicShellComponent {
   }
 
   /**
-   * ⌘K / Ctrl+K opens the palette from anywhere on the site. `/` focuses the
-   * hero's ask bar on home, unless the visitor is typing somewhere.
+   * ⌘K / Ctrl+K opens the palette from anywhere on the site. `/` goes to the
+   * assistant, unless the visitor is typing somewhere: the hero's ask bar on
+   * home, the sheet elsewhere.
    */
   protected onKeydown(event: KeyboardEvent): void {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -78,9 +88,13 @@ export class PublicShellComponent {
     if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
     if (event.defaultPrevented || isTyping(event.target)) return;
     const bar = this.doc.getElementById(ASK_BAR_ID);
-    if (!bar) return;
-    event.preventDefault();
-    bar.focus();
+    if (bar) {
+      event.preventDefault();
+      bar.focus();
+    } else if (!this.onHome() && !this.launcher.sheetOpen() && !this.palette.open()) {
+      event.preventDefault();
+      this.launcher.openSheet("shortcut");
+    }
   }
 }
 

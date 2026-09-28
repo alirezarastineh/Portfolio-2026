@@ -162,6 +162,24 @@ a {
 }
 /* eslint-enable css/use-baseline */
 
+/* The mobile menu covers the page, and the ask button would sit on its switches. */
+:root:has(.site-header[data-open]) .ask-fab {
+  display: none;
+}
+
+/* A press sinks the ask button a little, with a spring back. */
+@media (prefers-reduced-motion: no-preference) {
+  .ask-fab {
+    transition:
+      border-color var(--dur-2),
+      scale var(--dur-1) var(--ease-spring);
+  }
+
+  .ask-fab:active {
+    scale: 0.98;
+  }
+}
+
 /* Takes no width of its own (the negative margin), so text typed in front of
    it never re-wraps as the caret moves. */
 .terminal-caret {

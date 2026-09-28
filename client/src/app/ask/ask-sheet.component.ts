@@ -2,12 +2,17 @@ import {
   afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
+  computed,
   ElementRef,
   inject,
   viewChild,
 } from "@angular/core";
 
-import { TerminalWindowComponent } from "../components/terminal-window.component";
+import {
+  TerminalWindowComponent,
+  type TerminalStatus,
+} from "../components/terminal-window.component";
+import { CHROME } from "../i18n/chrome";
 import { LanguageService } from "../services/language.service";
 import { AskLauncherService } from "./ask-launcher.service";
 import { AskStore } from "./ask.store";
@@ -16,7 +21,9 @@ import { TerminalShellComponent } from "./terminal-shell.component";
 /**
  * The assistant on pages without the About terminal: the same shell and
  * conversation in a modal dialog, opened by the floating `>_` button or the
- * palette's "Ask AI…". A panel at the bottom right; full width on phones. Esc, the close button or a click outside closes it.
+ * palette's "Ask AI…", or `/`. A panel at the bottom right; full width on
+ * phones. Esc, the close button or a click outside closes it. Its title bar
+ * says whether the assistant answers, as the About window's does.
  */
 @Component({
   selector: "app-ask-sheet",
@@ -30,10 +37,11 @@ import { TerminalShellComponent } from "./terminal-shell.component";
       (close)="launcher.closeSheet()"
       (click)="onBackdrop($event)"
     >
-      <app-terminal-window [title]="lang.t().ask.title">
+      <app-terminal-window [title]="lang.t().ask.title" [status]="status()" [compact]="true">
         <button
+          windowAction
           type="button"
-          class="absolute right-3 top-1.5 cursor-pointer rounded-md px-2 py-1 font-mono text-xs text-muted-foreground hover:text-foreground"
+          class="-my-1 -mr-1.5 inline-flex min-h-6 cursor-pointer items-center rounded-md px-1.5 text-muted-foreground hover:text-foreground"
           [attr.aria-label]="store.copy().close"
           (click)="launcher.closeSheet()"
         >
@@ -58,12 +66,61 @@ import { TerminalShellComponent } from "./terminal-shell.component";
         max-height: 100dvh;
       }
     }
+
+    /* Opening, it rises 16px and fades in over a fading backdrop; closing, it
+       goes the same way, faster (display and the top layer wait for it).
+       Where the browser cannot animate a dialog's display, it simply appears.
+       The fallbacks: ::backdrop inherits the tokens only in newer browsers. */
+    @media (prefers-reduced-motion: no-preference) {
+      @supports (transition-behavior: allow-discrete) {
+        .ask-sheet,
+        .ask-sheet::backdrop {
+          opacity: 0;
+          transition:
+            opacity var(--dur-3, 240ms) var(--ease-in, ease-in),
+            translate var(--dur-3, 240ms) var(--ease-in, ease-in),
+            overlay var(--dur-3, 240ms) allow-discrete,
+            display var(--dur-3, 240ms) allow-discrete;
+        }
+        .ask-sheet {
+          translate: 0 16px;
+        }
+        .ask-sheet[open],
+        .ask-sheet[open]::backdrop {
+          opacity: 1;
+          transition-duration: var(--dur-4, 360ms);
+          transition-timing-function: var(--ease-emph, ease-out);
+        }
+        .ask-sheet[open] {
+          translate: 0 0;
+        }
+        @starting-style {
+          .ask-sheet[open],
+          .ask-sheet[open]::backdrop {
+            opacity: 0;
+          }
+          .ask-sheet[open] {
+            translate: 0 16px;
+          }
+        }
+      }
+    }
   `,
 })
 export class AskSheetComponent {
   protected readonly launcher = inject(AskLauncherService);
   protected readonly store = inject(AskStore);
   protected readonly lang = inject(LanguageService);
+
+  /** As on the About window: `● online` or `● resting`, once the prompt's code knows. */
+  protected readonly status = computed<TerminalStatus | null>(() => {
+    const state = this.launcher.assistant();
+    if (!state) return null;
+    const about = CHROME[this.lang.lang()].about;
+    return state === "online"
+      ? { label: about.online, live: true }
+      : { label: about.resting, live: false };
+  });
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>("dialog");
   private readonly shell = viewChild.required(TerminalShellComponent);
   private returnFocus: HTMLElement | null = null;

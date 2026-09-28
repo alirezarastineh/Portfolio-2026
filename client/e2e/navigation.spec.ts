@@ -192,6 +192,27 @@ test.describe("site navigation", () => {
     await expect(menu).toBeHidden();
   });
 
+  test("the ask button steps aside while the menu is open", async ({ page, isMobile }) => {
+    if (!isMobile) return;
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    // A circle on phones; it sat on the menu's theme switch.
+    const ask = page.getByRole("button", { name: "ask my portfolio" });
+    await expect(ask).toBeVisible();
+    await expect(ask.getByText("ask", { exact: true })).toBeHidden();
+
+    await page.getByRole("button", { name: "Toggle navigation" }).click();
+    const menu = page.getByRole("navigation", { name: "Mobile" });
+    await expect(menu).toBeVisible();
+    await expect(ask).toBeHidden();
+    await menu.getByRole("group", { name: "Theme" }).getByRole("button", { name: "Light" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await expect(ask).toBeVisible();
+  });
+
   test("widening the window to the desktop layout closes the menu", async ({ page, isMobile }) => {
     if (!isMobile) return;
     await page.goto("/en");

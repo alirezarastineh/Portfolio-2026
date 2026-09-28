@@ -15,9 +15,12 @@ import {
   untracked,
   viewChild,
 } from "@angular/core";
+import { NgIcon, provideIcons } from "@ng-icons/core";
+import { lucideX } from "@ng-icons/lucide";
 
 import { LanguageService } from "../services/language.service";
 import { AskAnswerComponent } from "./ask-answer.component";
+import { ASK_ENTRY_COPY } from "./ask-entry-copy";
 import { answersByQuestion } from "./answers";
 import { AskLauncherService, type AskSource } from "./ask-launcher.service";
 import { AskLinesComponent } from "./ask-lines.component";
@@ -35,25 +38,27 @@ const MAX_INPUT_LINES = 6;
  * adds a line, ↑/↓ recall history, Tab completes, Ctrl+C stops an answer,
  * Ctrl+L clears, Esc leaves. The transcript is a log whose finished answers
  * are announced once through a polite live region, never token by token.
- * On a phone, focusing the prompt opens the terminal full screen.
+ * While it is empty, a few starter questions sit under the prompt. On a
+ * phone, focusing the prompt opens the terminal full screen.
  */
 @Component({
   selector: "app-terminal-shell",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AskAnswerComponent, AskLinesComponent],
+  imports: [AskAnswerComponent, AskLinesComponent, NgIcon],
+  viewProviders: [provideIcons({ lucideX })],
   host: { class: "block" },
   template: `
     <div #frame [class]="frameClass()">
       @if (expanded()) {
-        <div class="flex items-center justify-between border-b border-border py-2">
+        <div class="flex items-center justify-between border-b border-border">
           <span class="text-xs text-muted-foreground">{{ lang.t().ask.title }}</span>
           <button
             type="button"
-            class="cursor-pointer rounded px-2 py-1 text-muted-foreground hover:text-foreground"
+            class="-mr-3 inline-flex size-11 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
             [attr.aria-label]="copy().close"
             (click)="collapse()"
           >
-            ✕
+            <ng-icon name="lucideX" size="20" aria-hidden="true" />
           </button>
         </div>
       }
@@ -94,14 +99,14 @@ const MAX_INPUT_LINES = 6;
             <span class="text-accent-orange">{{ copy().handoff.ask }}</span>
             <button
               type="button"
-              class="cursor-pointer rounded-md border border-border px-2 py-0.5 hover:border-accent-orange"
+              class="min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
               (click)="store.answerHandoff(true)"
             >
               {{ copy().handoff.yes }}
             </button>
             <button
               type="button"
-              class="cursor-pointer rounded-md border border-border px-2 py-0.5 hover:border-accent-orange"
+              class="min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
               (click)="store.answerHandoff(false)"
             >
               {{ copy().handoff.no }}
@@ -145,6 +150,29 @@ const MAX_INPUT_LINES = 6;
           ></textarea>
         </span>
       </form>
+      <!-- An empty terminal suggests a first question (the same as the hero's).
+           About's placeholder draws the same row, so nothing moves when this loads. -->
+      @if (!store.entries().length) {
+        <div
+          class="mb-1 mt-2 flex flex-wrap items-center gap-2"
+          role="group"
+          [attr.aria-label]="starters().suggestions"
+          [class.invisible]="!active()"
+        >
+          <span class="text-meta text-muted-foreground" aria-hidden="true">{{
+            starters().try
+          }}</span>
+          @for (question of starters().starters; track question) {
+            <button
+              type="button"
+              class="chip min-h-8 cursor-pointer px-2.5 text-left transition-colors duration-(--dur-2) hover:border-border-strong hover:text-foreground"
+              (click)="start(question)"
+            >
+              {{ question }}
+            </button>
+          }
+        </div>
+      }
       <p [id]="hintId" class="m-0 mt-1 text-xs text-muted-foreground" [class.invisible]="!active()">
         {{ lang.t().ask.hint }} · {{ lang.t().ask.disclosure }}
       </p>
@@ -203,6 +231,7 @@ export class TerminalShellComponent {
   private opened = false;
 
   protected readonly prompt = computed(() => this.lang.t().about.terminalPrompt);
+  protected readonly starters = computed(() => ASK_ENTRY_COPY[this.lang.lang()]);
   protected readonly status = computed(() => this.store.chat.status);
   protected readonly busy = computed(() => ["submitted", "streaming"].includes(this.status()));
   protected readonly showIdleCaret = computed(() => !this.focused() && !this.value());
@@ -322,6 +351,12 @@ export class TerminalShellComponent {
     el.value = text;
     this.submit();
     el.focus();
+  }
+
+  /** A starter question from the empty terminal. */
+  protected start(question: string): void {
+    this.reportOpen("starter");
+    this.send(question);
   }
 
   private handleArrowKey(event: KeyboardEvent, el: HTMLTextAreaElement): boolean {

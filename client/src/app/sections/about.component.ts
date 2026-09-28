@@ -14,6 +14,7 @@ import {
   untracked,
 } from "@angular/core";
 
+import { ASK_ENTRY_COPY } from "../ask/ask-entry-copy";
 import { AskLauncherService } from "../ask/ask-launcher.service";
 import { hasStoredConversation } from "../ask/ask-storage";
 import { TerminalShellComponent } from "../ask/terminal-shell.component";
@@ -111,10 +112,31 @@ import { typingAt, type TerminalLine, type TypingState } from "./about-typing";
               @defer (when loadShell()) {
                 <app-terminal-shell [active]="finished()" />
               } @placeholder {
-                <div>
+                <!-- A flex column like the shell's, so the margins add up the same. -->
+                <div class="flex flex-col">
                   <div class="mt-1 flex items-baseline gap-2" [class.invisible]="!finished()">
                     <span class="text-accent-orange">{{ lang.t().about.terminalPrompt }}</span>
                     <span class="terminal-caret" aria-hidden="true"></span>
+                  </div>
+                  <!-- The shell's starter questions; one asks at once, loading the shell. -->
+                  <div
+                    class="mb-1 mt-2 flex flex-wrap items-center gap-2"
+                    role="group"
+                    [attr.aria-label]="starters().suggestions"
+                    [class.invisible]="!finished()"
+                  >
+                    <span class="text-meta text-muted-foreground" aria-hidden="true">{{
+                      starters().try
+                    }}</span>
+                    @for (question of starters().starters; track question) {
+                      <button
+                        type="button"
+                        class="chip min-h-8 cursor-pointer px-2.5 text-left transition-colors duration-(--dur-2) hover:border-border-strong hover:text-foreground"
+                        (click)="launcher.ask(question, 'starter')"
+                      >
+                        {{ question }}
+                      </button>
+                    }
                   </div>
                   <p class="m-0 mt-1 text-xs text-muted-foreground" [class.invisible]="!finished()">
                     {{ lang.t().ask.hint }} · {{ lang.t().ask.disclosure }}
@@ -209,7 +231,8 @@ export class AboutSectionComponent {
   protected readonly typing = signal<TypingState | null>(null);
   protected readonly finished = computed(() => this.typing() === null);
 
-  private readonly launcher = inject(AskLauncherService);
+  protected readonly launcher = inject(AskLauncherService);
+  protected readonly starters = computed(() => ASK_ENTRY_COPY[this.lang.lang()]);
 
   /** `● online` once the prompt's code knows; not while the intro types (its skip button sits there). */
   protected readonly status = computed<TerminalStatus | null>(() => {

@@ -78,7 +78,7 @@ interface Group {
   template: `
     <dialog
       #dialog
-      class="mx-auto mt-[12vh] w-[min(36rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-popover p-0 text-popover-foreground shadow-e3 backdrop:bg-scrim backdrop:backdrop-blur-sm"
+      class="palette mx-auto mt-[12vh] w-[min(36rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-popover p-0 text-popover-foreground shadow-e3 backdrop:bg-scrim backdrop:backdrop-blur-sm"
       [attr.aria-label]="labels().title"
       (close)="palette.hide()"
       (click)="closeOnBackdrop($event)"
@@ -155,6 +155,46 @@ interface Group {
         {{ labels().hint }}
       </p>
     </dialog>
+  `,
+  styles: `
+    /* Opening, it grows from 98% and fades in over a fading backdrop; closing,
+       the reverse, faster (display and the top layer wait for it). Where the
+       browser cannot animate a dialog's display, it simply appears. The
+       fallbacks: ::backdrop inherits the tokens only in newer browsers. */
+    @media (prefers-reduced-motion: no-preference) {
+      @supports (transition-behavior: allow-discrete) {
+        .palette,
+        .palette::backdrop {
+          opacity: 0;
+          transition:
+            opacity var(--dur-2, 160ms) var(--ease-in, ease-in),
+            scale var(--dur-2, 160ms) var(--ease-in, ease-in),
+            overlay var(--dur-2, 160ms) allow-discrete,
+            display var(--dur-2, 160ms) allow-discrete;
+        }
+        .palette {
+          scale: 0.98;
+        }
+        .palette[open],
+        .palette[open]::backdrop {
+          opacity: 1;
+          transition-duration: var(--dur-3, 240ms);
+          transition-timing-function: var(--ease-emph, ease-out);
+        }
+        .palette[open] {
+          scale: 1;
+        }
+        @starting-style {
+          .palette[open],
+          .palette[open]::backdrop {
+            opacity: 0;
+          }
+          .palette[open] {
+            scale: 0.98;
+          }
+        }
+      }
+    }
   `,
 })
 export class CommandPaletteComponent {

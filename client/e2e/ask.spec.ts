@@ -122,6 +122,44 @@ function sse(route: Route, chunks: Chunk[]) {
   });
 }
 
+/**
+ * A mocked route delivers its body at once. This streams the answer from the
+ * page's own fetch instead, stopping for `pause` ms after chunk `cut`, as a
+ * model (or a tool call) does.
+ */
+async function pausedStream(page: Page, chunks: Chunk[], cut: number, pause: number) {
+  await page.addInitScript(
+    ({ head, tail, pause }) => {
+      const original = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (!url.endsWith("/v1/ask") || init?.method !== "POST") return original(input, init);
+        const encoder = new TextEncoder();
+        const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+        const body = new ReadableStream<Uint8Array>({
+          async start(controller) {
+            const send = (chunk: unknown) =>
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+            for (const chunk of head) {
+              send(chunk);
+              await wait(50);
+            }
+            await wait(pause);
+            for (const chunk of tail) send(chunk);
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          },
+        });
+        return new Response(body, {
+          headers: { "content-type": "text/event-stream", "x-vercel-ai-ui-message-stream": "v1" },
+        });
+      };
+    },
+    { head: chunks.slice(0, cut + 1), tail: chunks.slice(cut + 1), pause },
+  );
+}
+
 /** The About section's prompt, once its code has loaded. */
 async function openPrompt(page: Page, path = "/en") {
   await page.goto(path);
@@ -223,10 +261,18 @@ test.describe("assistant terminal", () => {
 
     const log = page.locator("#about [role=log]");
     await expect(log).toContainText("He runs evals before every prompt change");
-    await expect(log).toContainText('› search "evals"');
+    await expect(log).toContainText('› search "evals" ✓');
     const cite = log.getByRole("link", { name: /sources 1: Project one/ });
     await expect(cite).toHaveAttribute("href", "/en/work/project-one");
-    await expect(log.getByRole("link", { name: "Project one", exact: true })).toBeVisible();
+    const source = log.getByRole("link", { name: "Project one", exact: true });
+    await expect(source).toBeVisible();
+    // Pointing at the citation lights up its source.
+    const border = () => source.evaluate((el) => getComputedStyle(el).borderColor);
+    const resting = await border();
+    await cite.hover();
+    await expect.poll(border).not.toBe(resting);
+    await page.mouse.move(0, 0);
+    await expect.poll(border).toBe(resting);
     await expect(log).toContainText("gemini-3.5-flash-lite · 1.3 s · 91% cached");
     // Announced once, in full, without markup or markers.
     await expect(page.locator("#about [aria-live=polite]")).toHaveText(
@@ -252,36 +298,7 @@ test.describe("assistant terminal", () => {
     // model does, and the words so far must already be on screen.
     const chunks = answer({ text: "First words arrive now, the rest a little later." });
     const cut = chunks.findIndex((c) => c["type"] === "text-delta" && c["delta"] === "now, ");
-    await page.addInitScript(
-      ({ head, tail }) => {
-        const original = window.fetch.bind(window);
-        window.fetch = async (input, init) => {
-          const url =
-            typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-          if (!url.endsWith("/v1/ask") || init?.method !== "POST") return original(input, init);
-          const encoder = new TextEncoder();
-          const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-          const body = new ReadableStream<Uint8Array>({
-            async start(controller) {
-              const send = (chunk: unknown) =>
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-              for (const chunk of head) {
-                send(chunk);
-                await wait(50);
-              }
-              await wait(3000);
-              for (const chunk of tail) send(chunk);
-              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-              controller.close();
-            },
-          });
-          return new Response(body, {
-            headers: { "content-type": "text/event-stream", "x-vercel-ai-ui-message-stream": "v1" },
-          });
-        };
-      },
-      { head: chunks.slice(0, cut + 1), tail: chunks.slice(cut + 1) },
-    );
+    await pausedStream(page, chunks, cut, 3000);
     await mockAsk(page, () => undefined);
     const prompt = await openPrompt(page);
     await run(prompt, "What is he doing?");
@@ -290,6 +307,50 @@ test.describe("assistant terminal", () => {
     await expect(log).toContainText("First words arrive now,", { timeout: 2500 });
     await expect(log).not.toContainText("a little later");
     await expect(log).toContainText("First words arrive now, the rest a little later.");
+  });
+
+  test("a tool step spins while it runs, then shows its check", async ({ page }) => {
+    const chunks = answer({ text: "Found it.", tools: SEARCH_STEP });
+    const cut = chunks.findIndex((c) => c["type"] === "tool-input-available");
+    await pausedStream(page, chunks, cut, 3000);
+    await mockAsk(page, () => undefined);
+    const prompt = await openPrompt(page);
+    await run(prompt, "What does he test?");
+
+    const step = page.locator("#about [role=log] p", { hasText: 'search "evals"' });
+    const spinner = step.locator(".step-spin");
+    await expect(spinner).toBeVisible();
+    // Reduced motion: a static ellipsis. Otherwise it spins.
+    expect(await spinner.evaluate((el) => getComputedStyle(el, "::after").content)).toBe('"…"');
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    expect(await spinner.evaluate((el) => getComputedStyle(el, "::after").animationName)).not.toBe(
+      "none",
+    );
+    await expect(step).toContainText("✓");
+    await expect(spinner).toHaveCount(0);
+  });
+
+  test("an empty terminal suggests starter questions; one asks at once", async ({ page }) => {
+    const mock = await mockAsk(page, (route) =>
+      sse(route, answer({ text: "Evals on every prompt change." })),
+    );
+    await page.goto("/en");
+    await interactive(page);
+    // Before the prompt's code loads, About's placeholder draws the same row.
+    const starters = page.locator("#about").getByRole("group", { name: "Suggested questions" });
+    await starters.getByRole("button", { name: "How does he test AI features?" }).click();
+
+    const log = page.locator("#about [role=log]");
+    await expect(log).toContainText("How does he test AI features?");
+    await expect(log).toContainText("Evals on every prompt change.");
+    const prompt = page.locator("#about textarea");
+    await expect(prompt).toBeFocused();
+    expect(mock.bodies).toHaveLength(1);
+    await expect(starters).toHaveCount(0);
+
+    // Cleared, the terminal is empty again, and suggests them again.
+    await prompt.press("Control+l");
+    await expect(starters.getByRole("button")).toHaveCount(3);
   });
 
   test("German pages ask in German", async ({ page }) => {
@@ -423,6 +484,7 @@ test.describe("assistant terminal", () => {
     await expect(bar).toHaveValue("a/b");
 
     await page
+      .locator("#hero")
       .getByRole("group", { name: "Suggested questions" })
       .getByRole("button", { name: "What has he shipped with RAG?" })
       .click();
@@ -448,6 +510,35 @@ test.describe("assistant terminal", () => {
     await run(prompt, "Hello");
     await expect(sheet).toContainText("From the sheet.");
     await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+  });
+
+  test("“/” opens the sheet on other pages; its empty terminal suggests questions", async ({
+    page,
+  }) => {
+    await mockAsk(page, (route) => sse(route, answer({ text: "From the sheet." })));
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    // From lg the button is a pill that says what it does; its name stays the same.
+    const button = page.getByRole("button", { name: "ask my portfolio" });
+    await expect(button.getByText("ask", { exact: true })).toBeVisible();
+    await expect(button).toHaveAttribute("aria-keyshortcuts", "/");
+
+    await page.keyboard.press("/");
+    const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
+    const prompt = sheet.locator("textarea");
+    await expect(prompt).toBeFocused();
+    await expect(sheet.locator("app-terminal-window header")).toContainText("online");
+    await sheet
+      .getByRole("group", { name: "Suggested questions" })
+      .getByRole("button", { name: "What has he shipped with RAG?" })
+      .click();
+    await expect(sheet).toContainText("From the sheet.");
+    await expect(sheet.getByRole("group", { name: "Suggested questions" })).toHaveCount(0);
+    // In the prompt, "/" is just a character.
+    await prompt.pressSequentially("a/b");
+    await expect(prompt).toHaveValue("a/b");
+    await sheet.getByRole("button", { name: "Close the assistant" }).click();
     await expect(sheet).toBeHidden();
   });
 
@@ -549,6 +640,15 @@ test.describe("assistant on a phone", () => {
     expect(box?.width).toBeGreaterThanOrEqual(389);
     await expect(prompt).toBeFocused();
     await page.keyboard.press("Escape");
+    await expect(frame).toHaveCount(0);
+
+    // Or its close button, a 44px target.
+    await prompt.focus();
+    const close = frame.getByRole("button", { name: "Close the assistant" });
+    const target = await close.boundingBox();
+    expect(target?.width).toBeGreaterThanOrEqual(44);
+    expect(target?.height).toBeGreaterThanOrEqual(44);
+    await close.click();
     await expect(frame).toHaveCount(0);
   });
 });
