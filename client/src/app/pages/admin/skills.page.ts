@@ -30,6 +30,10 @@ import {
   type SkillInput,
   type SkillRow,
 } from "../../admin/admin-api.service";
+import { countChangedFields } from "../../admin/changed-fields";
+import { EditorLayoutComponent } from "../../admin/components/editor-layout.component";
+import { withSkills, withUi, type LiveCompose } from "../../admin/preview/live-content";
+import { LivePreviewToggleComponent } from "../../admin/preview/live-preview-toggle.component";
 import { ICON_KEYS } from "../../icons/icon-registry";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import {
@@ -95,8 +99,10 @@ function toInput(row: SkillRow): SkillInput {
     HlmInput,
     HlmSeparator,
     AdminPageHeaderComponent,
+    EditorLayoutComponent,
     FormSkeletonComponent,
     HlmSwitch,
+    LivePreviewToggleComponent,
     HlmTextarea,
     LoadErrorComponent,
     LocaleToggleComponent,
@@ -110,183 +116,191 @@ function toInput(row: SkillRow): SkillInput {
   viewProviders: [provideIcons({ lucidePlus, lucideTrash2 })],
   host: { class: "block" },
   template: `
-    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
-      <app-page-header
-        title="Skills"
-        description="The section's heading and the bento cards. One Save covers both."
-        preview="/admin/preview/en#skills"
-      />
-
-      <app-ui-group-editor
-        group="skills"
-        title="Above the cards"
-        description="The section's heading and subtitle on the home page."
-        [fields]="headingFields"
-        [saveBar]="false"
-        [level]="2"
-      />
-
-      <hlm-separator />
-
-      <header class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 class="m-0 text-h4">Cards</h2>
-          <p class="m-0 mt-1 text-sm text-muted-foreground">
-            Edits are kept until you save. Adding, deleting and reordering a card take effect at
-            once.
-          </p>
-        </div>
-        <div class="flex items-center gap-3">
-          <app-locale-toggle [(view)]="view" />
-          <button hlmBtn variant="outline" (click)="add()">
-            <ng-icon name="lucidePlus" size="14" aria-hidden="true" />
-            <span class="ml-1.5">Add card</span>
-          </button>
-        </div>
-      </header>
-
-      @if (loading()) {
-        <app-form-skeleton kind="list" [rows]="3" label="Loading skill cards…" />
-      } @else if (loadError(); as reason) {
-        <app-load-error
-          title="Could not load the skill cards"
-          [reason]="reason"
-          (retry)="reload()"
-        />
-      } @else {
-        <app-sortable-list
-          [items]="rows()"
-          [trackBy]="trackRow"
-          label="skill card"
-          emptyText="No skill cards yet."
-          (reordered)="onReorder($event)"
+    <app-editor-layout anchor="skills" [compose]="livePreview()" [view]="view()">
+      <div class="flex flex-col gap-6 pb-28">
+        <app-page-header
+          title="Skills"
+          description="The section's heading and the bento cards. One Save covers both."
+          preview="/admin/preview/en#skills"
         >
-          <ng-template appSortableRow let-row>
-            <div class="flex flex-col gap-4">
-              <div class="flex flex-wrap items-center gap-3">
-                <code class="rounded bg-muted px-2 py-1 font-mono text-xs">{{ row.id }}</code>
-                @if (isChanged(row.id)) {
-                  <span
-                    hlmBadge
-                    variant="outline"
-                    class="border-accent-orange/50 font-mono text-accent-orange"
-                    >unsaved</span
+          <app-live-preview-toggle headerActions />
+        </app-page-header>
+
+        <app-ui-group-editor
+          group="skills"
+          title="Above the cards"
+          description="The section's heading and subtitle on the home page."
+          [fields]="headingFields"
+          [saveBar]="false"
+          [level]="2"
+        />
+
+        <hlm-separator />
+
+        <header class="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 class="m-0 text-h4">Cards</h2>
+            <p class="m-0 mt-1 text-sm text-muted-foreground">
+              Edits are kept until you save. Adding, deleting and reordering a card take effect at
+              once.
+            </p>
+          </div>
+          <div class="flex items-center gap-3">
+            <app-locale-toggle [(view)]="view" />
+            <button hlmBtn variant="outline" (click)="add()">
+              <ng-icon name="lucidePlus" size="14" aria-hidden="true" />
+              <span class="ml-1.5">Add card</span>
+            </button>
+          </div>
+        </header>
+
+        @if (loading()) {
+          <app-form-skeleton kind="list" [rows]="3" label="Loading skill cards…" />
+        } @else if (loadError(); as reason) {
+          <app-load-error
+            title="Could not load the skill cards"
+            [reason]="reason"
+            (retry)="reload()"
+          />
+        } @else {
+          <app-sortable-list
+            [items]="rows()"
+            [trackBy]="trackRow"
+            label="skill card"
+            emptyText="No skill cards yet."
+            (reordered)="onReorder($event)"
+          >
+            <ng-template appSortableRow let-row>
+              <div class="flex flex-col gap-4">
+                <div class="flex flex-wrap items-center gap-3">
+                  <code class="rounded bg-muted px-2 py-1 font-mono text-xs">{{ row.id }}</code>
+                  @if (isChanged(row.id)) {
+                    <span
+                      hlmBadge
+                      variant="outline"
+                      class="border-accent-orange/50 font-mono text-accent-orange"
+                      >unsaved</span
+                    >
+                  }
+                  <select
+                    class="h-8 rounded-md border border-border bg-card px-2 font-mono text-xs"
+                    [ngModel]="row.icon"
+                    (ngModelChange)="patch(row.id, { icon: $event })"
+                    aria-label="Icon"
                   >
-                }
-                <select
-                  class="h-8 rounded-md border border-border bg-card px-2 font-mono text-xs"
-                  [ngModel]="row.icon"
-                  (ngModelChange)="patch(row.id, { icon: $event })"
-                  aria-label="Icon"
-                >
-                  @for (icon of icons; track icon) {
-                    <option [value]="icon">{{ icon }}</option>
-                  }
-                </select>
-                <select
-                  class="h-8 rounded-md border border-border bg-card px-2 font-mono text-xs"
-                  [ngModel]="row.span"
-                  (ngModelChange)="patch(row.id, { span: $event })"
-                  aria-label="Card size"
-                >
-                  @for (span of spans; track span) {
-                    <option [value]="span">{{ span }}</option>
-                  }
-                </select>
-                <label class="flex items-center gap-2 text-xs text-muted-foreground">
-                  <hlm-switch
-                    [checked]="row.isVisible"
-                    (checkedChange)="patch(row.id, { isVisible: $event })"
-                  />
-                  <span>{{ row.isVisible ? "shown" : "hidden" }}</span>
-                </label>
-                <button
-                  hlmBtn
-                  variant="ghost"
-                  size="sm"
-                  class="ml-auto text-muted-foreground hover:text-destructive"
-                  [attr.aria-label]="'Delete ' + row.id"
-                  (click)="remove(row)"
-                >
-                  <ng-icon name="lucideTrash2" size="14" aria-hidden="true" />
-                </button>
-              </div>
+                    @for (icon of icons; track icon) {
+                      <option [value]="icon">{{ icon }}</option>
+                    }
+                  </select>
+                  <select
+                    class="h-8 rounded-md border border-border bg-card px-2 font-mono text-xs"
+                    [ngModel]="row.span"
+                    (ngModelChange)="patch(row.id, { span: $event })"
+                    aria-label="Card size"
+                  >
+                    @for (span of spans; track span) {
+                      <option [value]="span">{{ span }}</option>
+                    }
+                  </select>
+                  <label class="flex items-center gap-2 text-xs text-muted-foreground">
+                    <hlm-switch
+                      [checked]="row.isVisible"
+                      (checkedChange)="patch(row.id, { isVisible: $event })"
+                    />
+                    <span>{{ row.isVisible ? "shown" : "hidden" }}</span>
+                  </label>
+                  <button
+                    hlmBtn
+                    variant="ghost"
+                    size="sm"
+                    class="ml-auto text-muted-foreground hover:text-destructive"
+                    [attr.aria-label]="'Delete ' + row.id"
+                    (click)="remove(row)"
+                  >
+                    <ng-icon name="lucideTrash2" size="14" aria-hidden="true" />
+                  </button>
+                </div>
 
-              <div [class]="view() === 'both' ? 'grid gap-4 lg:grid-cols-2' : 'grid gap-4'">
-                @for (locale of visibleLocales(); track locale) {
-                  <div class="flex flex-col gap-2 rounded-lg border border-border/60 p-3">
-                    <span class="eyebrow text-muted-foreground">{{ locale }}</span>
-                    <input
-                      hlmInput
-                      class="h-8"
-                      maxlength="120"
-                      [ngModel]="row.translations[locale].title"
-                      (ngModelChange)="patchTranslation(row.id, locale, { title: $event })"
-                      [attr.aria-label]="'Title (' + locale + ')'"
-                      [attr.aria-invalid]="issue(row.id, locale, 'title') ? true : null"
-                      [attr.aria-describedby]="
-                        issue(row.id, locale, 'title') ? issueId(row.id, locale, 'title') : null
-                      "
-                      placeholder="Title"
-                    />
-                    <app-field-issue
-                      [id]="issueId(row.id, locale, 'title')"
-                      [message]="issue(row.id, locale, 'title')"
-                    />
-                    <input
-                      hlmInput
-                      class="h-8"
-                      maxlength="160"
-                      [ngModel]="row.translations[locale].caption"
-                      (ngModelChange)="patchTranslation(row.id, locale, { caption: $event })"
-                      [attr.aria-label]="'Caption (' + locale + ')'"
-                      [attr.aria-invalid]="issue(row.id, locale, 'caption') ? true : null"
-                      [attr.aria-describedby]="
-                        issue(row.id, locale, 'caption') ? issueId(row.id, locale, 'caption') : null
-                      "
-                      placeholder="// caption"
-                    />
-                    <app-field-issue
-                      [id]="issueId(row.id, locale, 'caption')"
-                      [message]="issue(row.id, locale, 'caption')"
-                    />
-                    <textarea
-                      hlmTextarea
-                      rows="3"
-                      maxlength="2000"
-                      [ngModel]="row.translations[locale].narrative"
-                      (ngModelChange)="patchTranslation(row.id, locale, { narrative: $event })"
-                      [attr.aria-label]="'Narrative (' + locale + ')'"
-                      placeholder="Narrative"
-                    ></textarea>
-                  </div>
-                }
-              </div>
+                <div [class]="view() === 'both' ? 'grid gap-4 lg:grid-cols-2' : 'grid gap-4'">
+                  @for (locale of visibleLocales(); track locale) {
+                    <div class="flex flex-col gap-2 rounded-lg border border-border/60 p-3">
+                      <span class="eyebrow text-muted-foreground">{{ locale }}</span>
+                      <input
+                        hlmInput
+                        class="h-8"
+                        maxlength="120"
+                        [ngModel]="row.translations[locale].title"
+                        (ngModelChange)="patchTranslation(row.id, locale, { title: $event })"
+                        [attr.aria-label]="'Title (' + locale + ')'"
+                        [attr.aria-invalid]="issue(row.id, locale, 'title') ? true : null"
+                        [attr.aria-describedby]="
+                          issue(row.id, locale, 'title') ? issueId(row.id, locale, 'title') : null
+                        "
+                        placeholder="Title"
+                      />
+                      <app-field-issue
+                        [id]="issueId(row.id, locale, 'title')"
+                        [message]="issue(row.id, locale, 'title')"
+                      />
+                      <input
+                        hlmInput
+                        class="h-8"
+                        maxlength="160"
+                        [ngModel]="row.translations[locale].caption"
+                        (ngModelChange)="patchTranslation(row.id, locale, { caption: $event })"
+                        [attr.aria-label]="'Caption (' + locale + ')'"
+                        [attr.aria-invalid]="issue(row.id, locale, 'caption') ? true : null"
+                        [attr.aria-describedby]="
+                          issue(row.id, locale, 'caption')
+                            ? issueId(row.id, locale, 'caption')
+                            : null
+                        "
+                        placeholder="// caption"
+                      />
+                      <app-field-issue
+                        [id]="issueId(row.id, locale, 'caption')"
+                        [message]="issue(row.id, locale, 'caption')"
+                      />
+                      <textarea
+                        hlmTextarea
+                        rows="3"
+                        maxlength="2000"
+                        [ngModel]="row.translations[locale].narrative"
+                        (ngModelChange)="patchTranslation(row.id, locale, { narrative: $event })"
+                        [attr.aria-label]="'Narrative (' + locale + ')'"
+                        placeholder="Narrative"
+                      ></textarea>
+                    </div>
+                  }
+                </div>
 
-              <app-string-list
-                label="Tech tags"
-                singular="tag"
-                emptyText="No tags yet."
-                [max]="40"
-                [value]="row.items"
-                (valueChange)="patch(row.id, { items: $event })"
-              />
-              <app-field-issue [id]="row.id + '-items-issue'" [message]="itemsIssue(row.id)" />
-            </div>
-          </ng-template>
-        </app-sortable-list>
+                <app-string-list
+                  label="Tech tags"
+                  singular="tag"
+                  emptyText="No tags yet."
+                  [max]="40"
+                  [value]="row.items"
+                  (valueChange)="patch(row.id, { items: $event })"
+                />
+                <app-field-issue [id]="row.id + '-items-issue'" [message]="itemsIssue(row.id)" />
+              </div>
+            </ng-template>
+          </app-sortable-list>
+        }
+      </div>
+
+      @if (!loading()) {
+        <app-save-bar
+          [dirty]="dirty()"
+          [saving]="saving()"
+          [problems]="problems()"
+          [changes]="changes()"
+          previewHref="/admin/preview/en#skills"
+          (save)="save()"
+          (discard)="discard()"
+        />
       }
-    </div>
-
-    @if (!loading()) {
-      <app-save-bar
-        [dirty]="dirty()"
-        [saving]="saving()"
-        [problems]="problems()"
-        (save)="save()"
-        (discard)="discard()"
-      />
-    }
+    </app-editor-layout>
   `,
 })
 export default class AdminSkillsPage implements OnInit {
@@ -322,6 +336,25 @@ export default class AdminSkillsPage implements OnInit {
   });
 
   protected readonly dirty = computed(() => this.changedIds().length > 0 || this.heading().dirty());
+
+  /** The section as it would be published: these cards, in this order, under this heading. */
+  protected readonly livePreview = computed<LiveCompose | null>(() => {
+    if (this.loading() || this.loadError()) return null;
+    const rows = this.rows();
+    const heading = this.heading().value();
+    return (base, locale) =>
+      withUi(withSkills(base, locale, rows), locale, heading ? { skills: heading } : {});
+  });
+
+  /** Changed fields across the cards, plus the heading's. */
+  protected readonly changes = computed(() => {
+    const saved = this.saved();
+    const cards = this.rows().reduce((sum, row) => {
+      const before = saved.get(row.id);
+      return sum + (before ? countChangedFields(toInput(before), toInput(row)) : 0);
+    }, 0);
+    return cards + this.heading().changes();
+  });
   protected readonly saving = computed(() => this.savingCards() || this.heading().saving());
   protected readonly problems = computed(() => this.issues.count() + this.heading().problems());
 

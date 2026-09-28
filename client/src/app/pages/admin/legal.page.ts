@@ -20,6 +20,7 @@ import { BrnTabsContent } from "@spartan-ng/brain/tabs";
 import { HlmTabsImports } from "@spartan-ng/helm/tabs";
 
 import { AdminApiService, type LegalSectionInput } from "../../admin/admin-api.service";
+import { countChangedFields } from "../../admin/changed-fields";
 import {
   FieldIssueComponent,
   SaveBarComponent,
@@ -176,6 +177,8 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
         [dirty]="dirty()"
         [saving]="saving()"
         [problems]="problems()"
+        [changes]="changes()"
+        [previewHref]="'/admin/preview/en/legal/' + active()"
         (save)="save()"
         (discard)="discard()"
       />
@@ -207,6 +210,9 @@ export default class AdminLegalPage implements OnInit {
     () => JSON.stringify(this.docs()) !== JSON.stringify(this.pristine()),
   );
   protected readonly dirty = computed(() => this.docsDirty() || this.labels().dirty());
+  protected readonly changes = computed(
+    () => countChangedFields(this.pristine(), this.docs()) + this.labels().changes(),
+  );
   protected readonly saving = computed(() => this.savingDocs() || this.labels().saving());
   protected readonly problems = computed(() => this.issues.count() + this.labels().problems());
 

@@ -25,6 +25,7 @@ import {
   type SocialRow,
 } from "../../admin/admin-api.service";
 import { ICON_KEYS } from "../../icons/icon-registry";
+import { countChangedFields } from "../../admin/changed-fields";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import {
   FieldIssueComponent,
@@ -193,6 +194,7 @@ function toInput(row: SocialRow): SocialInput {
           [dirty]="changedIds().length > 0"
           [saving]="saving()"
           [problems]="issues.count()"
+          [changes]="changes()"
           (save)="save()"
           (discard)="discard()"
         />
@@ -225,6 +227,15 @@ export default class AdminSocialsPage implements OnInit {
         return !before || JSON.stringify(toInput(row)) !== JSON.stringify(toInput(before));
       })
       .map((row) => row.id);
+  });
+
+  /** Changed fields across the links. */
+  protected readonly changes = computed(() => {
+    const saved = this.saved();
+    return this.rows().reduce((sum, row) => {
+      const before = saved.get(row.id);
+      return sum + (before ? countChangedFields(toInput(before), toInput(row)) : 0);
+    }, 0);
   });
 
   constructor() {

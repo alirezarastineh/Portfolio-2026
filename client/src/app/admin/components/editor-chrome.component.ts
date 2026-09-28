@@ -4,14 +4,17 @@ import {
   computed,
   effect,
   input,
+  linkedSignal,
   model,
   output,
   signal,
 } from "@angular/core";
+import { toast } from "@spartan-ng/brain/sonner";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmSpinner } from "@spartan-ng/helm/spinner";
 import { HlmToggleGroupImports } from "@spartan-ng/helm/toggle-group";
 
+import { changedFieldsLabel } from "../changed-fields";
 import type { LocaleView } from "./field-pair.component";
 
 /**
@@ -85,10 +88,14 @@ export function isSaveShortcut(event: KeyboardEvent): boolean {
   );
 }
 
+/** How long "Save & preview" waits for its save before giving up on the preview. */
+const PREVIEW_WAIT_MS = 30_000;
+
 /**
  * The one save model of the admin: edits stay local until Save (or Ctrl+S /
  * ⌘S), Discard puts the last saved state back, and the bar says which of
- * unsaved / saving / saved / needs attention the editor is in.
+ * unsaved (and how much) / saving / saved / needs attention the editor is in.
+ * With a `previewHref`, "Save & preview" saves and then opens the draft page.
  *
  * Sticky, not fixed: it lives inside the sidebar inset, so it follows the
  * sidebar whether it is expanded, collapsed to icons, or off-canvas on mobile —
@@ -99,15 +106,49 @@ export function isSaveShortcut(event: KeyboardEvent): boolean {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [HlmButton, HlmSpinner],
   host: { class: "block", "(document:keydown)": "onKeydown($event)" },
+  styles: `
+    /* One status fades into the next (both sit in the same grid cell). */
+    @media (prefers-reduced-motion: no-preference) {
+      .status-in {
+        animation: status-fade var(--dur-2, 160ms) var(--ease-out, ease-out) both;
+      }
+      .status-out {
+        animation: status-fade var(--dur-2, 160ms) var(--ease-out, ease-out) reverse both;
+      }
+    }
+    @keyframes status-fade {
+      from {
+        opacity: 0;
+      }
+    }
+  `,
   template: `
     <div
       class="sticky bottom-0 z-20 -mx-6 border-t border-border bg-card/95 px-6 py-3 backdrop-blur"
     >
-      <div class="mx-auto flex max-w-4xl items-center justify-between gap-4">
-        <p class="m-0 font-mono text-meta" [class]="statusClass()" role="status">
-          {{ status() }}
+      <div class="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <!-- A new status takes the other branch, so the old one leaves as the new one enters. -->
+        <p class="m-0 grid font-mono text-meta" role="status">
+          @let shown = statusShown();
+          @if (shown.odd) {
+            <span
+              class="col-start-1 row-start-1"
+              [class]="statusClass()"
+              animate.enter="status-in"
+              animate.leave="status-out"
+              >{{ shown.text }}</span
+            >
+          } @else {
+            <span
+              class="col-start-1 row-start-1"
+              [class]="statusClass()"
+              animate.enter="status-in"
+              animate.leave="status-out"
+              >{{ shown.text }}</span
+            >
+          }
         </p>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <kbd
             class="hidden rounded-sm border border-border px-1.5 py-px font-mono text-xs text-muted-foreground sm:inline"
             aria-hidden="true"
@@ -122,12 +163,24 @@ export function isSaveShortcut(event: KeyboardEvent): boolean {
           >
             Discard
           </button>
+          @if (previewHref()) {
+            <button
+              hlmBtn
+              variant="outline"
+              type="button"
+              [disabled]="!dirty() || saving()"
+              (click)="saveAndPreview()"
+            >
+              Save &amp; preview
+              <span class="sr-only">(opens in a new tab)</span>
+            </button>
+          }
           <button
             hlmBtn
             type="button"
             [disabled]="!dirty() || saving()"
             [attr.aria-keyshortcuts]="ariaShortcut"
-            (click)="save.emit()"
+            (click)="requestSave()"
           >
             @if (saving()) {
               <hlm-spinner class="size-4" />
@@ -145,8 +198,12 @@ export class SaveBarComponent {
   readonly saving = input(false);
   /** Fields the last save flagged, still unfixed. */
   readonly problems = input(0);
+  /** Fields that differ from what is saved; 0 when the editor does not count them. */
+  readonly changes = input(0);
   readonly saveLabel = input("Save draft");
   readonly hint = input("publish to go live");
+  /** The draft page this editor shows up on; offers "Save & preview" when set. */
+  readonly previewHref = input<string | null>(null);
 
   readonly save = output<void>();
   readonly discard = output<void>();
@@ -159,6 +216,8 @@ export class SaveBarComponent {
   /** When the last save that left nothing unsaved finished. */
   private readonly savedAt = signal<Date | null>(null);
   private wasSaving = false;
+  /** Set by "Save & preview" until its save settles: then open the draft page. */
+  private previewUntil = 0;
 
   protected readonly status = computed(() => {
     if (this.saving()) return "saving…";
@@ -166,9 +225,22 @@ export class SaveBarComponent {
     if (problems > 0) {
       return problems === 1 ? "1 field needs attention" : `${problems} fields need attention`;
     }
-    if (this.dirty()) return "unsaved changes";
+    if (this.dirty()) {
+      const changes = this.changes();
+      return changes > 0 ? changedFieldsLabel(changes) : "unsaved changes";
+    }
     const at = this.savedAt();
     return at ? `saved at ${formatTime(at)} — ${this.hint()}` : `saved — ${this.hint()}`;
+  });
+
+  /** The status, and a parity that flips whenever its text does. */
+  protected readonly statusShown = linkedSignal<string, { text: string; odd: boolean }>({
+    source: this.status,
+    computation: (text, previous) => {
+      const before = previous?.value;
+      if (!before) return { text, odd: false };
+      return { text, odd: before.text === text ? before.odd : !before.odd };
+    },
   });
 
   protected readonly statusClass = computed(() => {
@@ -180,8 +252,37 @@ export class SaveBarComponent {
     effect(() => {
       const saving = this.saving();
       const dirty = this.dirty();
-      if (this.wasSaving && !saving && !dirty) this.savedAt.set(new Date());
+      if (this.wasSaving && !saving) {
+        const saved = !dirty && this.problems() === 0;
+        if (saved) this.savedAt.set(new Date());
+        if (this.previewUntil > Date.now() && saved) this.openPreview();
+        this.previewUntil = 0;
+      }
       this.wasSaving = saving;
+    });
+  }
+
+  protected requestSave(): void {
+    this.previewUntil = 0;
+    this.save.emit();
+  }
+
+  protected saveAndPreview(): void {
+    this.previewUntil = Date.now() + PREVIEW_WAIT_MS;
+    this.save.emit();
+  }
+
+  /** A new tab, still within the click's activation for a save of a second or two. */
+  private openPreview(): void {
+    const href = this.previewHref();
+    if (!href || typeof window === "undefined") return;
+    const opened = window.open(href, "_blank");
+    if (opened) {
+      opened.opener = null;
+      return;
+    }
+    toast.info("Saved", {
+      description: "The browser blocked the new tab; use Preview to open the draft.",
     });
   }
 
@@ -191,13 +292,13 @@ export class SaveBarComponent {
     event.preventDefault();
     if (this.saving()) return;
     if (this.dirty()) {
-      this.save.emit();
+      this.requestSave();
       return;
     }
     // Typed and saved in one breath: the keystroke's edit reaches `dirty`
     // with the next change detection, which may not have run yet.
     setTimeout(() => {
-      if (this.dirty() && !this.saving()) this.save.emit();
+      if (this.dirty() && !this.saving()) this.requestSave();
     }, 50);
   }
 }

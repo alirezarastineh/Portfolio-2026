@@ -9,6 +9,7 @@ import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
 
 import { AdminApiService, type PostListRow } from "../../../admin/admin-api.service";
+import { createBlankPost } from "../../../admin/create-entities";
 import { ConfirmService } from "../../../admin/components/confirm-dialog.component";
 import {
   FormSkeletonComponent,
@@ -170,24 +171,12 @@ export default class AdminWritingPage implements OnInit {
   }
 
   protected async add(): Promise<void> {
-    const slug = `post-${Date.now().toString(36)}`;
-    const result = await this.api.createPost({
-      slug,
-      status: "draft",
-      publishedAt: null,
-      coverId: null,
-      tags: [],
-      canonicalUrl: "",
-      translations: {
-        en: { title: "New post", excerpt: "", body: "", seoTitle: "", seoDescription: "" },
-        de: null,
-      },
-    });
+    const result = await createBlankPost(this.api);
     if (!result.ok) {
       toast.error("Could not create the post", { description: result.error });
       return;
     }
-    void this.router.navigate(["/admin/writing", slug]);
+    void this.router.navigate(["/admin/writing", result.slug]);
   }
 
   protected async remove(row: PostListRow): Promise<void> {

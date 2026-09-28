@@ -2,9 +2,35 @@ import { computed, inject, Injectable, signal } from "@angular/core";
 
 import { AdminApiService, type MediaAsset } from "./admin-api.service";
 
+/** Matches the API's MEDIA_MAX_BYTES (10 MiB). */
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+/** What the library takes: the images the API processes, and PDFs. */
+export const UPLOAD_ACCEPT = "image/png,image/jpeg,image/webp,image/avif,image/gif,application/pdf";
+
+export const UPLOAD_ERRORS: Record<string, string> = {
+  file_too_large: "That file is over 10 MB. Compress it and try again.",
+  image_too_large: "That image is over 50 megapixels. Scale it down and try again.",
+  unsupported_media_type: "Only PNG, JPEG, WebP, AVIF, GIF and PDF are accepted.",
+  missing_file: "No file was received.",
+  invalid_upload: "The upload could not be read.",
+  media_in_use:
+    "Still used by the draft (a project, gallery, post, experience, CV, photo or a text) — change that first.",
+  media_in_use_live: "Shown on the live site right now — publish without it first.",
+};
+
+export type Uploaded =
+  { ok: true; asset: MediaAsset; deduped: boolean } | { ok: false; message: string };
+
 /** Not used by the draft, not shown live — safe to delete, bar rollbacks. */
 export function isUnused(asset: MediaAsset): boolean {
   return !!asset.usage && asset.usage.draft.length === 0 && !asset.usage.live;
+}
+
+export function formatBytes(bytes: number): string {
+  return bytes < 1024 * 1024
+    ? `${Math.round(bytes / 1024)} KB`
+    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 /**
@@ -38,6 +64,20 @@ export class MediaLibraryService {
     const result = await this.api.listMedia();
     if (result.ok) this.assets.set(result.data.media);
     this.loaded.set(true);
+  }
+
+  /**
+   * Uploads one file and reloads the library. Checked for size here first, so
+   * an obvious mistake costs no round trip; the server checks again.
+   */
+  async upload(file: File, onProgress?: (percent: number) => void): Promise<Uploaded> {
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return { ok: false, message: UPLOAD_ERRORS["file_too_large"]! };
+    }
+    const result = await this.api.uploadMedia(file, onProgress);
+    if (!result.ok) return { ok: false, message: UPLOAD_ERRORS[result.error] ?? result.error };
+    await this.load(true);
+    return { ok: true, asset: result.data.media, deduped: result.data.deduped ?? false };
   }
 
   /**

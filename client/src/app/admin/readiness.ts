@@ -52,6 +52,16 @@ const PLACEHOLDER = /\bTODO\b/;
 /** The seed's covers: the SVG stubs in `public/projects/`. Uploads live under `/media/`. */
 const STAND_IN_COVER_PREFIX = "/projects/";
 
+/** Still the seed's "TODO" copy. */
+export function isPlaceholder(text: string): boolean {
+  return PLACEHOLDER.test(text);
+}
+
+/** One of the seed's stub covers rather than an upload. */
+export function isStandInCover(src: string): boolean {
+  return src.startsWith(STAND_IN_COVER_PREFIX);
+}
+
 /**
  * The skill captions the seed content ships with, in both languages
  * (`content/fallback.*.json`; the spec keeps the two equal). Some describe

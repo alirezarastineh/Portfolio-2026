@@ -21,6 +21,7 @@ import { unsavedChangesGuard } from "../../../admin/unsaved-changes.service";
 
 import { AdminApiService, type ProjectListRow } from "../../../admin/admin-api.service";
 import { ConfirmService } from "../../../admin/components/confirm-dialog.component";
+import { createBlankProject } from "../../../admin/create-entities";
 import {
   FormSkeletonComponent,
   LoadErrorComponent,
@@ -235,39 +236,7 @@ export default class AdminProjectsPage implements OnInit {
   }
 
   protected async add(): Promise<void> {
-    const slug = `project-${Date.now().toString(36)}`;
-    const blank = {
-      name: "New project",
-      descriptor: "",
-      hook: "",
-      problem: "",
-      aiArchitecture: "",
-      fullStackInfra: "",
-      outcomes: [] as string[],
-      role: "",
-      categoryLabel: "",
-      metrics: [],
-      body: "",
-      seoDescription: "",
-    };
-
-    const result = await this.api.createProject({
-      slug,
-      coverId: null,
-      stack: [],
-      linkLive: "",
-      linkRepo: "",
-      linkCaseStudy: "",
-      isVisible: true,
-      featured: false,
-      periodStart: null,
-      periodEnd: null,
-      category: "",
-      tags: [],
-      gallery: [],
-      translations: { en: { ...blank }, de: { ...blank } },
-    });
-
+    const result = await createBlankProject(this.api);
     if (!result.ok) {
       toast.error("Could not add project", { description: result.error });
       return;

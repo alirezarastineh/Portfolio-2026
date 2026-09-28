@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
@@ -12,6 +13,10 @@ import { FormBuilder, FormControl, ReactiveFormsModule } from "@angular/forms";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
 
+import { countChangedFields } from "../changed-fields";
+import { withUi, type LiveCompose } from "../preview/live-content";
+import { LivePreviewToggleComponent } from "../preview/live-preview-toggle.component";
+import { EditorLayoutComponent } from "./editor-layout.component";
 import { applyIssues, countServerErrors, focusFirstInvalid } from "../issues";
 import { toastIssues, toastStale } from "../save-feedback";
 import { UiSectionService, type UiGroup } from "../ui-section.service";
@@ -54,73 +59,96 @@ type StringRecord = Record<string, string>;
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     AdminPageHeaderComponent,
+    EditorLayoutComponent,
     FieldPairComponent,
     FormSkeletonComponent,
     HlmSeparator,
+    LivePreviewToggleComponent,
     LoadErrorComponent,
     LocaleToggleComponent,
+    NgTemplateOutlet,
     ReactiveFormsModule,
     SaveBarComponent,
   ],
   host: { class: "block" },
   template: `
-    <div class="mx-auto flex max-w-4xl flex-col gap-6" [class.pb-24]="saveBar() && level() === 1">
-      @if (level() === 1) {
-        <app-page-header
-          [title]="title()"
-          [description]="description()"
-          [preview]="preview()"
-          [(view)]="view"
-        />
-      } @else {
-        <header class="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 class="m-0 text-h4">{{ title() }}</h2>
-            @if (description()) {
-              <p class="m-0 mt-1 text-sm text-muted-foreground">{{ description() }}</p>
-            }
-          </div>
-          <app-locale-toggle [(view)]="view" />
-        </header>
-      }
+    <!-- As the page: in the editor frame, with its live preview when it has one. -->
+    @if (level() === 1) {
+      <app-editor-layout [anchor]="live() ?? 'hero'" [compose]="livePreview()" [view]="view()">
+        <ng-container *ngTemplateOutlet="body" />
+      </app-editor-layout>
+    } @else {
+      <ng-container *ngTemplateOutlet="body" />
+    }
 
-      @if (loading()) {
-        <app-form-skeleton [rows]="skeletonRows()" />
-      } @else if (!loaded()) {
-        <app-load-error (retry)="reload()" />
-      } @else {
-        <form [formGroup]="form" class="flex flex-col gap-6">
-          @for (field of fields(); track field.key; let last = $last) {
-            <app-field-pair
-              [id]="group() + '-' + field.key"
-              [label]="field.label"
-              [hint]="field.hint ?? ''"
-              [multiline]="field.multiline ?? false"
-              [rows]="field.rows ?? 3"
-              [maxLength]="field.maxLength ?? 0"
-              [softMax]="field.softMax ?? 0"
-              [ai]="field.ai ?? true"
-              [view]="view()"
-              [controlEn]="control('en', field.key)"
-              [controlDe]="control('de', field.key)"
-            />
-            @if (!last) {
-              <hlm-separator />
+    <ng-template #body>
+      <div
+        class="flex flex-col gap-6"
+        [class]="level() === 1 ? (saveBar() ? 'pb-24' : '') : 'mx-auto max-w-4xl'"
+      >
+        @if (level() === 1) {
+          <app-page-header
+            [title]="title()"
+            [description]="description()"
+            [preview]="preview()"
+            [(view)]="view"
+          >
+            @if (live()) {
+              <app-live-preview-toggle headerActions />
             }
-          }
-        </form>
-
-        @if (saveBar()) {
-          <app-save-bar
-            [dirty]="dirty()"
-            [saving]="saving()"
-            [problems]="problems()"
-            (save)="save()"
-            (discard)="discard()"
-          />
+          </app-page-header>
+        } @else {
+          <header class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 class="m-0 text-h4">{{ title() }}</h2>
+              @if (description()) {
+                <p class="m-0 mt-1 text-sm text-muted-foreground">{{ description() }}</p>
+              }
+            </div>
+            <app-locale-toggle [(view)]="view" />
+          </header>
         }
-      }
-    </div>
+
+        @if (loading()) {
+          <app-form-skeleton [rows]="skeletonRows()" />
+        } @else if (!loaded()) {
+          <app-load-error (retry)="reload()" />
+        } @else {
+          <form [formGroup]="form" class="flex flex-col gap-6">
+            @for (field of fields(); track field.key; let last = $last) {
+              <app-field-pair
+                [id]="group() + '-' + field.key"
+                [label]="field.label"
+                [hint]="field.hint ?? ''"
+                [multiline]="field.multiline ?? false"
+                [rows]="field.rows ?? 3"
+                [maxLength]="field.maxLength ?? 0"
+                [softMax]="field.softMax ?? 0"
+                [ai]="field.ai ?? true"
+                [view]="view()"
+                [controlEn]="control('en', field.key)"
+                [controlDe]="control('de', field.key)"
+              />
+              @if (!last) {
+                <hlm-separator />
+              }
+            }
+          </form>
+
+          @if (saveBar()) {
+            <app-save-bar
+              [dirty]="dirty()"
+              [saving]="saving()"
+              [problems]="problems()"
+              [changes]="changes()"
+              [previewHref]="preview()"
+              (save)="save()"
+              (discard)="discard()"
+            />
+          }
+        }
+      </div>
+    </ng-template>
   `,
 })
 export class UiGroupEditorComponent {
@@ -134,6 +162,16 @@ export class UiGroupEditorComponent {
   readonly level = input<1 | 2>(1);
   /** At level 1: where the page header's Preview opens the draft. */
   readonly preview = input<string | null>(null);
+  /** At level 1: the home page section the group fills, for the live preview; none, no preview. */
+  readonly live = input<string | null>(null);
+
+  /** The section with the unsaved copy over the draft's. */
+  protected readonly livePreview = computed<LiveCompose | null>(() => {
+    const value = this.value();
+    const group = this.group();
+    if (!value || !this.live()) return null;
+    return (base, locale) => withUi(base, locale, { [group]: value });
+  });
 
   /** As many placeholder fields as the form will have, up to a screenful. */
   protected readonly skeletonRows = computed(() => Math.min(this.fields().length, 6));
@@ -157,9 +195,26 @@ export class UiGroupEditorComponent {
     de: this.fb.nonNullable.group<StringRecord>({}),
   });
 
-  readonly dirty = computed(() => {
+  /** The form as loaded or last saved: what "changed" compares with. */
+  private baseline: Record<Locale, StringRecord> | null = null;
+
+  /** Fields that differ from the saved ones: typing a value back is no change. */
+  readonly changes = computed(() => {
     this.revision();
-    return this.form.dirty;
+    return this.baseline ? countChangedFields(this.baseline, this.form.getRawValue()) : 0;
+  });
+
+  readonly dirty = computed(() => this.changes() > 0);
+
+  /**
+   * The group as it reads on screen, each language over what the server has
+   * (fields this editor does not show keep theirs): what a live preview shows.
+   */
+  readonly value = computed<Record<Locale, StringRecord> | null>(() => {
+    this.revision();
+    if (!this.pristine) return null;
+    const raw = this.form.getRawValue() as Record<Locale, StringRecord>;
+    return { en: { ...this.pristine.en, ...raw.en }, de: { ...this.pristine.de, ...raw.de } };
   });
 
   readonly problems = computed(() => {
@@ -170,7 +225,7 @@ export class UiGroupEditorComponent {
   constructor() {
     this.form.valueChanges.subscribe(() => {
       this.revision.update((v) => v + 1);
-      this.unsaved.set(`ui:${this.group()}`, this.form.dirty);
+      this.unsaved.set(`ui:${this.group()}`, this.dirty());
     });
     // Leaving a dirty editor must not keep warning about it forever.
     inject(DestroyRef).onDestroy(() => this.unsaved.clear(`ui:${this.group()}`));
@@ -213,14 +268,15 @@ export class UiGroupEditorComponent {
       de: loaded.value.de as unknown as StringRecord,
     };
     this.form.markAsPristine();
+    this.baseline = this.form.getRawValue() as Record<Locale, StringRecord>;
     this.revision.update((v) => v + 1);
     this.unsaved.clear(`ui:${this.group()}`);
     this.loaded.set(true);
   }
 
   discard(): void {
-    if (!this.pristine) return;
-    this.form.reset({ en: this.pristine.en, de: this.pristine.de });
+    if (!this.pristine || !this.baseline) return;
+    this.form.reset(this.baseline);
     this.form.markAsPristine();
     this.revision.update((v) => v + 1);
     this.unsaved.clear(`ui:${this.group()}`);
@@ -229,7 +285,7 @@ export class UiGroupEditorComponent {
   /** Resolves to whether the group is saved (true too when there was nothing to save). */
   async save(): Promise<boolean> {
     if (this.saving()) return false;
-    if (!this.form.dirty) return true;
+    if (!this.dirty()) return true;
     this.saving.set(true);
 
     const raw = this.form.getRawValue() as Record<Locale, StringRecord>;
@@ -264,6 +320,7 @@ export class UiGroupEditorComponent {
     this.updatedAt = result.updatedAt;
     this.pristine = value;
     this.form.markAsPristine();
+    this.baseline = raw;
     this.revision.update((v) => v + 1);
     this.unsaved.clear(`ui:${this.group()}`);
     if (this.saveBar()) toast.success("Draft saved");

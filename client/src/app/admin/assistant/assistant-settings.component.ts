@@ -21,6 +21,7 @@ import type { Locale } from "../../content/schema";
 import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
 import { AdminApiService } from "../admin-api.service";
 import type { AssistantEnv, AssistantSettings, AssistantSettingsInput } from "../assistant-types";
+import { countChangedFields } from "../changed-fields";
 import { SaveBarComponent } from "../components/editor-chrome.component";
 import { UnsavedChangesService } from "../unsaved-changes.service";
 
@@ -198,6 +199,7 @@ function toDraft(s: AssistantSettings): Draft {
       <app-save-bar
         [dirty]="dirty()"
         [saving]="saving()"
+        [changes]="changes()"
         saveLabel="Save"
         hint="live immediately, no publish needed"
         (save)="save()"
@@ -222,6 +224,7 @@ export class AssistantSettingsComponent implements OnInit {
   protected readonly dirty = computed(
     () => JSON.stringify(this.draft()) !== JSON.stringify(this.saved()),
   );
+  protected readonly changes = computed(() => countChangedFields(this.saved(), this.draft()));
 
   constructor() {
     const unsaved = inject(UnsavedChangesService);

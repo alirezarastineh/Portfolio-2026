@@ -28,6 +28,7 @@ import {
   FormSkeletonComponent,
   LoadErrorComponent,
 } from "../../admin/components/load-state.component";
+import { KpiTileComponent } from "../../admin/components/kpi-tile.component";
 import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 import { ReadinessCardComponent } from "../../admin/components/readiness-card.component";
 import { editorLinkForI18n } from "../../admin/editor-links";
@@ -73,6 +74,7 @@ function usd(value: number): string {
     HlmButton,
     HlmCardImports,
     HlmSkeleton,
+    KpiTileComponent,
     LoadErrorComponent,
     NgIcon,
     NgTemplateOutlet,
@@ -132,8 +134,7 @@ function usd(value: number): string {
         <h2 id="glance-title" class="sr-only">At a glance</h2>
         <ul class="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 xl:grid-cols-4" role="list">
           <!-- What publishing now would change. -->
-          <li class="surface-card flex min-w-0 flex-col gap-1.5 p-4">
-            <h3 class="eyebrow m-0 text-muted-foreground">Unpublished</h3>
+          <li appKpiTile="Unpublished">
             @if (pulse.review(); as r) {
               @if (r.issues) {
                 <p class="m-0 text-h3 tabular-nums text-destructive">
@@ -183,8 +184,7 @@ function usd(value: number): string {
             }
           </li>
 
-          <li class="surface-card flex min-w-0 flex-col gap-1.5 p-4">
-            <h3 class="eyebrow m-0 text-muted-foreground">Inbox</h3>
+          <li appKpiTile="Inbox">
             @if (pulse.messages(); as messages) {
               <p class="m-0 text-h3 tabular-nums">
                 {{ pulse.newMessages() }}
@@ -207,8 +207,7 @@ function usd(value: number): string {
             />
           </li>
 
-          <li class="surface-card flex min-w-0 flex-col gap-1.5 p-4">
-            <h3 class="eyebrow m-0 text-muted-foreground">Assistant · 24 h</h3>
+          <li appKpiTile="Assistant · 24 h">
             @if (pulse.assistant(); as h) {
               <p class="m-0 text-h3 tabular-nums">
                 {{ h.last24h.answers }}
@@ -244,8 +243,7 @@ function usd(value: number): string {
             />
           </li>
 
-          <li class="surface-card flex min-w-0 flex-col gap-1.5 p-4">
-            <h3 class="eyebrow m-0 text-muted-foreground">Translations</h3>
+          <li appKpiTile="Translations">
             @if (pulse.i18n(); as items) {
               <p class="m-0 text-h3 tabular-nums">
                 {{ items.length }}
@@ -370,10 +368,12 @@ function usd(value: number): string {
                           ></span>
                           <span class="sr-only">New:</span>
                         }
-                        <span
-                          class="min-w-0 flex-1 truncate text-sm"
+                        <a
+                          class="min-w-0 flex-1 truncate text-sm underline-offset-4 hover:underline"
                           [class.font-medium]="m.status === 'new'"
-                          >{{ m.name }}</span
+                          routerLink="/admin/inbox"
+                          [queryParams]="{ m: m.id }"
+                          >{{ m.name }}</a
                         >
                         <time
                           class="shrink-0 font-mono text-xs text-muted-foreground"

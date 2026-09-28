@@ -54,6 +54,7 @@ import { listVariants } from "./hlm-tabs-list";
         class="relative grow transition-transform"
         #tabList
         role="tablist"
+        [attr.aria-label]="tabListLabel()"
         (cdkObserveContent)="_onContentChanges()"
       >
         <div #tabListInner [class]="_tabListClass()">
@@ -99,6 +100,9 @@ export class HlmTabsPaginatedList extends BrnTabsPaginatedList {
   public readonly nextPaginator = viewChild.required<ElementRef<HTMLElement>>("nextPaginator");
   public readonly previousPaginator =
     viewChild.required<ElementRef<HTMLElement>>("previousPaginator");
+
+  /** The tab list's accessible name: the list is an inner element, so the host's own label would name nothing. */
+  public readonly tabListLabel = input<string | null>(null);
 
   public readonly tabListClass = input<ClassValue>("", { alias: "tabListClass" }); // NOSONAR - alias required: 'tabListClass' is a more descriptive name for users of the component, while 'tabListClass' is a valid
   protected readonly _tabListClass = computed(() => hlm(listVariants(), this.tabListClass()));

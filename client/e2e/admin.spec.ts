@@ -18,6 +18,8 @@ const content = (locale: "en" | "de") =>
   ) as Record<string, unknown>;
 
 const USER = { id: "u1", email: "admin@example.com", totpEnrolled: true };
+/** A 1×1 GIF: an image the fake media library can show without a server. */
+const PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=";
 const NOW = new Date().toISOString();
 const HOUR_AGO = new Date(Date.now() - 3600_000).toISOString();
 
@@ -38,9 +40,90 @@ function message(id: string, name: string, status: string) {
 /** What each admin endpoint answers; a function may vary its answer per call. */
 type Answer = unknown | ((call: number) => { status: number; body: unknown });
 
+interface FixtureProject {
+  slug: string;
+  name: string;
+  descriptor: string;
+  hook: string;
+  problem: string;
+  aiArchitecture: string;
+  fullStackInfra: string;
+  outcomes: string[];
+  role: string;
+  stack: string[];
+  tags: string[];
+  featured: boolean;
+  metrics: unknown[];
+}
+
+/** A fixture project as the editor loads it. */
+function projectRow(en: FixtureProject, de: FixtureProject, i: number) {
+  const text = (p: FixtureProject) => ({
+    name: p.name,
+    descriptor: p.descriptor,
+    hook: p.hook,
+    problem: p.problem,
+    aiArchitecture: p.aiArchitecture,
+    fullStackInfra: p.fullStackInfra,
+    outcomes: p.outcomes,
+    role: p.role,
+    categoryLabel: "",
+    metrics: p.metrics,
+    body: "",
+    seoDescription: "",
+  });
+  return {
+    id: `p${i}`,
+    slug: en.slug,
+    position: i,
+    coverId: null,
+    coverPath: null,
+    stack: en.stack,
+    linkLive: "",
+    linkRepo: "",
+    linkCaseStudy: "",
+    isVisible: true,
+    featured: en.featured,
+    periodStart: null,
+    periodEnd: null,
+    category: "",
+    tags: en.tags,
+    gallery: [],
+    createdAt: NOW,
+    updatedAt: NOW,
+    translations: { en: text(en), de: text(de) },
+  };
+}
+
+function mediaAsset(id: string, name: string, change: Record<string, unknown> = {}) {
+  return {
+    id,
+    filename: `${id}.png`,
+    originalName: name,
+    mime: "image/png",
+    kind: "image",
+    byteSize: 120_000,
+    width: 1200,
+    height: 800,
+    blurDataUri: null,
+    altEn: "A diagram",
+    altDe: null,
+    createdAt: HOUR_AGO,
+    url: PIXEL,
+    path: `/media/${id}.png`,
+    variants: [],
+    usage: { draft: [], live: false, recent: false },
+    ...change,
+  };
+}
+
 function defaults(): Record<string, Answer> {
   const en = content("en");
   const de = content("de");
+  const projects = (en["projects"] as FixtureProject[]).map((p, i) =>
+    projectRow(p, (de["projects"] as FixtureProject[])[i]!, i),
+  );
+  const identity = en["identity"] as Record<string, string>;
   return {
     "GET /auth/me": { user: USER, pendingTotp: false, csrfToken: "x" },
     "GET /admin/status": {
@@ -144,6 +227,35 @@ function defaults(): Record<string, Answer> {
       section: "ui",
       updatedAt: HOUR_AGO,
       data: { en: en["ui"], de: de["ui"] },
+    },
+    "GET /admin/assistant/usage": { days: 30, models: [], answers: [] },
+    "GET /admin/profile": {
+      profile: {
+        name: identity["name"],
+        handle: identity["handle"],
+        contactEmail: identity["contactEmail"],
+        primaryCtaHref: "#projects",
+        secondaryCtaHref: "#contact",
+        siteUrl: "",
+        availability: "open",
+        locationCity: "Berlin",
+        locationCountry: "DE",
+        timezone: "Europe/Berlin",
+        avatarId: null,
+        avatarPath: null,
+        updatedAt: HOUR_AGO,
+      },
+    },
+    "GET /admin/resumes": { resumes: { en: null, de: null } },
+    "GET /admin/projects": { projects },
+    "GET /admin/projects/p0": { project: projects[0] },
+    "GET /admin/media": {
+      media: [
+        mediaAsset("a1", "architecture.png", {
+          usage: { draft: ["project:project-one"], live: true, recent: true },
+        }),
+        mediaAsset("a2", "old-screenshot.png"),
+      ],
     },
   };
 }
@@ -328,6 +440,194 @@ test.describe("admin", () => {
     expect(await shook).toBe(true);
   });
 
+  test("the live preview draws the page with the editor's unsaved edits", async ({
+    page,
+    baseURL,
+    problems,
+  }) => {
+    const en = content("en") as { ui: { profile: { heroHeadline: string } } };
+    const de = content("de") as { ui: { profile: { heroHeadline: string } } };
+    const unmocked = await fakeApi(page, baseURL);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openAdmin(page, "/admin/hero");
+
+    const toggle = page.getByRole("button", { name: "Live preview" });
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await toggle.click();
+    const frame = page.locator("iframe[title^='Live preview']");
+    const preview = page.frameLocator("iframe[title^='Live preview']");
+    const headline = preview.locator("#hero-heading");
+    await expect(headline).toContainText(en.ui.profile.heroHeadline);
+
+    // Typed, not saved: the page follows, and the save bar counts it.
+    await page.locator("#profile-heroHeadline-en").fill("Ships AI that answers with sources.");
+    await expect(headline).toContainText("Ships AI that answers with sources.");
+    await expect(page.locator("app-save-bar [role=status]")).toHaveText("1 field changed");
+
+    // A picture, not a second site: nothing in it takes focus or clicks.
+    expect(
+      await frame.evaluate((el) =>
+        (el as HTMLIFrameElement).contentDocument?.body.firstElementChild?.hasAttribute("inert"),
+      ),
+    ).toBe(true);
+
+    // The phone is the page's own phone layout, not the desktop one squeezed.
+    await page
+      .getByRole("group", { name: "Preview width" })
+      .getByRole("button", { name: "Phone" })
+      .click();
+    await expect
+      .poll(() => frame.evaluate((el) => (el as HTMLIFrameElement).contentWindow?.innerWidth))
+      .toBe(390);
+    await page
+      .getByRole("group", { name: "Preview language" })
+      .getByRole("button", { name: "de" })
+      .click();
+    await expect(headline).toContainText(de.ui.profile.heroHeadline);
+
+    await page.getByRole("button", { name: "Close the preview" }).click();
+    await expect(frame).toHaveCount(0);
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(problems.consoleErrors).toEqual([]);
+    expect(problems.cspViolations).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the outline rail lists a long editor's sections and jumps to one", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openAdmin(page, "/admin/projects/project-one");
+
+    const rail = page.getByRole("navigation", { name: "On this page" });
+    await expect(rail.getByRole("link")).toHaveCount(10);
+    // The fixture's stack is filled in; its card still says TODO.
+    await expect(rail.getByRole("link", { name: /^Stack and tags\W+done/ })).toBeVisible();
+    await expect(rail.getByRole("link", { name: /^On the card\W+to do/ })).toBeVisible();
+
+    const metrics = rail.getByRole("link", { name: /^Metrics/ });
+    await metrics.click();
+    await expect(page.getByRole("heading", { level: 2, name: "Metrics" })).toBeFocused();
+    await expect(metrics).toHaveAttribute("aria-current", "location");
+  });
+
+  test("the inbox reads in two panes: J opens, E archives and opens the next", async ({
+    page,
+    baseURL,
+  }) => {
+    const statuses: string[] = [];
+    const recordStatus = (id: string) => () => {
+      statuses.push(id);
+      return { status: 200, body: { ok: true } };
+    };
+    await fakeApi(page, baseURL, {
+      "PATCH /admin/messages/m1": recordStatus("m1"),
+      "PATCH /admin/messages/m2": recordStatus("m2"),
+    });
+    await openAdmin(page, "/admin/inbox");
+
+    const list = page.getByRole("region", { name: "Messages" });
+    // Spam has its own filter.
+    await expect(list.getByRole("button")).toHaveCount(3);
+    await expect(list).not.toContainText("Spam Bot");
+
+    await page.keyboard.press("j");
+    await expect(page.getByRole("region", { name: "Ada Lovelace" })).toBeVisible();
+    // Opening a new message marks it read.
+    await expect.poll(() => statuses).toEqual(["m1"]);
+
+    await page.keyboard.press("e");
+    await expect(page.getByRole("region", { name: "Grace Hopper" })).toBeVisible();
+    await expect(list).not.toContainText("Ada Lovelace");
+    await expect(list.locator("[aria-current=true]")).toContainText("Grace Hopper");
+  });
+
+  test("the palette runs actions, and ? lists the shortcuts", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin");
+
+    await page.keyboard.press("Control+k");
+    const search = page.getByRole("combobox", { name: "Jump to a section or action…" });
+    await expect(search).toBeFocused();
+    // The first action is the one Enter runs on opening.
+    await expect(page.getByRole("option", { selected: true })).toHaveAccessibleName(
+      /^Review and publish/,
+    );
+    await page.keyboard.type("review");
+    await expect(page.getByRole("option", { name: /^Review and publish/ })).toBeVisible();
+    await page.keyboard.press("Enter");
+    const review = page.getByRole("dialog", { name: "Review and publish" });
+    await expect(review).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(review).toHaveCount(0);
+
+    // A fresh search each time: the last one is not left behind.
+    await page.keyboard.press("Control+k");
+    await expect(search).toHaveValue("");
+    await page.keyboard.press("Escape");
+
+    await page.locator("main").click({ position: { x: 10, y: 10 } });
+    await page.keyboard.press("?");
+    const sheet = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByText("Archive the open message")).toBeVisible();
+  });
+
+  test("the assistant's tabs stay on one row on a phone", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openAdmin(page, "/admin/assistant");
+
+    const tabs = page.getByRole("tablist", { name: "Assistant sections" });
+    await expect(tabs.getByRole("tab")).toHaveCount(7);
+    expect((await tabs.boundingBox())?.height ?? 99).toBeLessThan(44);
+    await expect(page.getByText("Answering")).toBeVisible();
+  });
+
+  test("the media library shows where a file is used, and suggests its alt text", async ({
+    page,
+    baseURL,
+  }) => {
+    const cleaned: string[][] = [];
+    await fakeApi(page, baseURL, {
+      "POST /admin/ai/copilot": {
+        text: "Architekturdiagramm der Suchpipeline",
+        model: "gemini-flash",
+      },
+      "POST /admin/media/cleanup": () => {
+        cleaned.push(["a2"]);
+        return {
+          status: 200,
+          body: { ok: true, deleted: ["a2"], skipped: [], freedBytes: 120_000 },
+        };
+      },
+    });
+    await openAdmin(page, "/admin/media");
+
+    await page.getByRole("button", { name: "Details of architecture.png" }).click();
+    const details = page.locator("hlm-sheet-content");
+    await expect(details.getByRole("heading", { name: "architecture.png" })).toBeVisible();
+    await expect(details.getByRole("link", { name: "Project project-one" })).toHaveAttribute(
+      "href",
+      "/admin/projects/project-one",
+    );
+    // Live files cannot be deleted; the reason is given.
+    await expect(details.getByRole("button", { name: "Delete" })).toBeDisabled();
+    await details.getByRole("button", { name: "Suggest alt text in German with AI" }).click();
+    await expect(details.getByLabel("de", { exact: true })).toHaveValue(
+      "Architekturdiagramm der Suchpipeline",
+    );
+    await page.keyboard.press("Escape");
+
+    // What nothing uses can go, several at once.
+    await page.getByRole("button", { name: "Select unused (1)" }).click();
+    await page.getByRole("button", { name: "Delete 1" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
+    await expect.poll(() => cleaned).toEqual([["a2"]]);
+  });
+
   test("the sign-in stays still under reduced motion", async ({ page, baseURL }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await fakeApi(page, baseURL, {
@@ -352,7 +652,13 @@ test.describe("admin accessibility", () => {
   test.use({ reducedMotion: "reduce" });
 
   for (const colorScheme of ["dark", "light"] as const) {
-    for (const path of ["/admin", "/admin/about"]) {
+    for (const path of [
+      "/admin",
+      "/admin/about",
+      "/admin/projects/project-one",
+      "/admin/inbox",
+      "/admin/media",
+    ]) {
       test(`${path} in the ${colorScheme} theme has no accessibility violations`, async ({
         page,
         baseURL,
@@ -376,5 +682,34 @@ test.describe("admin accessibility", () => {
         ).toEqual([]);
       });
     }
+
+    test(`an editor with its live preview open, in the ${colorScheme} theme, has no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme });
+      await page.addInitScript(() => localStorage.setItem("admin.preview.open", "1"));
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await fakeApi(page, baseURL);
+      // Not `openAdmin`: the preview loads the home page's chunks too, which can keep
+      // the network from going quiet under parallel load. Its own content is the mark.
+      await page.goto("/admin/hero");
+      await page.locator("html[data-hydrated]").waitFor({ state: "attached" });
+      const preview = page.frameLocator("iframe[title^='Live preview']");
+      await expect(preview.locator("#hero-heading")).toBeVisible({ timeout: 15_000 });
+      await expect(preview.locator("#contact")).toBeAttached({ timeout: 15_000 });
+      await expect(page.locator("[role=status] .sr-only")).toHaveCount(0);
+
+      const { violations } = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+        .analyze();
+      expect(
+        violations.map((v) => ({
+          rule: v.id,
+          help: v.help,
+          targets: v.nodes.slice(0, 5).map((n) => n.target.join(" ")),
+        })),
+      ).toEqual([]);
+    });
   }
 });

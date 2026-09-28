@@ -272,6 +272,43 @@ describe("admin assistant API", () => {
     expect(seo.text.length).toBeLessThanOrEqual(155);
   });
 
+  it("suggests alt text from the picture itself", async () => {
+    // A 1×1 PNG: too small for resized copies, so the original is what the model sees.
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const upload = new FormData();
+    upload.set("file", new File([new Uint8Array(png)], "pipeline.png", { type: "image/png" }));
+    const { media } = (await (await admin.post("/admin/media", upload)).json()) as {
+      media: { id: string };
+    };
+
+    models.copilot = generating(["Diagramm der Suchpipeline. ".repeat(10)]);
+    const res = await admin.post("/admin/ai/copilot", {
+      task: "alt",
+      mediaId: media.id,
+      locale: "de",
+    });
+    expect(res.status).toBe(200);
+    const { text } = (await res.json()) as { text: string };
+    expect(text.length).toBeLessThanOrEqual(150);
+    expect(text.startsWith("Diagramm der Suchpipeline.")).toBe(true);
+
+    const prompt = JSON.stringify(models.copilot.calls[0]!.prompt);
+    expect(prompt).toContain("German");
+    expect(prompt).toContain('"mediaType":"image/png"');
+    expect(prompt).toContain("pipeline.png");
+
+    const missing = await admin.post("/admin/ai/copilot", {
+      task: "alt",
+      mediaId: "00000000-0000-4000-8000-000000000000",
+      locale: "en",
+    });
+    expect(missing.status).toBe(404);
+    expect(models.copilot.calls).toHaveLength(1);
+  });
+
   it("groups visitor questions into topics", async () => {
     await getDb()
       .insert(aiMessages)

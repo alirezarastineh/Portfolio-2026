@@ -53,10 +53,13 @@ let counter = 0;
       >
         <ng-template appSortableRow let-entry let-i="index">
           <div class="flex items-center gap-2">
+            <!-- Standalone: inside a page's form (the experience sheet), nameless
+                 rows would share one control and all show the last value. -->
             <input
               hlmInput
               class="h-8 flex-1"
               [ngModel]="entry.value"
+              [ngModelOptions]="{ standalone: true }"
               (ngModelChange)="update(entry.id, $event)"
               [attr.aria-label]="label() + ' ' + (i + 1)"
             />

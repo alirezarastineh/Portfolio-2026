@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { createUIMessageStreamResponse, generateText, Output } from "ai";
+import { createUIMessageStreamResponse, generateText, Output, type ModelMessage } from "ai";
 import { and, asc, desc, eq, gte, lt, sql, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -16,13 +16,20 @@ import {
   aiUsage,
 } from "../db/schema.js";
 import { streamAnswer } from "./agent.js";
+import { altImage } from "./alt-image.js";
 import type { AskConfig } from "./config.js";
 import { askChain, askConfig, askCorpus, askDraftCorpus } from "./deps.js";
 import { availability, hashWithSalt } from "./guard.js";
 import { buildHistory } from "./history.js";
 import { createFallbackModel, newTrace, type ModelCall, type Trace } from "./models/fallback.js";
 import { breakerSnapshot } from "./models/circuit.js";
-import { capsOf, configuredModels, shortName, type ChainRole } from "./models/registry.js";
+import {
+  capsOf,
+  configuredModels,
+  shortName,
+  type ChainRole,
+  type ModelEntry,
+} from "./models/registry.js";
 import { buildInstructions, PROMPT_HASH, PROMPT_VERSION } from "./prompt.js";
 import { EVAL_CASES } from "./evals/cases.js";
 import { fixtureAskCorpus } from "./evals/fixture.js";
@@ -43,18 +50,25 @@ export const adminAskRouter = new Hono();
 const invalid = (result: { success: boolean }, c: { json: (b: unknown, s: 400) => Response }) =>
   result.success ? undefined : c.json({ error: "invalid_input" }, 400);
 
-/** A model call outside the visitor stream (insights, copilot): same chain, budget and accounting. */
+/**
+ * A model call outside the visitor stream (insights, copilot): same chain,
+ * budget and accounting. `accepts` narrows the chain to the models that can
+ * take the request (an image, say).
+ */
 async function oneShot<T>(
   config: AskConfig,
   role: ChainRole,
   run: (model: ReturnType<typeof createFallbackModel>) => Promise<T>,
+  accepts: (entry: ModelEntry) => boolean = () => true,
 ): Promise<{ ok: true; value: T; trace: Trace } | { ok: false; error: string }> {
   const settings = await readAiSettings();
   const state = await availability(config, { ...settings, enabled: true });
   if (state.state === "off") return { ok: false, error: "assistant_off" };
   if (state.state === "resting") return { ok: false, error: "assistant_resting" };
-  const chain = askChain(config, role);
-  if (!chain.length) return { ok: false, error: "assistant_off" };
+  const all = askChain(config, role);
+  const chain = all.filter(accepts);
+  if (!chain.length)
+    return { ok: false, error: all.length ? "no_model_for_this" : "assistant_off" };
   const trace = newTrace();
   const model = createFallbackModel({
     entries: chain,
@@ -667,52 +681,107 @@ const copilotInput = z.discriminatedUnion("task", [
     question: z.string().min(3).max(300),
     locale: z.enum(["en", "de"]),
   }),
+  z.object({
+    task: z.literal("alt"),
+    mediaId: z.uuid(),
+    locale: z.enum(["en", "de"]),
+  }),
 ]);
 
 const LANGUAGE = { en: "English", de: "German" } as const;
+
+/** Alt text a screen reader reads in one breath; the field itself takes 300. */
+const ALT_MAX = 150;
+
+/** One copilot task as a model request: what to tell the model, what to show it, the cap. */
+interface CopilotRequest {
+  instructions: string;
+  prompt: string | ModelMessage[];
+  maxLength?: number;
+  /** The models that can take it: for an image, Gemini's. */
+  accepts?: (entry: ModelEntry) => boolean;
+}
+
+/** The request for a task, or the answer when no model is needed (or the input is unusable). */
+async function copilotRequest(
+  input: z.infer<typeof copilotInput>,
+  config: AskConfig,
+): Promise<CopilotRequest | { answer: unknown; status: 200 | 400 | 404 }> {
+  switch (input.task) {
+    case "translate":
+      if (input.from === input.to) return { answer: { text: input.text }, status: 200 };
+      return {
+        instructions: `Translate the text from ${LANGUAGE[input.from]} to ${LANGUAGE[input.to]} for a senior engineer's portfolio. Keep technical terms, product names, numbers and code unchanged; keep the tone. ${input.html ? "The text is HTML: keep every tag and attribute exactly as it is and translate only the text between tags." : "Return plain text."} Return only the translation.`,
+        prompt: input.text,
+      };
+    case "tighten": {
+      const limit = input.maxLength ? `At most ${input.maxLength} characters. ` : "";
+      return {
+        instructions: `Rewrite the text in ${LANGUAGE[input.locale]} to be shorter and sharper, keeping every fact. ${limit}No quotes, no preamble. Return only the rewritten text.`,
+        prompt: input.text,
+        maxLength: input.maxLength,
+      };
+    }
+    case "seo":
+      return {
+        instructions: `Write a search-result description in ${LANGUAGE[input.locale]} for this page of a senior AI / full-stack engineer's portfolio: specific, factual, no hype, at most ${input.maxLength} characters. Return only the description.`,
+        prompt: input.text.replace(/<[^<>]{1,1000}>/g, " ").slice(0, 8_000),
+        maxLength: input.maxLength,
+      };
+    case "faq-answer": {
+      const corpus = await askCorpus(config);
+      return {
+        instructions: `Draft an answer in ${LANGUAGE[input.locale]} to a question visitors ask about Alireza Rastineh, using only the portfolio documents below. Third person, at most 80 words. If the documents do not answer it, write exactly: NO_ANSWER\n\n# Portfolio documents\n\n${corpus.core}`,
+        prompt: input.question,
+      };
+    }
+    case "alt": {
+      const picture = await altImage(input.mediaId);
+      if (!picture.ok) {
+        return {
+          answer: { error: picture.error },
+          status: picture.error === "not_found" ? 404 : 400,
+        };
+      }
+      return {
+        instructions: `Write the alt text in ${LANGUAGE[input.locale]} for this image on a senior AI / full-stack engineer's portfolio: what it shows that a reader who cannot see it needs, in one sentence of at most ${ALT_MAX} characters. Name the product, diagram or screen if it is clear; no "image of", no quotes, no guessing at text you cannot read. Return only the alt text.`,
+        prompt: [
+          {
+            role: "user",
+            content: [
+              { type: "file", data: picture.image, mediaType: picture.mediaType },
+              { type: "text", text: `The file is called "${picture.name}".` },
+            ],
+          },
+        ],
+        maxLength: ALT_MAX,
+        accepts: (entry) => entry.provider === "gemini",
+      };
+    }
+  }
+}
 
 adminAskRouter.post("/ai/copilot", zValidator("json", copilotInput, invalid), async (c) => {
   const input = c.req.valid("json");
   const config = askConfig();
 
-  let instructions: string;
-  let prompt: string;
-  let maxLength: number | undefined;
-  switch (input.task) {
-    case "translate":
-      if (input.from === input.to) return c.json({ text: input.text });
-      instructions = `Translate the text from ${LANGUAGE[input.from]} to ${LANGUAGE[input.to]} for a senior engineer's portfolio. Keep technical terms, product names, numbers and code unchanged; keep the tone. ${input.html ? "The text is HTML: keep every tag and attribute exactly as it is and translate only the text between tags." : "Return plain text."} Return only the translation.`;
-      prompt = input.text;
-      break;
-    case "tighten": {
-      maxLength = input.maxLength;
-      const limit = maxLength ? `At most ${maxLength} characters. ` : "";
-      instructions = `Rewrite the text in ${LANGUAGE[input.locale]} to be shorter and sharper, keeping every fact. ${limit}No quotes, no preamble. Return only the rewritten text.`;
-      prompt = input.text;
-      break;
-    }
-    case "seo":
-      maxLength = input.maxLength;
-      instructions = `Write a search-result description in ${LANGUAGE[input.locale]} for this page of a senior AI / full-stack engineer's portfolio: specific, factual, no hype, at most ${maxLength} characters. Return only the description.`;
-      prompt = input.text.replace(/<[^<>]{1,1000}>/g, " ").slice(0, 8_000);
-      break;
-    case "faq-answer": {
-      const corpus = await askCorpus(config);
-      instructions = `Draft an answer in ${LANGUAGE[input.locale]} to a question visitors ask about Alireza Rastineh, using only the portfolio documents below. Third person, at most 80 words. If the documents do not answer it, write exactly: NO_ANSWER\n\n# Portfolio documents\n\n${corpus.core}`;
-      prompt = input.question;
-      break;
-    }
-  }
+  const request = await copilotRequest(input, config);
+  if ("answer" in request) return c.json(request.answer, request.status);
+  const { instructions, prompt, maxLength, accepts } = request;
 
-  const result = await oneShot(config, "copilot", (model) =>
-    generateText({
-      model,
-      instructions,
-      prompt,
-      maxRetries: 0,
-      maxOutputTokens: 4_000,
-      temperature: 0.2,
-    }).then((r) => r.text.trim()),
+  const result = await oneShot(
+    config,
+    "copilot",
+    (model) =>
+      generateText({
+        model,
+        instructions,
+        prompt,
+        maxRetries: 0,
+        maxOutputTokens: 4_000,
+        temperature: 0.2,
+      }).then((r) => r.text.trim()),
+    accepts,
   );
   if (!result.ok) return c.json({ error: result.error }, 503);
   let text = result.value;

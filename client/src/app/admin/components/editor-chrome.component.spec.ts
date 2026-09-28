@@ -11,6 +11,8 @@ import { SaveBarComponent } from "./editor-chrome.component";
       [dirty]="dirty()"
       [saving]="saving()"
       [problems]="problems()"
+      [changes]="changes()"
+      [previewHref]="previewHref()"
       (save)="saves = saves + 1"
       (discard)="discards = discards + 1"
     />
@@ -20,6 +22,8 @@ class HostComponent {
   readonly dirty = signal(false);
   readonly saving = signal(false);
   readonly problems = signal(0);
+  readonly changes = signal(0);
+  readonly previewHref = signal<string | null>(null);
   saves = 0;
   discards = 0;
 }
@@ -99,5 +103,74 @@ describe("SaveBarComponent", () => {
     host.problems.set(2);
     fixture.detectChanges();
     expect(status()).toBe("2 fields need attention");
+  });
+
+  it("says how many fields changed when the editor counts them", () => {
+    const { host, fixture, status } = setup();
+    host.dirty.set(true);
+    host.changes.set(3);
+    fixture.detectChanges();
+    expect(status()).toBe("3 fields changed");
+
+    host.changes.set(1);
+    fixture.detectChanges();
+    expect(status()).toBe("1 field changed");
+  });
+
+  it("saves, then opens the draft page, on Save & preview", () => {
+    const { host, fixture } = setup();
+    const opened = { opener: {} as unknown };
+    const open = vi.spyOn(window, "open").mockReturnValue(opened as Window);
+    const button = () =>
+      [...(fixture.nativeElement as HTMLElement).querySelectorAll("button")].find((b) =>
+        b.textContent?.includes("Save & preview"),
+      );
+    expect(button()).toBeUndefined();
+
+    host.previewHref.set("/admin/preview/en#about");
+    host.dirty.set(true);
+    fixture.detectChanges();
+    button()!.click();
+    expect(host.saves).toBe(1);
+    expect(open).not.toHaveBeenCalled();
+
+    // The save runs, then leaves nothing unsaved: now the tab opens, detached.
+    host.saving.set(true);
+    fixture.detectChanges();
+    host.saving.set(false);
+    host.dirty.set(false);
+    fixture.detectChanges();
+    expect(open).toHaveBeenCalledWith("/admin/preview/en#about", "_blank");
+    expect(opened.opener).toBeNull();
+
+    // A plain save afterwards does not open it again.
+    host.dirty.set(true);
+    fixture.detectChanges();
+    host.saving.set(true);
+    fixture.detectChanges();
+    host.saving.set(false);
+    host.dirty.set(false);
+    fixture.detectChanges();
+    expect(open).toHaveBeenCalledTimes(1);
+    open.mockRestore();
+  });
+
+  it("does not open the preview when the save leaves problems", () => {
+    const { host, fixture } = setup();
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    host.previewHref.set("/admin/preview/en");
+    host.dirty.set(true);
+    fixture.detectChanges();
+    const button = [...(fixture.nativeElement as HTMLElement).querySelectorAll("button")].find(
+      (b) => b.textContent?.includes("Save & preview"),
+    )!;
+    button.click();
+    host.saving.set(true);
+    fixture.detectChanges();
+    host.saving.set(false);
+    host.problems.set(1);
+    fixture.detectChanges();
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
   });
 });

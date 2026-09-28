@@ -7,6 +7,7 @@ import {
   inject,
   OnInit,
   signal,
+  viewChild,
 } from "@angular/core";
 import type { RouteMeta } from "@analogjs/router";
 import { FormsModule } from "@angular/forms";
@@ -48,7 +49,12 @@ import {
   UiGroupEditorComponent,
   type UiFieldDef,
 } from "../../admin/components/ui-group-editor.component";
+import { EditorLayoutComponent } from "../../admin/components/editor-layout.component";
 import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
+import { withExperiences, withUi, type LiveCompose } from "../../admin/preview/live-content";
+import { LivePreviewComponent } from "../../admin/preview/live-preview.component";
+import { LivePreviewToggleComponent } from "../../admin/preview/live-preview-toggle.component";
+import { LivePreviewService } from "../../admin/preview/live-preview.service";
 import { toastIssues } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import type { Locale } from "../../content/schema";
@@ -117,9 +123,12 @@ function blankDraft(): Draft {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     AdminPageHeaderComponent,
+    EditorLayoutComponent,
     FieldIssueComponent,
     FormSkeletonComponent,
     FormsModule,
+    LivePreviewComponent,
+    LivePreviewToggleComponent,
     HlmBadge,
     HlmButton,
     HlmField,
@@ -140,84 +149,96 @@ function blankDraft(): Draft {
   viewProviders: [provideIcons({ lucidePencil, lucidePlus, lucideTrash2 })],
   host: { class: "block" },
   template: `
-    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
-      <app-page-header
-        title="Experience"
-        description="Work, education and certifications for the timeline. Drag to reorder: saved at once, and on the site after the next publish."
-        preview="/admin/preview/en#experience"
-      >
-        <button headerActions hlmBtn variant="outline" size="sm" (click)="edit(null)">
-          <ng-icon name="lucidePlus" size="14" aria-hidden="true" />
-          <span class="ml-1.5">Add entry</span>
-        </button>
-      </app-page-header>
-
-      @if (loading()) {
-        <app-form-skeleton kind="list" [rows]="4" label="Loading the timeline…" />
-      } @else if (loadError(); as reason) {
-        <app-load-error title="Could not load the timeline" [reason]="reason" (retry)="reload()" />
-      } @else {
-        <app-sortable-list
-          [items]="rows()"
-          [trackBy]="trackRow"
-          label="experience entry"
-          emptyText="No entries yet."
-          (reordered)="onReorder($event)"
+    <app-editor-layout anchor="experience" [compose]="livePreview()" [note]="previewNote()">
+      <div class="flex flex-col gap-6 pb-28">
+        <app-page-header
+          title="Experience"
+          description="Work, education and certifications for the timeline. Drag to reorder: saved at once, and on the site after the next publish."
+          preview="/admin/preview/en#experience"
         >
-          <ng-template appSortableRow let-row>
-            <div class="flex flex-wrap items-center gap-3">
-              <div class="min-w-0 flex-1">
-                <p class="m-0 truncate text-sm font-medium">
-                  {{ row.translations.en.title || "(untitled)" }} · {{ row.orgName }}
-                </p>
-                <p class="m-0 mt-0.5 font-mono text-xs text-muted-foreground">
-                  {{ row.startDate }} – {{ row.endDate ?? "present" }}
-                </p>
+          <app-live-preview-toggle headerActions />
+          <button headerActions hlmBtn variant="outline" size="sm" (click)="edit(null)">
+            <ng-icon name="lucidePlus" size="14" aria-hidden="true" />
+            <span class="ml-1.5">Add entry</span>
+          </button>
+        </app-page-header>
+
+        @if (loading()) {
+          <app-form-skeleton kind="list" [rows]="4" label="Loading the timeline…" />
+        } @else if (loadError(); as reason) {
+          <app-load-error
+            title="Could not load the timeline"
+            [reason]="reason"
+            (retry)="reload()"
+          />
+        } @else {
+          <app-sortable-list
+            [items]="rows()"
+            [trackBy]="trackRow"
+            label="experience entry"
+            emptyText="No entries yet."
+            (reordered)="onReorder($event)"
+          >
+            <ng-template appSortableRow let-row>
+              <div class="flex flex-wrap items-center gap-3">
+                <div class="min-w-0 flex-1">
+                  <p class="m-0 truncate text-sm font-medium">
+                    {{ row.translations.en.title || "(untitled)" }} · {{ row.orgName }}
+                  </p>
+                  <p class="m-0 mt-0.5 font-mono text-xs text-muted-foreground">
+                    {{ row.startDate }} – {{ row.endDate ?? "present" }}
+                  </p>
+                </div>
+                <span hlmBadge variant="outline" class="font-mono">{{ row.kind }}</span>
+                <label class="flex items-center gap-2 text-xs text-muted-foreground">
+                  <hlm-switch
+                    [checked]="row.isVisible"
+                    (checkedChange)="toggleVisible(row, $event)"
+                  />
+                  <span>{{ row.isVisible ? "shown" : "hidden" }}</span>
+                </label>
+                <button hlmBtn variant="outline" size="sm" (click)="edit(row)">
+                  <ng-icon name="lucidePencil" size="14" aria-hidden="true" />
+                  <span class="ml-1.5">Edit</span>
+                </button>
+                <button
+                  hlmBtn
+                  variant="ghost"
+                  size="sm"
+                  class="text-muted-foreground hover:text-destructive"
+                  [attr.aria-label]="'Delete ' + row.orgName"
+                  (click)="remove(row)"
+                >
+                  <ng-icon name="lucideTrash2" size="14" aria-hidden="true" />
+                </button>
               </div>
-              <span hlmBadge variant="outline" class="font-mono">{{ row.kind }}</span>
-              <label class="flex items-center gap-2 text-xs text-muted-foreground">
-                <hlm-switch
-                  [checked]="row.isVisible"
-                  (checkedChange)="toggleVisible(row, $event)"
-                />
-                <span>{{ row.isVisible ? "shown" : "hidden" }}</span>
-              </label>
-              <button hlmBtn variant="outline" size="sm" (click)="edit(row)">
-                <ng-icon name="lucidePencil" size="14" aria-hidden="true" />
-                <span class="ml-1.5">Edit</span>
-              </button>
-              <button
-                hlmBtn
-                variant="ghost"
-                size="sm"
-                class="text-muted-foreground hover:text-destructive"
-                [attr.aria-label]="'Delete ' + row.orgName"
-                (click)="remove(row)"
-              >
-                <ng-icon name="lucideTrash2" size="14" aria-hidden="true" />
-              </button>
-            </div>
-          </ng-template>
-        </app-sortable-list>
-      }
+            </ng-template>
+          </app-sortable-list>
+        }
 
-      <hlm-separator />
+        <hlm-separator />
 
-      <app-ui-group-editor
-        group="experience"
-        title="Timeline copy"
-        description="The section's heading and the labels around each entry."
-        [fields]="copyFields"
-        [level]="2"
-      />
-    </div>
+        <app-ui-group-editor
+          group="experience"
+          title="Timeline copy"
+          description="The section's heading and the labels around each entry."
+          [fields]="copyFields"
+          [level]="2"
+        />
+      </div>
+    </app-editor-layout>
 
     <hlm-sheet
       side="right"
       [state]="sheetOpen() ? 'open' : 'closed'"
       (stateChanged)="onSheet($event)"
     >
-      <hlm-sheet-content *hlmSheetPortal="let ctx" class="w-full overflow-y-auto sm:max-w-2xl">
+      <!-- Wider while the preview is on: the entry's own preview sits beside the form. -->
+      <hlm-sheet-content
+        *hlmSheetPortal="let ctx"
+        class="w-full overflow-y-auto sm:max-w-(--entry-sheet)"
+        [style.--entry-sheet]="sheetPreview() ? 'min(96vw, 84rem)' : '42rem'"
+      >
         @if (draft(); as d) {
           <hlm-sheet-header>
             <h2 hlmSheetTitle>{{ d.id ? "Edit entry" : "New entry" }}</h2>
@@ -226,224 +247,245 @@ function blankDraft(): Draft {
               publish.
             </p>
           </hlm-sheet-header>
-          <form
-            #entryForm
-            class="flex flex-col gap-4 px-4 pb-6"
-            (ngSubmit)="save(entryForm)"
-            (keydown)="onFormKeydown($event, entryForm)"
+          <div
+            class="grid gap-6"
+            [class]="
+              sheetPreview() && livePreview() ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)]' : ''
+            "
           >
-            <div class="grid gap-4 sm:grid-cols-2">
-              <div hlmField>
-                <label hlmFieldLabel for="exp-kind">Kind</label>
-                <select
-                  id="exp-kind"
-                  name="kind"
-                  class="h-9 rounded-md border border-border bg-card px-2 text-sm"
-                  [ngModel]="d.kind"
-                  (ngModelChange)="patch({ kind: $event })"
-                >
-                  @for (kind of kinds; track kind.value) {
-                    <option [value]="kind.value">{{ kind.label }}</option>
-                  }
-                </select>
+            <form
+              #entryForm
+              class="flex min-w-0 flex-col gap-4 px-4 pb-6"
+              (ngSubmit)="save(entryForm)"
+              (keydown)="onFormKeydown($event, entryForm)"
+            >
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div hlmField>
+                  <label hlmFieldLabel for="exp-kind">Kind</label>
+                  <select
+                    id="exp-kind"
+                    name="kind"
+                    class="h-9 rounded-md border border-border bg-card px-2 text-sm"
+                    [ngModel]="d.kind"
+                    (ngModelChange)="patch({ kind: $event })"
+                  >
+                    @for (kind of kinds; track kind.value) {
+                      <option [value]="kind.value">{{ kind.label }}</option>
+                    }
+                  </select>
+                </div>
+                <div hlmField>
+                  <label hlmFieldLabel for="exp-type">Employment</label>
+                  <select
+                    id="exp-type"
+                    name="employmentType"
+                    class="h-9 rounded-md border border-border bg-card px-2 text-sm"
+                    [ngModel]="d.employmentType"
+                    (ngModelChange)="patch({ employmentType: $event })"
+                  >
+                    @for (type of employment; track type.value) {
+                      <option [value]="type.value">{{ type.label }}</option>
+                    }
+                  </select>
+                </div>
+                <div hlmField>
+                  <label hlmFieldLabel for="exp-org">Organisation</label>
+                  <input
+                    hlmInput
+                    id="exp-org"
+                    name="orgName"
+                    required
+                    maxlength="160"
+                    [ngModel]="d.orgName"
+                    (ngModelChange)="patch({ orgName: $event })"
+                    [attr.aria-invalid]="issues.get('orgName') ? true : null"
+                    [attr.aria-describedby]="issues.get('orgName') ? 'exp-org-issue' : null"
+                  />
+                  <app-field-issue id="exp-org-issue" [message]="issues.get('orgName')" />
+                </div>
+                <div hlmField>
+                  <label hlmFieldLabel for="exp-url">Organisation URL</label>
+                  <input
+                    hlmInput
+                    id="exp-url"
+                    name="orgUrl"
+                    maxlength="500"
+                    [ngModel]="d.orgUrl"
+                    (ngModelChange)="patch({ orgUrl: $event })"
+                    [attr.aria-invalid]="issues.get('orgUrl') ? true : null"
+                    [attr.aria-describedby]="issues.get('orgUrl') ? 'exp-url-issue' : null"
+                  />
+                  <app-field-issue id="exp-url-issue" [message]="issues.get('orgUrl')" />
+                </div>
+                <div hlmField>
+                  <label hlmFieldLabel for="exp-start">Start</label>
+                  <input
+                    hlmInput
+                    id="exp-start"
+                    name="startDate"
+                    type="date"
+                    required
+                    [ngModel]="d.startDate"
+                    (ngModelChange)="patch({ startDate: $event })"
+                    [attr.aria-invalid]="issues.get('startDate') ? true : null"
+                    [attr.aria-describedby]="issues.get('startDate') ? 'exp-start-issue' : null"
+                  />
+                  <app-field-issue id="exp-start-issue" [message]="issues.get('startDate')" />
+                </div>
+                <div hlmField>
+                  <label hlmFieldLabel for="exp-end">End (empty = present)</label>
+                  <input
+                    hlmInput
+                    id="exp-end"
+                    name="endDate"
+                    type="date"
+                    [ngModel]="d.endDate ?? ''"
+                    (ngModelChange)="patch({ endDate: $event || null })"
+                    [attr.aria-invalid]="issues.get('endDate') ? true : null"
+                    [attr.aria-describedby]="issues.get('endDate') ? 'exp-end-issue' : null"
+                  />
+                  <app-field-issue id="exp-end-issue" [message]="issues.get('endDate')" />
+                </div>
+                <div hlmField>
+                  <label hlmFieldLabel for="exp-precision">Dates mean</label>
+                  <select
+                    id="exp-precision"
+                    name="datePrecision"
+                    class="h-9 rounded-md border border-border bg-card px-2 text-sm"
+                    [ngModel]="d.datePrecision"
+                    (ngModelChange)="patch({ datePrecision: $event })"
+                  >
+                    <option value="month">a month</option>
+                    <option value="year">a year only</option>
+                  </select>
+                </div>
+                <div hlmField>
+                  <label hlmFieldLabel for="exp-location">Location</label>
+                  <input
+                    hlmInput
+                    id="exp-location"
+                    name="location"
+                    [ngModel]="d.location"
+                    (ngModelChange)="patch({ location: $event })"
+                  />
+                </div>
+                <div hlmField>
+                  <label hlmFieldLabel for="exp-cred-id">Credential ID</label>
+                  <input
+                    hlmInput
+                    id="exp-cred-id"
+                    name="credentialId"
+                    [ngModel]="d.credentialId"
+                    (ngModelChange)="patch({ credentialId: $event })"
+                  />
+                </div>
+                <div hlmField>
+                  <label hlmFieldLabel for="exp-cred-url">Credential URL</label>
+                  <input
+                    hlmInput
+                    id="exp-cred-url"
+                    name="credentialUrl"
+                    maxlength="500"
+                    [ngModel]="d.credentialUrl"
+                    (ngModelChange)="patch({ credentialUrl: $event })"
+                    [attr.aria-invalid]="issues.get('credentialUrl') ? true : null"
+                    [attr.aria-describedby]="
+                      issues.get('credentialUrl') ? 'exp-cred-url-issue' : null
+                    "
+                  />
+                  <app-field-issue
+                    id="exp-cred-url-issue"
+                    [message]="issues.get('credentialUrl')"
+                  />
+                </div>
               </div>
-              <div hlmField>
-                <label hlmFieldLabel for="exp-type">Employment</label>
-                <select
-                  id="exp-type"
-                  name="employmentType"
-                  class="h-9 rounded-md border border-border bg-card px-2 text-sm"
-                  [ngModel]="d.employmentType"
-                  (ngModelChange)="patch({ employmentType: $event })"
-                >
-                  @for (type of employment; track type.value) {
-                    <option [value]="type.value">{{ type.label }}</option>
-                  }
-                </select>
-              </div>
-              <div hlmField>
-                <label hlmFieldLabel for="exp-org">Organisation</label>
-                <input
-                  hlmInput
-                  id="exp-org"
-                  name="orgName"
-                  required
-                  maxlength="160"
-                  [ngModel]="d.orgName"
-                  (ngModelChange)="patch({ orgName: $event })"
-                  [attr.aria-invalid]="issues.get('orgName') ? true : null"
-                  [attr.aria-describedby]="issues.get('orgName') ? 'exp-org-issue' : null"
-                />
-                <app-field-issue id="exp-org-issue" [message]="issues.get('orgName')" />
-              </div>
-              <div hlmField>
-                <label hlmFieldLabel for="exp-url">Organisation URL</label>
-                <input
-                  hlmInput
-                  id="exp-url"
-                  name="orgUrl"
-                  maxlength="500"
-                  [ngModel]="d.orgUrl"
-                  (ngModelChange)="patch({ orgUrl: $event })"
-                  [attr.aria-invalid]="issues.get('orgUrl') ? true : null"
-                  [attr.aria-describedby]="issues.get('orgUrl') ? 'exp-url-issue' : null"
-                />
-                <app-field-issue id="exp-url-issue" [message]="issues.get('orgUrl')" />
-              </div>
-              <div hlmField>
-                <label hlmFieldLabel for="exp-start">Start</label>
-                <input
-                  hlmInput
-                  id="exp-start"
-                  name="startDate"
-                  type="date"
-                  required
-                  [ngModel]="d.startDate"
-                  (ngModelChange)="patch({ startDate: $event })"
-                  [attr.aria-invalid]="issues.get('startDate') ? true : null"
-                  [attr.aria-describedby]="issues.get('startDate') ? 'exp-start-issue' : null"
-                />
-                <app-field-issue id="exp-start-issue" [message]="issues.get('startDate')" />
-              </div>
-              <div hlmField>
-                <label hlmFieldLabel for="exp-end">End (empty = present)</label>
-                <input
-                  hlmInput
-                  id="exp-end"
-                  name="endDate"
-                  type="date"
-                  [ngModel]="d.endDate ?? ''"
-                  (ngModelChange)="patch({ endDate: $event || null })"
-                  [attr.aria-invalid]="issues.get('endDate') ? true : null"
-                  [attr.aria-describedby]="issues.get('endDate') ? 'exp-end-issue' : null"
-                />
-                <app-field-issue id="exp-end-issue" [message]="issues.get('endDate')" />
-              </div>
-              <div hlmField>
-                <label hlmFieldLabel for="exp-precision">Dates mean</label>
-                <select
-                  id="exp-precision"
-                  name="datePrecision"
-                  class="h-9 rounded-md border border-border bg-card px-2 text-sm"
-                  [ngModel]="d.datePrecision"
-                  (ngModelChange)="patch({ datePrecision: $event })"
-                >
-                  <option value="month">a month</option>
-                  <option value="year">a year only</option>
-                </select>
-              </div>
-              <div hlmField>
-                <label hlmFieldLabel for="exp-location">Location</label>
-                <input
-                  hlmInput
-                  id="exp-location"
-                  name="location"
-                  [ngModel]="d.location"
-                  (ngModelChange)="patch({ location: $event })"
-                />
-              </div>
-              <div hlmField>
-                <label hlmFieldLabel for="exp-cred-id">Credential ID</label>
-                <input
-                  hlmInput
-                  id="exp-cred-id"
-                  name="credentialId"
-                  [ngModel]="d.credentialId"
-                  (ngModelChange)="patch({ credentialId: $event })"
-                />
-              </div>
-              <div hlmField>
-                <label hlmFieldLabel for="exp-cred-url">Credential URL</label>
-                <input
-                  hlmInput
-                  id="exp-cred-url"
-                  name="credentialUrl"
-                  maxlength="500"
-                  [ngModel]="d.credentialUrl"
-                  (ngModelChange)="patch({ credentialUrl: $event })"
-                  [attr.aria-invalid]="issues.get('credentialUrl') ? true : null"
-                  [attr.aria-describedby]="
-                    issues.get('credentialUrl') ? 'exp-cred-url-issue' : null
-                  "
-                />
-                <app-field-issue id="exp-cred-url-issue" [message]="issues.get('credentialUrl')" />
-              </div>
-            </div>
 
-            <app-media-field
-              id="exp-logo"
-              label="Logo"
-              [path]="d.logoPath"
-              (chosen)="chooseLogo($event)"
-            />
-
-            <app-string-list
-              label="Skills"
-              singular="skill"
-              emptyText="No skills yet."
-              [max]="30"
-              [value]="d.skills"
-              (valueChange)="patch({ skills: $event })"
-            />
-
-            @for (locale of locales; track locale) {
-              <hlm-separator />
-              <p class="eyebrow m-0 text-muted-foreground">{{ locale }}</p>
-              <div hlmField>
-                <label hlmFieldLabel [for]="'exp-title-' + locale">Title</label>
-                <input
-                  hlmInput
-                  [id]="'exp-title-' + locale"
-                  [name]="'title-' + locale"
-                  required
-                  maxlength="200"
-                  [ngModel]="d.translations[locale].title"
-                  (ngModelChange)="patchText(locale, { title: $event })"
-                  [attr.aria-invalid]="textIssue(locale, 'title') ? true : null"
-                  [attr.aria-describedby]="
-                    textIssue(locale, 'title') ? 'exp-title-' + locale + '-issue' : null
-                  "
-                />
-                <app-field-issue
-                  [id]="'exp-title-' + locale + '-issue'"
-                  [message]="textIssue(locale, 'title')"
-                />
-              </div>
-              <div hlmField>
-                <label hlmFieldLabel [for]="'exp-summary-' + locale">Summary</label>
-                <textarea
-                  hlmTextarea
-                  rows="3"
-                  [id]="'exp-summary-' + locale"
-                  [name]="'summary-' + locale"
-                  [ngModel]="d.translations[locale].summary"
-                  (ngModelChange)="patchText(locale, { summary: $event })"
-                ></textarea>
-              </div>
-              <app-string-list
-                [label]="'Highlights (' + locale + ')'"
-                singular="highlight"
-                emptyText="No highlights yet."
-                [max]="12"
-                [value]="d.translations[locale].highlights"
-                (valueChange)="patchText(locale, { highlights: $event })"
+              <app-media-field
+                id="exp-logo"
+                label="Logo"
+                [path]="d.logoPath"
+                (chosen)="chooseLogo($event)"
               />
-            }
 
-            <div class="flex justify-end gap-2 pt-2">
-              <button hlmBtn variant="ghost" type="button" (click)="onSheet('closed')">
-                Cancel
-              </button>
-              <button
-                hlmBtn
-                type="submit"
-                [disabled]="saving()"
-                [attr.aria-keyshortcuts]="ariaShortcut"
-              >
-                {{ d.id ? "Save entry" : "Add entry" }}
-              </button>
-            </div>
-          </form>
+              <app-string-list
+                label="Skills"
+                singular="skill"
+                emptyText="No skills yet."
+                [max]="30"
+                [value]="d.skills"
+                (valueChange)="patch({ skills: $event })"
+              />
+
+              @for (locale of locales; track locale) {
+                <hlm-separator />
+                <p class="eyebrow m-0 text-muted-foreground">{{ locale }}</p>
+                <div hlmField>
+                  <label hlmFieldLabel [for]="'exp-title-' + locale">Title</label>
+                  <input
+                    hlmInput
+                    [id]="'exp-title-' + locale"
+                    [name]="'title-' + locale"
+                    required
+                    maxlength="200"
+                    [ngModel]="d.translations[locale].title"
+                    (ngModelChange)="patchText(locale, { title: $event })"
+                    [attr.aria-invalid]="textIssue(locale, 'title') ? true : null"
+                    [attr.aria-describedby]="
+                      textIssue(locale, 'title') ? 'exp-title-' + locale + '-issue' : null
+                    "
+                  />
+                  <app-field-issue
+                    [id]="'exp-title-' + locale + '-issue'"
+                    [message]="textIssue(locale, 'title')"
+                  />
+                </div>
+                <div hlmField>
+                  <label hlmFieldLabel [for]="'exp-summary-' + locale">Summary</label>
+                  <textarea
+                    hlmTextarea
+                    rows="3"
+                    [id]="'exp-summary-' + locale"
+                    [name]="'summary-' + locale"
+                    [ngModel]="d.translations[locale].summary"
+                    (ngModelChange)="patchText(locale, { summary: $event })"
+                  ></textarea>
+                </div>
+                <app-string-list
+                  [label]="'Highlights (' + locale + ')'"
+                  singular="highlight"
+                  emptyText="No highlights yet."
+                  [max]="12"
+                  [value]="d.translations[locale].highlights"
+                  (valueChange)="patchText(locale, { highlights: $event })"
+                />
+              }
+
+              <div class="flex justify-end gap-2 pt-2">
+                <button hlmBtn variant="ghost" type="button" (click)="onSheet('closed')">
+                  Cancel
+                </button>
+                <button
+                  hlmBtn
+                  type="submit"
+                  [disabled]="saving()"
+                  [attr.aria-keyshortcuts]="ariaShortcut"
+                >
+                  {{ d.id ? "Save entry" : "Add entry" }}
+                </button>
+              </div>
+            </form>
+            @if (sheetPreview() && livePreview(); as compose) {
+              <div class="sticky top-0 h-svh min-w-0 border-l border-border">
+                <app-live-preview
+                  anchor="experience"
+                  [compose]="compose"
+                  [focus]="entryFocus()"
+                  [focusKey]="d.id ?? 'new'"
+                  [note]="d.isVisible ? null : hiddenNote"
+                />
+              </div>
+            }
+          </div>
         }
       </hlm-sheet-content>
     </hlm-sheet>
@@ -480,6 +522,40 @@ export default class AdminExperiencePage implements OnInit {
     const d = this.draft();
     return d !== null && JSON.stringify(d) !== this.opened();
   });
+
+  private readonly preview = inject(LivePreviewService);
+  private readonly copy = viewChild(UiGroupEditorComponent);
+  protected readonly hiddenNote = "Hidden on the site: shown here so you can check it.";
+
+  /** The entry sheet carries its own preview while the preview is on (the sheet covers the page's). */
+  protected readonly sheetPreview = computed(() => this.preview.open() && this.preview.wide());
+
+  /** The timeline as it would be published: the list, the timeline copy and the open entry. */
+  private compose(open: Draft | null): LiveCompose | null {
+    if (this.loading() || this.loadError()) return null;
+    const rows = this.rows();
+    const copy = this.copy()?.value() ?? null;
+    return (base, locale, media) =>
+      withUi(
+        withExperiences(base, locale, rows, open, media),
+        locale,
+        copy ? { experience: copy } : {},
+      );
+  }
+
+  protected readonly livePreview = computed(() => this.compose(this.draft()));
+
+  /** The open entry's title in each language, to bring it into view. */
+  protected readonly entryFocus = computed(() => {
+    const d = this.draft();
+    return d ? { en: d.translations.en.title, de: d.translations.de.title } : null;
+  });
+
+  protected readonly previewNote = computed(() =>
+    !this.loading() && !this.rows().some((row) => row.isVisible)
+      ? "No entries shown yet: the timeline is left off the page."
+      : null,
+  );
 
   protected readonly trackRow = (row: ExperienceRow): string => row.id;
 

@@ -188,4 +188,6 @@ export type CopilotInput =
   | { task: "translate"; text: string; from: Locale; to: Locale; html?: boolean }
   | { task: "tighten"; text: string; locale: Locale; maxLength?: number }
   | { task: "seo"; text: string; locale: Locale; maxLength?: number }
-  | { task: "faq-answer"; question: string; locale: Locale };
+  | { task: "faq-answer"; question: string; locale: Locale }
+  /** Alt text for an uploaded image, from the picture itself (a model that sees images). */
+  | { task: "alt"; mediaId: string; locale: Locale };

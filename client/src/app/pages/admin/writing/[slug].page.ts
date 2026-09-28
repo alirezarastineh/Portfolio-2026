@@ -29,6 +29,9 @@ import {
   type PostRow,
   type PostTranslationInput,
 } from "../../../admin/admin-api.service";
+import { countChangedFields } from "../../../admin/changed-fields";
+import { EditorLayoutComponent } from "../../../admin/components/editor-layout.component";
+import { postOutline, type OutlineItem } from "../../../admin/editor-outline";
 import { CopilotSuggestComponent } from "../../../admin/components/copilot-suggest.component";
 import {
   FieldIssueComponent,
@@ -70,6 +73,7 @@ type PostDraft = PostRow;
   imports: [
     AdminPageHeaderComponent,
     CopilotSuggestComponent,
+    EditorLayoutComponent,
     FieldIssueComponent,
     FormSkeletonComponent,
     FormsModule,
@@ -93,212 +97,246 @@ type PostDraft = PostRow;
   viewProviders: [provideIcons({ lucideArrowLeft })],
   host: { class: "block" },
   template: `
-    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
-      <a hlmBtn variant="ghost" size="sm" class="self-start" routerLink="/admin/writing">
-        <ng-icon name="lucideArrowLeft" size="14" aria-hidden="true" />
-        <span class="ml-1.5">All posts</span>
-      </a>
+    <app-editor-layout [outline]="outline()">
+      <div class="flex flex-col gap-6 pb-28">
+        <a hlmBtn variant="ghost" size="sm" class="self-start" routerLink="/admin/writing">
+          <ng-icon name="lucideArrowLeft" size="14" aria-hidden="true" />
+          <span class="ml-1.5">All posts</span>
+        </a>
 
-      @if (loading()) {
-        <app-form-skeleton [rows]="7" />
-      } @else if (loadError(); as reason) {
-        <app-load-error title="Could not load the post" [reason]="reason" (retry)="reload()" />
-      } @else if (!post()) {
-        <app-not-found-state what="post" back="/admin/writing" backLabel="All posts" />
-      } @else if (post(); as p) {
-        <app-page-header
-          [title]="p.translations.en?.title || p.translations.de?.title || p.slug"
-          [meta]="'/writing/' + p.slug"
-          [preview]="previewPath()"
-        >
-          <span headerStatus class="flex flex-wrap gap-1.5">
-            <span hlmBadge [variant]="statusVariant()" class="font-mono">{{ statusLabel() }}</span>
-            @if (dirty()) {
-              <span
-                hlmBadge
-                variant="outline"
-                class="border-accent-orange/50 font-mono text-accent-orange"
-                >unsaved</span
-              >
-            }
-          </span>
-        </app-page-header>
-
-        <section class="grid gap-4 sm:grid-cols-2">
-          <div hlmField>
-            <label hlmFieldLabel for="post-slug">Slug</label>
-            <input
-              hlmInput
-              id="post-slug"
-              maxlength="80"
-              [ngModel]="p.slug"
-              (ngModelChange)="patch({ slug: $event })"
-              [attr.aria-invalid]="issues.get('slug') ? true : null"
-              [attr.aria-describedby]="issues.get('slug') ? 'post-slug-issue' : null"
-            />
-            <app-field-issue id="post-slug-issue" [message]="issues.get('slug')" />
-          </div>
-          <div hlmField>
-            <label hlmFieldLabel for="post-date">Publish date</label>
-            <input
-              hlmInput
-              id="post-date"
-              type="datetime-local"
-              [ngModel]="localDate()"
-              (ngModelChange)="setDate($event)"
-              [attr.aria-invalid]="issues.get('publishedAt') ? true : null"
-              [attr.aria-describedby]="
-                issues.get('publishedAt') ? 'post-date-issue post-date-hint' : 'post-date-hint'
-              "
-            />
-            <span id="post-date-hint" class="text-xs text-muted-foreground">
-              In the future = scheduled: it appears with the first publish after this time.
+        @if (loading()) {
+          <app-form-skeleton [rows]="7" />
+        } @else if (loadError(); as reason) {
+          <app-load-error title="Could not load the post" [reason]="reason" (retry)="reload()" />
+        } @else if (!post()) {
+          <app-not-found-state what="post" back="/admin/writing" backLabel="All posts" />
+        } @else if (post(); as p) {
+          <app-page-header
+            [title]="p.translations.en?.title || p.translations.de?.title || p.slug"
+            [meta]="'/writing/' + p.slug"
+            [preview]="previewPath()"
+          >
+            <span headerStatus class="flex flex-wrap gap-1.5">
+              <span hlmBadge [variant]="statusVariant()" class="font-mono">{{
+                statusLabel()
+              }}</span>
+              @if (dirty()) {
+                <span
+                  hlmBadge
+                  variant="outline"
+                  class="border-accent-orange/50 font-mono text-accent-orange"
+                  >unsaved</span
+                >
+              }
             </span>
-            <app-field-issue id="post-date-issue" [message]="issues.get('publishedAt')" />
-          </div>
-          <label class="flex items-center gap-3 text-sm font-medium">
-            <hlm-switch
-              [checked]="p.status === 'published'"
-              (checkedChange)="setPublished($event)"
-            />
-            <span>{{ p.status === "published" ? "Published" : "Draft — not on the site" }}</span>
-          </label>
-          <div hlmField>
-            <label hlmFieldLabel for="post-canonical"
-              >Canonical URL (if first published elsewhere)</label
-            >
-            <input
-              hlmInput
-              id="post-canonical"
-              maxlength="500"
-              [ngModel]="p.canonicalUrl"
-              (ngModelChange)="patch({ canonicalUrl: $event })"
-              [attr.aria-invalid]="issues.get('canonicalUrl') ? true : null"
-              [attr.aria-describedby]="issues.get('canonicalUrl') ? 'post-canonical-issue' : null"
-            />
-            <app-field-issue id="post-canonical-issue" [message]="issues.get('canonicalUrl')" />
-          </div>
-        </section>
-        <app-field-issue id="post-translations-issue" [message]="issues.get('translations')" />
+          </app-page-header>
 
-        <app-media-field
-          id="post-cover"
-          label="Cover image"
-          [path]="p.coverPath"
-          (chosen)="chooseCover($event)"
-        />
-
-        <app-string-list
-          label="Tags"
-          singular="tag"
-          emptyText="No tags yet."
-          [max]="20"
-          [value]="p.tags"
-          (valueChange)="patch({ tags: $event })"
-        />
-        <app-field-issue id="post-tags-issue" [message]="issues.under('tags')" />
-
-        @for (locale of locales; track locale) {
-          <hlm-separator />
-          <section class="flex flex-col gap-4">
-            <label class="flex items-center gap-3 text-h4">
-              <hlm-switch
-                [checked]="p.translations[locale] !== null"
-                (checkedChange)="setLocale(locale, $event)"
-              />
-              <span>{{ locale === "en" ? "English" : "German" }} version</span>
-            </label>
-
-            @if (p.translations[locale]; as t) {
+          <section
+            id="post-details"
+            aria-labelledby="post-details-title"
+            class="flex flex-col gap-4"
+          >
+            <h2 id="post-details-title" class="m-0 text-h4">Details</h2>
+            <div class="grid gap-4 sm:grid-cols-2">
               <div hlmField>
-                <label hlmFieldLabel [for]="'post-title-' + locale">Title</label>
+                <label hlmFieldLabel for="post-slug">Slug</label>
                 <input
                   hlmInput
-                  [id]="'post-title-' + locale"
-                  maxlength="200"
-                  [ngModel]="t.title"
-                  (ngModelChange)="patchText(locale, { title: $event })"
-                  [attr.aria-invalid]="textIssue(locale, 'title') ? true : null"
-                  [attr.aria-describedby]="
-                    textIssue(locale, 'title') ? 'post-title-' + locale + '-issue' : null
-                  "
+                  id="post-slug"
+                  maxlength="80"
+                  [ngModel]="p.slug"
+                  (ngModelChange)="patch({ slug: $event })"
+                  [attr.aria-invalid]="issues.get('slug') ? true : null"
+                  [attr.aria-describedby]="issues.get('slug') ? 'post-slug-issue' : null"
                 />
-                <app-field-issue
-                  [id]="'post-title-' + locale + '-issue'"
-                  [message]="textIssue(locale, 'title')"
-                />
+                <app-field-issue id="post-slug-issue" [message]="issues.get('slug')" />
               </div>
               <div hlmField>
-                <label hlmFieldLabel [for]="'post-excerpt-' + locale">Excerpt</label>
-                <textarea
-                  hlmTextarea
-                  rows="2"
-                  maxlength="600"
-                  [id]="'post-excerpt-' + locale"
-                  [ngModel]="t.excerpt"
-                  (ngModelChange)="patchText(locale, { excerpt: $event })"
-                ></textarea>
+                <label hlmFieldLabel for="post-date">Publish date</label>
+                <input
+                  hlmInput
+                  id="post-date"
+                  type="datetime-local"
+                  [ngModel]="localDate()"
+                  (ngModelChange)="setDate($event)"
+                  [attr.aria-invalid]="issues.get('publishedAt') ? true : null"
+                  [attr.aria-describedby]="
+                    issues.get('publishedAt') ? 'post-date-issue post-date-hint' : 'post-date-hint'
+                  "
+                />
+                <span id="post-date-hint" class="text-xs text-muted-foreground">
+                  In the future = scheduled: it appears with the first publish after this time.
+                </span>
+                <app-field-issue id="post-date-issue" [message]="issues.get('publishedAt')" />
               </div>
-              <app-rich-text
-                mode="long"
-                [label]="'Body (' + locale + ')'"
-                [ngModel]="t.body"
-                (ngModelChange)="patchText(locale, { body: $event })"
-              />
-              <app-field-issue
-                [id]="'post-body-' + locale + '-issue'"
-                [message]="textIssue(locale, 'body')"
-              />
-              <div class="grid gap-4 sm:grid-cols-2">
-                <div hlmField>
-                  <label hlmFieldLabel [for]="'post-seo-title-' + locale"
-                    >Search title (optional)</label
-                  >
-                  <input
-                    hlmInput
-                    maxlength="120"
-                    [id]="'post-seo-title-' + locale"
-                    [ngModel]="t.seoTitle"
-                    (ngModelChange)="patchText(locale, { seoTitle: $event })"
-                  />
-                </div>
-                <div hlmField>
-                  <label hlmFieldLabel [for]="'post-seo-description-' + locale"
-                    >Search description</label
-                  >
-                  <input
-                    hlmInput
-                    maxlength="300"
-                    [id]="'post-seo-description-' + locale"
-                    [ngModel]="t.seoDescription"
-                    (ngModelChange)="patchText(locale, { seoDescription: $event })"
-                  />
-                  <app-copilot-suggest
-                    class="self-end"
-                    [locale]="locale"
-                    [source]="seoSources[locale]"
-                    (suggested)="patchText(locale, { seoDescription: $event })"
-                  />
-                </div>
+              <label class="flex items-center gap-3 text-sm font-medium">
+                <hlm-switch
+                  [checked]="p.status === 'published'"
+                  (checkedChange)="setPublished($event)"
+                />
+                <span>{{
+                  p.status === "published" ? "Published" : "Draft — not on the site"
+                }}</span>
+              </label>
+              <div hlmField>
+                <label hlmFieldLabel for="post-canonical"
+                  >Canonical URL (if first published elsewhere)</label
+                >
+                <input
+                  hlmInput
+                  id="post-canonical"
+                  maxlength="500"
+                  [ngModel]="p.canonicalUrl"
+                  (ngModelChange)="patch({ canonicalUrl: $event })"
+                  [attr.aria-invalid]="issues.get('canonicalUrl') ? true : null"
+                  [attr.aria-describedby]="
+                    issues.get('canonicalUrl') ? 'post-canonical-issue' : null
+                  "
+                />
+                <app-field-issue id="post-canonical-issue" [message]="issues.get('canonicalUrl')" />
               </div>
-            } @else {
-              <p class="m-0 text-sm text-muted-foreground">
-                This post does not exist in {{ locale.toUpperCase() }}; its alternate link stays
-                empty.
-              </p>
-            }
+            </div>
+            <app-field-issue id="post-translations-issue" [message]="issues.get('translations')" />
           </section>
-        }
 
-        <app-save-bar
-          [dirty]="dirty()"
-          [saving]="saving()"
-          [problems]="issues.count()"
-          (save)="save()"
-          (discard)="discard()"
-        />
-      }
-    </div>
+          <hlm-separator />
+
+          <section id="post-cover" aria-labelledby="post-cover-title" class="flex flex-col gap-4">
+            <h2 id="post-cover-title" class="m-0 text-h4">Cover</h2>
+            <app-media-field
+              id="post-cover-image"
+              label="Cover image"
+              [path]="p.coverPath"
+              (chosen)="chooseCover($event)"
+            />
+          </section>
+
+          <hlm-separator />
+
+          <section id="post-tags" aria-labelledby="post-tags-title" class="flex flex-col gap-4">
+            <h2 id="post-tags-title" class="m-0 text-h4">Tags</h2>
+            <app-string-list
+              label="Tags"
+              singular="tag"
+              emptyText="No tags yet."
+              [max]="20"
+              [value]="p.tags"
+              (valueChange)="patch({ tags: $event })"
+            />
+            <app-field-issue id="post-tags-issue" [message]="issues.under('tags')" />
+          </section>
+
+          @for (locale of locales; track locale) {
+            <hlm-separator />
+            <section
+              [id]="'post-' + locale"
+              [attr.aria-labelledby]="'post-' + locale + '-title'"
+              class="flex flex-col gap-4"
+            >
+              <!-- The switch is the section's heading: whether this language exists at all. -->
+              <h2 [id]="'post-' + locale + '-title'" class="m-0">
+                <label class="flex items-center gap-3 text-h4">
+                  <hlm-switch
+                    [checked]="p.translations[locale] !== null"
+                    (checkedChange)="setLocale(locale, $event)"
+                  />
+                  <span>{{ locale === "en" ? "English" : "German" }} version</span>
+                </label>
+              </h2>
+
+              @if (p.translations[locale]; as t) {
+                <div hlmField>
+                  <label hlmFieldLabel [for]="'post-title-' + locale">Title</label>
+                  <input
+                    hlmInput
+                    [id]="'post-title-' + locale"
+                    maxlength="200"
+                    [ngModel]="t.title"
+                    (ngModelChange)="patchText(locale, { title: $event })"
+                    [attr.aria-invalid]="textIssue(locale, 'title') ? true : null"
+                    [attr.aria-describedby]="
+                      textIssue(locale, 'title') ? 'post-title-' + locale + '-issue' : null
+                    "
+                  />
+                  <app-field-issue
+                    [id]="'post-title-' + locale + '-issue'"
+                    [message]="textIssue(locale, 'title')"
+                  />
+                </div>
+                <div hlmField>
+                  <label hlmFieldLabel [for]="'post-excerpt-' + locale">Excerpt</label>
+                  <textarea
+                    hlmTextarea
+                    rows="2"
+                    maxlength="600"
+                    [id]="'post-excerpt-' + locale"
+                    [ngModel]="t.excerpt"
+                    (ngModelChange)="patchText(locale, { excerpt: $event })"
+                  ></textarea>
+                </div>
+                <app-rich-text
+                  mode="long"
+                  [label]="'Body (' + locale + ')'"
+                  [ngModel]="t.body"
+                  (ngModelChange)="patchText(locale, { body: $event })"
+                />
+                <app-field-issue
+                  [id]="'post-body-' + locale + '-issue'"
+                  [message]="textIssue(locale, 'body')"
+                />
+                <div class="grid gap-4 sm:grid-cols-2">
+                  <div hlmField>
+                    <label hlmFieldLabel [for]="'post-seo-title-' + locale"
+                      >Search title (optional)</label
+                    >
+                    <input
+                      hlmInput
+                      maxlength="120"
+                      [id]="'post-seo-title-' + locale"
+                      [ngModel]="t.seoTitle"
+                      (ngModelChange)="patchText(locale, { seoTitle: $event })"
+                    />
+                  </div>
+                  <div hlmField>
+                    <label hlmFieldLabel [for]="'post-seo-description-' + locale"
+                      >Search description</label
+                    >
+                    <input
+                      hlmInput
+                      maxlength="300"
+                      [id]="'post-seo-description-' + locale"
+                      [ngModel]="t.seoDescription"
+                      (ngModelChange)="patchText(locale, { seoDescription: $event })"
+                    />
+                    <app-copilot-suggest
+                      class="self-end"
+                      [locale]="locale"
+                      [source]="seoSources[locale]"
+                      (suggested)="patchText(locale, { seoDescription: $event })"
+                    />
+                  </div>
+                </div>
+              } @else {
+                <p class="m-0 text-sm text-muted-foreground">
+                  This post does not exist in {{ locale.toUpperCase() }}; its alternate link stays
+                  empty.
+                </p>
+              }
+            </section>
+          }
+
+          <app-save-bar
+            [dirty]="dirty()"
+            [saving]="saving()"
+            [problems]="issues.count()"
+            [changes]="changes()"
+            [previewHref]="previewPath()"
+            (save)="save()"
+            (discard)="discard()"
+          />
+        }
+      </div>
+    </app-editor-layout>
   `,
 })
 export default class AdminPostEditorPage implements OnInit {
@@ -366,6 +404,23 @@ export default class AdminPostEditorPage implements OnInit {
     this.revision();
     const current = this.post();
     return current !== null && JSON.stringify(current) !== JSON.stringify(this.pristine);
+  });
+
+  /** The cover's path follows its id: one field. */
+  protected readonly changes = computed(() => {
+    this.revision();
+    return countChangedFields(this.pristine, this.post(), ["coverPath"]);
+  });
+
+  /** The sections for the rail: how far along each is, and the last save's problems in it. */
+  protected readonly outline = computed<OutlineItem[]>(() => {
+    const p = this.post();
+    return p
+      ? postOutline(
+          p,
+          this.issues.entries().map(([path]) => path),
+        )
+      : [];
   });
 
   protected readonly localDate = computed(() => toLocalInput(this.post()?.publishedAt ?? null));

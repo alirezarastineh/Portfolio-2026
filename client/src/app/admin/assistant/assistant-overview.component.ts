@@ -11,6 +11,7 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 
+import { KpiTileComponent } from "../components/kpi-tile.component";
 import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
 import { AdminApiService } from "../admin-api.service";
 import type { AnswersRow, AssistantHealth, UsageRow } from "../assistant-types";
@@ -32,7 +33,14 @@ interface ModelTotal {
 @Component({
   selector: "app-assistant-overview",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, FormSkeletonComponent, HlmBadge, HlmButton, LoadErrorComponent],
+  imports: [
+    DecimalPipe,
+    FormSkeletonComponent,
+    HlmBadge,
+    HlmButton,
+    KpiTileComponent,
+    LoadErrorComponent,
+  ],
   host: { class: "block" },
   template: `
     @if (loadError(); as reason) {
@@ -45,50 +53,65 @@ interface ModelTotal {
       <app-form-skeleton kind="list" [rows]="3" label="Loading the assistant's health…" />
     } @else {
       @let h = health()!;
-      <section class="grid gap-4 sm:grid-cols-3">
-        <div class="rounded-lg border border-border p-4">
-          <p class="m-0 text-xs text-muted-foreground">Status</p>
-          <p class="m-0 mt-1 flex items-center gap-2">
-            <span hlmBadge [variant]="h.state.state === 'ok' ? 'default' : 'destructive'">{{
-              h.state.state
-            }}</span>
-            @if (h.state.state === "off") {
-              <span class="font-mono text-xs text-muted-foreground">{{ h.state.reason }}</span>
-            }
-          </p>
-          <p class="m-0 mt-2 text-xs text-muted-foreground">
-            {{ h.inFlight }} answer(s) streaming now
-          </p>
-        </div>
-        <div class="rounded-lg border border-border p-4">
-          <p class="m-0 text-xs text-muted-foreground">Spent today (UTC)</p>
-          @if (h.state.state !== "off") {
-            <p class="m-0 mt-1 font-mono text-lg">
-              \${{ h.state.spentUsd | number: "1.2-4" }}
-              <span class="text-sm text-muted-foreground"
-                >/ \${{ h.state.budgetUsd | number: "1.2-2" }}</span
-              >
+      <!-- The dashboard's tiles: a figure, what it means, the detail under it. -->
+      <section aria-labelledby="assistant-glance">
+        <h2 id="assistant-glance" class="sr-only">The assistant at a glance</h2>
+        <ul class="m-0 grid list-none gap-3 p-0 sm:grid-cols-3" role="list">
+          <li appKpiTile="Status">
+            <p
+              class="m-0 text-h3"
+              [class]="h.state.state === 'ok' ? 'text-foreground' : 'text-destructive'"
+            >
+              {{ stateLabel() }}
             </p>
-            <div class="mt-2 h-1.5 rounded bg-muted" aria-hidden="true">
-              <div class="h-1.5 rounded bg-primary" [style.width.%]="spentShare()"></div>
-            </div>
-            @if (h.state.state === "ok" && !h.state.deepAllowed) {
-              <p class="m-0 mt-2 text-xs text-muted-foreground">
-                Deep model off (over 80 % or disabled)
-              </p>
+            @if (h.state.state === "off") {
+              <p class="m-0 font-mono text-xs text-muted-foreground">{{ h.state.reason }}</p>
             }
-          } @else {
-            <p class="m-0 mt-1 text-sm text-muted-foreground">—</p>
-          }
-        </div>
-        <div class="rounded-lg border border-border p-4">
-          <p class="m-0 text-xs text-muted-foreground">Last 24 h</p>
-          <p class="m-0 mt-1 font-mono text-lg">{{ h.last24h.answers }} answers</p>
-          <p class="m-0 mt-1 text-xs text-muted-foreground">
-            {{ h.last24h.failures }} failed · {{ h.last24h.fallbackRate * 100 | number: "1.0-1" }} %
-            from a fallback
-          </p>
-        </div>
+            <p class="m-0 text-xs text-muted-foreground">
+              {{ h.inFlight }} {{ h.inFlight === 1 ? "answer" : "answers" }} streaming now
+            </p>
+          </li>
+          <li appKpiTile="Spent today (UTC)">
+            @if (h.state.state !== "off") {
+              <p class="m-0 text-h3 tabular-nums">
+                \${{ h.state.spentUsd | number: "1.2-4" }}
+                <span class="text-sm font-normal text-muted-foreground"
+                  >of \${{ h.state.budgetUsd | number: "1.2-2" }}</span
+                >
+              </p>
+              <div class="h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                <div
+                  class="h-full rounded-full bg-accent-orange"
+                  [style.width.%]="spentShare()"
+                ></div>
+              </div>
+              @if (h.state.state === "ok" && !h.state.deepAllowed) {
+                <p class="m-0 text-xs text-muted-foreground">
+                  Deep model off (over 80 % or disabled)
+                </p>
+              }
+            } @else {
+              <p class="m-0 text-h3 text-muted-foreground">—</p>
+            }
+          </li>
+          <li appKpiTile="Last 24 h">
+            <p class="m-0 text-h3 tabular-nums">
+              {{ h.last24h.answers }}
+              <span class="text-sm font-normal text-muted-foreground">{{
+                h.last24h.answers === 1 ? "answer" : "answers"
+              }}</span>
+            </p>
+            <p
+              class="m-0 text-xs"
+              [class]="h.last24h.failures ? 'text-destructive' : 'text-muted-foreground'"
+            >
+              {{ h.last24h.failures }} failed
+            </p>
+            <p class="m-0 text-xs text-muted-foreground">
+              {{ h.last24h.fallbackRate * 100 | number: "1.0-1" }} % from a fallback
+            </p>
+          </li>
+        </ul>
       </section>
 
       <section class="flex flex-col gap-2">
@@ -238,6 +261,13 @@ export class AssistantOverviewComponent implements OnInit {
   /** The API's reason when the health did not arrive. */
   protected readonly loadError = signal<string | null>(null);
   protected readonly geminiCount = signal<number | null>(null);
+
+  /** "Answering", "Resting", "Off": the state in words. */
+  protected readonly stateLabel = computed(() => {
+    const state = this.health()?.state.state;
+    if (state === "ok") return "Answering";
+    return state === "resting" ? "Resting" : "Off";
+  });
 
   protected readonly spentShare = computed(() => {
     const state = this.health()?.state;

@@ -28,7 +28,12 @@ import {
   type ProfileInput,
   type ResumeRow,
 } from "../../admin/admin-api.service";
+import { countChangedFields } from "../../admin/changed-fields";
+import { EditorLayoutComponent } from "../../admin/components/editor-layout.component";
+import { hasText, type OutlineItem } from "../../admin/editor-outline";
 import { applyIssues, countServerErrors, focusFirstInvalid } from "../../admin/issues";
+import { withIdentity, withUi, type LiveCompose } from "../../admin/preview/live-content";
+import { LivePreviewToggleComponent } from "../../admin/preview/live-preview-toggle.component";
 import { toastIssues, toastStale } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import {
@@ -118,6 +123,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     AdminPageHeaderComponent,
+    EditorLayoutComponent,
     FieldIssueComponent,
     FieldPairComponent,
     FormSkeletonComponent,
@@ -125,6 +131,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
     HlmFieldLabel,
     HlmInput,
     HlmSeparator,
+    LivePreviewToggleComponent,
     LoadErrorComponent,
     MediaFieldComponent,
     ReactiveFormsModule,
@@ -132,120 +139,138 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   ],
   host: { class: "block" },
   template: `
-    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-24">
-      <app-page-header
-        title="Hero & identity"
-        description="Who you are, where, whether you are available, plus the headline, button labels and navigation wording."
-        preview="/admin/preview/en"
-        [(view)]="view"
-      />
+    <app-editor-layout
+      anchor="hero"
+      [compose]="livePreview()"
+      [outline]="outline()"
+      [view]="view()"
+    >
+      <div class="flex flex-col gap-6 pb-24">
+        <app-page-header
+          title="Hero & identity"
+          description="Who you are, where, whether you are available, plus the headline, button labels and navigation wording."
+          preview="/admin/preview/en"
+          [(view)]="view"
+        >
+          <app-live-preview-toggle headerActions />
+        </app-page-header>
 
-      @if (loading()) {
-        <app-form-skeleton [rows]="6" />
-      } @else if (!loaded()) {
-        <app-load-error (retry)="reload()" />
-      } @else {
-        <section class="flex flex-col gap-4">
-          <h2 class="m-0 text-h4">Identity</h2>
-          <p class="m-0 -mt-3 text-sm text-muted-foreground">
-            Not translated: the same in both languages.
-          </p>
-          <form [formGroup]="identity" class="grid gap-4 sm:grid-cols-2">
-            @for (field of identityFields; track field.key) {
-              @if (field.key === "timezone") {
+        @if (loading()) {
+          <app-form-skeleton [rows]="6" />
+        } @else if (!loaded()) {
+          <app-load-error (retry)="reload()" />
+        } @else {
+          <section
+            id="hero-identity"
+            aria-labelledby="hero-identity-title"
+            class="flex flex-col gap-4"
+          >
+            <h2 id="hero-identity-title" class="m-0 text-h4">Identity</h2>
+            <p class="m-0 -mt-3 text-sm text-muted-foreground">
+              Not translated: the same in both languages.
+            </p>
+            <form [formGroup]="identity" class="grid gap-4 sm:grid-cols-2">
+              @for (field of identityFields; track field.key) {
+                @if (field.key === "timezone") {
+                  <div hlmField>
+                    <label hlmFieldLabel for="availability">Availability</label>
+                    <select
+                      id="availability"
+                      formControlName="availability"
+                      class="h-9 rounded-md border border-border bg-card px-2 text-sm"
+                    >
+                      @for (option of availability; track option.value) {
+                        <option [value]="option.value">{{ option.label }}</option>
+                      }
+                    </select>
+                  </div>
+                }
                 <div hlmField>
-                  <label hlmFieldLabel for="availability">Availability</label>
-                  <select
-                    id="availability"
-                    formControlName="availability"
-                    class="h-9 rounded-md border border-border bg-card px-2 text-sm"
-                  >
-                    @for (option of availability; track option.value) {
-                      <option [value]="option.value">{{ option.label }}</option>
-                    }
-                  </select>
+                  <label hlmFieldLabel [for]="field.key">{{ field.label }}</label>
+                  <input
+                    hlmInput
+                    [id]="field.key"
+                    [type]="field.type ?? 'text'"
+                    [formControlName]="field.key"
+                    [placeholder]="field.placeholder ?? ''"
+                    [attr.maxlength]="field.maxLength ?? null"
+                    [class.uppercase]="field.key === 'locationCountry'"
+                    [attr.aria-invalid]="identityIssue(field.key) ? true : null"
+                    [attr.aria-describedby]="identityIssue(field.key) ? field.key + '-issue' : null"
+                  />
+                  <app-field-issue
+                    [id]="field.key + '-issue'"
+                    [message]="identityIssue(field.key)"
+                  />
                 </div>
               }
-              <div hlmField>
-                <label hlmFieldLabel [for]="field.key">{{ field.label }}</label>
-                <input
-                  hlmInput
-                  [id]="field.key"
-                  [type]="field.type ?? 'text'"
-                  [formControlName]="field.key"
-                  [placeholder]="field.placeholder ?? ''"
-                  [attr.maxlength]="field.maxLength ?? null"
-                  [class.uppercase]="field.key === 'locationCountry'"
-                  [attr.aria-invalid]="identityIssue(field.key) ? true : null"
-                  [attr.aria-describedby]="identityIssue(field.key) ? field.key + '-issue' : null"
+            </form>
+
+            <app-media-field
+              id="avatar"
+              label="Photo"
+              hint="Optional; shown in the hero and in the structured data."
+              [path]="avatarPath()"
+              (chosen)="chooseAvatar($event)"
+            />
+          </section>
+
+          <hlm-separator />
+
+          <section id="hero-cv" aria-labelledby="hero-cv-title" class="flex flex-col gap-4">
+            <h2 id="hero-cv-title" class="m-0 text-h4">CV</h2>
+            <p class="m-0 -mt-3 text-sm text-muted-foreground">
+              A PDF per language, behind the "Download CV" button. Saved immediately; live after the
+              next publish.
+            </p>
+            <div class="grid gap-4 sm:grid-cols-2">
+              @for (locale of locales; track locale) {
+                <app-media-field
+                  [id]="'cv-' + locale"
+                  [label]="'CV (' + locale.toUpperCase() + ')'"
+                  kind="document"
+                  [path]="resumes()[locale]?.path ?? null"
+                  [caption]="resumes()[locale]?.originalName ?? ''"
+                  (chosen)="chooseResume(locale, $event)"
                 />
-                <app-field-issue [id]="field.key + '-issue'" [message]="identityIssue(field.key)" />
-              </div>
-            }
-          </form>
+              }
+            </div>
+          </section>
 
-          <app-media-field
-            id="avatar"
-            label="Photo"
-            hint="Optional; shown in the hero and in the structured data."
-            [path]="avatarPath()"
-            (chosen)="chooseAvatar($event)"
-          />
-        </section>
+          <hlm-separator />
 
-        <hlm-separator />
+          <section id="hero-copy" aria-labelledby="hero-copy-title" class="flex flex-col gap-6">
+            <h2 id="hero-copy-title" class="m-0 text-h4">Hero copy</h2>
+            <div class="flex flex-col gap-6">
+              @for (field of profileFields; track field.key) {
+                <app-field-pair
+                  [id]="'profile-' + field.key"
+                  [label]="field.label"
+                  [hint]="field.hint ?? ''"
+                  [multiline]="field.multiline ?? false"
+                  [rows]="2"
+                  [view]="view()"
+                  [controlEn]="control('profile', 'en', field.key)"
+                  [controlDe]="control('profile', 'de', field.key)"
+                />
+              }
 
-        <section class="flex flex-col gap-4">
-          <h2 class="m-0 text-h4">CV</h2>
-          <p class="m-0 -mt-3 text-sm text-muted-foreground">
-            A PDF per language, behind the "Download CV" button. Saved immediately; live after the
-            next publish.
-          </p>
-          <div class="grid gap-4 sm:grid-cols-2">
-            @for (locale of locales; track locale) {
-              <app-media-field
-                [id]="'cv-' + locale"
-                [label]="'CV (' + locale.toUpperCase() + ')'"
-                kind="document"
-                [path]="resumes()[locale]?.path ?? null"
-                [caption]="resumes()[locale]?.originalName ?? ''"
-                (chosen)="chooseResume(locale, $event)"
-              />
-            }
-          </div>
-        </section>
+              @for (field of heroFields; track field.key) {
+                <app-field-pair
+                  [id]="'hero-' + field.key"
+                  [label]="field.label"
+                  [view]="view()"
+                  [controlEn]="control('hero', 'en', field.key)"
+                  [controlDe]="control('hero', 'de', field.key)"
+                />
+              }
+            </div>
+          </section>
 
-        <hlm-separator />
+          <hlm-separator />
 
-        <section class="flex flex-col gap-6">
-          <h2 class="m-0 text-h4">Hero copy</h2>
-          <form [formGroup]="form" class="flex flex-col gap-6">
-            @for (field of profileFields; track field.key) {
-              <app-field-pair
-                [id]="'profile-' + field.key"
-                [label]="field.label"
-                [hint]="field.hint ?? ''"
-                [multiline]="field.multiline ?? false"
-                [rows]="2"
-                [view]="view()"
-                [controlEn]="control('profile', 'en', field.key)"
-                [controlDe]="control('profile', 'de', field.key)"
-              />
-            }
-
-            @for (field of heroFields; track field.key) {
-              <app-field-pair
-                [id]="'hero-' + field.key"
-                [label]="field.label"
-                [view]="view()"
-                [controlEn]="control('hero', 'en', field.key)"
-                [controlDe]="control('hero', 'de', field.key)"
-              />
-            }
-
-            <hlm-separator />
-            <h2 class="m-0 text-h4">Navigation labels</h2>
-
+          <section id="hero-nav" aria-labelledby="hero-nav-title" class="flex flex-col gap-6">
+            <h2 id="hero-nav-title" class="m-0 text-h4">Navigation labels</h2>
             @for (field of navFields; track field.key) {
               <app-field-pair
                 [id]="'nav-' + field.key"
@@ -255,18 +280,20 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                 [controlDe]="control('nav', 'de', field.key)"
               />
             }
-          </form>
-        </section>
+          </section>
 
-        <app-save-bar
-          [dirty]="dirty()"
-          [saving]="saving()"
-          [problems]="problems()"
-          (save)="save()"
-          (discard)="discard()"
-        />
-      }
-    </div>
+          <app-save-bar
+            [dirty]="dirty()"
+            [saving]="saving()"
+            [problems]="problems()"
+            [changes]="changes()"
+            previewHref="/admin/preview/en"
+            (save)="save()"
+            (discard)="discard()"
+          />
+        }
+      </div>
+    </app-editor-layout>
   `,
 })
 export default class AdminHeroPage implements OnInit {
@@ -327,18 +354,95 @@ export default class AdminHeroPage implements OnInit {
     navDe: this.fb.nonNullable.group(blank(NAV_FIELDS)),
   });
 
-  protected readonly dirty = computed(() => {
+  /** The fields as loaded or last saved, in the forms' own shape: what "changed" compares with. */
+  private baseline: object | null = null;
+
+  private snapshot(): object {
+    return {
+      identity: this.identity.getRawValue(),
+      copy: this.form.getRawValue(),
+      avatarId: this.avatarId(),
+    };
+  }
+
+  /** Fields that differ from the saved ones: typing a value back is no change. */
+  protected readonly changes = computed(() => {
     this.revision();
-    return (
-      this.form.dirty ||
-      this.identity.dirty ||
-      (this.pristine !== null && this.avatarId() !== this.pristine.avatar.id)
-    );
+    return this.baseline ? countChangedFields(this.baseline, this.snapshot()) : 0;
   });
+
+  protected readonly dirty = computed(() => this.changes() > 0);
 
   protected readonly problems = computed(() => {
     this.revision();
     return countServerErrors(this.form) + countServerErrors(this.identity);
+  });
+
+  /** The page's four sections for the rail: filled in, and the last save's problems in each. */
+  protected readonly outline = computed<OutlineItem[]>(() => {
+    this.revision();
+    if (!this.loaded()) return [];
+    const who = this.identity.getRawValue();
+    const copy = this.form.controls;
+    const filled = (groups: FormGroup[]) =>
+      groups.every((group) =>
+        Object.values(group.getRawValue() as Record<string, string>).every(hasText),
+      );
+    const state = (done: boolean): OutlineItem["state"] => (done ? "done" : "todo");
+    const resumes = this.resumes();
+    return [
+      {
+        id: "hero-identity",
+        label: "Identity",
+        state: state(
+          [
+            who.name,
+            who.handle,
+            who.contactEmail,
+            who.timezone,
+            who.locationCity,
+            who.locationCountry,
+          ].every((value) => value.trim() !== ""),
+        ),
+        problems: countServerErrors(this.identity),
+      },
+      {
+        id: "hero-cv",
+        label: "CV",
+        state: state(!!resumes.en && !!resumes.de),
+        problems: 0,
+      },
+      {
+        id: "hero-copy",
+        label: "Hero copy",
+        state: state(filled([copy.profileEn, copy.profileDe, copy.heroEn, copy.heroDe])),
+        problems: [copy.profileEn, copy.profileDe, copy.heroEn, copy.heroDe].reduce(
+          (sum, group) => sum + countServerErrors(group),
+          0,
+        ),
+      },
+      {
+        id: "hero-nav",
+        label: "Navigation labels",
+        state: state(filled([copy.navEn, copy.navDe])),
+        problems: countServerErrors(copy.navEn) + countServerErrors(copy.navDe),
+      },
+    ];
+  });
+
+  /** The hero as it would be published with these edits: identity and copy over the draft. */
+  protected readonly livePreview = computed<LiveCompose | null>(() => {
+    this.revision();
+    if (!this.loaded()) return null;
+    const identity = { ...this.identity.getRawValue(), avatarId: this.avatarId() };
+    const copy = this.form.getRawValue();
+    const savedAvatar = this.pristine?.avatar.id ?? null;
+    return (base, locale, media) =>
+      withUi(withIdentity(base, locale, identity, savedAvatar, media), locale, {
+        profile: { en: copy.profileEn, de: copy.profileDe },
+        hero: { en: copy.heroEn, de: copy.heroDe },
+        nav: { en: copy.navEn, de: copy.navDe },
+      });
   });
 
   constructor() {
@@ -420,6 +524,7 @@ export default class AdminHeroPage implements OnInit {
     });
     this.form.markAsPristine();
     this.identity.markAsPristine();
+    this.baseline = this.snapshot();
     this.revision.update((v) => v + 1);
     this.unsaved.clear("hero");
   }
@@ -494,6 +599,7 @@ export default class AdminHeroPage implements OnInit {
     this.identity.patchValue({ locationCountry: identity.locationCountry }, { emitEvent: false });
     this.form.markAsPristine();
     this.identity.markAsPristine();
+    this.baseline = this.snapshot();
     this.revision.update((v) => v + 1);
     this.unsaved.clear("hero");
     toast.success("Draft saved");

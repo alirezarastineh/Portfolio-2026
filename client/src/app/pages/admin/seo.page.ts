@@ -14,6 +14,7 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
 
 import { AdminApiService } from "../../admin/admin-api.service";
+import { countChangedFields } from "../../admin/changed-fields";
 import { applyIssues, countServerErrors, focusFirstInvalid } from "../../admin/issues";
 import { toastIssues, toastStale } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
@@ -129,6 +130,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           [dirty]="dirty()"
           [saving]="saving()"
           [problems]="problems()"
+          [changes]="changes()"
           (save)="save()"
           (discard)="reset()"
         />
@@ -160,10 +162,16 @@ export default class AdminSeoPage implements OnInit {
     de: this.fb.nonNullable.group(this.emptyGroup()),
   });
 
-  protected readonly dirty = computed(() => {
+  /** The form as loaded or last saved: what "changed" compares with. */
+  private baseline: object | null = null;
+
+  /** Fields that differ from the saved ones: typing a value back is no change. */
+  protected readonly changes = computed(() => {
     this.formVersion();
-    return this.form.dirty;
+    return this.baseline ? countChangedFields(this.baseline, this.form.getRawValue()) : 0;
   });
+
+  protected readonly dirty = computed(() => this.changes() > 0);
 
   protected readonly problems = computed(() => {
     this.formVersion();
@@ -175,7 +183,7 @@ export default class AdminSeoPage implements OnInit {
   constructor() {
     this.form.valueChanges.subscribe(() => {
       this.formVersion.update((v) => v + 1);
-      this.unsaved.set("seo", this.form.dirty);
+      this.unsaved.set("seo", this.dirty());
     });
     inject(DestroyRef).onDestroy(() => this.unsaved.clear("seo"));
   }
@@ -213,6 +221,7 @@ export default class AdminSeoPage implements OnInit {
     this.pristine = result.data.data;
     this.form.reset({ en: result.data.data.en, de: result.data.data.de });
     this.form.markAsPristine();
+    this.baseline = this.form.getRawValue();
     this.formVersion.update((v) => v + 1);
     this.unsaved.clear("seo");
     this.loaded.set(true);
@@ -261,6 +270,7 @@ export default class AdminSeoPage implements OnInit {
     this.updatedAt = result.data.updatedAt;
     this.pristine = raw;
     this.form.markAsPristine();
+    this.baseline = raw;
     this.formVersion.update((v) => v + 1);
     this.unsaved.clear("seo");
     toast.success("Draft saved", { description: "Publish to go live." });

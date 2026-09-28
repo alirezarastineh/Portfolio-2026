@@ -20,6 +20,7 @@ import type { RouteMeta } from "@analogjs/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import {
   lucideBriefcase,
+  lucideExternalLink,
   lucideEye,
   lucideFileText,
   lucideHistory,
@@ -27,11 +28,13 @@ import {
   lucideImage,
   lucideImages,
   lucideInbox,
+  lucideKeyboard,
   lucideLayers,
   lucideLogOut,
   lucideNewspaper,
   lucideCircleCheck,
   lucidePenLine,
+  lucidePlus,
   lucideRocket,
   lucideScale,
   lucideSearch,
@@ -39,9 +42,11 @@ import {
   lucideShare2,
   lucideSparkles,
   lucideSquareUser,
+  lucideSunMoon,
   lucideUser,
 } from "@ng-icons/lucide";
 import type { BrnDialogState } from "@spartan-ng/brain/dialog";
+import { toast } from "@spartan-ng/brain/sonner";
 import { HlmBreadcrumbImports } from "@spartan-ng/helm/breadcrumb";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmCommandImports } from "@spartan-ng/helm/command";
@@ -58,11 +63,18 @@ import { addAdminStyles } from "../admin/admin-styles";
 import { AdminSessionService } from "../admin/admin-session.service";
 import { isSaveShortcut } from "../admin/components/editor-chrome.component";
 import { PublishDialogComponent } from "../admin/components/publish-dialog.component";
+import {
+  isShortcutTarget,
+  ShortcutSheetComponent,
+} from "../admin/components/shortcut-sheet.component";
+import { createBlankPost, createBlankProject } from "../admin/create-entities";
 import { MediaLibraryService } from "../admin/media-library.service";
+import { LivePreviewService } from "../admin/preview/live-preview.service";
 import { changesLabel } from "../admin/publish-summary";
 import { AdminPulseService } from "../admin/pulse.service";
 import { UiSectionService } from "../admin/ui-section.service";
 import { UnsavedChangesService } from "../admin/unsaved-changes.service";
+import { ThemeService } from "../services/theme.service";
 
 export const routeMeta: RouteMeta = {
   title: "Admin",
@@ -81,6 +93,7 @@ export const routeMeta: RouteMeta = {
     AdminApiService,
     AdminPulseService,
     AdminSessionService,
+    LivePreviewService,
     MediaLibraryService,
     UiSectionService,
   ],
@@ -123,6 +136,15 @@ const NAV: NavItem[] = [
 
 const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
 
+/** Long enough for the palette to close and give focus back before an action takes it. */
+const PALETTE_CLOSE_MS = 120;
+
+/** A new tab that cannot reach back into the admin. */
+function openTab(href: string): void {
+  const opened = window.open(href, "_blank");
+  if (opened) opened.opener = null;
+}
+
 @Component({
   selector: "app-admin-layout",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -138,11 +160,13 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
     PublishDialogComponent,
     RouterLink,
     RouterOutlet,
+    ShortcutSheetComponent,
   ],
   viewProviders: [
     provideIcons({
       lucideBriefcase,
       lucideCircleCheck,
+      lucideExternalLink,
       lucideEye,
       lucideFileText,
       lucideHistory,
@@ -150,10 +174,12 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
       lucideImage,
       lucideImages,
       lucideInbox,
+      lucideKeyboard,
       lucideLayers,
       lucideLogOut,
       lucideNewspaper,
       lucidePenLine,
+      lucidePlus,
       lucideRocket,
       lucideScale,
       lucideSearch,
@@ -161,6 +187,7 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
       lucideShare2,
       lucideSparkles,
       lucideSquareUser,
+      lucideSunMoon,
       lucideUser,
     }),
   ],
@@ -384,12 +411,64 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
         [state]="paletteOpen() ? 'open' : 'closed'"
         (stateChange)="onPaletteState($event)"
         title="Jump to"
-        description="Go to any admin section"
+        description="Go to any admin section, or run an action"
       >
-        <hlm-command>
-          <hlm-command-input placeholder="Jump to a section…" />
+        <!-- Each opening starts from an empty search. -->
+        <hlm-command [(search)]="paletteSearch">
+          <hlm-command-input placeholder="Jump to a section or action…" />
           <hlm-command-list>
-            <div hlmCommandEmpty>No section matches.</div>
+            <div hlmCommandEmpty>Nothing matches.</div>
+            <hlm-command-group>
+              <hlm-command-group-label>Actions</hlm-command-group-label>
+              <!-- Always listed, so the list's order (and the first, active item) is fixed from the start. -->
+              <button
+                hlmCommandItem
+                value="Review and publish"
+                [disabled]="!pulse.unpublished()"
+                (selected)="after(publish)"
+              >
+                <ng-icon name="lucideRocket" size="14" aria-hidden="true" />
+                <span class="ml-2">Review and publish…</span>
+                @if (!pulse.unpublished()) {
+                  <span class="ml-auto font-mono text-xs text-muted-foreground">all published</span>
+                }
+              </button>
+              <button
+                hlmCommandItem
+                value="Preview the draft in English"
+                (selected)="after(previewEn)"
+              >
+                <ng-icon name="lucideExternalLink" size="14" aria-hidden="true" />
+                <span class="ml-2">Preview the draft in English</span>
+                <span class="sr-only">(opens in a new tab)</span>
+              </button>
+              <button
+                hlmCommandItem
+                value="Preview the draft in German"
+                (selected)="after(previewDe)"
+              >
+                <ng-icon name="lucideExternalLink" size="14" aria-hidden="true" />
+                <span class="ml-2">Preview the draft in German</span>
+                <span class="sr-only">(opens in a new tab)</span>
+              </button>
+              <button hlmCommandItem value="New project" (selected)="after(newProject)">
+                <ng-icon name="lucidePlus" size="14" aria-hidden="true" />
+                <span class="ml-2">New project</span>
+              </button>
+              <button hlmCommandItem value="New post" (selected)="after(newPost)">
+                <ng-icon name="lucidePlus" size="14" aria-hidden="true" />
+                <span class="ml-2">New post</span>
+              </button>
+              <button hlmCommandItem [value]="themeLabel()" (selected)="after(toggleTheme)">
+                <ng-icon name="lucideSunMoon" size="14" aria-hidden="true" />
+                <span class="ml-2">{{ themeLabel() }}</span>
+              </button>
+              <button hlmCommandItem value="Keyboard shortcuts" (selected)="after(showShortcuts)">
+                <ng-icon name="lucideKeyboard" size="14" aria-hidden="true" />
+                <span class="ml-2">Keyboard shortcuts</span>
+                <kbd class="kbd ml-auto" aria-hidden="true">?</kbd>
+              </button>
+            </hlm-command-group>
             @for (group of groups; track group) {
               <hlm-command-group>
                 <hlm-command-group-label>{{ group }}</hlm-command-group-label>
@@ -412,12 +491,14 @@ const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
         </hlm-command>
       </hlm-command-dialog>
 
-      <!-- The one review dialog: the sidebar's Publish and the dashboard both open it. -->
+      <!-- The one review dialog: the sidebar's Publish, the dashboard and the palette open it. -->
       <app-publish-dialog
         [open]="pulse.publishOpen()"
         (openChange)="pulse.publishOpen.set($event)"
         (published)="pulse.published()"
       />
+
+      <app-shortcut-sheet [(open)]="shortcutsOpen" />
     }
   `,
 })
@@ -429,12 +510,21 @@ export default class AdminLayout {
   protected readonly unsaved = inject(UnsavedChangesService);
   protected readonly pulse = inject(AdminPulseService);
 
+  private readonly theme = inject(ThemeService);
+
   protected readonly groups = GROUPS;
   protected readonly email = computed(() => this.session.user()?.email ?? "account");
   protected readonly paletteOpen = signal(false);
+  protected readonly paletteSearch = signal("");
+  protected readonly shortcutsOpen = signal(false);
 
   constructor() {
     addAdminStyles(inject(DOCUMENT));
+
+    // A fresh search each time the palette opens.
+    effect(() => {
+      if (this.paletteOpen()) untracked(() => this.paletteSearch.set(""));
+    });
 
     // The counts load once the admin shows, and are dropped at the sign-in screen.
     effect(() => {
@@ -567,6 +657,11 @@ export default class AdminLayout {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
       this.paletteOpen.update((open) => !open);
+      return;
+    }
+    if (event.key === "?" && isShortcutTarget(event)) {
+      event.preventDefault();
+      this.shortcutsOpen.set(true);
     }
   }
 
@@ -579,6 +674,50 @@ export default class AdminLayout {
     // Navigation still passes through canDeactivate, so unsaved work is guarded.
     void this.router.navigateByUrl(path);
   }
+
+  /**
+   * A palette action runs once the palette has closed and handed focus back,
+   * so a dialog it opens keeps the focus.
+   */
+  protected after(action: () => void | Promise<void>): void {
+    this.paletteOpen.set(false);
+    setTimeout(() => void action(), PALETTE_CLOSE_MS);
+  }
+
+  protected readonly publish = (): void => this.pulse.publishOpen.set(true);
+  protected readonly previewEn = (): void => openTab("/admin/preview/en");
+  protected readonly previewDe = (): void => openTab("/admin/preview/de");
+  protected readonly toggleTheme = (): void => this.theme.toggle();
+  protected readonly showShortcuts = (): void => this.shortcutsOpen.set(true);
+
+  protected readonly newProject = async (): Promise<void> => {
+    const created = await createBlankProject(this.api);
+    if (!created.ok) {
+      toast.error("Could not add project", { description: created.error });
+      return;
+    }
+    await this.openCreated(["/admin/projects", created.slug], "Project added");
+  };
+
+  protected readonly newPost = async (): Promise<void> => {
+    const created = await createBlankPost(this.api);
+    if (!created.ok) {
+      toast.error("Could not create the post", { description: created.error });
+      return;
+    }
+    await this.openCreated(["/admin/writing", created.slug], "Post created");
+  };
+
+  /** Opens what was just created, unless leaving the page was refused (unsaved edits). */
+  private async openCreated(path: string[], done: string): Promise<void> {
+    const went = await this.router.navigate(path);
+    if (!went)
+      toast.success(done, { description: "It is in the list for when you are done here." });
+  }
+
+  protected readonly themeLabel = computed(() =>
+    this.theme.theme() === "dark" ? "Switch to the light theme" : "Switch to the dark theme",
+  );
 
   protected async logout(): Promise<void> {
     await this.api.logout();

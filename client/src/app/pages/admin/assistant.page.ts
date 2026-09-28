@@ -69,12 +69,13 @@ const TABS: { id: Tab; label: string }[] = [
         </span>
       </app-page-header>
 
-      <div hlmTabs class="gap-6" [tab]="strip()" (tabActivated)="select($any($event))">
-        <div hlmTabsList aria-label="Assistant sections" class="flex-wrap">
+      <div hlmTabs class="min-w-0 gap-6" [tab]="strip()" (tabActivated)="select($any($event))">
+        <!-- One row that scrolls, with arrows where it overflows: seven tabs wrapped onto two rows below md. -->
+        <hlm-paginated-tabs-list tabListLabel="Assistant sections">
           @for (option of tabs; track option.id) {
             <button [hlmTabsTrigger]="option.id">{{ option.label }}</button>
           }
-        </div>
+        </hlm-paginated-tabs-list>
 
         <!-- A panel per tab, for the tabs to point at; only the shown one holds its section. -->
         @for (option of tabs; track option.id) {

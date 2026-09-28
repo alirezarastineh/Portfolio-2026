@@ -287,7 +287,6 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
         class="admin-prose px-3 py-2 text-sm leading-relaxed focus-within:outline-none"
         [class.min-h-32]="mode() === 'inline'"
         [class.min-h-96]="mode() === 'long'"
-        [attr.aria-label]="label()"
       ></div>
     </div>
 
@@ -536,6 +535,12 @@ export class RichTextComponent implements ControlValueAccessor {
       ],
       content: this.pending || "<p></p>",
       editable: !this.disabled,
+      // The editable element is the textbox (Tiptap gives it the role), so it
+      // carries the field's name; on the wrapper `div` a label named nothing.
+      // (An object: Tiptap spreads it over its own `role`, so a function would be lost.)
+      editorProps: {
+        attributes: { "aria-label": this.label(), "aria-multiline": "true" },
+      },
       onUpdate: ({ editor }) => {
         this.schedule(editor.getHTML());
         this.refreshActive(editor);
