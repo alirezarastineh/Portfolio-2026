@@ -140,9 +140,12 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
         }
       }
 
+      <!-- Said once. The seconds tick ten times a second: hidden from screen
+           readers, which would read the status again at every change. -->
       @if (thinking()) {
         <p class="m-0 text-muted-foreground" role="status">
-          {{ copy().thinking }} <span class="tabular-nums">{{ elapsed() }}</span>
+          {{ copy().thinking }}
+          <span class="tabular-nums" aria-hidden="true">{{ elapsed() }}</span>
           <span class="ml-2 hidden text-xs sm:inline">{{ copy().stopHint }}</span>
         </p>
       }
@@ -170,8 +173,11 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
         </div>
       }
 
+      <!-- Not a live region: the terminal announces the failure once (the
+           store's announcement); here it would be read again, and a rate
+           limit's countdown every second. -->
       @if (entry().failure; as failure) {
-        <p class="m-0 text-destructive" role="status">{{ failureText() }}</p>
+        <p class="m-0 text-destructive">{{ failureText() }}</p>
         @if (entry().offline; as lines) {
           <app-ask-lines [lines]="lines" />
         }

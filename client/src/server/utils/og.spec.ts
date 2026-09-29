@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { appContentSchema, type AppContent, type Locale } from "../../app/content/schema";
-import { OG_SIZE, ogCardFor, ogCardKey, renderOgPng, type OgFonts } from "./og";
+import { OG_SIZE, ogCardFor, ogCardKey, ogSiteCard, renderOgPng, type OgFonts } from "./og";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -91,14 +91,46 @@ describe("ogCardFor", () => {
   });
 });
 
-describe("renderOgPng", () => {
-  it("renders a 1200×630 PNG", async () => {
-    const card = ogCardFor(content(), "en", "writing", "shipping-rag")!;
-    const png = await renderOgPng(card, fonts());
+describe("ogSiteCard", () => {
+  it("draws the site itself: the role, the name and the headline, over the assistant's prompt", () => {
+    const c = content();
+    expect(ogSiteCard(c, "en")).toMatchObject({
+      eyebrow: c.ui.profile.role,
+      title: "Alireza Rastineh",
+      summary: c.ui.profile.heroHeadline,
+      metrics: [],
+      prompt: c.ui.ask.title,
+      author: "",
+      site: "alirezarastineh.me",
+    });
+  });
+});
 
+describe("renderOgPng", () => {
+  /** The PNG's signature, then IHDR's width and height (big-endian, after its length and type). */
+  function expectCard(png: Buffer): void {
     expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-    // IHDR: width and height, big-endian, right after the chunk's length and type.
     expect(png.readUInt32BE(16)).toBe(OG_SIZE.width);
     expect(png.readUInt32BE(20)).toBe(OG_SIZE.height);
+  }
+
+  it("renders a 1200×630 PNG", async () => {
+    const card = ogCardFor(content(), "en", "writing", "shipping-rag")!;
+    expectCard(await renderOgPng(card, fonts()));
   }, 20_000);
+
+  it("renders the site's card, and a case study with every line at its longest", async () => {
+    const c = content();
+    expectCard(await renderOgPng(ogSiteCard(c, "en"), fonts()));
+
+    const study = ogCardFor(c, "en", "work", c.projects[0]!.slug)!;
+    const longest = {
+      ...study,
+      eyebrow: "A descriptor long enough to need more than the one line it gets",
+      title: "A title long enough for three lines at the smallest size the card sets titles in",
+      summary: "A summary that runs on and on, well past the single line it is clamped to here.",
+      metrics: study.metrics.map((m) => ({ ...m, label: `${m.label}, with a long explanation` })),
+    };
+    expectCard(await renderOgPng(longest, fonts()));
+  }, 40_000);
 });

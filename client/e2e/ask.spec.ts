@@ -363,6 +363,19 @@ test.describe("assistant terminal", () => {
     expect(mock.bodies[0]!.locale).toBe("de");
   });
 
+  test("while it thinks, the status is read once: its ticking clock is not", async ({ page }) => {
+    await pausedStream(page, answer({ text: "Hybrid search." }), 0, 2000);
+    await mockAsk(page, () => undefined);
+    const prompt = await openPrompt(page);
+    await run(prompt, "How does retrieval work?");
+
+    const status = page.locator("#about").getByRole("status");
+    // Seen: the seconds count up. Heard: no number, so nothing to read again.
+    await expect(status).toContainText(/thinking… \d+\.\d s/);
+    expect(await status.ariaSnapshot()).not.toMatch(/\d+\.\d s/);
+    await expect(page.locator("#about [role=log]")).toContainText("Hybrid search.");
+  });
+
   test("a rate limit shows a countdown, and a failed answer can be retried", async ({ page }) => {
     await mockAsk(page, async (route, n) => {
       if (n === 1) {
@@ -385,6 +398,10 @@ test.describe("assistant terminal", () => {
 
     await run(prompt, "First question");
     await expect(log).toContainText(/try again in 4[0-2]s/);
+    // Heard once, from the terminal's live region; the countdown is for the eye
+    // (a live region would read it again every second).
+    await expect(page.locator('#about [aria-live="polite"]')).toContainText(/try again in 42s/);
+    await expect(log.getByRole("status")).toHaveCount(0);
 
     // Past the limit (the mock does not enforce it; the terminal does).
     await page.evaluate(() => sessionStorage.clear());
@@ -650,5 +667,20 @@ test.describe("assistant on a phone", () => {
     expect(target?.height).toBeGreaterThanOrEqual(44);
     await close.click();
     await expect(frame).toHaveCount(0);
+  });
+
+  test("tabbing out of the full-screen terminal closes it, so focus never hides behind it", async ({
+    page,
+  }) => {
+    await mockAsk(page, () => undefined);
+    const prompt = await openPrompt(page);
+    await prompt.focus();
+    const frame = page.locator("#about .ask-expanded");
+    await expect(frame).toBeVisible();
+
+    // Through its own controls, then on to the page.
+    for (let i = 0; i < 12 && (await frame.count()) > 0; i++) await page.keyboard.press("Tab");
+    await expect(frame).toHaveCount(0);
+    await expect(page.locator(":focus")).toBeInViewport();
   });
 });

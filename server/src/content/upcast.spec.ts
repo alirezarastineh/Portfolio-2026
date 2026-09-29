@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { v1Seo } from "../test/v1-snapshot.js";
 import { appContentSchema, type AppContent } from "./schema.js";
 import * as v1 from "./schema-v1.js";
 import { UI_V2_ADDITIONS, fillMissing, withUiDefaults } from "./ui-defaults.js";
@@ -19,7 +20,7 @@ function v1Payload(): v1.AppContent {
     })[];
     documents: {
       ui: Record<string, v1.AppContent["ui"]>;
-      seo: Record<string, v1.AppContent["seo"]>;
+      seo: Record<string, Omit<v1.AppContent["seo"], "themeColor">>;
     };
   };
   return v1.appContentSchema.parse({
@@ -50,7 +51,7 @@ function v1Payload(): v1.AppContent {
         links: { live: "", repo: "", caseStudy: "" },
       },
     ],
-    seo: seed.documents.seo["en"],
+    seo: v1Seo(seed.documents.seo["en"]!),
   });
 }
 
@@ -67,6 +68,9 @@ describe("upcast", () => {
     expect(content.ui.profile).toEqual(old.ui.profile);
     expect(content.ui.writing).toEqual(UI_V2_ADDITIONS.en.writing);
     expect(content.identity.siteUrl).toBe(new URL(old.seo.canonical).origin);
+    // v2 has no theme colour: the site's own theme sets the browser's.
+    expect(content.seo).not.toHaveProperty("themeColor");
+    expect(content.seo.title).toBe(old.seo.title);
     expect(content.projects[0]).toMatchObject({
       cover: { src: "/media/abc.webp", srcset: "", alt: "Atlas" },
       hasCaseStudy: false,
@@ -82,6 +86,15 @@ describe("upcast", () => {
     expect(upcast({ version: 2 }, "x").ok).toBe(false);
     expect(payloadVersion({ version: 1 })).toBe(1);
     expect(payloadVersion(null)).toBeNull();
+  });
+
+  it("reads a v2 payload published with a theme colour, and drops it", () => {
+    // Live until the next publish; the client reads the same schema (its mirror).
+    const v2 = (upcast(v1Payload(), "2026-01-01T00:00:00.000Z") as { content: AppContent }).content;
+    const published = { ...v2, seo: { ...v2.seo, themeColor: "#3b3b3d" } };
+    const result = upcast(published, "x");
+    expect(result).toMatchObject({ ok: true, from: 2 });
+    if (result.ok) expect(result.content.seo).toEqual(v2.seo);
   });
 
   it("gives a v1 version the bundled legal pages as docs", async () => {

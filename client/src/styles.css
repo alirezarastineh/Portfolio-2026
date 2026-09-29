@@ -219,3 +219,97 @@ a {
 html:has(app-admin-layout) {
   scroll-behavior: auto;
 }
+
+/*
+ * On paper (case studies and posts, above all): the content, black on white,
+ * whatever theme the screen shows. Off the page goes what only works on
+ * screen: the header, footer and ask button, the reading progress, the table
+ * of contents, an article's closing links (its ask and share buttons, the
+ * next and previous studies) and code's Copy. Links to other sites print
+ * their address. No reveals: they would leave content at opacity 0. Code
+ * prints in one colour: its highlighting is made for one screen background.
+ *
+ * The utilities are not in a layer here (`@tailwind utilities` above), and one
+ * class (`flex`, `pt-28`) outranks an element's name: the rules that hide or
+ * unpad start from `:root`, which puts them a class ahead.
+ */
+@media print {
+  /* eslint-disable-next-line css/use-baseline -- a hint: without it the print dialog's own margins apply. */
+  @page {
+    margin: 15mm;
+  }
+
+  :root[data-theme] {
+    color-scheme: light;
+    --background: #fff;
+    --card: #fff;
+    --muted: #f2f2f2;
+    --foreground: #000;
+    --muted-foreground: #333;
+    --border: #bbb;
+    --accent-orange: oklch(0.54 0.18 42);
+    --accent-indigo: oklch(0.5 0.2 280);
+    --shadow-e1: none;
+    --gutter: 0px;
+  }
+
+  /* The skip link (to #main) waits above the screen, which on paper would
+     put it at the foot of every page. */
+  :root
+    :is(
+      a[href$="#main"],
+      .site-header,
+      app-site-footer,
+      .ask-fab,
+      .reading-progress,
+      main aside,
+      article > nav,
+      article > footer,
+      .code-copy
+    ) {
+    display: none;
+  }
+
+  :root main {
+    padding: 0;
+  }
+
+  .reveal,
+  .hairline-draw {
+    animation: none;
+  }
+
+  main a[href^="http"] {
+    height: auto;
+  }
+
+  main a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    overflow-wrap: anywhere;
+  }
+
+  :root[data-theme] .code-block {
+    --code-bg: #fff;
+    --code-fg: #000;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  :root[data-theme] .code-block [class] {
+    color: inherit;
+  }
+
+  h1,
+  h2,
+  h3 {
+    /* eslint-disable-next-line css/use-baseline -- a hint: a heading may still end a page without it. */
+    break-after: avoid;
+  }
+
+  img,
+  pre,
+  blockquote,
+  .surface-card {
+    break-inside: avoid;
+  }
+}

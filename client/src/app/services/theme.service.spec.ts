@@ -1,8 +1,19 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { DOCUMENT } from "@angular/common";
 import { TestBed } from "@angular/core/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { applyTheme, revealCircle, THEME_STORAGE_KEY, ThemeService } from "./theme.service";
+import {
+  applyTheme,
+  revealCircle,
+  THEME_COLOR,
+  THEME_STORAGE_KEY,
+  ThemeService,
+  type Theme,
+} from "./theme.service";
 
 /** A controllable `(prefers-color-scheme: light)`. */
 function systemTheme(light: boolean) {
@@ -70,6 +81,86 @@ describe("ThemeService", () => {
     theme.set("dark");
     system.change(true);
     expect(theme.theme()).toBe("dark");
+  });
+
+  it("gives the browser's own colours the page's background", () => {
+    systemTheme(false);
+    const meta = document.createElement("meta");
+    meta.name = "theme-color";
+    meta.content = THEME_COLOR.dark;
+    document.head.append(meta);
+    try {
+      applyTheme(document, "dark");
+      const theme = TestBed.inject(ThemeService);
+
+      theme.toggle();
+      expect(meta.content).toBe(THEME_COLOR.light);
+      theme.toggle();
+      expect(meta.content).toBe(THEME_COLOR.dark);
+    } finally {
+      meta.remove();
+    }
+  });
+});
+
+describe("index.html's theme-init script", () => {
+  const html = readFileSync(
+    resolve(dirname(fileURLToPath(import.meta.url)), "../../../index.html"),
+    "utf8",
+  );
+  const source = /<script id="theme-init">([\s\S]*?)<\/script>/.exec(html)![1]!;
+
+  /** Runs the script before the first paint, as the browser would, against stand-ins. */
+  function run(saved: string | null | Error, systemLight: boolean) {
+    const classes = new Set(["dark"]);
+    const root = {
+      dataset: {} as Record<string, string>,
+      classList: {
+        toggle: (name: string, on: boolean) => (on ? classes.add(name) : classes.delete(name)),
+      },
+    };
+    const meta = { content: THEME_COLOR.dark };
+    const storage = {
+      getItem: (key: string) => {
+        if (saved instanceof Error) throw saved;
+        return key === THEME_STORAGE_KEY ? saved : null;
+      },
+    };
+    const matchMedia = (query: string) => ({
+      matches: systemLight && query === "(prefers-color-scheme: light)",
+    });
+    new Function("localStorage", "window", "matchMedia", "document", source)(
+      storage,
+      { matchMedia },
+      matchMedia,
+      {
+        documentElement: root,
+        querySelector: (selector: string) =>
+          selector === 'meta[name="theme-color"]' ? meta : null,
+      },
+    );
+    return {
+      theme: root.dataset["theme"] as Theme,
+      dark: classes.has("dark"),
+      color: meta.content,
+    };
+  }
+
+  it("applies the saved choice over the system's", () => {
+    expect(run("light", false)).toEqual({ theme: "light", dark: false, color: THEME_COLOR.light });
+    expect(run("dark", true)).toEqual({ theme: "dark", dark: true, color: THEME_COLOR.dark });
+  });
+
+  it("follows the system without a saved choice, or when storage is blocked", () => {
+    expect(run(null, true)).toEqual({ theme: "light", dark: false, color: THEME_COLOR.light });
+    expect(run(null, false)).toEqual({ theme: "dark", dark: true, color: THEME_COLOR.dark });
+    expect(run(new Error("SecurityError"), true).theme).toBe("light");
+  });
+
+  it("finds the theme-color tag above it, where the browser has already parsed it", () => {
+    expect(html.indexOf('<meta name="theme-color"')).toBeLessThan(
+      html.indexOf('<script id="theme-init">'),
+    );
   });
 });
 

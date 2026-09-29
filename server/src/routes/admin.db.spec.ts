@@ -114,6 +114,38 @@ describe("section saves", () => {
       expect.objectContaining({ path: ["en", "title"], message: "Required" }),
     ]);
   });
+
+  // The theme colour left the content model: the site's own theme sets the browser's.
+  it("takes an SEO save that still sends a theme colour, and does not keep it", async () => {
+    const seo = await section<Record<string, string>>("seo");
+    const res = await client.put("/admin/sections/seo", {
+      data: {
+        en: { ...seo.data.en, themeColor: "#3b3b3d" },
+        de: { ...seo.data.de, themeColor: "#3b3b3d" },
+      },
+      updatedAt: seo.updatedAt,
+    });
+    expect(res.status).toBe(200);
+    const saved = await section<Record<string, string>>("seo");
+    expect(saved.data.en).not.toHaveProperty("themeColor");
+    expect(saved.data.de).not.toHaveProperty("themeColor");
+  });
+
+  it("builds a stored SEO document that still has a theme colour without it", async () => {
+    await getDb()
+      .update(contentDocuments)
+      .set({ data: sql`${contentDocuments.data} || '{"themeColor": "#3b3b3d"}'::jsonb` })
+      .where(eq(contentDocuments.section, "seo"));
+
+    const review = await json<{ locales: { draft: { seo: object } | null }[] }>(
+      await client.get("/admin/publish/review"),
+    );
+    expect(review.locales).toHaveLength(2);
+    for (const locale of review.locales) {
+      expect(locale.draft?.seo).toBeDefined();
+      expect(locale.draft?.seo).not.toHaveProperty("themeColor");
+    }
+  });
 });
 
 describe("PATCH /admin/sections/ui", () => {

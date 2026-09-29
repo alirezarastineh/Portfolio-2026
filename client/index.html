@@ -4,17 +4,25 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <base href="/" />
-    <!-- The saved theme, or else the system's, before anything paints. The
-         server renders dark; this only ever switches to light. Nonced per
-         request by id (src/app/security/csp-nonce.ts); keep it tiny. -->
+    <!-- The browser's own colours (its toolbar, on phones): the page's
+         background, dark as the server renders it. theme-init below and
+         ThemeService switch it with the theme (THEME_COLOR). -->
+    <meta name="theme-color" content="#101012" />
+    <meta name="color-scheme" content="dark light" />
+    <!-- The saved theme, or else the system's, before anything paints: the
+         `data-theme` the tokens follow, Spartan's `dark` class, and the
+         theme-color above. With storage blocked (privacy settings) there is no
+         saved choice, and the system decides. The server renders dark; this
+         only ever switches to light. Nonced per request by id
+         (src/app/security/csp-nonce.ts); keep it tiny, and its comments out
+         here: the build drops HTML comments (vite-plugins/strip-html-comments.ts),
+         not script ones. -->
     <script id="theme-init">
       (function () {
         var t = null;
         try {
           t = localStorage.getItem("theme");
         } catch (e) {
-          // Storage blocked (privacy settings): no saved choice, so the
-          // system setting decides below.
           t = null;
         }
         if (t !== "light" && t !== "dark") {
@@ -24,6 +32,9 @@
         var r = document.documentElement;
         r.dataset.theme = t;
         r.classList.toggle("dark", t === "dark");
+        if (t === "light") {
+          document.querySelector('meta[name="theme-color"]').content = "#f9fafb";
+        }
       })();
     </script>
     <!-- Must precede the app's module script, which the build moves into
@@ -36,8 +47,6 @@
       content="Full Stack AI Engineer. Reliable cloud infrastructure meets defensive AI engineering — production-grade Angular, FastAPI, RAG pipelines, and observability."
     />
     <meta name="author" content="Alireza Rastineh" />
-    <meta name="theme-color" content="#121212" />
-    <meta name="color-scheme" content="dark light" />
 
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />

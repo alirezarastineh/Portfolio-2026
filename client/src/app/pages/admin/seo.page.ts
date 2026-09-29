@@ -61,12 +61,6 @@ const FIELDS: FieldDef[] = [
     hint: "Absolute URL, including the trailing slash.",
     ai: false,
   },
-  {
-    key: "themeColor",
-    label: "Theme colour",
-    hint: "Hex value used by mobile browser chrome.",
-    ai: false,
-  },
   { key: "ogTitle", label: "OG title", softMax: 60 },
   { key: "ogDescription", label: "OG description", multiline: true, softMax: 200 },
   { key: "ogImage", label: "OG image URL", ai: false },

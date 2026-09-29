@@ -65,9 +65,11 @@ const segment =
   },
   template: `
     <!-- First stop for keyboard users. A real link to this page's <main>, so
-         it works before the app is interactive too. -->
+         it works before the app is interactive too. Waits above the screen and
+         drops in, over the header, when focused (not sr-only: undoing that on
+         focus makes it static, under the header). -->
     <a
-      class="sr-only fixed left-4 top-3 z-60 rounded-md bg-accent-orange px-4 py-2 font-mono text-sm font-medium text-accent-orange-foreground focus:not-sr-only"
+      class="fixed left-4 top-3 z-60 -translate-y-16 rounded-md bg-accent-orange px-4 py-2 font-mono text-sm font-medium text-accent-orange-foreground focus:translate-y-0"
       [attr.href]="skipHref()"
       (click)="skipToContent($event)"
       >{{ labels().skip }}</a

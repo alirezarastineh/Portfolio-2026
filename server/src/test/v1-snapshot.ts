@@ -20,8 +20,16 @@ interface SeedFile {
   }[];
   documents: {
     ui: Record<Locale, v1.AppContent["ui"]>;
-    seo: Record<Locale, v1.AppContent["seo"]>;
+    seo: Record<Locale, Omit<v1.AppContent["seo"], "themeColor">>;
   };
+}
+
+/**
+ * The seed's SEO block as v1 published it: v1 had a theme colour, which the
+ * content model has since dropped (the seed with it).
+ */
+export function v1Seo(seo: Omit<v1.AppContent["seo"], "themeColor">): v1.AppContent["seo"] {
+  return { ...seo, themeColor: "#3b3b3d" };
 }
 
 /**
@@ -51,6 +59,6 @@ export function v1Snapshot(locale: Locale): v1.AppContent {
       image: `/projects/${p.slug}.svg`,
       links: { live: p.linkLive, repo: p.linkRepo, caseStudy: p.linkCaseStudy },
     })),
-    seo: seed.documents.seo[locale],
+    seo: v1Seo(seed.documents.seo[locale]),
   });
 }

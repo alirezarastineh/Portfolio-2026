@@ -106,4 +106,9 @@ describe("pageMeta", () => {
       content: "en_US",
     });
   });
+
+  it("leaves theme-color to the visitor's theme", () => {
+    const tags = pageMeta(content, "en", { title: "a", description: "b", url: "u", robots: "x" });
+    expect(tags.some((t) => "name" in t && t.name === "theme-color")).toBe(false);
+  });
 });

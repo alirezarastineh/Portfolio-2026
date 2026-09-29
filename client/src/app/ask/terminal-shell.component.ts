@@ -48,7 +48,7 @@ const MAX_INPUT_LINES = 6;
   viewProviders: [provideIcons({ lucideX })],
   host: { class: "block" },
   template: `
-    <div #frame [class]="frameClass()">
+    <div #frame [class]="frameClass()" (focusout)="onFocusOut($event)">
       @if (expanded()) {
         <div class="flex items-center justify-between border-b border-border">
           <span class="text-xs text-muted-foreground">{{ lang.t().ask.title }}</span>
@@ -430,6 +430,19 @@ export class TerminalShellComponent {
       this.expanded.set(true);
       // The element moved; keep the keyboard on it.
       queueMicrotask(() => this.inputRef().nativeElement.focus({ preventScroll: true }));
+    }
+  }
+
+  /**
+   * Focus leaving the full-screen terminal for the page (Tab past its last
+   * control, Shift+Tab before its first) takes it down, so the page's next
+   * stop is not hidden behind it. A blur with nowhere to go, as when a phone
+   * puts its keyboard away, keeps it open for reading.
+   */
+  protected onFocusOut(event: FocusEvent): void {
+    const next = event.relatedTarget;
+    if (this.expanded() && next instanceof Node && !this.frameRef().nativeElement.contains(next)) {
+      this.collapse();
     }
   }
 

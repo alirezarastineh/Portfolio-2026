@@ -28,6 +28,8 @@ export interface OgCard {
   metrics: { value: string; label: string }[];
   /** Date, reading time, tags (posts). */
   meta: string;
+  /** A terminal prompt instead of the facts (the site's own card): `~$ ask my portfolio`. */
+  prompt?: string;
   author: string;
   role: string;
   site: string;
@@ -83,9 +85,40 @@ export function ogCardFor(
   };
 }
 
+/**
+ * The site's own card (public/og.png, drawn by scripts/og-default.ts): the
+ * name, the role and the hero's headline, over the assistant's prompt.
+ */
+export function ogSiteCard(content: AppContent, locale: Locale): OgCard {
+  const t = content.ui;
+  return {
+    locale,
+    eyebrow: t.profile.role,
+    title: content.identity.name,
+    summary: t.profile.heroHeadline,
+    metrics: [],
+    meta: "",
+    prompt: t.ask.title,
+    author: "",
+    role: "",
+    site: hostOf(content.identity.siteUrl || content.seo.canonical),
+  };
+}
+
+/**
+ * Bumped when the drawing changes, so every card gets a new key and ETag
+ * (a cached card would otherwise keep the old look). Redraw public/og.png
+ * then too: scripts/og-default.ts.
+ */
+const OG_DESIGN = "2";
+
 /** A content hash of the card: the cache key and ETag, new whenever the card would change. */
 export function ogCardKey(card: OgCard): string {
-  return createHash("sha256").update(JSON.stringify(card)).digest("base64url").slice(0, 32);
+  return createHash("sha256")
+    .update(OG_DESIGN)
+    .update(JSON.stringify(card))
+    .digest("base64url")
+    .slice(0, 32);
 }
 
 export async function renderOgPng(card: OgCard, fonts: OgFonts): Promise<Buffer> {
@@ -100,19 +133,34 @@ export async function renderOgPng(card: OgCard, fonts: OgFonts): Promise<Buffer>
   return new Resvg(svg, { fitTo: { mode: "width", value: OG_SIZE.width } }).render().asPng();
 }
 
-// The dark theme's tokens (src/styles/tokens.css), as sRGB for Satori.
-const COLOR = {
-  background: "#121212",
-  card: "#1b1b1b",
-  foreground: "#f7f7f7",
-  muted: "#c6c6c6",
-  border: "rgba(255, 255, 255, 0.13)",
+/**
+ * The dark theme's tokens (src/styles/tokens.css) in sRGB: Satori and resvg
+ * take hex and rgba, not oklch. The orange lies outside sRGB and is clipped
+ * into it, as an sRGB screen shows it. src/styles/tokens.spec.ts keeps these
+ * equal to the tokens.
+ */
+export const OG_COLOR = {
+  background: "#101012",
+  card: "#161719",
+  foreground: "#f5f5f5",
+  mutedForeground: "#bcbec1",
+  borderStrong: "rgba(255, 255, 255, 0.2)",
   orange: "#ff7115",
+  indigo: "#7472f4",
 } as const;
+
+const COLOR = OG_COLOR;
+const PAD = 64;
+
+/** The assistant's pipeline, as the hero's trace panel names its steps (app/visuals/trace.ts). */
+const TRACE_STEPS = ["query", "route", "retrieve", "generate", "cite", "answer"] as const;
 
 interface Node {
   type: string;
-  props: { style?: Record<string, unknown>; children?: (Node | string)[] | Node | string };
+  props: Record<string, unknown> & {
+    style?: Record<string, unknown>;
+    children?: (Node | string)[] | Node | string;
+  };
 }
 
 function el(style: Record<string, unknown>, ...children: (Node | string)[]): Node {
@@ -123,97 +171,230 @@ function text(style: Record<string, unknown>, value: string): Node {
   return { type: "div", props: { style: { display: "block", ...style }, children: value } };
 }
 
-/** The card as Satori's element tree (the shape React elements have). */
-export function ogTree(card: OgCard): Node {
-  const long = card.title.length > 42;
-  const mark = el(
+function svg(type: string, props: Record<string, unknown>, ...children: Node[]): Node {
+  return { type, props: { ...props, children } };
+}
+
+/** The favicon's `>_` (public/favicon.svg) on a card-coloured tile. */
+function mark(): Node {
+  return el(
     {
-      width: 52,
-      height: 52,
+      width: 56,
+      height: 56,
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 12,
-      border: `1px solid ${COLOR.border}`,
+      borderRadius: 14,
+      border: `1px solid ${COLOR.borderStrong}`,
       backgroundColor: COLOR.card,
-      fontFamily: "Geist Mono",
-      fontSize: 26,
-      fontWeight: 500,
     },
-    text({ color: COLOR.orange }, ">"),
-    text({ color: COLOR.foreground }, "_"),
+    svg(
+      "svg",
+      { width: 36, height: 36, viewBox: "8 8 48 48" },
+      svg("path", {
+        d: "M17 21 29 32 17 43",
+        fill: "none",
+        stroke: COLOR.orange,
+        strokeWidth: 6.5,
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
+      }),
+      svg("path", {
+        d: "M34 44h13",
+        stroke: COLOR.foreground,
+        strokeWidth: 6.5,
+        strokeLinecap: "round",
+      }),
+    ),
   );
+}
+
+/**
+ * The trace motif: the hero's pipeline as one line of steps, each done
+ * (indigo) up to the answer (orange). No timings: it is not a real trace.
+ */
+function trace(): Node {
+  const last = TRACE_STEPS.length - 1;
+  return el(
+    { alignItems: "center", gap: 10, fontFamily: "Geist Mono", fontSize: 16 },
+    ...TRACE_STEPS.flatMap((step, i) => [
+      ...(i > 0 ? [el({ width: 14, height: 1, backgroundColor: COLOR.borderStrong })] : []),
+      el(
+        { alignItems: "center", gap: 8 },
+        el({
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          backgroundColor: i === last ? COLOR.orange : COLOR.indigo,
+        }),
+        text({ color: i === last ? COLOR.foreground : COLOR.mutedForeground }, step),
+      ),
+    ]),
+  );
+}
+
+/**
+ * The hero's dot grid, full-bleed and fading out towards the text. The stops
+ * are in percent of the tile's gradient: Satori measures pixel stops against
+ * the whole card, which shrinks the dots to nothing.
+ */
+function dotGrid(): Node {
+  return el({
+    position: "absolute",
+    left: 0,
+    top: 0,
+    ...OG_SIZE,
+    backgroundImage: `radial-gradient(circle at 50% 50%, ${COLOR.indigo} 0%, ${COLOR.indigo} 9%, transparent 11%)`,
+    backgroundSize: "24px 24px",
+    opacity: 0.7,
+    maskImage: "radial-gradient(ellipse 80% 110% at 100% 0%, #000 0%, transparent 100%)",
+  });
+}
+
+/** The hero's ask bar at rest: the prompt, the question, the caret. */
+function promptLine(question: string): Node {
+  return el(
+    { alignItems: "center", gap: 14, fontFamily: "Geist Mono", fontSize: 26 },
+    text({ color: COLOR.orange }, "~$"),
+    text({ color: COLOR.foreground }, question),
+    el({ width: 14, height: 28, backgroundColor: COLOR.orange }),
+  );
+}
+
+/**
+ * What the footer leads with: the prompt (the site's card), the metrics as
+ * the case study's band shows them (the number under an orange rule), or the
+ * post's date line.
+ */
+function facts(card: OgCard): Node {
+  if (card.prompt) return promptLine(card.prompt);
+  if (card.metrics.length === 0) {
+    return text(
+      {
+        fontFamily: "Geist Mono",
+        fontSize: 21,
+        color: COLOR.mutedForeground,
+        maxWidth: 700,
+        lineClamp: 2,
+      },
+      card.meta,
+    );
+  }
+  return el(
+    { gap: 36, flexShrink: 1 },
+    ...card.metrics.map((metric) =>
+      el(
+        {
+          flexDirection: "column",
+          gap: 6,
+          width: 206,
+          paddingTop: 14,
+          borderTop: `2px solid ${COLOR.orange}`,
+        },
+        text({ fontSize: 46, fontWeight: 600, lineHeight: 1, letterSpacing: -1.4 }, metric.value),
+        text(
+          { fontSize: 19, lineHeight: 1.3, color: COLOR.mutedForeground, lineClamp: 2 },
+          metric.label,
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * The title's size by its length: as large as two lines allow, down to 56px;
+ * past that, three lines and a one-line summary, so the card never overflows.
+ */
+function titleStyle(title: string): { fontSize: number; lines: number; summaryLines: number } {
+  if (title.length <= 24) return { fontSize: 80, lines: 2, summaryLines: 2 };
+  if (title.length <= 56) return { fontSize: 68, lines: 2, summaryLines: 2 };
+  if (title.length <= 72) return { fontSize: 56, lines: 2, summaryLines: 2 };
+  return { fontSize: 56, lines: 3, summaryLines: 1 };
+}
+
+/** The card as Satori's element tree (the shape React elements have). */
+export function ogTree(card: OgCard): Node {
+  const title = titleStyle(card.title);
 
   const header = el(
-    { alignItems: "center", gap: 18 },
-    mark,
-    text({ fontFamily: "Geist Mono", fontSize: 22, color: COLOR.muted }, card.site),
+    { alignItems: "center", justifyContent: "space-between", gap: 32 },
+    el(
+      { alignItems: "center", gap: 18 },
+      mark(),
+      text({ fontFamily: "Geist Mono", fontSize: 22, color: COLOR.mutedForeground }, card.site),
+    ),
+    trace(),
   );
 
   const body = el(
-    { flexDirection: "column", gap: 22, maxWidth: 1040 },
+    { flexDirection: "column", gap: 20, maxWidth: 1040 },
     text(
       {
         fontFamily: "Geist Mono",
-        fontSize: 20,
+        fontSize: 19,
         fontWeight: 500,
-        letterSpacing: 3,
+        letterSpacing: 2.6,
         textTransform: "uppercase",
-        color: COLOR.orange,
+        color: COLOR.mutedForeground,
+        lineClamp: 1,
       },
-      `// ${card.eyebrow}`,
+      card.eyebrow,
     ),
     text(
       {
-        fontSize: long ? 58 : 72,
+        fontSize: title.fontSize,
         fontWeight: 600,
-        lineHeight: 1.05,
-        letterSpacing: -2,
+        lineHeight: 1.04,
+        letterSpacing: -0.035 * title.fontSize,
         color: COLOR.foreground,
-        lineClamp: 3,
+        lineClamp: title.lines,
       },
       card.title,
     ),
     ...(card.summary
-      ? [text({ fontSize: 28, lineHeight: 1.35, color: COLOR.muted, lineClamp: 2 }, card.summary)]
+      ? [
+          text(
+            {
+              fontSize: 27,
+              lineHeight: 1.4,
+              color: COLOR.mutedForeground,
+              maxWidth: 980,
+              lineClamp: title.summaryLines,
+            },
+            card.summary,
+          ),
+        ]
       : []),
   );
 
-  const facts = card.metrics.length
-    ? el(
-        { gap: 48 },
-        ...card.metrics.map((metric) =>
-          el(
-            { flexDirection: "column", gap: 4 },
-            text({ fontSize: 44, fontWeight: 600, color: COLOR.orange }, metric.value),
-            text({ fontSize: 20, color: COLOR.muted, maxWidth: 260 }, metric.label),
-          ),
+  const byline = card.author
+    ? [
+        el(
+          { flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0, maxWidth: 360 },
+          text({ fontSize: 26, fontWeight: 600, color: COLOR.foreground }, card.author),
+          text({ fontFamily: "Geist Mono", fontSize: 17, color: COLOR.mutedForeground }, card.role),
         ),
-      )
-    : text(
-        { fontFamily: "Geist Mono", fontSize: 22, color: COLOR.muted, maxWidth: 760 },
-        card.meta,
-      );
+      ]
+    : [];
 
   const footer = el(
     { alignItems: "flex-end", justifyContent: "space-between", gap: 32 },
-    facts,
-    el(
-      { flexDirection: "column", alignItems: "flex-end", gap: 6 },
-      text({ fontSize: 26, fontWeight: 600, color: COLOR.foreground }, card.author),
-      text({ fontFamily: "Geist Mono", fontSize: 18, color: COLOR.muted }, card.role),
-    ),
+    facts(card),
+    ...byline,
   );
 
   return el(
     {
       ...OG_SIZE,
+      position: "relative",
       flexDirection: "column",
       justifyContent: "space-between",
-      padding: 64,
+      gap: 24,
+      padding: PAD,
       fontFamily: "Geist",
+      color: COLOR.foreground,
       backgroundColor: COLOR.background,
-      borderTop: `6px solid ${COLOR.orange}`,
     },
+    dotGrid(),
     header,
     body,
     footer,

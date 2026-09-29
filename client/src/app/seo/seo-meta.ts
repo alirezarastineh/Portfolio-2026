@@ -116,6 +116,10 @@ interface PageMeta {
  * The full set of tags for one page. Every page emits all of them: Analog
  * updates tags by name on navigation but never removes one, so a tag a page
  * left out would keep the previous page's value.
+ *
+ * Not `theme-color`: it follows the visitor's theme (index.html and
+ * ThemeService set it), and a colour set here would come back on every
+ * navigation (Analog updates tags by name).
  */
 export function pageMeta(content: AppContent, locale: Locale, page: PageMeta): MetaTag[] {
   const seo = content.seo;
@@ -123,7 +127,6 @@ export function pageMeta(content: AppContent, locale: Locale, page: PageMeta): M
     { name: "description", content: page.description },
     { name: "robots", content: page.robots },
     { name: "author", content: seo.author },
-    { name: "theme-color", content: seo.themeColor },
     { property: "og:type", content: page.ogType ?? "website" },
     { property: "og:site_name", content: seo.siteName },
     { property: "og:title", content: page.ogTitle ?? page.title },

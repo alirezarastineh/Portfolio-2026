@@ -351,8 +351,9 @@ interface Section {
             </nav>
           }
 
-          <!-- The end, as terminal output: what to do next. -->
-          <section
+          <!-- The end, as terminal output: what to do next. The article's
+               footer, as on a post: print leaves it out (styles.css). -->
+          <footer
             class="reveal surface-card flex flex-col items-start gap-4 rounded-2xl p-6 sm:p-10"
           >
             <p class="m-0 font-mono text-meta text-muted-foreground" aria-hidden="true">
@@ -380,7 +381,7 @@ interface Section {
                 {{ askLabel() }}
               </button>
             </div>
-          </section>
+          </footer>
         </article>
       </main>
     } @else {

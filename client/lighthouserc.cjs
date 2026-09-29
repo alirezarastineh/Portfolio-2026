@@ -33,7 +33,12 @@ module.exports = {
     collect: {
       startServerCommand: `node e2e/serve.mjs --port ${PORT}`,
       startServerReadyPattern: "Listening on",
-      url: [`${BASE}/en`, `${BASE}/en/work/project-one`, `${BASE}/de/legal/privacy`],
+      url: [
+        `${BASE}/en`,
+        `${BASE}/en/work/project-one`,
+        `${BASE}/en/writing`,
+        `${BASE}/de/legal/privacy`,
+      ],
       numberOfRuns: 3,
       settings: {
         chromeFlags: "--headless=new --no-sandbox",

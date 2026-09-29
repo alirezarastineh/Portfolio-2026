@@ -78,6 +78,13 @@ else
 fi
 LIVE_VERSION="$(db_value "select max(schema_version) from content_publications p join content_versions v on v.publication_id = p.id join content_pointers c on c.version_id = v.id")"
 echo "  info  live content is schema v${LIVE_VERSION:-?} (v1 until the first publish after deploying v2; served upcast either way)"
+# The CMS's theme colour is retired (September 2026). The API already serves
+# live content without it; the stored versions keep it until the next publish,
+# and until then the admin counts one change per language with no field shown.
+RETIRED_COLOUR="$(db_value "select count(*) from content_pointers c join content_versions v on v.id = c.version_id where v.payload->'seo' ? 'themeColor'")"
+if [[ -n "${RETIRED_COLOUR}" && "${RETIRED_COLOUR}" != "0" ]]; then
+  echo "  info  the live versions still hold the retired theme colour: publish once (Admin → Review & publish)"
+fi
 
 echo "== services =="
 check "client responds" curl -fsSI "${CLIENT}"
@@ -113,6 +120,20 @@ check "BFF serves docs (the German imprint)" \
   bash -c "curl -fsS '${CLIENT}/api/v2/content/de/legal/imprint' | grep -q '\"kind\":\"legal\"'"
 check "legal pages render from the CMS" \
   bash -c "curl -fsS '${CLIENT}/de/legal/privacy' | grep -q 'class=\"prose-body\"'"
+
+# The redesign's client (2026-09): the browser's colour is the page's own
+# background, set by the theme (the CMS's theme colour is retired), and
+# index.html's developer comments no longer ship with every page.
+if grep -qF '<meta name="theme-color" content="#101012">' <<<"${HOME_EN}"; then
+  pass "pages give the browser their dark background as its colour (the redesign's client)"
+else
+  fail "the page's theme-color is not #101012 — an older client, or the CMS colour still emitted?"
+fi
+if grep -qF 'The saved theme, or else' <<<"${HOME_EN}"; then
+  fail "index.html's comments are still sent with every page (vite-plugins/strip-html-comments.ts)"
+else
+  pass "index.html's developer comments are not sent"
+fi
 
 check "prerendered index.html is absent (edits must not need a rebuild)" \
   bash -c "! docker compose --env-file '${ENV_FILE}' -f '${COMPOSE_FILE}' exec -T client test -f dist/analog/public/index.html"

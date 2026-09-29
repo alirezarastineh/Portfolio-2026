@@ -211,6 +211,27 @@ test.describe("theme", () => {
     await expect(html).toHaveAttribute("data-theme", "dark");
     expect(await page.evaluate(() => window.__reveals?.types)).toEqual(["theme"]);
   });
+
+  test("the browser's own colour is the page's, from before the first paint", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto("/en");
+    const color = page.locator('meta[name="theme-color"]');
+    await expect(color).toHaveCount(1);
+    await expect(color).toHaveAttribute("content", "#f9fafb");
+
+    await interactive(page);
+    await page.getByRole("button", { name: "Switch to the dark theme" }).click();
+    await expect(color).toHaveAttribute("content", "#101012");
+
+    // No page's tags name a colour, so moving to another page keeps it.
+    await page
+      .getByRole("link", { name: /Read case study/ })
+      .first()
+      .click();
+    await expect(page).toHaveURL(/\/en\/work\/project-one$/);
+    await expect(page.locator("main h1")).toBeVisible();
+    await expect(color).toHaveAttribute("content", "#101012");
+  });
 });
 
 test.describe("motion", () => {
@@ -268,6 +289,15 @@ test.describe("keyboard", () => {
     const skip = page.getByRole("link", { name: "Skip to content" });
     await expect(skip).toBeFocused();
     await expect(skip).toBeInViewport();
+    // Seen, not only in view: nothing (the fixed header) covers it.
+    expect(
+      await skip.evaluate((link) => {
+        const box = link.getBoundingClientRect();
+        return link.contains(
+          document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2),
+        );
+      }),
+    ).toBe(true);
     await page.keyboard.press("Enter");
     await expect(page.locator("#main")).toBeFocused();
   });

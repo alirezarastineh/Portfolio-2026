@@ -1,4 +1,4 @@
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, Locator, Page } from "@playwright/test";
 
 import { expect, interactive, test } from "./fixtures";
 
@@ -25,6 +25,32 @@ async function hreflangs(page: Page): Promise<Record<string, string>> {
     out[(await link.getAttribute("hreflang"))!] = (await link.getAttribute("href"))!;
   }
   return out;
+}
+
+/**
+ * Prints the page (print media): the site's chrome and `offPage`, all shown on
+ * screen first, leave the paper; the article stays, in black on white.
+ */
+async function expectPaper(page: Page, offPage: Locator[]): Promise<void> {
+  const hidden = [
+    page.locator(".site-header"),
+    page.locator("app-site-footer footer"),
+    page.locator(".ask-fab"),
+    // The skip link waits above the screen; on paper it would sit at every page's foot.
+    page.locator('a[href$="#main"]'),
+    ...offPage,
+  ];
+  for (const locator of hidden) await expect(locator).toBeVisible();
+
+  await page.emulateMedia({ media: "print" });
+  for (const locator of hidden) await expect(locator).toBeHidden();
+  await expect(page.locator("main h1")).toBeVisible();
+  await expect(page.locator("main .prose-body").first()).toBeVisible();
+  const colours = await page.evaluate(() => {
+    const body = getComputedStyle(document.body);
+    return [body.backgroundColor, body.color];
+  });
+  expect(colours).toEqual(["rgb(255, 255, 255)", "rgb(0, 0, 0)"]);
 }
 
 test.describe("case study", () => {
@@ -181,6 +207,22 @@ test.describe("case study", () => {
     );
   });
 
+  test("prints its content black on white, without the site around it", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    const main = page.locator("main");
+    await expectPaper(page, [
+      main.locator("aside"),
+      main.getByRole("link", { name: /Next project/ }),
+      main.getByRole("button", { name: /^Ask about/ }),
+      main.getByRole("button", { name: "Copy" }),
+    ]);
+    // Code prints in one colour: its highlighting is made for a screen's background.
+    const keyword = main.locator(".code-block .shd-ff7b72").first();
+    expect(await keyword.evaluate((el) => getComputedStyle(el).color)).toBe("rgb(0, 0, 0)");
+  });
+
   test("the home page's card opens its case study client-side", async ({ page }) => {
     await page.goto("/en");
     await interactive(page);
@@ -212,6 +254,18 @@ test.describe("case study", () => {
 });
 
 test.describe("writing", () => {
+  test("a post prints black on white, without its ask and share buttons", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto("/en/writing/shipping-rag-to-production");
+    await interactive(page);
+    const main = page.locator("main");
+    await expectPaper(page, [
+      main.locator("aside"),
+      main.getByRole("button", { name: "Ask the assistant about this post" }),
+      main.locator("app-share-links"),
+    ]);
+  });
+
   test("the index lists this language's posts, newest first, and filters by tag", async ({
     page,
   }) => {

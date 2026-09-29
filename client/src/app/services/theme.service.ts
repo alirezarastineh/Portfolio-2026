@@ -16,11 +16,23 @@ export const THEME_STORAGE_KEY = "theme";
 
 const LIGHT_QUERY = "(prefers-color-scheme: light)";
 
-/** Sets the theme on `<html>`: the attribute the tokens use, and Spartan's `dark` class. */
+/**
+ * Each theme's `--background` (styles/tokens.css) in hex, for the browser's
+ * own colours (`<meta name="theme-color">`, which index.html sets before the
+ * first paint). styles/tokens.spec.ts keeps them equal to the tokens, and to
+ * the copies in index.html and site.webmanifest.
+ */
+export const THEME_COLOR: Record<Theme, string> = { dark: "#101012", light: "#f9fafb" };
+
+/**
+ * Sets the theme on `<html>`: the attribute the tokens use, Spartan's `dark`
+ * class, and the browser's colour to match the page.
+ */
 export function applyTheme(doc: Document, theme: Theme): void {
   const root = doc.documentElement;
   root.setAttribute("data-theme", theme); // NOSONAR
   root.classList.toggle("dark", theme === "dark");
+  doc.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLOR[theme]);
 }
 
 /**

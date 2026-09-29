@@ -353,13 +353,17 @@ export const legalSummarySchema = z.object({
   updatedAt: isoDateTimeSchema,
 });
 
+/**
+ * No theme colour: the browser's follows the visitor's light or dark theme
+ * (the client's index.html and ThemeService). Stored drafts and older
+ * payloads that still carry `themeColor` parse as before; it is dropped.
+ */
 export const seoSchema = z.object({
   title: nonEmpty,
   description: nonEmpty,
   author: nonEmpty,
   siteName: nonEmpty,
   canonical: nonEmpty,
-  themeColor: nonEmpty,
   ogTitle: nonEmpty,
   ogDescription: nonEmpty,
   ogImage: nonEmpty,
