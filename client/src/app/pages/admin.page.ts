@@ -5,11 +5,13 @@ import {
   withRequestsMadeViaParent,
 } from "@angular/common/http";
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
   effect,
   inject,
+  Injector,
   PLATFORM_ID,
   signal,
   untracked,
@@ -103,7 +105,7 @@ interface NavItem {
   path: string;
   label: string;
   icon: string;
-  group: "Overview" | "Content" | "Library";
+  group: "Overview" | "Content";
 }
 
 /** Something a sidebar entry reports: a count, or an alert, with the words for it. */
@@ -131,13 +133,34 @@ const NAV: NavItem[] = [
   { path: "/admin/copy", label: "Page copy", icon: "lucidePenLine", group: "Content" },
   { path: "/admin/legal", label: "Legal pages", icon: "lucideScale", group: "Content" },
   { path: "/admin/seo", label: "SEO & meta", icon: "lucideSearch", group: "Content" },
-  { path: "/admin/media", label: "Media", icon: "lucideImages", group: "Library" },
+  // Last in Content rather than a group of one: its label and padding cost a row.
+  { path: "/admin/media", label: "Media", icon: "lucideImages", group: "Content" },
 ];
 
-const GROUPS: NavItem["group"][] = ["Overview", "Content", "Library"];
+const GROUPS: NavItem["group"][] = ["Overview", "Content"];
 
 /** Long enough for the palette to close and give focus back before an action takes it. */
 const PALETTE_CLOSE_MS = 120;
+
+/** Room kept above and below the current entry: clear of the list's faded edges. */
+const ENTRY_MARGIN = 40;
+
+/**
+ * Scrolls the sidebar's list, and only it, until the current page's entry is
+ * in view (`scrollIntoView` would move the page too).
+ */
+function revealCurrentEntry(doc: Document): void {
+  const list = doc.querySelector<HTMLElement>('[data-slot="sidebar-content"]');
+  const entry = list?.querySelector<HTMLElement>('[aria-current="page"]');
+  if (!list || !entry) return;
+  const area = list.getBoundingClientRect();
+  const box = entry.getBoundingClientRect();
+  if (box.top < area.top + ENTRY_MARGIN) {
+    list.scrollTop -= area.top + ENTRY_MARGIN - box.top;
+  } else if (box.bottom > area.bottom - ENTRY_MARGIN) {
+    list.scrollTop += box.bottom - (area.bottom - ENTRY_MARGIN);
+  }
+}
 
 /** A new tab that cannot reach back into the admin. */
 function openTab(href: string): void {
@@ -320,9 +343,15 @@ function openTab(href: string): void {
                   }
                 </button>
               </li>
-              <li hlmSidebarMenuItem>
+              <!-- The account and signing out share a row (stacked when collapsed to icons):
+                   a row less keeps the whole list in view on a laptop's screen. -->
+              <li
+                hlmSidebarMenuItem
+                class="flex items-center gap-1 group-data-[collapsible=icon]:flex-col"
+              >
                 <a
                   hlmSidebarMenuButton
+                  class="min-w-0 flex-1"
                   routerLink="/admin/account"
                   [isActive]="isCurrent('/admin/account')"
                   [tooltip]="email()"
@@ -331,16 +360,15 @@ function openTab(href: string): void {
                   <ng-icon name="lucideUser" size="16" aria-hidden="true" />
                   <span class="truncate">{{ email() }}</span>
                 </a>
-              </li>
-              <li hlmSidebarMenuItem>
                 <button
                   hlmSidebarMenuButton
+                  class="w-auto shrink-0"
                   tooltip="Sign out"
+                  title="Sign out"
                   aria-label="Sign out"
                   (click)="logout()"
                 >
                   <ng-icon name="lucideLogOut" size="16" aria-hidden="true" />
-                  <span>Sign out</span>
                 </button>
               </li>
             </ul>
@@ -519,7 +547,17 @@ export default class AdminLayout {
   protected readonly shortcutsOpen = signal(false);
 
   constructor() {
-    addAdminStyles(inject(DOCUMENT));
+    const doc = inject(DOCUMENT);
+    const injector = inject(Injector);
+    addAdminStyles(doc);
+
+    // On a short window the sidebar's list scrolls: the page's own entry is
+    // brought into it after each navigation (Media, say, is last).
+    effect(() => {
+      this.url();
+      if (!this.ready()) return;
+      afterNextRender({ read: () => revealCurrentEntry(doc) }, { injector });
+    });
 
     // A fresh search each time the palette opens.
     effect(() => {

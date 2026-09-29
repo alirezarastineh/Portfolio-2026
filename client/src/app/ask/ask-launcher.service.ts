@@ -10,7 +10,7 @@ export const ASK_BAR_ID = "ask-bar";
 
 /** Where a visitor opened the assistant from, reported once with `ask_open`. */
 export type AskSource =
-  "hero" | "starter" | "palette" | "button" | "shortcut" | "terminal" | "case-study";
+  "hero" | "starter" | "palette" | "button" | "shortcut" | "terminal" | "case-study" | "post";
 
 /**
  * How the rest of the site reaches the assistant without loading it: the

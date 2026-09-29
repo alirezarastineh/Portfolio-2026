@@ -6,6 +6,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 // With its extension: Vite's native config loader (Node type stripping) needs it.
 import { localeRedirect } from "./src/app/content/locale.ts";
+import { aotOnly } from "./vite-plugins/aot-only.ts";
 import { bootAfterPaint } from "./vite-plugins/boot-after-paint.ts";
 
 /**
@@ -144,6 +145,7 @@ export default defineConfig(({ mode }) => {
     define: { "process.env": publicEnv },
     plugins: [
       bootAfterPaint(),
+      aotOnly(),
       {
         // Production runs src/server/middleware/locale.ts through Nitro. In
         // dev, Analog finds that file by globbing a path that still has

@@ -82,6 +82,12 @@ export interface ChromeLabels {
     /** What that action asks the assistant. */
     question: string;
   };
+  /** A post's footer action (pages/[locale]/writing/[slug].page.ts). */
+  post: {
+    ask: string;
+    /** What it asks the assistant, `{title}` the post's. */
+    question: string;
+  };
   /** A code block's copy button (components/prose-body.component.ts). */
   code: { copy: string; copied: string };
 }
@@ -152,6 +158,10 @@ export const CHROME: Record<Locale, ChromeLabels> = {
     notFound: { command: "command not found", didYouMean: "Did you mean" },
     projectCard: { details: "Details", links: "Project links" },
     caseStudy: { ask: "Ask about {name}", question: "What did he build in {name}, and how?" },
+    post: {
+      ask: "Ask the assistant about this post",
+      question: "What is the post “{title}” about, in short?",
+    },
     code: { copy: "Copy", copied: "Copied" },
   },
   de: {
@@ -224,6 +234,10 @@ export const CHROME: Record<Locale, ChromeLabels> = {
     notFound: { command: "Befehl nicht gefunden", didYouMean: "Meinten Sie" },
     projectCard: { details: "Details", links: "Projektlinks" },
     caseStudy: { ask: "Zu {name} fragen", question: "Was hat er bei {name} gebaut – und wie?" },
+    post: {
+      ask: "Den Assistenten zu diesem Artikel fragen",
+      question: "Worum geht es im Artikel „{title}“, kurz gesagt?",
+    },
     code: { copy: "Kopieren", copied: "Kopiert" },
   },
 };

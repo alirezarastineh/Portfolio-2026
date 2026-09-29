@@ -7,9 +7,7 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideRss } from "@ng-icons/lucide";
 import { map } from "rxjs";
 
-import { PictureComponent } from "../../../components/picture.component";
-import { formatDay } from "../../../content/period";
-import { fmt } from "../../../i18n/interpolate";
+import { PostListComponent } from "../../../components/post-list.component";
 import { applyHead } from "../../../seo/head";
 import { feedsOf, languageAlternates, pageMeta, pageUrl, siteOrigin } from "../../../seo/seo-meta";
 import { writingJsonLd } from "../../../seo/structured-data";
@@ -56,134 +54,106 @@ export const routeMeta: RouteMeta = {
 @Component({
   selector: "app-writing-page",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgIcon, PictureComponent, RouterLink],
+  imports: [NgIcon, PostListComponent, RouterLink],
   viewProviders: [provideIcons({ lucideRss })],
   host: { class: "block" },
+  styles: `
+    /* The tag shown: filled, where the others are outlined. */
+    .tag[aria-current="page"] {
+      border-color: color-mix(in oklab, var(--accent-orange) 60%, transparent);
+      background-color: var(--accent-orange-soft);
+      color: var(--foreground);
+    }
+    .tag-count {
+      opacity: 0.7;
+    }
+  `,
   template: `
-    <main id="main" class="mx-auto flex max-w-4xl flex-col gap-12 px-6 pb-24 pt-32 sm:px-8">
-      <header class="flex flex-col gap-4">
-        <p class="eyebrow m-0 text-muted-foreground">
-          <span aria-hidden="true">// </span>{{ lang.t().writing.subtitle }}
-        </p>
-        <div class="flex flex-wrap items-end justify-between gap-4">
-          <h1 class="m-0 text-h1 text-foreground hyphens-auto">
-            {{ lang.t().writing.heading }}
-          </h1>
+    <main id="main" class="pb-24 pt-28 lg:pt-32">
+      <div class="container-site flex flex-col gap-10 lg:gap-12">
+        <header class="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
+          <div class="flex flex-col gap-4">
+            <p class="eyebrow m-0 text-muted-foreground">
+              <span aria-hidden="true">// </span>{{ lang.t().writing.subtitle }}
+            </p>
+            <h1 class="m-0 text-h1 text-foreground hyphens-auto">
+              {{ lang.t().writing.heading }}
+            </h1>
+          </div>
           @if (posts().length) {
             <!-- A file, not a page: a plain link, so the router leaves it alone. -->
             <a
               class="press inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 font-mono text-meta text-foreground hover:border-accent-orange/50 hover:text-accent-orange"
-              [href]="'/' + lang.lang() + '/rss.xml'"
+              [href]="feed()"
               type="application/rss+xml"
             >
               <ng-icon name="lucideRss" size="14" aria-hidden="true" />
               {{ lang.t().writing.rss }}
             </a>
           }
-        </div>
-      </header>
+        </header>
 
-      @if (tags().length > 1) {
-        <nav [attr.aria-label]="lang.t().writing.tags">
-          <ul class="m-0 flex list-none flex-wrap gap-2 p-0" role="list">
-            <li>
-              <a
-                [class]="chip"
-                [class.border-accent-orange]="!tag()"
-                [class.text-foreground]="!tag()"
-                [attr.aria-current]="tag() ? null : 'page'"
-                [routerLink]="[]"
-                [queryParams]="{ tag: null }"
-                >{{ lang.t().writing.allPosts }}</a
-              >
-            </li>
-            @for (t of tags(); track t) {
+        @if (tags().length > 1) {
+          <nav [attr.aria-label]="lang.t().writing.tags">
+            <ul class="m-0 flex list-none flex-wrap gap-2 p-0" role="list">
               <li>
                 <a
                   [class]="chip"
-                  [class.border-accent-orange]="tag() === t"
-                  [class.text-foreground]="tag() === t"
-                  [attr.aria-current]="tag() === t ? 'page' : null"
+                  [attr.aria-current]="tag() ? null : 'page'"
                   [routerLink]="[]"
-                  [queryParams]="{ tag: t }"
-                  >#{{ t }}</a
+                  [queryParams]="{ tag: null }"
+                  >{{ lang.t().writing.allPosts }}
+                  <span class="tag-count tabular-nums">{{ posts().length }}</span></a
                 >
               </li>
-            }
-          </ul>
-        </nav>
-      }
+              @for (t of tags(); track t.name) {
+                <li>
+                  <a
+                    [class]="chip"
+                    [attr.aria-current]="tag() === t.name ? 'page' : null"
+                    [routerLink]="[]"
+                    [queryParams]="{ tag: t.name }"
+                    >#{{ t.name }} <span class="tag-count tabular-nums">{{ t.count }}</span></a
+                  >
+                </li>
+              }
+            </ul>
+          </nav>
+        }
 
-      @if (visible().length) {
-        <ol class="m-0 flex list-none flex-col gap-4 p-0" role="list">
-          @for (post of visible(); track post.slug) {
-            <li class="reveal">
-              <article
-                class="group relative grid gap-5 rounded-xl border border-border bg-card/40 p-6 transition-colors duration-200 hover:border-accent-indigo/50 sm:grid-cols-[minmax(0,1fr)_10rem] sm:p-8"
-              >
-                <div class="flex flex-col gap-3">
-                  <p class="m-0 font-mono text-xs text-muted-foreground">
-                    <time [attr.datetime]="post.publishedAt">{{ day(post.publishedAt) }}</time>
-                    · {{ readingTime(post.readingMinutes) }}
-                  </p>
-                  <h2
-                    class="m-0 text-xl font-medium leading-snug tracking-tight text-foreground sm:text-2xl"
-                  >
-                    <!-- The whole card is the link's hit area (after:inset-0). -->
-                    <a
-                      class="after:absolute after:inset-0 after:rounded-xl"
-                      [routerLink]="['/', lang.lang(), 'writing', post.slug]"
-                      >{{ post.title }}</a
-                    >
-                  </h2>
-                  @if (post.excerpt) {
-                    <p class="m-0 text-pretty leading-relaxed text-muted-foreground">
-                      {{ post.excerpt }}
-                    </p>
-                  }
-                  @if (post.tags.length) {
-                    <ul
-                      class="m-0 flex list-none flex-wrap gap-2 p-0"
-                      role="list"
-                      [attr.aria-label]="lang.t().writing.tags"
-                    >
-                      @for (t of post.tags; track t) {
-                        <li class="font-mono text-xs text-muted-foreground">#{{ t }}</li>
-                      }
-                    </ul>
-                  }
-                </div>
-                @if (post.cover) {
-                  <div
-                    class="hidden aspect-square overflow-hidden rounded-xl border border-border sm:block"
-                  >
-                    <app-picture
-                      [image]="post.cover"
-                      alt=""
-                      sizes="10rem"
-                      imgClass="block size-full object-cover"
-                    />
-                  </div>
-                }
-              </article>
-            </li>
-          }
-        </ol>
-      } @else {
-        <p class="m-0 font-mono text-sm text-muted-foreground">
-          <span class="text-accent-orange" aria-hidden="true">&gt; </span
-          >{{ lang.t().writing.empty }}
-        </p>
-      }
+        @if (visible().length) {
+          <app-post-list [posts]="visible()" />
+        } @else {
+          <!-- Nothing to list, as terminal output. -->
+          <div class="surface-card flex flex-col gap-2 p-6 font-mono text-meta">
+            <p class="m-0 text-foreground" aria-hidden="true">
+              <span class="text-accent-orange">&gt;</span> ls posts/{{ tag() ? " #" + tag() : "" }}
+            </p>
+            <p class="m-0 text-muted-foreground">
+              (empty) —
+              @if (tag() && posts().length) {
+                <a class="link-underline" [routerLink]="[]" [queryParams]="{ tag: null }">{{
+                  lang.t().writing.allPosts
+                }}</a>
+              } @else {
+                {{ lang.t().writing.empty }} ·
+                <a class="link-underline" [href]="feed()" type="application/rss+xml">{{
+                  lang.t().writing.rss
+                }}</a>
+              }
+            </p>
+          </div>
+        }
+      </div>
     </main>
   `,
 })
 export default class WritingPageComponent {
   protected readonly lang = inject(LanguageService);
 
-  /** A tag filter: a chip with a 32px target; the active one is outlined in orange. */
+  /** A tag filter: a chip with a 32px target and its count; the one shown is filled. */
   protected readonly chip =
-    "chip press h-8 px-3 text-muted-foreground hover:border-accent-orange/60 hover:text-foreground";
+    "tag chip press h-8 gap-1.5 px-3 text-muted-foreground hover:border-accent-orange/60 hover:text-foreground";
 
   protected readonly tag = toSignal(
     inject(ActivatedRoute).queryParamMap.pipe(map((params) => params.get("tag"))),
@@ -191,8 +161,9 @@ export default class WritingPageComponent {
   );
 
   protected readonly posts = computed(() => this.lang.content().posts);
+  protected readonly feed = computed(() => `/${this.lang.lang()}/rss.xml`);
 
-  /** Every tag in use, most used first. */
+  /** Every tag in use and how many posts have it, most used first. */
   protected readonly tags = computed(() => {
     const counts = new Map<string, number>();
     for (const post of this.posts()) {
@@ -200,19 +171,11 @@ export default class WritingPageComponent {
     }
     return [...counts.entries()]
       .sort(([a, x], [b, y]) => y - x || a.localeCompare(b))
-      .map(([t]) => t);
+      .map(([name, count]) => ({ name, count }));
   });
 
   protected readonly visible = computed(() => {
     const tag = this.tag();
     return tag ? this.posts().filter((post) => post.tags.includes(tag)) : this.posts();
   });
-
-  protected day(iso: string): string {
-    return formatDay(iso, this.lang.lang());
-  }
-
-  protected readingTime(minutes: number): string {
-    return fmt(this.lang.t().writing.readingTime, { n: minutes });
-  }
 }
