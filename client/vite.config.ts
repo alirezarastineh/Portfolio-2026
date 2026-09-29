@@ -8,6 +8,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { localeRedirect } from "./src/app/content/locale.ts";
 import { aotOnly } from "./vite-plugins/aot-only.ts";
 import { bootAfterPaint } from "./vite-plugins/boot-after-paint.ts";
+import { sequentialEnvironments } from "./vite-plugins/sequential-environments.ts";
 
 /**
  * Satori shapes text with HarfBuzz, compiled to WebAssembly: `hb.js` reads
@@ -145,6 +146,7 @@ export default defineConfig(({ mode }) => {
     define: { "process.env": publicEnv },
     plugins: [
       bootAfterPaint(),
+      sequentialEnvironments(),
       aotOnly(),
       {
         // Production runs src/server/middleware/locale.ts through Nitro. In

@@ -24,16 +24,14 @@ export function decoratorLeft(code: string): string | undefined {
  * Fails the build when an Angular class reaches the bundle without being
  * compiled ahead of time.
  *
- * Analog compiles the files of the TypeScript program; a file it does not
- * find there goes through with its decorators and a warning, and the class
- * then needs the JIT compiler at runtime, which a production bundle does not
- * have: "JIT compiler unavailable" in the server's log for every request that
- * renders it, and in the browser a page that never boots. One build on a
- * loaded machine (2026-09-28) shipped uncompiled copies of `LocaleLayout` and
- * `AdminApiService` to the server; rebuilt, they came out compiled. The likely
- * cause: Analog builds the client and the server at the same time with one
- * shared compiler (`@analogjs/vite-plugin-nitro`'s `buildApp`). This stops
- * such a build instead of shipping it; rebuilding is the fix.
+ * Analog passes a file through with its decorators, and only a warning, when
+ * its compiler has no output for it: the file is not in the TypeScript
+ * program, or the compiler was already released (the parallel builds that
+ * `sequential-environments.ts` puts in turn). The class then needs the JIT
+ * compiler at runtime, which a production bundle does not have: "JIT compiler
+ * unavailable" in the server's log for every request that renders it, and in
+ * the browser a page that never boots. This stops such a build instead of
+ * shipping it.
  *
  * Runs after every other transform, on the app's own TypeScript: compiled,
  * it holds no decorators at all.
@@ -49,7 +47,7 @@ export function aotOnly(): Plugin {
       const left = decoratorLeft(code);
       if (left) {
         this.error(
-          `${file} was not compiled ahead of time (\`${left}\` is still in its code), so it would need the JIT compiler at runtime. Rebuild; if it happens again, check that the file is in tsconfig.app.json's program.`,
+          `${file} was not compiled ahead of time (\`${left}\` is still in its code), so it would need the JIT compiler at runtime. Check that the file is in tsconfig.app.json's program, and that the sequential-environments plugin is in vite.config.ts.`,
         );
       }
     },
