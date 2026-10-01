@@ -3,7 +3,15 @@ import { eq } from "drizzle-orm";
 
 import { createApp } from "../app.js";
 import { getDb } from "../db/client.js";
-import { aiFeedback, aiMessages, aiSettings, aiUsage } from "../db/schema.js";
+import {
+  aiCorpusSnapshots,
+  aiFeedback,
+  aiGuardEvents,
+  aiMessages,
+  aiSettings,
+  aiUsage,
+  contactMessages,
+} from "../db/schema.js";
 import {
   apiError,
   failing,
@@ -23,7 +31,9 @@ import {
 } from "../test/ask-fixtures.js";
 import { resetDb } from "../test/helpers.js";
 import type { AskConfig } from "./config.js";
+import { resetRecordedSnapshots, snapshotKey } from "./corpus/snapshots.js";
 import { utcDay } from "./guard.js";
+import { flushGuardEvents } from "./guard-events.js";
 import { verifyAnswer } from "./history.js";
 import { resetBreakers } from "./models/circuit.js";
 import type { ChainRole, ModelEntry } from "./models/registry.js";
@@ -92,6 +102,7 @@ beforeEach(async () => {
   await resetDb();
   invalidateAssistantCache();
   resetBreakers();
+  resetRecordedSnapshots();
   roles.length = 0;
   config = fixtureConfig();
 });
@@ -162,6 +173,36 @@ describe("POST /v1/ask", () => {
     });
     expect(row.promptVersion).toMatch(/^ask-/);
 
+    // The audit: what it did step by step, the citation it invented, the corpus it read.
+    expect(row.droppedCitations).toEqual(["made-up@en"]);
+    expect(row.checks).toEqual({ v: 1, flags: ["invented-citation"] });
+    // The corpus it read, exactly: its key plus a digest of the documents.
+    expect(row.corpusKey).toBe(snapshotKey(fixtureCorpus(config)));
+    expect(row.corpusKey?.startsWith(`${fixtureCorpus(config).key}#`)).toBe(true);
+    // It is kept once, for eval cases frozen from this answer.
+    const snapshots = await getDb().select().from(aiCorpusSnapshots);
+    expect(snapshots.map((s) => s.key)).toEqual([row.corpusKey]);
+    expect(snapshots[0]!.documents.map((d) => d.id)).toContain("project:atlas@en");
+    expect(row.trace?.steps).toEqual([
+      expect.objectContaining({
+        model: "gemini-3.5-flash-lite",
+        finishReason: "tool-calls",
+        passedOver: [],
+        tools: [
+          expect.objectContaining({
+            name: "search_portfolio",
+            input: '{"query":"atlas"}',
+            outcome: "ok",
+          }),
+        ],
+      }),
+      expect.objectContaining({
+        model: "gemini-3.5-flash-lite",
+        tools: [expect.objectContaining({ name: "suggest_followups", outcome: "ok" })],
+      }),
+    ]);
+    expect(row.trace!.steps[0]!.tools[0]!.resultChars).toBeGreaterThan(100);
+
     const [usage] = await getDb().select().from(aiUsage);
     expect(usage).toMatchObject({
       day: utcDay(),
@@ -225,6 +266,17 @@ describe("POST /v1/ask", () => {
       "rate-limited",
       "ok",
     ]);
+    // The trace says which model was passed over for the step, and why.
+    expect(row.trace?.steps).toEqual([
+      expect.objectContaining({
+        model: "nvidia/nemotron-3-super-120b-a12b:free",
+        passedOver: [
+          expect.objectContaining({ model: "gemini-3.5-flash-lite", outcome: "rate-limited" }),
+        ],
+      }),
+    ]);
+    // And the checks mark the answer as degraded: not the chain's first choice.
+    expect(row.checks?.flags).toContain("degraded");
   });
 
   it("ends with an error code (not details) when no model can answer, and still logs it", async () => {
@@ -234,6 +286,14 @@ describe("POST /v1/ask", () => {
     expect(chunks.find((c) => c["type"] === "error")).toMatchObject({ errorText: "unavailable" });
     const row = await logged(chunks[0]!["messageId"] as string);
     expect(row).toMatchObject({ model: null, finishReason: "error:unavailable" });
+    expect(row.trace?.steps).toEqual([
+      expect.objectContaining({
+        model: null,
+        passedOver: [
+          expect.objectContaining({ model: "gemini-3.5-flash-lite", outcome: "server-error" }),
+        ],
+      }),
+    ]);
   });
 
   it("routes deep questions to the deep chain, but not past 80 % of the budget", async () => {
@@ -321,6 +381,69 @@ describe("POST /v1/ask", () => {
     });
     expect(malformed.status).toBe(400);
   });
+
+  it("counts every request it turns away, per day and kind", async () => {
+    // Drop what earlier tests counted: this one checks its own.
+    await flushGuardEvents(async () => undefined);
+    only(scripted([textTurn("ok")]));
+
+    expect((await ask("Hi", { extra: { website: "http://spam" } })).status).toBe(400);
+    expect((await ask("x".repeat(601))).status).toBe(413);
+    const malformed = await app.request("/v1/ask", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sessionId: "short", locale: "fr", messages: [] }),
+    });
+    expect(malformed.status).toBe(400);
+
+    config = fixtureConfig({ maxConcurrent: 1 });
+    const open = await ask("one");
+    expect((await ask("two")).status).toBe(429);
+    await open.text();
+
+    config = fixtureConfig({ ratePerHour: 1 });
+    const ip = "203.0.113.90";
+    await (await ask("Hi", { ip, session: "tab-session-a000000000" })).text();
+    expect((await ask("Hi", { ip, session: "tab-session-b000000000" })).status).toBe(429);
+
+    config = fixtureConfig();
+    // Over the body limit: refused before anything is parsed.
+    expect((await ask("Hi", { extra: { padding: "x".repeat(70_000) } })).status).toBe(413);
+    // Turnstile on, and no token sent (refused without asking Cloudflare).
+    process.env.TURNSTILE_SECRET_KEY = "test-secret";
+    try {
+      expect((await ask("Hi", { session: "tab-session-t000000000" })).status).toBe(403);
+    } finally {
+      delete process.env.TURNSTILE_SECRET_KEY;
+    }
+    // The day's budget is spent.
+    await getDb().insert(aiUsage).values({ day: utcDay(), model: "x", usd: config.dailyBudgetUsd });
+    expect((await ask("Hi")).status).toBe(503);
+
+    config = fixtureConfig({ enabled: false });
+    expect((await ask("Hi")).status).toBe(503);
+
+    await flushGuardEvents();
+    const rows = await getDb().select().from(aiGuardEvents);
+    expect(Object.fromEntries(rows.map((r) => [r.kind, r.count]))).toEqual({
+      honeypot: 1,
+      too_long: 1,
+      invalid_input: 1,
+      busy: 1,
+      rate_limited: 1,
+      too_large: 1,
+      turnstile_required: 1,
+      resting: 1,
+      off: 1,
+    });
+    expect(new Set(rows.map((r) => r.day))).toEqual(new Set([utcDay()]));
+
+    // A second flush adds to the day's row rather than replacing it.
+    expect((await ask("Hi")).status).toBe(503);
+    await flushGuardEvents();
+    const [off] = await getDb().select().from(aiGuardEvents).where(eq(aiGuardEvents.kind, "off"));
+    expect(off?.count).toBe(2);
+  });
 });
 
 describe("GET /v1/ask/config", () => {
@@ -359,6 +482,76 @@ describe("POST /v1/ask/feedback", () => {
     expect((await rate(SESSION, -1)).status).toBe(200);
     const rows = await getDb().select().from(aiFeedback);
     expect(rows).toEqual([expect.objectContaining({ messageId, value: -1 })]);
+  });
+});
+
+describe("POST /v1/ask/handoff", () => {
+  it("records the visitor's yes to an answer's offer: that session, an offer, the first yes", async () => {
+    only(
+      scripted([
+        toolTurn("handoff_contact", { summary: "Wants to talk about a contract." }, "h1"),
+        textTurn("Happy to connect you."),
+      ]),
+    );
+    const offered = (await readUiChunks(await ask("I want to hire him")))[0]![
+      "messageId"
+    ] as string;
+    await logged(offered);
+    only(scripted([textTurn("ok")]));
+    const plain = (await readUiChunks(await ask("Hi")))[0]!["messageId"] as string;
+    await logged(plain);
+
+    const confirm = (sessionId: string, messageId: string) =>
+      app.request("/v1/ask/handoff", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId, messageId }),
+      });
+    const confirmedAt = async () =>
+      (
+        await getDb()
+          .select({ at: aiMessages.handoffConfirmedAt })
+          .from(aiMessages)
+          .where(eq(aiMessages.id, offered))
+      )[0]!.at;
+
+    expect((await confirm("some-other-session-000", offered)).status).toBe(404);
+    // An answer that made no offer cannot be confirmed.
+    expect((await confirm(SESSION, plain)).status).toBe(404);
+    expect(await confirmedAt()).toBeNull();
+
+    expect((await confirm(SESSION, offered)).status).toBe(200);
+    const first = await confirmedAt();
+    expect(first).toBeInstanceOf(Date);
+    expect((await confirm(SESSION, offered)).status).toBe(200);
+    expect(await confirmedAt()).toEqual(first);
+    expect((await confirm(SESSION, "no")).status).toBe(400);
+  });
+
+  it("attaches the conversation redacted, as the log keeps it", async () => {
+    only(scripted([textTurn("He works on Atlas.")]));
+    const asked = (
+      await readUiChunks(await ask("Write to jane.doe@example.com or +49 30 1234567 about Atlas"))
+    )[0]!["messageId"] as string;
+    await logged(asked);
+
+    const sent = await app.request("/contact", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": "198.51.100.200" },
+      body: JSON.stringify({
+        name: "Jane",
+        email: "jane@example.com",
+        message: "Hello there, a real message.",
+        origin: "ask",
+        ask: { sessionId: SESSION, messageId: asked },
+      }),
+    });
+    expect(sent.status).toBe(200);
+    const [stored] = await getDb().select().from(contactMessages);
+    const question = stored!.askTranscript!.turns[0]!.question;
+    expect(question).toContain("about Atlas");
+    expect(question).not.toContain("jane.doe@example.com");
+    expect(question).not.toContain("1234567");
   });
 });
 

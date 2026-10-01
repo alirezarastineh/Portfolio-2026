@@ -13,20 +13,25 @@ import type {
   SocialInput,
 } from "./admin-schema";
 import type {
-  AnswersRow,
   AssistantEnv,
   AssistantHealth,
   AssistantSettings,
   AssistantSettingsInput,
+  AssistantUsage,
   ConversationFilter,
   ConversationRow,
   CopilotInput,
-  EvalSummary,
   FaqEntry,
   FaqInput,
   InsightTopic,
-  UsageRow,
+  ReviewLabels,
+  ReviewQueue,
+  RunItem,
+  RunRow,
 } from "./assistant-types";
+import type { EvalCaseRow, FreezeBody } from "./eval-cases";
+import type { OutcomesView, PrimaryMetric } from "./outcomes";
+import type { JudgeStatus } from "./pairwise";
 
 export type {
   ExperienceInput,
@@ -492,10 +497,7 @@ export class AdminApiService {
   }
 
   assistantUsage(days = 30) {
-    return this.request<{ days: number; models: UsageRow[]; answers: AnswersRow[] }>(
-      "GET",
-      `/admin/assistant/usage?days=${days}`,
-    );
+    return this.request<AssistantUsage>("GET", `/admin/assistant/usage?days=${days}`);
   }
 
   assistantConversations(filter: ConversationFilter, source: "terminal" | "playground") {
@@ -535,9 +537,109 @@ export class AdminApiService {
     );
   }
 
-  /** Runs the eval suite live against the configured providers. */
-  runEvals(cases?: string[]) {
-    return this.request<EvalSummary>("POST", "/admin/assistant/evals", cases ? { cases } : {});
+  /** A week's review queue; the current week when none is named. */
+  assistantReviews(week?: string) {
+    const query = week ? `?week=${encodeURIComponent(week)}` : "";
+    return this.request<ReviewQueue>("GET", `/admin/assistant/reviews${query}`);
+  }
+
+  saveReview(messageId: string, review: { labels: ReviewLabels; note: string | null }) {
+    return this.request<{ ok: true; reviewedAt: string }>(
+      "PUT",
+      `/admin/assistant/reviews/${encodeURIComponent(messageId)}`,
+      review,
+    );
+  }
+
+  /** Production eval cases frozen from visitor answers. */
+  evalCases() {
+    return this.request<{ cases: EvalCaseRow[] }>("GET", "/admin/assistant/eval-cases");
+  }
+
+  /** Freezes a visitor's answer into a production eval case. */
+  freezeEvalCase(messageId: string, body: FreezeBody) {
+    return this.request<{ id: string }>("POST", "/admin/assistant/eval-cases", {
+      messageId,
+      ...body,
+    });
+  }
+
+  /** Deletes a production eval case for good, its question with it. */
+  deleteEvalCase(id: string) {
+    return this.request<{ ok: true }>(
+      "DELETE",
+      `/admin/assistant/eval-cases/${encodeURIComponent(id)}`,
+    );
+  }
+
+  /** Retires or reactivates a production eval case. */
+  setEvalCaseStatus(id: string, status: "active" | "retired") {
+    return this.request<{ ok: true }>(
+      "PATCH",
+      `/admin/assistant/eval-cases/${encodeURIComponent(id)}`,
+      { status },
+    );
+  }
+
+  /** Starts the eval suite as a background run; its progress is read with `getRun`. */
+  startEvalRun(cases?: string[]) {
+    return this.request<{ id: string }>("POST", "/admin/assistant/runs", {
+      kind: "eval",
+      ...(cases ? { cases } : {}),
+    });
+  }
+
+  /** Starts a pairwise comparison as a background run. */
+  startPairwiseRun(a: string, b: string, cases?: string[]) {
+    return this.request<{ id: string }>("POST", "/admin/assistant/runs", {
+      kind: "pairwise",
+      a,
+      b,
+      ...(cases ? { cases } : {}),
+    });
+  }
+
+  /** Whether visitors got what they came for: the last 30 days and the primary metric. */
+  assistantOutcomes() {
+    return this.request<OutcomesView>("GET", "/admin/assistant/outcomes");
+  }
+
+  setPrimaryMetric(metric: PrimaryMetric) {
+    return this.request<{ ok: true }>("PUT", "/admin/assistant/primary-metric", { metric });
+  }
+
+  /** Judges the reviewed answers the visitor judge has not scored yet (for its calibration). */
+  startJudgeRun() {
+    return this.request<{ id: string }>("POST", "/admin/assistant/runs", { kind: "judge" });
+  }
+
+  judgeStatus() {
+    return this.request<JudgeStatus>("GET", "/admin/assistant/judge");
+  }
+
+  listRuns() {
+    return this.request<{ runs: RunRow[] }>("GET", "/admin/assistant/runs");
+  }
+
+  getRun(id: string) {
+    return this.request<{ run: RunRow; items: RunItem[] }>(
+      "GET",
+      `/admin/assistant/runs/${encodeURIComponent(id)}`,
+    );
+  }
+
+  cancelRun(id: string) {
+    return this.request<{ ok: true }>(
+      "POST",
+      `/admin/assistant/runs/${encodeURIComponent(id)}/cancel`,
+    );
+  }
+
+  resumeRun(id: string) {
+    return this.request<{ id: string }>(
+      "POST",
+      `/admin/assistant/runs/${encodeURIComponent(id)}/resume`,
+    );
   }
 
   /** A draft from the editor copilot; nothing is saved. */
@@ -774,6 +876,16 @@ export interface MessageRow {
   status: MessageStatus;
   mailStatus: "pending" | "sent" | "failed" | "skipped";
   mailError: string | null;
+  /** `ask` when the assistant's hand-off wrote the draft; absent from an older API. */
+  origin?: "form" | "ask";
+  /** The conversation the visitor chose to attach (redacted, the last 10 turns). */
+  askTranscript?: AskTranscript | null;
+}
+
+/** Mirrors `server/src/ask/handoff.ts`. */
+export interface AskTranscript {
+  v: 1;
+  turns: { question: string; answer: string; cited: string[]; at: string }[];
 }
 
 /** Re-exported for pages that type a single translation. */

@@ -2,6 +2,12 @@ import { Injectable, signal } from "@angular/core";
 
 import { apiBaseUrl } from "./api-base";
 
+/** The assistant's answer a hand-off came from: the conversation that can be attached. */
+export interface AskConversation {
+  sessionId: string;
+  messageId: string;
+}
+
 export interface ContactPayload {
   name: string;
   email: string;
@@ -10,9 +16,20 @@ export interface ContactPayload {
   locale?: "en" | "de";
   /** Only while Turnstile is on. */
   turnstileToken?: string;
+  /** Sent through the assistant's hand-off. */
+  origin?: "ask";
+  /** Only when the visitor ticked "attach my conversation". */
+  ask?: AskConversation;
 }
 
 export type ContactResult = { ok: true } | { ok: false; error: string };
+
+/** What the assistant's hand-off leaves for the form. */
+export interface ContactPrefill {
+  text: string;
+  /** The answer the hand-off came from; null for one that came from no answer. */
+  ask: AskConversation | null;
+}
 
 @Injectable({ providedIn: "root" })
 export class ContactService {
@@ -22,7 +39,7 @@ export class ContactService {
    * A message the assistant's hand-off wrote, waiting for the form to take it
    * (the form may not have hydrated yet). The visitor confirmed it first.
    */
-  readonly prefill = signal<string | null>(null);
+  readonly prefill = signal<ContactPrefill | null>(null);
 
   async send(payload: ContactPayload): Promise<ContactResult> {
     try {

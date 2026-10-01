@@ -21,6 +21,14 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import type { AnswerChecks } from "../ask/checks.js";
+import type { CorpusDocument, PostFacts, ProjectFacts } from "../ask/corpus/build.js";
+import type { AnswerJudgment } from "../ask/evals/calibration.js";
+import type { AskTranscript } from "../ask/handoff.js";
+import type { ReviewLabels } from "../ask/reviews.js";
+import type { ToolName } from "../ask/tools.js";
+import type { AnswerTrace } from "../ask/trace.js";
+
 /* -------------------------------------------------------------------------- */
 /* Custom column types                                                         */
 /* -------------------------------------------------------------------------- */
@@ -599,6 +607,14 @@ export const contactMessages = pgTable(
     status: text("status").notNull().default("new"),
     mailStatus: text("mail_status").notNull().default("pending"),
     mailError: text("mail_error"),
+    /** `ask` when the assistant's hand-off wrote the draft (plan phase 11), else `form`. */
+    origin: text("origin").notNull().default("form"),
+    /** The answer the hand-off came from, when the visitor attached the conversation. */
+    askMessageId: text("ask_message_id").references(() => aiMessages.id, {
+      onDelete: "set null",
+    }),
+    /** That conversation (`ask/handoff.ts`), attached only with the visitor's tick. */
+    askTranscript: jsonb("ask_transcript").$type<AskTranscript>(),
   },
   (t) => [
     index("contact_messages_created_idx").on(t.createdAt.desc()),
@@ -608,6 +624,7 @@ export const contactMessages = pgTable(
       "contact_messages_mail_status_check",
       sql`${t.mailStatus} in ('pending', 'sent', 'failed', 'skipped')`,
     ),
+    check("contact_messages_origin_check", sql`${t.origin} in ('form', 'ask')`),
   ],
 );
 
@@ -637,6 +654,8 @@ export const aiSettings = pgTable(
       .$type<Record<Locale, string>>()
       .notNull()
       .default({ en: "", de: "" }),
+    /** The outcome metric watched first (`ask/outcomes.ts`); it rotates when it goes flat. */
+    primaryMetric: text("primary_metric").notNull().default("helpfulRate"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [check("ai_settings_singleton_check", sql`${t.id} = 1`)],
@@ -717,11 +736,89 @@ export const aiMessages = pgTable(
     usd: doublePrecision("usd").notNull().default(0),
     finishReason: text("finish_reason").notNull(),
     promptVersion: text("prompt_version").notNull(),
+    /** What the answer did, step by step (`ask/trace.ts`); null on rows from before traces. */
+    trace: jsonb("trace").$type<AnswerTrace>(),
+    /** Citation ids the model invented; removed before the visitor saw them. */
+    droppedCitations: jsonb("dropped_citations").$type<string[]>().notNull().default([]),
+    /** The corpus the answer was grounded in. */
+    corpusKey: text("corpus_key"),
+    /** The deterministic checks' flags on the finished answer (`ask/checks.ts`). */
+    checks: jsonb("checks").$type<AnswerChecks>(),
+    /** A judge's verdict: the calibration run (plan phase 10), the nightly judge (phase 26). */
+    judge: jsonb("judge").$type<AnswerJudgment>(),
+    /** When the visitor said yes to this answer's hand-off offer (the outcomes funnel). */
+    handoffConfirmedAt: timestamp("handoff_confirmed_at", { withTimezone: true }),
   },
   (t) => [
     index("ai_messages_created_idx").on(t.createdAt.desc()),
     index("ai_messages_session_idx").on(t.sessionHash, t.createdAt),
     check("ai_messages_source_check", sql`${t.source} in ('terminal', 'playground', 'eval')`),
+  ],
+);
+
+/**
+ * The weekly human review of visitor answers (`ask/reviews.ts`): five
+ * verdicts and a note. A review goes with its answer when that is pruned.
+ */
+export const aiReviews = pgTable("ai_reviews", {
+  messageId: text("message_id")
+    .primaryKey()
+    .references(() => aiMessages.id, { onDelete: "cascade" }),
+  labels: jsonb("labels").$type<ReviewLabels>().notNull(),
+  note: text("note"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * The published corpus as it was, per corpus key (`ask/corpus/snapshots.ts`):
+ * written with the first visitor answer on a key, kept while an answer or an
+ * eval case refers to it.
+ */
+export const aiCorpusSnapshots = pgTable("ai_corpus_snapshots", {
+  key: text("key").primaryKey(),
+  documents: jsonb("documents").$type<CorpusDocument[]>().notNull(),
+  projects: jsonb("projects").$type<ProjectFacts[]>().notNull(),
+  posts: jsonb("posts").$type<PostFacts[]>().notNull(),
+  coreTokens: integer("core_tokens").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Eval cases frozen from visitor answers (`ask/evals/production.ts`): the
+ * redacted question, the snapshot it was answered from, and what a good
+ * answer must do. Patterns are case-insensitive regular expressions.
+ */
+export const aiEvalCases = pgTable(
+  "ai_eval_cases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    suite: text("suite").notNull().default("production"),
+    question: text("question").notNull(),
+    locale: localeEnum("locale").notNull(),
+    snapshotKey: text("snapshot_key")
+      .notNull()
+      .references(() => aiCorpusSnapshots.key, { onDelete: "restrict" }),
+    mustCite: jsonb("must_cite").$type<string[]>().notNull().default([]),
+    citeAny: jsonb("cite_any").$type<string[]>().notNull().default([]),
+    mustInclude: jsonb("must_include").$type<string[]>().notNull().default([]),
+    mustNotInclude: jsonb("must_not_include").$type<string[]>().notNull().default([]),
+    expectTool: jsonb("expect_tool").$type<{
+      name: ToolName;
+      input?: Record<string, unknown>;
+    }>(),
+    judge: boolean("judge").notNull().default(true),
+    /** The answer it was frozen from; null once that answer is pruned. */
+    fromMessageId: text("from_message_id").references(() => aiMessages.id, {
+      onDelete: "set null",
+    }),
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("ai_eval_cases_suite_status_idx").on(t.suite, t.status),
+    check("ai_eval_cases_status_check", sql`${t.status} in ('active', 'retired')`),
+    check("ai_eval_cases_suite_check", sql`${t.suite} in ('production')`),
   ],
 );
 
@@ -735,6 +832,85 @@ export const aiFeedback = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [check("ai_feedback_value_check", sql`${t.value} in (-1, 1)`)],
+);
+
+/**
+ * Requests the public assistant turned away, per UTC day and kind
+ * (`ask/guard-events.ts`). Aggregates only, no content; kept like `ai_usage`.
+ */
+export const aiGuardEvents = pgTable(
+  "ai_guard_events",
+  {
+    day: date("day", { mode: "string" }).notNull(),
+    kind: text("kind").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.kind] })],
+);
+
+/**
+ * Long, paid work run in the background (`ask/runs/`): the eval suite today;
+ * the pairwise and nightly judges, insights and the content agent later. At
+ * most one queued or running run per kind; its items are the checkpoint a
+ * resumed run continues from.
+ */
+export const aiRuns = pgTable(
+  "ai_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind").notNull(),
+    status: text("status").notNull(),
+    params: jsonb("params").$type<Record<string, unknown>>().notNull().default({}),
+    progress: jsonb("progress")
+      .$type<{ total: number; done: number; failed: number; unavailable: number }>()
+      .notNull()
+      .default({ total: 0, done: 0, failed: 0, unavailable: 0 }),
+    summary: jsonb("summary").$type<unknown>(),
+    usd: doublePrecision("usd").notNull().default(0),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("ai_runs_created_idx").on(t.createdAt.desc()),
+    uniqueIndex("ai_runs_one_active_per_kind")
+      .on(t.kind)
+      .where(sql`${t.status} in ('queued', 'running')`),
+    check(
+      "ai_runs_kind_check",
+      sql`${t.kind} in ('eval', 'pairwise', 'judge', 'insights', 'agent')`,
+    ),
+    check(
+      "ai_runs_status_check",
+      sql`${t.status} in ('queued', 'running', 'done', 'failed', 'cancelled', 'interrupted')`,
+    ),
+  ],
+);
+
+export const aiRunItems = pgTable(
+  "ai_run_items",
+  {
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => aiRuns.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    /** The order the items run in. */
+    position: integer("position").notNull(),
+    status: text("status").notNull().default("pending"),
+    result: jsonb("result").$type<unknown>(),
+    attempts: integer("attempts").notNull().default(0),
+    usd: doublePrecision("usd").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.runId, t.key] }),
+    check(
+      "ai_run_items_status_check",
+      sql`${t.status} in ('pending', 'running', 'done', 'failed', 'unavailable')`,
+    ),
+  ],
 );
 
 /** Rate-limit events, keyed by a salted IP hash or session hash; pruned after a day. */

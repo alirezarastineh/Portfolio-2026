@@ -33,12 +33,19 @@ export async function spentToday(at = new Date()): Promise<number> {
   return row?.usd ?? 0;
 }
 
-export async function availability(config: AskConfig, settings: AiSettings): Promise<Availability> {
-  if (!config.enabled) return { state: "off", reason: "disabled" };
-  if (config.unavailableReason) return { state: "off", reason: "unconfigured" };
-  if (!settings.enabled) return { state: "off", reason: "disabled_by_admin" };
+/** Why the assistant is off, whatever the spend; null when the switches are on. */
+function offReason(config: AskConfig, settings: AiSettings): string | null {
+  if (!config.enabled) return "disabled";
+  if (config.unavailableReason) return "unconfigured";
+  if (!settings.enabled) return "disabled_by_admin";
+  return null;
+}
+
+/** The state for a given spend today: pure, so it holds for every spend (see the property tests). */
+export function stateFor(config: AskConfig, settings: AiSettings, spentUsd: number): Availability {
+  const reason = offReason(config, settings);
+  if (reason) return { state: "off", reason };
   const budgetUsd = settings.dailyBudgetUsd ?? config.dailyBudgetUsd;
-  const spentUsd = await spentToday();
   if (spentUsd >= budgetUsd) return { state: "resting", spentUsd, budgetUsd };
   return {
     state: "ok",
@@ -46,6 +53,12 @@ export async function availability(config: AskConfig, settings: AiSettings): Pro
     spentUsd,
     budgetUsd,
   };
+}
+
+export async function availability(config: AskConfig, settings: AiSettings): Promise<Availability> {
+  // Off needs no database: the spend is read only when it can matter.
+  if (offReason(config, settings)) return stateFor(config, settings, 0);
+  return stateFor(config, settings, await spentToday());
 }
 
 /**
@@ -96,11 +109,8 @@ export async function checkRate(
     { bucket: `ip:${ipHash}`, limit: config.ratePerDay, windowMs: DAY_MS },
     { bucket: `session:${sessionHash}`, limit: config.sessionRatePerHour, windowMs: HOUR_MS },
   ];
-  let retryAfter = 0;
-  for (const window of windows) {
-    const wait = await overLimit(window, now);
-    if (wait !== null) retryAfter = Math.max(retryAfter, wait);
-  }
+  const waits = await Promise.all(windows.map((window) => overLimit(window, now)));
+  const retryAfter = Math.max(0, ...waits.filter((wait): wait is number => wait !== null));
   return retryAfter ? { ok: false, retryAfter } : { ok: true };
 }
 

@@ -175,6 +175,24 @@ function entry(config: AskConfig, id: string, thinking: Thinking | null): ModelE
   };
 }
 
+function collectLiteModels(
+  geminiConfig: AskConfig["gemini"],
+  gemini: [string, Thinking | null][],
+): void {
+  gemini.push([geminiConfig.model, "low"]);
+  if (geminiConfig.deepModel) gemini.push([geminiConfig.deepModel, "low"]);
+  if (geminiConfig.fallbackModel) gemini.push([geminiConfig.fallbackModel, null]);
+}
+
+function collectDeepModels(
+  geminiConfig: AskConfig["gemini"],
+  gemini: [string, Thinking | null][],
+): void {
+  if (geminiConfig.deepModel) gemini.push([geminiConfig.deepModel, "medium"]);
+  gemini.push([geminiConfig.model, "low"]);
+  if (geminiConfig.fallbackModel) gemini.push([geminiConfig.fallbackModel, null]);
+}
+
 function collectCopilotModels(
   config: AskConfig,
   gemini: [string, Thinking | null][],
@@ -191,35 +209,40 @@ function collectCopilotModels(
   if (model !== first) gemini.push([model, "low"]);
 }
 
+/** The default judge, when `SERVER_AI_JUDGE_MODELS` names none: the deep model, or the main one. */
+function collectJudgeModels(
+  config: AskConfig,
+  gemini: [string, Thinking | null][],
+  openrouter: string[],
+): void {
+  const { model, deepModel } = config.gemini;
+  gemini.push([deepModel ?? model, "low"]);
+  openrouter.splice(0, openrouter.length);
+}
+
 function collectRoleModels(
   config: AskConfig,
   role: ChainRole,
 ): { gemini: [string, Thinking | null][]; openrouter: string[] } {
-  const { model, deepModel, fallbackModel } = config.gemini;
   const gemini: [string, Thinking | null][] = [];
   const openrouter: string[] = [...config.openrouter.models];
 
   switch (role) {
     case "lite":
-      gemini.push([model, "low"]);
-      if (deepModel) gemini.push([deepModel, "low"]);
-      if (fallbackModel) gemini.push([fallbackModel, null]);
+      collectLiteModels(config.gemini, gemini);
       break;
     case "deep":
-      if (deepModel) gemini.push([deepModel, "medium"]);
-      gemini.push([model, "low"]);
-      if (fallbackModel) gemini.push([fallbackModel, null]);
+      collectDeepModels(config.gemini, gemini);
       break;
     case "insight":
-      gemini.push([model, "low"]);
+      gemini.push([config.gemini.model, "low"]);
       openrouter.splice(0, openrouter.length, ...config.insightFallbackModels);
       break;
     case "copilot":
       collectCopilotModels(config, gemini, openrouter);
       break;
     case "judge":
-      gemini.push([deepModel ?? model, "low"]);
-      openrouter.length = 0;
+      collectJudgeModels(config, gemini, openrouter);
       break;
   }
 
@@ -233,6 +256,15 @@ export type ChainRole = "lite" | "deep" | "insight" | "copilot" | "judge";
  * Provider order follows `SERVER_AI_PROVIDER_PRIORITY`.
  */
 export function buildChain(config: AskConfig, role: ChainRole): ModelEntry[] {
+  // Named judges run in the order listed, so one of another family can come
+  // first without reordering the providers that answer visitors. Fixture runs
+  // may use any of them; visitor answers only one that already answers
+  // visitors (`askVisitorJudges` in deps.ts).
+  if (role === "judge" && config.judgeModels.length) {
+    return [...new Set(config.judgeModels)]
+      .map((id) => entry(config, id, providerOf(id) === "gemini" ? "low" : null))
+      .filter((e) => e !== null);
+  }
   const { gemini, openrouter } = collectRoleModels(config, role);
 
   const byProvider: Record<ProviderName, ModelEntry[]> = {
@@ -250,6 +282,18 @@ export function buildChain(config: AskConfig, role: ChainRole): ModelEntry[] {
     }
   }
   return chain;
+}
+
+/**
+ * One side of a pairwise eval: a route's configured chain (`lite`, `deep`),
+ * or a model by id on its own, so the comparison is that model's alone (a new
+ * release can be tried before it is configured). Null when its provider has
+ * no key.
+ */
+export function variantChain(config: AskConfig, variant: string): ModelEntry[] | null {
+  if (variant === "lite" || variant === "deep") return buildChain(config, variant);
+  const one = entry(config, variant, providerOf(variant) === "gemini" ? "low" : null);
+  return one ? [one] : null;
 }
 
 /** Every configured model id, for the admin's health view. */

@@ -24,6 +24,25 @@ export const TOOL_NAMES = [
 
 export type ToolName = (typeof TOOL_NAMES)[number];
 
+/** How a tool call ended, for the answer's trace. */
+export type ToolOutcome = "ok" | "not_found" | "not_allowed" | "no_hits" | "error";
+
+/**
+ * Reads a tool's result by the shapes the tools below return: a missing
+ * document or CV is not_found, a refused page not_allowed, an empty search or
+ * project list no_hits. A tool that throws never gets here: the stream
+ * carries a `tool-error` for it instead.
+ */
+export function toolOutcome(output: unknown): ToolOutcome {
+  if (!output || typeof output !== "object") return "ok";
+  const result = output as Record<string, unknown>;
+  if (result["error"] === "not_found" || result["available"] === false) return "not_found";
+  if (result["error"] === "not_allowed") return "not_allowed";
+  if (typeof result["error"] === "string") return "error";
+  const list = [result["results"], result["projects"]].find(Array.isArray);
+  return list?.length === 0 ? "no_hits" : "ok";
+}
+
 const SECTIONS = ["projects", "experience", "skills", "writing", "about", "contact"] as const;
 const DOCUMENT_CHARS = 12_000;
 const RESUME_CHARS = 12_000;
@@ -87,7 +106,7 @@ export function buildTools(corpus: AskCorpus, locale: Locale) {
           .describe("Keywords, e.g. 'RAG evaluation' or 'Kubernetes'"),
         kinds: z.array(kindSchema).max(8).optional().describe("Restrict to these document kinds"),
       }),
-      execute: async ({ query, kinds }) => {
+      execute: ({ query, kinds }) => {
         const hits = corpus.search.search(query, { locale, ...(kinds ? { kinds } : {}) });
         return hits.length ? { results: hits } : { results: [], note: "No matching documents." };
       },
@@ -97,7 +116,7 @@ export function buildTools(corpus: AskCorpus, locale: Locale) {
       description:
         "The full text of one portfolio document by id (e.g. 'project:atlas@en', 'cv@en', 'post:my-post@de'). Use it for documents shown cut short.",
       inputSchema: z.object({ id: z.string().min(1).max(160) }),
-      execute: async ({ id }) => {
+      execute: ({ id }) => {
         const doc = resolveDocument(corpus, id, locale);
         if (!doc) return { error: "not_found", note: "No document has this id." };
         const text =
@@ -116,7 +135,7 @@ export function buildTools(corpus: AskCorpus, locale: Locale) {
           .optional()
           .describe("Matches name, descriptor, stack, tags or category"),
       }),
-      execute: async ({ text }) => {
+      execute: ({ text }) => {
         const needle = text?.trim().toLowerCase();
         const mine = corpus.projects.filter((p) => p.locale === locale);
         const pool = mine.length ? mine : corpus.projects;
@@ -135,7 +154,7 @@ export function buildTools(corpus: AskCorpus, locale: Locale) {
     get_resume: tool({
       description: "The CV's text and its download link.",
       inputSchema: z.object({ locale: z.enum(["en", "de"]).optional() }),
-      execute: async (input) => {
+      execute: (input) => {
         const wanted = input.locale ?? locale;
         const doc =
           corpus.byId.get(`cv@${wanted}`) ?? corpus.byId.get(`cv@${wanted === "en" ? "de" : "en"}`);
@@ -150,7 +169,7 @@ export function buildTools(corpus: AskCorpus, locale: Locale) {
       description:
         "Open a page of this site for the visitor: '/en', '/en#projects', '/en/work/<slug>', '/en/writing/<slug>'. Only when the visitor asks to open or go somewhere.",
       inputSchema: z.object({ to: z.string().min(2).max(160) }),
-      execute: async ({ to }) => {
+      execute: ({ to }) => {
         const path = allowedPath(corpus, to);
         return path
           ? { ok: true as const, to: path }
@@ -162,14 +181,14 @@ export function buildTools(corpus: AskCorpus, locale: Locale) {
       description:
         "Offer the visitor 2-3 short follow-up questions, shown as buttons. Call it together with your answer, never alone.",
       inputSchema: z.object({ items: z.array(z.string().min(2).max(90)).min(1).max(3) }),
-      execute: async () => ({ ok: true as const }),
+      execute: () => ({ ok: true as const }),
     }),
 
     handoff_contact: tool({
       description:
         "Offer to hand the conversation to the contact form, pre-filled with a short summary. Only when the visitor wants to hire, contact or work with Alireza. The visitor confirms first; nothing is sent.",
       inputSchema: z.object({ summary: z.string().min(10).max(800) }),
-      execute: async () => ({ ok: true as const, awaitingConfirmation: true }),
+      execute: () => ({ ok: true as const, awaitingConfirmation: true }),
     }),
   };
 }

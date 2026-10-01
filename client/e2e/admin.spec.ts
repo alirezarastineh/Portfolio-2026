@@ -117,6 +117,74 @@ function mediaAsset(id: string, name: string, change: Record<string, unknown> = 
   };
 }
 
+const VERDICT_LABELS = ["correct", "grounded", "helpful", "tone", "language"] as const;
+
+/** `GET /admin/assistant/outcomes`: a month of answers, the primary metric's weekly reviews. */
+function outcomesView(metric: string, rotate: boolean) {
+  return {
+    days: 30,
+    outcomes: {
+      answers: 40,
+      answered: 38,
+      helpful: 30,
+      funnel: { offered: 4, confirmed: 2, sent: 1 },
+      rated: { up: 3, down: 1 },
+      helpfulRate: 30 / 38,
+      thumbsUpRate: 0.75,
+      unknownRate: 0.1,
+      rephraseRate: 0.05,
+      usd: 0.1,
+      costPerAnswered: 0.0026,
+      costPerHelpful: 0.0033,
+    },
+    primary: {
+      metric,
+      weeks: [
+        { week: "2026-W36", value: 0.7 },
+        { week: "2026-W37", value: 0.79 },
+        { week: "2026-W38", value: 0.795 },
+        { week: "2026-W39", value: 0.8 },
+      ],
+      rotate,
+    },
+    metrics: ["helpfulRate", "thumbsUpRate", "unknownRate", "rephraseRate"],
+  };
+}
+
+/** A review week's label shares before anyone gave a verdict. */
+function noVerdicts() {
+  return Object.fromEntries(VERDICT_LABELS.map((l) => [l, { good: 0, bad: 0 }]));
+}
+
+/** An answer as the assistant's Conversations and Reviews tabs list it. */
+function answerRow(id: string, question: string, change: Record<string, unknown> = {}) {
+  return {
+    id,
+    createdAt: NOW,
+    session: "a1b2c3d4e5",
+    locale: "en",
+    route: "lite",
+    question,
+    answer: `An answer to “${question}”`,
+    citedIds: [],
+    droppedCitations: [],
+    toolCalls: [],
+    model: "gemini-flash",
+    attempts: [],
+    ttftMs: 800,
+    totalMs: 2_000,
+    tokens: { input: 1_000, cached: 0, output: 50, thoughts: 0 },
+    usd: 0.001,
+    finishReason: "stop",
+    promptVersion: "ask-test",
+    corpusKey: "en:1",
+    checks: null,
+    feedback: null,
+    trace: null,
+    ...change,
+  };
+}
+
 function defaults(): Record<string, Answer> {
   const en = content("en");
   const de = content("de");
@@ -228,7 +296,38 @@ function defaults(): Record<string, Answer> {
       updatedAt: HOUR_AGO,
       data: { en: en["ui"], de: de["ui"] },
     },
-    "GET /admin/assistant/usage": { days: 30, models: [], answers: [] },
+    "GET /admin/assistant/usage": {
+      days: 30,
+      primaryModel: "gemini-flash",
+      models: [],
+      answers: [],
+      guardEvents: [],
+      checks: [],
+    },
+    "GET /admin/assistant/runs": { runs: [] },
+    "GET /admin/assistant/outcomes": outcomesView("helpfulRate", false),
+    "GET /admin/assistant/judge": {
+      fixtureJudge: "gemini-flash-lite",
+      visitorJudge: "gemini-flash-lite",
+      calibration: {
+        pairs: 0,
+        agree: 0,
+        agreement: null,
+        calibrated: null,
+        judgeLenient: 0,
+        judgeStrict: 0,
+      },
+      unjudged: 0,
+      answerers: ["lite", "deep", "gemini-flash-lite", "gemini-flash"],
+    },
+    "GET /admin/assistant/eval-cases": { cases: [] },
+    "GET /admin/assistant/reviews": {
+      week: "2026-W40",
+      previous: "2026-W39",
+      next: null,
+      queue: [],
+      stats: { answers: 0, queued: 0, reviewed: 0, labels: noVerdicts() },
+    },
     "GET /admin/profile": {
       profile: {
         name: identity["name"],
@@ -513,6 +612,79 @@ test.describe("admin", () => {
     await expect(metrics).toHaveAttribute("aria-current", "location");
   });
 
+  test("the inbox shows a hand-off's attached conversation", async ({ page, baseURL }) => {
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/messages": {
+        messages: [
+          {
+            ...message("m9", "Ada Lovelace", "read"),
+            message: "Wants to discuss a six-month contract for an AI platform.",
+            origin: "ask",
+            askTranscript: {
+              v: 1,
+              turns: [
+                {
+                  question: "Has he built RAG systems?",
+                  answer: "Yes: Atlas cut escalations by 38% [^project:atlas@en].",
+                  cited: ["project:atlas@en"],
+                  at: HOUR_AGO,
+                },
+                {
+                  question: "I want to hire him",
+                  answer: "Happy to connect you.",
+                  cited: [],
+                  at: NOW,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    await openAdmin(page, "/admin/inbox");
+    await page.getByRole("region", { name: "Messages" }).getByRole("button").first().click();
+
+    const reader = page.getByRole("region", { name: "Ada Lovelace" });
+    await expect(reader.getByText("via the assistant")).toBeVisible();
+    await expect(
+      reader.getByText("Their conversation with the assistant (2 answers)"),
+    ).toBeVisible();
+    await expect(reader.getByText("Has he built RAG systems?")).toBeVisible();
+    await expect(reader.getByText("cited: project:atlas@en")).toBeVisible();
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the Overview shows the outcomes and rotates the primary metric", async ({
+    page,
+    baseURL,
+  }) => {
+    const chosen: unknown[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/outcomes": (call: number) => ({
+        status: 200,
+        body: call > 1 ? outcomesView("unknownRate", false) : outcomesView("helpfulRate", true),
+      }),
+      "PUT /admin/assistant/primary-metric": () => ({ status: 200, body: { ok: true } }),
+    });
+    page.on("request", (r) => {
+      if (r.method() === "PUT" && r.url().endsWith("/admin/assistant/primary-metric")) {
+        chosen.push(r.postDataJSON());
+      }
+    });
+    await openAdmin(page, "/admin/assistant");
+
+    const outcomes = page.getByRole("region", { name: "Outcomes" });
+    await expect(
+      outcomes.getByText("4 offered → 2 confirmed (50 %) → 1 sent (50 %)"),
+    ).toBeVisible();
+    await expect(outcomes.getByText("Flat for two weekly reviews")).toBeVisible();
+    await outcomes.getByLabel("Primary metric").selectOption("unknownRate");
+    await expect.poll(() => chosen).toEqual([{ metric: "unknownRate" }]);
+    await expect(outcomes.getByText("lower is better")).toBeVisible();
+    await expect(outcomes.getByText("Flat for two weekly reviews")).toHaveCount(0);
+    expect(unmocked).toEqual([]);
+  });
+
   test("the inbox reads in two panes: J opens, E archives and opens the next", async ({
     page,
     baseURL,
@@ -581,9 +753,567 @@ test.describe("admin", () => {
     await openAdmin(page, "/admin/assistant");
 
     const tabs = page.getByRole("tablist", { name: "Assistant sections" });
-    await expect(tabs.getByRole("tab")).toHaveCount(7);
+    await expect(tabs.getByRole("tab")).toHaveCount(8);
     expect((await tabs.boundingBox())?.height ?? 99).toBeLessThan(44);
     await expect(page.getByText("Answering")).toBeVisible();
+  });
+
+  test("the assistant shows the day's signals and an answer's timeline", async ({
+    page,
+    baseURL,
+  }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const tokens = { input: 12_000, cached: 1_500, output: 60, thoughts: 0 };
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/usage": {
+        days: 30,
+        primaryModel: "gemini-flash",
+        models: [],
+        answers: [
+          {
+            day: today,
+            answers: 5,
+            up: 0,
+            down: 0,
+            withDropped: 1,
+            flagged: 2,
+            primaryInput: 10_000,
+            primaryCached: 1_000,
+          },
+        ],
+        guardEvents: [{ day: today, kind: "rate_limited", count: 2 }],
+        checks: [{ flag: "uncited", count: 2 }],
+      },
+      "GET /admin/assistant/conversations": {
+        messages: [
+          {
+            id: "m_trace000001",
+            createdAt: new Date().toISOString(),
+            session: "a1b2c3d4e5",
+            locale: "en",
+            route: "lite",
+            question: "Which project cut support escalations?",
+            answer: "Atlas cut escalations by 38% [^project:atlas@en].",
+            citedIds: ["project:atlas@en"],
+            droppedCitations: ["project:nebula@en"],
+            toolCalls: ["search_portfolio", "get_document"],
+            model: "gemini-flash",
+            attempts: [],
+            ttftMs: 820,
+            totalMs: 2_900,
+            tokens,
+            usd: 0.0079,
+            finishReason: "stop",
+            promptVersion: "ask-test",
+            corpusKey: "en:1",
+            checks: { v: 1, flags: ["invented-citation"] },
+            feedback: null,
+            trace: {
+              v: 1,
+              steps: [
+                {
+                  model: "gemini-flash",
+                  answerOnly: false,
+                  ttftMs: 820,
+                  tokens,
+                  finishReason: "tool-calls",
+                  passedOver: [{ model: "gemini-pro", outcome: "rate-limited", ms: 140 }],
+                  tools: [
+                    {
+                      name: "get_document",
+                      input: '{"id":"project:nebula@en"}',
+                      outcome: "not_found",
+                      resultChars: 48,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    await openAdmin(page, "/admin/assistant");
+
+    const signals = page.getByRole("region", { name: "Signals" });
+    await expect(
+      signals.getByText("Under 50 %: the fixed prefix is not being reused."),
+    ).toBeVisible();
+    await expect(signals.getByText("rate_limited 2")).toBeVisible();
+    await expect(signals.getByText(/uncited 2/)).toBeVisible();
+
+    await page.getByRole("tab", { name: "Conversations" }).click();
+    await expect(
+      page.getByText("dropped (invented, never shown): project:nebula@en"),
+    ).toBeVisible();
+    await expect(page.getByText("invented citation", { exact: true })).toBeVisible();
+    await page.locator("summary", { hasText: "Timeline" }).click();
+    await expect(page.getByText("passed over: gemini-pro rate-limited (140 ms)")).toBeVisible();
+    await expect(
+      page.getByText(/get_document \{"id":"project:nebula@en"\} → not found/),
+    ).toBeVisible();
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the Evals tab follows a background run it did not start, until it ends", async ({
+    page,
+    baseURL,
+  }) => {
+    const id = "5d9d0f5e-6f4b-4d2a-9d3e-0c7a2b1e4f10";
+    const at = new Date().toISOString();
+    const summary = {
+      promptVersion: "ask-test",
+      corpus: "eval-fixture-1",
+      judge: "gemini-flash-lite",
+      cases: 3,
+      completed: 3,
+      passed: 2,
+      unavailable: 0,
+      remaining: 0,
+      incomplete: false,
+      passRate: 2 / 3,
+      byCategory: { fact: { cases: 3, completed: 3, passed: 2, unavailable: 0 } },
+      usd: 0.006,
+      p50TtftMs: 900,
+      p95TotalMs: 3000,
+    };
+    const run = (status: string, done: number) => ({
+      id,
+      kind: "eval",
+      status,
+      params: {},
+      progress: { total: 3, done, failed: 0, unavailable: 0 },
+      summary: status === "done" ? summary : null,
+      usd: done * 0.002,
+      error: null,
+      createdAt: at,
+      startedAt: at,
+      finishedAt: status === "done" ? at : null,
+      heartbeatAt: at,
+      live: status === "running",
+    });
+    const item = (key: string, position: number, passed: boolean | null) => ({
+      key,
+      position,
+      status: passed === null ? "pending" : "done",
+      attempts: passed === null ? 0 : 1,
+      usd: 0.002,
+      updatedAt: at,
+      result:
+        passed === null
+          ? null
+          : {
+              id: key,
+              category: "fact",
+              status: passed ? "passed" : "failed",
+              passed,
+              failures: passed ? [] : ["did not cite project:atlas@en"],
+              answer: "Atlas cut escalations by 38%.",
+              cited: [],
+              invented: [],
+              tools: [],
+              model: "gemini-flash-lite",
+              ttftMs: 900,
+              totalMs: 3000,
+              usd: 0.002,
+              judge: null,
+              attempts: [],
+            },
+    });
+    const unmocked = await fakeApi(page, baseURL, {
+      // Another tab (or before a reload) started it: this page only follows it.
+      "GET /admin/assistant/runs": { runs: [run("running", 1)] },
+      [`GET /admin/assistant/runs/${id}`]: (call: number) => ({
+        status: 200,
+        body:
+          call === 1
+            ? {
+                run: run("running", 1),
+                items: [item("fact-a", 0, true), item("fact-b", 1, null), item("fact-c", 2, null)],
+              }
+            : {
+                run: run("done", 3),
+                items: [item("fact-a", 0, true), item("fact-b", 1, false), item("fact-c", 2, true)],
+              },
+      }),
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Evals" }).click();
+
+    await expect(page.getByText("1 of 3 cases done")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Cancel the run" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Run the evals" })).toBeDisabled();
+
+    // It keeps following the run until it ends.
+    await expect(page.getByRole("heading", { name: /finished/ })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("3 of 3 cases done")).toBeVisible();
+    await expect(page.locator("strong", { hasText: "2/3" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Cancel the run" })).toHaveCount(0);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the Evals tab compares two answerers, a verdict counting only when both orders agree", async ({
+    page,
+    baseURL,
+  }) => {
+    const id = "3f2a9c1e-8b7d-4e6f-a5b4-c3d2e1f0a9b8";
+    const bodies: unknown[] = [];
+    const side = (answer: string, failures: string[] = []) => ({
+      answer,
+      model: "gemini-flash",
+      failures,
+      usd: 0.001,
+    });
+    const item = (key: string, outcome: string) => ({
+      key,
+      position: 0,
+      status: "done",
+      attempts: 1,
+      usd: 0.004,
+      updatedAt: NOW,
+      result: {
+        id: key,
+        category: "fact",
+        status: "judged",
+        a: side("Atlas shipped.", ["did not cite project:atlas@en"]),
+        b: side("Atlas cut escalations by 38% [^project:atlas@en]."),
+        verdicts: { aFirst: "second", bFirst: "first" },
+        outcome,
+        reasons: ["B cites its source.", "B cites its source."],
+        usd: 0.004,
+      },
+    });
+    const run = {
+      id,
+      kind: "pairwise",
+      status: "done",
+      params: { a: "lite", b: "deep", cases: null },
+      progress: { total: 2, done: 2, failed: 0, unavailable: 0 },
+      summary: {
+        a: "lite",
+        b: "deep",
+        judge: "gemini-flash-lite",
+        cases: 2,
+        judged: 2,
+        unavailable: 0,
+        passed: { a: 0, b: 2 },
+        tally: { a: 0, b: 1, tie: 0, inconsistent: 1 },
+        byCategory: { fact: { a: 0, b: 1, tie: 0, inconsistent: 1 } },
+        swapAgreement: 0.5,
+        usd: 0.008,
+      },
+      usd: 0.008,
+      error: null,
+      createdAt: NOW,
+      startedAt: NOW,
+      finishedAt: NOW,
+      heartbeatAt: NOW,
+      live: false,
+    };
+    const unmocked = await fakeApi(page, baseURL, {
+      "POST /admin/assistant/runs": () => ({ status: 202, body: { id } }),
+      [`GET /admin/assistant/runs/${id}`]: {
+        run,
+        items: [item("fact-atlas-impact", "b"), item("fact-atlas-team", "inconsistent")],
+      },
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/admin/assistant/runs")) {
+        bodies.push(r.postDataJSON());
+      }
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Evals" }).click();
+
+    const compare = page.getByRole("region", { name: "Compare two answerers" });
+    await expect(compare.getByLabel("A")).toHaveValue("lite");
+    await compare.getByLabel("B").fill("deep");
+    await compare.getByRole("button", { name: "Compare", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Compare" }).click();
+
+    await expect(
+      compare.getByText("B (deep) ahead: 0 to 1, 0 ties; the orders disagreed on 1."),
+    ).toBeVisible();
+    await expect(compare.locator("strong", { hasText: "50 %" })).toBeVisible();
+    await expect(compare.getByText("orders disagree", { exact: true })).toBeVisible();
+    expect(bodies).toEqual([{ kind: "pairwise", a: "lite", b: "deep" }]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the Reviews tab shows the judge's calibration and judges the reviewed answers", async ({
+    page,
+    baseURL,
+  }) => {
+    const id = "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d";
+    const calibration = (calibrated: boolean, agree: number) => ({
+      pairs: 12,
+      agree,
+      agreement: agree / 12,
+      calibrated,
+      judgeLenient: 12 - agree,
+      judgeStrict: 0,
+    });
+    const status = (after: boolean) => ({
+      fixtureJudge: "gemini-flash-lite",
+      visitorJudge: "gemini-flash-lite",
+      calibration: after ? calibration(true, 10) : calibration(false, 6),
+      unjudged: after ? 0 : 3,
+      answerers: ["lite", "deep"],
+    });
+    const judgeRun = (status: string) => ({
+      id,
+      kind: "judge",
+      status,
+      params: { judge: "gemini-flash-lite" },
+      progress: { total: 3, done: status === "done" ? 3 : 1, failed: 0, unavailable: 0 },
+      summary: null,
+      usd: 0.001,
+      error: null,
+      createdAt: NOW,
+      startedAt: NOW,
+      finishedAt: status === "done" ? NOW : null,
+      heartbeatAt: NOW,
+      live: status === "running",
+    });
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/judge": (call: number) => ({ status: 200, body: status(call > 1) }),
+      "POST /admin/assistant/runs": () => ({ status: 202, body: { id } }),
+      [`GET /admin/assistant/runs/${id}`]: (call: number) => ({
+        status: 200,
+        body: { run: judgeRun(call > 1 ? "done" : "running"), items: [] },
+      }),
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Reviews" }).click();
+
+    const panel = page.getByRole("region", { name: "The judge against reviewers" });
+    await expect(
+      panel.getByText(
+        "Uncalibrated: the judge agrees with reviewers on 50 % of 12 answers (6 passed that reviewers failed, 0 the reverse).",
+      ),
+    ).toBeVisible();
+    await panel.getByRole("button", { name: "Judge 3 reviewed answers" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Judge" }).click();
+    await expect(
+      panel.getByText(/^Calibrated: the judge agrees with reviewers on 83 %/),
+    ).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(panel.getByRole("button", { name: /^Judge \d/ })).toHaveCount(0);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("resuming an eval run asks first, since it spends", async ({ page, baseURL }) => {
+    const id = "7c1e5b0a-2f4d-4c1b-8e6a-9d3f2a1b0c4e";
+    const resumed: number[] = [];
+    const run = (status: string) => ({
+      id,
+      kind: "eval",
+      status,
+      params: {},
+      progress: { total: 3, done: 1, failed: 0, unavailable: 0 },
+      summary: null,
+      usd: 0.002,
+      error: null,
+      createdAt: NOW,
+      startedAt: NOW,
+      finishedAt: status === "running" ? null : NOW,
+      heartbeatAt: NOW,
+      live: status === "running",
+    });
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/runs": { runs: [run("interrupted")] },
+      [`GET /admin/assistant/runs/${id}`]: () => ({
+        status: 200,
+        body: { run: run(resumed.length ? "running" : "interrupted"), items: [] },
+      }),
+      [`POST /admin/assistant/runs/${id}/resume`]: (call: number) => {
+        resumed.push(call);
+        return { status: 202, body: { id } };
+      },
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Evals" }).click();
+
+    const resume = page.getByRole("button", { name: "Resume the run" });
+    await resume.click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(
+      dialog.getByText("The 2 cases still to do go to the configured models"),
+    ).toBeVisible();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(resumed).toEqual([]);
+
+    await resume.click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Resume" }).click();
+    await expect.poll(() => resumed.length).toBe(1);
+    await expect(page.getByRole("button", { name: "Cancel the run" })).toBeVisible();
+    expect(unmocked).toEqual([]);
+  });
+
+  test("an answer is frozen as an eval case, and the cases list puts stale ones first", async ({
+    page,
+    baseURL,
+  }) => {
+    const frozen: unknown[] = [];
+    const retired: unknown[] = [];
+    const deleted: string[] = [];
+    const evalCase = (id: string, question: string, stale: string | null) => ({
+      id,
+      question,
+      locale: "en",
+      snapshotKey: "en:12|de:13|a:x",
+      mustCite: ["project:atlas@en"],
+      mustInclude: [],
+      status: "active",
+      fromMessageId: null,
+      createdAt: NOW,
+      stale,
+    });
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/conversations": {
+        messages: [
+          answerRow("m_freeze0001", "Which project cut support escalations?", {
+            citedIds: ["project:atlas@en"],
+          }),
+        ],
+      },
+      "POST /admin/assistant/eval-cases": () => ({ status: 201, body: { id: "c1" } }),
+      "GET /admin/assistant/eval-cases": {
+        cases: [
+          evalCase("3c1d8a6e-0000-4000-8000-000000000001", "Where does he live?", null),
+          evalCase("3c1d8a6e-0000-4000-8000-000000000002", "What did Vesper do?", "gone"),
+        ],
+      },
+      "PATCH /admin/assistant/eval-cases/3c1d8a6e-0000-4000-8000-000000000002": () => ({
+        status: 200,
+        body: { ok: true },
+      }),
+      "DELETE /admin/assistant/eval-cases/3c1d8a6e-0000-4000-8000-000000000001": () => ({
+        status: 200,
+        body: { ok: true },
+      }),
+    });
+    page.on("request", (r) => {
+      const url = r.url();
+      if (r.method() === "POST" && url.endsWith("/admin/assistant/eval-cases")) {
+        frozen.push(r.postDataJSON());
+      }
+      if (r.method() === "PATCH" && url.includes("/admin/assistant/eval-cases/")) {
+        retired.push(r.postDataJSON());
+      }
+      if (r.method() === "DELETE" && url.includes("/admin/assistant/eval-cases/")) {
+        deleted.push(url.split("/").pop()!);
+      }
+    });
+    await openAdmin(page, "/admin/assistant");
+
+    await page.getByRole("tab", { name: "Conversations" }).click();
+    await page.getByRole("button", { name: "Freeze as eval case" }).click();
+    await expect(page.getByLabel("Must cite (ids, comma-separated)")).toHaveValue(
+      "project:atlas@en",
+    );
+    // The admin rewrites the question to remove anything personal.
+    const question = page.getByLabel("Question", { exact: true });
+    await expect(question).toHaveValue("Which project cut support escalations?");
+    await question.fill("Which project cut escalations?");
+    await page.getByLabel("Must include (patterns, comma-separated)").fill("38");
+    // Nothing is frozen without the admin's word that nothing personal is left.
+    const freezeButton = page.getByRole("button", { name: "Freeze", exact: true });
+    await expect(freezeButton).toBeDisabled();
+    await page.getByLabel("Nothing personal is left in the question").check();
+    await freezeButton.click();
+    await expect(page.getByText("frozen as an eval case", { exact: true })).toBeVisible();
+    expect(frozen).toEqual([
+      {
+        messageId: "m_freeze0001",
+        question: "Which project cut escalations?",
+        mustCite: ["project:atlas@en"],
+        mustInclude: ["38"],
+        personalChecked: true,
+      },
+    ]);
+
+    await page.getByRole("tab", { name: "Evals" }).click();
+    const cases = page.getByRole("region", { name: "Production eval cases" });
+    // The stale one first: what it cites is gone from the live corpus.
+    await expect(cases.getByRole("listitem").first()).toContainText("What did Vesper do?");
+    await expect(cases.getByText("Stale: a document it cites is gone.")).toBeVisible();
+    await cases.getByRole("button", { name: "Retire" }).first().click();
+    await expect.poll(() => retired).toEqual([{ status: "retired" }]);
+
+    // Deleting asks first, then removes the question for good.
+    await cases.getByRole("button", { name: "Delete" }).last().click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete case" }).click();
+    await expect.poll(() => deleted).toEqual(["3c1d8a6e-0000-4000-8000-000000000001"]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the Reviews tab labels an answer from the keyboard, then opens the next", async ({
+    page,
+    baseURL,
+  }) => {
+    const unset = Object.fromEntries(VERDICT_LABELS.map((l) => [l, null]));
+    const verdicts = { ...unset, correct: true, grounded: false };
+    const week = (saved: boolean) => ({
+      week: "2026-W40",
+      previous: "2026-W39",
+      next: null,
+      queue: [
+        {
+          message: answerRow("m_review0001", "Where is Alireza based?", { feedback: -1 }),
+          reasons: ["thumbs down", "check:uncited"],
+          sampled: false,
+          review: saved ? { labels: verdicts, note: null, reviewedAt: NOW } : null,
+        },
+        {
+          message: answerRow("m_review0002", "Which stack does he use?"),
+          reasons: [],
+          sampled: true,
+          review: null,
+        },
+      ],
+      stats: { answers: 12, queued: 2, reviewed: saved ? 1 : 0, labels: noVerdicts() },
+    });
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/reviews": (call: number) => ({ status: 200, body: week(call > 1) }),
+      "PUT /admin/assistant/reviews/m_review0001": { ok: true, reviewedAt: NOW },
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Reviews" }).click();
+
+    await expect(page.getByText("0 of 2 reviewed · 12 answers this week")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Where is Alireza based?" })).toBeVisible();
+    const queue = page.getByRole("list", { name: "Answers to review" });
+    await expect(queue.getByText("thumbs down")).toBeVisible();
+    await expect(queue.getByText("sample")).toBeVisible();
+
+    // An answer can be frozen from here too; the form starts over on the next one.
+    await page.getByRole("button", { name: "Freeze as eval case" }).click();
+    await expect(page.getByLabel("Question", { exact: true })).toHaveValue(
+      "Where is Alireza based?",
+    );
+
+    // 1 marks "Correct" good; 2 twice marks "Grounded" not good; S saves.
+    await page.keyboard.press("1");
+    await page.keyboard.press("2");
+    await page.keyboard.press("2");
+    const correct = page.getByRole("group", { name: "Correct" });
+    await expect(correct.getByRole("button", { name: "Good", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    const saving = page.waitForRequest((r) => r.method() === "PUT");
+    await page.keyboard.press("s");
+    expect((await saving).postDataJSON()).toEqual({ labels: verdicts, note: null });
+
+    await expect(page.getByRole("heading", { name: "Which stack does he use?" })).toBeVisible();
+    await expect(page.getByText("1 of 2 reviewed · 12 answers this week")).toBeVisible();
+    await expect(queue.getByLabel("reviewed")).toHaveCount(1);
+    await expect(page.getByLabel("Question", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Freeze as eval case" })).toBeVisible();
+    expect(unmocked).toEqual([]);
   });
 
   test("the media library shows where a file is used, and suggests its alt text", async ({

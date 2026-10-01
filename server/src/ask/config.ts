@@ -34,6 +34,13 @@ export interface AskConfig {
   copilotModel: string;
   copilotHistoryTurns: number;
   insightFallbackModels: string[];
+  /**
+   * `SERVER_AI_JUDGE_MODELS`: who scores answers, first choice first, in the
+   * order listed. Empty means the deep model, or the main one. Fixture answers
+   * (evals, pairwise) may go to any of them; visitor answers (the calibration
+   * run) only to one that already answers visitors (`askVisitorJudges`).
+   */
+  judgeModels: string[];
   insightCacheTtlMs: number;
   maxInputTokens: number;
   maxOutputTokens: number;
@@ -156,6 +163,7 @@ export function parseAskConfig(): AskConfig {
       "gemini-3.5-flash-lite",
     copilotHistoryTurns: read("SERVER_AI_COPILOT_HISTORY_TURNS", positiveInt, 8, errors),
     insightFallbackModels: list(process.env.SERVER_AI_INSIGHT_FALLBACK_MODELS),
+    judgeModels: [...new Set(list(process.env.SERVER_AI_JUDGE_MODELS))],
     insightCacheTtlMs: seconds("SERVER_AI_INSIGHT_CACHE_TTL_SECONDS", 3600),
     maxInputTokens: read("SERVER_AI_MAX_INPUT_TOKENS", positiveInt, 120_000, errors),
     maxOutputTokens: read("SERVER_AI_MAX_OUTPUT_TOKENS", positiveInt, 1024, errors),

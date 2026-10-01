@@ -53,6 +53,9 @@ export interface ChromeLabels {
     copyWhat: string;
     elsewhere: string;
     localTime: string;
+    /** The opt-in after the assistant's hand-off: off unless ticked. */
+    attach: string;
+    attachHint: string;
   };
   about: {
     skip: string;
@@ -137,6 +140,9 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       copyWhat: "the email address",
       elsewhere: "Elsewhere",
       localTime: "local time",
+      attach: "Attach my conversation with the assistant",
+      attachHint:
+        "Your questions and its answers go with your message, with email addresses and phone numbers removed.",
     },
     about: {
       skip: "skip",
@@ -213,6 +219,9 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       copyWhat: "die E-Mail-Adresse",
       elsewhere: "Im Netz",
       localTime: "Ortszeit",
+      attach: "Mein Gespräch mit dem Assistenten anhängen",
+      attachHint:
+        "Deine Fragen und seine Antworten gehen mit deiner Nachricht mit, ohne E-Mail-Adressen und Telefonnummern.",
     },
     about: {
       skip: "überspringen",

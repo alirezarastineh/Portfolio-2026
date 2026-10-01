@@ -5,25 +5,53 @@ import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmToggleGroupImports } from "@spartan-ng/helm/toggle-group";
 
 import { AdminApiService } from "../admin-api.service";
+import {
+  checkLabel,
+  checkTone,
+  passedOverLine,
+  stepLine,
+  toolOutcomeLabel,
+  toolTone,
+  type Tone,
+} from "../answer-trace";
 import { FormSkeletonComponent } from "../components/load-state.component";
-import type { ConversationFilter, ConversationRow } from "../assistant-types";
+import type { ConversationFilter, ConversationRow, ToolOutcome } from "../assistant-types";
+import { FreezeCaseComponent } from "./freeze-case.component";
 
 const FILTERS: { id: ConversationFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "down", label: "Thumbs down" },
   { id: "unknown", label: "Didn't know" },
   { id: "failed", label: "Failed" },
+  { id: "dropped", label: "Invented citations" },
+  { id: "flagged", label: "Flagged" },
 ];
+
+const TONE_CLASS: Record<Tone, string> = {
+  ok: "text-muted-foreground",
+  warn: "text-accent-orange",
+  bad: "text-destructive",
+};
 
 /**
  * What visitors asked and what they got, redacted (no emails, phone numbers
  * or IPs) and kept 90 days. "Didn't know" lists answers that admitted the
- * portfolio has no answer — the candidates for an FAQ entry.
+ * portfolio has no answer — the candidates for an FAQ entry; "Flagged", the
+ * ones a deterministic check marked (uncited, wrong language, a fallback…).
+ * Each answer opens into its timeline: every step's model (and the ones
+ * passed over), its tools with their outcomes, and the citations kept or
+ * dropped.
  */
 @Component({
   selector: "app-assistant-conversations",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, FormSkeletonComponent, HlmBadge, HlmToggleGroupImports],
+  imports: [
+    DecimalPipe,
+    FormSkeletonComponent,
+    FreezeCaseComponent,
+    HlmBadge,
+    HlmToggleGroupImports,
+  ],
   host: { class: "block" },
   template: `
     <div class="flex flex-col gap-4">
@@ -77,6 +105,13 @@ const FILTERS: { id: ConversationFilter; label: string }[] = [
                 } @else if (row.feedback === -1) {
                   <span hlmBadge variant="destructive">−1</span>
                 }
+                @for (flag of row.checks?.flags ?? []; track flag) {
+                  <span
+                    hlmBadge
+                    [variant]="checkTone(flag) === 'bad' ? 'destructive' : 'outline'"
+                    >{{ checkLabel(flag) }}</span
+                  >
+                }
                 <span>first token {{ row.ttftMs ?? "–" }} ms · total {{ row.totalMs }} ms</span>
                 <span>
                   {{ row.tokens.input | number }} in ({{
@@ -99,6 +134,47 @@ const FILTERS: { id: ConversationFilter; label: string }[] = [
                 <p class="m-0 font-mono text-xs text-muted-foreground">
                   cited: {{ row.citedIds.join(", ") }}
                 </p>
+              }
+              @if (row.droppedCitations.length) {
+                <p class="m-0 font-mono text-xs text-destructive">
+                  dropped (invented, never shown): {{ row.droppedCitations.join(", ") }}
+                </p>
+              }
+              @if (source() === "terminal") {
+                <app-freeze-case [message]="row" />
+              }
+              @if (row.trace?.steps.length) {
+                @let steps = row.trace!.steps;
+                <details class="rounded-md border border-border px-3 py-2">
+                  <summary class="cursor-pointer font-mono text-xs text-muted-foreground">
+                    Timeline · {{ steps.length }} {{ steps.length === 1 ? "step" : "steps" }}
+                  </summary>
+                  <ol
+                    class="m-0 mt-2 flex list-none flex-col gap-2 p-0 font-mono text-xs"
+                    role="list"
+                  >
+                    @for (step of steps; track $index) {
+                      <li class="flex flex-col gap-1">
+                        <p class="m-0">
+                          <span class="text-muted-foreground">{{ $index + 1 }}.</span>
+                          {{ stepLine(step) }}
+                        </p>
+                        @if (passedOverLine(step); as passed) {
+                          <p class="m-0 pl-4 text-muted-foreground">passed over: {{ passed }}</p>
+                        }
+                        @for (tool of step.tools; track $index) {
+                          <p class="m-0 break-all pl-4">
+                            {{ tool.name }} {{ tool.input }} →
+                            <span [class]="toneClass(tool.outcome)">{{
+                              outcomeLabel(tool.outcome)
+                            }}</span>
+                            · {{ tool.resultChars | number }} chars
+                          </p>
+                        }
+                      </li>
+                    }
+                  </ol>
+                </details>
               }
             </li>
           } @empty {
@@ -151,5 +227,15 @@ export class AssistantConversationsComponent implements OnInit {
 
   protected attempts(row: ConversationRow): string {
     return row.attempts.map((a) => `${a.model} ${a.outcome}`).join(" → ");
+  }
+
+  protected readonly stepLine = stepLine;
+  protected readonly passedOverLine = passedOverLine;
+  protected readonly outcomeLabel = toolOutcomeLabel;
+  protected readonly checkLabel = checkLabel;
+  protected readonly checkTone = checkTone;
+
+  protected toneClass(outcome: ToolOutcome): string {
+    return TONE_CLASS[toolTone(outcome)];
   }
 }

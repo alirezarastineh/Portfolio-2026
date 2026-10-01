@@ -1,6 +1,6 @@
 import { zValidator } from "@hono/zod-validator";
 import { createUIMessageStreamResponse, generateText, Output, type ModelMessage } from "ai";
-import { and, asc, desc, eq, gte, lt, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -11,14 +11,25 @@ import {
   aiFaq,
   aiFaqTranslations,
   aiFeedback,
+  aiGuardEvents,
   aiMessages,
+  aiReviews,
   aiSettings,
   aiUsage,
+  contactMessages,
 } from "../db/schema.js";
 import { streamAnswer } from "./agent.js";
 import { altImage } from "./alt-image.js";
+import { NOT_IN_PORTFOLIO } from "./answer-patterns.js";
 import type { AskConfig } from "./config.js";
-import { askChain, askConfig, askCorpus, askDraftCorpus } from "./deps.js";
+import {
+  askChain,
+  askConfig,
+  askCorpus,
+  askDraftCorpus,
+  askEvalPacing,
+  askVisitorJudges,
+} from "./deps.js";
 import { availability, hashWithSalt } from "./guard.js";
 import { buildHistory } from "./history.js";
 import { createFallbackModel, newTrace, type ModelCall, type Trace } from "./models/fallback.js";
@@ -30,12 +41,34 @@ import {
   type ChainRole,
   type ModelEntry,
 } from "./models/registry.js";
+import {
+  completedWeeks,
+  outcomes,
+  PRIMARY_METRICS,
+  shouldRotate,
+  weeklyValues,
+  type OutcomeRow,
+} from "./outcomes.js";
 import { buildInstructions, PROMPT_HASH, PROMPT_VERSION } from "./prompt.js";
+import {
+  buildQueue,
+  isoWeek,
+  labelStats,
+  reviewReasons,
+  weekBounds,
+  type ReviewLabel,
+} from "./reviews.js";
+import { evalCasesRouter } from "./eval-cases-routes.js";
+import { calibrate } from "./evals/calibration.js";
 import { EVAL_CASES } from "./evals/cases.js";
 import { fixtureAskCorpus } from "./evals/fixture.js";
-import { FREE_TIER_EVAL_PACING, FREE_TIER_RATE_LIMIT_RETRY, runEvals } from "./evals/run.js";
+import { FREE_TIER_RATE_LIMIT_RETRY, runEvals } from "./evals/run.js";
 import { routeQuestion } from "./router.js";
 import { SESSION_ID, streamsInFlight } from "./route.js";
+import { calibrationPairs, reviewedToJudge } from "./runs/judge-work.js";
+import { runsRouter } from "./runs/routes.js";
+import { claimRequestEval, releaseRequestEval } from "./runs/runner.js";
+import { activeRuns } from "./runs/store.js";
 import { invalidateAssistantCache, readAiSettings, readFaq } from "./settings.js";
 import { countTokens } from "./tokens.js";
 import { recordUsage } from "./usage.js";
@@ -287,6 +320,9 @@ adminAskRouter.get("/assistant/corpus", async (c) => {
 adminAskRouter.get("/assistant/usage", async (c) => {
   const days = Math.min(90, Math.max(1, Number.parseInt(c.req.query("days") ?? "30", 10) || 30));
   const since = new Date(Date.now() - (days - 1) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // The model whose cache hits matter: the lite chain's first, which answers most questions.
+  const primaryModel = askChain(askConfig(), "lite")[0]?.id ?? null;
+  const byPrimary = sql`${aiMessages.model} = ${primaryModel}`;
 
   const models = await getDb()
     .select()
@@ -300,6 +336,10 @@ adminAskRouter.get("/assistant/usage", async (c) => {
       answers: sql<number>`count(*)::int`,
       up: sql<number>`count(${aiFeedback.messageId}) filter (where ${aiFeedback.value} = 1)::int`,
       down: sql<number>`count(${aiFeedback.messageId}) filter (where ${aiFeedback.value} = -1)::int`,
+      withDropped: sql<number>`count(*) filter (where jsonb_array_length(${aiMessages.droppedCitations}) > 0)::int`,
+      flagged: sql<number>`count(*) filter (where ${FLAGGED})::int`,
+      primaryInput: sql<number>`coalesce(sum((${aiMessages.tokens}->>'input')::float8) filter (where ${byPrimary}), 0)`,
+      primaryCached: sql<number>`coalesce(sum((${aiMessages.tokens}->>'cached')::float8) filter (where ${byPrimary}), 0)`,
     })
     .from(aiMessages)
     .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
@@ -312,13 +352,59 @@ adminAskRouter.get("/assistant/usage", async (c) => {
     .groupBy(sql`1`)
     .orderBy(sql`1`);
 
-  return c.json({ days, models, answers });
+  const guardEvents = await getDb()
+    .select()
+    .from(aiGuardEvents)
+    .where(gte(aiGuardEvents.day, since))
+    .orderBy(asc(aiGuardEvents.day), asc(aiGuardEvents.kind));
+
+  // Each flag the checks raised, over the period: a set-returning function per row.
+  const { rows: checks } = await getDb().execute<{ flag: string; count: number }>(sql`
+    select f.flag, count(*)::int as count
+    from ai_messages m
+    cross join lateral jsonb_array_elements_text(coalesce(m.checks -> 'flags', '[]'::jsonb)) as f(flag)
+    where m.created_at >= ${new Date(`${since}T00:00:00Z`)} and m.source = 'terminal'
+    group by f.flag
+    order by count desc, f.flag`);
+
+  return c.json({ days, primaryModel, models, answers, guardEvents, checks });
 });
 
 /* ----------------------------------------------------------- conversations */
 
-/** Answers that admit the portfolio does not say: the list worth turning into FAQ entries. */
-const UNKNOWN_ANSWER = sql`(${aiMessages.answerExcerpt} ~* '(not (in|part of|mentioned in) (the|this|his|my) (portfolio|documents|site|content)|no information|isn''t (mentioned|covered)|nicht (im|in den|auf der) (portfolio|dokumenten|unterlagen|website)|keine (informationen|angaben))')`;
+/**
+ * Answers that admit the portfolio does not say: the list worth turning into
+ * FAQ entries. The same pattern the eval graders use (answer-patterns.ts).
+ */
+const UNKNOWN_ANSWER = sql`(${aiMessages.answerExcerpt} ~* ${NOT_IN_PORTFOLIO})`;
+/** Answers any deterministic check flagged (checks.ts). */
+const FLAGGED = sql`jsonb_array_length(coalesce(${aiMessages.checks} -> 'flags', '[]'::jsonb)) > 0`;
+
+/** An answer as Conversations and Reviews show it; needs the join on `ai_feedback`. */
+const CONVERSATION_ROW = {
+  id: aiMessages.id,
+  createdAt: aiMessages.createdAt,
+  session: sql<string>`left(${aiMessages.sessionHash}, 10)`,
+  locale: aiMessages.locale,
+  route: aiMessages.route,
+  question: aiMessages.questionRedacted,
+  answer: aiMessages.answerExcerpt,
+  citedIds: aiMessages.citedIds,
+  toolCalls: aiMessages.toolCalls,
+  model: aiMessages.model,
+  attempts: aiMessages.attempts,
+  ttftMs: aiMessages.ttftMs,
+  totalMs: aiMessages.totalMs,
+  tokens: aiMessages.tokens,
+  usd: aiMessages.usd,
+  finishReason: aiMessages.finishReason,
+  promptVersion: aiMessages.promptVersion,
+  droppedCitations: aiMessages.droppedCitations,
+  trace: aiMessages.trace,
+  corpusKey: aiMessages.corpusKey,
+  checks: aiMessages.checks,
+  feedback: aiFeedback.value,
+};
 
 adminAskRouter.get("/assistant/conversations", async (c) => {
   const filter = c.req.query("filter");
@@ -330,28 +416,13 @@ adminAskRouter.get("/assistant/conversations", async (c) => {
   if (filter === "down") conditions.push(eq(aiFeedback.value, -1));
   if (filter === "unknown") conditions.push(UNKNOWN_ANSWER);
   if (filter === "failed") conditions.push(sql`${aiMessages.finishReason} like 'error:%'`);
+  if (filter === "dropped") {
+    conditions.push(sql`jsonb_array_length(${aiMessages.droppedCitations}) > 0`);
+  }
+  if (filter === "flagged") conditions.push(FLAGGED);
 
   const rows = await getDb()
-    .select({
-      id: aiMessages.id,
-      createdAt: aiMessages.createdAt,
-      session: sql<string>`left(${aiMessages.sessionHash}, 10)`,
-      locale: aiMessages.locale,
-      route: aiMessages.route,
-      question: aiMessages.questionRedacted,
-      answer: aiMessages.answerExcerpt,
-      citedIds: aiMessages.citedIds,
-      toolCalls: aiMessages.toolCalls,
-      model: aiMessages.model,
-      attempts: aiMessages.attempts,
-      ttftMs: aiMessages.ttftMs,
-      totalMs: aiMessages.totalMs,
-      tokens: aiMessages.tokens,
-      usd: aiMessages.usd,
-      finishReason: aiMessages.finishReason,
-      promptVersion: aiMessages.promptVersion,
-      feedback: aiFeedback.value,
-    })
+    .select(CONVERSATION_ROW)
     .from(aiMessages)
     .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
     .where(and(...conditions))
@@ -359,6 +430,200 @@ adminAskRouter.get("/assistant/conversations", async (c) => {
     .limit(100);
   return c.json({ messages: rows });
 });
+
+/* ----------------------------------------------------------------- reviews */
+
+/**
+ * The weekly human review (reviews.ts): the week's queue with each answer as
+ * Conversations shows it, and how far the review got. The label shares count
+ * the random sample only, so the answers flagged into the queue do not drag
+ * the estimate down.
+ */
+adminAskRouter.get("/assistant/reviews", async (c) => {
+  const week = c.req.query("week") || isoWeek(new Date());
+  const bounds = weekBounds(week);
+  if (!bounds) return c.json({ error: "invalid_input" }, 400);
+  const db = getDb();
+
+  const candidates = await db
+    .select({
+      id: aiMessages.id,
+      flags: sql<string[]>`coalesce(${aiMessages.checks} -> 'flags', '[]'::jsonb)`,
+      thumbsDown: sql<boolean>`coalesce(${aiFeedback.value} = -1, false)`,
+      unknown: sql<boolean>`${UNKNOWN_ANSWER}`,
+      reviewed: sql<boolean>`${aiReviews.messageId} is not null`,
+    })
+    .from(aiMessages)
+    .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
+    .leftJoin(aiReviews, eq(aiReviews.messageId, aiMessages.id))
+    .where(
+      and(
+        eq(aiMessages.source, "terminal"),
+        gte(aiMessages.createdAt, bounds.start),
+        lt(aiMessages.createdAt, bounds.end),
+      ),
+    );
+  const queue = buildQueue(
+    week,
+    candidates.map((row) => ({ id: row.id, reasons: reviewReasons(row), reviewed: row.reviewed })),
+  );
+
+  const ids = queue.map((entry) => entry.id);
+  const [rows, reviews] = ids.length
+    ? await Promise.all([
+        db
+          .select(CONVERSATION_ROW)
+          .from(aiMessages)
+          .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
+          .where(inArray(aiMessages.id, ids)),
+        db.select().from(aiReviews).where(inArray(aiReviews.messageId, ids)),
+      ])
+    : [[], []];
+  const messages = new Map(rows.map((row) => [row.id, row]));
+  const reviewed = new Map(reviews.map((review) => [review.messageId, review]));
+  const entries = queue.flatMap((entry) => {
+    const message = messages.get(entry.id);
+    if (!message) return []; // pruned in between
+    const review = reviewed.get(entry.id);
+    return [
+      {
+        message,
+        reasons: entry.reasons,
+        sampled: entry.sampled,
+        review: review
+          ? { labels: review.labels, note: review.note, reviewedAt: review.reviewedAt }
+          : null,
+      },
+    ];
+  });
+
+  return c.json({
+    week,
+    previous: isoWeek(new Date(bounds.start.getTime() - 1)),
+    next: bounds.end.getTime() <= Date.now() ? isoWeek(bounds.end) : null,
+    queue: entries,
+    stats: {
+      answers: candidates.length,
+      queued: entries.length,
+      reviewed: entries.filter((entry) => entry.review).length,
+      labels: labelStats(entries.flatMap((e) => (e.sampled && e.review ? [e.review] : []))),
+    },
+  });
+});
+
+const verdict = z.boolean().nullable();
+const reviewInput = z.object({
+  labels: z.object({
+    correct: verdict,
+    grounded: verdict,
+    helpful: verdict,
+    tone: verdict,
+    language: verdict,
+  } satisfies Record<ReviewLabel, typeof verdict>),
+  note: z.string().max(2000).nullable(),
+});
+
+adminAskRouter.put(
+  "/assistant/reviews/:messageId",
+  zValidator("json", reviewInput, invalid),
+  async (c) => {
+    const messageId = c.req.param("messageId");
+    const input = c.req.valid("json");
+    const [message] = await getDb()
+      .select({ id: aiMessages.id })
+      .from(aiMessages)
+      .where(and(eq(aiMessages.id, messageId), eq(aiMessages.source, "terminal")));
+    if (!message) return c.json({ error: "not_found" }, 404);
+
+    const review = {
+      labels: input.labels,
+      note: input.note?.trim() || null,
+      reviewedAt: new Date(),
+    };
+    await getDb()
+      .insert(aiReviews)
+      .values({ messageId, ...review })
+      .onConflictDoUpdate({ target: aiReviews.messageId, set: review });
+    return c.json({ ok: true, reviewedAt: review.reviewedAt });
+  },
+);
+
+/* ---------------------------------------------------------------- outcomes */
+
+const OUTCOME_DAYS = 30;
+/** The primary metric's weekly reviews shown, oldest first. */
+const OUTCOME_WEEKS = 4;
+
+/**
+ * Whether visitors got what they came for (outcomes.ts): the last 30 days'
+ * composite, the hand-off funnel, and the primary metric per weekly review
+ * with the rotation rule's verdict.
+ */
+adminAskRouter.get("/assistant/outcomes", async (c) => {
+  const now = new Date();
+  const weeks = completedWeeks(OUTCOME_WEEKS, now);
+  const since = new Date(now.getTime() - OUTCOME_DAYS * 24 * 60 * 60 * 1000);
+  const oldest = weekBounds(weeks[0]!)!.start;
+  const from = oldest < since ? oldest : since;
+  const db = getDb();
+
+  const rows: OutcomeRow[] = await db
+    .select({
+      id: aiMessages.id,
+      sessionHash: aiMessages.sessionHash,
+      createdAt: aiMessages.createdAt,
+      question: aiMessages.questionRedacted,
+      finishReason: aiMessages.finishReason,
+      usd: aiMessages.usd,
+      flags: sql<string[]>`coalesce(${aiMessages.checks} -> 'flags', '[]'::jsonb)`,
+      feedback: sql<1 | -1 | null>`${aiFeedback.value}`,
+      faithfulness: sql<number | null>`(${aiMessages.judge} ->> 'faithfulness')::float8`,
+      unknown: sql<boolean>`${UNKNOWN_ANSWER}`,
+      handoffOffered: sql<boolean>`${aiMessages.toolCalls} @> '["handoff_contact"]'::jsonb`,
+      handoffConfirmed: sql<boolean>`${aiMessages.handoffConfirmedAt} is not null`,
+    })
+    .from(aiMessages)
+    .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
+    .where(and(eq(aiMessages.source, "terminal"), gte(aiMessages.createdAt, from)));
+  const [sent] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(contactMessages)
+    .where(and(eq(contactMessages.origin, "ask"), gte(contactMessages.createdAt, since)));
+
+  const { primaryMetric } = await readAiSettings();
+  const weekly = weeklyValues(rows, primaryMetric, weeks);
+  return c.json({
+    days: OUTCOME_DAYS,
+    outcomes: outcomes(
+      rows.filter((row) => row.createdAt >= since),
+      sent?.n ?? 0,
+    ),
+    primary: {
+      metric: primaryMetric,
+      weeks: weekly,
+      rotate: shouldRotate(weekly.map((w) => w.value)),
+    },
+    metrics: PRIMARY_METRICS,
+  });
+});
+
+adminAskRouter.put(
+  "/assistant/primary-metric",
+  zValidator("json", z.object({ metric: z.enum(PRIMARY_METRICS) }), invalid),
+  async (c) => {
+    const { metric } = c.req.valid("json");
+    const now = new Date();
+    await getDb()
+      .insert(aiSettings)
+      .values({ id: 1, primaryMetric: metric, updatedAt: now })
+      .onConflictDoUpdate({
+        target: aiSettings.id,
+        set: { primaryMetric: metric, updatedAt: now },
+      });
+    invalidateAssistantCache();
+    return c.json({ ok: true });
+  },
+);
 
 /* --------------------------------------------------------------------- FAQ */
 
@@ -610,35 +875,63 @@ adminAskRouter.post("/assistant/playground", async (c) => {
 
 /* ------------------------------------------------------------------- evals */
 
-let evalRunning = false;
+/** Background runs (the Evals tab since plan phase 8): start, follow, cancel, resume. */
+adminAskRouter.route("/assistant/runs", runsRouter);
+
+/** Eval cases frozen from visitor answers (plan phase 12): list, freeze, retire. */
+adminAskRouter.route("/assistant/eval-cases", evalCasesRouter);
 
 /**
- * The eval suite on demand, against the frozen fixture corpus. The page asks
- * for confirmation because it consumes configured-provider quota. Usage counts
- * toward the daily budget like any other call.
+ * The judges and how far the one on visitor answers agrees with reviewers
+ * (evals/calibration.ts), plus the answerers a pairwise run can compare.
+ */
+adminAskRouter.get("/assistant/judge", async (c) => {
+  const config = askConfig();
+  const visitorJudge = askVisitorJudges(config)[0]?.id ?? null;
+  const [pairs, unjudged] = visitorJudge
+    ? await Promise.all([calibrationPairs(visitorJudge), reviewedToJudge(visitorJudge)])
+    : [[], []];
+  const models = (["lite", "deep"] as const).flatMap((role) =>
+    askChain(config, role).map((e) => e.id),
+  );
+  return c.json({
+    fixtureJudge: askChain(config, "judge")[0]?.id ?? null,
+    visitorJudge,
+    calibration: calibrate(pairs),
+    unjudged: unjudged.length,
+    answerers: [...new Set(["lite", "deep", ...models])],
+  });
+});
+
+/**
+ * The eval suite inside one request: the previous admin's Evals tab, kept
+ * until the new admin (background runs) is deployed. It and the start of a
+ * background run exclude each other (runs/runner.ts), and it refuses while a
+ * run of any kind is active: one paid thing at a time.
  */
 adminAskRouter.post(
   "/assistant/evals",
   zValidator("json", z.object({ cases: z.array(z.string().max(40)).max(60).optional() }), invalid),
   async (c) => {
-    if (evalRunning) return c.json({ error: "already_running" }, 409);
-    const config = askConfig();
-    const settings = await readAiSettings();
-    const state = await availability(config, { ...settings, enabled: true });
-    if (state.state !== "ok") return c.json({ error: `assistant_${state.state}` }, 503);
-
-    const wanted = c.req.valid("json").cases;
-    const cases = wanted?.length ? EVAL_CASES.filter((e) => wanted.includes(e.id)) : EVAL_CASES;
+    // Claimed before the first await, so no run can start in between.
+    if (!claimRequestEval()) return c.json({ error: "already_running" }, 409);
     const calls: ModelCall[] = [];
-    evalRunning = true;
     try {
+      if ((await activeRuns()).length) return c.json({ error: "already_running" }, 409);
+      const config = askConfig();
+      const settings = await readAiSettings();
+      const state = await availability(config, { ...settings, enabled: true });
+      if (state.state !== "ok") return c.json({ error: `assistant_${state.state}` }, 503);
+
+      const wanted = c.req.valid("json").cases;
+      const cases = wanted?.length ? EVAL_CASES.filter((e) => wanted.includes(e.id)) : EVAL_CASES;
       const summary = await runEvals({
         cases,
         corpus: fixtureAskCorpus(config),
         config,
         chain: (role) => askChain(config, role),
         concurrency: 1,
-        pacing: FREE_TIER_EVAL_PACING,
+        pacing: askEvalPacing(),
         rateLimitRetry: FREE_TIER_RATE_LIMIT_RETRY,
         stopOnUnavailable: true,
         abortSignal: c.req.raw.signal,
@@ -647,8 +940,12 @@ adminAskRouter.post(
       });
       return c.json(summary);
     } finally {
-      evalRunning = false;
-      if (calls.length) await recordUsage(calls).catch(() => undefined);
+      releaseRequestEval();
+      if (calls.length) {
+        await recordUsage(calls).catch((error) =>
+          console.error("[ask] eval usage not recorded", error),
+        );
+      }
     }
   },
 );

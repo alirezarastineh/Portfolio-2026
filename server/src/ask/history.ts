@@ -132,18 +132,22 @@ function totalTokens(list: ModelMessage[]): number {
   );
 }
 
-function trimHistory(
+/** The last turns that fit, starting with a visitor's turn (see the property tests). */
+export function trimHistory(
   turns: ModelMessage[],
   current: ModelMessage,
   options: { historyTurns: number; maxInputTokens: number },
 ): ModelMessage[] {
-  let kept = turns.slice(-options.historyTurns * 2);
-  while (kept[0]?.role === "assistant") {
-    kept = kept.slice(1);
-  }
+  // The history must open with the visitor: drop any answers left at the front.
+  const fromVisitor = (list: ModelMessage[]) => {
+    let from = 0;
+    while (list[from]?.role === "assistant") from++;
+    return list.slice(from);
+  };
+  let kept = fromVisitor(turns.slice(-options.historyTurns * 2));
   while (kept.length > 0 && totalTokens([...kept, current]) > options.maxInputTokens) {
-    const dropCount = kept[1]?.role === "assistant" ? 2 : 1;
-    kept = kept.slice(dropCount);
+    // The oldest turn goes, and with it every answer that would then lead.
+    kept = fromVisitor(kept.slice(1));
   }
   return kept;
 }

@@ -27,7 +27,7 @@ import { CHROME } from "../i18n/chrome";
 import { fmt } from "../i18n/interpolate";
 import { ClockService } from "../services/clock.service";
 import { LanguageService } from "../services/language.service";
-import { ContactService } from "../services/contact.service";
+import { ContactService, type AskConversation } from "../services/contact.service";
 import { TURNSTILE_SITE_KEY, turnstileToken } from "../services/turnstile";
 
 /** The API's own limits; the form's validators say the same in the reader's language. */
@@ -269,6 +269,26 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                   }
                 </div>
 
+                @if (attachable()) {
+                  <!-- After the assistant's hand-off: the conversation goes only if ticked. -->
+                  <div class="flex items-start gap-2 text-sm">
+                    <input
+                      id="contact-attach"
+                      type="checkbox"
+                      class="mt-1 size-4 accent-current"
+                      [checked]="attach()"
+                      (change)="attach.set($any($event.target).checked)"
+                      aria-describedby="contact-attach-hint"
+                    />
+                    <div class="flex flex-col gap-0.5">
+                      <label for="contact-attach">{{ chrome().attach }}</label>
+                      <p id="contact-attach-hint" class="m-0 text-xs text-muted-foreground">
+                        {{ chrome().attachHint }}
+                      </p>
+                    </div>
+                  </div>
+                }
+
                 <!-- Honeypot: invisible to people, tempting to bots. -->
                 <div
                   aria-hidden="true"
@@ -364,6 +384,11 @@ export class ContactSectionComponent {
   readonly state = signal<SubmitState>("idle");
   readonly errorMsg = signal<string>("");
 
+  /** The conversation the assistant's hand-off came from, while the form holds its draft. */
+  protected readonly attachable = signal<AskConversation | null>(null);
+  /** The visitor's opt-in to attach it: off unless ticked. */
+  protected readonly attach = signal(false);
+
   protected readonly announcement = computed(() => {
     const state = this.state();
     if (state === "submitting") return this.lang.t().contact.sending;
@@ -395,15 +420,18 @@ export class ContactSectionComponent {
     inject(DestroyRef).onDestroy(() => clearTimeout(this.copiedTimer));
 
     // The assistant's hand-off (after the visitor confirmed it): the summary
-    // becomes the message, and the visitor adds their name and email.
+    // becomes the message, and the visitor adds their name and email. The
+    // conversation it came from can be attached, unticked until they tick it.
     effect(() => {
-      const text = this.contact.prefill();
-      if (!text || !this.isBrowser) return;
+      const prefill = this.contact.prefill();
+      if (!prefill || !this.isBrowser) return;
       untracked(() => {
         this.contact.prefill.set(null);
         if (this.state() === "success") this.reset();
-        this.form.controls.message.setValue(text.slice(0, 4000));
+        this.form.controls.message.setValue(prefill.text.slice(0, 4000));
         this.form.controls.message.markAsDirty();
+        this.attachable.set(prefill.ask);
+        this.attach.set(false);
         afterNextRender(() => this.firstField()?.focus(), { injector: this.injector });
       });
     });
@@ -504,11 +532,15 @@ export class ContactSectionComponent {
     const turnstile = await this.fetchTurnstile();
     if (turnstile === null) return;
 
-    // The page language, so the inbox shows which language to reply in.
+    // The page language, so the inbox shows which language to reply in. A
+    // hand-off says so; its conversation goes only with the visitor's tick.
+    const ask = this.attachable();
     const result = await this.contact.send({
       ...data,
       locale: this.lang.lang(),
       ...(turnstile ? { turnstileToken: turnstile } : {}),
+      ...(ask ? { origin: "ask" as const } : {}),
+      ...(ask && this.attach() ? { ask } : {}),
     });
     if (result.ok) this.succeed();
     else this.fail(this.humanize(result.error));
@@ -520,10 +552,18 @@ export class ContactSectionComponent {
     this.form.reset({ name: "", email: "", message: "", website: "" });
     this.state.set("idle");
     this.errorMsg.set("");
+    this.forgetConversation();
     afterNextRender(() => this.firstField()?.focus(), { injector: this.injector });
   }
 
+  /** A sent or discarded hand-off: the next message is the visitor's own. */
+  private forgetConversation(): void {
+    this.attachable.set(null);
+    this.attach.set(false);
+  }
+
   private succeed(): void {
+    this.forgetConversation();
     this.state.set("success");
     afterNextRender(() => this.successMessage()?.nativeElement.focus(), {
       injector: this.injector,

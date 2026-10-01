@@ -2,9 +2,11 @@ import { serve } from "@hono/node-server";
 
 import { createApp } from "./app.js";
 import { getAskConfig } from "./ask/config.js";
+import { flushGuardEvents, startGuardEventFlush } from "./ask/guard-events.js";
 import { startAskPruning } from "./ask/log.js";
 import { checkModels } from "./ask/models/registry.js";
 import { abortAllAsks } from "./ask/route.js";
+import { abortAllRuns, recoverRuns } from "./ask/runs/runner.js";
 import { loadEncoder } from "./ask/tokens.js";
 import { startSessionPruning } from "./auth/session.js";
 import { backfillContentV2 } from "./content/backfill.js";
@@ -53,12 +55,20 @@ if (migrated) {
     console.error("[db] content v2 backfill failed", error);
     captureError(error, { phase: "backfill" });
   }
+  try {
+    // A run the last process was working on when it stopped can be resumed.
+    await recoverRuns();
+  } catch (error) {
+    console.error("[runs] recovery failed", error);
+    captureError(error, { phase: "runs-recovery" });
+  }
 }
 
 startAuthAttemptPruning();
 startSessionPruning();
 startContactPruning();
 startAskPruning();
+startGuardEventFlush();
 
 // The assistant never blocks the boot: a bad setting or missing key switches
 // it off, and the model check runs in the background.
@@ -116,8 +126,14 @@ function shutdown(signal: string): void {
 
   // Answers can stream for minutes; end them now so the drain can finish.
   abortAllAsks();
+  // Background runs stop as interrupted; they can be resumed after the restart.
+  abortAllRuns();
   server.close((error) => {
-    void Promise.allSettled([closeDb(), flushSentry()])
+    // The last minute of refusal counts goes in before the pool closes.
+    const database = flushGuardEvents()
+      .catch((flushError: unknown) => console.error("[ask] guard events not written", flushError))
+      .then(() => closeDb());
+    void Promise.allSettled([database, flushSentry()])
       .then((results) => {
         for (const result of results) {
           if (result.status === "rejected")

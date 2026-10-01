@@ -14,7 +14,16 @@ import { HlmButton } from "@spartan-ng/helm/button";
 import { KpiTileComponent } from "../components/kpi-tile.component";
 import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
 import { AdminApiService } from "../admin-api.service";
-import type { AnswersRow, AssistantHealth, UsageRow } from "../assistant-types";
+import {
+  cacheDays,
+  checkLabel,
+  dayRows,
+  droppedRate,
+  refusalTotals,
+  shareOf,
+  type DayRow,
+} from "../answer-trace";
+import type { AssistantHealth, AssistantUsage } from "../assistant-types";
 
 interface ModelTotal {
   model: string;
@@ -28,7 +37,9 @@ interface ModelTotal {
 /**
  * The assistant at a glance: is it answering, what has it cost today, how
  * fast and how often a fallback answered, each model's breaker, what the
- * corpus weighs, and 30 days of usage.
+ * corpus weighs, and 30 days of usage. The signals show what is otherwise
+ * invisible: whether the fixed prefix is served from the cache, how many
+ * requests the gate turned away, and how often a model invented a citation.
  */
 @Component({
   selector: "app-assistant-overview",
@@ -188,6 +199,56 @@ interface ModelTotal {
     }
 
     @if (usage(); as u) {
+      <section class="flex flex-col gap-2" aria-labelledby="assistant-signals">
+        <h2 id="assistant-signals" class="m-0 text-sm font-medium">Signals</h2>
+        <ul class="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 xl:grid-cols-4" role="list">
+          <li appKpiTile="Cache hits">
+            @if (latestCache(); as c) {
+              <p
+                class="m-0 text-h3 tabular-nums"
+                [class]="c.warn ? 'text-destructive' : 'text-foreground'"
+              >
+                {{ c.share! * 100 | number: "1.0-0" }} %
+              </p>
+              <p class="m-0 text-xs text-muted-foreground">
+                of {{ u.primaryModel ?? "the primary model" }}'s input came from the cache on
+                {{ c.day }}
+              </p>
+              @if (c.warn) {
+                <p class="m-0 text-xs text-destructive">
+                  Under 50 %: the fixed prefix is not being reused.
+                </p>
+              }
+            } @else {
+              <p class="m-0 text-h3 text-muted-foreground">—</p>
+              <p class="m-0 text-xs text-muted-foreground">
+                No answers from the primary model yet.
+              </p>
+            }
+          </li>
+          <li appKpiTile="Turned away (30 days)">
+            <p class="m-0 text-h3 tabular-nums">{{ refused().total }}</p>
+            <p class="m-0 text-xs text-muted-foreground">
+              {{ refused().kinds || "No request refused at the gate." }}
+            </p>
+          </li>
+          <li appKpiTile="Invented citations (30 days)">
+            <p class="m-0 text-h3 tabular-nums">{{ dropped().rate * 100 | number: "1.0-1" }} %</p>
+            <p class="m-0 text-xs text-muted-foreground">
+              {{ dropped().withDropped }} of {{ dropped().answers }} answers cited a document that
+              does not exist; the marker was removed before the visitor saw it.
+            </p>
+          </li>
+          <li appKpiTile="Flagged by checks (30 days)">
+            <p class="m-0 text-h3 tabular-nums">{{ flagged().rate * 100 | number: "1.0-1" }} %</p>
+            <p class="m-0 text-xs text-muted-foreground">
+              {{ flagged().count }} of {{ flagged().answers }} answers.
+              {{ flagKinds() || "No check raised a flag." }}
+            </p>
+          </li>
+        </ul>
+      </section>
+
       <section class="flex flex-col gap-2">
         <h2 class="m-0 text-sm font-medium">Last 30 days</h2>
         <div class="overflow-x-auto rounded-lg border border-border">
@@ -229,6 +290,10 @@ interface ModelTotal {
                 <th class="p-2 font-normal">Day</th>
                 <th class="p-2 text-right font-normal">Answers</th>
                 <th class="p-2 text-right font-normal">+1 / −1</th>
+                <th class="p-2 text-right font-normal">Cache hits</th>
+                <th class="p-2 text-right font-normal">Invented</th>
+                <th class="p-2 text-right font-normal">Flagged</th>
+                <th class="p-2 text-right font-normal">Turned away</th>
                 <th class="p-2 text-right font-normal">Cost</th>
               </tr>
             </thead>
@@ -238,11 +303,17 @@ interface ModelTotal {
                   <td class="p-2">{{ d.day }}</td>
                   <td class="p-2 text-right">{{ d.answers }}</td>
                   <td class="p-2 text-right">{{ d.up }} / {{ d.down }}</td>
+                  <td class="p-2 text-right" [class]="d.cacheWarn ? 'text-destructive' : ''">
+                    {{ d.cache === null ? "–" : (d.cache * 100 | number: "1.0-0") + " %" }}
+                  </td>
+                  <td class="p-2 text-right">{{ d.withDropped }}</td>
+                  <td class="p-2 text-right">{{ d.flagged }}</td>
+                  <td class="p-2 text-right" [title]="d.refusedKinds">{{ d.refused }}</td>
                   <td class="p-2 text-right">\${{ d.usd | number: "1.2-4" }}</td>
                 </tr>
               } @empty {
                 <tr>
-                  <td class="p-2 text-muted-foreground" colspan="4">No answers yet.</td>
+                  <td class="p-2 text-muted-foreground" colspan="8">No answers yet.</td>
                 </tr>
               }
             </tbody>
@@ -256,7 +327,7 @@ export class AssistantOverviewComponent implements OnInit {
   private readonly api = inject(AdminApiService);
 
   protected readonly health = signal<AssistantHealth | null>(null);
-  protected readonly usage = signal<{ models: UsageRow[]; answers: AnswersRow[] } | null>(null);
+  protected readonly usage = signal<AssistantUsage | null>(null);
   protected readonly counting = signal(false);
   /** The API's reason when the health did not arrive. */
   protected readonly loadError = signal<string | null>(null);
@@ -302,20 +373,31 @@ export class AssistantOverviewComponent implements OnInit {
     return [...totals.values()].sort((a, b) => b.usd - a.usd);
   });
 
-  protected readonly days = computed(() => {
+  /** The newest day on which the primary model answered, with its cache hits. */
+  protected readonly latestCache = computed(
+    () => cacheDays(this.usage()?.answers ?? []).find((d) => d.share !== null) ?? null,
+  );
+
+  protected readonly refused = computed(() => {
+    const totals = refusalTotals(this.usage()?.guardEvents ?? []);
+    return {
+      total: totals.reduce((sum, t) => sum + t.count, 0),
+      kinds: totals.map((t) => `${t.kind} ${t.count}`).join(" · "),
+    };
+  });
+
+  protected readonly dropped = computed(() => droppedRate(this.usage()?.answers ?? []));
+
+  protected readonly flagged = computed(() => shareOf(this.usage()?.answers ?? [], "flagged"));
+
+  /** "uncited 4 · fallback answered 2": each flag the checks raised, most frequent first. */
+  protected readonly flagKinds = computed(() =>
+    (this.usage()?.checks ?? []).map((c) => `${checkLabel(c.flag)} ${c.count}`).join(" · "),
+  );
+
+  protected readonly days = computed<DayRow[]>(() => {
     const usage = this.usage();
-    if (!usage) return [];
-    const byDay = new Map<
-      string,
-      { day: string; answers: number; up: number; down: number; usd: number }
-    >();
-    for (const a of usage.answers) byDay.set(a.day, { ...a, usd: 0 });
-    for (const m of usage.models) {
-      const d = byDay.get(m.day) ?? { day: m.day, answers: 0, up: 0, down: 0, usd: 0 };
-      d.usd += m.usd;
-      byDay.set(m.day, d);
-    }
-    return [...byDay.values()].sort((a, b) => b.day.localeCompare(a.day));
+    return usage ? dayRows(usage) : [];
   });
 
   ngOnInit(): void {

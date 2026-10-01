@@ -1,5 +1,5 @@
 import { createUIMessageStreamResponse } from "ai";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
@@ -11,6 +11,7 @@ import { turnstileEnabled, verifyTurnstile, VerifiedSessions } from "../lib/turn
 import { streamAnswer } from "./agent.js";
 import { askChain, askConfig, askCorpus } from "./deps.js";
 import { availability, checkRate, ConcurrencyGate, hashWithSalt, recordRequest } from "./guard.js";
+import { countGuardEvent } from "./guard-events.js";
 import { ASK_MESSAGE_ID, buildHistory } from "./history.js";
 import { shortName } from "./models/registry.js";
 import { routeQuestion } from "./router.js";
@@ -21,6 +22,7 @@ import { assistantState } from "./settings.js";
  *   POST /v1/ask           one streamed answer (AI SDK UI message stream)
  *   GET  /v1/ask/config    whether it is on, suggested questions, limits
  *   POST /v1/ask/feedback  +1 / -1 on an answer from this session
+ *   POST /v1/ask/handoff   the visitor's yes to that answer's hand-off offer
  *   GET  /v1/ask/stream-check  three ticks, so a deploy can prove nothing buffers
  *
  * No cookies and no credentials: the browser holds a random session id per
@@ -46,6 +48,11 @@ const feedbackBody = z.object({
   sessionId: z.string().regex(SESSION_ID),
   messageId: z.string().regex(ASK_MESSAGE_ID),
   value: z.union([z.literal(1), z.literal(-1)]),
+});
+
+const handoffBody = z.object({
+  sessionId: z.string().regex(SESSION_ID),
+  messageId: z.string().regex(ASK_MESSAGE_ID),
 });
 
 const gate = new ConcurrencyGate(() => askConfig().maxConcurrent);
@@ -87,20 +94,34 @@ export function createAskRouter(): Hono {
   router.post(
     "/",
     // Eight turns of 600 characters plus signatures fit easily; anything bigger is not a visitor.
-    bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: "too_large" }, 413) }),
+    bodyLimit({
+      maxSize: 64 * 1024,
+      onError: (c) => {
+        countGuardEvent("too_large");
+        return c.json({ error: "too_large" }, 413);
+      },
+    }),
     async (c) => {
+      // Every refusal below is counted (guard-events.ts): the answers table never sees them.
       const parsed = askBody.safeParse(await readJson(c));
-      if (!parsed.success || parsed.data.website) return c.json({ error: "invalid_input" }, 400);
+      if (!parsed.success || parsed.data.website) {
+        countGuardEvent(parsed.success ? "honeypot" : "invalid_input");
+        return c.json({ error: "invalid_input" }, 400);
+      }
       const body = parsed.data;
 
       if (!(await checkTurnstile(body.sessionId, body.turnstileToken, clientIp(c)))) {
+        countGuardEvent("turnstile_required");
         return c.json({ error: "turnstile_required" }, 403);
       }
 
       const config = askConfig();
       const { settings } = await assistantState();
       const state = await availability(config, settings);
-      if (state.state !== "ok") return c.json({ error: `assistant_${state.state}` }, 503);
+      if (state.state !== "ok") {
+        countGuardEvent(state.state);
+        return c.json({ error: `assistant_${state.state}` }, 503);
+      }
 
       const history = await buildHistory({
         messages: body.messages,
@@ -112,19 +133,23 @@ export function createAskRouter(): Hono {
         maxChars: config.maxMessageChars,
       });
       if (!history.ok) {
-        return c.json({ error: history.error }, history.error === "too_long" ? 413 : 400);
+        const tooLong = history.error === "too_long";
+        countGuardEvent(tooLong ? "too_long" : "invalid_input");
+        return c.json({ error: history.error }, tooLong ? 413 : 400);
       }
 
       const ipHash = hashWithSalt("ip", clientIp(c));
       const sessionHash = hashWithSalt("session", body.sessionId);
       const rate = await checkRate(config, ipHash, sessionHash);
       if (!rate.ok) {
+        countGuardEvent("rate_limited");
         c.header("Retry-After", String(rate.retryAfter));
         return c.json({ error: "rate_limited", retryAfter: rate.retryAfter }, 429);
       }
 
       const release = gate.tryEnter();
       if (!release) {
+        countGuardEvent("busy");
         c.header("Retry-After", "5");
         return c.json({ error: "busy", retryAfter: 5 }, 429);
       }
@@ -142,6 +167,7 @@ export function createAskRouter(): Hono {
         const chain = askChain(config, route.route);
         if (!chain.length) {
           release();
+          countGuardEvent("off");
           return c.json({ error: "assistant_off" }, 503);
         }
 
@@ -221,6 +247,28 @@ export function createAskRouter(): Hono {
       .insert(aiFeedback)
       .values({ messageId, value })
       .onConflictDoUpdate({ target: aiFeedback.messageId, set: { value, createdAt: new Date() } });
+    return c.json({ ok: true });
+  });
+
+  router.post("/handoff", async (c) => {
+    const parsed = handoffBody.safeParse(await readJson(c));
+    if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
+    const { sessionId, messageId } = parsed.data;
+
+    // Only the session that got the offer may confirm it, only on an answer
+    // that made one, and the first yes is the one that counts.
+    const [confirmed] = await getDb()
+      .update(aiMessages)
+      .set({ handoffConfirmedAt: sql`coalesce(${aiMessages.handoffConfirmedAt}, now())` })
+      .where(
+        and(
+          eq(aiMessages.id, messageId),
+          eq(aiMessages.sessionHash, hashWithSalt("session", sessionId)),
+          sql`${aiMessages.toolCalls} @> '["handoff_contact"]'::jsonb`,
+        ),
+      )
+      .returning({ id: aiMessages.id });
+    if (!confirmed) return c.json({ error: "not_found" }, 404);
     return c.json({ ok: true });
   });
 

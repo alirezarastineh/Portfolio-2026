@@ -33,7 +33,7 @@ export function defaultSystemCard(locale: Locale, config: AskConfig): string {
       "- Grundlage: Das veröffentlichte Portfolio (Profil, Werdegang, Projekte, Artikel, Fähigkeiten, Lebenslauf und ein gepflegtes FAQ) geht mit jeder Frage als gleichbleibender Präfix mit, den der Anbieter zwischenspeichert; Such- und Dokument-Werkzeuge liefern Details.",
       "- Quellenangaben werden gegen diese Inhalte geprüft; Verweise, die es nicht gibt, werden entfernt, bevor die Antwort ankommt.",
       "- Schutz: Text von Besuchern gilt als Daten, nie als Anweisung. Die Werkzeuge lesen nur; die einzige Aktion – das Gespräch an das Kontaktformular übergeben – braucht deine Bestätigung. Ratenlimits, ein tägliches Kostenlimit und ein Notschalter begrenzen den Betrieb.",
-      "- Datenschutz: Fragen werden 90 Tage ohne E-Mail-Adressen und Telefonnummern protokolliert; IP-Adressen werden nicht gespeichert.",
+      "- Datenschutz: Fragen werden 90 Tage ohne E-Mail-Adressen und Telefonnummern protokolliert; IP-Adressen werden nicht gespeichert. Einzelne Fragen kann der Betreiber als Testfall behalten, erst nachdem er bestätigt hat, dass nichts Persönliches mehr darin steht.",
       "- Gebaut mit dem Vercel AI SDK auf einer Hono-API, gestreamt in ein Angular-Terminal.",
     ].join("\n");
   }
@@ -46,7 +46,7 @@ export function defaultSystemCard(locale: Locale, config: AskConfig): string {
     "- Grounding: the published portfolio (profile, experience, projects, posts, skills, CV and a curated FAQ) goes with every question as one fixed prefix, which the provider caches; search and document tools fetch detail.",
     "- Citations are checked against that content; references that do not exist are removed before the answer reaches you.",
     "- Guardrails: visitor text is treated as data, never as instructions. The tools only read; the one action, handing the conversation to the contact form, needs your confirmation. Rate limits, a daily cost cap and a kill switch keep it bounded.",
-    "- Privacy: questions are logged for 90 days with emails and phone numbers removed; IP addresses are not stored.",
+    "- Privacy: questions are logged for 90 days with emails and phone numbers removed; IP addresses are not stored. The owner may keep a question as a test case, only after confirming that nothing personal is left in it.",
     "- Built with the Vercel AI SDK on a Hono API, streamed into an Angular terminal.",
   ].join("\n");
 }

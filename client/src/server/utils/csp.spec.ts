@@ -164,11 +164,7 @@ describe("buildCsp", () => {
       ),
     );
 
-    expect(policy.get("script-src")).toEqual([
-      "'self'",
-      "'nonce-n0nce'",
-      "https://cloud.umami.is",
-    ]);
+    expect(policy.get("script-src")).toEqual(["'self'", "'nonce-n0nce'", "https://cloud.umami.is"]);
     expect(policy.get("connect-src")).toEqual([
       "'self'",
       "https://api.alirezarastineh.me",

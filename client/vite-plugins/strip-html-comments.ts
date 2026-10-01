@@ -22,7 +22,5 @@ export function stripHtmlComments(): Plugin {
 
 /** The HTML without its comments, and without the blank lines they leave behind. */
 export function withoutComments(html: string): string {
-  return html
-    .replaceAll(/^[ \t]*<!--.*?-->[ \t]*(?:\r?\n)?/gms, "")
-    .replaceAll(/<!--.*?-->/gs, "");
+  return html.replaceAll(/^[ \t]*<!--.*?-->[ \t]*(?:\r?\n)?/gms, "").replaceAll(/<!--.*?-->/gs, "");
 }

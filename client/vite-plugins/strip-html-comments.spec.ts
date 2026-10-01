@@ -47,8 +47,6 @@ describe("stripHtmlComments", () => {
   });
 
   it("strips inline comments without affecting surrounding markup", () => {
-    expect(withoutComments("<p>Hello <!-- comment -->world</p>")).toBe(
-      "<p>Hello world</p>",
-    );
+    expect(withoutComments("<p>Hello <!-- comment -->world</p>")).toBe("<p>Hello world</p>");
   });
 });

@@ -224,11 +224,39 @@ const MOVED: Partial<Record<MessageStatus, string>> = {
                       >email failed</span
                     >
                   }
+                  @if (message.origin === "ask") {
+                    <span hlmBadge variant="outline" class="font-mono">via the assistant</span>
+                  }
                 </div>
 
                 <p class="m-0 whitespace-pre-wrap text-sm leading-relaxed wrap-break-word">
                   {{ message.message }}
                 </p>
+
+                @if (message.askTranscript; as transcript) {
+                  <!-- The visitor ticked "attach": their conversation, redacted, the last turns. -->
+                  <details class="rounded-md border border-border p-3 text-sm" open>
+                    <summary class="cursor-pointer text-xs text-muted-foreground">
+                      Their conversation with the assistant ({{ transcript.turns.length }}
+                      {{ transcript.turns.length === 1 ? "answer" : "answers" }})
+                    </summary>
+                    <ol class="m-0 mt-2 flex list-none flex-col gap-3 p-0">
+                      @for (turn of transcript.turns; track turn.at) {
+                        <li class="flex flex-col gap-1">
+                          <p class="m-0 font-medium">{{ turn.question }}</p>
+                          <p class="m-0 whitespace-pre-wrap text-foreground/85">
+                            {{ turn.answer || "(no answer)" }}
+                          </p>
+                          @if (turn.cited.length) {
+                            <p class="m-0 font-mono text-[11px] text-muted-foreground">
+                              cited: {{ turn.cited.join(", ") }}
+                            </p>
+                          }
+                        </li>
+                      }
+                    </ol>
+                  </details>
+                }
 
                 <div class="flex flex-wrap items-center gap-2 border-t border-border pt-4">
                   <a hlmBtn size="sm" [href]="replyHref(message)">

@@ -2,6 +2,7 @@ import type { StreamTextTransform, TextStreamPart, ToolSet } from "ai";
 
 import type { Locale } from "../content/schema.js";
 import { resolveDocument, type AskCorpus } from "./corpus/index.js";
+import { toolOutcome, type ToolOutcome } from "./tools.js";
 
 /**
  * Citation markers (`[^project:atlas@en]`) are checked against the corpus as
@@ -25,9 +26,13 @@ type TextDeltaPart = { type: "text-delta"; id: string; text: string };
 
 function findPendingCut(text: string): number {
   const open = Math.max(...OPENERS.map((opener) => text.lastIndexOf(opener)));
-  if (open === -1) return text.length;
-  const start = open > 0 && text[open - 1] === " " ? open - 1 : open;
-  return OPEN_TAIL.test(text.slice(start)) ? start : text.length;
+  if (open !== -1) {
+    const start = open > 0 && text[open - 1] === " " ? open - 1 : open;
+    if (OPEN_TAIL.test(text.slice(start))) return start;
+  }
+  // A trailing space may belong to a marker the next chunk starts: an invented
+  // one takes its space with it, so the answer reads the same however it is cut.
+  return text.endsWith(" ") ? text.length - 1 : text.length;
 }
 
 export function citationTransform<TOOLS extends ToolSet>(options: {
@@ -103,11 +108,28 @@ export function citationTransform<TOOLS extends ToolSet>(options: {
   };
 }
 
+export interface RecordedToolCall {
+  id: string;
+  name: string;
+  input: unknown;
+  /** Null until its result arrives: a call cut off by the end of the answer has none. */
+  outcome: ToolOutcome | null;
+  /** Size of the result the model got back, in characters of JSON. */
+  resultChars: number;
+}
+
+/** One agent step as the stream showed it: its tool calls and how it ended. */
+export interface RecordedStep {
+  tools: RecordedToolCall[];
+  finishReason: string | null;
+}
+
 /** What the visitor was shown, collected for the log, the usage row and the signature. */
 export interface AnswerRecord {
   textOrder: string[];
   texts: Map<string, string>;
   toolCalls: { name: string; input: unknown }[];
+  steps: RecordedStep[];
   finishReason: string | null;
   error: unknown;
   aborted: boolean;
@@ -118,10 +140,36 @@ export function newAnswerRecord(): AnswerRecord {
     textOrder: [],
     texts: new Map(),
     toolCalls: [],
+    steps: [],
     finishReason: null,
     error: null,
     aborted: false,
   };
+}
+
+function currentStep(record: AnswerRecord): RecordedStep {
+  let step = record.steps.at(-1);
+  if (!step) {
+    step = { tools: [], finishReason: null };
+    record.steps.push(step);
+  }
+  return step;
+}
+
+function recordedCall(record: AnswerRecord, id: string): RecordedToolCall | undefined {
+  for (let i = record.steps.length - 1; i >= 0; i--) {
+    const call = record.steps[i]!.tools.find((t) => t.id === id);
+    if (call) return call;
+  }
+  return undefined;
+}
+
+function jsonLength(value: unknown): number {
+  try {
+    return JSON.stringify(value)?.length ?? 0;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -149,8 +197,34 @@ export function recorderTransform<TOOLS extends ToolSet>(
           case "text-delta":
             record.texts.set(part.id, (record.texts.get(part.id) ?? "") + part.text);
             break;
+          case "start-step":
+            record.steps.push({ tools: [], finishReason: null });
+            break;
           case "tool-call":
             record.toolCalls.push({ name: part.toolName, input: part.input });
+            currentStep(record).tools.push({
+              id: part.toolCallId,
+              name: part.toolName,
+              input: part.input,
+              outcome: null,
+              resultChars: 0,
+            });
+            break;
+          case "tool-result": {
+            const call = part.preliminary ? undefined : recordedCall(record, part.toolCallId);
+            if (call) {
+              call.outcome = toolOutcome(part.output);
+              call.resultChars = jsonLength(part.output);
+            }
+            break;
+          }
+          case "tool-error": {
+            const call = recordedCall(record, part.toolCallId);
+            if (call) call.outcome = "error";
+            break;
+          }
+          case "finish-step":
+            currentStep(record).finishReason = part.finishReason;
             break;
           case "finish":
             record.finishReason = part.finishReason;

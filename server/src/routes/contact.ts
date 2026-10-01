@@ -1,12 +1,16 @@
 import { createHash, randomBytes } from "node:crypto";
 import { zValidator } from "@hono/zod-validator";
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
+import { buildTranscript, TRANSCRIPT_TURNS, type AskTranscript } from "../ask/handoff.js";
+import { hashWithSalt } from "../ask/guard.js";
+import { ASK_MESSAGE_ID } from "../ask/history.js";
+import { SESSION_ID } from "../ask/route.js";
 import { clientIp } from "../auth/middleware.js";
 import { getDb } from "../db/client.js";
-import { contactMessages } from "../db/schema.js";
+import { aiMessages, contactMessages } from "../db/schema.js";
 import { isMailerConfigured, sendContactEmail } from "../lib/mailer.js";
 import { verifyTurnstile } from "../lib/turnstile.js";
 
@@ -18,7 +22,59 @@ const contactSchema = z.object({
   locale: z.enum(["en", "de"]).optional(),
   /** Required only while Turnstile is on (TURNSTILE_SECRET_KEY). */
   turnstileToken: z.string().max(2048).optional(),
+  /** The assistant's hand-off wrote the draft. */
+  origin: z.literal("ask").optional(),
+  /** The conversation to attach: only when the visitor ticked it. */
+  ask: z
+    .object({
+      sessionId: z.string().regex(SESSION_ID),
+      messageId: z.string().regex(ASK_MESSAGE_ID),
+    })
+    .optional(),
 });
+
+/**
+ * The visitor's conversation up to the answer the hand-off came from, when
+ * that answer belongs to their session (the salted hash of the session id,
+ * as feedback checks). Null otherwise: the message then goes without it.
+ */
+async function attachedConversation(ask: {
+  sessionId: string;
+  messageId: string;
+}): Promise<{ messageId: string; transcript: AskTranscript } | null> {
+  const sessionHash = hashWithSalt("session", ask.sessionId);
+  const [answer] = await getDb()
+    .select({ id: aiMessages.id })
+    .from(aiMessages)
+    .where(
+      and(
+        eq(aiMessages.id, ask.messageId),
+        eq(aiMessages.sessionHash, sessionHash),
+        eq(aiMessages.source, "terminal"),
+      ),
+    );
+  if (!answer) return null;
+  const rows = await getDb()
+    .select({
+      question: aiMessages.questionRedacted,
+      answer: aiMessages.answerExcerpt,
+      cited: aiMessages.citedIds,
+      createdAt: aiMessages.createdAt,
+    })
+    .from(aiMessages)
+    .where(
+      and(
+        eq(aiMessages.sessionHash, sessionHash),
+        eq(aiMessages.source, "terminal"),
+        // Compared in the database: a JS Date would drop the microseconds and
+        // leave out the hand-off's own answer.
+        sql`${aiMessages.createdAt} <= (select m.created_at from ai_messages m where m.id = ${ask.messageId})`,
+      ),
+    )
+    .orderBy(desc(aiMessages.createdAt))
+    .limit(TRANSCRIPT_TURNS);
+  return { messageId: ask.messageId, transcript: buildTranscript(rows) };
+}
 
 /** Per sender: survives restarts and deploys, unlike the old in-memory limiter. */
 export const PER_IP_LIMIT = 5;
@@ -84,6 +140,11 @@ contactRouter.post(
       return c.json({ ok: false, error: "rate_limited" }, 429);
     }
 
+    // A conversation that is not this visitor's is left out, never refused:
+    // their message is what matters.
+    const attached = body.ask ? await attachedConversation(body.ask) : null;
+    if (body.ask && !attached) console.warn("[contact] hand-off conversation not attached");
+
     const mailer = isMailerConfigured();
     const [stored] = await getDb()
       .insert(contactMessages)
@@ -94,6 +155,9 @@ contactRouter.post(
         locale: body.locale ?? null,
         ipHash,
         mailStatus: mailer ? "pending" : "skipped",
+        origin: body.origin ?? "form",
+        askMessageId: attached?.messageId ?? null,
+        askTranscript: attached?.transcript ?? null,
       })
       .returning({ id: contactMessages.id });
 

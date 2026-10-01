@@ -33,6 +33,15 @@ export const SHORTCUTS: { where: string; items: Shortcut[] }[] = [
       { keys: ["U"], does: "Mark the open message unread" },
     ],
   },
+  {
+    where: "In the assistant's reviews",
+    items: [
+      { keys: ["J"], does: "Next answer" },
+      { keys: ["K"], does: "Previous answer" },
+      { keys: ["1–5"], does: "Cycle a verdict: good, not good, does not apply" },
+      { keys: ["S"], does: "Save the review and open the next answer" },
+    ],
+  },
 ];
 
 /** The `?` sheet: every shortcut the admin has, in one place. */

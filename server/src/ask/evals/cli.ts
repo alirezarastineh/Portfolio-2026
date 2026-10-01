@@ -1,54 +1,75 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
 import { loadEnvFiles } from "../../lib/env.js";
 import { getAskConfig } from "../config.js";
 import { getAskCorpus } from "../corpus/index.js";
 import { buildChain } from "../models/registry.js";
 import { PROMPT_HASH, PROMPT_VERSION } from "../prompt.js";
 import { loadEncoder } from "../tokens.js";
+import { hasFlag, optionValues } from "./args.js";
+import {
+  BASELINE_PATH,
+  baselineFrom,
+  compareToBaseline,
+  DEFAULT_GATE,
+  parsePercent,
+  readBaseline,
+  recordRefusal,
+  writeBaseline,
+  type GateLimits,
+} from "./baseline.js";
 import { EVAL_CASES } from "./cases.js";
 import { fixtureAskCorpus } from "./fixture.js";
-import {
-  FREE_TIER_EVAL_PACING,
-  FREE_TIER_RATE_LIMIT_RETRY,
-  runEvals,
-  type EvalSummary,
-} from "./run.js";
+import { pairwiseCli, pairwiseSides } from "./pairwise-cli.js";
+import { productionCli } from "./production-cli.js";
+import { FREE_TIER_EVAL_PACING, FREE_TIER_RATE_LIMIT_RETRY, runEvals } from "./run.js";
 
 /**
  * `pnpm ai:eval` — runs the eval suite live against the configured models.
  * It consumes provider quota, so it is run by hand, never in CI.
  *
- *   --case <id|category>   only matching cases (repeatable)
- *   --corpus live          the published corpus instead of the frozen fixture
- *   --no-judge             skip the LLM judge
- *   --concurrency <n>      parallel questions (default 1; provider calls stay paced)
- *   --update-baseline      store this run as the baseline to beat
+ *   --case <id|category>          only matching cases (repeatable)
+ *   --corpus live                 the published corpus instead of the frozen fixture
+ *   --no-judge                    skip the LLM judge
+ *   --concurrency <n>             parallel questions (default 1; provider calls stay paced)
+ *   --max-cost-increase <pct>     allowed rise in cost per case (default 25)
+ *   --max-latency-increase <pct>  also gate the p95 total time (off by default: the
+ *                                 free-tier pacing waits count as latency here)
+ *   --update-baseline             store this run as the baseline to beat
+ *   --accept-regression "<why>"   with --update-baseline: record a run that fails
+ *                                 the gate, or cannot be compared with the
+ *                                 recorded one; the reason is stored with it
+ *   --pairwise <A>,<B>            rank two answerers instead of grading one: each
+ *                                 a route (lite, deep) or a model id; the judge
+ *                                 sees both answers twice, swapped (pairwise-cli.ts)
+ *   --candidate-prompt <file>     rank the current prompt (A) against this one (B),
+ *                                 on the lite model unless --pairwise names the sides
+ *   --suite production            the cases frozen from visitor answers, each against
+ *                                 its own corpus snapshot (reads the database through
+ *                                 the tunnel, writes nothing; report only)
  *
- * Exits 1 when the pass rate falls below the baseline.
+ * Exits 1 when the run fails the gate against baseline.json (a lower pass
+ * rate, or a cost or latency rise above its limit) and is not recorded, 2
+ * when the run is incomplete or cannot be recorded.
  */
 
-const BASELINE = fileURLToPath(new URL("./baseline.json", import.meta.url));
+const flag = (name: string) => hasFlag(process.argv, name);
+const values = (name: string) => optionValues(process.argv, name);
 
-function flag(name: string): boolean {
-  return process.argv.includes(`--${name}`);
-}
-function values(name: string): string[] {
-  const out: string[] = [];
-  process.argv.forEach((arg, i) => {
-    if (arg === `--${name}` && process.argv[i + 1]) out.push(process.argv[i + 1]!);
-  });
-  return out;
+/** A percentage flag as a fraction, or `fallback` when it is absent. */
+function percentFlag(name: string, fallback: number | null): number | null {
+  const [raw] = values(name);
+  if (raw === undefined) return fallback;
+  try {
+    return parsePercent(raw);
+  } catch {
+    console.error(`--${name} takes a percentage of at least 0, such as 25.`);
+    process.exit(2);
+  }
 }
 
-interface Baseline {
-  promptVersion: string;
-  corpus: string;
-  passRate: number;
-  byCategory: EvalSummary["byCategory"];
-  at: string;
-}
+const limits: GateLimits = {
+  maxCostIncrease: percentFlag("max-cost-increase", DEFAULT_GATE.maxCostIncrease)!,
+  maxLatencyIncrease: percentFlag("max-latency-increase", DEFAULT_GATE.maxLatencyIncrease),
+};
 
 loadEnvFiles();
 const config = getAskConfig();
@@ -67,8 +88,25 @@ const cases = EVAL_CASES.filter(
     (!filters.length || filters.some((f) => c.id === f || c.category === f || c.id.startsWith(f))),
 );
 
+if (values("suite")[0] === "production") {
+  // The frozen visitor cases, each against its own snapshot (read-only).
+  process.exit(await productionCli(config, { judge: !flag("no-judge") }));
+}
+
+const pairwise = values("pairwise")[0];
+const candidatePrompt = values("candidate-prompt")[0];
+if (pairwise || candidatePrompt) {
+  const planned = pairwiseSides(config, pairwise, candidatePrompt);
+  if ("error" in planned) {
+    console.error(planned.error);
+    process.exit(2);
+  }
+  process.exit(await pairwiseCli({ config, corpus, cases, sides: planned.sides }));
+}
+
+const judge = flag("no-judge") ? "no judge" : `judged by ${buildChain(config, "judge")[0]?.id}`;
 console.log(
-  `Running ${cases.length} case(s) against ${live ? "the live" : "the fixture"} corpus with ${config.gemini.model}. Free-tier-safe pacing is enabled.\n`,
+  `Running ${cases.length} case(s) against ${live ? "the live" : "the fixture"} corpus with ${config.gemini.model}, ${judge}. Free-tier-safe pacing is enabled.\n`,
 );
 
 function resultMark(status: string, passed: boolean): string {
@@ -103,46 +141,52 @@ for (const [category, row] of Object.entries(summary.byCategory)) {
   console.log(`  ${category.padEnd(14)} ${row.passed}/${row.completed}${incomplete}`);
 }
 console.log(
-  `\nPassed ${summary.passed}/${summary.completed} completed (${(summary.passRate * 100).toFixed(1)} %) · ${summary.cases} planned · $${summary.usd.toFixed(4)} estimated · p50 TTFT ${summary.p50TtftMs ?? "–"} ms · p95 total ${summary.p95TotalMs ?? "–"} ms`,
+  `\nPassed ${summary.passed}/${summary.completed} completed (${(summary.passRate * 100).toFixed(1)} %) · ${summary.cases} planned · $${summary.usd.toFixed(4)} estimated · p50 TTFT ${summary.p50TtftMs ?? "–"} ms · p95 total ${summary.p95TotalMs ?? "–"} ms\n`,
 );
 
 let exitCode = 0;
-const baseline = existsSync(BASELINE)
-  ? (JSON.parse(readFileSync(BASELINE, "utf8")) as Baseline)
-  : null;
+let failures: string[] = [];
+/** Why this run could not be compared with a recorded baseline, if it could not. */
+let incomparable: string | null = null;
 if (summary.incomplete) {
   console.error(
     `Incomplete run: ${summary.unavailable} unavailable, ${summary.remaining} not started. No baseline comparison or update is valid.`,
   );
   exitCode = 2;
-} else if (baseline && !filters.length && baseline.corpus === summary.corpus) {
-  const delta = summary.passRate - baseline.passRate;
-  console.log(
-    `Baseline ${(baseline.passRate * 100).toFixed(1)} % (${baseline.promptVersion}, ${baseline.at.slice(0, 10)}): ${delta >= 0 ? "+" : ""}${(delta * 100).toFixed(1)} pts`,
-  );
-  if (delta < 0) {
-    console.error("Below the baseline: this change must not ship as it is.");
+} else if (!filters.length) {
+  const baseline = readBaseline();
+  const comparison = compareToBaseline(summary, baseline, limits);
+  for (const line of comparison.lines) console.log(line);
+  failures = comparison.failures;
+  if (!comparison.compared && baseline.passRate !== null) incomparable = comparison.lines[0]!;
+  if (failures.length) {
+    console.error(
+      `\nBelow the baseline: ${failures.join("; ")}. This change must not ship as it is.`,
+    );
     exitCode = 1;
   }
 }
 
 if (flag("update-baseline")) {
-  if (summary.incomplete) {
-    console.error("Not updating the baseline from an incomplete run.");
-    exitCode = 2;
-  } else if (filters.length) {
-    console.error("Not updating the baseline from a filtered run.");
+  const acceptReason = values("accept-regression")[0]?.trim() || null;
+  const refusal = recordRefusal(summary, {
+    filtered: filters.length > 0,
+    live,
+    failures,
+    acceptReason,
+    incomparable,
+  });
+  if (refusal) {
+    console.error(refusal);
     exitCode = 2;
   } else {
-    const next: Baseline = {
-      promptVersion: summary.promptVersion,
-      corpus: summary.corpus,
-      passRate: summary.passRate,
-      byCategory: summary.byCategory,
-      at: new Date().toISOString(),
-    };
-    writeFileSync(BASELINE, `${JSON.stringify(next, null, 2)}\n`);
-    console.log(`Baseline updated: ${BASELINE}`);
+    // What the reason excuses: the gate's failures, or that no comparison was possible.
+    const excused = failures.length || !incomparable ? failures : [incomparable];
+    const acceptedRegression = excused.length ? { reason: acceptReason!, failures: excused } : null;
+    writeBaseline(baselineFrom(summary, { acceptedRegression }));
+    const accepted = acceptedRegression ? ", with the regression accepted" : "";
+    console.log(`\nBaseline updated${accepted}: ${BASELINE_PATH}`);
+    exitCode = 0;
   }
 }
 

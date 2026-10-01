@@ -172,6 +172,7 @@ describe("runEvals", () => {
       promptVersion: "test",
     });
     expect(summary.cases).toBe(2);
+    expect(summary.judge).toBeNull();
     expect(summary.results.find((r) => r.id === "tool-open-atlas")).toMatchObject({
       passed: true,
       tools: [{ name: "navigate", input: { to: "/en/work/atlas" } }],
@@ -215,6 +216,7 @@ describe("runEvals", () => {
     });
 
     expect(summary.passed).toBe(1);
+    expect(summary.judge).toBe("gemini-3.7-flash");
     expect(waits).toEqual([12_000]);
   });
 
@@ -366,7 +368,10 @@ describe("runEvals", () => {
   });
 
   it("reserves enough timeout for paced fallback and retry calls", async () => {
-    const config = fixtureConfig({ agentMaxRounds: 1, streamTimeoutMs: 100 });
+    // Three paced calls need ~2 s of waits at 60 RPM: far beyond the stream's own
+    // 300 ms, so only the reserved allowance (3 s) lets the case finish, with room
+    // to spare when the machine is busy.
+    const config = fixtureConfig({ agentMaxRounds: 1, streamTimeoutMs: 300 });
     const corpus = fixtureAskCorpus(config);
     const limited = failing(apiError(429));
     const recovered = scripted([textTurn("Atlas cut escalations by 38% [^project:atlas@en].")]);
@@ -378,7 +383,7 @@ describe("runEvals", () => {
       judge: false,
       concurrency: 1,
       rateLimitRetry: { maxRetries: 1, defaultDelayMs: 0, maxDelayMs: 0 },
-      pacing: { requestsPerMinute: { gemini: 600, openrouter: 600 } },
+      pacing: { requestsPerMinute: { gemini: 60, openrouter: 60 } },
       chain: () => [
         mockEntry("gemini-paced-fallback-a", limited.model),
         mockEntry("gemini-paced-fallback-b", recovered.model),
@@ -421,5 +426,45 @@ describe("runEvals", () => {
       status: "unavailable",
       failures: ["stream error:unavailable"],
     });
+  });
+
+  it("starts no case once stopped, whether before a case or by its onStart", async () => {
+    const config = fixtureConfig();
+    const corpus = fixtureAskCorpus(config);
+    const model = scripted([textTurn("Atlas cut escalations by 38% [^project:atlas@en].")]);
+    const run = async (stopAt: "onResult" | "onStart") => {
+      model.calls.length = 0;
+      const stop = new AbortController();
+      const started: string[] = [];
+      const summary = await runEvals({
+        cases: [byId("fact-atlas-impact"), byId("inj-repeat"), byId("tool-open-atlas")],
+        corpus,
+        config,
+        judge: false,
+        concurrency: 1,
+        chain: () => [mockEntry("gemini-3.5-flash-lite", model.model)],
+        promptVersion: "test",
+        abortSignal: stop.signal,
+        onStart: (c) => {
+          started.push(c.id);
+          // A spent budget, found when the second case would start.
+          if (stopAt === "onStart" && started.length === 2) stop.abort(new Error("budget"));
+        },
+        // A cancel landing between the first and the second case.
+        onResult: () => (stopAt === "onResult" ? stop.abort(new Error("cancel")) : undefined),
+      });
+      return { started, summary, calls: model.calls.length };
+    };
+
+    const cancelled = await run("onResult");
+    expect(cancelled.started).toEqual(["fact-atlas-impact"]);
+    expect(cancelled.calls).toBe(1);
+    expect(cancelled.summary).toMatchObject({ completed: 1, remaining: 2 });
+
+    const budget = await run("onStart");
+    expect(budget.started).toEqual(["fact-atlas-impact", "inj-repeat"]);
+    // The case whose onStart stopped the run never reached a model.
+    expect(budget.calls).toBe(1);
+    expect(budget.summary).toMatchObject({ completed: 1, remaining: 2 });
   });
 });

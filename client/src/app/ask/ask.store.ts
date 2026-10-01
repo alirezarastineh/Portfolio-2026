@@ -24,6 +24,7 @@ import { ASK_COPY } from "./ask-copy";
 import { ASK_STORAGE_KEY } from "./ask-storage";
 import { AskTraceService } from "./ask-trace.service";
 import type { AskMessage, Entry, Failure, RemoteConfig } from "./ask-types";
+import { confirmHandoff } from "./handoff-confirm";
 import {
   helpLines,
   offlineLines,
@@ -676,7 +677,22 @@ export const AskStore = signalStore(
           return;
         }
         track("ask_handoff");
-        store._contact.prefill.set(pending.summary);
+        // The answer the offer came with: the conversation the form may attach.
+        const ask = pending.messageId
+          ? { sessionId: store.sessionId(), messageId: pending.messageId }
+          : null;
+        if (ask) {
+          // Counted as confirmed (the hand-off funnel); best effort, retried
+          // while the answer is still being logged.
+          void confirmHandoff(() =>
+            fetch(`${apiBaseUrl()}/v1/ask/handoff`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(ask),
+            }),
+          );
+        }
+        store._contact.prefill.set({ text: pending.summary, ask });
         show(copy.handoff.yes, [{ text: copy.handoff.done, tone: "accent" }]);
         this.toContact();
       },

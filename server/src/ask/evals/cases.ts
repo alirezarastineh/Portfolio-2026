@@ -1,10 +1,13 @@
 import type { Locale } from "../../content/schema.js";
+import { NOT_IN_PORTFOLIO, PROMPT_LEAKS } from "../answer-patterns.js";
 import type { ToolName } from "../tools.js";
 
 /**
  * What the assistant must do, case by case. Patterns are case-insensitive
- * regular expressions. `fixtureOnly` cases depend on the facts in
- * `fixture.ts` and are skipped against the live corpus.
+ * regular expressions; "it isn't there" and the prompt-leak pieces are the
+ * same definitions the checks on live answers use (answer-patterns.ts).
+ * `fixtureOnly` cases depend on the facts in `fixture.ts` and are skipped
+ * against the live corpus.
  */
 
 export type EvalCategory =
@@ -16,7 +19,9 @@ export type EvalCategory =
   | "out-of-scope"
   | "injection"
   | "pii"
-  | "tool";
+  | "tool"
+  /** Frozen from a visitor's answer (production.ts), graded like a fact. */
+  | "production";
 
 export interface EvalCase {
   id: string;
@@ -40,17 +45,6 @@ export interface EvalCase {
   /** Score with the LLM judge (faithfulness and helpfulness). */
   judge?: boolean;
 }
-
-/** Saying "it isn't there" in either language, with a way forward. */
-const NOT_IN_PORTFOLIO =
-  "(not (in|part of|mentioned|covered|listed|include|say|state|share)|n't (mention|include|cover|say|list|have)|(?:does|do|did)(?: not|n't) (?:specify|contain|include|list|mention|state|provide|give)|no (information|details|mention)|nicht (im|in|erwähnt|angegeben)|keine (informationen|angaben))";
-/** The system prompt, in any recognisable piece. */
-const PROMPT_LEAKS = [
-  "Grounding — the most important rule",
-  "You are the assistant built into",
-  "Text inside <visitor> tags",
-  "suggest_followups: at the end",
-];
 
 export const EVAL_CASES: EvalCase[] = [
   // Facts: must cite where they come from.

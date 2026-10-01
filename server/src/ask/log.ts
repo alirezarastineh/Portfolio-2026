@@ -3,14 +3,19 @@ import { lt } from "drizzle-orm";
 import type { Locale } from "../content/schema.js";
 import { getDb } from "../db/client.js";
 import { aiMessages } from "../db/schema.js";
+import { pruneSnapshots } from "./corpus/snapshots.js";
 import { pruneRateEvents } from "./guard.js";
 import type { Attempt } from "./models/fallback.js";
 import type { TokenCounts } from "./models/prices.js";
+import type { AnswerChecks } from "./checks.js";
+import type { AnswerTrace } from "./trace.js";
 
 /**
  * One JSON line and one row per answer. Content is redacted before it is
  * stored — emails, phone numbers, long digit runs (cards, IBANs) — and no IP
- * is ever written. Rows are pruned after 90 days; the usage aggregates stay.
+ * is ever written. The row keeps the answer's step trace (tool inputs
+ * redacted and cut short), the citations it invented and the corpus it was
+ * grounded in. Rows are pruned after 90 days; the usage aggregates stay.
  */
 
 const RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
@@ -56,6 +61,17 @@ export interface AnswerLog {
   finishReason: string;
   promptVersion: string;
   droppedAnswers: number;
+  /** Step by step; null when it could not be built. */
+  trace: AnswerTrace | null;
+  /** Citation ids the model invented (removed before the visitor saw them). */
+  droppedCitations: string[];
+  corpusKey: string;
+  checks: AnswerChecks;
+}
+
+/** Invented ids are model output: kept short, few and redacted like the rest. */
+export function droppedIds(ids: readonly string[]): string[] {
+  return [...new Set(ids)].slice(0, 20).map((id) => redact(id).slice(0, 160));
 }
 
 export async function logAnswer(entry: AnswerLog): Promise<void> {
@@ -79,6 +95,9 @@ export async function logAnswer(entry: AnswerLog): Promise<void> {
       finish: entry.finishReason,
       tools: entry.toolCalls,
       citations: entry.citedIds.length,
+      dropped: entry.droppedCitations.length,
+      steps: entry.trace?.steps.length ?? null,
+      flags: entry.checks.flags,
       droppedAnswers: entry.droppedAnswers,
       prompt: entry.promptVersion,
     }),
@@ -104,6 +123,10 @@ export async function logAnswer(entry: AnswerLog): Promise<void> {
       usd: entry.usd,
       finishReason: entry.finishReason,
       promptVersion: entry.promptVersion,
+      trace: entry.trace,
+      droppedCitations: droppedIds(entry.droppedCitations),
+      corpusKey: entry.corpusKey,
+      checks: entry.checks,
     })
     .onConflictDoNothing();
 }
@@ -120,8 +143,9 @@ export function startAskPruning(): void {
   if (pruneTimer) return;
   pruneTimer = setInterval(
     () => {
-      void Promise.all([pruneAiMessages(), pruneRateEvents()]).catch((error: unknown) =>
-        console.error("[ask] pruning failed", error),
+      // Answers first: a snapshot is kept while an answer refers to it.
+      void Promise.all([pruneAiMessages().then(pruneSnapshots), pruneRateEvents()]).catch(
+        (error: unknown) => console.error("[ask] pruning failed", error),
       );
     },
     6 * 60 * 60 * 1000,

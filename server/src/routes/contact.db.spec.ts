@@ -6,9 +6,11 @@ const mailer = vi.hoisted(() => ({
 }));
 vi.mock("../lib/mailer.js", () => mailer);
 
+const { eq } = await import("drizzle-orm");
 const { createApp } = await import("../app.js");
+const { hashWithSalt } = await import("../ask/guard.js");
 const { getDb } = await import("../db/client.js");
-const { contactMessages } = await import("../db/schema.js");
+const { aiMessages, contactMessages } = await import("../db/schema.js");
 const { resetDb } = await import("../test/helpers.js");
 const { PER_IP_LIMIT, pruneContactMessages } = await import("./contact.js");
 
@@ -52,6 +54,8 @@ describe("POST /contact", () => {
 
     const [row] = await stored();
     expect(row).toMatchObject({ ...VALID, locale: "de", status: "new", mailStatus: "sent" });
+    // What the previous client sends still stores as a plain form message.
+    expect(row).toMatchObject({ origin: "form", askMessageId: null, askTranscript: null });
   });
 
   /** The point of storing first: a mail outage must not lose the message. */
@@ -108,6 +112,115 @@ describe("POST /contact", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+});
+
+describe("the assistant's hand-off", () => {
+  const SESSION = "session-abcdefghijkl";
+  const OTHER = "someone-else-abcdefgh";
+  const at = (minute: number) => new Date(Date.UTC(2026, 8, 30, 10, minute));
+
+  /** Twelve answers in the visitor's session, one in another, one after the hand-off. */
+  async function seedConversation(): Promise<void> {
+    const base = {
+      locale: "en" as const,
+      route: "lite",
+      totalMs: 100,
+      tokens: { input: 1, cached: 0, output: 1, thoughts: 0 },
+      finishReason: "stop",
+      promptVersion: "p",
+      citedIds: ["profile@en"],
+    };
+    const mine = hashWithSalt("session", SESSION);
+    await getDb()
+      .insert(aiMessages)
+      .values([
+        ...Array.from({ length: 12 }, (_, i) => ({
+          ...base,
+          id: `m_mine_${String(i).padStart(2, "0")}`,
+          sessionHash: mine,
+          createdAt: at(i),
+          questionRedacted: `question ${i}`,
+          answerExcerpt: `answer ${i}`,
+        })),
+        {
+          ...base,
+          id: "m_other_00",
+          sessionHash: hashWithSalt("session", OTHER),
+          createdAt: at(5),
+          questionRedacted: "someone else's question",
+          answerExcerpt: "not yours",
+        },
+        {
+          ...base,
+          id: "m_mine_later",
+          sessionHash: mine,
+          createdAt: at(30),
+          questionRedacted: "asked after the hand-off",
+          answerExcerpt: "later",
+        },
+      ]);
+  }
+
+  it("says the message came through the hand-off, and attaches nothing unless asked", async () => {
+    expect((await send({ ...VALID, origin: "ask" })).status).toBe(200);
+    const [row] = await stored();
+    expect(row).toMatchObject({ origin: "ask", askMessageId: null, askTranscript: null });
+  });
+
+  it("attaches the visitor's own conversation up to the answer, the last ten turns", async () => {
+    await seedConversation();
+    const ask = { sessionId: SESSION, messageId: "m_mine_11" };
+    expect((await send({ ...VALID, origin: "ask", ask })).status).toBe(200);
+    const [row] = await stored();
+    expect(row).toMatchObject({ origin: "ask", askMessageId: "m_mine_11" });
+    const turns = row!.askTranscript!.turns;
+    // Oldest first, ending at the hand-off's answer; never another session's.
+    expect(turns.map((t) => t.question)).toEqual(
+      Array.from({ length: 10 }, (_, i) => `question ${i + 2}`),
+    );
+    expect(turns.at(-1)).toMatchObject({ answer: "answer 11", cited: ["profile@en"] });
+  });
+
+  it("serves the attached conversation to the admin inbox", async () => {
+    const { createAdmin, TestClient } = await import("../test/helpers.js");
+    await seedConversation();
+    const ask = { sessionId: SESSION, messageId: "m_mine_11" };
+    await send({ ...VALID, origin: "ask", ask });
+    await createAdmin();
+    const admin = new TestClient(app);
+    await admin.login();
+
+    const { messages } = (await (await admin.get("/admin/messages")).json()) as {
+      messages: { origin: string; askTranscript: { turns: { question: string }[] } | null }[];
+    };
+    expect(messages[0]).toMatchObject({ origin: "ask" });
+    expect(messages[0]!.askTranscript!.turns.map((t) => t.question).at(-1)).toBe("question 11");
+  });
+
+  it("stores the message without a conversation that is not the visitor's", async () => {
+    await seedConversation();
+    const ask = { sessionId: OTHER, messageId: "m_mine_11" };
+    expect((await send({ ...VALID, origin: "ask", ask })).status).toBe(200);
+    const [row] = await stored();
+    expect(row).toMatchObject({ message: VALID.message, askMessageId: null, askTranscript: null });
+  });
+
+  it("keeps the message when its answer is pruned", async () => {
+    await seedConversation();
+    await send({ ...VALID, origin: "ask", ask: { sessionId: SESSION, messageId: "m_mine_11" } });
+    await getDb().delete(aiMessages).where(eq(aiMessages.id, "m_mine_11"));
+    const [row] = await stored();
+    expect(row).toMatchObject({ askMessageId: null, origin: "ask" });
+    expect(row!.askTranscript!.turns).toHaveLength(10);
+  });
+
+  it("rejects an origin or a conversation of the wrong shape", async () => {
+    expect((await send({ ...VALID, origin: "email" })).status).toBe(400);
+    expect((await send({ ...VALID, ask: { sessionId: "short", messageId: "m" } })).status).toBe(
+      400,
+    );
+    expect(await stored()).toHaveLength(0);
   });
 });
 

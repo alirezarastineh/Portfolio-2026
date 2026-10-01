@@ -11,14 +11,26 @@ import { AdminPulseService } from "../../admin/pulse.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 
 import { AssistantConversationsComponent } from "../../admin/assistant/assistant-conversations.component";
+import { AssistantEvalCasesComponent } from "../../admin/assistant/assistant-eval-cases.component";
 import { AssistantEvalsComponent } from "../../admin/assistant/assistant-evals.component";
 import { AssistantFaqComponent } from "../../admin/assistant/assistant-faq.component";
 import { AssistantInsightsComponent } from "../../admin/assistant/assistant-insights.component";
+import { AssistantOutcomesComponent } from "../../admin/assistant/assistant-outcomes.component";
 import { AssistantOverviewComponent } from "../../admin/assistant/assistant-overview.component";
+import { AssistantPairwiseComponent } from "../../admin/assistant/assistant-pairwise.component";
 import { AssistantPlaygroundComponent } from "../../admin/assistant/assistant-playground.component";
+import { AssistantReviewsComponent } from "../../admin/assistant/assistant-reviews.component";
 import { AssistantSettingsComponent } from "../../admin/assistant/assistant-settings.component";
 
-type Tab = "overview" | "settings" | "faq" | "conversations" | "insights" | "playground" | "evals";
+type Tab =
+  | "overview"
+  | "settings"
+  | "faq"
+  | "conversations"
+  | "reviews"
+  | "insights"
+  | "playground"
+  | "evals";
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
@@ -27,6 +39,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "settings", label: "Settings" },
   { id: "faq", label: "FAQ" },
   { id: "conversations", label: "Conversations" },
+  { id: "reviews", label: "Reviews" },
   { id: "insights", label: "Insights" },
   { id: "playground", label: "Playground" },
   { id: "evals", label: "Evals" },
@@ -34,8 +47,8 @@ const TABS: { id: Tab; label: string }[] = [
 
 /**
  * The portfolio assistant ("Ask my portfolio"): health and cost, its
- * settings, the FAQ it cites, what visitors asked, a playground against the
- * draft, and the eval suite.
+ * settings, the FAQ it cites, what visitors asked and their weekly review, a
+ * playground against the draft, the eval suite and pairwise comparisons.
  */
 @Component({
   selector: "app-admin-assistant",
@@ -43,11 +56,15 @@ const TABS: { id: Tab; label: string }[] = [
   imports: [
     AdminPageHeaderComponent,
     AssistantConversationsComponent,
+    AssistantEvalCasesComponent,
     AssistantEvalsComponent,
     AssistantFaqComponent,
     AssistantInsightsComponent,
+    AssistantOutcomesComponent,
     AssistantOverviewComponent,
+    AssistantPairwiseComponent,
     AssistantPlaygroundComponent,
+    AssistantReviewsComponent,
     AssistantSettingsComponent,
     BrnTabsContent,
     HlmBadge,
@@ -70,7 +87,7 @@ const TABS: { id: Tab; label: string }[] = [
       </app-page-header>
 
       <div hlmTabs class="min-w-0 gap-6" [tab]="strip()" (tabActivated)="select($any($event))">
-        <!-- One row that scrolls, with arrows where it overflows: seven tabs wrapped onto two rows below md. -->
+        <!-- One row that scrolls, with arrows where it overflows: eight tabs wrapped onto two rows below md. -->
         <hlm-paginated-tabs-list tabListLabel="Assistant sections">
           @for (option of tabs; track option.id) {
             <button [hlmTabsTrigger]="option.id">{{ option.label }}</button>
@@ -83,7 +100,10 @@ const TABS: { id: Tab; label: string }[] = [
             @if (option.id === tab()) {
               @switch (tab()) {
                 @case ("overview") {
-                  <app-assistant-overview class="flex flex-col gap-6" />
+                  <div class="flex flex-col gap-8">
+                    <app-assistant-overview class="flex flex-col gap-6" />
+                    <app-assistant-outcomes />
+                  </div>
                 }
                 @case ("settings") {
                   <app-assistant-settings />
@@ -94,6 +114,9 @@ const TABS: { id: Tab; label: string }[] = [
                 @case ("conversations") {
                   <app-assistant-conversations />
                 }
+                @case ("reviews") {
+                  <app-assistant-reviews />
+                }
                 @case ("insights") {
                   <app-assistant-insights (toFaq)="toFaq($event)" />
                 }
@@ -101,7 +124,11 @@ const TABS: { id: Tab; label: string }[] = [
                   <app-assistant-playground />
                 }
                 @case ("evals") {
-                  <app-assistant-evals />
+                  <div class="flex flex-col gap-8">
+                    <app-assistant-evals />
+                    <app-assistant-pairwise />
+                    <app-assistant-eval-cases />
+                  </div>
                 }
               }
             }

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
 import { getDb } from "../db/client.js";
-import { aiFeedback, aiMessages, aiUsage } from "../db/schema.js";
+import { aiCorpusSnapshots, aiFeedback, aiGuardEvents, aiMessages, aiUsage } from "../db/schema.js";
 import {
   eventually,
   FIXTURE_BASE,
@@ -20,6 +20,7 @@ import {
 import { createAdmin, resetDb, TestClient } from "../test/helpers.js";
 import type { AskConfig } from "./config.js";
 import { assembleCorpus } from "./corpus/index.js";
+import { resetRecordedSnapshots } from "./corpus/snapshots.js";
 import { utcDay } from "./guard.js";
 import { resetBreakers } from "./models/circuit.js";
 import type { ChainRole } from "./models/registry.js";
@@ -67,6 +68,7 @@ beforeEach(async () => {
   await resetDb();
   invalidateAssistantCache();
   resetBreakers();
+  resetRecordedSnapshots();
   config = fixtureConfig();
   models = {};
   await createAdmin();
@@ -174,9 +176,20 @@ describe("admin assistant API", () => {
     const playground = (await (
       await admin.get("/admin/assistant/conversations?source=playground")
     ).json()) as {
-      messages: { question: string }[];
+      messages: {
+        question: string;
+        corpusKey: string;
+        trace: { steps: { model: string; tools: unknown[] }[] };
+      }[];
     };
     expect(playground.messages[0]!.question).toBe("What is Nova?");
+    // Its timeline: one step, answered by the lite model, against the draft corpus.
+    expect(playground.messages[0]!.corpusKey).toMatch(/^draft:x/);
+    expect(playground.messages[0]!.trace.steps).toEqual([
+      expect.objectContaining({ model: "gemini-3.5-flash-lite", tools: [] }),
+    ]);
+    // Drafts are never snapshotted: only visitor answers keep their corpus.
+    expect(await getDb().select().from(aiCorpusSnapshots)).toHaveLength(0);
   });
 
   it("filters conversations by thumbs-down and by answers that did not know", async () => {
@@ -205,6 +218,14 @@ describe("admin assistant API", () => {
           answerExcerpt: "Python and Angular.",
         },
         { ...base, id: "m_c00000001", questionRedacted: "where?", answerExcerpt: "Berlin." },
+        {
+          ...base,
+          id: "m_d00000001",
+          questionRedacted: "nebula?",
+          answerExcerpt: "Nebula shipped.",
+          droppedCitations: ["project:nebula@en"],
+          checks: { v: 1, flags: ["invented-citation"] },
+        },
       ]);
     await getDb().insert(aiFeedback).values({ messageId: "m_c00000001", value: -1 });
 
@@ -216,7 +237,9 @@ describe("admin assistant API", () => {
       ).messages.map((m) => m.id);
     expect(await list("unknown")).toEqual(["m_a00000001"]);
     expect(await list("down")).toEqual(["m_c00000001"]);
-    expect(await list("all")).toHaveLength(3);
+    expect(await list("dropped")).toEqual(["m_d00000001"]);
+    expect(await list("flagged")).toEqual(["m_d00000001"]);
+    expect(await list("all")).toHaveLength(4);
   });
 
   it("reports usage per day and model, and health", async () => {
@@ -242,6 +265,77 @@ describe("admin assistant API", () => {
     expect(health.state.state).toBe("ok");
     expect(health.corpus.documents["project"]).toBe(1);
     expect(health.corpus.coreTokens).toBeGreaterThan(0);
+  });
+
+  it("reports the signals: cache hits, invented citations, refusals, check flags", async () => {
+    models.lite = scripted([textTurn("unused")]);
+    const base = {
+      sessionHash: "s",
+      locale: "en" as const,
+      route: "lite",
+      questionRedacted: "q",
+      totalMs: 1,
+      finishReason: "stop",
+      promptVersion: "p",
+    };
+    await getDb()
+      .insert(aiMessages)
+      .values([
+        {
+          ...base,
+          id: "m_s00000001",
+          model: "gemini-3.5-flash-lite",
+          tokens: { input: 1_000, cached: 200, output: 10, thoughts: 0 },
+          droppedCitations: ["project:nebula@en"],
+          checks: { v: 1, flags: ["invented-citation", "uncited"] },
+        },
+        {
+          ...base,
+          id: "m_s00000002",
+          model: "gemini-3.5-flash-lite",
+          tokens: { input: 3_000, cached: 600, output: 10, thoughts: 0 },
+          checks: { v: 1, flags: ["uncited"] },
+        },
+        // A fallback's tokens are not the primary model's cache.
+        {
+          ...base,
+          id: "m_s00000003",
+          model: "nvidia/nemotron-3-super-120b-a12b:free",
+          tokens: { input: 5_000, cached: 5_000, output: 10, thoughts: 0 },
+        },
+      ]);
+    await getDb()
+      .insert(aiGuardEvents)
+      .values([
+        { day: utcDay(), kind: "rate_limited", count: 4 },
+        { day: utcDay(), kind: "honeypot", count: 1 },
+      ]);
+
+    const usage = (await (await admin.get("/admin/assistant/usage?days=7")).json()) as {
+      primaryModel: string;
+      answers: Record<string, unknown>[];
+      guardEvents: { kind: string; count: number }[];
+      checks: { flag: string; count: number }[];
+    };
+    expect(usage.primaryModel).toBe("gemini-3.5-flash-lite");
+    expect(usage.answers).toEqual([
+      expect.objectContaining({
+        day: utcDay(),
+        answers: 3,
+        withDropped: 1,
+        flagged: 2,
+        primaryInput: 4_000,
+        primaryCached: 800,
+      }),
+    ]);
+    expect(usage.guardEvents).toEqual([
+      expect.objectContaining({ kind: "honeypot", count: 1 }),
+      expect.objectContaining({ kind: "rate_limited", count: 4 }),
+    ]);
+    expect(usage.checks).toEqual([
+      { flag: "uncited", count: 2 },
+      { flag: "invented-citation", count: 1 },
+    ]);
   });
 
   it("runs the copilot through the same chain and counts its cost", async () => {

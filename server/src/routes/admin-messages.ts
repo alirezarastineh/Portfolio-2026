@@ -33,6 +33,9 @@ adminMessagesRouter.get("/messages", async (c) => {
       status: contactMessages.status,
       mailStatus: contactMessages.mailStatus,
       mailError: contactMessages.mailError,
+      /** `ask` for a hand-off from the assistant; its conversation when attached. */
+      origin: contactMessages.origin,
+      askTranscript: contactMessages.askTranscript,
     })
     .from(contactMessages)
     .where(filter)

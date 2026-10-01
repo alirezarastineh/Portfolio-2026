@@ -300,6 +300,34 @@ if [[ "$(db_value "select count(*) from information_schema.tables where table_na
 else
   fail "assistant tables missing — migration 0008_ask_assistant not applied?"
 fi
+TRACE_COLUMNS="$(db_value "select count(*) from information_schema.columns where table_name = 'ai_messages' and column_name in ('trace', 'dropped_citations', 'corpus_key', 'checks', 'judge')")"
+GUARD_TABLE="$(db_value "select count(*) from information_schema.tables where table_name = 'ai_guard_events'")"
+if [[ "${TRACE_COLUMNS}" == "5" && "${GUARD_TABLE}" == "1" ]]; then
+  pass "answer traces and guard events exist (migration 0010)"
+else
+  fail "answer-trace columns (${TRACE_COLUMNS}/5) or ai_guard_events (${GUARD_TABLE}/1) missing — migration 0010_answer_traces not applied?"
+fi
+if [[ "$(db_value "select count(*) from information_schema.tables where table_name in ('ai_runs', 'ai_run_items')")" == "2" ]]; then
+  pass "background run tables exist (migration 0011)"
+else
+  fail "ai_runs or ai_run_items missing — migration 0011_runs not applied?"
+fi
+if [[ "$(db_value "select count(*) from information_schema.tables where table_name = 'ai_reviews'")" == "1" ]]; then
+  pass "the review table exists (migration 0012)"
+else
+  fail "ai_reviews missing — migration 0012_reviews not applied?"
+fi
+OUTCOME_COLUMNS="$(db_value "select count(*) from information_schema.columns where (table_name = 'contact_messages' and column_name in ('origin', 'ask_message_id', 'ask_transcript')) or (table_name = 'ai_messages' and column_name = 'handoff_confirmed_at') or (table_name = 'ai_settings' and column_name = 'primary_metric')")"
+if [[ "${OUTCOME_COLUMNS}" == "5" ]]; then
+  pass "hand-off and outcome columns exist (migration 0013)"
+else
+  fail "hand-off and outcome columns (${OUTCOME_COLUMNS}/5) missing — migration 0013_outcomes not applied?"
+fi
+if [[ "$(db_value "select count(*) from information_schema.tables where table_name in ('ai_corpus_snapshots', 'ai_eval_cases')")" == "2" ]]; then
+  pass "corpus snapshot and eval case tables exist (migration 0014)"
+else
+  fail "ai_corpus_snapshots or ai_eval_cases missing — migration 0014_snapshots not applied?"
+fi
 check "the assistant's search and tokenizer load in the api container" \
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T api \
   node -e "Promise.all([import('minisearch'), import('js-tiktoken/lite'), import('js-tiktoken/ranks/o200k_base')]).then(() => process.exit(0), () => process.exit(1))"

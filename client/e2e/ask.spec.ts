@@ -175,6 +175,56 @@ async function run(prompt: ReturnType<Page["locator"]>, text: string) {
   await prompt.press("Enter");
 }
 
+/**
+ * An answer that offers the hand-off, with the confirm and contact calls
+ * recorded; returns once the offer is on screen.
+ */
+async function offerHandoff(page: Page) {
+  const summary = "Wants to discuss a six-month contract for an AI platform.";
+  await mockAsk(page, (route) =>
+    sse(route, [
+      ...answer({ text: "Happy to help you reach him." }).slice(0, -2),
+      { type: "tool-input-start", toolCallId: "h1", toolName: "handoff_contact" },
+      {
+        type: "tool-input-available",
+        toolCallId: "h1",
+        toolName: "handoff_contact",
+        input: { summary },
+      },
+      {
+        type: "tool-output-available",
+        toolCallId: "h1",
+        output: { ok: true, awaitingConfirmation: true },
+      },
+      { type: "finish-step" },
+      {
+        type: "finish",
+        finishReason: "tool-calls",
+        messageMetadata: { sig: "s", model: "gemini-3.5-flash-lite" },
+      },
+    ]),
+  );
+  const confirmed: unknown[] = [];
+  const sent: unknown[] = [];
+  const answerJson = (list: unknown[]) => async (route: Route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers: cors });
+      return;
+    }
+    list.push(route.request().postDataJSON());
+    await route.fulfill({ headers: cors, json: { ok: true } });
+  };
+  await page.route("**/v1/ask/handoff", answerJson(confirmed));
+  await page.route("**/contact", answerJson(sent));
+  const prompt = await openPrompt(page);
+  await run(prompt, "I want to hire him");
+  const confirm = page.getByRole("group", {
+    name: "Hand this conversation to the contact form?",
+  });
+  await expect(confirm).toBeVisible();
+  return { summary, confirm, confirmed, sent };
+}
+
 test.use({ reducedMotion: "reduce" });
 
 test.describe("assistant terminal", () => {
@@ -427,41 +477,36 @@ test.describe("assistant terminal", () => {
   });
 
   test("the hand-off to the contact form waits for the visitor's yes", async ({ page }) => {
-    const summary = "Wants to discuss a six-month contract for an AI platform.";
-    await mockAsk(page, (route) =>
-      sse(route, [
-        ...answer({ text: "Happy to help you reach him." }).slice(0, -2),
-        { type: "tool-input-start", toolCallId: "h1", toolName: "handoff_contact" },
-        {
-          type: "tool-input-available",
-          toolCallId: "h1",
-          toolName: "handoff_contact",
-          input: { summary },
-        },
-        {
-          type: "tool-output-available",
-          toolCallId: "h1",
-          output: { ok: true, awaitingConfirmation: true },
-        },
-        { type: "finish-step" },
-        {
-          type: "finish",
-          finishReason: "tool-calls",
-          messageMetadata: { sig: "s", model: "gemini-3.5-flash-lite" },
-        },
-      ]),
-    );
-    const prompt = await openPrompt(page);
-    await run(prompt, "I want to hire him");
-    const confirm = page.getByRole("group", {
-      name: "Hand this conversation to the contact form?",
-    });
-    await expect(confirm).toBeVisible();
+    const { summary, confirm, confirmed, sent } = await offerHandoff(page);
     await expect(page.locator("#contact-message")).toHaveValue("");
+    expect(confirmed).toHaveLength(0);
 
     await confirm.getByRole("button", { name: "yes" }).click();
     await expect(page.locator("#contact-message")).toHaveValue(summary);
     await expect(page.locator("#contact-name")).toBeFocused();
+    // The yes is counted; the conversation goes along only if the visitor ticks it.
+    await expect.poll(() => confirmed.length).toBe(1);
+    expect(confirmed[0]).toEqual({ sessionId: expect.any(String), messageId: expect.any(String) });
+    const attach = page.getByLabel("Attach my conversation with the assistant");
+    await expect(attach).not.toBeChecked();
+    await attach.check();
+    await page.locator("#contact-name").fill("Ada Lovelace");
+    await page.locator("#contact-email").fill("ada@example.com");
+    await page.getByRole("button", { name: "> send_message()" }).click();
+    await expect.poll(() => sent.length).toBe(1);
+    expect(sent[0]).toMatchObject({ message: summary, origin: "ask", ask: confirmed[0] });
+  });
+
+  test("without the tick, the message goes without the conversation", async ({ page }) => {
+    const { summary, confirm, sent } = await offerHandoff(page);
+    await confirm.getByRole("button", { name: "yes" }).click();
+    await expect(page.locator("#contact-message")).toHaveValue(summary);
+    await page.locator("#contact-name").fill("Ada Lovelace");
+    await page.locator("#contact-email").fill("ada@example.com");
+    await page.getByRole("button", { name: "> send_message()" }).click();
+    await expect.poll(() => sent.length).toBe(1);
+    expect(sent[0]).toMatchObject({ message: summary, origin: "ask" });
+    expect(sent[0]).not.toHaveProperty("ask");
   });
 
   test("a question asked in the hero is answered in the About terminal, and traced", async ({

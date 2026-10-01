@@ -4,6 +4,7 @@ import type { DbExecutor } from "../content/build.js";
 import { LOCALES, type Locale } from "../content/schema.js";
 import { getDb } from "../db/client.js";
 import { aiFaq, aiFaqTranslations, aiSettings } from "../db/schema.js";
+import { PRIMARY_METRICS, type PrimaryMetric } from "./outcomes.js";
 
 /**
  * The admin's side of the assistant: the settings row and the FAQ. Both are
@@ -17,6 +18,8 @@ export interface AiSettings {
   deepEnabled: boolean;
   suggestedQuestions: Record<Locale, string[]>;
   systemCard: Record<Locale, string>;
+  /** The outcome metric watched first (`outcomes.ts`), rotated when it goes flat. */
+  primaryMetric: PrimaryMetric;
   updatedAt: string | null;
 }
 
@@ -34,6 +37,7 @@ export const DEFAULT_SETTINGS: AiSettings = {
   deepEnabled: true,
   suggestedQuestions: { en: [], de: [] },
   systemCard: { en: "", de: "" },
+  primaryMetric: "helpfulRate",
   updatedAt: null,
 };
 
@@ -58,6 +62,7 @@ export async function readAiSettings(db: DbExecutor = getDb()): Promise<AiSettin
     deepEnabled: row.deepEnabled,
     suggestedQuestions: perLocale(row.suggestedQuestions, [] as string[]),
     systemCard: perLocale(row.systemCard, ""),
+    primaryMetric: PRIMARY_METRICS.find((m) => m === row.primaryMetric) ?? "helpfulRate",
     updatedAt: row.updatedAt.toISOString(),
   };
 }

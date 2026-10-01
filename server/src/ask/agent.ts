@@ -17,8 +17,10 @@ import {
 
 import type { Locale } from "../content/schema.js";
 import { captureError } from "../lib/sentry.js";
+import { checkAnswer, type AnswerChecks } from "./checks.js";
 import type { AskConfig } from "./config.js";
 import type { AskCorpus } from "./corpus/index.js";
+import { recordSnapshot, snapshotKey } from "./corpus/snapshots.js";
 import { signAnswer } from "./history.js";
 import { logAnswer } from "./log.js";
 import {
@@ -48,6 +50,7 @@ import {
 } from "./stream-transforms.js";
 import { countTokens } from "./tokens.js";
 import { buildTools, type AskTools } from "./tools.js";
+import { buildAnswerTrace, type AnswerTrace } from "./trace.js";
 import { recordUsage, summarizeCalls } from "./usage.js";
 
 /**
@@ -93,6 +96,8 @@ export interface AnswerRequest {
   beforeModelCall?: (entry: ModelEntry, signal?: AbortSignal) => Promise<void>;
   /** Extra total time reserved for deliberate eval pacing and a bounded 429 wait. */
   timeoutExtraMs?: number;
+  /** A candidate prompt in place of `SYSTEM_PROMPT`: pairwise evals only, never a request. */
+  systemPrompt?: string;
   droppedAnswers?: number;
   /**
    * Write the log row and the usage totals (default). Off for evals run from
@@ -113,7 +118,21 @@ export interface AnswerOutcome {
   finishReason: string;
   model: string | null;
   trace: Trace;
+  /** What the answer did, step by step, as the log stores it; null if it could not be built. */
+  steps: AnswerTrace | null;
+  /** The deterministic checks' flags (checks.ts). */
+  checks: AnswerChecks;
   usd: number;
+}
+
+/** The step trace, or null: a trace that cannot be built must never cost the answer. */
+function safeTrace(record: AnswerRecord, trace: Trace): AnswerTrace | null {
+  try {
+    return buildAnswerTrace(record.steps, trace);
+  } catch (error) {
+    console.error("[ask] could not build the answer trace", error);
+    return null;
+  }
 }
 
 /** The error text the browser receives: a code, never provider details. */
@@ -148,7 +167,16 @@ function instructionsFor(
   corpus: AskCorpus,
   locale: Locale,
   language: Locale | null,
+  systemPrompt?: string,
 ): { text: string; tokens: number } {
+  if (systemPrompt !== undefined) {
+    // A pairwise eval's candidate prompt: built each time, never memoised.
+    return {
+      text: buildInstructions(corpus.core, locale, language, systemPrompt),
+      tokens:
+        countTokens(buildInstructions("", locale, language, systemPrompt)) + corpus.coreTokens + 16,
+    };
+  }
   const key = `${corpus.key}:${locale}:${language}`;
   let memo = instructionsMemo.get(key);
   if (!memo) {
@@ -175,6 +203,7 @@ export function answerOnlyOptions(
   corpus: AskCorpus,
   locale?: Locale,
   language: Locale | null = null,
+  systemPrompt?: string,
 ): LanguageModelV4CallOptions {
   const turns: LanguageModelV4Prompt = [];
   for (const message of options.prompt) {
@@ -193,7 +222,10 @@ export function answerOnlyOptions(
     tools: undefined,
     toolChoice: undefined,
     prompt: [
-      { role: "system", content: buildAnswerOnlyInstructions(corpus.compact, locale, language) },
+      {
+        role: "system",
+        content: buildAnswerOnlyInstructions(corpus.compact, locale, language, systemPrompt),
+      },
       ...recent,
     ],
   };
@@ -217,7 +249,7 @@ export function streamAnswer(request: AnswerRequest): {
   const record = newAnswerRecord();
   const cited = new Set<string>();
   const dropped: string[] = [];
-  const instructions = instructionsFor(corpus, locale, language);
+  const instructions = instructionsFor(corpus, locale, language, request.systemPrompt);
 
   const model = createFallbackModel({
     entries: request.chain,
@@ -230,7 +262,8 @@ export function streamAnswer(request: AnswerRequest): {
     rateLimitRetry: request.rateLimitRetry,
     acquireRateLimitRetry: request.acquireRateLimitRetry,
     beforeAttempt: request.beforeModelCall,
-    answerOnly: (options) => answerOnlyOptions(options, corpus, locale, language),
+    answerOnly: (options) =>
+      answerOnlyOptions(options, corpus, locale, language, request.systemPrompt),
     estimateTokens: (options) =>
       options.prompt.reduce(
         (sum, message) =>
@@ -322,15 +355,28 @@ export function streamAnswer(request: AnswerRequest): {
     const answering = answeringModel(trace);
     const { tokens, usd } = summarizeCalls(trace.calls);
     const finishReason = resolveFinishReason(ending, record);
+    const text = answerText(record);
     const outcome: AnswerOutcome = {
       messageId,
-      text: answerText(record),
+      text,
       citedIds: [...cited],
       droppedCitations: dropped,
       toolCalls: record.toolCalls,
       finishReason,
       model: answering?.model ?? null,
       trace,
+      steps: safeTrace(record, trace),
+      checks: checkAnswer({
+        text,
+        locale,
+        language,
+        droppedCitations: dropped,
+        toolNames: record.toolCalls.map((c) => c.name),
+        finishReason,
+        steps: trace.calls.length,
+        maxRounds: config.agentMaxRounds,
+        degraded: usedFallback(trace, request.chain),
+      }),
       usd,
     };
 
@@ -365,7 +411,15 @@ export function streamAnswer(request: AnswerRequest): {
         finishReason,
         promptVersion: `${PROMPT_VERSION}+${PROMPT_HASH}`,
         droppedAnswers: request.droppedAnswers ?? 0,
+        trace: outcome.steps,
+        droppedCitations: dropped,
+        // The documents it saw, exactly (`snapshotKey`), so a case frozen from it replays them.
+        corpusKey: snapshotKey(corpus),
+        checks: outcome.checks,
       });
+      // The corpus this visitor's answer saw, kept so a case frozen from it
+      // re-runs against the same documents (playground drafts are not kept).
+      if (request.source === "terminal") await recordSnapshot(corpus);
     } catch (error) {
       console.error("[ask] could not record the answer", error);
       captureError(error, { phase: "ask-log" });

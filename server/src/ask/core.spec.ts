@@ -1,18 +1,20 @@
 import { describe, expect, it } from "vitest";
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
-import type { TextStreamPart, ToolSet } from "ai";
+import type { ModelMessage, TextStreamPart, ToolSet } from "ai";
 
+import { fixtureConfig } from "../test/ask-fixtures.js";
 import { drain } from "../test/ask-models.js";
 import { answerOnlyOptions } from "./agent.js";
+import type { AskConfig } from "./config.js";
 import type { CorpusDocument } from "./corpus/build.js";
 import type { AskCorpus } from "./corpus/index.js";
 import { renderCompact, renderCore, resolveDocument } from "./corpus/index.js";
 import { CorpusSearch } from "./corpus/search.js";
-import { buildHistory, signAnswer, verifyAnswer } from "./history.js";
+import { buildHistory, signAnswer, trimHistory, verifyAnswer } from "./history.js";
 import { detectLanguage, visitorLanguage } from "./language.js";
-import { redact } from "./log.js";
+import { droppedIds, redact } from "./log.js";
 import { costUsd, priceOf } from "./models/prices.js";
-import { shortName } from "./models/registry.js";
+import { buildChain, shortName, variantChain } from "./models/registry.js";
 import { responseLanguageInstruction, wrapVisitor } from "./prompt.js";
 import { routeQuestion } from "./router.js";
 import {
@@ -21,7 +23,7 @@ import {
   newAnswerRecord,
   recorderTransform,
 } from "./stream-transforms.js";
-import { allowedPath } from "./tools.js";
+import { allowedPath, toolOutcome } from "./tools.js";
 
 const docs: CorpusDocument[] = [
   {
@@ -117,6 +119,14 @@ describe("citations", () => {
     expect(text).toBe("Siehe [^project:atlas@de].");
   });
 
+  it("drops an invented marker's space even when the space came in an earlier chunk", async () => {
+    // Found by the property tests: the space went out before the marker arrived.
+    const { text } = await throughCitations(["Fast", " ", "[^project:nope@en] and cited"]);
+    expect(text).toBe("Fast and cited");
+    const whole = await throughCitations(["Fast [^project:nope@en] and cited"]);
+    expect(whole.text).toBe(text);
+  });
+
   it("drops a marker left open at the end, and leaves ordinary brackets alone", async () => {
     const { text } = await throughCitations(["Use `a[0]` and [links] too [^project:at"]);
     expect(text).toBe("Use `a[0]` and [links] too");
@@ -149,6 +159,94 @@ describe("citations", () => {
     );
     // Empty parts are dropped, the same rule the browser's copy is checked with.
     expect(answerText(record)).toBe("One\n\nTwo");
+  });
+
+  it("the recorder keeps each step's tool calls, their outcomes and result sizes", async () => {
+    const record = newAnswerRecord();
+    const parts = [
+      { type: "start-step" },
+      { type: "tool-call", toolCallId: "1", toolName: "search_portfolio", input: { query: "k8s" } },
+      { type: "tool-call", toolCallId: "2", toolName: "get_document", input: { id: "cv@en" } },
+      { type: "tool-call", toolCallId: "3", toolName: "navigate", input: { to: "/admin" } },
+      {
+        type: "tool-result",
+        toolCallId: "1",
+        toolName: "search_portfolio",
+        output: { results: [] },
+      },
+      { type: "tool-error", toolCallId: "2", toolName: "get_document", error: new Error("boom") },
+      {
+        type: "tool-result",
+        toolCallId: "3",
+        toolName: "navigate",
+        output: { ok: false, error: "not_allowed" },
+      },
+      { type: "finish-step", finishReason: "tool-calls" },
+      { type: "start-step" },
+      { type: "tool-call", toolCallId: "4", toolName: "list_projects", input: {} },
+      { type: "finish-step", finishReason: "length" },
+    ] as unknown as TextStreamPart<ToolSet>[];
+    const input = new ReadableStream<TextStreamPart<ToolSet>>({
+      start(c) {
+        for (const p of parts) c.enqueue(p);
+        c.close();
+      },
+    });
+    await drain(input.pipeThrough(recorderTransform(record)({ tools: {}, stopStream: () => {} })));
+
+    expect(record.steps).toEqual([
+      {
+        finishReason: "tool-calls",
+        tools: [
+          {
+            id: "1",
+            name: "search_portfolio",
+            input: { query: "k8s" },
+            outcome: "no_hits",
+            resultChars: 14,
+          },
+          {
+            id: "2",
+            name: "get_document",
+            input: { id: "cv@en" },
+            outcome: "error",
+            resultChars: 0,
+          },
+          {
+            id: "3",
+            name: "navigate",
+            input: { to: "/admin" },
+            outcome: "not_allowed",
+            resultChars: 34,
+          },
+        ],
+      },
+      {
+        finishReason: "length",
+        // Cut off: the answer ended before its result came back.
+        tools: [{ id: "4", name: "list_projects", input: {}, outcome: null, resultChars: 0 }],
+      },
+    ]);
+    expect(record.toolCalls.map((t) => t.name)).toEqual([
+      "search_portfolio",
+      "get_document",
+      "navigate",
+      "list_projects",
+    ]);
+  });
+});
+
+describe("tool outcomes", () => {
+  it("reads each tool's result shape", () => {
+    expect(toolOutcome({ results: [{ id: "cv@en" }] })).toBe("ok");
+    expect(toolOutcome({ results: [], note: "No matching documents." })).toBe("no_hits");
+    expect(toolOutcome({ projects: [] })).toBe("no_hits");
+    expect(toolOutcome({ error: "not_found", note: "No document has this id." })).toBe("not_found");
+    expect(toolOutcome({ available: false, note: "No CV is published." })).toBe("not_found");
+    expect(toolOutcome({ ok: false, error: "not_allowed" })).toBe("not_allowed");
+    expect(toolOutcome({ error: "something else" })).toBe("error");
+    expect(toolOutcome({ ok: true, awaitingConfirmation: true })).toBe("ok");
+    expect(toolOutcome(undefined)).toBe("ok");
   });
 });
 
@@ -228,6 +326,24 @@ describe("history", () => {
       messages: [{ id: "u", role: "user", parts: [{ type: "text", text: "hi‮there\u0007" }] }],
     });
     expect(result.ok && result.question).toBe("hithere");
+  });
+
+  it("never lets the budget leave an answer at the front", () => {
+    // Found by the property tests: two answers in a row, and a tight budget.
+    const turns: ModelMessage[] = [
+      { role: "user", content: " " },
+      { role: "assistant", content: "        " },
+      { role: "assistant", content: " " },
+    ];
+    const kept = trimHistory(
+      turns,
+      { role: "user", content: " " },
+      {
+        historyTurns: 2,
+        maxInputTokens: 5,
+      },
+    );
+    expect(kept[0]?.role).not.toBe("assistant");
   });
 
   it("keeps only the last turns", async () => {
@@ -324,6 +440,14 @@ describe("redact", () => {
     expect(redact("He worked there 2019-2023 and shipped 3 releases")).toBe(
       "He worked there 2019-2023 and shipped 3 releases",
     );
+  });
+
+  it("stores invented citation ids once each, at most 20, redacted and cut short", () => {
+    const many = Array.from({ length: 30 }, (_, i) => `project:fake-${i}@en`);
+    expect(droppedIds(["a@en", "a@en", "b@en"])).toEqual(["a@en", "b@en"]);
+    expect(droppedIds(many)).toHaveLength(20);
+    expect(droppedIds(["contact:jane.doe@example.org"])).toEqual(["contact:[email]"]);
+    expect(droppedIds(["x".repeat(400)])[0]).toHaveLength(160);
   });
 
   it("handles non-matching email-like strings in linear time without backtracking", () => {
@@ -443,5 +567,37 @@ describe("prices", () => {
   it("names models briefly for the meta line", () => {
     expect(shortName("nvidia/nemotron-3-super-120b-a12b:free")).toBe("nemotron-3-super");
     expect(shortName("gemini-3.5-flash-lite")).toBe("gemini-3.5-flash-lite");
+  });
+});
+
+describe("the judge chain", () => {
+  it("is the deep model unless SERVER_AI_JUDGE_MODELS names the judges, in its order", () => {
+    const ids = (config: AskConfig) => buildChain(config, "judge").map((e) => e.id);
+    expect(ids(fixtureConfig())).toEqual(["gemini-3.7-flash"]);
+    const base = fixtureConfig();
+    const withOpenRouter = { ...base, openrouter: { ...base.openrouter, apiKey: "test-key" } };
+    // Another family first, whatever order the providers answer visitors in.
+    expect(
+      ids({ ...withOpenRouter, judgeModels: ["vendor/judge:free", "gemini-3.5-flash-lite"] }),
+    ).toEqual(["vendor/judge:free", "gemini-3.5-flash-lite"]);
+    // A judge whose provider has no key is left out.
+    expect(ids({ ...base, judgeModels: ["vendor/judge:free", "gemini-3.5-flash-lite"] })).toEqual([
+      "gemini-3.5-flash-lite",
+    ]);
+  });
+});
+
+describe("pairwise sides", () => {
+  it("are a route's chain, or one model on its own when its provider has a key", () => {
+    const base = fixtureConfig();
+    expect(variantChain(base, "deep")?.map((e) => e.id)).toEqual(
+      buildChain(base, "deep").map((e) => e.id),
+    );
+    expect(variantChain(base, "gemini-3.9-preview")?.map((e) => [e.id, e.provider])).toEqual([
+      ["gemini-3.9-preview", "gemini"],
+    ]);
+    expect(
+      variantChain({ ...base, openrouter: { ...base.openrouter, apiKey: "" } }, "vendor/m"),
+    ).toBeNull();
   });
 });
