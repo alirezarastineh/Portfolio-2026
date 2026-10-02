@@ -185,6 +185,102 @@ function answerRow(id: string, question: string, change: Record<string, unknown>
   };
 }
 
+/** The assistant's settings as the Settings tab loads them. */
+function assistantSettings(change: Record<string, unknown> = {}) {
+  return {
+    enabled: true,
+    dailyBudgetUsd: null,
+    deepEnabled: true,
+    suggestedQuestions: { en: [], de: [] },
+    systemCard: { en: "", de: "" },
+    publicReserve: 0.5,
+    featureCaps: {
+      playground: null,
+      copilot: null,
+      insights: null,
+      eval: null,
+      pairwise: null,
+      judge: null,
+      autoInsights: null,
+      agent: null,
+      embeddings: null,
+    },
+    featureSwitches: {
+      copilot: true,
+      judge: true,
+      autoInsights: false,
+      agent: false,
+      embeddings: false,
+    },
+    updatedAt: HOUR_AGO,
+    ...change,
+  };
+}
+
+/** The Trust tab's view: who may do what, and whatever waits for a person. */
+function trustView(change: Record<string, unknown> = {}) {
+  return {
+    registry: [
+      {
+        action: "navigate",
+        actor: "assistant",
+        level: "L1",
+        approver: "none",
+        enforcement: "tools.ts allowedPath",
+        reversible: true,
+        built: true,
+      },
+      {
+        action: "agent.apply",
+        actor: "agent",
+        level: "L1",
+        approver: "admin",
+        enforcement: "Plan phase 30",
+        reversible: true,
+        built: false,
+      },
+      {
+        action: "publish",
+        actor: "admin",
+        level: "human",
+        approver: "admin",
+        enforcement: "routes/admin.ts",
+        reversible: true,
+        built: true,
+      },
+    ],
+    rules: {
+      faithfulnessFloor: 0.8,
+      judgedWindow: 50,
+      judgedMinimum: 20,
+      deepErrorCeiling: 0.2,
+      deepWindow: 30,
+    },
+    demoted: [],
+    alerts: [],
+    audit: [],
+    lastCheck: null,
+    ...change,
+  };
+}
+
+/** What the deploy configured, read-only under the settings. */
+const ASSISTANT_ENV = {
+  enabled: true,
+  unavailableReason: null,
+  defaultBudgetUsd: 2,
+  keys: { gemini: true, openrouter: false },
+  chains: { lite: [], deep: [], copilot: [], insight: [] },
+  limits: {
+    ratePerHour: 20,
+    ratePerDay: 60,
+    maxConcurrent: 4,
+    maxOutputTokens: 1024,
+    historyTurns: 6,
+  },
+  prompt: "ask-test+000000000000",
+};
+
 function defaults(): Record<string, Answer> {
   const en = content("en");
   const de = content("de");
@@ -250,6 +346,18 @@ function defaults(): Record<string, Answer> {
     },
     "GET /admin/assistant/health": {
       state: { state: "ok", deepAllowed: true, spentUsd: 0.42, budgetUsd: 2 },
+      spend: {
+        totalUsd: 0.42,
+        budgetUsd: 2,
+        publicReserve: 0.5,
+        reserveLineUsd: 1,
+        features: [
+          { feature: "terminal", spentUsd: 0.12, capUsd: null, switchedOn: null, state: "ok" },
+          { feature: "eval", spentUsd: 0.3, capUsd: 0.3, switchedOn: null, state: "cap" },
+          { feature: "copilot", spentUsd: 0, capUsd: null, switchedOn: true, state: "ok" },
+          { feature: "agent", spentUsd: 0, capUsd: null, switchedOn: false, state: "off" },
+        ],
+      },
       inFlight: 0,
       breakers: [
         {
@@ -303,7 +411,10 @@ function defaults(): Record<string, Answer> {
       answers: [],
       guardEvents: [],
       checks: [],
+      features: [],
     },
+    "GET /admin/assistant/settings": { settings: assistantSettings(), env: ASSISTANT_ENV },
+    "GET /admin/assistant/trust": trustView(),
     "GET /admin/assistant/runs": { runs: [] },
     "GET /admin/assistant/outcomes": outcomesView("helpfulRate", false),
     "GET /admin/assistant/judge": {
@@ -753,7 +864,7 @@ test.describe("admin", () => {
     await openAdmin(page, "/admin/assistant");
 
     const tabs = page.getByRole("tablist", { name: "Assistant sections" });
-    await expect(tabs.getByRole("tab")).toHaveCount(8);
+    await expect(tabs.getByRole("tab")).toHaveCount(9);
     expect((await tabs.boundingBox())?.height ?? 99).toBeLessThan(44);
     await expect(page.getByText("Answering")).toBeVisible();
   });
@@ -852,6 +963,170 @@ test.describe("admin", () => {
     await expect(
       page.getByText(/get_document \{"id":"project:nebula@en"\} → not found/),
     ).toBeVisible();
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the Overview shows spend by feature, and Settings fences what the rest may spend", async ({
+    page,
+    baseURL,
+  }) => {
+    const saved: Record<string, unknown>[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "PUT /admin/assistant/settings": () => ({
+        status: 200,
+        body: { ok: true, settings: assistantSettings({ publicReserve: 0.6 }) },
+      }),
+    });
+    page.on("request", (r) => {
+      if (r.method() === "PUT" && r.url().endsWith("/admin/assistant/settings")) {
+        saved.push(r.postDataJSON() as Record<string, unknown>);
+      }
+    });
+    await openAdmin(page, "/admin/assistant");
+
+    await expect(
+      page.getByText("All but the terminal stop at $1.00 (50 % kept for visitors)"),
+    ).toBeVisible();
+    const spend = page.getByRole("region", { name: "Spending by feature" });
+    await expect(spend.getByRole("row", { name: /Eval runs/ })).toContainText("stopped at its cap");
+    await expect(spend.getByRole("row", { name: /Visitors' terminal/ })).toContainText("$0.12");
+    // Work not built yet stays out of the table until it spends.
+    await expect(spend.getByText("agent", { exact: true })).toHaveCount(0);
+
+    await page.getByRole("tab", { name: "Settings" }).click();
+    await page.getByLabel("Kept for visitors (% of the budget)", { exact: true }).fill("60");
+    await page.getByLabel("Eval runs", { exact: true }).fill("0.5");
+    // Each switch is named by its own label alone (a Spartan switch without an id takes the first's).
+    const named = (name: string) => page.getByRole("switch", { name, exact: true });
+    await expect(named("Deep model for comparisons and architecture questions")).toBeChecked();
+    await expect(named("Judge runs")).toHaveAccessibleDescription(/agrees with you/);
+    await named("Copilot").click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(() => saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      publicReserve: 0.6,
+      featureCaps: { eval: 0.5, copilot: null, pairwise: null },
+      featureSwitches: { copilot: false, judge: true },
+    });
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the Overview points to Trust, where an alert is marked seen and a demotion reinstated", async ({
+    page,
+    baseURL,
+  }) => {
+    const demotion = {
+      subject: "route:deep",
+      at: HOUR_AGO,
+      reason: "8 of 30 answers failed (27 %; ceiling 20 %)",
+    };
+    const alert = {
+      id: 7,
+      at: HOUR_AGO,
+      actor: "agent",
+      action: "answer",
+      target: "m_leak00000001",
+      decision: "allowed",
+      reason: "leak: the answer repeated a piece of the system prompt",
+      alternatives: [],
+      alert: true,
+      seenAt: null,
+    };
+    const posted: string[] = [];
+    let seen = false;
+    let reinstated = false;
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/health": () => ({
+        status: 200,
+        body: {
+          state: { state: "ok", deepAllowed: true, spentUsd: 0.42, budgetUsd: 2 },
+          trust: { alerts: seen ? 0 : 1, demoted: reinstated ? [] : [demotion] },
+          inFlight: 0,
+          breakers: [],
+          last24h: { answers: 12, failures: 0, fallbackRate: 0, models: [] },
+          corpus: null,
+        },
+      }),
+      // The view follows what was posted: an alert seen, a demotion reinstated.
+      "GET /admin/assistant/trust": () => ({
+        status: 200,
+        body: trustView({
+          demoted: reinstated ? [] : [demotion],
+          alerts: seen ? [] : [alert],
+          audit: [alert],
+          lastCheck: {
+            ...alert,
+            id: 6,
+            actor: "system",
+            action: "trust.check",
+            target: "trust",
+            alert: false,
+            reason: "4 checked, 1 demoted, 0 refused",
+            alternatives: [{ option: "demote route:deep", why: "demote: 8 of 30 answers failed" }],
+          },
+        }),
+      }),
+      "POST /admin/assistant/trust/alerts/7/seen": () => {
+        seen = true;
+        return { status: 200, body: { ok: true } };
+      },
+      "POST /admin/assistant/trust/reinstate": () => {
+        reinstated = true;
+        return { status: 200, body: { ok: true } };
+      },
+      "POST /admin/assistant/trust/check": () => ({
+        status: 200,
+        body: { checked: 4, demoted: [], refused: [] },
+      }),
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().includes("/admin/assistant/trust/")) {
+        posted.push(`${new URL(r.url()).pathname} ${r.postData() ?? ""}`);
+      }
+    });
+    await openAdmin(page, "/admin/assistant");
+
+    await expect(
+      page.getByText("1 alert and the deep route is demoted: see the Trust tab", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    // The page header says so too, until it is resolved.
+    await expect(page.getByText("needs a look")).toBeVisible();
+    await page.getByRole("button", { name: "Open Trust", exact: true }).click();
+    await expect(page.getByRole("tab", { name: "Trust" })).toHaveAttribute("aria-selected", "true");
+
+    const alerts = page.getByRole("region", { name: "Alerts" });
+    await expect(
+      alerts.getByText("leak: the answer repeated a piece of the system prompt"),
+    ).toBeVisible();
+    const check = page.getByRole("region", { name: "Nightly check" });
+    await expect(check.getByText(/more than 20 % of its last 30 answers failed/)).toBeVisible();
+    await expect(check.getByText("demote route:deep")).toBeVisible();
+    const registry = page.getByRole("region", { name: "Who may do what" });
+    await expect(registry.getByRole("row", { name: /publish/ })).toContainText("people only");
+    await expect(registry.getByRole("row", { name: /agent\.apply/ })).toContainText("not built");
+
+    await alerts.getByRole("button", { name: "Seen", exact: true }).click();
+    const demoted = page.getByRole("region", { name: "Demoted" });
+    await demoted.getByRole("button", { name: "Reinstate", exact: true }).click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Reinstate", exact: true })
+      .click();
+    await expect(demoted.getByText("Every model and route is in service.")).toBeVisible();
+    // Resolved here, cleared there: no reload needed.
+    await expect(page.getByText("needs a look")).toHaveCount(0);
+
+    await check.getByRole("button", { name: "Check now", exact: true }).click();
+    await expect(page.getByText("4 checked · 0 demoted", { exact: true })).toBeVisible();
+    await expect
+      .poll(() => posted)
+      .toEqual([
+        "/admin/assistant/trust/alerts/7/seen {}",
+        '/admin/assistant/trust/reinstate {"subject":"route:deep"}',
+        "/admin/assistant/trust/check {}",
+      ]);
     expect(unmocked).toEqual([]);
   });
 

@@ -5,6 +5,7 @@ import {
   computed,
   inject,
   OnInit,
+  output,
   signal,
 } from "@angular/core";
 import { toast } from "@spartan-ng/brain/sonner";
@@ -24,6 +25,8 @@ import {
   type DayRow,
 } from "../answer-trace";
 import type { AssistantHealth, AssistantUsage } from "../assistant-types";
+import { featureRows, stateLabel } from "../spending";
+import { trustAlert } from "../trust";
 
 interface ModelTotal {
   model: string;
@@ -35,8 +38,9 @@ interface ModelTotal {
 }
 
 /**
- * The assistant at a glance: is it answering, what has it cost today, how
- * fast and how often a fallback answered, each model's breaker, what the
+ * The assistant at a glance: is it answering, what has it cost today and
+ * which feature spent it (everything but the terminal stops at the visitors'
+ * reserve), how fast and how often a fallback answered, each model's breaker, what the
  * corpus weighs, and 30 days of usage. The signals show what is otherwise
  * invisible: whether the fixed prefix is served from the cache, how many
  * requests the gate turned away, and how often a model invented a citation.
@@ -64,6 +68,16 @@ interface ModelTotal {
       <app-form-skeleton kind="list" [rows]="3" label="Loading the assistant's health…" />
     } @else {
       @let h = health()!;
+      @if (trustLine(); as line) {
+        <div
+          class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/40 p-3 text-sm"
+        >
+          <p class="m-0">{{ line }}</p>
+          <button hlmBtn size="sm" variant="outline" type="button" (click)="toTrust.emit()">
+            Open Trust
+          </button>
+        </div>
+      }
       <!-- The dashboard's tiles: a figure, what it means, the detail under it. -->
       <section aria-labelledby="assistant-glance">
         <h2 id="assistant-glance" class="sr-only">The assistant at a glance</h2>
@@ -90,12 +104,26 @@ interface ModelTotal {
                   >of \${{ h.state.budgetUsd | number: "1.2-2" }}</span
                 >
               </p>
-              <div class="h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+              <div class="relative h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
                 <div
                   class="h-full rounded-full bg-accent-orange"
                   [style.width.%]="spentShare()"
                 ></div>
+                @if (h.spend; as s) {
+                  <div
+                    class="absolute inset-y-0 w-0.5 bg-foreground"
+                    [style.left.%]="(1 - s.publicReserve) * 100"
+                  ></div>
+                }
               </div>
+              @if (h.spend; as s) {
+                <p class="m-0 text-xs text-muted-foreground">
+                  All but the terminal stop at \${{ s.reserveLineUsd | number: "1.2-2" }} ({{
+                    s.publicReserve * 100 | number: "1.0-0"
+                  }}
+                  % kept for visitors)
+                </p>
+              }
               @if (h.state.state === "ok" && !h.state.deepAllowed) {
                 <p class="m-0 text-xs text-muted-foreground">
                   Deep model off (over 80 % or disabled)
@@ -124,6 +152,51 @@ interface ModelTotal {
           </li>
         </ul>
       </section>
+
+      @if (h.spend) {
+        <section class="flex flex-col gap-2" aria-labelledby="assistant-spend">
+          <h2 id="assistant-spend" class="m-0 text-sm font-medium">Spending by feature</h2>
+          <div class="overflow-x-auto rounded-lg border border-border">
+            <table class="w-full text-sm">
+              <thead class="text-left text-xs text-muted-foreground">
+                <tr>
+                  <th class="p-2 font-normal">Feature</th>
+                  <th class="p-2 text-right font-normal">Today</th>
+                  <th class="p-2 text-right font-normal">Own cap</th>
+                  <th class="p-2 text-right font-normal">30 days</th>
+                  <th class="p-2 font-normal">Now</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (f of features(); track f.feature) {
+                  <tr class="border-t border-border">
+                    <td class="p-2">{{ f.label }}</td>
+                    <td class="p-2 text-right font-mono text-xs">
+                      \${{ f.todayUsd | number: "1.2-4" }}
+                    </td>
+                    <td class="p-2 text-right font-mono text-xs">
+                      {{ f.capUsd === null ? "–" : "$" + (f.capUsd | number: "1.2-2") }}
+                    </td>
+                    <td class="p-2 text-right font-mono text-xs">
+                      \${{ f.periodUsd | number: "1.2-4" }}
+                    </td>
+                    <td
+                      class="p-2 text-xs"
+                      [class]="
+                        f.state === 'ok' || f.state === null
+                          ? 'text-muted-foreground'
+                          : 'text-destructive'
+                      "
+                    >
+                      {{ f.state ? stateText(f.state) : "–" }}
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
 
       <section class="flex flex-col gap-2">
         <h2 class="m-0 text-sm font-medium">Models</h2>
@@ -345,6 +418,17 @@ export class AssistantOverviewComponent implements OnInit {
     if (!state || state.state === "off" || !state.budgetUsd) return 0;
     return Math.min(100, (state.spentUsd / state.budgetUsd) * 100);
   });
+
+  /** Asks the page to open the Trust tab. */
+  readonly toTrust = output<void>();
+
+  /** An alert or a demotion waiting for a person, in a sentence. */
+  protected readonly trustLine = computed(() => trustAlert(this.health()?.trust));
+
+  /** Each feature's spend today and over the period, and what its next call would get. */
+  protected readonly features = computed(() => featureRows(this.health()?.spend, this.usage()));
+
+  protected readonly stateText = stateLabel;
 
   protected readonly modelStats = computed(
     () => new Map((this.health()?.last24h.models ?? []).map((m) => [m.model, m])),

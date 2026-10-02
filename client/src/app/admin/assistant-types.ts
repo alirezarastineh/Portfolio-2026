@@ -2,6 +2,25 @@ import type { Locale } from "../content/schema";
 
 /** Shapes of the admin assistant API (`server/src/ask/admin.ts`). */
 
+/** What spends model money, as the server records it (`server/src/ask/features.ts`). */
+export type SpendFeature =
+  | "terminal"
+  | "playground"
+  | "copilot"
+  | "insights"
+  | "eval"
+  | "pairwise"
+  | "judge"
+  | "autoInsights"
+  | "agent"
+  | "embeddings";
+
+/** Everything but the terminal: fenced by the visitors' reserve and its own cap. */
+export type FencedFeature = Exclude<SpendFeature, "terminal">;
+
+/** The features the admin can switch off. */
+export type SwitchedFeature = "copilot" | "judge" | "autoInsights" | "agent" | "embeddings";
+
 export interface AssistantSettings {
   enabled: boolean;
   /** Null = the deploy's `SERVER_AI_DAILY_BUDGET_USD`. */
@@ -9,10 +28,22 @@ export interface AssistantSettings {
   deepEnabled: boolean;
   suggestedQuestions: Record<Locale, string[]>;
   systemCard: Record<Locale, string>;
+  /** The share of the daily budget kept for visitors (0–0.9). */
+  publicReserve: number;
+  /** Each fenced feature's own daily cap in USD; null = only the reserve line. */
+  featureCaps: Record<FencedFeature, number | null>;
+  featureSwitches: Record<SwitchedFeature, boolean>;
   updatedAt: string | null;
 }
 
-export type AssistantSettingsInput = Omit<AssistantSettings, "updatedAt">;
+/** A save: the fences may name only some features; the rest keep what is stored. */
+export type AssistantSettingsInput = Omit<
+  AssistantSettings,
+  "updatedAt" | "featureCaps" | "featureSwitches"
+> & {
+  featureCaps: Partial<AssistantSettings["featureCaps"]>;
+  featureSwitches: Partial<AssistantSettings["featureSwitches"]>;
+};
 
 export interface ChainModel {
   id: string;
@@ -41,7 +72,28 @@ export interface AssistantEnv {
 export type AssistantState =
   | { state: "ok"; deepAllowed: boolean; spentUsd: number; budgetUsd: number }
   | { state: "off"; reason: string }
-  | { state: "resting"; spentUsd: number; budgetUsd: number };
+  | { state: "resting"; spentUsd: number; budgetUsd: number; line?: SpendLine };
+
+/** The line a feature reached: the whole budget, the visitors' reserve, its own cap. */
+export type SpendLine = "budget" | "reserve" | "cap";
+
+/** Today's spend by feature against its lines (the health route's `spend`). */
+export interface SpendToday {
+  totalUsd: number;
+  budgetUsd: number;
+  publicReserve: number;
+  /** The day's total at which everything but the terminal stops. */
+  reserveLineUsd: number;
+  features: {
+    feature: SpendFeature;
+    spentUsd: number;
+    capUsd: number | null;
+    /** Null for a feature without a switch. */
+    switchedOn: boolean | null;
+    /** What its next call would get. */
+    state: "ok" | "off" | SpendLine;
+  }[];
+}
 
 export interface BreakerRow {
   model: string;
@@ -54,8 +106,66 @@ export interface BreakerRow {
   p50TtftMs: number | null;
 }
 
+/** Who may do what (`server/src/ask/trust.ts`). */
+export type TrustLevel = "L0" | "L1" | "L2" | "L3" | "human";
+
+export interface TrustEntry {
+  action: string;
+  actor: string;
+  level: TrustLevel;
+  approver: "none" | "visitor" | "admin";
+  enforcement: string;
+  reversible: boolean;
+  /** False for an action a later phase builds. */
+  built: boolean;
+}
+
+/** One row of the governance log (`server/src/ask/audit.ts`). */
+export interface AuditRow {
+  id: number;
+  at: string;
+  actor: "admin" | "agent" | "system";
+  action: string;
+  target: string;
+  decision: "allowed" | "denied" | "asked";
+  reason: string;
+  /** What was considered but rejected, or a check's verdicts. */
+  alternatives: { option: string; why: string }[];
+  alert: boolean;
+  seenAt: string | null;
+}
+
+/** A model or the deep route the trust monitor took out of the visitors' service. */
+export interface Demotion {
+  subject: string;
+  at: string;
+  reason: string;
+}
+
+/** The evidence a demotion needs (`TRUST_RULES` on the server). */
+export interface TrustRules {
+  faithfulnessFloor: number;
+  judgedWindow: number;
+  judgedMinimum: number;
+  deepErrorCeiling: number;
+  deepWindow: number;
+}
+
+export interface TrustView {
+  registry: TrustEntry[];
+  rules: TrustRules;
+  demoted: Demotion[];
+  alerts: AuditRow[];
+  audit: AuditRow[];
+  lastCheck: AuditRow | null;
+}
+
 export interface AssistantHealth {
   state: AssistantState;
+  /** Absent from an API older than the spending fences. */
+  spend?: SpendToday;
+  /** What needs a person (plan phase 14); absent from an older API. */
+  trust?: { alerts: number; demoted: Demotion[] };
   inFlight: number;
   breakers: BreakerRow[];
   last24h: {
@@ -118,6 +228,8 @@ export interface AssistantUsage {
   guardEvents: GuardEventRow[];
   /** How often each check flag was raised over the period, most frequent first. */
   checks: { flag: string; count: number }[];
+  /** What each feature spent per day; days before the split have none. */
+  features?: { day: string; feature: string; requests: number; usd: number }[];
 }
 
 export interface Attempt {

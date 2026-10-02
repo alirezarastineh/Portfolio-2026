@@ -1,3 +1,4 @@
+import { QUESTION_FLAGS } from "./checks.js";
 import { FAITHFUL_AT } from "./evals/calibration.js";
 import { isoWeek, weekBounds } from "./reviews.js";
 
@@ -87,11 +88,14 @@ export function isAnswered(row: OutcomeRow): boolean {
   return !row.finishReason.startsWith("error") && row.finishReason !== "aborted";
 }
 
-/** No flag, not rephrased, no thumbs-down, and faithful when judged. */
+/**
+ * No flag on the answer, not rephrased, no thumbs-down, and faithful when
+ * judged. A flag on the question (an injection attempt) says nothing about it.
+ */
 export function isHelpful(row: OutcomeRow, rephrasedIds: ReadonlySet<string>): boolean {
   return (
     isAnswered(row) &&
-    !row.flags.length &&
+    !row.flags.some((flag) => !(QUESTION_FLAGS as readonly string[]).includes(flag)) &&
     !rephrasedIds.has(row.id) &&
     row.feedback !== -1 &&
     (row.faithfulness === null || row.faithfulness >= FAITHFUL_AT)

@@ -17,7 +17,8 @@ import {
 
 import type { Locale } from "../content/schema.js";
 import { captureError } from "../lib/sentry.js";
-import { checkAnswer, type AnswerChecks } from "./checks.js";
+import { raiseAlert } from "./audit.js";
+import { checkAnswer, leakReached, type AnswerChecks } from "./checks.js";
 import type { AskConfig } from "./config.js";
 import type { AskCorpus } from "./corpus/index.js";
 import { recordSnapshot, snapshotKey } from "./corpus/snapshots.js";
@@ -33,12 +34,23 @@ import {
   usedFallback,
   type Trace,
 } from "./models/fallback.js";
+import {
+  buildLeakGuard,
+  deploySecrets,
+  echoOf,
+  leakGuardTransform,
+  type LeakGuard,
+  type LeakKind,
+} from "./leak-guard.js";
 import { shortName, type ModelEntry } from "./models/registry.js";
 import {
   buildAnswerOnlyInstructions,
   buildInstructions,
+  PROMPT_CANARY,
   PROMPT_HASH,
   PROMPT_VERSION,
+  SCOPE,
+  SYSTEM_PROMPT,
 } from "./prompt.js";
 import type { RouteDecision } from "./router.js";
 import {
@@ -191,6 +203,52 @@ function instructionsFor(
   return memo;
 }
 
+/**
+ * The alert for a leak: removed by the guard before the visitor saw it
+ * (denied), or written and only found by the check afterwards (allowed).
+ */
+export function leakAlert(messageId: string, leaks: ReadonlySet<LeakKind>, reached: boolean) {
+  const removed = leaks.size
+    ? `${[...leaks].sort((a, b) => a.localeCompare(b)).join(", ")} removed before the visitor saw it`
+    : null;
+  const shown = reached ? "a piece of the instructions or a secret reached the visitor" : null;
+  return {
+    actor: "agent" as const,
+    action: "answer",
+    target: messageId,
+    // Denied only when nothing got through.
+    decision: reached ? ("allowed" as const) : ("denied" as const),
+    reason: `leak: ${[removed, shown].filter(Boolean).join("; ")}`,
+  };
+}
+
+const guardMemo = new Map<string, LeakGuard>();
+
+/**
+ * The output guard for answers from this corpus (plan phase 15,
+ * leak-guard.ts): the instructions they must not repeat, less what the corpus
+ * says too, and the secrets the deploy holds. Built once per corpus.
+ */
+function guardFor(corpus: AskCorpus, config: AskConfig, systemPrompt?: string): LeakGuard {
+  const build = () =>
+    buildLeakGuard({
+      instructions: systemPrompt ?? SYSTEM_PROMPT,
+      corpusTexts: corpus.documents.map((d) => d.text),
+      quotable: [SCOPE],
+      canary: PROMPT_CANARY,
+      secrets: deploySecrets(config),
+    });
+  // A pairwise eval's candidate prompt: built each time, never memoised.
+  if (systemPrompt !== undefined) return build();
+  let memo = guardMemo.get(corpus.key);
+  if (!memo) {
+    if (guardMemo.size >= 8) guardMemo.clear();
+    memo = build();
+    guardMemo.set(corpus.key, memo);
+  }
+  return memo;
+}
+
 function messageTokens(message: LanguageModelV4Message): number {
   return countTokens(
     typeof message.content === "string" ? message.content : JSON.stringify(message.content),
@@ -249,6 +307,8 @@ export function streamAnswer(request: AnswerRequest): {
   const record = newAnswerRecord();
   const cited = new Set<string>();
   const dropped: string[] = [];
+  /** What the output guard removed before the visitor saw it. */
+  const leaks = new Set<LeakKind>();
   const instructions = instructionsFor(corpus, locale, language, request.systemPrompt);
 
   const model = createFallbackModel({
@@ -320,6 +380,12 @@ export function streamAnswer(request: AnswerRequest): {
       },
       experimental_transform: [
         citationTransform({ corpus, locale, cited, dropped }),
+        // The sandwich's output layer: after the citations, before the words are paced.
+        leakGuardTransform(
+          guardFor(corpus, config, request.systemPrompt),
+          leaks,
+          echoOf(request.question),
+        ),
         smoothStream({ chunking: "word" }),
         recorderTransform(record),
       ],
@@ -356,6 +422,9 @@ export function streamAnswer(request: AnswerRequest): {
     const { tokens, usd } = summarizeCalls(trace.calls);
     const finishReason = resolveFinishReason(ending, record);
     const text = answerText(record);
+    // The tools' inputs reach the visitor too (follow-ups, the hand-off summary): checked, not filtered.
+    const toolText = record.toolCalls.map((c) => JSON.stringify(c.input ?? "")).join("\n");
+    const secrets = deploySecrets(config);
     const outcome: AnswerOutcome = {
       messageId,
       text,
@@ -376,6 +445,10 @@ export function streamAnswer(request: AnswerRequest): {
         steps: trace.calls.length,
         maxRounds: config.agentMaxRounds,
         degraded: usedFallback(trace, request.chain),
+        guarded: [...leaks],
+        question: request.question,
+        toolText,
+        secrets,
       }),
       usd,
     };
@@ -389,7 +462,8 @@ export function streamAnswer(request: AnswerRequest): {
         resolveDone(outcome);
         return;
       }
-      if (trace.calls.length) await recordUsage(trace.calls);
+      // The source names the feature that spent: the terminal, the playground, an eval.
+      if (trace.calls.length) await recordUsage(trace.calls, request.source);
       await logAnswer({
         id: messageId,
         sessionHash: request.sessionHash,
@@ -423,6 +497,14 @@ export function streamAnswer(request: AnswerRequest): {
     } catch (error) {
       console.error("[ask] could not record the answer", error);
       captureError(error, { phase: "ask-log" });
+    }
+    // A piece of the instructions or a secret was written for a visitor: the
+    // owner hears of it at once, even when the answer could not be logged.
+    if (request.source === "terminal" && outcome.checks.flags.includes("leak")) {
+      const reached = leakReached({ text, question: request.question, toolText, secrets });
+      await raiseAlert(leakAlert(messageId, leaks, reached)).catch((error: unknown) =>
+        console.error("[ask] leak alert not written", error),
+      );
     }
     resolveDone(outcome);
   };

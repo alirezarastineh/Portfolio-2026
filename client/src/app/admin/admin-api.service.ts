@@ -28,6 +28,7 @@ import type {
   ReviewQueue,
   RunItem,
   RunRow,
+  TrustView,
 } from "./assistant-types";
 import type { EvalCaseRow, FreezeBody } from "./eval-cases";
 import type { OutcomesView, PrimaryMetric } from "./outcomes";
@@ -554,6 +555,28 @@ export class AdminApiService {
   /** Production eval cases frozen from visitor answers. */
   evalCases() {
     return this.request<{ cases: EvalCaseRow[] }>("GET", "/admin/assistant/eval-cases");
+  }
+
+  /** Who may do what, what is demoted, the open alerts and the audit log. */
+  assistantTrust() {
+    return this.request<TrustView>("GET", "/admin/assistant/trust");
+  }
+
+  /** The nightly trust check, now; no model calls. */
+  trustCheck() {
+    return this.request<{ checked: number; demoted: string[]; refused: string[] }>(
+      "POST",
+      "/admin/assistant/trust/check",
+      {},
+    );
+  }
+
+  trustReinstate(subject: string) {
+    return this.request<{ ok: true }>("POST", "/admin/assistant/trust/reinstate", { subject });
+  }
+
+  trustAlertSeen(id: number) {
+    return this.request<{ ok: true }>("POST", `/admin/assistant/trust/alerts/${id}/seen`, {});
   }
 
   /** Freezes a visitor's answer into a production eval case. */

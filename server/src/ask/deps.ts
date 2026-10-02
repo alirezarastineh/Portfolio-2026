@@ -1,3 +1,4 @@
+import { onProductionTunnel } from "../db/migrate.js";
 import type { AskConfig } from "./config.js";
 import { getAskConfig } from "./config.js";
 import { getAskCorpus, getDraftAskCorpus, type AskCorpus } from "./corpus/index.js";
@@ -18,6 +19,8 @@ export interface AskDeps {
   evalPacing?: EvalPacingOptions | null;
   /** One model by id, for a pairwise side (`models/registry.ts`). */
   variantChain?: (config: AskConfig, id: string) => ModelEntry[] | null;
+  /** Whether this API sits on the production tunnel (tests answer without touching the env). */
+  onTunnel?: () => boolean;
 }
 
 let current: AskDeps = {};
@@ -58,6 +61,11 @@ export function askVisitorJudges(config: AskConfig): ModelEntry[] {
     [...askChain(config, "lite"), ...askChain(config, "deep")].map((e) => e.id),
   );
   return askChain(config, "judge").filter((e) => answering.has(e.id));
+}
+
+/** A laptop's API on the production tunnel: it must not start writes of its own there. */
+export function askOnTunnel(): boolean {
+  return (current.onTunnel ?? onProductionTunnel)();
 }
 
 /** Free-tier-safe pacing unless the deps say otherwise. */

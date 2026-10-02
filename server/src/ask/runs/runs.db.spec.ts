@@ -6,11 +6,21 @@ import { eq } from "drizzle-orm";
 
 import { createApp } from "../../app.js";
 import { getDb, getPool } from "../../db/client.js";
-import { aiMessages, aiReviews, aiRunItems, aiRuns, aiUsage } from "../../db/schema.js";
+import {
+  aiAudit,
+  aiMessages,
+  aiReviews,
+  aiRunItems,
+  aiRuns,
+  aiSettings,
+  aiUsage,
+  aiUsageFeatures,
+} from "../../db/schema.js";
 import { eventually, fixtureConfig, fixtureCorpus } from "../../test/ask-fixtures.js";
 import { apiError, mockEntry, textTurn, usage } from "../../test/ask-models.js";
 import { createAdmin, resetDb, TestClient } from "../../test/helpers.js";
 import type { AskConfig } from "../config.js";
+import { utcDay } from "../guard.js";
 import { resetBreakers } from "../models/circuit.js";
 import type { ChainRole, ModelEntry } from "../models/registry.js";
 import { invalidateAssistantCache } from "../settings.js";
@@ -263,6 +273,16 @@ describe("background eval runs", () => {
       ["pending", 0],
     ]);
     expect(lite.calls).toHaveLength(1);
+    // The fence's refusal is in the audit log (plan phase 14).
+    expect(await getDb().select().from(aiAudit)).toEqual([
+      expect.objectContaining({
+        actor: "agent",
+        action: "run.spend",
+        target: id,
+        decision: "denied",
+        reason: "eval run stopped before inj-repeat: assistant_resting",
+      }),
+    ]);
 
     // Neither a resume nor a new run spends while it is spent.
     const resume = await admin.post(`/admin/assistant/runs/${id}/resume`, {});
@@ -275,6 +295,67 @@ describe("background eval runs", () => {
     expect((await admin.post(`/admin/assistant/runs/${id}/resume`, {})).status).toBe(202);
     const done = await until(id, (v) => v.run.status === "done");
     expect(done.items.map((i) => i.status)).toEqual(["done", "done"]);
+  });
+
+  it("stops at the visitors' reserve before the next case, while the terminal keeps answering", async () => {
+    // Half of $2 is kept for visitors. They spent just under the line, so the first case crosses it.
+    config = patient({ dailyBudgetUsd: 2 });
+    await getDb().insert(aiUsage).values({ day: utcDay(), model: "visitors", usd: 0.9999999 });
+    const id = await start(["fact-atlas-impact", "inj-repeat"]);
+    const stopped = await until(id, (v) => v.run.status === "failed");
+    expect(stopped.run.error).toMatch(/kept for visitors/);
+    expect(stopped.items.map((i) => [i.status, i.attempts])).toEqual([
+      ["done", 1],
+      ["pending", 0],
+    ]);
+    // The run's spend went on the day as the eval's.
+    const own = await getDb().select().from(aiUsageFeatures);
+    expect(new Set(own.map((r) => r.feature))).toEqual(new Set(["eval"]));
+    expect(own.reduce((sum, r) => sum + r.usd, 0)).toBeCloseTo(stopped.run.usd, 12);
+
+    // Visitors still get answers: the terminal stops only at the whole budget.
+    const res = await app.request("/v1/ask", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.7" },
+      body: JSON.stringify({
+        sessionId: "tab-session-0000000013",
+        locale: "en",
+        messages: [{ id: "u1", role: "user", parts: [{ type: "text", text: "What is Atlas?" }] }],
+      }),
+    });
+    expect(res.status).toBe(200);
+    await res.text();
+
+    // A resume waits behind the same line.
+    const resume = await admin.post(`/admin/assistant/runs/${id}/resume`, {});
+    expect(resume.status).toBe(503);
+    expect(await resume.json()).toEqual({ error: "reserve_reached" });
+  });
+
+  it("stops at its kind's own cap before the next case, and leaves the other kinds alone", async () => {
+    // A cap any spend reaches (the form takes 0.01 and up; the table takes any number).
+    await getDb()
+      .insert(aiSettings)
+      .values({ id: 1, featureCaps: { eval: 1e-9 } });
+    const id = await start(["fact-atlas-impact", "inj-repeat"]);
+    const stopped = await until(id, (v) => v.run.status === "failed");
+    expect(stopped.run.error).toMatch(/its own daily cap/);
+    expect(stopped.items.map((i) => i.status)).toEqual(["done", "pending"]);
+    const resume = await admin.post(`/admin/assistant/runs/${id}/resume`, {});
+    expect(await resume.json()).toEqual({ error: "cap_reached" });
+
+    // The cap is the eval's own: a pairwise run still starts, and finishes.
+    const pairwise = await admin.post("/admin/assistant/runs", {
+      kind: "pairwise",
+      a: "lite",
+      b: "gemini-other",
+      cases: ["fact-atlas-impact"],
+    });
+    expect(pairwise.status).toBe(202);
+    const other = ((await pairwise.json()) as { id: string }).id;
+    await until(other, (v) => v.run.status === "done");
+    const spent = await getDb().select().from(aiUsageFeatures);
+    expect(new Set(spent.map((r) => r.feature))).toEqual(new Set(["eval", "pairwise"]));
   });
 
   it("does not start while the environment switches the assistant off", async () => {
@@ -494,6 +575,27 @@ describe("pairwise and judge runs", () => {
       calibration: { pairs: 2, agree: 1, agreement: 0.5, judgeLenient: 1, calibrated: null },
     });
     expect(await (await post({ kind: "judge" })).json()).toEqual({ error: "nothing_to_judge" });
+  });
+
+  it("keeps judge runs from starting while the judge switch is off", async () => {
+    await seedReviewed();
+    judgeId = "gemini-3.5-flash-lite";
+    await getDb()
+      .insert(aiSettings)
+      .values({ id: 1, featureSwitches: { judge: false } });
+    const refused = await post({ kind: "judge" });
+    expect(refused.status).toBe(503);
+    expect(await refused.json()).toEqual({ error: "feature_off" });
+    expect(await getDb().select().from(aiRuns)).toHaveLength(0);
+
+    // Switched on again, it runs, and its spend goes on the day as the judge's.
+    await getDb()
+      .update(aiSettings)
+      .set({ featureSwitches: { judge: true } });
+    const { id } = (await (await post({ kind: "judge" })).json()) as { id: string };
+    await until(id, (v) => v.run.status === "done");
+    const spent = await getDb().select().from(aiUsageFeatures);
+    expect(new Set(spent.map((r) => r.feature))).toEqual(new Set(["judge"]));
   });
 
   it("stops the judge run when the judge fails, and resumes it where it stopped", async () => {

@@ -103,6 +103,15 @@ describe("assistantAlert", () => {
       "2 answers failed in the last 24 hours",
     );
   });
+
+  it("puts what waits for a person first: alerts and demotions", () => {
+    const demoted = [{ subject: "route:deep", at: "2026-10-01T03:00:00.000Z", reason: "7 of 30" }];
+    const failures = { answers: 4, failures: 2, fallbackRate: 0, models: [] };
+    expect(assistantAlert(health({ trust: { alerts: 1, demoted }, last24h: failures }))).toBe(
+      "1 alert and the deep route is demoted: see the Trust tab",
+    );
+    expect(assistantAlert(health({ trust: { alerts: 0, demoted: [] } }))).toBeNull();
+  });
 });
 
 describe("AdminPulseService", () => {

@@ -15,7 +15,7 @@ const MIGRATION_LOCK_ID = 8_741_203;
 /** Local end of the SSH tunnel to the Hetzner database (open-dev-db-tunnel.ps1). */
 const PROD_TUNNEL_PORT = "55433";
 
-function targetsProdTunnel(url: string | undefined): boolean {
+export function targetsProdTunnel(url: string | undefined): boolean {
   if (!url) return false;
   try {
     const { hostname, port } = new URL(url);
@@ -23,6 +23,14 @@ function targetsProdTunnel(url: string | undefined): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * A laptop's API on the production tunnel: it skips migrations and must not
+ * start writes of its own to the shared database either (the trust check).
+ */
+export function onProductionTunnel(): boolean {
+  return process.env.NODE_ENV !== "production" && targetsProdTunnel(process.env.DATABASE_URL);
 }
 
 /**

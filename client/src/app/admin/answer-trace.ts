@@ -159,6 +159,7 @@ const CHECK_LABELS: Record<string, string> = {
   "max-rounds": "used every round",
   degraded: "fallback answered",
   blocked: "blocked by the filter",
+  "injection-attempt": "injection attempt",
 };
 
 /** A check flag in words (`server/src/ask/checks.ts` defines them). */
@@ -166,7 +167,7 @@ export function checkLabel(flag: string): string {
   return CHECK_LABELS[flag] ?? flag;
 }
 
-/** A leak, a wrong language or an empty answer reached the visitor; the rest are worth a look. */
+/** A leak (removed by the guard or shown), a wrong language, an empty answer: bad; the rest worth a look. */
 export function checkTone(flag: string): Tone {
   return flag === "leak" || flag === "language" || flag === "empty" ? "bad" : "warn";
 }

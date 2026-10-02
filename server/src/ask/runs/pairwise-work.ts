@@ -6,7 +6,7 @@ import { runPairwise } from "../evals/pairwise-run.js";
 import { FREE_TIER_RATE_LIMIT_RETRY } from "../evals/run.js";
 import type { ModelCall } from "../models/fallback.js";
 import { PROMPT_HASH, PROMPT_VERSION } from "../prompt.js";
-import { BUDGET_SPENT, paidItems, PROVIDER_DOWN } from "./paid.js";
+import { paidItems, PROVIDER_DOWN } from "./paid.js";
 import type { WorkFn } from "./runner.js";
 import { getRun } from "./store.js";
 
@@ -61,7 +61,8 @@ export const pairwiseWork: WorkFn = async (work) => {
       i.status === "done" && i.result ? [i.result as PairwiseCaseResult] : [],
     ),
   });
-  if (paid.budgetSpent()) return { status: "failed", error: BUDGET_SPENT, summary };
+  const stopped = paid.stoppedBy();
+  if (stopped) return { status: "failed", error: stopped, summary };
   if (items.some((i) => i.status === "unavailable")) {
     return { status: "failed", error: PROVIDER_DOWN, summary };
   }

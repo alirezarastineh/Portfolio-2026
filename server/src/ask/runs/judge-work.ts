@@ -14,7 +14,7 @@ import type { ModelCall } from "../models/fallback.js";
 import type { AskConfig } from "../config.js";
 import type { AskCorpus } from "../corpus/index.js";
 import type { ModelEntry } from "../models/registry.js";
-import { BUDGET_SPENT, paidItems } from "./paid.js";
+import { paidItems } from "./paid.js";
 import type { WorkFn } from "./runner.js";
 import { getRun } from "./store.js";
 
@@ -145,7 +145,8 @@ export const judgeWork: WorkFn = async (work) => {
     judged: items.filter((i) => i.status === "done").length,
     judge: chain[0]!.id,
   };
-  if (paid.budgetSpent()) return { status: "failed", error: BUDGET_SPENT, summary };
+  const stopped = paid.stoppedBy();
+  if (stopped) return { status: "failed", error: stopped, summary };
   if (down) return { status: "failed", error: JUDGE_DOWN, summary };
   return { status: "done", summary };
 };

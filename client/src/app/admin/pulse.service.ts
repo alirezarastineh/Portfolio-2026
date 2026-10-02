@@ -9,6 +9,7 @@ import {
   type MessageRow,
 } from "./admin-api.service";
 import type { AssistantHealth } from "./assistant-types";
+import { trustAlert } from "./trust";
 import { summarizeReview, type PublishSummary } from "./publish-summary";
 
 /** A save is often several requests: wait for them to settle before looking again. */
@@ -25,6 +26,9 @@ const AFTER_WRITE: readonly PulsePart[] = ["status", "review", "messages", "i18n
 /** Why the assistant needs a look, or null while it is answering normally. */
 export function assistantAlert(health: AssistantHealth | null): string | null {
   if (!health) return null;
+  // An alert or a demotion waits for a person; a breaker heals by itself.
+  const trust = trustAlert(health.trust);
+  if (trust) return trust;
   const open = health.breakers.filter((b) => b.state === "open").length;
   if (open === 1) return "A model is failing: its breaker is open";
   if (open > 1) return `${open} models are failing: their breakers are open`;

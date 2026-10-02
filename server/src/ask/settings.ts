@@ -4,6 +4,14 @@ import type { DbExecutor } from "../content/build.js";
 import { LOCALES, type Locale } from "../content/schema.js";
 import { getDb } from "../db/client.js";
 import { aiFaq, aiFaqTranslations, aiSettings } from "../db/schema.js";
+import {
+  DEFAULT_PUBLIC_RESERVE,
+  FENCED_FEATURES,
+  SWITCH_DEFAULTS,
+  SWITCHED_FEATURES,
+  type FencedFeature,
+  type SwitchedFeature,
+} from "./features.js";
 import { PRIMARY_METRICS, type PrimaryMetric } from "./outcomes.js";
 
 /**
@@ -20,6 +28,12 @@ export interface AiSettings {
   systemCard: Record<Locale, string>;
   /** The outcome metric watched first (`outcomes.ts`), rotated when it goes flat. */
   primaryMetric: PrimaryMetric;
+  /** The share of the daily budget kept for visitors (`features.ts`). */
+  publicReserve: number;
+  /** Each fenced feature's own daily cap in USD; null = only the reserve line. */
+  featureCaps: Record<FencedFeature, number | null>;
+  /** The admin's switch for each feature that has one. */
+  featureSwitches: Record<SwitchedFeature, boolean>;
   updatedAt: string | null;
 }
 
@@ -38,6 +52,9 @@ export const DEFAULT_SETTINGS: AiSettings = {
   suggestedQuestions: { en: [], de: [] },
   systemCard: { en: "", de: "" },
   primaryMetric: "helpfulRate",
+  publicReserve: DEFAULT_PUBLIC_RESERVE,
+  featureCaps: capsFrom({}),
+  featureSwitches: switchesFrom({}),
   updatedAt: null,
 };
 
@@ -46,6 +63,26 @@ let cache: { at: number; value: Promise<{ settings: AiSettings; faq: FaqEntry[] 
 
 export function invalidateAssistantCache(): void {
   cache = undefined;
+}
+
+/** The stored caps, each a positive number or null; a key no feature has is ignored. */
+function capsFrom(stored: Partial<Record<string, unknown>>): Record<FencedFeature, number | null> {
+  return Object.fromEntries(
+    FENCED_FEATURES.map((f) => {
+      const cap = stored[f];
+      return [f, typeof cap === "number" && cap > 0 ? cap : null];
+    }),
+  ) as Record<FencedFeature, number | null>;
+}
+
+/** The stored switches over each feature's default. */
+function switchesFrom(stored: Partial<Record<string, unknown>>): Record<SwitchedFeature, boolean> {
+  return Object.fromEntries(
+    SWITCHED_FEATURES.map((f) => {
+      const on = stored[f];
+      return [f, typeof on === "boolean" ? on : SWITCH_DEFAULTS[f]];
+    }),
+  ) as Record<SwitchedFeature, boolean>;
 }
 
 function perLocale<T>(value: unknown, fallback: T): Record<Locale, T> {
@@ -63,6 +100,9 @@ export async function readAiSettings(db: DbExecutor = getDb()): Promise<AiSettin
     suggestedQuestions: perLocale(row.suggestedQuestions, [] as string[]),
     systemCard: perLocale(row.systemCard, ""),
     primaryMetric: PRIMARY_METRICS.find((m) => m === row.primaryMetric) ?? "helpfulRate",
+    publicReserve: row.publicReserve,
+    featureCaps: capsFrom(row.featureCaps),
+    featureSwitches: switchesFrom(row.featureSwitches),
     updatedAt: row.updatedAt.toISOString(),
   };
 }

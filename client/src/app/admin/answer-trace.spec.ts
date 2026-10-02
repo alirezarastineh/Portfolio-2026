@@ -114,6 +114,7 @@ describe("assistant signals", () => {
       shareOf([day({ answers: 4, flagged: 1 }), day({ answers: 6, flagged: 2 })], "flagged"),
     ).toEqual({ answers: 10, count: 3, rate: 0.3 });
     expect(checkLabel("invented-citation")).toBe("invented citation");
+    expect(checkLabel("injection-attempt")).toBe("injection attempt");
     expect(checkLabel("something-new")).toBe("something-new");
     expect(checkTone("leak")).toBe("bad");
     expect(checkTone("degraded")).toBe("warn");

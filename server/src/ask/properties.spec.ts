@@ -17,7 +17,16 @@ import {
 import { streamAnswer } from "./agent.js";
 import type { CorpusDocument } from "./corpus/build.js";
 import { resolveDocument, type AskCorpus } from "./corpus/index.js";
+import { FEATURES, FENCED_FEATURES, MAX_PUBLIC_RESERVE, SWITCHED_FEATURES } from "./features.js";
 import { stateFor, type Availability } from "./guard.js";
+import {
+  buildLeakGuard,
+  newScanState,
+  scanChunk,
+  SHINGLE_WORDS,
+  words as leakWords,
+  type LeakKind,
+} from "./leak-guard.js";
 import { cleanVisitorText, signAnswer, trimHistory, verifyAnswer } from "./history.js";
 import { redact } from "./log.js";
 import {
@@ -29,8 +38,8 @@ import {
   tryAcquire,
 } from "./models/circuit.js";
 import { createFallbackModel, newTrace } from "./models/fallback.js";
-import { wrapVisitor } from "./prompt.js";
-import { DEFAULT_SETTINGS } from "./settings.js";
+import { PROMPT_CANARY, SYSTEM_PROMPT, wrapVisitor } from "./prompt.js";
+import { DEFAULT_SETTINGS, type AiSettings } from "./settings.js";
 import { citationTransform } from "./stream-transforms.js";
 import { countTokens } from "./tokens.js";
 import { allowedPath } from "./tools.js";
@@ -204,6 +213,152 @@ describe("properties", () => {
     // The smallest failing case: one marker, cut once inside it.
     expect(text).toMatch(/^[[【［]\^[^\]】］\s]+[\]】］]$/);
     expect(chunks).toHaveLength(2);
+  });
+
+  /* --------------------------------------------------------- leak guard */
+
+  const guard = buildLeakGuard({
+    instructions: SYSTEM_PROMPT,
+    corpusTexts: [],
+    canary: PROMPT_CANARY,
+    secrets: [],
+  });
+  /** What the guard lets through, the text fed in the given pieces. */
+  const guarded = (chunks: string[]) => {
+    const hits = new Set<LeakKind>();
+    const state = newScanState();
+    const text =
+      chunks.map((c) => scanChunk(guard, state, c, false, hits)).join("") +
+      scanChunk(guard, state, "", true, hits);
+    return { text, hits };
+  };
+  /** Ordinary answer text: words, markers, numbers, punctuation, line breaks. */
+  const ordinary = fc
+    .array(
+      fc.constantFrom(
+        "Atlas",
+        "cut",
+        "escalations",
+        "by",
+        "38%",
+        "the",
+        "of",
+        "and",
+        "a",
+        "Alireza",
+        "built",
+        "pipeline",
+        "[^project:atlas@en]",
+        "AI",
+        "sk-or",
+        "Rq7",
+        "R",
+        ",",
+        ".",
+        "—",
+      ),
+      { maxLength: 40 },
+    )
+    .chain((words) =>
+      fc
+        .array(fc.constantFrom(" ", " ", "\n", ""), {
+          minLength: words.length,
+          maxLength: words.length,
+        })
+        .map((gaps) => words.map((w, i) => w + gaps[i]).join("")),
+    );
+  // The tokens that hold a word, as the guard counts them (a lone `#` holds none).
+  const instructionWords = [...SYSTEM_PROMPT.matchAll(/\S+/g)].filter((m) =>
+    /[\p{L}\p{N}]/u.test(m[0]),
+  );
+
+  it("leak guard: ordinary text passes unchanged under any chunking", () => {
+    fc.assert(
+      fc.property(ordinary, fc.array(fc.nat(), { maxLength: 8 }), (text, points) => {
+        expect(guarded(cut(text, points))).toEqual({ text, hits: new Set() });
+      }),
+      runs(500),
+    );
+  });
+
+  it("leak guard: the canary never reaches a visitor, whatever its case or chunking", () => {
+    const anyCase = fc
+      .array(fc.boolean(), { minLength: PROMPT_CANARY.length, maxLength: PROMPT_CANARY.length })
+      .map((upper) =>
+        [...PROMPT_CANARY]
+          .map((ch, i) => (upper[i] ? ch.toUpperCase() : ch.toLowerCase()))
+          .join(""),
+      );
+    // Glued into a word of any length, as at the end of a URL (found by review).
+    const glue = fc.stringMatching(/^[A-Za-z0-9/._?=&-]{0,150}$/);
+    fc.assert(
+      fc.property(
+        ordinary,
+        glue,
+        anyCase,
+        glue,
+        ordinary,
+        fc.array(fc.nat(), { maxLength: 8 }),
+        (a, before, canary, after, b, points) => {
+          const { text, hits } = guarded(cut(`${a} ${before}${canary}${after} ${b}`, points));
+          expect(text.toLowerCase()).not.toContain(PROMPT_CANARY.toLowerCase());
+          expect(hits.has("canary")).toBe(true);
+        },
+      ),
+      runs(500),
+    );
+  });
+
+  it("leak guard: a key-shaped string never reaches a visitor, even at the end of a long URL", () => {
+    const key = fc.oneof(
+      fc.stringMatching(/^[0-9A-Za-z_-]{35}$/).map((body) => `AIza${body}`),
+      fc.stringMatching(/^[0-9a-f]{64}$/).map((body) => `sk-or-v1-${body}`),
+    );
+    const url = fc.stringMatching(/^https:\/\/[a-z]{1,20}\.example\/[A-Za-z0-9/._-]{0,120}\?key=$/);
+    fc.assert(
+      fc.property(
+        ordinary,
+        url,
+        key,
+        ordinary,
+        fc.array(fc.nat(), { maxLength: 10 }),
+        (a, u, k, b, points) => {
+          const { text, hits } = guarded(cut(`${a} ${u}${k} ${b}`, points));
+          expect(text).not.toContain(k);
+          expect(hits.has("secret")).toBe(true);
+        },
+      ),
+      runs(300),
+    );
+  });
+
+  it("leak guard: no run of 12 words from the instructions gets through, however it is cut", () => {
+    const copy = fc
+      .tuple(fc.nat(), fc.integer({ min: SHINGLE_WORDS, max: 60 }))
+      .map(([at, length]) => {
+        const first = at % (instructionWords.length - SHINGLE_WORDS);
+        const last = Math.min(instructionWords.length - 1, first + length - 1);
+        const from = instructionWords[first]!.index;
+        const to = instructionWords[last]!.index + instructionWords[last]![0].length;
+        return SYSTEM_PROMPT.slice(from, to);
+      });
+    fc.assert(
+      fc.property(
+        ordinary,
+        copy,
+        ordinary,
+        fc.array(fc.nat(), { maxLength: 12 }),
+        (a, run, b, points) => {
+          const { text, hits } = guarded(cut(`${a} ${run} ${b}`, points));
+          const shown = leakWords(text);
+          for (let i = 0; i + SHINGLE_WORDS <= shown.length; i++) {
+            expect(guard.shingles.has(shown.slice(i, i + SHINGLE_WORDS).join(" "))).toBe(false);
+          }
+          expect(hits.has("instructions")).toBe(true);
+        },
+      ),
+      runs(300),
+    );
   });
 
   /* ---------------------------------------------------------- navigate */
@@ -558,21 +713,76 @@ describe("properties", () => {
     return a.deepAllowed ? 0 : 1;
   };
 
-  it("availability: more spend never opens anything back up", () => {
+  const usd = fc.double({ min: 0, max: 10, noNaN: true });
+  /** Any settings the fences can have: budget, reserve, caps, switches. */
+  const fenceSettings = fc.record({
+    dailyBudgetUsd: fc.option(fc.double({ min: 0.01, max: 5, noNaN: true })),
+    deepEnabled: fc.boolean(),
+    publicReserve: fc.double({ min: 0, max: MAX_PUBLIC_RESERVE, noNaN: true }),
+    cap: fc.option(fc.double({ min: 0.01, max: 5, noNaN: true })),
+    switchedOn: fc.boolean(),
+  });
+  const settingsFrom = (s: {
+    dailyBudgetUsd: number | null;
+    deepEnabled: boolean;
+    publicReserve: number;
+    cap: number | null;
+    switchedOn: boolean;
+  }): AiSettings => ({
+    ...DEFAULT_SETTINGS,
+    dailyBudgetUsd: s.dailyBudgetUsd,
+    deepEnabled: s.deepEnabled,
+    publicReserve: s.publicReserve,
+    featureCaps: Object.fromEntries(
+      FENCED_FEATURES.map((f) => [f, s.cap]),
+    ) as AiSettings["featureCaps"],
+    featureSwitches: Object.fromEntries(
+      SWITCHED_FEATURES.map((f) => [f, s.switchedOn]),
+    ) as AiSettings["featureSwitches"],
+  });
+
+  it("availability: more spend never opens anything back up, for any feature", () => {
     const config = fixtureConfig();
-    const spend = fc.double({ min: 0, max: 10, noNaN: true });
     fc.assert(
       fc.property(
-        spend,
-        spend,
-        fc.option(fc.double({ min: 0.01, max: 5, noNaN: true })),
-        fc.boolean(),
-        (a, b, budget, deepEnabled) => {
-          const [low, high] = a <= b ? [a, b] : [b, a];
-          const settings = { ...DEFAULT_SETTINGS, dailyBudgetUsd: budget, deepEnabled };
-          expect(rank(stateFor(config, settings, low))).toBeLessThanOrEqual(
-            rank(stateFor(config, settings, high)),
+        fc.constantFrom(...FEATURES),
+        fenceSettings,
+        usd,
+        usd,
+        usd,
+        usd,
+        (feature, s, t1, t2, o1, o2) => {
+          const settings = settingsFrom(s);
+          const low = { totalUsd: Math.min(t1, t2), ownUsd: Math.min(o1, o2) };
+          const high = { totalUsd: Math.max(t1, t2), ownUsd: Math.max(o1, o2) };
+          expect(rank(stateFor(config, settings, feature, low))).toBeLessThanOrEqual(
+            rank(stateFor(config, settings, feature, high)),
           );
+        },
+      ),
+      runs(1000),
+    );
+  });
+
+  it("availability: only the terminal spends into the visitors' reserve, and no feature past its cap", () => {
+    const config = fixtureConfig();
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...FENCED_FEATURES),
+        fenceSettings,
+        usd,
+        usd,
+        (feature, s, totalUsd, ownUsd) => {
+          const settings = settingsFrom(s);
+          const budget = settings.dailyBudgetUsd ?? config.dailyBudgetUsd;
+          const state = stateFor(config, settings, feature, { totalUsd, ownUsd });
+          if (state.state === "ok") {
+            expect(totalUsd).toBeLessThan(budget * (1 - settings.publicReserve));
+            if (s.cap !== null) expect(ownUsd).toBeLessThan(s.cap);
+          }
+          // Whatever the others spent, the terminal answers until the whole budget is gone.
+          const terminal = stateFor(config, settings, "terminal", { totalUsd, ownUsd: 0 });
+          expect(terminal.state === "ok").toBe(totalUsd < budget);
         },
       ),
       runs(1000),

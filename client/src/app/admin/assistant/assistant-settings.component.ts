@@ -23,6 +23,14 @@ import { AdminApiService } from "../admin-api.service";
 import type { AssistantEnv, AssistantSettings, AssistantSettingsInput } from "../assistant-types";
 import { countChangedFields } from "../changed-fields";
 import { SaveBarComponent } from "../components/editor-chrome.component";
+import {
+  CAPPED,
+  featureLabel,
+  spendDraft,
+  spendInput,
+  SWITCHES,
+  type SpendDraft,
+} from "../spending";
 import { UnsavedChangesService } from "../unsaved-changes.service";
 
 const LOCALES: Locale[] = ["en", "de"];
@@ -33,6 +41,7 @@ interface Draft {
   deepEnabled: boolean;
   suggestions: Record<Locale, string>;
   systemCard: Record<Locale, string>;
+  spend: SpendDraft;
 }
 
 function toDraft(s: AssistantSettings): Draft {
@@ -42,13 +51,15 @@ function toDraft(s: AssistantSettings): Draft {
     deepEnabled: s.deepEnabled,
     suggestions: { en: s.suggestedQuestions.en.join("\n"), de: s.suggestedQuestions.de.join("\n") },
     systemCard: { ...s.systemCard },
+    spend: spendDraft(s),
   };
 }
 
 /**
  * What can change without a deploy: the admin's switch, the daily budget, the
- * deep model, suggested questions, and the "how this assistant works" text.
- * Live on save (no publish). Below, read-only, what the deploy configured.
+ * deep model, what the rest may spend of it, suggested questions, and the "how
+ * this assistant works" text. Live on save (no publish). Below, read-only,
+ * what the deploy configured.
  */
 @Component({
   selector: "app-assistant-settings",
@@ -75,25 +86,36 @@ function toDraft(s: AssistantSettings): Draft {
     } @else {
       @let d = draft()!;
       <div class="flex flex-col gap-6">
-        <label class="flex items-center gap-3 text-sm">
-          <hlm-switch [checked]="d.enabled" (checkedChange)="patch({ enabled: $event })" />
-          <span>
-            Assistant on
-            <span class="block text-xs text-muted-foreground">
+        <!-- Each switch: its label names it, the hint describes it (admin-ui rule). -->
+        <div class="flex items-center gap-3 text-sm">
+          <hlm-switch
+            id="ask-enabled"
+            aria-describedby="ask-enabled-hint"
+            [checked]="d.enabled"
+            (checkedChange)="patch({ enabled: $event })"
+          />
+          <div>
+            <label for="ask-enabled">Assistant on</label>
+            <p id="ask-enabled-hint" class="m-0 text-xs text-muted-foreground">
               Off, visitors get the offline shell. The playground and evals still work.
-            </span>
-          </span>
-        </label>
+            </p>
+          </div>
+        </div>
 
-        <label class="flex items-center gap-3 text-sm">
-          <hlm-switch [checked]="d.deepEnabled" (checkedChange)="patch({ deepEnabled: $event })" />
-          <span>
-            Deep model for comparisons and architecture questions
-            <span class="block text-xs text-muted-foreground">
+        <div class="flex items-center gap-3 text-sm">
+          <hlm-switch
+            id="ask-deep"
+            aria-describedby="ask-deep-hint"
+            [checked]="d.deepEnabled"
+            (checkedChange)="patch({ deepEnabled: $event })"
+          />
+          <div>
+            <label for="ask-deep">Deep model for comparisons and architecture questions</label>
+            <p id="ask-deep-hint" class="m-0 text-xs text-muted-foreground">
               Switches itself off for the rest of the day at 80 % of the budget.
-            </span>
-          </span>
-        </label>
+            </p>
+          </div>
+        </div>
 
         <div hlmField class="max-w-xs">
           <label hlmFieldLabel for="ask-budget">Daily budget (USD)</label>
@@ -109,9 +131,75 @@ function toDraft(s: AssistantSettings): Draft {
             (ngModelChange)="patch({ budget: $event === null ? '' : String($event) })"
           />
           <p class="m-0 text-xs text-muted-foreground">
-            Shared by the terminal, the copilot, insights and evals. Empty = the deploy's default.
+            The visitors' terminal may spend all of it; everything else stops at the line below.
+            Empty = the deploy's default.
           </p>
         </div>
+
+        <fieldset class="flex flex-col gap-4 rounded-lg border border-border p-4">
+          <legend class="px-1 text-sm font-medium">Spending</legend>
+          <div hlmField class="max-w-xs">
+            <label hlmFieldLabel for="ask-reserve">Kept for visitors (% of the budget)</label>
+            <input
+              hlmInput
+              id="ask-reserve"
+              type="number"
+              min="0"
+              max="90"
+              step="1"
+              aria-describedby="ask-reserve-hint"
+              [ngModel]="d.spend.reserve"
+              (ngModelChange)="patchSpend({ reserve: $event === null ? '' : String($event) })"
+            />
+            <p id="ask-reserve-hint" class="m-0 text-xs text-muted-foreground">
+              The copilot, insights, the playground and runs stop once the day's spend reaches the
+              rest, so they cannot put visitors into "resting". At 0 % they may spend the whole
+              budget.
+            </p>
+          </div>
+          @for (s of switches; track s.feature) {
+            <div class="flex items-center gap-3 text-sm">
+              <hlm-switch
+                [id]="'ask-feature-' + s.feature"
+                [aria-describedby]="'ask-feature-' + s.feature + '-hint'"
+                [checked]="d.spend.switches[s.feature]"
+                (checkedChange)="patchSwitch(s.feature, $event)"
+              />
+              <div>
+                <label [for]="'ask-feature-' + s.feature">{{ s.label }}</label>
+                <p
+                  [id]="'ask-feature-' + s.feature + '-hint'"
+                  class="m-0 text-xs text-muted-foreground"
+                >
+                  {{ s.hint }}
+                </p>
+              </div>
+            </div>
+          }
+          <!-- The legend names what each field is: a cap, in USD, per day. -->
+          <fieldset class="flex flex-col gap-2">
+            <legend class="text-sm">Daily cap per feature (USD)</legend>
+            <p class="m-0 text-xs text-muted-foreground">Empty = only the reserve line.</p>
+            <div class="grid gap-3 sm:grid-cols-3">
+              @for (f of capped; track f) {
+                <div hlmField>
+                  <label hlmFieldLabel [for]="'ask-cap-' + f">{{ label(f) }}</label>
+                  <input
+                    hlmInput
+                    type="number"
+                    min="0.01"
+                    max="100"
+                    step="0.01"
+                    placeholder="no cap"
+                    [id]="'ask-cap-' + f"
+                    [ngModel]="d.spend.caps[f]"
+                    (ngModelChange)="patchCap(f, $event)"
+                  />
+                </div>
+              }
+            </div>
+          </fieldset>
+        </fieldset>
 
         @for (locale of locales; track locale) {
           <fieldset class="flex flex-col gap-3 rounded-lg border border-border p-4">
@@ -214,6 +302,9 @@ export class AssistantSettingsComponent implements OnInit {
   protected readonly locales = LOCALES;
   protected readonly roles = ["lite", "deep", "copilot", "insight"] as const;
   protected readonly String = String;
+  protected readonly capped = CAPPED;
+  protected readonly switches = SWITCHES;
+  protected readonly label = featureLabel;
 
   private readonly saved = signal<Draft | null>(null);
   protected readonly draft = signal<Draft | null>(null);
@@ -263,6 +354,24 @@ export class AssistantSettingsComponent implements OnInit {
     this.draft.update((d) => (d ? { ...d, [key]: { ...d[key], [locale]: value } } : d));
   }
 
+  protected patchSpend(values: Partial<SpendDraft>): void {
+    this.draft.update((d) => (d ? { ...d, spend: { ...d.spend, ...values } } : d));
+  }
+
+  protected patchSwitch(feature: string, on: boolean): void {
+    this.draft.update((d) =>
+      d ? { ...d, spend: { ...d.spend, switches: { ...d.spend.switches, [feature]: on } } } : d,
+    );
+  }
+
+  /** A number input reports null when emptied. */
+  protected patchCap(feature: string, value: number | string | null): void {
+    const text = value === null ? "" : String(value);
+    this.draft.update((d) =>
+      d ? { ...d, spend: { ...d.spend, caps: { ...d.spend.caps, [feature]: text } } } : d,
+    );
+  }
+
   protected discard(): void {
     const saved = this.saved();
     if (saved) this.draft.set(structuredClone(saved));
@@ -274,6 +383,11 @@ export class AssistantSettingsComponent implements OnInit {
     const budget = d.budget.trim() === "" ? null : Number(d.budget);
     if (budget !== null && !(budget >= 0.01 && budget <= 100)) {
       toast.error("The budget must be between 0.01 and 100 USD, or empty");
+      return;
+    }
+    const spend = spendInput(d.spend);
+    if (!spend.ok) {
+      toast.error(spend.error);
       return;
     }
     const lines = (text: string) =>
@@ -288,6 +402,7 @@ export class AssistantSettingsComponent implements OnInit {
       deepEnabled: d.deepEnabled,
       suggestedQuestions: { en: lines(d.suggestions.en), de: lines(d.suggestions.de) },
       systemCard: { en: d.systemCard.en.trim(), de: d.systemCard.de.trim() },
+      ...spend.value,
     };
     this.saving.set(true);
     const result = await this.api.saveAssistantSettings(input);

@@ -16,7 +16,7 @@ import {
   startRun,
   whileStarting,
 } from "./runner.js";
-import { activeRuns, getRun, listRuns, type RunRow } from "./store.js";
+import { activeRuns, getRun, listRuns, type RunKind, type RunRow } from "./store.js";
 
 /**
  * The admin's background runs, under /admin/assistant/runs (the admin
@@ -89,7 +89,7 @@ runsRouter.post("/", zValidator("json", runInput, invalid), async (c) => {
   const started = await whileStarting(async (): Promise<{ id: string } | Refusal> => {
     // One paid run at a time, whatever its kind: they share the providers' quota.
     if ((await activeRuns()).length) return { error: "already_running", status: 409 };
-    const blocked = await spendBlocked();
+    const blocked = await spendBlocked(input.kind);
     if (blocked) return { error: blocked, status: 503 };
     const run = await startRun(input.kind, plan.params, plan.keys);
     return run ? { id: run.id } : { error: "already_running", status: 409 };
@@ -119,9 +119,11 @@ runsRouter.post("/:id/cancel", idParam, async (c) => {
 runsRouter.post("/:id/resume", idParam, async (c) => {
   const resumed = await whileStarting(async (): Promise<{ id: string } | Refusal> => {
     if ((await activeRuns()).length) return { error: "already_running", status: 409 };
-    const blocked = await spendBlocked();
+    const found = await getRun(c.req.valid("param").id);
+    if (!found) return { error: "not_resumable", status: 409 };
+    const blocked = await spendBlocked(found.run.kind as RunKind);
     if (blocked) return { error: blocked, status: 503 };
-    const run = await resumeRun(c.req.valid("param").id);
+    const run = await resumeRun(found.run.id);
     return run ? { id: run.id } : { error: "not_resumable", status: 409 };
   });
   if (resumed === "busy") return c.json({ error: "already_running" }, 409);

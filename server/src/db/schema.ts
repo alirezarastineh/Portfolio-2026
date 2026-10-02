@@ -21,6 +21,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import type { AuditAlternative } from "../ask/audit.js";
 import type { AnswerChecks } from "../ask/checks.js";
 import type { CorpusDocument, PostFacts, ProjectFacts } from "../ask/corpus/build.js";
 import type { AnswerJudgment } from "../ask/evals/calibration.js";
@@ -656,9 +657,30 @@ export const aiSettings = pgTable(
       .default({ en: "", de: "" }),
     /** The outcome metric watched first (`ask/outcomes.ts`); it rotates when it goes flat. */
     primaryMetric: text("primary_metric").notNull().default("helpfulRate"),
+    /**
+     * The share of the daily budget kept for visitors (`ask/features.ts`): the
+     * admin's tools and background work stop once the day's spend reaches the rest.
+     */
+    publicReserve: doublePrecision("public_reserve").notNull().default(0.5),
+    /** Per fenced feature, its own daily cap in USD; a missing key or null = none. */
+    featureCaps: jsonb("feature_caps")
+      .$type<Partial<Record<string, number | null>>>()
+      .notNull()
+      .default({}),
+    /** Per switchable feature, the admin's switch; a missing key = the feature's default. */
+    featureSwitches: jsonb("feature_switches")
+      .$type<Partial<Record<string, boolean>>>()
+      .notNull()
+      .default({}),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [check("ai_settings_singleton_check", sql`${t.id} = 1`)],
+  (t) => [
+    check("ai_settings_singleton_check", sql`${t.id} = 1`),
+    check(
+      "ai_settings_public_reserve_check",
+      sql`${t.publicReserve} >= 0 and ${t.publicReserve} <= 0.9`,
+    ),
+  ],
 );
 
 /** Curated answers the assistant may cite; live on save, never published. */
@@ -687,21 +709,48 @@ export const aiFaqTranslations = pgTable(
   (t) => [primaryKey({ columns: [t.faqId, t.locale] })],
 );
 
-/** Aggregates only (no content), per UTC day and model; kept indefinitely. */
+/** What a day's model calls took and cost: `ai_usage` and `ai_usage_features` share them. */
+const usageCounters = {
+  /** Model calls, not answers: one answer can take several steps or fallbacks. */
+  requests: integer("requests").notNull().default(0),
+  inputTokens: bigint("input_tokens", { mode: "number" }).notNull().default(0),
+  cachedInputTokens: bigint("cached_input_tokens", { mode: "number" }).notNull().default(0),
+  outputTokens: bigint("output_tokens", { mode: "number" }).notNull().default(0),
+  thoughtTokens: bigint("thought_tokens", { mode: "number" }).notNull().default(0),
+  usd: doublePrecision("usd").notNull().default(0),
+};
+
+/**
+ * Aggregates only (no content), per UTC day and model; kept indefinitely. The
+ * day's total, which the daily budget reads.
+ */
 export const aiUsage = pgTable(
   "ai_usage",
   {
     day: date("day", { mode: "string" }).notNull(),
     model: text("model").notNull(),
-    /** Model calls, not answers: one answer can take several steps or fallbacks. */
-    requests: integer("requests").notNull().default(0),
-    inputTokens: bigint("input_tokens", { mode: "number" }).notNull().default(0),
-    cachedInputTokens: bigint("cached_input_tokens", { mode: "number" }).notNull().default(0),
-    outputTokens: bigint("output_tokens", { mode: "number" }).notNull().default(0),
-    thoughtTokens: bigint("thought_tokens", { mode: "number" }).notNull().default(0),
-    usd: doublePrecision("usd").notNull().default(0),
+    ...usageCounters,
   },
   (t) => [primaryKey({ columns: [t.day, t.model] })],
+);
+
+/**
+ * The same calls split by feature (`ask/features.ts`): the terminal, the
+ * playground, the copilot, insights, each kind of run. Written right after
+ * `ai_usage`, as a separate statement whose failure is logged and dropped
+ * (`ask/usage.ts`): the total stays exact, a feature's own spend can only fall
+ * short. The fences read each feature's own spend here. The feature is not a
+ * check constraint, so a new feature needs no migration.
+ */
+export const aiUsageFeatures = pgTable(
+  "ai_usage_features",
+  {
+    day: date("day", { mode: "string" }).notNull(),
+    feature: text("feature").notNull(),
+    model: text("model").notNull(),
+    ...usageCounters,
+  },
+  (t) => [primaryKey({ columns: [t.day, t.feature, t.model] })],
 );
 
 /**
@@ -922,6 +971,44 @@ export const aiRateEvents = pgTable(
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("ai_rate_events_bucket_time_idx").on(t.bucket, t.occurredAt.desc())],
+);
+
+/**
+ * The governance log (plan phase 14, `ask/audit.ts`): what was done or
+ * refused, by whom, on what, why, and what was considered but rejected. The
+ * current demotions are read from it (the latest `demote` or `reinstate` per
+ * target), so a demotion is its audit row. No visitor text: reasons are
+ * numbers, flags and setting names, targets are ids. Kept indefinitely (small).
+ */
+export const aiAudit = pgTable(
+  "ai_audit",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    actor: text("actor").notNull(),
+    /** `trust.check`, `demote`, `reinstate`, `answer`, `run.spend`, `settings.update`. */
+    action: text("action").notNull(),
+    /** `model:<id>`, `route:deep`, a message or run id, `settings`. */
+    target: text("target").notNull(),
+    decision: text("decision").notNull(),
+    reason: text("reason").notNull().default(""),
+    /** What was considered but rejected, or a check's verdicts. */
+    alternatives: jsonb("alternatives").$type<AuditAlternative[]>().notNull().default([]),
+    /** For a human to look at: shown on the Overview until seen. */
+    alert: boolean("alert").notNull().default(false),
+    seenAt: timestamp("seen_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("ai_audit_at_idx").on(t.at.desc()),
+    index("ai_audit_state_idx")
+      .on(t.target, t.at.desc())
+      .where(sql`${t.action} in ('demote', 'reinstate')`),
+    index("ai_audit_open_alerts_idx")
+      .on(t.at.desc())
+      .where(sql`${t.alert} and ${t.seenAt} is null`),
+    check("ai_audit_actor_check", sql`${t.actor} in ('admin', 'agent', 'system')`),
+    check("ai_audit_decision_check", sql`${t.decision} in ('allowed', 'denied', 'asked')`),
+  ],
 );
 
 export type Locale = (typeof localeEnum.enumValues)[number];

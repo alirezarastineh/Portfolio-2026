@@ -8,6 +8,7 @@ import { checkModels } from "./ask/models/registry.js";
 import { abortAllAsks } from "./ask/route.js";
 import { abortAllRuns, recoverRuns } from "./ask/runs/runner.js";
 import { loadEncoder } from "./ask/tokens.js";
+import { startTrustMonitor } from "./ask/trust-monitor.js";
 import { startSessionPruning } from "./auth/session.js";
 import { backfillContentV2 } from "./content/backfill.js";
 import { closeDb } from "./db/client.js";
@@ -62,6 +63,8 @@ if (migrated) {
     console.error("[runs] recovery failed", error);
     captureError(error, { phase: "runs-recovery" });
   }
+  // The nightly trust check writes demotions: only here, never from a laptop.
+  startTrustMonitor();
 }
 
 startAuthAttemptPruning();

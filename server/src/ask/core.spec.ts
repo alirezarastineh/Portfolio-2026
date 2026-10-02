@@ -4,7 +4,7 @@ import type { ModelMessage, TextStreamPart, ToolSet } from "ai";
 
 import { fixtureConfig } from "../test/ask-fixtures.js";
 import { drain } from "../test/ask-models.js";
-import { answerOnlyOptions } from "./agent.js";
+import { answerOnlyOptions, leakAlert } from "./agent.js";
 import type { AskConfig } from "./config.js";
 import type { CorpusDocument } from "./corpus/build.js";
 import type { AskCorpus } from "./corpus/index.js";
@@ -551,6 +551,27 @@ describe("answer-only rebuild", () => {
     expect((rebuilt.prompt[0] as { content: string }).content).toContain("COMPACT");
     expect((rebuilt.prompt[0] as { content: string }).content).not.toContain("# Tools");
     expect(rebuilt.prompt.slice(1).map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+  });
+});
+
+describe("leak alerts", () => {
+  it("are denied only when all of it was removed, and say both when some got through", () => {
+    expect(leakAlert("m_alert0001", new Set(["canary"]), false)).toEqual({
+      actor: "agent",
+      action: "answer",
+      target: "m_alert0001",
+      decision: "denied",
+      reason: "leak: canary removed before the visitor saw it",
+    });
+    expect(leakAlert("m_alert0001", new Set(["secret", "canary"]), true)).toMatchObject({
+      decision: "allowed",
+      reason:
+        "leak: canary, secret removed before the visitor saw it; a piece of the instructions or a secret reached the visitor",
+    });
+    expect(leakAlert("m_alert0001", new Set(), true)).toMatchObject({
+      decision: "allowed",
+      reason: "leak: a piece of the instructions or a secret reached the visitor",
+    });
   });
 });
 

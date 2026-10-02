@@ -32,6 +32,16 @@ function row(id: string, change: Partial<OutcomeRow> = {}): OutcomeRow {
 }
 
 describe("outcomes", () => {
+  it("does not hold a visitor's injection attempt against the answer", () => {
+    const rows = [
+      row("a", { flags: ["injection-attempt"], question: "What is his stack?" }),
+      row("b", { flags: ["uncited"], question: "Where is he based?" }),
+    ];
+    const result = outcomes(rows, 0);
+    // The first stays helpful; the second's flag is about the answer itself.
+    expect(result.helpful).toBe(1);
+  });
+
   it("reads a near-duplicate question soon after an answer as a rephrase", () => {
     expect(
       similarity("Where does Alireza live?", "where does alireza live now"),

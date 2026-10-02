@@ -328,6 +328,18 @@ if [[ "$(db_value "select count(*) from information_schema.tables where table_na
 else
   fail "ai_corpus_snapshots or ai_eval_cases missing — migration 0014_snapshots not applied?"
 fi
+FEATURE_TABLE="$(db_value "select count(*) from information_schema.tables where table_name = 'ai_usage_features'")"
+FENCE_COLUMNS="$(db_value "select count(*) from information_schema.columns where table_name = 'ai_settings' and column_name in ('public_reserve', 'feature_caps', 'feature_switches')")"
+if [[ "${FEATURE_TABLE}" == "1" && "${FENCE_COLUMNS}" == "3" ]]; then
+  pass "usage per feature and the spending fences exist (migration 0015)"
+else
+  fail "ai_usage_features (${FEATURE_TABLE}/1) or the fence columns (${FENCE_COLUMNS}/3) missing — migration 0015_feature_budgets not applied?"
+fi
+if [[ "$(db_value "select count(*) from information_schema.tables where table_name = 'ai_audit'")" == "1" ]]; then
+  pass "the audit log exists (migration 0016)"
+else
+  fail "ai_audit missing — migration 0016_audit not applied?"
+fi
 check "the assistant's search and tokenizer load in the api container" \
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T api \
   node -e "Promise.all([import('minisearch'), import('js-tiktoken/lite'), import('js-tiktoken/ranks/o200k_base')]).then(() => process.exit(0), () => process.exit(1))"

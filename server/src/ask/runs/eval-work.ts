@@ -9,7 +9,7 @@ import {
 } from "../evals/run.js";
 import type { ModelCall } from "../models/fallback.js";
 import { PROMPT_HASH, PROMPT_VERSION } from "../prompt.js";
-import { BUDGET_SPENT, paidItems, PROVIDER_DOWN } from "./paid.js";
+import { paidItems, PROVIDER_DOWN } from "./paid.js";
 import type { WorkFn } from "./runner.js";
 import { getRun } from "./store.js";
 
@@ -17,8 +17,8 @@ import { getRun } from "./store.js";
  * An eval run in the background: its items are case ids, answered and judged
  * one at a time (free-tier pacing, as in the CLI), each checkpointed with its
  * result and cost as soon as it is graded. Spend is recorded as it happens,
- * and the daily budget is checked before every case (paid.ts): a run stops at
- * the budget, resumable once it resets. The summary covers every item of the
+ * and the run's spending lines are checked before every case (paid.ts): a run
+ * stops at one, resumable once it resets. The summary covers every item of the
  * run, however many resumes it took.
  */
 export const evalWork: WorkFn = async (work) => {
@@ -62,7 +62,8 @@ export const evalWork: WorkFn = async (work) => {
     }),
     results: undefined,
   };
-  if (paid.budgetSpent()) return { status: "failed", error: BUDGET_SPENT, summary };
+  const stopped = paid.stoppedBy();
+  if (stopped) return { status: "failed", error: stopped, summary };
   if (partial.unavailable) return { status: "failed", error: PROVIDER_DOWN, summary };
   return { status: "done", summary };
 };

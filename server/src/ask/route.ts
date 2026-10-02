@@ -9,6 +9,7 @@ import { getDb } from "../db/client.js";
 import { aiFeedback, aiMessages } from "../db/schema.js";
 import { turnstileEnabled, verifyTurnstile, VerifiedSessions } from "../lib/turnstile.js";
 import { streamAnswer } from "./agent.js";
+import { demotedSubjects } from "./audit.js";
 import { askChain, askConfig, askCorpus } from "./deps.js";
 import { availability, checkRate, ConcurrencyGate, hashWithSalt, recordRequest } from "./guard.js";
 import { countGuardEvent } from "./guard-events.js";
@@ -16,6 +17,7 @@ import { ASK_MESSAGE_ID, buildHistory } from "./history.js";
 import { shortName } from "./models/registry.js";
 import { routeQuestion } from "./router.js";
 import { assistantState } from "./settings.js";
+import { DEEP_ROUTE, withoutDemoted } from "./trust.js";
 
 /**
  * The public assistant API:
@@ -117,7 +119,7 @@ export function createAskRouter(): Hono {
 
       const config = askConfig();
       const { settings } = await assistantState();
-      const state = await availability(config, settings);
+      const state = await availability(config, settings, "terminal");
       if (state.state !== "ok") {
         countGuardEvent(state.state);
         return c.json({ error: `assistant_${state.state}` }, 503);
@@ -159,12 +161,14 @@ export function createAskRouter(): Hono {
       try {
         await recordRequest(ipHash, sessionHash);
         const corpus = await askCorpus(config);
+        // What the trust monitor demoted is closed to visitors until the admin reinstates it.
+        const demoted = await demotedSubjects();
         const route = routeQuestion(history.question, {
           forceDeep: body.deep ?? false,
-          deepAllowed: state.deepAllowed,
+          deepAllowed: state.deepAllowed && !demoted.has(DEEP_ROUTE),
           projectNames: corpus.projects.map((p) => p.name),
         });
-        const chain = askChain(config, route.route);
+        const chain = withoutDemoted(askChain(config, route.route), demoted);
         if (!chain.length) {
           release();
           countGuardEvent("off");
@@ -214,11 +218,11 @@ export function createAskRouter(): Hono {
   router.get("/config", async (c) => {
     const config = askConfig();
     const { settings } = await assistantState();
-    const state = await availability(config, settings);
+    const state = await availability(config, settings, "terminal");
     c.header("Cache-Control", "no-store");
     return c.json({
       state: state.state,
-      deep: state.state === "ok" && state.deepAllowed,
+      deep: state.state === "ok" && state.deepAllowed && !(await demotedSubjects()).has(DEEP_ROUTE),
       suggestions: settings.suggestedQuestions,
       limits: { maxChars: config.maxMessageChars, historyTurns: config.historyTurns },
       model: shortName(config.gemini.model),

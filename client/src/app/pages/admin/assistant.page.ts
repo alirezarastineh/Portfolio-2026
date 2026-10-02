@@ -21,6 +21,7 @@ import { AssistantPairwiseComponent } from "../../admin/assistant/assistant-pair
 import { AssistantPlaygroundComponent } from "../../admin/assistant/assistant-playground.component";
 import { AssistantReviewsComponent } from "../../admin/assistant/assistant-reviews.component";
 import { AssistantSettingsComponent } from "../../admin/assistant/assistant-settings.component";
+import { AssistantTrustComponent } from "../../admin/assistant/assistant-trust.component";
 
 type Tab =
   | "overview"
@@ -30,7 +31,8 @@ type Tab =
   | "reviews"
   | "insights"
   | "playground"
-  | "evals";
+  | "evals"
+  | "trust";
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
@@ -43,12 +45,14 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "insights", label: "Insights" },
   { id: "playground", label: "Playground" },
   { id: "evals", label: "Evals" },
+  { id: "trust", label: "Trust" },
 ];
 
 /**
  * The portfolio assistant ("Ask my portfolio"): health and cost, its
  * settings, the FAQ it cites, what visitors asked and their weekly review, a
- * playground against the draft, the eval suite and pairwise comparisons.
+ * playground against the draft, the eval suite and pairwise comparisons, and
+ * trust: what may act, what was demoted, the alerts and the audit log.
  */
 @Component({
   selector: "app-admin-assistant",
@@ -66,6 +70,7 @@ const TABS: { id: Tab; label: string }[] = [
     AssistantPlaygroundComponent,
     AssistantReviewsComponent,
     AssistantSettingsComponent,
+    AssistantTrustComponent,
     BrnTabsContent,
     HlmBadge,
     HlmTabsImports,
@@ -87,7 +92,7 @@ const TABS: { id: Tab; label: string }[] = [
       </app-page-header>
 
       <div hlmTabs class="min-w-0 gap-6" [tab]="strip()" (tabActivated)="select($any($event))">
-        <!-- One row that scrolls, with arrows where it overflows: eight tabs wrapped onto two rows below md. -->
+        <!-- One row that scrolls, with arrows where it overflows: nine tabs wrapped onto two rows below md. -->
         <hlm-paginated-tabs-list tabListLabel="Assistant sections">
           @for (option of tabs; track option.id) {
             <button [hlmTabsTrigger]="option.id">{{ option.label }}</button>
@@ -101,7 +106,10 @@ const TABS: { id: Tab; label: string }[] = [
               @switch (tab()) {
                 @case ("overview") {
                   <div class="flex flex-col gap-8">
-                    <app-assistant-overview class="flex flex-col gap-6" />
+                    <app-assistant-overview
+                      class="flex flex-col gap-6"
+                      (toTrust)="select('trust')"
+                    />
                     <app-assistant-outcomes />
                   </div>
                 }
@@ -129,6 +137,9 @@ const TABS: { id: Tab; label: string }[] = [
                     <app-assistant-pairwise />
                     <app-assistant-eval-cases />
                   </div>
+                }
+                @case ("trust") {
+                  <app-assistant-trust />
                 }
               }
             }
