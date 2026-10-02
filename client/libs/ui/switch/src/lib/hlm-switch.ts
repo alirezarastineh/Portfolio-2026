@@ -51,6 +51,8 @@ export const HLM_SWITCH_VALUE_ACCESSOR = {
   `,
 })
 export class HlmSwitch implements ControlValueAccessor {
+  private static _id = 0;
+
   public readonly userClass = input<ClassValue>("", { alias: "class" }); // NOSONAR - alias required: 'class' is a reserved keyword, cannot be a TS property name
   protected readonly _computedClass = computed(() =>
     hlm(
@@ -67,8 +69,12 @@ export class HlmSwitch implements ControlValueAccessor {
     transform: booleanAttribute,
   });
 
-  /** Used to set the id on the underlying brn element. */
-  public readonly id = input<string | null>(null);
+  /**
+   * Used to set the id on the underlying brn element. Unique by default: brn
+   * names the switch's label `<id>-switch-label`, so without an id every label
+   * on the page became `null-label` and each switch read as the first one.
+   */
+  public readonly id = input<string>(`hlm-switch-${HlmSwitch._id++}`);
 
   /** Used to set the aria-label attribute on the underlying brn element. */
   public readonly ariaLabel = input<string | null>(null, { alias: "aria-label" });

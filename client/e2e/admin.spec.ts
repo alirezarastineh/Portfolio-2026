@@ -996,7 +996,7 @@ test.describe("admin", () => {
     await page.getByRole("tab", { name: "Settings" }).click();
     await page.getByLabel("Kept for visitors (% of the budget)", { exact: true }).fill("60");
     await page.getByLabel("Eval runs", { exact: true }).fill("0.5");
-    // Each switch is named by its own label alone (a Spartan switch without an id takes the first's).
+    // Each switch is named by its own label alone, its hint left out.
     const named = (name: string) => page.getByRole("switch", { name, exact: true });
     await expect(named("Deep model for comparisons and architecture questions")).toBeChecked();
     await expect(named("Judge runs")).toHaveAccessibleDescription(/agrees with you/);
@@ -1633,6 +1633,21 @@ test.describe("admin", () => {
     await expect.poll(() => cleaned).toEqual([["a2"]]);
   });
 
+  test("each project's visibility switch names its own project", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/projects");
+    const names = (content("en")["projects"] as FixtureProject[]).map(
+      (p) => `Show ${p.name} on the site`,
+    );
+    // Before, a switch without an id took the first row's label (`null-label`).
+    for (const name of names) {
+      await expect(page.getByRole("switch", { name, exact: true })).toBeChecked();
+    }
+    await expect(page.getByRole("switch", { name: /^Show .+ on the site$/ })).toHaveCount(
+      names.length,
+    );
+  });
+
   test("the sign-in stays still under reduced motion", async ({ page, baseURL }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await fakeApi(page, baseURL, {
@@ -1660,6 +1675,7 @@ test.describe("admin accessibility", () => {
     for (const path of [
       "/admin",
       "/admin/about",
+      "/admin/projects",
       "/admin/projects/project-one",
       "/admin/inbox",
       "/admin/media",

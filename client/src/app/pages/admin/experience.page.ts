@@ -195,7 +195,11 @@ function blankDraft(): Draft {
                     [checked]="row.isVisible"
                     (checkedChange)="toggleVisible(row, $event)"
                   />
-                  <span>{{ row.isVisible ? "shown" : "hidden" }}</span>
+                  <span aria-hidden="true">{{ row.isVisible ? "shown" : "hidden" }}</span>
+                  <span class="sr-only"
+                    >Show {{ row.translations.en.title || "(untitled)"
+                    }}{{ row.orgName ? " at " + row.orgName : "" }} on the site</span
+                  >
                 </label>
                 <button hlmBtn variant="outline" size="sm" (click)="edit(row)">
                   <ng-icon name="lucidePencil" size="14" aria-hidden="true" />

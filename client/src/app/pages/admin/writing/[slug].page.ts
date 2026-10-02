@@ -174,9 +174,11 @@ type PostDraft = PostRow;
                   [checked]="p.status === 'published'"
                   (checkedChange)="setPublished($event)"
                 />
-                <span>{{
+                <!-- A name that stays put: the switch's own state says on or off. -->
+                <span aria-hidden="true">{{
                   p.status === "published" ? "Published" : "Draft — not on the site"
                 }}</span>
+                <span class="sr-only">Published</span>
               </label>
               <div hlmField>
                 <label hlmFieldLabel for="post-canonical"

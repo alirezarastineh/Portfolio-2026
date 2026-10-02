@@ -144,7 +144,10 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                   [checked]="row.isVisible"
                   (checkedChange)="toggleVisible(row, $event)"
                 />
-                <span>{{ row.isVisible ? "shown" : "hidden" }}</span>
+                <span aria-hidden="true">{{ row.isVisible ? "shown" : "hidden" }}</span>
+                <span class="sr-only"
+                  >Show {{ row.translations.en?.name || row.slug }} on the site</span
+                >
               </label>
 
               <a hlmBtn variant="outline" size="sm" [routerLink]="['/admin/projects', row.slug]">

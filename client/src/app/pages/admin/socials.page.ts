@@ -169,9 +169,9 @@ function toInput(row: SocialRow): SocialInput {
                 <hlm-switch
                   [checked]="row.isVisible"
                   (checkedChange)="patch(row.id, { isVisible: $event })"
-                  aria-label="Visible"
                 />
-                <span>{{ row.isVisible ? "shown" : "hidden" }}</span>
+                <span aria-hidden="true">{{ row.isVisible ? "shown" : "hidden" }}</span>
+                <span class="sr-only">Show {{ row.label || "this link" }} on the site</span>
                 @if (isChanged(row.id)) {
                   <span class="text-accent-orange">· unsaved</span>
                 }
@@ -283,21 +283,33 @@ export default class AdminSocialsPage implements OnInit {
     if (this.saving()) return;
     this.saving.set(true);
 
+    const changedRows = this.changedIds()
+      .map((id) => this.rows().find((r) => r.id === id))
+      .filter((r): r is SocialRow => r !== undefined);
+
+    const results = await Promise.all(
+      changedRows.map(async (row) => ({
+        row,
+        result: await this.api.updateSocial(row.id, toInput(row)),
+      })),
+    );
+
     const failed: ApiIssue[] = [];
     let error = "";
-    for (const id of this.changedIds()) {
-      const row = this.rows().find((r) => r.id === id);
-      if (!row) continue;
-      const input = toInput(row);
-      const result = await this.api.updateSocial(id, input);
-      if (result.ok) {
-        this.saved.update((map) => new Map(map).set(id, structuredClone(row)));
-      } else if (result.issues?.length) {
-        failed.push(...result.issues.map((i) => ({ ...i, path: [id, ...i.path] })));
-      } else {
-        error = result.error;
+
+    this.saved.update((savedMap) => {
+      const next = new Map(savedMap);
+      for (const { row, result } of results) {
+        if (result.ok) {
+          next.set(row.id, structuredClone(row));
+        } else if (result.issues?.length) {
+          failed.push(...result.issues.map((i) => ({ ...i, path: [row.id, ...i.path] })));
+        } else {
+          error = result.error;
+        }
       }
-    }
+      return next;
+    });
     this.saving.set(false);
 
     if (failed.length > 0) {

@@ -207,7 +207,8 @@ function toInput(row: SkillRow): SkillInput {
                       [checked]="row.isVisible"
                       (checkedChange)="patch(row.id, { isVisible: $event })"
                     />
-                    <span>{{ row.isVisible ? "shown" : "hidden" }}</span>
+                    <span aria-hidden="true">{{ row.isVisible ? "shown" : "hidden" }}</span>
+                    <span class="sr-only">Show {{ row.id }} on the site</span>
                   </label>
                   <button
                     hlmBtn
@@ -443,20 +444,33 @@ export default class AdminSkillsPage implements OnInit {
     if (this.saving()) return;
     this.savingCards.set(true);
 
+    const changedRows = this.changedIds()
+      .map((id) => this.rows().find((r) => r.id === id))
+      .filter((r): r is SkillRow => r !== undefined);
+
+    const results = await Promise.all(
+      changedRows.map(async (row) => ({
+        row,
+        result: await this.api.updateSkill(row.id, toInput(row)),
+      })),
+    );
+
     const failed: { id: string; issues: ApiIssue[] }[] = [];
     let error = "";
-    for (const id of this.changedIds()) {
-      const row = this.rows().find((r) => r.id === id);
-      if (!row) continue;
-      const result = await this.api.updateSkill(id, toInput(row));
-      if (result.ok) {
-        this.saved.update((map) => new Map(map).set(id, structuredClone(row)));
-      } else if (result.issues?.length) {
-        failed.push({ id, issues: result.issues });
-      } else {
-        error = result.error;
+
+    this.saved.update((savedMap) => {
+      const next = new Map(savedMap);
+      for (const { row, result } of results) {
+        if (result.ok) {
+          next.set(row.id, structuredClone(row));
+        } else if (result.issues?.length) {
+          failed.push({ id: row.id, issues: result.issues });
+        } else {
+          error = result.error;
+        }
       }
-    }
+      return next;
+    });
     this.savingCards.set(false);
 
     if (failed.length > 0) {
