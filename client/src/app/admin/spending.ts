@@ -23,6 +23,7 @@ const LABELS: Partial<Record<SpendFeature, string>> = {
   eval: "Eval runs",
   pairwise: "Pairwise runs",
   judge: "Judge runs",
+  embeddings: "Search by meaning",
 };
 
 export const featureLabel = (feature: string): string => LABELS[feature as SpendFeature] ?? feature;
@@ -35,6 +36,7 @@ export const CAPPED: FencedFeature[] = [
   "eval",
   "pairwise",
   "judge",
+  "embeddings",
 ];
 
 /** The switches the Settings form offers. */
@@ -42,12 +44,17 @@ export const SWITCHES: { feature: SwitchedFeature; label: string; hint: string }
   {
     feature: "copilot",
     label: "Copilot",
-    hint: "Suggestions in the editors: translate, tighten, SEO, FAQ answers, alt text.",
+    hint: "Suggestions in the editors: translate, tighten, SEO, FAQ answers, alt text, image descriptions.",
   },
   {
     feature: "judge",
     label: "Judge runs",
     hint: "Scoring reviewed visitor answers, to see how far the judge agrees with you.",
+  },
+  {
+    feature: "embeddings",
+    label: "Search by meaning",
+    hint: "The assistant's search finds synonyms and the other language: Gemini embeds the published content and each search. The server needs SERVER_AI_EMBEDDINGS as well.",
   },
 ];
 

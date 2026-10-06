@@ -1,4 +1,5 @@
 import { askChain, askConfig, askEvalPacing } from "../deps.js";
+import { embedInMemory } from "../embeddings.js";
 import { EVAL_CASES } from "../evals/cases.js";
 import { fixtureAskCorpus } from "../evals/fixture.js";
 import {
@@ -28,6 +29,9 @@ export const evalWork: WorkFn = async (work) => {
   const promptVersion = `${PROMPT_VERSION}+${PROMPT_HASH}`;
   const calls: ModelCall[] = [];
   const paid = paidItems(work, calls);
+  // Searched by meaning as visitors' answers are, when that is on (plan phase 18): the
+  // fixture embedded in memory, its spend recorded with the first case.
+  calls.push(...(await embedInMemory(corpus, config)).calls);
 
   const partial = await runEvals({
     cases: work.keys.flatMap((key) => byId.get(key) ?? []),

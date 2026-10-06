@@ -5,7 +5,8 @@ import { z } from "zod";
 import type { Locale } from "../../content/schema.js";
 import { streamAnswer, type AnswerOutcome } from "../agent.js";
 import type { AskConfig, ProviderName } from "../config.js";
-import type { AskCorpus } from "../corpus/index.js";
+import { withLayout, type AskCorpus } from "../corpus/index.js";
+import type { CoreLayout } from "../corpus/render.js";
 import {
   createFallbackModel,
   newTrace,
@@ -17,7 +18,7 @@ import {
 import { detectLanguage } from "../language.js";
 import type { ChainRole, ModelEntry } from "../models/registry.js";
 import { wrapVisitor } from "../prompt.js";
-import { routeQuestion } from "../router.js";
+import { routeLabels, routeQuestion, type RouteLabel } from "../router.js";
 import { countTokens } from "../tokens.js";
 import { summarizeCalls } from "../usage.js";
 import type { EvalCase, EvalCategory } from "./cases.js";
@@ -43,12 +44,26 @@ export interface CaseResult {
   invented: string[];
   tools: { name: string; input: unknown }[];
   model: string | null;
+  /** From the case's start to its first token, the free-tier pacing waits included. */
   ttftMs: number | null;
+  /**
+   * The first model call's own time to its first token, no pacing wait in it
+   * (plan phase 20: what the lookup tier's minimal thinking should cut).
+   */
+  modelTtftMs?: number | null;
   totalMs: number;
   usd: number;
   judge: { faithfulness: number; helpfulness: number; unsupported: string[] } | null;
   attempts: Attempt[];
+  /**
+   * A failed case's thoughts, cut to an excerpt (plan phase 23): evidence of
+   * why it failed, not proof, as a model's account of itself can be unfaithful.
+   */
+  reasoning?: string;
 }
+
+/** How much of a failed case's thoughts its result keeps. */
+const REASONING_EXCERPT = 2_000;
 
 export interface EvalCategorySummary {
   cases: number;
@@ -97,6 +112,10 @@ export const FREE_TIER_RATE_LIMIT_RETRY: RateLimitRetryOptions = {
 export interface AnswerVariant {
   chain: ModelEntry[];
   systemPrompt?: string;
+  /** A line after the corpus (`--candidate-reminder`). */
+  afterCorpus?: string;
+  /** How this side's core is laid out (`--compare-core`); today's when unset. */
+  layout?: CoreLayout;
 }
 
 export interface AnsweredCase {
@@ -133,6 +152,13 @@ export interface EvalOptions {
   /** Internal hooks populated by runEvals and shared by answer and judge calls. */
   beforeModelCall?: (entry: ModelEntry, signal?: AbortSignal) => Promise<void>;
   timeoutExtraMs?: number;
+  /**
+   * The router's say over each case (plan phase 20): `deep` answers every one
+   * on the deep chain, as the `deep` command would (the production suite's
+   * `--on deep` replay); `lookup: false` leaves the lookup tier out (an A/B of
+   * its time to the first token).
+   */
+  routing?: { deep?: boolean; lookup?: boolean };
 }
 
 function percentile(values: number[], p: number): number | null {
@@ -275,7 +301,13 @@ function checkTools(
 /** The deterministic checks; the judge adds its own failures. */
 export function grade(
   c: EvalCase,
-  answer: { text: string; cited: string[]; tools: { name: string; input: unknown }[] },
+  answer: {
+    text: string;
+    cited: string[];
+    tools: { name: string; input: unknown }[];
+    /** The routing the answer got (`routeLabels`), for `expectRoute`. */
+    route?: readonly RouteLabel[];
+  },
 ): string[] {
   const failures: string[] = [];
   // Citation markers are not prose: patterns check the words.
@@ -285,6 +317,9 @@ export function grade(
   checkCitations(c, answer.cited, failures);
   checkProse(c, prose, failures);
   checkTools(c, answer.tools, failures);
+  if (c.expectRoute && answer.route && !answer.route.includes(c.expectRoute)) {
+    failures.push(`routed ${answer.route.join("+")}, not ${c.expectRoute}`);
+  }
 
   return failures;
 }
@@ -488,9 +523,13 @@ function collectCaseFailures(
   outcome: { text: string; finishReason: string; citedIds: string[]; droppedCitations: string[] },
   operationalFailure: boolean,
   tools: { name: string; input: unknown }[],
+  route: readonly RouteLabel[],
 ): string[] {
-  if (operationalFailure) return [`stream ${outcome.finishReason}`];
-  const failures = grade(c, { text: outcome.text, cited: outcome.citedIds, tools });
+  // An answer that failed (an outage, or the model's own mistake) has nothing to grade.
+  if (operationalFailure || outcome.finishReason.startsWith("error")) {
+    return [`stream ${outcome.finishReason}`];
+  }
+  const failures = grade(c, { text: outcome.text, cited: outcome.citedIds, tools, route });
   if (outcome.droppedCitations.length) {
     failures.push(`invented citations: ${outcome.droppedCitations.join(", ")}`);
   }
@@ -503,13 +542,22 @@ export async function answerCase(
   acquireRateLimitRetry?: () => boolean,
   variant?: AnswerVariant,
 ): Promise<AnsweredCase> {
-  const { config, corpus } = options;
-  const route = routeQuestion(c.question, {
-    forceDeep: false,
+  const { config } = options;
+  const corpus = variant?.layout ? withLayout(options.corpus, variant.layout) : options.corpus;
+  const decided = routeQuestion(c.question, {
+    forceDeep: options.routing?.deep ?? false,
     deepAllowed: true,
     projectNames: corpus.projects.map((p) => p.name),
   });
+  // `--no-lookup`: the same question without the lookup tier, for its A/B.
+  const route =
+    options.routing?.lookup === false && decided.lookup
+      ? { route: decided.route, reason: decided.reason.replace("+lookup", "") }
+      : decided;
   const chain = variant?.chain ?? options.chain(route.route);
+  // As for visitors, a case routed lite may move up to the deep chain (plan phase 20), which
+  // holds the same models; a pairwise side is one chain's answer alone.
+  const escalation = variant?.chain ? undefined : () => options.chain("deep");
   const timeoutExtraMs = options.timeoutExtraMs ?? timeoutAllowance(options, chain.length);
   const abortSignal = createCaseAbortSignal(
     config.streamTimeoutMs,
@@ -529,23 +577,30 @@ export async function answerCase(
     corpus,
     config,
     chain,
+    escalation,
     abortSignal,
     rateLimitRetry: options.rateLimitRetry,
     acquireRateLimitRetry,
     beforeModelCall: options.beforeModelCall,
     timeoutExtraMs,
     systemPrompt: variant?.systemPrompt,
+    afterCorpus: variant?.afterCorpus,
     persist: false,
   });
 
   await drainStream(stream);
   const outcome = await done;
-  options.calls?.push(...outcome.trace.calls);
+  // The searches' embeddings too: the run records them with the case (runs/paid.ts).
+  options.calls?.push(...outcome.trace.calls, ...outcome.searchCalls);
 
   const tools = outcome.toolCalls.map((t) => ({ name: t.name, input: t.input }));
-  const operationalFailure =
-    outcome.finishReason.startsWith("error") || outcome.finishReason === "aborted";
-  const failures = collectCaseFailures(c, outcome, operationalFailure, tools);
+  // Only an outage is "unavailable" (no model answered, or in time): the run stops and can
+  // resume. Any other error is the answer failing, and the case fails.
+  const operationalFailure = ["error:unavailable", "error:timeout", "aborted"].includes(
+    outcome.finishReason,
+  );
+  const labels = routeLabels(route, outcome.escalation !== null);
+  const failures = collectCaseFailures(c, outcome, operationalFailure, tools, labels);
 
   return { outcome, failures, operationalFailure };
 }
@@ -559,7 +614,8 @@ async function runCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
   const attempts = [...outcome.trace.attempts];
   let judge: CaseResult["judge"] = null;
   let unavailable = operationalFailure;
-  if (!unavailable) {
+  // An answer that failed has failed already: no judge is paid to say so.
+  if (!unavailable && !outcome.finishReason.startsWith("error")) {
     const judged = await applyJudge(
       options,
       c,
@@ -580,6 +636,7 @@ async function runCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
   } else if (failures.length > 0) {
     status = "failed";
   }
+  const thoughts = status === "failed" ? outcome.reasoning : null;
   return {
     id: c.id,
     category: c.category,
@@ -592,10 +649,19 @@ async function runCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
     tools,
     model: outcome.model,
     ttftMs: trace.firstTokenAt === null ? null : trace.firstTokenAt - trace.startedAt,
+    modelTtftMs: trace.calls[0]?.ttftMs ?? null,
     totalMs: Date.now() - trace.startedAt,
     usd: outcome.usd,
     judge,
     attempts,
+    ...(thoughts
+      ? {
+          reasoning:
+            thoughts.length > REASONING_EXCERPT
+              ? `${thoughts.slice(0, REASONING_EXCERPT)}…`
+              : thoughts,
+        }
+      : {}),
   };
 }
 

@@ -139,6 +139,12 @@ const LEAKS = PROMPT_LEAKS.map((piece) => new RegExp(piece, "i"));
 const DECLINE =
   /(only (help|answer)|can(not|'t) help|outside (of )?(my|the) scope|nur fragen|nicht (helfen|beantworten))/i;
 const UNCITED_WORDS = 25;
+/**
+ * A figure in the prose: an answer saying "it isn't there" may go uncited,
+ * but not one that then gives a number anyway (an estimate after "his rates
+ * are not published", which the careful block forbids).
+ */
+const FIGURE = /\d/;
 
 /** The canary is a leak whoever wrote it first: pasting it must not hide a translated leak. */
 const CANARY = new RegExp(PROMPT_CANARY, "i");
@@ -175,10 +181,11 @@ export function checkAnswer(input: CheckInput): AnswerChecks {
   if (detected && detected !== (input.language ?? input.locale)) flags.push("language");
 
   const words = prose.split(/\s+/).filter(Boolean).length;
+  const saysAbsent = UNKNOWN.test(prose) && !FIGURE.test(prose);
   if (
     words >= UNCITED_WORDS &&
     !HAS_MARKER.test(input.text) &&
-    !UNKNOWN.test(prose) &&
+    !saysAbsent &&
     !DECLINE.test(prose)
   ) {
     flags.push("uncited");

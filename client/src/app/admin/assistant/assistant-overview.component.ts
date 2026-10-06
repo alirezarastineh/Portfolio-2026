@@ -254,14 +254,39 @@ interface ModelTotal {
               >
             }
           </div>
-          <p class="m-0 text-sm text-muted-foreground">
-            Prefix sent with every question: {{ c.coreChars | number }} characters, about
-            {{ c.coreTokens | number }} tokens (local estimate)
-            @if (geminiCount() !== null) {
-              · Gemini counts {{ geminiCount() | number }}
-            }
-            .
-          </p>
+          @if (c.byLocale; as by) {
+            <p class="m-0 text-sm text-muted-foreground">
+              Prefix sent with every question, per answer language: English
+              {{ by.en.chars | number }} characters, about {{ by.en.tokens | number }} tokens;
+              German {{ by.de.chars | number }}, about {{ by.de.tokens | number }} (local estimates)
+              @if (geminiCount(); as g) {
+                · Gemini counts English {{ g.en === null ? "–" : (g.en | number) }}, German
+                {{ g.de === null ? "–" : (g.de | number) }}
+              }
+              .
+            </p>
+          } @else {
+            <p class="m-0 text-sm text-muted-foreground">
+              Prefix sent with every question: {{ c.coreChars | number }} characters, about
+              {{ c.coreTokens | number }} tokens (local estimate)
+              @if (geminiCount(); as g) {
+                · Gemini counts {{ g.en | number }}
+              }
+              .
+            </p>
+          }
+          @if (c.embeddings; as e) {
+            <p class="m-0 text-sm text-muted-foreground">
+              @if (e.on) {
+                Search by meaning ({{ e.model }}): {{ e.embedded | number }} of
+                {{ e.chunks | number }} passages have a vector; the switch is in Settings →
+                Spending.
+              } @else {
+                Search by meaning is off on this server (SERVER_AI_EMBEDDINGS): the search matches
+                words alone.
+              }
+            </p>
+          }
           <div>
             <button hlmBtn variant="outline" size="sm" [disabled]="counting()" (click)="count()">
               Count with Gemini
@@ -404,7 +429,8 @@ export class AssistantOverviewComponent implements OnInit {
   protected readonly counting = signal(false);
   /** The API's reason when the health did not arrive. */
   protected readonly loadError = signal<string | null>(null);
-  protected readonly geminiCount = signal<number | null>(null);
+  /** Gemini's own count of each language's prefix, once asked. */
+  protected readonly geminiCount = signal<{ en: number | null; de: number | null } | null>(null);
 
   /** "Answering", "Resting", "Off": the state in words. */
   protected readonly stateLabel = computed(() => {
@@ -507,8 +533,15 @@ export class AssistantOverviewComponent implements OnInit {
     this.counting.set(true);
     const result = await this.api.assistantTokenCount();
     this.counting.set(false);
-    if (result.ok) this.geminiCount.set(result.data.totalTokens);
-    else toast.error("Gemini could not count", { description: result.error });
+    if (result.ok) {
+      const by = result.data.byLocale;
+      this.geminiCount.set({
+        en: by?.en.totalTokens ?? result.data.totalTokens,
+        de: by?.de.totalTokens ?? null,
+      });
+    } else {
+      toast.error("Gemini could not count", { description: result.error });
+    }
   }
 
   protected when(iso: string | null): string {

@@ -7,10 +7,12 @@ import { z } from "zod";
 import { clientIp } from "../auth/middleware.js";
 import { getDb } from "../db/client.js";
 import { aiFeedback, aiMessages } from "../db/schema.js";
+import { captureError } from "../lib/sentry.js";
 import { turnstileEnabled, verifyTurnstile, VerifiedSessions } from "../lib/turnstile.js";
 import { streamAnswer } from "./agent.js";
 import { demotedSubjects } from "./audit.js";
 import { askChain, askConfig, askCorpus } from "./deps.js";
+import { backfillEmbeddings } from "./embeddings.js";
 import { availability, checkRate, ConcurrencyGate, hashWithSalt, recordRequest } from "./guard.js";
 import { countGuardEvent } from "./guard-events.js";
 import { ASK_MESSAGE_ID, buildHistory } from "./history.js";
@@ -90,6 +92,97 @@ async function checkTurnstile(
   return true;
 }
 
+type AskBody = z.infer<typeof askBody>;
+
+type AdmittedAsk = {
+  body: AskBody;
+  history: Extract<Awaited<ReturnType<typeof buildHistory>>, { ok: true }>;
+  config: ReturnType<typeof askConfig>;
+  deepAllowed: boolean;
+  ipHash: string;
+  sessionHash: string;
+  release: () => void;
+};
+
+type AdmitResult = { ok: true; ask: AdmittedAsk } | { ok: false; response: Response };
+
+/**
+ * Every refusal a visitor can hit before a stream starts: invalid input, the
+ * honeypot, Turnstile, availability, history, rate limits and the concurrency
+ * gate. Counted in guard-events; the answers table never sees them.
+ */
+async function admitAsk(c: Context): Promise<AdmitResult> {
+  const parsed = askBody.safeParse(await readJson(c));
+  if (!parsed.success || parsed.data.website) {
+    countGuardEvent(parsed.success ? "honeypot" : "invalid_input");
+    return { ok: false, response: c.json({ error: "invalid_input" }, 400) };
+  }
+  const body = parsed.data;
+
+  if (!(await checkTurnstile(body.sessionId, body.turnstileToken, clientIp(c)))) {
+    countGuardEvent("turnstile_required");
+    return { ok: false, response: c.json({ error: "turnstile_required" }, 403) };
+  }
+
+  const config = askConfig();
+  const { settings } = await assistantState();
+  const state = await availability(config, settings, "terminal");
+  if (state.state !== "ok") {
+    countGuardEvent(state.state);
+    return { ok: false, response: c.json({ error: `assistant_${state.state}` }, 503) };
+  }
+
+  const history = await buildHistory({
+    messages: body.messages,
+    sessionId: body.sessionId,
+    locale: body.locale,
+    historyTurns: config.historyTurns,
+    // The corpus prefix takes its share first; history gets the rest.
+    maxInputTokens: Math.max(2_000, Math.floor(config.maxInputTokens * 0.25)),
+    maxChars: config.maxMessageChars,
+  });
+  if (!history.ok) {
+    const tooLong = history.error === "too_long";
+    countGuardEvent(tooLong ? "too_long" : "invalid_input");
+    return {
+      ok: false,
+      response: c.json({ error: history.error }, tooLong ? 413 : 400),
+    };
+  }
+
+  const ipHash = hashWithSalt("ip", clientIp(c));
+  const sessionHash = hashWithSalt("session", body.sessionId);
+  const rate = await checkRate(config, ipHash, sessionHash);
+  if (!rate.ok) {
+    countGuardEvent("rate_limited");
+    c.header("Retry-After", String(rate.retryAfter));
+    return {
+      ok: false,
+      response: c.json({ error: "rate_limited", retryAfter: rate.retryAfter }, 429),
+    };
+  }
+
+  const release = gate.tryEnter();
+  if (!release) {
+    countGuardEvent("busy");
+    c.header("Retry-After", "5");
+    return { ok: false, response: c.json({ error: "busy", retryAfter: 5 }, 429) };
+  }
+
+  return {
+    ok: true,
+    ask: {
+      body,
+      history,
+      config,
+      deepAllowed: state.deepAllowed,
+      ipHash,
+      sessionHash,
+      release,
+    },
+  };
+}
+
 export function createAskRouter(): Hono {
   const router = new Hono();
 
@@ -104,71 +197,33 @@ export function createAskRouter(): Hono {
       },
     }),
     async (c) => {
-      // Every refusal below is counted (guard-events.ts): the answers table never sees them.
-      const parsed = askBody.safeParse(await readJson(c));
-      if (!parsed.success || parsed.data.website) {
-        countGuardEvent(parsed.success ? "honeypot" : "invalid_input");
-        return c.json({ error: "invalid_input" }, 400);
-      }
-      const body = parsed.data;
-
-      if (!(await checkTurnstile(body.sessionId, body.turnstileToken, clientIp(c)))) {
-        countGuardEvent("turnstile_required");
-        return c.json({ error: "turnstile_required" }, 403);
-      }
-
-      const config = askConfig();
-      const { settings } = await assistantState();
-      const state = await availability(config, settings, "terminal");
-      if (state.state !== "ok") {
-        countGuardEvent(state.state);
-        return c.json({ error: `assistant_${state.state}` }, 503);
-      }
-
-      const history = await buildHistory({
-        messages: body.messages,
-        sessionId: body.sessionId,
-        locale: body.locale,
-        historyTurns: config.historyTurns,
-        // The corpus prefix takes its share first; history gets the rest.
-        maxInputTokens: Math.max(2_000, Math.floor(config.maxInputTokens * 0.25)),
-        maxChars: config.maxMessageChars,
-      });
-      if (!history.ok) {
-        const tooLong = history.error === "too_long";
-        countGuardEvent(tooLong ? "too_long" : "invalid_input");
-        return c.json({ error: history.error }, tooLong ? 413 : 400);
-      }
-
-      const ipHash = hashWithSalt("ip", clientIp(c));
-      const sessionHash = hashWithSalt("session", body.sessionId);
-      const rate = await checkRate(config, ipHash, sessionHash);
-      if (!rate.ok) {
-        countGuardEvent("rate_limited");
-        c.header("Retry-After", String(rate.retryAfter));
-        return c.json({ error: "rate_limited", retryAfter: rate.retryAfter }, 429);
-      }
-
-      const release = gate.tryEnter();
-      if (!release) {
-        countGuardEvent("busy");
-        c.header("Retry-After", "5");
-        return c.json({ error: "busy", retryAfter: 5 }, 429);
-      }
+      const admitted = await admitAsk(c);
+      if (!admitted.ok) return admitted.response;
+      const { body, history, config, deepAllowed, ipHash, sessionHash, release } = admitted.ask;
 
       const controller = new AbortController();
       const onClientGone = () => controller.abort(new Error("client disconnected"));
       try {
         await recordRequest(ipHash, sessionHash);
         const corpus = await askCorpus(config);
+        // New chunks get their search vectors in the background (plan phase 18), never in the way.
+        void backfillEmbeddings(corpus, config).catch((error: unknown) => {
+          console.error("[ask] embedding backfill failed", error);
+          captureError(error, { phase: "embeddings" });
+        });
         // What the trust monitor demoted is closed to visitors until the admin reinstates it.
         const demoted = await demotedSubjects();
+        const deepOpen = deepAllowed && !demoted.has(DEEP_ROUTE);
         const route = routeQuestion(history.question, {
           forceDeep: body.deep ?? false,
-          deepAllowed: state.deepAllowed && !demoted.has(DEEP_ROUTE),
+          deepAllowed: deepOpen,
           projectNames: corpus.projects.map((p) => p.name),
         });
         const chain = withoutDemoted(askChain(config, route.route), demoted);
+        // Where the deep route is open, an answer routed lite may move up to it (plan phase 20).
+        const escalation = deepOpen
+          ? () => withoutDemoted(askChain(config, "deep"), demoted)
+          : undefined;
         if (!chain.length) {
           release();
           countGuardEvent("off");
@@ -189,8 +244,10 @@ export function createAskRouter(): Hono {
           corpus,
           config,
           chain,
+          escalation,
           abortSignal: controller.signal,
           droppedAnswers: history.droppedAnswers,
+          window: history.window,
           onClose: () => {
             release();
             inFlight.delete(controller);

@@ -23,6 +23,7 @@ import { HlmAlert, HlmAlertDescription, HlmAlertTitle } from "@spartan-ng/helm/a
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmEmptyImports } from "@spartan-ng/helm/empty";
 import { HlmInput } from "@spartan-ng/helm/input";
+import { HlmTextarea } from "@spartan-ng/helm/textarea";
 import { HlmProgressImports } from "@spartan-ng/helm/progress";
 import { HlmSheetImports } from "@spartan-ng/helm/sheet";
 import { HlmSpinner } from "@spartan-ng/helm/spinner";
@@ -85,6 +86,7 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
     HlmButton,
     HlmEmptyImports,
     HlmInput,
+    HlmTextarea,
     HlmProgressImports,
     HlmSheetImports,
     HlmSpinner,
@@ -433,6 +435,65 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
                   </button>
                 </div>
               </section>
+
+              <section class="flex flex-col gap-3" aria-labelledby="description-title">
+                <div>
+                  <h3 id="description-title" class="m-0 text-sm font-medium">
+                    Description for the assistant
+                  </h3>
+                  <p class="m-0 mt-1 text-xs text-muted-foreground">
+                    What a diagram or screenshot shows: its parts and how they connect. Only the
+                    assistant reads it, from the next question on; no page shows it. Drafts are
+                    drawn from the picture; nothing is saved until you save.
+                  </p>
+                </div>
+                @for (locale of locales; track locale) {
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center justify-between gap-2">
+                      <label [for]="'description-' + locale" class="eyebrow text-muted-foreground"
+                        ><span class="sr-only">Assistant description, </span>{{ locale }}</label
+                      >
+                      <button
+                        hlmBtn
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        class="h-6 px-2 font-mono text-xs text-muted-foreground"
+                        [disabled]="describing() !== null"
+                        [attr.aria-label]="
+                          'Describe the image in ' +
+                          (locale === 'en' ? 'English' : 'German') +
+                          ' with AI'
+                        "
+                        (click)="describe(asset, locale)"
+                      >
+                        <ng-icon name="lucideSparkles" size="12" aria-hidden="true" />
+                        <span class="ml-1">{{ describing() === locale ? "…" : "describe" }}</span>
+                      </button>
+                    </div>
+                    <textarea
+                      hlmTextarea
+                      rows="5"
+                      maxlength="2000"
+                      [id]="'description-' + locale"
+                      [ngModel]="description()[locale]"
+                      [ngModelOptions]="{ standalone: true }"
+                      (ngModelChange)="setDescription(locale, $event)"
+                    ></textarea>
+                  </div>
+                }
+                <div class="flex justify-end">
+                  <button
+                    hlmBtn
+                    size="sm"
+                    type="button"
+                    [disabled]="!descriptionChanged() || savingDescription()"
+                    (click)="saveDescription(asset)"
+                  >
+                    Save description
+                  </button>
+                </div>
+              </section>
             }
 
             <div class="flex flex-wrap items-center gap-2 border-t border-border pt-4">
@@ -503,6 +564,10 @@ export default class AdminMediaPage implements OnInit {
   protected readonly alt = signal<Record<Locale, string>>({ en: "", de: "" });
   protected readonly suggesting = signal<Locale | null>(null);
   protected readonly savingAlt = signal(false);
+  /** The description for the assistant (plan phase 17), as being edited. */
+  protected readonly description = signal<Record<Locale, string>>({ en: "", de: "" });
+  protected readonly describing = signal<Locale | null>(null);
+  protected readonly savingDescription = signal(false);
 
   protected readonly counts = computed(() => {
     const assets = this.library.assets();
@@ -550,6 +615,14 @@ export default class AdminMediaPage implements OnInit {
     const now = this.alt();
     return now.en !== (asset.altEn ?? "") || now.de !== (asset.altDe ?? "");
   });
+  protected readonly descriptionChanged = computed(() => {
+    const asset = this.active();
+    if (!asset) return false;
+    const now = this.description();
+    return (
+      now.en.trim() !== (asset.descriptionEn ?? "") || now.de.trim() !== (asset.descriptionDe ?? "")
+    );
+  });
 
   ngOnInit(): void {
     void this.library.load(true);
@@ -579,6 +652,7 @@ export default class AdminMediaPage implements OnInit {
   protected open(asset: MediaAsset): void {
     this.activeId.set(asset.id);
     this.alt.set({ en: asset.altEn ?? "", de: asset.altDe ?? "" });
+    this.description.set({ en: asset.descriptionEn ?? "", de: asset.descriptionDe ?? "" });
   }
 
   protected onSheet(state: string): void {
@@ -619,6 +693,39 @@ export default class AdminMediaPage implements OnInit {
     toast.success("Alt text saved", { description: "Live after the next publish." });
     await this.library.load(true);
     this.alt.set({ en: alt.en.trim(), de: alt.de.trim() });
+  }
+
+  protected setDescription(locale: Locale, text: string): void {
+    this.description.update((d) => ({ ...d, [locale]: text }));
+  }
+
+  /** A draft of what the picture shows, from the picture itself (the copilot, paid). */
+  protected async describe(asset: MediaAsset, locale: Locale): Promise<void> {
+    this.describing.set(locale);
+    const result = await this.api.copilot({ task: "describe", mediaId: asset.id, locale });
+    this.describing.set(null);
+    if (!result.ok) {
+      toast.error("No description", { description: result.error });
+      return;
+    }
+    this.setDescription(locale, result.data.text);
+  }
+
+  protected async saveDescription(asset: MediaAsset): Promise<void> {
+    const d = this.description();
+    this.savingDescription.set(true);
+    const result = await this.api.updateMediaAlt(asset.id, {
+      descriptionEn: d.en.trim() || null,
+      descriptionDe: d.de.trim() || null,
+    });
+    this.savingDescription.set(false);
+    if (!result.ok) {
+      toast.error("Not saved", { description: result.error });
+      return;
+    }
+    toast.success("Description saved", { description: "The assistant reads it from now on." });
+    await this.library.load(true);
+    this.description.set({ en: d.en.trim(), de: d.de.trim() });
   }
 
   protected async copyPath(asset: MediaAsset): Promise<void> {
@@ -769,18 +876,21 @@ export default class AdminMediaPage implements OnInit {
   /** One after the other, so the progress reads as one file's, and a failure names its file. */
   private async uploadAll(files: File[]): Promise<void> {
     if (!files.length || this.uploading()) return;
-    let done = 0;
-    for (const [i, file] of files.entries()) {
-      this.uploading.set({ name: file.name, index: i + 1, total: files.length, percent: 0 });
-      const result = await this.library.upload(file, (percent) =>
-        this.uploading.update((u) => (u ? { ...u, percent } : u)),
-      );
-      if (result.ok) done++;
-      else toast.error(`${file.name} was not uploaded`, { description: result.message });
-    }
+    const done = await this.uploadNext(files, 0, 0);
     this.uploading.set(null);
     await this.loadReconcile();
     if (done) toast.success(done === 1 ? "Uploaded" : `Uploaded ${done} files`);
+  }
+
+  private async uploadNext(files: File[], index: number, done: number): Promise<number> {
+    const file = files[index];
+    if (!file) return done;
+    this.uploading.set({ name: file.name, index: index + 1, total: files.length, percent: 0 });
+    const result = await this.library.upload(file, (percent) =>
+      this.uploading.update((u) => (u ? { ...u, percent } : u)),
+    );
+    if (!result.ok) toast.error(`${file.name} was not uploaded`, { description: result.message });
+    return this.uploadNext(files, index + 1, done + (result.ok ? 1 : 0));
   }
 
   private async afterChange(): Promise<void> {

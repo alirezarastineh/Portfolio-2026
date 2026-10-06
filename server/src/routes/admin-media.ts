@@ -29,6 +29,7 @@ import {
   writeMediaFile,
 } from "../lib/media-store.js";
 import { readJson } from "./admin-inputs.js";
+import { invalidateImageDescriptions } from "../ask/corpus/media.js";
 import { findMediaUsage, listMediaAssets, mediaUsageAll } from "./media.js";
 
 export const adminMediaRouter = new Hono();
@@ -36,6 +37,9 @@ export const adminMediaRouter = new Hono();
 const altInput = z.object({
   altEn: z.string().max(300).nullable().optional(),
   altDe: z.string().max(300).nullable().optional(),
+  /** What a diagram or screenshot shows, for the assistant (plan phase 17). */
+  descriptionEn: z.string().max(2_000).nullable().optional(),
+  descriptionDe: z.string().max(2_000).nullable().optional(),
 });
 
 /** Publications this far back count as "recent" for the delete warning. */
@@ -65,6 +69,8 @@ function toResponse(row: typeof mediaAssets.$inferSelect, variants: VariantRow[]
     blurDataUri: row.blurDataUri,
     altEn: row.altEn,
     altDe: row.altDe,
+    descriptionEn: row.descriptionEn,
+    descriptionDe: row.descriptionDe,
     createdAt: row.createdAt,
     url: publicUrl(row.filename),
     path: `/media/${row.filename}`,
@@ -239,23 +245,27 @@ async function writeVariants(
   baseFilename: string,
   variants: NonNullable<Awaited<ReturnType<typeof processImage>>>["variants"],
 ) {
-  const written: string[] = [];
-  const variantRows: Omit<typeof mediaVariants.$inferInsert, "assetId">[] = [];
+  const prepared = variants.map((variant) => {
+    const filename = variantFilename(baseFilename, variant.width, variant.format);
+    return {
+      filename,
+      buffer: variant.buffer,
+      row: {
+        format: variant.format,
+        width: variant.width,
+        height: variant.height,
+        filename,
+        byteSize: variant.buffer.length,
+      } satisfies Omit<typeof mediaVariants.$inferInsert, "assetId">,
+    };
+  });
 
-  for (const variant of variants) {
-    const name = variantFilename(baseFilename, variant.width, variant.format);
-    await writeMediaFile(variant.buffer, name);
-    written.push(name);
-    variantRows.push({
-      format: variant.format,
-      width: variant.width,
-      height: variant.height,
-      filename: name,
-      byteSize: variant.buffer.length,
-    });
-  }
+  await Promise.all(prepared.map((item) => writeMediaFile(item.buffer, item.filename)));
 
-  return { written, variantRows };
+  return {
+    written: prepared.map((item) => item.filename),
+    variantRows: prepared.map((item) => item.row),
+  };
 }
 
 async function insertMediaAssetWithVariants(params: {
@@ -351,7 +361,7 @@ adminMediaRouter.post("/media", async (c) => {
 
     return c.json({ ok: true, media: toResponse(row, savedVariants) }, 201);
   } catch (error) {
-    for (const name of written) await deleteMedia(name);
+    await Promise.all(written.map((name) => deleteMedia(name)));
 
     const winner = await findAssetByChecksum(checksum);
     if (winner) {
@@ -379,11 +389,19 @@ adminMediaRouter.patch("/media/:id", async (c) => {
     .set({
       ...(parsed.data.altEn !== undefined ? { altEn: parsed.data.altEn } : {}),
       ...(parsed.data.altDe !== undefined ? { altDe: parsed.data.altDe } : {}),
+      ...(parsed.data.descriptionEn !== undefined
+        ? { descriptionEn: parsed.data.descriptionEn?.trim() || null }
+        : {}),
+      ...(parsed.data.descriptionDe !== undefined
+        ? { descriptionDe: parsed.data.descriptionDe?.trim() || null }
+        : {}),
     })
     .where(eq(mediaAssets.id, c.req.param("id")))
     .returning({ id: mediaAssets.id });
 
   if (!row) return c.json({ error: "not_found" }, 404);
+  // The assistant reads a saved description with the next question (same process).
+  invalidateImageDescriptions();
   return c.json({ ok: true });
 });
 
@@ -484,7 +502,7 @@ async function deleteAsset(id: string, confirmed: boolean): Promise<DeleteOutcom
   // Files only once the rows are gone for good: a rolled-back transaction must
   // not leave rows pointing at deleted files.
   if (result.status === 200) {
-    for (const name of result.files) await deleteMedia(name);
+    await Promise.all(result.files.map((name) => deleteMedia(name)));
     return { status: 200, body: result.body, bytes: result.bytes };
   }
   return result;
@@ -513,8 +531,13 @@ adminMediaRouter.post("/media/cleanup", async (c) => {
   const deleted: string[] = [];
   const skipped: { id: string; error: string }[] = [];
   let freedBytes = 0;
-  for (const id of new Set(parsed.data.ids)) {
-    const outcome = await deleteAsset(id, parsed.data.confirm);
+  const outcomes = await Promise.all(
+    [...new Set(parsed.data.ids)].map(async (id) => ({
+      id,
+      outcome: await deleteAsset(id, parsed.data.confirm),
+    })),
+  );
+  for (const { id, outcome } of outcomes) {
     if (outcome.status === 200) {
       deleted.push(id);
       freedBytes += outcome.bytes;

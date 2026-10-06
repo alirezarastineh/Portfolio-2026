@@ -22,6 +22,8 @@ const PRICES: Record<string, Price[]> = {
   ],
   // Free tier only (see the plan's privacy notes).
   "gemma-4-31b-it": FREE,
+  // Search vectors (plan phase 18): input only; free on the free tier. Read 2026-10-05.
+  "gemini-embedding-2": [{ from: "2026-01-01", input: 0.2, cachedInput: 0.2, output: 0 }],
 };
 
 /**

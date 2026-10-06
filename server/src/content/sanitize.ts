@@ -92,16 +92,50 @@ export function plainTextToRichText(value: string): string {
     .join("");
 }
 
-/** The visible text of sanitized HTML, for reading time and search. */
-export function htmlToText(value: string): string {
+/**
+ * The visible text of sanitized HTML, for reading time and search. With
+ * `images`, each image stays as `[image: its alt]` (`[image]` without one),
+ * where it stood: the assistant's corpus keeps what a picture shows (plan
+ * phase 17, multi-modal fusion).
+ */
+export function htmlToText(value: string, options: { images?: boolean } = {}): string {
+  // The marker is built from the decoded alt, as `mediaImages` reads it, and
+  // escaped again ("<" and ">" would read as a tag to the strip below) so the
+  // decoding of the whole text restores it exactly. A picture is a block of
+  // its own: its marker ends the line.
+  const marked = options.images
+    ? value.replace(
+        /<img\b[^<>]*>/gi,
+        (img) =>
+          `${escapeHtml(imageMarker(decodeEntities(/\salt="([^"]*)"/i.exec(img)?.[1] ?? "")))}\n`,
+      )
+    : value;
   return decodeEntities(
-    value
+    marked
       .replace(/<(?:br|\/(?:p|li|h[2-4]|pre|blockquote))\b[^<>]*>/gi, "\n")
       .replace(/<[^<>]*>/g, ""),
   )
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/** How a picture stands in a text: `[image: its alt]`, or `[image]` without one. */
+export function imageMarker(alt: string): string {
+  // Brackets in the alt would end the marker early.
+  const clean = alt.replace(/\s+/g, " ").trim().replaceAll("[", "(").replaceAll("]", ")");
+  return clean ? `[image: ${clean}]` : "[image]";
+}
+
+/** The `/media/…` images an HTML text shows, in order, with their alt text (decoded). */
+export function mediaImages(html: string): { file: string; alt: string }[] {
+  const found: { file: string; alt: string }[] = [];
+  for (const [img] of html.matchAll(/<img\b[^<>]*>/gi)) {
+    const file = /\ssrc="\/media\/([^"/?#]+)"/i.exec(img)?.[1];
+    if (!file) continue;
+    found.push({ file, alt: decodeEntities(/\salt="([^"]*)"/i.exec(img)?.[1] ?? "").trim() });
+  }
+  return found;
 }
 
 /** The entities sanitize-html and Tiptap write. */

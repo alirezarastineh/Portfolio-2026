@@ -9,6 +9,7 @@ import { abortAllAsks } from "./ask/route.js";
 import { abortAllRuns, recoverRuns } from "./ask/runs/runner.js";
 import { loadEncoder } from "./ask/tokens.js";
 import { startTrustMonitor } from "./ask/trust-monitor.js";
+import { allowEmbeddingBackfill } from "./ask/embeddings.js";
 import { startSessionPruning } from "./auth/session.js";
 import { backfillContentV2 } from "./content/backfill.js";
 import { closeDb } from "./db/client.js";
@@ -65,6 +66,8 @@ if (migrated) {
   }
   // The nightly trust check writes demotions: only here, never from a laptop.
   startTrustMonitor();
+  // Search vectors are written here too (plan phase 18), when the deploy and the admin turn them on.
+  allowEmbeddingBackfill();
 }
 
 startAuthAttemptPruning();

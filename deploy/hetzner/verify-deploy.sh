@@ -340,6 +340,21 @@ if [[ "$(db_value "select count(*) from information_schema.tables where table_na
 else
   fail "ai_audit missing — migration 0016_audit not applied?"
 fi
+if [[ "$(db_value "select count(*) from information_schema.columns where table_name = 'ai_settings' and column_name = 'corpus_tiers'")" == "1" ]]; then
+  pass "the corpus tiers column exists (migration 0017)"
+else
+  fail "ai_settings.corpus_tiers missing — migration 0017_corpus_tiers not applied?"
+fi
+if [[ "$(db_value "select count(*) from information_schema.columns where table_name = 'media_assets' and column_name in ('description_en', 'description_de')")" == "2" ]]; then
+  pass "the image description columns exist (migration 0018)"
+else
+  fail "media_assets.description_en/_de missing — migration 0018_media_descriptions not applied?"
+fi
+if [[ "$(db_value "select count(*) from information_schema.tables where table_name = 'ai_embeddings'")" == "1" ]]; then
+  pass "the search vectors table exists (migration 0019)"
+else
+  fail "ai_embeddings missing — migration 0019_embeddings not applied?"
+fi
 check "the assistant's search and tokenizer load in the api container" \
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T api \
   node -e "Promise.all([import('minisearch'), import('js-tiktoken/lite'), import('js-tiktoken/ranks/o200k_base')]).then(() => process.exit(0), () => process.exit(1))"

@@ -81,6 +81,41 @@ export function fixtureCorpus(config: AskConfig = fixtureConfig()): AskCorpus {
   return assembleCorpus(FIXTURE_BASE, DEFAULT_SETTINGS, [], config);
 }
 
+const ATLAS = FIXTURE_BASE.projects[0]!;
+
+/** The fixture with a second project, for answers that span two (plan phase 20's escalation). */
+export const FIXTURE_TWO_PROJECTS: Corpus = {
+  ...FIXTURE_BASE,
+  key: "en:1|de:2|two-projects",
+  documents: [
+    ...FIXTURE_BASE.documents,
+    {
+      id: "project:borealis@en",
+      kind: "project",
+      locale: "en",
+      title: "Borealis",
+      url: "/en/work/borealis",
+      text: "Borealis — analytics pipeline\nStack: Kafka, Snowflake",
+    },
+  ],
+  projects: [
+    ...FIXTURE_BASE.projects,
+    {
+      ...ATLAS,
+      id: "project:borealis@en",
+      slug: "borealis",
+      name: "Borealis",
+      descriptor: "analytics pipeline",
+      stack: ["Kafka", "Snowflake"],
+      url: "/en/work/borealis",
+    },
+  ],
+};
+
+export function twoProjectCorpus(config: AskConfig = fixtureConfig()): AskCorpus {
+  return assembleCorpus(FIXTURE_TWO_PROJECTS, DEFAULT_SETTINGS, [], config);
+}
+
 /** The UI message stream as parsed chunks. */
 export async function readUiChunks(res: Response): Promise<Record<string, unknown>[]> {
   const text = await res.text();
@@ -105,10 +140,14 @@ export async function eventually<T>(
   timeoutMs = 3_000,
 ): Promise<T> {
   const until = Date.now() + timeoutMs;
-  for (;;) {
+  const poll = async (): Promise<T> => {
     const value = await read();
     if (value !== undefined) return value;
     if (Date.now() > until) throw new Error("timed out waiting");
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 25);
+    });
+    return poll();
+  };
+  return poll();
 }

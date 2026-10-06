@@ -1,11 +1,11 @@
 import { zValidator } from "@hono/zod-validator";
 import { createUIMessageStreamResponse, generateText, Output, type ModelMessage } from "ai";
-import { and, asc, desc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, notInArray, sql, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import { PublicationError } from "../content/publish.js";
-import { LOCALES } from "../content/schema.js";
+import { LOCALES, type Locale } from "../content/schema.js";
 import { getDb } from "../db/client.js";
 import {
   aiFaq,
@@ -22,8 +22,10 @@ import {
 import { streamAnswer } from "./agent.js";
 import { altImage } from "./alt-image.js";
 import { audit, countOpenAlerts, readDemotions } from "./audit.js";
-import { NOT_IN_PORTFOLIO } from "./answer-patterns.js";
+import { OUTCOME_COLUMNS, UNKNOWN_ANSWER } from "./outcome-rows.js";
 import type { AskConfig } from "./config.js";
+import { largestCore } from "./corpus/index.js";
+import { embeddingStatus } from "./embeddings.js";
 import {
   askChain,
   askConfig,
@@ -81,6 +83,8 @@ import { claimRequestEval, releaseRequestEval } from "./runs/runner.js";
 import { activeRuns } from "./runs/store.js";
 import { invalidateAssistantCache, readAiSettings, readFaq, type AiSettings } from "./settings.js";
 import { countTokens } from "./tokens.js";
+import { perceptionRouter } from "./perception-routes.js";
+import { routerReportRouter } from "./router-routes.js";
 import { trustRouter } from "./trust-routes.js";
 import { recordUsage } from "./usage.js";
 
@@ -219,7 +223,9 @@ const merged = (
 export function fenceChanges(before: AiSettings, after: AiSettings): string[] {
   const changes: string[] = [];
   const note = (key: string, was: unknown, now: unknown) => {
-    if (JSON.stringify(was) !== JSON.stringify(now)) changes.push(`${key} ${was} → ${now}`);
+    const before = JSON.stringify(was);
+    const after = JSON.stringify(now);
+    if (before !== after) changes.push(`${key} ${before} → ${after}`);
   };
   note("enabled", before.enabled, after.enabled);
   note("dailyBudgetUsd", before.dailyBudgetUsd, after.dailyBudgetUsd);
@@ -334,18 +340,27 @@ adminAskRouter.get("/assistant/health", async (c) => {
   let corpus: {
     key: string;
     documents: Record<string, number>;
+    /** The larger reading locale's core, as before per-locale cores (an older admin reads these). */
     coreChars: number;
     coreTokens: number;
+    byLocale: Record<Locale, { chars: number; tokens: number }>;
+    /** Hybrid search (plan phase 18): on, the model, chunks and how many have a vector. */
+    embeddings: Awaited<ReturnType<typeof embeddingStatus>>;
   } | null = null;
   try {
     const current = await askCorpus(config);
     const kinds: Record<string, number> = {};
     for (const d of current.documents) kinds[d.kind] = (kinds[d.kind] ?? 0) + 1;
+    const largest = largestCore(current);
     corpus = {
       key: current.key,
       documents: kinds,
-      coreChars: current.core.length,
-      coreTokens: current.coreTokens,
+      coreChars: largest.chars,
+      coreTokens: largest.tokens,
+      byLocale: Object.fromEntries(
+        LOCALES.map((l) => [l, { chars: current.core[l].length, tokens: current.coreTokens[l] }]),
+      ) as Record<Locale, { chars: number; tokens: number }>,
+      embeddings: await embeddingStatus(current, config),
     };
   } catch (error) {
     console.error("[ask] corpus unavailable for health", error);
@@ -374,28 +389,42 @@ adminAskRouter.get("/assistant/health", async (c) => {
   });
 });
 
-/** Gemini's own count of the prefix (free); the page shows the local estimate otherwise. */
+/**
+ * Gemini's own count of the prefix per reading locale (free); the page shows
+ * the local estimate otherwise. `totalTokens` and `estimate` are the English
+ * ones, as an older admin reads them.
+ */
 adminAskRouter.post("/assistant/corpus/count", async (c) => {
   const config = askConfig();
-  if (!config.gemini.apiKey) return c.json({ error: "no_gemini_key" }, 400);
+  const apiKey = config.gemini.apiKey;
+  if (!apiKey) return c.json({ error: "no_gemini_key" }, 400);
   const corpus = await askCorpus(config);
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:countTokens`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": config.gemini.apiKey },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: buildInstructions(corpus.core) }] }],
-      }),
-      signal: AbortSignal.timeout(10_000),
-    },
-  ).catch(() => null);
-  if (!res?.ok) return c.json({ error: "count_failed" }, 502);
-  const { totalTokens } = (await res.json()) as { totalTokens?: number };
+  const count = async (locale: Locale): Promise<number | null> => {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:countTokens`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: buildInstructions(corpus.core[locale]) }] }],
+        }),
+        signal: AbortSignal.timeout(10_000),
+      },
+    ).catch(() => null);
+    if (!res?.ok) return null;
+    const { totalTokens } = (await res.json()) as { totalTokens?: number };
+    return totalTokens ?? null;
+  };
+  const [en, de] = await Promise.all([count("en"), count("de")]);
+  if (en === null && de === null) return c.json({ error: "count_failed" }, 502);
   return c.json({
     model: config.gemini.model,
-    totalTokens: totalTokens ?? null,
-    estimate: corpus.coreTokens,
+    totalTokens: en,
+    estimate: corpus.coreTokens.en,
+    byLocale: {
+      en: { totalTokens: en, estimate: corpus.coreTokens.en },
+      de: { totalTokens: de, estimate: corpus.coreTokens.de },
+    },
   });
 });
 
@@ -492,11 +521,6 @@ adminAskRouter.get("/assistant/usage", async (c) => {
 
 /* ----------------------------------------------------------- conversations */
 
-/**
- * Answers that admit the portfolio does not say: the list worth turning into
- * FAQ entries. The same pattern the eval graders use (answer-patterns.ts).
- */
-const UNKNOWN_ANSWER = sql`(${aiMessages.answerExcerpt} ~* ${NOT_IN_PORTFOLIO})`;
 /** Answers any deterministic check flagged (checks.ts). */
 const FLAGGED = sql`jsonb_array_length(coalesce(${aiMessages.checks} -> 'flags', '[]'::jsonb)) > 0`;
 
@@ -688,20 +712,7 @@ adminAskRouter.get("/assistant/outcomes", async (c) => {
   const db = getDb();
 
   const rows: OutcomeRow[] = await db
-    .select({
-      id: aiMessages.id,
-      sessionHash: aiMessages.sessionHash,
-      createdAt: aiMessages.createdAt,
-      question: aiMessages.questionRedacted,
-      finishReason: aiMessages.finishReason,
-      usd: aiMessages.usd,
-      flags: sql<string[]>`coalesce(${aiMessages.checks} -> 'flags', '[]'::jsonb)`,
-      feedback: sql<1 | -1 | null>`${aiFeedback.value}`,
-      faithfulness: sql<number | null>`(${aiMessages.judge} ->> 'faithfulness')::float8`,
-      unknown: sql<boolean>`${UNKNOWN_ANSWER}`,
-      handoffOffered: sql<boolean>`${aiMessages.toolCalls} @> '["handoff_contact"]'::jsonb`,
-      handoffConfirmed: sql<boolean>`${aiMessages.handoffConfirmedAt} is not null`,
-    })
+    .select(OUTCOME_COLUMNS)
     .from(aiMessages)
     .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
     .where(and(eq(aiMessages.source, "terminal"), gte(aiMessages.createdAt, from)));
@@ -810,12 +821,28 @@ adminAskRouter.put(
         .where(eq(aiFaq.id, id))
         .returning({ id: aiFaq.id });
       if (!row) return false;
-      await tx.delete(aiFaqTranslations).where(eq(aiFaqTranslations.faqId, id));
-      const translations = LOCALES.flatMap((locale) => {
-        const t = input.translations[locale];
-        return t ? [{ faqId: id, locale, ...t }] : [];
-      });
-      await tx.insert(aiFaqTranslations).values(translations);
+      // A language left out goes; the others are written in place, and a translation's date
+      // moves only when its words do: it is the "as of" date the assistant gives (plan phase 19).
+      const kept = LOCALES.filter((locale) => input.translations[locale]);
+      await tx
+        .delete(aiFaqTranslations)
+        .where(and(eq(aiFaqTranslations.faqId, id), notInArray(aiFaqTranslations.locale, kept)));
+      await Promise.all(
+        kept.map((locale) => {
+          const t = input.translations[locale]!;
+          return tx
+            .insert(aiFaqTranslations)
+            .values({ faqId: id, locale, ...t })
+            .onConflictDoUpdate({
+              target: [aiFaqTranslations.faqId, aiFaqTranslations.locale],
+              set: {
+                question: t.question,
+                answer: t.answer,
+                updatedAt: sql`case when ${aiFaqTranslations.question} is distinct from excluded.question or ${aiFaqTranslations.answer} is distinct from excluded.answer then now() else ${aiFaqTranslations.updatedAt} end`,
+              },
+            });
+        }),
+      );
       return true;
     });
     if (!found) return c.json({ error: "not_found" }, 404);
@@ -975,6 +1002,8 @@ adminAskRouter.post("/assistant/playground", async (c) => {
   });
   const chain = askChain(config, route.route);
   if (!chain.length) return c.json({ error: "assistant_off" }, 503);
+  // As for visitors: an answer routed lite may move up to the deep chain (plan phase 20).
+  const escalation = state.deepAllowed ? () => askChain(config, "deep") : undefined;
 
   const { stream } = streamAnswer({
     messages: history.messages,
@@ -988,8 +1017,10 @@ adminAskRouter.post("/assistant/playground", async (c) => {
     corpus,
     config,
     chain,
+    escalation,
     abortSignal: c.req.raw.signal,
     droppedAnswers: history.droppedAnswers,
+    window: history.window,
   });
   return createUIMessageStreamResponse({
     stream,
@@ -1007,6 +1038,12 @@ adminAskRouter.route("/assistant/eval-cases", evalCasesRouter);
 
 /** Who may do what, what is demoted, the alerts and the audit log (plan phase 14). */
 adminAskRouter.route("/assistant/trust", trustRouter);
+
+/** What the assistant reads and how it uses it, and the corpus tiers (plan phase 16). */
+adminAskRouter.route("/assistant/perception", perceptionRouter);
+
+/** How answers were routed, and the false-simple rate (plan phase 20). */
+adminAskRouter.route("/assistant/router", routerReportRouter);
 
 /**
  * The judges and how far the one on visitor answers agrees with reviewers
@@ -1109,12 +1146,19 @@ const copilotInput = z.discriminatedUnion("task", [
     mediaId: z.uuid(),
     locale: z.enum(["en", "de"]),
   }),
+  z.object({
+    task: z.literal("describe"),
+    mediaId: z.uuid(),
+    locale: z.enum(["en", "de"]),
+  }),
 ]);
 
 const LANGUAGE = { en: "English", de: "German" } as const;
 
 /** Alt text a screen reader reads in one breath; the field itself takes 300. */
 const ALT_MAX = 150;
+/** An image description for the assistant (plan phase 17); the field takes 2,000. */
+const DESCRIBE_MAX = 1_200;
 
 /** One copilot task as a model request: what to tell the model, what to show it, the cap. */
 interface CopilotRequest {
@@ -1125,11 +1169,42 @@ interface CopilotRequest {
   accepts?: (entry: ModelEntry) => boolean;
 }
 
+type CopilotResult = CopilotRequest | { answer: unknown; status: 200 | 400 | 404 };
+
+/** Alt or describe: load the image, or the same not-found / not-an-image refusal. */
+async function visionCopilot(
+  mediaId: string,
+  instructions: string,
+  maxLength: number,
+): Promise<CopilotResult> {
+  const picture = await altImage(mediaId);
+  if (!picture.ok) {
+    return {
+      answer: { error: picture.error },
+      status: picture.error === "not_found" ? 404 : 400,
+    };
+  }
+  return {
+    instructions,
+    prompt: [
+      {
+        role: "user",
+        content: [
+          { type: "file", data: picture.image, mediaType: picture.mediaType },
+          { type: "text", text: `The file is called "${picture.name}".` },
+        ],
+      },
+    ],
+    maxLength,
+    accepts: (entry) => entry.provider === "gemini",
+  };
+}
+
 /** The request for a task, or the answer when no model is needed (or the input is unusable). */
 async function copilotRequest(
   input: z.infer<typeof copilotInput>,
   config: AskConfig,
-): Promise<CopilotRequest | { answer: unknown; status: 200 | 400 | 404 }> {
+): Promise<CopilotResult> {
   switch (input.task) {
     case "translate":
       if (input.from === input.to) return { answer: { text: input.text }, status: 200 };
@@ -1154,33 +1229,25 @@ async function copilotRequest(
     case "faq-answer": {
       const corpus = await askCorpus(config);
       return {
-        instructions: `Draft an answer in ${LANGUAGE[input.locale]} to a question visitors ask about Alireza Rastineh, using only the portfolio documents below. Third person, at most 80 words. If the documents do not answer it, write exactly: NO_ANSWER\n\n# Portfolio documents\n\n${corpus.core}`,
+        // The core an answer in that language reads (corpus/render.ts).
+        instructions: `Draft an answer in ${LANGUAGE[input.locale]} to a question visitors ask about Alireza Rastineh, using only the portfolio documents below. Third person, at most 80 words. If the documents do not answer it, write exactly: NO_ANSWER\n\n# Portfolio documents\n\n${corpus.core[input.locale]}`,
         prompt: input.question,
       };
     }
-    case "alt": {
-      const picture = await altImage(input.mediaId);
-      if (!picture.ok) {
-        return {
-          answer: { error: picture.error },
-          status: picture.error === "not_found" ? 404 : 400,
-        };
-      }
-      return {
-        instructions: `Write the alt text in ${LANGUAGE[input.locale]} for this image on a senior AI / full-stack engineer's portfolio: what it shows that a reader who cannot see it needs, in one sentence of at most ${ALT_MAX} characters. Name the product, diagram or screen if it is clear; no "image of", no quotes, no guessing at text you cannot read. Return only the alt text.`,
-        prompt: [
-          {
-            role: "user",
-            content: [
-              { type: "file", data: picture.image, mediaType: picture.mediaType },
-              { type: "text", text: `The file is called "${picture.name}".` },
-            ],
-          },
-        ],
-        maxLength: ALT_MAX,
-        accepts: (entry) => entry.provider === "gemini",
-      };
-    }
+    case "alt":
+      return visionCopilot(
+        input.mediaId,
+        `Write the alt text in ${LANGUAGE[input.locale]} for this image on a senior AI / full-stack engineer's portfolio: what it shows that a reader who cannot see it needs, in one sentence of at most ${ALT_MAX} characters. Name the product, diagram or screen if it is clear; no "image of", no quotes, no guessing at text you cannot read. Return only the alt text.`,
+        ALT_MAX,
+      );
+    case "describe":
+      // A diagram needs its relations spelled out: the representation that keeps
+      // what the questions need (plan phase 17, multi-modal fusion).
+      return visionCopilot(
+        input.mediaId,
+        `Describe this image from a senior AI / full-stack engineer's portfolio for an assistant that answers questions about it but cannot see it. Write in ${LANGUAGE[input.locale]}, plain text, at most ${DESCRIBE_MAX} characters. A diagram: name its parts, then each connection on its own line as "A → B: what passes between them". A screenshot or a chart: what it is, and the facts and numbers it shows. Only what you can see or read; never guess at a label or a number you cannot read. Return only the description.`,
+        DESCRIBE_MAX,
+      );
   }
 }
 

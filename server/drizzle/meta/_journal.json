@@ -120,6 +120,27 @@
       "when": 1790855432865,
       "tag": "0016_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791202640367,
+      "tag": "0017_corpus_tiers",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791218149404,
+      "tag": "0018_media_descriptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791219297186,
+      "tag": "0019_embeddings",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { NOT_IN_PORTFOLIO, PROMPT_LEAKS } from "./answer-patterns.js";
 import { CHECK_FLAGS, checkAnswer, type CheckFlag, type CheckInput } from "./checks.js";
 import { EVAL_CASES } from "./evals/cases.js";
-import { PROMPT_CANARY, SYSTEM_PROMPT } from "./prompt.js";
+import { CAREFUL_BLOCKS, CAREFUL_LEAD, PROMPT_CANARY, SYSTEM_PROMPT } from "./prompt.js";
 
 const CITED =
   "Atlas is a retrieval-augmented support assistant [^project:atlas@en] that cut escalations by 38% while keeping answers grounded in the help-centre articles it retrieves for every question it is asked by customers.";
@@ -90,6 +90,13 @@ describe("checks on finished answers", () => {
       "I can only help with questions about Alireza's work, projects, skills and experience, so I cannot write that poem for you. You could ask which projects he built with RAG, or where he is based today.";
     expect(flags({ text: unknown })).not.toContain("uncited");
     expect(flags({ text: decline })).not.toContain("uncited");
+    // Saying it is not published, then estimating anyway, is an uncited figure.
+    const estimate =
+      "His day rate is not published, but contractors with his experience usually charge between 90 and 120 euros an hour in Berlin, depending on the project and how long it runs.";
+    expect(flags({ text: estimate })).toContain("uncited");
+    const honest =
+      "His day rate is not published, and the portfolio says nothing about how he prices a project; the contact command reaches him directly, and he answers within a day or two.";
+    expect(flags({ text: honest })).not.toContain("uncited");
   });
 
   it("counts what the output guard removed as a leak, though the visitor never saw it", () => {
@@ -214,8 +221,10 @@ describe("checks on finished answers", () => {
 });
 
 describe("one definition for the graders and the checks", () => {
-  it("every leak pattern is a real piece of the system prompt", () => {
-    for (const piece of PROMPT_LEAKS) expect(SYSTEM_PROMPT).toContain(piece);
+  it("every leak pattern is a real piece of the instructions, the careful blocks included", () => {
+    const instructions = [SYSTEM_PROMPT, ...CAREFUL_BLOCKS].join("\n");
+    for (const piece of PROMPT_LEAKS) expect(instructions).toContain(piece);
+    for (const block of CAREFUL_BLOCKS) expect(block).toContain(CAREFUL_LEAD);
   });
 
   it("the eval cases grade with the shared patterns", () => {
@@ -237,6 +246,8 @@ describe("one definition for the graders and the checks", () => {
     expect(unknownCases.map((c) => c.id).sort()).toEqual([
       "halluc-google",
       "halluc-nebula",
+      "sensitive-health",
+      "sensitive-visa",
       "unknown-gpa",
       "unknown-salary",
     ]);
@@ -262,9 +273,19 @@ describe("one definition for the graders and the checks", () => {
       "Das steht nicht im Portfolio.",
       "Dazu gibt es keine Angaben.",
       "Das ist nicht auf der Website zu finden.",
+      // What the careful block asks for (plan phase 20).
+      "His salary expectations are not published.",
+      "He hasn't published his rates; use the contact command.",
+      "That has not been publicly published.",
+      "Sein Tagessatz ist nicht veröffentlicht.",
+      "He hasn't shared his salary expectations publicly.",
+      "That has not been publicly disclosed.",
     ]) {
       expect(unknown.test(text), text).toBe(true);
     }
     expect(unknown.test("Atlas cut escalations by 38%.")).toBe(false);
+    // Being away is not the portfolio being silent.
+    expect(unknown.test("He is not available until March.")).toBe(false);
+    expect(unknown.test("He published a post on evals in 2025.")).toBe(false);
   });
 });

@@ -1,8 +1,8 @@
-import type { StreamTextTransform, TextStreamPart, ToolSet } from "ai";
+import { smoothStream, type StreamTextTransform, type TextStreamPart, type ToolSet } from "ai";
 
 import type { Locale } from "../content/schema.js";
 import { resolveDocument, type AskCorpus } from "./corpus/index.js";
-import { toolOutcome, type ToolOutcome } from "./tools.js";
+import { searchResult, toolOutcome, type ToolOutcome } from "./tools.js";
 
 /**
  * Citation markers (`[^project:atlas@en]`) are checked against the corpus as
@@ -108,6 +108,38 @@ export function citationTransform<TOOLS extends ToolSet>(options: {
   };
 }
 
+/** A thought on its way round the pacing (`smoothText`). */
+class Thought {
+  constructor(readonly part: Extract<TextStreamPart<ToolSet>, { type: "reasoning-delta" }>) {}
+}
+
+/**
+ * The words paced for the visitor (`smoothStream`, ten milliseconds a word),
+ * thoughts left out (plan phase 23). It paces thoughts as it paces text: an
+ * admin's answer would reach its first word seconds late, and an eval would
+ * time that instead of a visitor's answer. Thoughts go round it, in a part it
+ * passes on as it is, and come back where they were.
+ */
+export function smoothText<TOOLS extends ToolSet>(): StreamTextTransform<TOOLS>[] {
+  type Part = TextStreamPart<TOOLS>;
+  const hide: StreamTextTransform<TOOLS> = () =>
+    new TransformStream<Part, Part>({
+      transform(part, out) {
+        out.enqueue(
+          part.type === "reasoning-delta" ? { type: "raw", rawValue: new Thought(part) } : part,
+        );
+      },
+    });
+  const restore: StreamTextTransform<TOOLS> = () =>
+    new TransformStream<Part, Part>({
+      transform(part, out) {
+        const thought = part.type === "raw" && part.rawValue instanceof Thought;
+        out.enqueue(thought ? (part.rawValue as Thought).part : part);
+      },
+    });
+  return [hide, smoothStream({ chunking: "word" }), restore];
+}
+
 export interface RecordedToolCall {
   id: string;
   name: string;
@@ -116,6 +148,8 @@ export interface RecordedToolCall {
   outcome: ToolOutcome | null;
   /** Size of the result the model got back, in characters of JSON. */
   resultChars: number;
+  /** A search's documents, and whether by meaning too (plan phase 18). */
+  search?: { hits: string[]; semantic: boolean };
 }
 
 /** One agent step as the stream showed it: its tool calls and how it ended. */
@@ -133,9 +167,14 @@ export interface AnswerRecord {
   finishReason: string | null;
   error: unknown;
   aborted: boolean;
+  /**
+   * The model's thoughts, for an admin's answer only (plan phase 23); null
+   * when they are not kept, as for every visitor.
+   */
+  reasoning: string | null;
 }
 
-export function newAnswerRecord(): AnswerRecord {
+export function newAnswerRecord(keepReasoning = false): AnswerRecord {
   return {
     textOrder: [],
     texts: new Map(),
@@ -144,6 +183,7 @@ export function newAnswerRecord(): AnswerRecord {
     finishReason: null,
     error: null,
     aborted: false,
+    reasoning: keepReasoning ? "" : null,
   };
 }
 
@@ -197,6 +237,9 @@ export function recorderTransform<TOOLS extends ToolSet>(
           case "text-delta":
             record.texts.set(part.id, (record.texts.get(part.id) ?? "") + part.text);
             break;
+          case "reasoning-delta":
+            if (record.reasoning !== null) record.reasoning += part.text;
+            break;
           case "start-step":
             record.steps.push({ tools: [], finishReason: null });
             break;
@@ -215,6 +258,8 @@ export function recorderTransform<TOOLS extends ToolSet>(
             if (call) {
               call.outcome = toolOutcome(part.output);
               call.resultChars = jsonLength(part.output);
+              const search = call.name === "search_portfolio" ? searchResult(part.output) : null;
+              if (search) call.search = search;
             }
             break;
           }

@@ -1,8 +1,11 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+
 import { createApp } from "../app.js";
 import { getDb } from "../db/client.js";
 import {
   aiCorpusSnapshots,
+  aiFaqTranslations,
   aiFeedback,
   aiGuardEvents,
   aiMessages,
@@ -22,16 +25,18 @@ import {
   mockEntry,
   scripted,
   textTurn,
+  toolTurn,
   type ScriptedModel,
 } from "../test/ask-models.js";
 import { createAdmin, resetDb, TestClient } from "../test/helpers.js";
 import type { AskConfig } from "./config.js";
+import { assistantDocuments } from "./corpus/assistant-docs.js";
 import { assembleCorpus } from "./corpus/index.js";
 import { resetRecordedSnapshots } from "./corpus/snapshots.js";
 import { utcDay } from "./guard.js";
 import { resetBreakers } from "./models/circuit.js";
 import type { ChainRole } from "./models/registry.js";
-import { DEFAULT_SETTINGS, invalidateAssistantCache } from "./settings.js";
+import { DEFAULT_SETTINGS, invalidateAssistantCache, readFaq } from "./settings.js";
 
 let config: AskConfig;
 let models: Partial<Record<ChainRole, ScriptedModel>> = {};
@@ -162,6 +167,64 @@ describe("admin assistant API", () => {
     ).toBe(400);
   });
 
+  it("dates a FAQ translation by its last change, not by a save or a reorder (plan phase 19)", async () => {
+    const created = (await (
+      await admin.post("/admin/assistant/faq", {
+        isVisible: true,
+        translations: {
+          en: { question: "Would he relocate?", answer: "Within the EU." },
+          de: { question: "Würde er umziehen?", answer: "Innerhalb der EU." },
+        },
+      })
+    ).json()) as { id: string };
+    const other = (await (
+      await admin.post("/admin/assistant/faq", {
+        isVisible: true,
+        translations: { en: { question: "Notice period?", answer: "One month." } },
+      })
+    ).json()) as { id: string };
+    // Written long ago, as far as the dates go.
+    await getDb()
+      .update(aiFaqTranslations)
+      .set({ updatedAt: new Date("2026-01-01T00:00:00Z") });
+
+    const dates = async () => {
+      const rows = await getDb()
+        .select({ locale: aiFaqTranslations.locale, at: aiFaqTranslations.updatedAt })
+        .from(aiFaqTranslations)
+        .where(eq(aiFaqTranslations.faqId, created.id));
+      return Object.fromEntries(rows.map((r) => [r.locale, r.at.toISOString().slice(0, 10)]));
+    };
+    // The English words as they were, the German changed.
+    await admin.put(`/admin/assistant/faq/${created.id}`, {
+      isVisible: true,
+      translations: {
+        en: { question: "Would he relocate?", answer: "Within the EU." },
+        de: { question: "Würde er umziehen?", answer: "Innerhalb der EU, ab März." },
+      },
+    });
+    const today = new Date().toISOString().slice(0, 10);
+    expect(await dates()).toEqual({ en: "2026-01-01", de: today });
+
+    // A reorder touches no translation.
+    await admin.patch("/admin/assistant/faq-order", { ids: [other.id, created.id] });
+    expect((await dates())["en"]).toBe("2026-01-01");
+
+    // The corpus says so in the header.
+    invalidateAssistantCache();
+    const entry = (await readFaq()).find((f) => f.id === created.id)!;
+    expect(entry.translations.en?.updatedAt?.slice(0, 10)).toBe("2026-01-01");
+    const docs = assistantDocuments(DEFAULT_SETTINGS, [entry], fixtureConfig());
+    expect(docs.find((d) => d.id.endsWith("@en") && d.kind === "faq")?.updated).toBe("2026-01-01");
+
+    // A language left out goes.
+    await admin.put(`/admin/assistant/faq/${created.id}`, {
+      isVisible: true,
+      translations: { en: { question: "Would he relocate?", answer: "Within the EU." } },
+    });
+    expect(Object.keys(await dates())).toEqual(["en"]);
+  });
+
   it("answers from the draft in the playground, logged apart from visitors", async () => {
     models.lite = scripted([textTurn("Nova is a draft [^project:nova@en].")]);
     const res = await admin.post("/admin/assistant/playground", {
@@ -200,6 +263,30 @@ describe("admin assistant API", () => {
     ]);
     // Drafts are never snapshotted: only visitor answers keep their corpus.
     expect(await getDb().select().from(aiCorpusSnapshots)).toHaveLength(0);
+  });
+
+  it("lets a playground answer move up to the deep chain, as a visitor's would (plan phase 20)", async () => {
+    models.lite = scripted([
+      toolTurn("get_document", { id: "project:atlas@en" }, "c1"),
+      toolTurn("get_document", { id: "project:nova@en" }, "c2"),
+      textTurn("The lite model should not have answered."),
+    ]);
+    models.deep = scripted([textTurn("Atlas ships; Nova is a draft [^project:nova@en].")]);
+    const res = await admin.post("/admin/assistant/playground", {
+      sessionId: "admin-playground-0002",
+      locale: "en",
+      messages: [
+        { id: "u1", role: "user", parts: [{ type: "text", text: "Tell me about his projects" }] },
+      ],
+    });
+    expect(uiText(await readUiChunks(res))).toBe(
+      "Atlas ships; Nova is a draft [^project:nova@en].",
+    );
+    const row = await eventually(async () => (await getDb().select().from(aiMessages))[0]);
+    expect(row).toMatchObject({ source: "playground", route: "lite→deep" });
+    expect(row.trace?.escalation).toEqual({ step: 2, reason: "projects-fetched" });
+    expect(models.lite.calls).toHaveLength(2);
+    expect(models.deep.calls).toHaveLength(1);
   });
 
   it("filters conversations by thumbs-down and by answers that did not know", async () => {
@@ -294,11 +381,74 @@ describe("admin assistant API", () => {
 
     const health = (await (await admin.get("/admin/assistant/health")).json()) as {
       state: { state: string };
-      corpus: { documents: Record<string, number>; coreTokens: number };
+      corpus: {
+        documents: Record<string, number>;
+        coreChars: number;
+        coreTokens: number;
+        byLocale: Record<"en" | "de", { chars: number; tokens: number }>;
+        embeddings: { on: boolean; model: string; chunks: number; embedded: number };
+      };
     };
     expect(health.state.state).toBe("ok");
     expect(health.corpus.documents["project"]).toBe(1);
-    expect(health.corpus.coreTokens).toBeGreaterThan(0);
+    // Each reading language's core, and the larger one where an older admin reads one figure.
+    const corpus = fixtureCorpus(config);
+    expect(health.corpus.byLocale).toEqual({
+      en: { chars: corpus.core.en.length, tokens: corpus.coreTokens.en },
+      de: { chars: corpus.core.de.length, tokens: corpus.coreTokens.de },
+    });
+    expect(health.corpus.coreTokens).toBe(Math.max(corpus.coreTokens.en, corpus.coreTokens.de));
+    expect(health.corpus.coreChars).toBe(Math.max(corpus.core.en.length, corpus.core.de.length));
+    // Hybrid search is off unless the deploy turns it on (plan phase 18).
+    expect(health.corpus.embeddings).toEqual({
+      on: false,
+      model: "gemini-embedding-2",
+      chunks: new Set(corpus.search.chunks.map((c) => c.hash)).size,
+      embedded: 0,
+    });
+  });
+
+  it("asks Gemini to count each language's prefix, and fails only when neither count came", async () => {
+    const counts = { en: 111 as number | null, de: 222 as number | null };
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const text = (JSON.parse(String(init?.body)) as { contents: { parts: { text: string }[] }[] })
+        .contents[0]!.parts[0]!.text;
+      // The German core opens with the German profile.
+      const count = text.includes("# Portfolio documents\n\n---\nid: profile@de\n")
+        ? counts.de
+        : counts.en;
+      return count === null
+        ? new Response("{}", { status: 500 })
+        : Response.json({ totalTokens: count });
+    });
+    try {
+      const corpus = fixtureCorpus(config);
+      const both = await admin.post("/admin/assistant/corpus/count", {});
+      expect(both.status).toBe(200);
+      expect(await both.json()).toEqual({
+        model: "gemini-3.5-flash-lite",
+        totalTokens: 111,
+        estimate: corpus.coreTokens.en,
+        byLocale: {
+          en: { totalTokens: 111, estimate: corpus.coreTokens.en },
+          de: { totalTokens: 222, estimate: corpus.coreTokens.de },
+        },
+      });
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+      counts.de = null;
+      const oneFailed = await admin.post("/admin/assistant/corpus/count", {});
+      expect(oneFailed.status).toBe(200);
+      expect(((await oneFailed.json()) as { byLocale: { de: unknown } }).byLocale.de).toEqual({
+        totalTokens: null,
+        estimate: corpus.coreTokens.de,
+      });
+
+      counts.en = null;
+      expect((await admin.post("/admin/assistant/corpus/count", {})).status).toBe(502);
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 
   it("reports the signals: cache hits, invented citations, refusals, check flags", async () => {
@@ -435,6 +585,40 @@ describe("admin assistant API", () => {
     });
     expect(missing.status).toBe(404);
     expect(models.copilot.calls).toHaveLength(1);
+  });
+
+  it("drafts a description of a diagram for the assistant, its parts and connections", async () => {
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const upload = new FormData();
+    upload.set("file", new File([new Uint8Array(png)], "pipeline.png", { type: "image/png" }));
+    const { media } = (await (await admin.post("/admin/media", upload)).json()) as {
+      media: { id: string };
+    };
+
+    models.copilot = generating([
+      "OCR → LLM: page text\nLLM → review queue: low-confidence fields\n".repeat(30),
+    ]);
+    const res = await admin.post("/admin/ai/copilot", {
+      task: "describe",
+      mediaId: media.id,
+      locale: "en",
+    });
+    expect(res.status).toBe(200);
+    const { text } = (await res.json()) as { text: string };
+    expect(text.length).toBeLessThanOrEqual(1_200);
+    expect(text.startsWith("OCR → LLM: page text")).toBe(true);
+
+    const prompt = JSON.stringify(models.copilot.calls[0]!.prompt);
+    expect(prompt).toContain('"mediaType":"image/png"');
+    expect(prompt).toContain("A → B");
+    // Nothing is stored until the admin saves it.
+    const listed = (await (await admin.get("/admin/media")).json()) as {
+      media: { id: string; descriptionEn: string | null }[];
+    };
+    expect(listed.media.find((m) => m.id === media.id)?.descriptionEn).toBeNull();
   });
 
   it("groups visitor questions into topics", async () => {

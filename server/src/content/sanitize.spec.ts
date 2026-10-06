@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { plainTextToRichText, sanitizeRichText } from "./sanitize.js";
+import {
+  htmlToText,
+  imageMarker,
+  mediaImages,
+  plainTextToRichText,
+  sanitizeRichText,
+} from "./sanitize.js";
 
 describe("sanitizeRichText", () => {
   it("keeps the formatting the editor can produce", () => {
@@ -90,5 +96,41 @@ describe("plainTextToRichText", () => {
   it("returns an empty string for empty input", () => {
     expect(plainTextToRichText("")).toBe("");
     expect(plainTextToRichText("   \n  ")).toBe("");
+  });
+});
+
+describe("images in text (plan phase 17)", () => {
+  const body =
+    '<p>How it works:</p><picture><source srcset="/media/a-480w.webp 480w" /><img src="/media/a.png" alt="AT&amp;T  [ops] diagram" /></picture><p><img src="/media/b.png"></p>';
+
+  it("drop out of plain text, or stay as markers where they stood", () => {
+    expect(htmlToText(body)).toBe("How it works:");
+    expect(htmlToText(body, { images: true })).toBe(
+      "How it works:\n[image: AT&T (ops) diagram]\n[image]",
+    );
+  });
+
+  it("are listed with their files and decoded alt, in order; other sources are not media", () => {
+    expect(mediaImages(`${body}<img src="https://x.test/c.png" alt="c">`)).toEqual([
+      { file: "a.png", alt: "AT&T  [ops] diagram" },
+      { file: "b.png", alt: "" },
+    ]);
+  });
+
+  it("read the same marker from a listed alt as the text shows", () => {
+    const [first] = mediaImages(body);
+    expect(htmlToText(body, { images: true })).toContain(imageMarker(first!.alt));
+    expect(imageMarker("  ")).toBe("[image]");
+  });
+
+  it("keep an alt that reads like a tag, or quotes, word for word", () => {
+    const tagged =
+      '<p>The terminal:</p><img src="/media/t.png" alt="The &lt;AskTerminal&gt; component, &quot;ask&quot; &amp; answer">';
+    const [picture] = mediaImages(tagged);
+    expect(picture!.alt).toBe('The <AskTerminal> component, "ask" & answer');
+    expect(htmlToText(tagged, { images: true })).toBe(
+      'The terminal:\n[image: The <AskTerminal> component, "ask" & answer]',
+    );
+    expect(htmlToText(tagged, { images: true })).toContain(imageMarker(picture!.alt));
   });
 });

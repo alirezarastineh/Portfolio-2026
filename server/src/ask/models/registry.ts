@@ -26,6 +26,12 @@ export interface ModelEntry extends ModelCaps {
   providerOptions?: SharedV4ProviderOptions;
   /** False once the boot check found the model missing. */
   available: boolean;
+  /**
+   * Asked for its thoughts for the admin (plan phase 23, `withThoughts`): they
+   * are not the answer starting, so the failover waits for its first text as
+   * it would for a visitor (models/fallback.ts).
+   */
+  thoughts?: true;
 }
 
 /** Read from each provider's model list on 2026-09-22; the boot check refreshes them. */
@@ -110,7 +116,7 @@ function googleOptions(id: string, thinking: Thinking | null): SharedV4ProviderO
         category,
         threshold: "BLOCK_MEDIUM_AND_ABOVE",
       })),
-      // Gemma takes no thinking settings; thoughts are never sent to visitors.
+      // Gemma takes no thinking settings; thoughts only for the admin's answers (`withThoughts`).
       ...(thinking && id.startsWith("gemini-")
         ? { thinkingConfig: { thinkingLevel: thinking, includeThoughts: false } }
         : {}),
@@ -285,6 +291,45 @@ export function buildChain(config: AskConfig, role: ChainRole): ModelEntry[] {
 }
 
 /**
+ * The lookup tier (plan phase 20, router.ts): the chain's first model with
+ * thinking `minimal`, the rest as they are. A model without a thinking setting
+ * (Gemma, OpenRouter, a test's mock) is left alone.
+ */
+export function withMinimalThinking(chain: readonly ModelEntry[]): ModelEntry[] {
+  const [first, ...rest] = chain;
+  const google = first?.providerOptions?.["google"] as
+    { thinkingConfig?: Record<string, unknown> } | undefined;
+  if (!first || !google?.thinkingConfig) return [...chain];
+  const thinkingConfig = { ...google.thinkingConfig, thinkingLevel: "minimal" };
+  return [
+    {
+      ...first,
+      providerOptions: { ...first.providerOptions, google: { ...google, thinkingConfig } },
+    } as ModelEntry,
+    ...rest,
+  ];
+}
+
+/**
+ * The admin's answers (plan phase 23): every model with a thinking setting
+ * returns its thoughts too, for the playground to show and a failed eval case
+ * to keep. A visitor's chain never goes through here.
+ */
+export function withThoughts(chain: readonly ModelEntry[]): ModelEntry[] {
+  return chain.map((entry) => {
+    const google = entry.providerOptions?.["google"] as
+      { thinkingConfig?: Record<string, unknown> } | undefined;
+    if (!google?.thinkingConfig) return entry;
+    const thinkingConfig = { ...google.thinkingConfig, includeThoughts: true };
+    return {
+      ...entry,
+      providerOptions: { ...entry.providerOptions, google: { ...google, thinkingConfig } },
+      thoughts: true,
+    } as ModelEntry;
+  });
+}
+
+/**
  * One side of a pairwise eval: a route's configured chain (`lite`, `deep`),
  * or a model by id on its own, so the comparison is that model's alone (a new
  * release can be tried before it is configured). Null when its provider has
@@ -305,6 +350,65 @@ export function configuredModels(config: AskConfig): string[] {
   return [...ids];
 }
 
+async function checkGeminiModel(
+  id: string,
+  apiKey: string,
+  fetchImpl: typeof fetch,
+  signal: AbortSignal,
+): Promise<void> {
+  try {
+    const res = await fetchImpl(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(id)}`,
+      { headers: { "x-goog-api-key": apiKey }, signal },
+    );
+    if (res.status === 404) {
+      learned.set(id, { missing: true });
+      console.error(`[ask] model ${id} does not exist on the Gemini API; skipping it`);
+      return;
+    }
+    if (!res.ok) return;
+    const info = (await res.json()) as { inputTokenLimit?: number };
+    if (info.inputTokenLimit) learned.set(id, { contextWindow: info.inputTokenLimit });
+  } catch (error) {
+    console.warn(`[ask] could not check ${id}`, (error as Error).message);
+  }
+}
+
+async function checkOpenRouterModels(
+  ids: readonly string[],
+  config: AskConfig,
+  fetchImpl: typeof fetch,
+  signal: AbortSignal,
+): Promise<void> {
+  try {
+    const res = await fetchImpl(`${config.openrouter.baseURL.replace(/\/$/, "")}/models`, {
+      headers: { authorization: `Bearer ${config.openrouter.apiKey}` },
+      signal,
+    });
+    if (!res.ok) return;
+    const list = (await res.json()) as {
+      data?: { id: string; context_length?: number; supported_parameters?: string[] }[];
+    };
+    const byId = new Map((list.data ?? []).map((m) => [m.id, m]));
+    for (const id of ids) {
+      const info = byId.get(id);
+      if (!info) {
+        learned.set(id, { missing: true });
+        console.error(`[ask] model ${id} is not listed by OpenRouter; skipping it`);
+        continue;
+      }
+      const params = info.supported_parameters ?? [];
+      learned.set(id, {
+        ...(info.context_length ? { contextWindow: info.context_length } : {}),
+        tools: params.includes("tools"),
+        structuredOutputs: params.includes("structured_outputs"),
+      });
+    }
+  } catch (error) {
+    console.warn("[ask] could not check the OpenRouter models", (error as Error).message);
+  }
+}
+
 /**
  * Asks each provider whether the configured models exist and what they can
  * do. A missing or renamed model is logged and skipped from then on, never a
@@ -314,62 +418,23 @@ export async function checkModels(
   config: AskConfig,
   fetchImpl: typeof fetch = fetch,
 ): Promise<void> {
-  const ids = configuredModels(config);
+  // The search's embedding model too, when it is on (plan phase 18).
+  const ids = [
+    ...configuredModels(config),
+    ...(config.embeddings.enabled ? [config.embeddings.model] : []),
+  ];
   const signal = AbortSignal.timeout(10_000);
 
   const geminiIds = ids.filter((id) => providerOf(id) === "gemini");
   if (config.gemini.apiKey) {
     await Promise.all(
-      geminiIds.map(async (id) => {
-        try {
-          const res = await fetchImpl(
-            `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(id)}`,
-            { headers: { "x-goog-api-key": config.gemini.apiKey! }, signal },
-          );
-          if (res.status === 404) {
-            learned.set(id, { missing: true });
-            console.error(`[ask] model ${id} does not exist on the Gemini API; skipping it`);
-            return;
-          }
-          if (!res.ok) return;
-          const info = (await res.json()) as { inputTokenLimit?: number };
-          if (info.inputTokenLimit) learned.set(id, { contextWindow: info.inputTokenLimit });
-        } catch (error) {
-          console.warn(`[ask] could not check ${id}`, (error as Error).message);
-        }
-      }),
+      geminiIds.map((id) => checkGeminiModel(id, config.gemini.apiKey!, fetchImpl, signal)),
     );
   }
 
   const openrouterIds = ids.filter((id) => providerOf(id) === "openrouter");
   if (config.openrouter.apiKey && openrouterIds.length) {
-    try {
-      const res = await fetchImpl(`${config.openrouter.baseURL.replace(/\/$/, "")}/models`, {
-        headers: { authorization: `Bearer ${config.openrouter.apiKey}` },
-        signal,
-      });
-      if (!res.ok) return;
-      const list = (await res.json()) as {
-        data?: { id: string; context_length?: number; supported_parameters?: string[] }[];
-      };
-      const byId = new Map((list.data ?? []).map((m) => [m.id, m]));
-      for (const id of openrouterIds) {
-        const info = byId.get(id);
-        if (!info) {
-          learned.set(id, { missing: true });
-          console.error(`[ask] model ${id} is not listed by OpenRouter; skipping it`);
-          continue;
-        }
-        const params = info.supported_parameters ?? [];
-        learned.set(id, {
-          ...(info.context_length ? { contextWindow: info.context_length } : {}),
-          tools: params.includes("tools"),
-          structuredOutputs: params.includes("structured_outputs"),
-        });
-      }
-    } catch (error) {
-      console.warn("[ask] could not check the OpenRouter models", (error as Error).message);
-    }
+    await checkOpenRouterModels(openrouterIds, config, fetchImpl, signal);
   }
 }
 

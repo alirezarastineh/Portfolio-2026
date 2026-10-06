@@ -10,6 +10,7 @@ import {
   combineOrders,
   summarizePairwise,
   type PairChoice,
+  type PairOutcome,
   type PairwiseCaseResult,
   type PairwiseSide,
   type PairwiseSummary,
@@ -101,6 +102,12 @@ function side(answered: AnsweredCase): PairwiseSide {
   };
 }
 
+/** Who wins when an answer failed: the side that did not, or neither. */
+function forfeit(failedA: boolean, failedB: boolean): PairOutcome {
+  if (failedA && failedB) return "tie";
+  return failedA ? "b" : "a";
+}
+
 /** Transient failures a one-model side retries (each retry also waits for its pacing slot). */
 const SIDE_RETRIES = 3;
 
@@ -146,6 +153,24 @@ async function pairCase(
   });
   if (a.operationalFailure || b.operationalFailure) {
     return unavailable([`answer ${a.operationalFailure ? "A" : "B"} failed`]);
+  }
+  // A side whose answer failed on its own (not an outage) forfeits: no judge is paid to
+  // compare a broken answer, and the case counts for the other side.
+  const failedA = a.outcome.finishReason.startsWith("error");
+  const failedB = b.outcome.finishReason.startsWith("error");
+  if (failedA || failedB) {
+    const failed = [
+      failedA && `A (${a.outcome.finishReason})`,
+      failedB && `B (${b.outcome.finishReason})`,
+    ];
+    return {
+      ...base,
+      status: "judged",
+      verdicts: null,
+      outcome: forfeit(failedA, failedB),
+      reasons: [`forfeit: answer ${failed.filter(Boolean).join(" and ")} failed, not judged`],
+      usd: summarizeCalls(calls.slice(from)).usd,
+    };
   }
 
   const cited = [...new Set([...a.outcome.citedIds, ...b.outcome.citedIds])];

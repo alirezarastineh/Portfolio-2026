@@ -16,10 +16,12 @@ import { AssistantEvalsComponent } from "../../admin/assistant/assistant-evals.c
 import { AssistantFaqComponent } from "../../admin/assistant/assistant-faq.component";
 import { AssistantInsightsComponent } from "../../admin/assistant/assistant-insights.component";
 import { AssistantOutcomesComponent } from "../../admin/assistant/assistant-outcomes.component";
+import { AssistantPerceptionComponent } from "../../admin/assistant/assistant-perception.component";
 import { AssistantOverviewComponent } from "../../admin/assistant/assistant-overview.component";
 import { AssistantPairwiseComponent } from "../../admin/assistant/assistant-pairwise.component";
 import { AssistantPlaygroundComponent } from "../../admin/assistant/assistant-playground.component";
 import { AssistantReviewsComponent } from "../../admin/assistant/assistant-reviews.component";
+import { AssistantRoutingComponent } from "../../admin/assistant/assistant-routing.component";
 import { AssistantSettingsComponent } from "../../admin/assistant/assistant-settings.component";
 import { AssistantTrustComponent } from "../../admin/assistant/assistant-trust.component";
 
@@ -65,10 +67,12 @@ const TABS: { id: Tab; label: string }[] = [
     AssistantFaqComponent,
     AssistantInsightsComponent,
     AssistantOutcomesComponent,
+    AssistantPerceptionComponent,
     AssistantOverviewComponent,
     AssistantPairwiseComponent,
     AssistantPlaygroundComponent,
     AssistantReviewsComponent,
+    AssistantRoutingComponent,
     AssistantSettingsComponent,
     AssistantTrustComponent,
     BrnTabsContent,
@@ -111,6 +115,8 @@ const TABS: { id: Tab; label: string }[] = [
                       (toTrust)="select('trust')"
                     />
                     <app-assistant-outcomes />
+                    <app-assistant-perception />
+                    <app-assistant-routing />
                   </div>
                 }
                 @case ("settings") {

@@ -35,6 +35,12 @@ export interface AskConfig {
   copilotHistoryTurns: number;
   insightFallbackModels: string[];
   /**
+   * Hybrid search (plan phase 18): `SERVER_AI_EMBEDDINGS` turns it on for the
+   * deploy (the admin's `embeddings` switch must be on as well), with the
+   * Gemini embedding model, the vectors' size and the query's time limit.
+   */
+  embeddings: { enabled: boolean; model: string; dims: number; queryTimeoutMs: number };
+  /**
    * `SERVER_AI_JUDGE_MODELS`: who scores answers, first choice first, in the
    * order listed. Empty means the deep model, or the main one. Fixture answers
    * (evals, pairwise) may go to any of them; visitor answers (the calibration
@@ -163,6 +169,12 @@ export function parseAskConfig(): AskConfig {
       "gemini-3.5-flash-lite",
     copilotHistoryTurns: read("SERVER_AI_COPILOT_HISTORY_TURNS", positiveInt, 8, errors),
     insightFallbackModels: list(process.env.SERVER_AI_INSIGHT_FALLBACK_MODELS),
+    embeddings: {
+      enabled: read("SERVER_AI_EMBEDDINGS", flag, false, errors),
+      model: process.env.GEMINI_EMBEDDING_MODEL?.trim() || "gemini-embedding-2",
+      dims: 768,
+      queryTimeoutMs: read("SERVER_AI_EMBEDDING_TIMEOUT_MS", positiveInt, 400, errors),
+    },
     judgeModels: [...new Set(list(process.env.SERVER_AI_JUDGE_MODELS))],
     insightCacheTtlMs: seconds("SERVER_AI_INSIGHT_CACHE_TTL_SECONDS", 3600),
     maxInputTokens: read("SERVER_AI_MAX_INPUT_TOKENS", positiveInt, 120_000, errors),

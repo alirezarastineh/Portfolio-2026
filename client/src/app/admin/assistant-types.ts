@@ -182,8 +182,13 @@ export interface AssistantHealth {
   corpus: {
     key: string;
     documents: Record<string, number>;
+    /** The larger reading language's core. */
     coreChars: number;
     coreTokens: number;
+    /** Each reading language's core (plan phase 16). */
+    byLocale?: Record<"en" | "de", { chars: number; tokens: number }>;
+    /** Search by meaning (plan phase 18): on, the model, chunks and how many have a vector. */
+    embeddings?: { on: boolean; model: string; chunks: number; embedded: number };
   } | null;
 }
 
@@ -239,7 +244,16 @@ export interface Attempt {
   error?: string;
 }
 
-export type ToolOutcome = "ok" | "not_found" | "not_allowed" | "no_hits" | "error" | "cut-off";
+export type ToolOutcome =
+  | "ok"
+  | "not_found"
+  | "not_allowed"
+  | "no_hits"
+  | "error"
+  | "cut-off"
+  // Plan phase 21: a repeated call, and a fetch past the answer's envelope.
+  | "duplicate"
+  | "budget_exhausted";
 
 export interface TraceTool {
   name: string;
@@ -334,6 +348,8 @@ export interface EvalCaseResult {
   usd: number;
   judge: { faithfulness: number; helpfulness: number; unsupported: string[] } | null;
   attempts: Attempt[];
+  /** A failed case's thought summary, cut short (plan phase 23); never a visitor's. */
+  reasoning?: string;
 }
 
 export interface EvalSummary {
@@ -425,4 +441,6 @@ export type CopilotInput =
   | { task: "seo"; text: string; locale: Locale; maxLength?: number }
   | { task: "faq-answer"; question: string; locale: Locale }
   /** Alt text for an uploaded image, from the picture itself (a model that sees images). */
-  | { task: "alt"; mediaId: string; locale: Locale };
+  | { task: "alt"; mediaId: string; locale: Locale }
+  /** A diagram's or screenshot's parts and connections, for the assistant (plan phase 17). */
+  | { task: "describe"; mediaId: string; locale: Locale };

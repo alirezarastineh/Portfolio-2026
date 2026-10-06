@@ -35,15 +35,17 @@ export function productionJudging(
 
 export async function productionCli(
   config: AskConfig,
-  options: { judge: boolean },
+  options: { judge: boolean; deep?: boolean },
 ): Promise<number> {
   const { judge, chain, label } = productionJudging(config, options.judge);
-  console.log(`Running the production cases, each against its corpus snapshot, ${label}.\n`);
+  const on = options.deep ? ", on the deep chain" : "";
+  console.log(`Running the production cases, each against its corpus snapshot${on}, ${label}.\n`);
   const { planned, results, missing } = await runProductionSuite({
     config,
     chain,
     concurrency: 1,
     judge,
+    ...(options.deep ? { routing: { deep: true } } : {}),
     pacing: FREE_TIER_EVAL_PACING,
     rateLimitRetry: FREE_TIER_RATE_LIMIT_RETRY,
     stopOnUnavailable: true,

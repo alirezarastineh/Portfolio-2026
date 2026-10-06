@@ -3,9 +3,8 @@ import { sql } from "drizzle-orm";
 
 import { getDb } from "../../db/client.js";
 import { aiCorpusSnapshots } from "../../db/schema.js";
-import { countTokens } from "../tokens.js";
 import type { CorpusDocument, PostFacts, ProjectFacts } from "./build.js";
-import { renderCompact, renderCore, type AskCorpus } from "./index.js";
+import { largestCore, renderCorpus, type AskCorpus } from "./index.js";
 import { CorpusSearch } from "./search.js";
 
 /**
@@ -59,24 +58,26 @@ export async function recordSnapshot(corpus: AskCorpus): Promise<void> {
       documents: corpus.documents,
       projects: corpus.projects,
       posts: corpus.posts,
-      coreTokens: corpus.coreTokens,
+      // The larger reading locale's core: the column predates the per-locale cores.
+      coreTokens: largestCore(corpus).tokens,
     })
     .onConflictDoNothing();
   recorded.add(key);
 }
 
-/** The corpus a snapshot holds, rendered and indexed as the live one is. */
+/**
+ * The corpus a snapshot holds, rendered and indexed as the live one is. The
+ * tiers travel on the documents, so they replay as the answer saw them; the
+ * layout is today's, as the prompt is.
+ */
 export function askCorpusFromSnapshot(snapshot: CorpusSnapshot): AskCorpus {
-  const core = renderCore(snapshot.documents);
   return {
     key: snapshot.key,
     documents: snapshot.documents,
     projects: snapshot.projects,
     posts: snapshot.posts,
     byId: new Map(snapshot.documents.map((d) => [d.id, d])),
-    core,
-    compact: renderCompact(snapshot.documents),
-    coreTokens: countTokens(core),
+    ...renderCorpus(snapshot.documents),
     search: new CorpusSearch(snapshot.documents),
   };
 }

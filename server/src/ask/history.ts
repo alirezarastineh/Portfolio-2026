@@ -4,8 +4,9 @@ import { safeValidateUIMessages } from "ai";
 import { z } from "zod";
 
 import type { Locale } from "../content/schema.js";
+import { droppedQuestions, NOTE_TOPICS, TOPIC_CHARS, windowTopics } from "./history-window.js";
 import { visitorLanguage } from "./language.js";
-import { wrapVisitor } from "./prompt.js";
+import { windowNote, wrapVisitor } from "./prompt.js";
 import { countTokens } from "./tokens.js";
 
 /**
@@ -82,6 +83,8 @@ export type HistoryResult =
       /** The language the visitor writes in, when any of their messages shows it. */
       language: Locale | null;
       droppedAnswers: number;
+      /** The visitor's earlier questions the window no longer shows (plan phase 22). */
+      window: { dropped: number };
     }
   | { ok: false; error: "invalid_input" | "too_long" };
 
@@ -124,6 +127,19 @@ function replayTurns(
 
   return { turns, droppedAnswers };
 }
+
+/**
+ * The most the window note can take: its fixed words, and its topic words at
+ * a token a character, the worst a tokenizer does with letters.
+ */
+const NOTE_RESERVE =
+  countTokens(
+    `${windowNote(
+      999,
+      Array.from({ length: NOTE_TOPICS }, () => ""),
+    )}\n`,
+  ) +
+  NOTE_TOPICS * TOPIC_CHARS;
 
 function totalTokens(list: ModelMessage[]): number {
   return list.reduce(
@@ -176,10 +192,32 @@ export async function buildHistory(options: {
 
   const { turns, droppedAnswers } = replayTurns(incoming, options);
   const current: ModelMessage = { role: "user", content: wrapVisitor(question, options.locale) };
-  const kept = trimHistory(turns, current, options);
+  let kept = trimHistory(turns, current, options);
+  // A trim adds the window note (plan phase 22): the history keeps room for the longest one.
+  if (droppedQuestions(turns, kept).length) {
+    kept = trimHistory(turns, current, {
+      ...options,
+      maxInputTokens: options.maxInputTokens - NOTE_RESERVE,
+    });
+  }
   const language = visitorLanguage(
     incoming.filter((m) => m.role === "user").map((m) => messageText(m)),
   );
 
-  return { ok: true, messages: [...kept, current], question, language, droppedAnswers };
+  // What the window dropped, named before the oldest turn still shown (plan phase 22).
+  const dropped = droppedQuestions(turns, kept);
+  const messages = [...kept, current];
+  if (dropped.length) {
+    const first = messages[0]!;
+    const note = windowNote(dropped.length, windowTopics(dropped));
+    messages[0] = { role: "user", content: `${note}\n${first.content as string}` };
+  }
+  return {
+    ok: true,
+    messages,
+    question,
+    language,
+    droppedAnswers,
+    window: { dropped: dropped.length },
+  };
 }

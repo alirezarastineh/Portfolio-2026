@@ -1,9 +1,12 @@
 import { tool } from "ai";
-import { z } from "zod";
 
 import type { Locale } from "../content/schema.js";
-import type { CorpusKind } from "./corpus/build.js";
+import type { AskConfig } from "./config.js";
 import { resolveDocument, type AskCorpus } from "./corpus/index.js";
+import { hybridSearch } from "./embeddings.js";
+import type { ModelCall } from "./models/fallback.js";
+import { ToolBudget } from "./tool-budget.js";
+import { NOTES, TOOL_DEFS } from "./tool-defs.js";
 
 /**
  * The agent's tools. Every one reads; none can change anything. The three the
@@ -24,18 +27,22 @@ export const TOOL_NAMES = [
 
 export type ToolName = (typeof TOOL_NAMES)[number];
 
-/** How a tool call ended, for the answer's trace. */
-export type ToolOutcome = "ok" | "not_found" | "not_allowed" | "no_hits" | "error";
+/** How a tool call ended, for the answer's trace (plan phase 21 adds the last two). */
+export type ToolOutcome =
+  "ok" | "not_found" | "not_allowed" | "no_hits" | "error" | "duplicate" | "budget_exhausted";
 
 /**
  * Reads a tool's result by the shapes the tools below return: a missing
  * document or CV is not_found, a refused page not_allowed, an empty search or
- * project list no_hits. A tool that throws never gets here: the stream
+ * project list no_hits, a repeated call duplicate, a fetch past the answer's
+ * envelope budget_exhausted. A tool that throws never gets here: the stream
  * carries a `tool-error` for it instead.
  */
 export function toolOutcome(output: unknown): ToolOutcome {
   if (!output || typeof output !== "object") return "ok";
   const result = output as Record<string, unknown>;
+  if (result["duplicate"] === true) return "duplicate";
+  if (result["error"] === "budget_exhausted") return "budget_exhausted";
   if (result["error"] === "not_found" || result["available"] === false) return "not_found";
   if (result["error"] === "not_allowed") return "not_allowed";
   if (typeof result["error"] === "string") return "error";
@@ -43,20 +50,51 @@ export function toolOutcome(output: unknown): ToolOutcome {
   return list?.length === 0 ? "no_hits" : "ok";
 }
 
-const SECTIONS = ["projects", "experience", "skills", "writing", "about", "contact"] as const;
-const DOCUMENT_CHARS = 12_000;
-const RESUME_CHARS = 12_000;
+/** Edits between two names (Levenshtein), for the tool-name repair below. */
+function distance(a: string, b: string): number {
+  let row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) {
+      next[j] = Math.min(
+        row[j]! + 1,
+        next[j - 1]! + 1,
+        row[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    row = next;
+  }
+  return row[b.length]!;
+}
 
-const kindSchema = z.enum([
-  "profile",
-  "experience",
-  "project",
-  "post",
-  "skills",
-  "cv",
-  "faq",
-  "system-card",
-]) satisfies z.ZodType<CorpusKind>;
+/**
+ * The one tool a misspelt name can only mean, or null. A model sometimes
+ * stutters a name ("suggest_suggest_followups", seen in production and in an
+ * eval run), and an unknown tool fails the whole answer: a name that contains
+ * exactly one tool's name, or is within two edits of exactly one, is that
+ * tool. Anything less certain fails as before.
+ */
+export function repairToolName(name: string, known: readonly string[]): string | null {
+  if (known.includes(name)) return name;
+  const containing = known.filter((k) => name.includes(k));
+  if (containing.length === 1) return containing[0]!;
+  const near = known.filter((k) => distance(name, k) <= 2);
+  return near.length === 1 ? near[0]! : null;
+}
+
+/** What a search returned, for the trace (plan phase 18): its documents, and whether by meaning too. */
+export function searchResult(output: unknown): { hits: string[]; semantic: boolean } | null {
+  if (!output || typeof output !== "object") return null;
+  const result = output as { results?: unknown; semantic?: unknown };
+  if (!Array.isArray(result.results)) return null;
+  const hits = result.results
+    .map((r) => (r && typeof r === "object" ? (r as { id?: unknown }).id : undefined))
+    .filter((id): id is string => typeof id === "string")
+    .slice(0, 6);
+  return { hits, semantic: result.semantic === true };
+}
+
+const SECTIONS = ["projects", "experience", "skills", "writing", "about", "contact"] as const;
 
 /** Internal pages the terminal may open: home, its sections, and existing pages. */
 export function allowedPath(
@@ -93,48 +131,70 @@ export function allowedPath(
   return null;
 }
 
-export function buildTools(corpus: AskCorpus, locale: Locale) {
+/**
+ * The tools for one answer, reading in `locale` (the answer's language).
+ * With `search.config`, the search is hybrid when the deploy and the admin
+ * turned embeddings on (embeddings.ts). Its spend joins `search.calls` (the
+ * answer's), and is written as the `embeddings` feature unless `search.record`
+ * is false (evals, whose runs record their own spend; the CLI none).
+ *
+ * Built per answer, so its `ToolBudget` is the answer's (plan phase 21): a
+ * repeated search or document returns "already provided", and the documents
+ * past the envelope `budget_exhausted`, before any work is done.
+ */
+export function buildTools(
+  corpus: AskCorpus,
+  locale: Locale,
+  search: { config?: AskConfig; record?: boolean; calls?: ModelCall[] } = {},
+) {
+  const budget = new ToolBudget();
+  /** A document's text through the envelope: read once, cut where the budget says. */
+  const readOnce = (id: string, text: string) => {
+    if (budget.hasRead(id)) return { id, duplicate: true as const, note: NOTES.alreadyProvided };
+    const chars = budget.take(id, text.length);
+    if (chars === null) return { error: "budget_exhausted" as const, note: NOTES.budgetSpent };
+    return { text: chars < text.length ? `${text.slice(0, chars)}…` : text };
+  };
+
   return {
     search_portfolio: tool({
-      description:
-        "Search the published portfolio (projects, posts, experience, CV, FAQ). Returns document ids, titles, URLs and a snippet. Use it when the answer is not clearly in the documents already provided.",
-      inputSchema: z.object({
-        query: z
-          .string()
-          .min(1)
-          .max(200)
-          .describe("Keywords, e.g. 'RAG evaluation' or 'Kubernetes'"),
-        kinds: z.array(kindSchema).max(8).optional().describe("Restrict to these document kinds"),
-      }),
-      execute: ({ query, kinds }) => {
-        const hits = corpus.search.search(query, { locale, ...(kinds ? { kinds } : {}) });
-        return hits.length ? { results: hits } : { results: [], note: "No matching documents." };
+      ...TOOL_DEFS.search_portfolio,
+      execute: async ({ query, kinds }) => {
+        // Before the search runs: two identical calls in one step get one result.
+        if (!budget.firstSearch(query, kinds)) {
+          return { duplicate: true as const, note: NOTES.alreadyProvided };
+        }
+        const { hits, semantic } = search.config
+          ? await hybridSearch(corpus, query, {
+              config: search.config,
+              reading: locale,
+              ...(kinds ? { kinds } : {}),
+              spend: { record: search.record ?? true, calls: search.calls },
+            })
+          : {
+              hits: corpus.search.search(query, { locale, ...(kinds ? { kinds } : {}) }),
+              semantic: false,
+            };
+        if (!hits.length) return { results: [], note: NOTES.noHits };
+        // `semantic` only when the embeddings took part: BM25's result reads as before.
+        return semantic ? { results: hits, semantic } : { results: hits };
       },
     }),
 
     get_document: tool({
-      description:
-        "The full text of one portfolio document by id (e.g. 'project:atlas@en', 'cv@en', 'post:my-post@de'). Use it for documents shown cut short.",
-      inputSchema: z.object({ id: z.string().min(1).max(160) }),
+      ...TOOL_DEFS.get_document,
       execute: ({ id }) => {
         const doc = resolveDocument(corpus, id, locale);
-        if (!doc) return { error: "not_found", note: "No document has this id." };
-        const text =
-          doc.text.length > DOCUMENT_CHARS ? `${doc.text.slice(0, DOCUMENT_CHARS)}…` : doc.text;
-        return { id: doc.id, title: doc.title, url: doc.url, text };
+        if (!doc) return { error: "not_found" as const, note: NOTES.notFound };
+        const read = readOnce(doc.id, doc.text);
+        return "text" in read
+          ? { id: doc.id, title: doc.title, url: doc.url, text: read.text }
+          : read;
       },
     }),
 
     list_projects: tool({
-      description:
-        "Projects as structured data (name, role, period, category, stack, tags, metrics, URL), optionally filtered — for questions like 'which projects used RAG?'.",
-      inputSchema: z.object({
-        text: z
-          .string()
-          .max(120)
-          .optional()
-          .describe("Matches name, descriptor, stack, tags or category"),
-      }),
+      ...TOOL_DEFS.list_projects,
       execute: ({ text }) => {
         const needle = text?.trim().toLowerCase();
         const mine = corpus.projects.filter((p) => p.locale === locale);
@@ -152,23 +212,22 @@ export function buildTools(corpus: AskCorpus, locale: Locale) {
     }),
 
     get_resume: tool({
-      description: "The CV's text and its download link.",
-      inputSchema: z.object({ locale: z.enum(["en", "de"]).optional() }),
+      ...TOOL_DEFS.get_resume,
       execute: (input) => {
         const wanted = input.locale ?? locale;
         const doc =
           corpus.byId.get(`cv@${wanted}`) ?? corpus.byId.get(`cv@${wanted === "en" ? "de" : "en"}`);
-        if (!doc) return { available: false, note: "No CV is published." };
-        const text =
-          doc.text.length > RESUME_CHARS ? `${doc.text.slice(0, RESUME_CHARS)}…` : doc.text;
-        return { available: true, id: doc.id, download: `/${doc.locale}/resume.pdf`, text };
+        if (!doc) return { available: false as const, note: NOTES.noCv };
+        // The CV is a document: `get_document("cv@en")` after it is a repeat, and the reverse.
+        const read = readOnce(doc.id, doc.text);
+        if (!("text" in read)) return read;
+        const download = `/${doc.locale}/resume.pdf`;
+        return { available: true as const, id: doc.id, download, text: read.text };
       },
     }),
 
     navigate: tool({
-      description:
-        "Open a page of this site for the visitor: '/en', '/en#projects', '/en/work/<slug>', '/en/writing/<slug>'. Only when the visitor asks to open or go somewhere.",
-      inputSchema: z.object({ to: z.string().min(2).max(160) }),
+      ...TOOL_DEFS.navigate,
       execute: ({ to }) => {
         const path = allowedPath(corpus, to);
         return path
@@ -178,16 +237,12 @@ export function buildTools(corpus: AskCorpus, locale: Locale) {
     }),
 
     suggest_followups: tool({
-      description:
-        "Offer the visitor 2-3 short follow-up questions, shown as buttons. Call it together with your answer, never alone.",
-      inputSchema: z.object({ items: z.array(z.string().min(2).max(90)).min(1).max(3) }),
+      ...TOOL_DEFS.suggest_followups,
       execute: () => ({ ok: true as const }),
     }),
 
     handoff_contact: tool({
-      description:
-        "Offer to hand the conversation to the contact form, pre-filled with a short summary. Only when the visitor wants to hire, contact or work with Alireza. The visitor confirms first; nothing is sent.",
-      inputSchema: z.object({ summary: z.string().min(10).max(800) }),
+      ...TOOL_DEFS.handoff_contact,
       execute: () => ({ ok: true as const, awaitingConfirmation: true }),
     }),
   };

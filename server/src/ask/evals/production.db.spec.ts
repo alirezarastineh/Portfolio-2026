@@ -4,11 +4,12 @@ import { sql } from "drizzle-orm";
 import { createApp } from "../../app.js";
 import { getDb } from "../../db/client.js";
 import { aiCorpusSnapshots, aiEvalCases, aiMessages, aiUsage } from "../../db/schema.js";
-import { fixtureConfig, fixtureCorpus } from "../../test/ask-fixtures.js";
+import { FIXTURE_BASE, fixtureConfig, fixtureCorpus } from "../../test/ask-fixtures.js";
 import { mockEntry, scripted, textTurn } from "../../test/ask-models.js";
 import { createAdmin, resetDb, TestClient } from "../../test/helpers.js";
 import type { AskConfig } from "../config.js";
 import type { CorpusDocument } from "../corpus/build.js";
+import { assembleCorpus } from "../corpus/index.js";
 import {
   askCorpusFromSnapshot,
   pruneSnapshots,
@@ -17,7 +18,7 @@ import {
   snapshotKey,
 } from "../corpus/snapshots.js";
 import { resetBreakers } from "../models/circuit.js";
-import { invalidateAssistantCache } from "../settings.js";
+import { DEFAULT_SETTINGS, invalidateAssistantCache } from "../settings.js";
 import { productionCases, runProductionSuite } from "./production.js";
 import { runEvals } from "./run.js";
 
@@ -102,6 +103,7 @@ describe("corpus snapshots", () => {
     // A deploy that builds a document differently, under the same content versions.
     const rebuilt = askCorpusFromSnapshot({
       ...corpus,
+      coreTokens: 0,
       documents: corpus.documents.map((d) =>
         d.id === "profile@en" ? { ...d, text: `${d.text} (built anew)` } : d,
       ),
@@ -109,6 +111,24 @@ describe("corpus snapshots", () => {
     expect(snapshotKey(same)).toBe(snapshotKey(corpus));
     expect(snapshotKey(rebuilt)).not.toBe(snapshotKey(corpus));
     expect(snapshotKey(rebuilt).startsWith(`${corpus.key}#`)).toBe(true);
+  });
+
+  it("keep the admin's tiers on the documents, so a replay renders each language's core again", async () => {
+    const tiered = assembleCorpus(
+      FIXTURE_BASE,
+      { ...DEFAULT_SETTINGS, corpusTiers: { promoted: ["project:atlas@en"], demoted: [] } },
+      [],
+      config,
+    );
+    await recordSnapshot(tiered);
+    const [row] = await getDb().select().from(aiCorpusSnapshots);
+    expect(row!.documents.find((d) => d.id === "project:atlas@en")?.tier).toBe("promoted");
+    expect(row!.coreTokens).toBe(Math.max(tiered.coreTokens.en, tiered.coreTokens.de));
+
+    const replayed = askCorpusFromSnapshot(row!);
+    expect(replayed.core).toEqual(tiered.core);
+    expect(replayed.compact).toEqual(tiered.compact);
+    expect(row!.key).toBe(snapshotKey(tiered));
   });
 
   it("are written once per key, and pruned once nothing refers to them", async () => {

@@ -148,4 +148,43 @@ describe("buildAnswerTrace", () => {
     const trace: Trace = { startedAt: 0, firstTokenAt: null, attempts: [], calls: [] };
     expect(buildAnswerTrace([], trace)).toEqual({ v: 1, steps: [] });
   });
+
+  it("keeps a search's documents and whether it searched by meaning (plan phase 18)", () => {
+    const trace: Trace = {
+      startedAt: 0,
+      firstTokenAt: 400,
+      attempts: [{ model: "m", outcome: "ok", ms: 400 }],
+      calls: [call("m")],
+    };
+    const recorded: RecordedStep[] = [
+      {
+        finishReason: "stop",
+        tools: [
+          {
+            id: "t1",
+            name: "search_portfolio",
+            input: { query: "llm ops" },
+            outcome: "ok",
+            resultChars: 400,
+            search: { hits: ["post:mlops@en"], semantic: true },
+          },
+        ],
+      },
+    ];
+    expect(buildAnswerTrace(recorded, trace).steps[0]!.tools[0]).toEqual({
+      name: "search_portfolio",
+      input: '{"query":"llm ops"}',
+      outcome: "ok",
+      resultChars: 400,
+      hits: ["post:mlops@en"],
+      semantic: true,
+    });
+  });
+
+  it("records the core the answer read, when given", () => {
+    const trace: Trace = { startedAt: 0, firstTokenAt: null, attempts: [], calls: [] };
+    const core = { locale: "de" as const, layout: "locale" as const, tokens: 1_557 };
+    expect(buildAnswerTrace([], trace, core)).toEqual({ v: 1, steps: [], core });
+    expect(buildAnswerTrace([], trace)).not.toHaveProperty("core");
+  });
 });

@@ -79,6 +79,21 @@ export class AllModelsFailedError extends Error {
   }
 }
 
+/**
+ * A provider that failed after its first chunk. The answer cannot move to
+ * another model any more (text has streamed), so it ends with this error: an
+ * outage, like `AllModelsFailedError`, never the model's own mistake.
+ */
+export class ProviderStreamError extends Error {
+  constructor(
+    readonly model: string,
+    override readonly cause: unknown,
+  ) {
+    super(`${model} failed mid-stream: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = "ProviderStreamError";
+  }
+}
+
 export class AttemptTimeoutError extends Error {
   constructor(readonly phase: "first-chunk" | "request") {
     super(`${phase} timeout`);
@@ -468,7 +483,9 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
         if (done) break;
         if (value.type === "error") throw value.error;
         buffered.push(value);
-        if (isContent(value)) break;
+        // Thoughts asked for the admin (plan phase 23) wait with the rest: the deadline is
+        // for the first text, as in a visitor's answer, which never asks for them.
+        if (isContent(value) && !(entry.thoughts && value.type === "reasoning-delta")) break;
       }
     } catch (error) {
       controller.abort(error);
@@ -477,9 +494,14 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
       throw error;
     }
 
-    record.ttftMs = now() - started;
-    trace.firstTokenAt ??= now();
-    recordSuccess(entry.id, record.ttftMs, now());
+    // The first token is the first a visitor could see: a thought a model sends unasked (an
+    // OpenRouter reasoning model) meets the deadline, but the first token is still its text's.
+    recordSuccess(entry.id, now() - started, now());
+    const stamp = (part: LanguageModelV4StreamPart) => {
+      if (record.ttftMs !== null || part.type === "reasoning-delta" || !isContent(part)) return;
+      record.ttftMs = now() - started;
+      trace.firstTokenAt ??= now();
+    };
 
     const activeReader = reader;
     let closed = false;
@@ -489,15 +511,21 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
       detach();
       return true;
     };
+    /** A failure from here on is the provider's, named so (a deadline keeps its own error). */
+    const midStream = (error: unknown) =>
+      error instanceof AttemptTimeoutError || caller?.aborted
+        ? error
+        : new ProviderStreamError(entry.id, error);
     const forward = (
       part: LanguageModelV4StreamPart,
       out: ReadableStreamDefaultController<LanguageModelV4StreamPart>,
     ) => {
+      stamp(part);
       if (part.type === "finish") {
         record.usage = part.usage;
         record.finishReason = part.finishReason.unified;
       }
-      out.enqueue(part);
+      out.enqueue(part.type === "error" ? { type: "error", error: midStream(part.error) } : part);
     };
 
     const stream = new ReadableStream<LanguageModelV4StreamPart>({
@@ -525,7 +553,7 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
           if (!caller?.aborted) {
             recordFailure(entry.id, { error: classifyError(error, now()).message }, now());
           }
-          out.enqueue({ type: "error", error });
+          out.enqueue({ type: "error", error: midStream(error) });
           out.close();
         }
       },

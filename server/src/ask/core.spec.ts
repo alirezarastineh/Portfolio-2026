@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import type { ModelMessage, TextStreamPart, ToolSet } from "ai";
 
@@ -14,8 +14,22 @@ import { buildHistory, signAnswer, trimHistory, verifyAnswer } from "./history.j
 import { detectLanguage, visitorLanguage } from "./language.js";
 import { droppedIds, redact } from "./log.js";
 import { costUsd, priceOf } from "./models/prices.js";
-import { buildChain, shortName, variantChain } from "./models/registry.js";
-import { responseLanguageInstruction, wrapVisitor } from "./prompt.js";
+import {
+  buildChain,
+  capsOf,
+  checkModels,
+  resetLearnedCaps,
+  shortName,
+  variantChain,
+  withMinimalThinking,
+  type ModelEntry,
+} from "./models/registry.js";
+import {
+  buildAnswerOnlyInstructions,
+  buildInstructions,
+  responseLanguageInstruction,
+  wrapVisitor,
+} from "./prompt.js";
 import { routeQuestion } from "./router.js";
 import {
   answerText,
@@ -23,7 +37,7 @@ import {
   newAnswerRecord,
   recorderTransform,
 } from "./stream-transforms.js";
-import { allowedPath, toolOutcome } from "./tools.js";
+import { allowedPath, repairToolName, searchResult, TOOL_NAMES, toolOutcome } from "./tools.js";
 
 const docs: CorpusDocument[] = [
   {
@@ -204,6 +218,8 @@ describe("citations", () => {
             input: { query: "k8s" },
             outcome: "no_hits",
             resultChars: 14,
+            // What it found, for the search → cited conversion (plan phase 18).
+            search: { hits: [], semantic: false },
           },
           {
             id: "2",
@@ -247,6 +263,37 @@ describe("tool outcomes", () => {
     expect(toolOutcome({ error: "something else" })).toBe("error");
     expect(toolOutcome({ ok: true, awaitingConfirmation: true })).toBe("ok");
     expect(toolOutcome(undefined)).toBe("ok");
+  });
+
+  it("repairs a stuttered tool name to the one tool it can only mean, and nothing less certain", () => {
+    const known = [...TOOL_NAMES];
+    expect(repairToolName("suggest_suggest_followups", known)).toBe("suggest_followups");
+    expect(repairToolName("functions.get_document", known)).toBe("get_document");
+    expect(repairToolName("get_documents", known)).toBe("get_document");
+    expect(repairToolName("list_projects", known)).toBe("list_projects");
+    // Two tools in one name, nothing near enough, or not a tool at all: no repair.
+    expect(repairToolName("get_document_or_get_resume", known)).toBeNull();
+    expect(repairToolName("search", known)).toBeNull();
+    expect(repairToolName("delete_everything", known)).toBeNull();
+  });
+
+  it("reads a search's documents, at most six, and whether by meaning too", () => {
+    const results = Array.from({ length: 8 }, (_, i) => ({
+      id: `post:p${i}@en`,
+      title: "",
+      url: "",
+      snippet: "",
+    }));
+    expect(searchResult({ results, semantic: true })).toEqual({
+      hits: results.slice(0, 6).map((r) => r.id),
+      semantic: true,
+    });
+    expect(searchResult({ results: [], note: "No matching documents." })).toEqual({
+      hits: [],
+      semantic: false,
+    });
+    expect(searchResult({ projects: [] })).toBeNull();
+    expect(searchResult("text")).toBeNull();
   });
 });
 
@@ -344,6 +391,38 @@ describe("history", () => {
       },
     );
     expect(kept[0]?.role).not.toBe("assistant");
+  });
+
+  it("names what the window dropped before the oldest turn still shown (plan phase 22)", async () => {
+    const ask = (...texts: string[]) =>
+      buildHistory({
+        ...base,
+        historyTurns: 2,
+        messages: texts.map((text, i) => ({
+          id: `u${i}`,
+          role: "user",
+          parts: [{ type: "text", text }],
+        })),
+      });
+    // Six earlier questions, four of them shown: the first two go.
+    const trimmed = await ask(
+      "What did Atlas achieve?",
+      "Is Atlas still live?",
+      "Is he available?",
+      "Which stack does Borealis use?",
+      "Does he know Rust?",
+      "Is he remote?",
+      "Where is he based?",
+    );
+    expect(trimmed.ok && trimmed.window).toEqual({ dropped: 2 });
+    const first = trimmed.ok ? (trimmed.messages[0]!.content as string) : "";
+    expect(first).toBe(
+      '[Not shown: 2 earlier questions in this conversation, about Atlas, achieve, still.]\n<visitor locale="en">Is he available?</visitor>',
+    );
+    // Nothing dropped, nothing said.
+    const short = await ask("Is he available?", "Where is he based?");
+    expect(short.ok && short.window).toEqual({ dropped: 0 });
+    expect(short.ok && (short.messages[0]!.content as string)).toMatch(/^<visitor/);
   });
 
   it("keeps only the last turns", async () => {
@@ -501,10 +580,10 @@ describe("corpus", () => {
 
   it("renders the same bytes for the same documents, cutting long ones", () => {
     const long: CorpusDocument = { ...docs[1]!, text: "line\n".repeat(1_000) };
-    const core = renderCore([docs[0]!, long]);
-    expect(core).toBe(renderCore([docs[0]!, long]));
+    const core = renderCore([docs[0]!, long], "en");
+    expect(core).toBe(renderCore([docs[0]!, long], "en"));
     expect(core).toContain('[… continues: get_document("project:atlas@en")]');
-    expect(renderCompact(docs).length).toBeLessThan(2_000);
+    expect(renderCompact(docs, "en").length).toBeLessThan(2_000);
   });
 
   it("search prefers the page language and falls back to the other", () => {
@@ -544,13 +623,21 @@ describe("answer-only rebuild", () => {
       ],
       tools: [{ type: "function", name: "x", description: "", inputSchema: { type: "object" } }],
     };
-    const corpus = { compact: "COMPACT" } as AskCorpus;
+    const corpus = { compact: { en: "COMPACT", de: "KOMPAKT" } };
     const rebuilt = answerOnlyOptions(options, corpus);
     expect(rebuilt.tools).toBeUndefined();
     expect(rebuilt.prompt[0]).toMatchObject({ role: "system" });
     expect((rebuilt.prompt[0] as { content: string }).content).toContain("COMPACT");
     expect((rebuilt.prompt[0] as { content: string }).content).not.toContain("# Tools");
     expect(rebuilt.prompt.slice(1).map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+  });
+
+  it("keep the related-documents line where headers have it, not in the compact corpus", () => {
+    // Plan phase 19: the compact corpus has no headers, and its models no tools to follow one.
+    const line = "start from the profile, then read the documents its header lists as related";
+    expect(buildInstructions("")).toContain(line);
+    expect(buildAnswerOnlyInstructions("")).not.toContain(line);
+    expect(buildAnswerOnlyInstructions("")).toContain("Never use outside knowledge");
   });
 });
 
@@ -585,6 +672,13 @@ describe("prices", () => {
     expect(costUsd("z-ai/glm-5.2:free", tokens, new Date())).toBe(0);
   });
 
+  it("charges the search's embeddings by input alone (plan phase 18)", () => {
+    const embedded = { input: 1_000_000, cached: 0, output: 0, thoughts: 0 };
+    expect(costUsd("gemini-embedding-2", embedded, new Date("2026-10-05"))).toBeCloseTo(0.2);
+    // Not the unknown-model fallback, which would charge it as the dearest chat model.
+    expect(priceOf("gemini-embedding-2", new Date("2026-10-05")).input).toBe(0.2);
+  });
+
   it("names models briefly for the meta line", () => {
     expect(shortName("nvidia/nemotron-3-super-120b-a12b:free")).toBe("nemotron-3-super");
     expect(shortName("gemini-3.5-flash-lite")).toBe("gemini-3.5-flash-lite");
@@ -605,6 +699,62 @@ describe("the judge chain", () => {
     expect(ids({ ...base, judgeModels: ["vendor/judge:free", "gemini-3.5-flash-lite"] })).toEqual([
       "gemini-3.5-flash-lite",
     ]);
+  });
+});
+
+describe("the boot check", () => {
+  afterEach(() => resetLearnedCaps());
+
+  it("asks about the search's embedding model only when search by meaning is on", async () => {
+    const asked: string[] = [];
+    const fetchSpy = (async (input: string | URL | Request) => {
+      const url = String(input);
+      asked.push(decodeURIComponent(url.slice(url.lastIndexOf("/") + 1)));
+      // The embedding model is gone: search by meaning stays off, words alone remain.
+      return url.endsWith("gemini-embedding-2")
+        ? new Response("{}", { status: 404 })
+        : new Response(JSON.stringify({ inputTokenLimit: 500_000 }), { status: 200 });
+    }) as typeof fetch;
+
+    const off = fixtureConfig();
+    await checkModels(off, fetchSpy);
+    expect(asked).not.toContain("gemini-embedding-2");
+
+    asked.length = 0;
+    const on = { ...off, embeddings: { ...off.embeddings, enabled: true } };
+    await checkModels(on, fetchSpy);
+    expect(asked).toEqual(expect.arrayContaining(["gemini-3.5-flash-lite", "gemini-embedding-2"]));
+    expect(capsOf("gemini-embedding-2").missing).toBe(true);
+    expect(capsOf("gemini-3.5-flash-lite")).toMatchObject({
+      missing: false,
+      contextWindow: 500_000,
+    });
+  });
+});
+
+describe("the lookup tier", () => {
+  const thinking = (entry: ModelEntry | undefined) =>
+    (entry?.providerOptions?.["google"] as { thinkingConfig?: { thinkingLevel?: string } })
+      ?.thinkingConfig?.thinkingLevel;
+
+  it("lets the first model think minimally and leaves the rest as configured", () => {
+    const lite = buildChain(fixtureConfig(), "lite");
+    const lookup = withMinimalThinking(lite);
+    expect(lookup.map((e) => e.id)).toEqual(lite.map((e) => e.id));
+    expect(thinking(lite[0])).toBe("low");
+    expect(thinking(lookup[0])).toBe("minimal");
+    expect(lookup.slice(1)).toEqual(lite.slice(1));
+    // The safety settings ride along; the chain it came from is untouched.
+    expect(lookup[0]!.providerOptions!["google"]).toMatchObject({
+      safetySettings: (lite[0]!.providerOptions!["google"] as { safetySettings: unknown })
+        .safetySettings,
+    });
+  });
+
+  it("leaves a model without a thinking setting alone", () => {
+    const mock = { ...buildChain(fixtureConfig(), "lite")[0]!, providerOptions: undefined };
+    expect(withMinimalThinking([mock])).toEqual([mock]);
+    expect(withMinimalThinking([])).toEqual([]);
   });
 });
 

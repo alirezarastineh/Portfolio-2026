@@ -36,7 +36,7 @@ describe("the spending fences in the admin", () => {
     const draft = spendDraft(settings);
     expect(draft.reserve).toBe("50");
     expect(draft.caps).toMatchObject({ copilot: "0.2", eval: "" });
-    expect(draft.switches).toEqual({ copilot: false, judge: true });
+    expect(draft.switches).toEqual({ copilot: false, judge: true, embeddings: false });
 
     const saved = spendInput({ ...draft, reserve: "40", caps: { ...draft.caps, eval: "0.5" } });
     expect(saved).toEqual({
@@ -50,8 +50,9 @@ describe("the spending fences in the admin", () => {
           eval: 0.5,
           pairwise: null,
           judge: null,
+          embeddings: null,
         },
-        featureSwitches: { copilot: false, judge: true },
+        featureSwitches: { copilot: false, judge: true, embeddings: false },
       },
     });
   });
@@ -113,6 +114,6 @@ describe("the spending fences in the admin", () => {
     ]);
     // A feature not built yet stays out until it spends.
     expect(rows.map((r) => r.feature)).not.toContain("agent");
-    expect(rows).toHaveLength(7);
+    expect(rows).toHaveLength(8);
   });
 });

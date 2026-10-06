@@ -20,7 +20,7 @@ function result(
     status: outcome ? "judged" : "unavailable",
     a: side,
     b: side,
-    verdicts: null,
+    verdicts: outcome ? { aFirst: "first", bFirst: "second" } : null,
     outcome,
     reasons: [],
     usd: 0.004,
@@ -54,20 +54,22 @@ describe("pairwise verdicts", () => {
           b: { answer: "y", model: "m", failures: ["did not cite x"], usd: 0.001 },
         }),
         result("g2", "german", null),
+        // B's answer failed on its own: A's without a judgment, outside the swap agreement.
+        result("f4", "fact", "a", { verdicts: null, reasons: ["forfeit"] }),
       ],
     });
     expect(summary).toMatchObject({
-      judged: 4,
+      judged: 5,
       unavailable: 1,
-      tally: { a: 1, b: 1, tie: 1, inconsistent: 1 },
+      tally: { a: 2, b: 1, tie: 1, inconsistent: 1 },
       byCategory: {
-        fact: { a: 1, b: 1, tie: 0, inconsistent: 1 },
+        fact: { a: 2, b: 1, tie: 0, inconsistent: 1 },
         german: { a: 0, b: 0, tie: 1, inconsistent: 0 },
       },
-      passed: { a: 4, b: 3 },
+      passed: { a: 5, b: 4 },
       swapAgreement: 0.75,
     });
-    expect(summary.usd).toBeCloseTo(0.02);
+    expect(summary.usd).toBeCloseTo(0.024);
     expect(summarizePairwise({ a: "a", b: "b", judge: null, cases: 0, results: [] })).toMatchObject(
       {
         judged: 0,

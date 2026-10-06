@@ -10,34 +10,48 @@ import { runPairwise, type PairwiseVariant } from "./pairwise-run.js";
 import { FREE_TIER_EVAL_PACING, FREE_TIER_RATE_LIMIT_RETRY } from "./run.js";
 
 /**
- * `pnpm ai:eval --pairwise <A>,<B>` and `--candidate-prompt <file>`: two
- * answerers compared case by case (pairwise.ts). Ranking only: nothing is
- * gated and the baseline is never touched. Exits 2 when a case could not be
- * answered or judged.
+ * `pnpm ai:eval --pairwise <A>,<B>`, `--candidate-prompt <file>`,
+ * `--candidate-reminder <file>` and `--compare-core`: two answerers compared
+ * case by case (pairwise.ts). Ranking only: nothing is gated and the baseline
+ * is never touched. Exits 2 when a case could not be answered or judged.
  */
 
 const MARK: Record<PairOutcome, string> = { a: "A", b: "B", tie: "=", inconsistent: "≠" };
 
 type Sides = [PairwiseVariant, PairwiseVariant];
 
+/** What the flags ask for (cli.ts). */
+export interface PairwiseChoice {
+  /** `--pairwise A,B`: two routes or model ids. */
+  pairwise?: string;
+  /** `--candidate-prompt <file>`: side B's system prompt. */
+  candidatePrompt?: string;
+  /** `--candidate-reminder <file>`: a line after the corpus, side B only. */
+  candidateReminder?: string;
+  /** `--compare-core`: side A reads Part C's single core with both languages. */
+  compareCore?: boolean;
+}
+
 /**
- * The two sides from `--pairwise` and `--candidate-prompt`, or why they
- * cannot be had. A prompt comparison defaults to the main model on both
- * sides, so only the prompt differs.
+ * The two sides the flags ask for, or why they cannot be had. A comparison
+ * of prompts, reminders or core layouts defaults to the main model on both
+ * sides, so only that differs.
  */
 export function pairwiseSides(
   config: AskConfig,
-  pairwise: string | undefined,
-  candidatePrompt: string | undefined,
+  choice: PairwiseChoice,
   read: (path: string) => string = (path) => readFileSync(path, "utf8"),
 ): { sides: Sides } | { error: string } {
+  const { pairwise, candidatePrompt, candidateReminder, compareCore } = choice;
   const names = pairwise?.split(",").map((s) => s.trim()) ?? [];
   if (pairwise && (names.length !== 2 || names.some((n) => !n))) {
     return { error: "--pairwise takes two answerers, such as lite,deep or two model ids." };
   }
   const [a, b] = names.length === 2 ? names : [config.gemini.model, config.gemini.model];
-  if (a === b && !candidatePrompt) {
-    return { error: `Both sides are "${a}": name two answerers, or add --candidate-prompt.` };
+  if (a === b && !candidatePrompt && !candidateReminder && !compareCore) {
+    return {
+      error: `Both sides are "${a}": name two answerers, or add --candidate-prompt, --candidate-reminder or --compare-core.`,
+    };
   }
   const chains = [variantChain(config, a!), variantChain(config, b!)];
   const missing = [a, b].find((_, i) => !chains[i]?.length);
@@ -46,24 +60,23 @@ export function pairwiseSides(
       error: `No model for "${missing}": name a route (lite, deep) or a model whose key is set.`,
     };
   }
-  if (!candidatePrompt) {
-    return {
-      sides: [
-        { label: a!, chain: chains[0]! },
-        { label: b!, chain: chains[1]! },
-      ],
-    };
+  const sideA: PairwiseVariant = { label: a!, chain: chains[0]! };
+  const sideB: PairwiseVariant = { label: b!, chain: chains[1]! };
+  if (compareCore) {
+    sideA.label += " · one core, both languages";
+    sideA.layout = "both";
+    sideB.label += " · a core per language";
   }
-  return {
-    sides: [
-      { label: `${a} · current prompt`, chain: chains[0]! },
-      {
-        label: `${b} · ${candidatePrompt}`,
-        chain: chains[1]!,
-        systemPrompt: read(candidatePrompt),
-      },
-    ],
-  };
+  if (candidatePrompt) {
+    sideA.label += " · current prompt";
+    sideB.label += ` · ${candidatePrompt}`;
+    sideB.systemPrompt = read(candidatePrompt);
+  }
+  if (candidateReminder) {
+    sideB.label += ` · reminder ${candidateReminder}`;
+    sideB.afterCorpus = read(candidateReminder);
+  }
+  return { sides: [sideA, sideB] };
 }
 
 function line(r: PairwiseCaseResult): string {

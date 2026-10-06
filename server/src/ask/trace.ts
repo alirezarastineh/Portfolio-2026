@@ -1,6 +1,9 @@
+import type { Locale } from "../content/schema.js";
+import type { CoreLayout } from "./corpus/render.js";
 import { redact } from "./log.js";
 import type { Attempt, AttemptOutcome, Trace } from "./models/fallback.js";
 import { tokenCounts, type TokenCounts } from "./models/prices.js";
+import type { Escalation, Sensitivity } from "./router.js";
 import type { RecordedStep } from "./stream-transforms.js";
 import type { ToolOutcome } from "./tools.js";
 
@@ -22,6 +25,9 @@ export interface TraceTool {
   outcome: ToolOutcome | "cut-off";
   /** Size of the result the model got back, in characters of JSON. */
   resultChars: number;
+  /** A search's documents (at most 6) and whether by meaning too (plan phase 18). */
+  hits?: string[];
+  semantic?: boolean;
 }
 
 export interface TraceStep {
@@ -39,6 +45,28 @@ export interface TraceStep {
 export interface AnswerTrace {
   v: 1;
   steps: TraceStep[];
+  /**
+   * The core the answer read (plan phase 16): its language, layout and size.
+   * Missing on answers from before, which all read one core with both languages.
+   */
+  core?: { locale: Locale; layout: CoreLayout; tokens: number };
+  /**
+   * How the router sent the answer (plan phase 20, router.ts): its reason,
+   * and the careful topic or the lookup tier when it had one. Missing on
+   * answers from before.
+   */
+  routing?: { reason: string; sensitive?: Sensitivity; lookup?: true };
+  /**
+   * The step from which an answer routed lite ran on the deep chain, and why
+   * (plan phase 20, router.ts); absent when it did not move.
+   */
+  escalation?: { step: number; reason: Escalation };
+  /**
+   * The visitor's earlier questions the conversation window no longer showed
+   * (plan phase 22): what the note before the history named, 0 for none.
+   * Absent for an answer without a history (an eval) and from before the phase.
+   */
+  window?: { dropped: number };
 }
 
 function inputText(input: unknown): string {
@@ -63,7 +91,12 @@ function passedOver(attempts: readonly Attempt[]): TraceStep["passedOver"] {
  * with that call's `ok`: what came before the `ok` was passed over. Attempts
  * after the last `ok` are a step no model could answer.
  */
-export function buildAnswerTrace(recorded: readonly RecordedStep[], trace: Trace): AnswerTrace {
+export function buildAnswerTrace(
+  recorded: readonly RecordedStep[],
+  trace: Trace,
+  core?: AnswerTrace["core"],
+  route?: Pick<AnswerTrace, "routing" | "escalation" | "window">,
+): AnswerTrace {
   const segments: Attempt[][] = [[]];
   for (const attempt of trace.attempts) {
     segments.at(-1)!.push(attempt);
@@ -82,6 +115,7 @@ export function buildAnswerTrace(recorded: readonly RecordedStep[], trace: Trace
       input: inputText(tool.input),
       outcome: tool.outcome ?? "cut-off",
       resultChars: tool.resultChars,
+      ...(tool.search ? { hits: tool.search.hits, semantic: tool.search.semantic } : {}),
     })),
   }));
 
@@ -97,5 +131,13 @@ export function buildAnswerTrace(recorded: readonly RecordedStep[], trace: Trace
       tools: [],
     });
   }
-  return { v: 1, steps };
+  return {
+    v: 1,
+    steps,
+    ...(core ? { core } : {}),
+    ...(route?.routing ? { routing: route.routing } : {}),
+    ...(route?.escalation ? { escalation: route.escalation } : {}),
+    // Zero included: an answer from before plan phase 22 has none, and is not counted untrimmed.
+    ...(route?.window ? { window: route.window } : {}),
+  };
 }

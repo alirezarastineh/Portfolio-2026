@@ -1,4 +1,5 @@
 import { askChain, askConfig, askEvalPacing, askVariantChain } from "../deps.js";
+import { embedInMemory } from "../embeddings.js";
 import { EVAL_CASES } from "../evals/cases.js";
 import { fixtureAskCorpus } from "../evals/fixture.js";
 import { summarizePairwise, type PairwiseCaseResult } from "../evals/pairwise.js";
@@ -33,10 +34,14 @@ export const pairwiseWork: WorkFn = async (work) => {
   const byId = new Map(EVAL_CASES.map((c) => [c.id, c]));
   const calls: ModelCall[] = [];
   const paid = paidItems(work, calls);
+  const corpus = fixtureAskCorpus(config);
+  // Searched by meaning as visitors' answers are, when that is on (plan phase 18): the
+  // fixture embedded in memory, its spend recorded with the first case.
+  calls.push(...(await embedInMemory(corpus, config)).calls);
 
   await runPairwise({
     cases: work.keys.flatMap((key) => byId.get(key) ?? []),
-    corpus: fixtureAskCorpus(config),
+    corpus,
     config,
     a: { label: params.a, chain: a },
     b: { label: params.b, chain: b },

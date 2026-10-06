@@ -259,6 +259,19 @@ describe("the trust monitor", () => {
     expect(row).toMatchObject({ route: "lite", model: "gemini-3.5-flash-lite" });
   });
 
+  it("counts the answers that moved up to the deep route mid-way as the deep route's", async () => {
+    // Plan phase 20: escalated answers ran their later steps on the deep chain. Only
+    // escalated ones here: counted apart, the deep route would have no evidence at all.
+    await seed(30, (i) => ({
+      route: "lite→deep",
+      model: "gemini-3.7-flash",
+      finishReason: i < 8 ? "error:timeout" : "stop",
+    }));
+    expect(await (await admin.post("/admin/assistant/trust/check", {})).json()).toMatchObject({
+      demoted: ["route:deep"],
+    });
+  });
+
   it("refuses to demote the last model of a chain, and says so", async () => {
     withBackup = false;
     await seed(TRUST_RULES.judgedMinimum, () => ({ judged: 0.2 }));

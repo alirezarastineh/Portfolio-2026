@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { MockEmbeddingModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 
 import { createApp } from "../app.js";
 import { getDb } from "../db/client.js";
 import {
   aiCorpusSnapshots,
+  aiEmbeddings,
   aiFeedback,
   aiGuardEvents,
   aiMessages,
@@ -27,11 +29,14 @@ import {
   fixtureConfig,
   fixtureCorpus,
   readUiChunks,
+  twoProjectCorpus,
   uiText,
 } from "../test/ask-fixtures.js";
 import { resetDb } from "../test/helpers.js";
 import type { AskConfig } from "./config.js";
+import type { AskCorpus } from "./corpus/index.js";
 import { resetRecordedSnapshots, snapshotKey } from "./corpus/snapshots.js";
+import { allowEmbeddingBackfill, resetEmbeddings, setEmbeddingDeps } from "./embeddings.js";
 import { utcDay } from "./guard.js";
 import { flushGuardEvents } from "./guard-events.js";
 import { verifyAnswer } from "./history.js";
@@ -42,6 +47,8 @@ import { invalidateAssistantCache } from "./settings.js";
 let config: AskConfig;
 let chain: (role: ChainRole) => ModelEntry[];
 const roles: ChainRole[] = [];
+/** A test's own corpus in place of the fixture's, for one test. */
+let corpusOverride: ((config: AskConfig) => AskCorpus) | null = null;
 
 const app = createApp({
   ask: {
@@ -50,7 +57,7 @@ const app = createApp({
       roles.push(role);
       return chain(role);
     },
-    corpus: async (c) => fixtureCorpus(c),
+    corpus: async (c) => (corpusOverride ?? fixtureCorpus)(c),
   },
 });
 
@@ -104,6 +111,7 @@ beforeEach(async () => {
   resetBreakers();
   resetRecordedSnapshots();
   roles.length = 0;
+  corpusOverride = null;
   config = fixtureConfig();
 });
 
@@ -202,6 +210,14 @@ describe("POST /v1/ask", () => {
       }),
     ]);
     expect(row.trace!.steps[0]!.tools[0]!.resultChars).toBeGreaterThan(100);
+    // Which core it read (plan phase 16): the perception figures tell layouts apart by it.
+    expect(row.trace?.core).toEqual({
+      locale: "en",
+      layout: "locale",
+      tokens: fixtureCorpus(config).coreTokens.en,
+    });
+    // Nothing trimmed is said too (plan phase 22): the window metric counts it as untrimmed.
+    expect(row.trace?.window).toEqual({ dropped: 0 });
 
     const [usage] = await getDb().select().from(aiUsage);
     expect(usage).toMatchObject({
@@ -211,6 +227,30 @@ describe("POST /v1/ask", () => {
       inputTokens: 200,
     });
     expect(usage!.usd).toBeGreaterThan(0);
+  });
+
+  it("names what the conversation window dropped, and logs the trim (plan phase 22)", async () => {
+    const model = scripted([textTurn("He is in Berlin [^profile@en].")]);
+    only(model);
+    config = fixtureConfig({ historyTurns: 2 });
+    // Five earlier questions, four of them shown: the first goes.
+    const history = [
+      "What did Atlas achieve?",
+      "Is he available?",
+      "Is he remote?",
+      "Rust?",
+      "Go?",
+    ].map((text, i) => ({ id: `h${i}000000`, role: "user", parts: [{ type: "text", text }] }));
+    const chunks = await readUiChunks(await ask("Where is he based?", { history }));
+    const messageId = chunks.find((c) => c["type"] === "start")!["messageId"] as string;
+
+    // The model read the note before the oldest question it was shown.
+    const sent = JSON.stringify(model.calls[0]!.prompt);
+    expect(sent).toContain(
+      "[Not shown: 1 earlier question in this conversation, about Atlas, achieve.]",
+    );
+    const row = await logged(messageId);
+    expect(row.trace?.window).toEqual({ dropped: 1 });
   });
 
   it("replays a signed answer as history, and not a forged one", async () => {
@@ -443,6 +483,76 @@ describe("POST /v1/ask", () => {
     await flushGuardEvents();
     const [off] = await getDb().select().from(aiGuardEvents).where(eq(aiGuardEvents.kind, "off"));
     expect(off?.count).toBe(2);
+  });
+
+  it("embeds the corpus in the background once a question comes, where it may (plan phase 18)", async () => {
+    const embedder = new MockEmbeddingModelV4({
+      modelId: "gemini-embedding-2",
+      maxEmbeddingsPerCall: 100,
+      doEmbed: async ({ values }) => ({
+        embeddings: values.map(() => [1, 0, 0]),
+        usage: { tokens: values.length },
+        warnings: [],
+      }),
+    });
+    setEmbeddingDeps({ model: () => embedder });
+    allowEmbeddingBackfill(true);
+    try {
+      config = { ...fixtureConfig(), embeddings: { ...config.embeddings, enabled: true, dims: 3 } };
+      await getDb()
+        .insert(aiSettings)
+        .values({ id: 1, featureSwitches: { embeddings: true } })
+        .onConflictDoUpdate({
+          target: aiSettings.id,
+          set: { featureSwitches: { embeddings: true } },
+        });
+      invalidateAssistantCache();
+      only(scripted([textTurn("He is in Berlin [^profile@en].")]));
+      await readUiChunks(await ask("Where is he based?"));
+
+      const chunks = new Set(fixtureCorpus(config).search.chunks.map((c) => c.hash));
+      const stored = await eventually(async () => {
+        const rows = await getDb().select().from(aiEmbeddings);
+        return rows.length === chunks.size ? rows : undefined;
+      });
+      expect(new Set(stored.map((r) => r.contentHash))).toEqual(chunks);
+    } finally {
+      setEmbeddingDeps(null);
+      allowEmbeddingBackfill(false);
+      resetEmbeddings();
+    }
+  });
+
+  it("moves an answer up to the deep chain mid-way and logs it so (plan phase 20)", async () => {
+    corpusOverride = twoProjectCorpus;
+    const lite = scripted([
+      toolTurn("get_document", { id: "project:atlas@en" }, "c1"),
+      toolTurn("get_document", { id: "project:borealis@en" }, "c2"),
+      textTurn("unused"),
+    ]);
+    const deep = scripted([textTurn("Both are his [^project:atlas@en].")]);
+    chain = (role) =>
+      role === "deep"
+        ? [mockEntry("gemini-3.7-flash", deep.model)]
+        : [mockEntry("gemini-3.5-flash-lite", lite.model)];
+
+    const chunks = await readUiChunks(await ask("Tell me about his projects"));
+    const messageId = chunks.find((c) => c["type"] === "start")!["messageId"] as string;
+    const metadata = chunks
+      .filter((c) => c["messageMetadata"])
+      .map((c) => c["messageMetadata"] as Record<string, unknown>)
+      .reduce((a, b) => ({ ...a, ...b }), {});
+    expect(metadata).toMatchObject({ route: "deep", model: "gemini-3.7-flash", fallback: false });
+    expect(roles).toEqual(["lite", "deep"]);
+
+    const row = await logged(messageId);
+    expect(row).toMatchObject({ route: "lite→deep", model: "gemini-3.7-flash" });
+    expect(row.trace).toMatchObject({
+      routing: { reason: "default" },
+      escalation: { step: 2, reason: "projects-fetched" },
+    });
+    expect(lite.calls).toHaveLength(2);
+    expect(deep.calls).toHaveLength(1);
   });
 });
 

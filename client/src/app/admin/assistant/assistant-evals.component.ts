@@ -192,6 +192,15 @@ const POLL_MS = 2_000;
                       tools: {{ tools(r.tools) }}
                     </p>
                   }
+                  @if (r.reasoning) {
+                    <!-- Plan phase 23: how a failed case reasoned; evidence, not proof. -->
+                    <div class="mt-2 rounded-md border border-border px-2 py-1 text-xs">
+                      <p class="m-0 text-muted-foreground">Its reasoning (an excerpt):</p>
+                      <p class="m-0 mt-1 whitespace-pre-wrap text-muted-foreground">
+                        {{ r.reasoning }}
+                      </p>
+                    </div>
+                  }
                 </details>
               </li>
             }

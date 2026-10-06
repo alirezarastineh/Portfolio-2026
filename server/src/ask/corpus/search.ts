@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import MiniSearch from "minisearch";
 
 import type { Locale } from "../../content/schema.js";
@@ -8,7 +9,7 @@ import type { CorpusDocument, CorpusKind } from "./build.js";
  * chunks of the corpus. Built once per corpus key and kept with the corpus.
  */
 
-interface Chunk {
+export interface Chunk {
   id: string;
   docId: string;
   locale: Locale;
@@ -16,6 +17,8 @@ interface Chunk {
   title: string;
   url: string;
   text: string;
+  /** Of the text: what a stored embedding is keyed by (plan phase 18). */
+  hash: string;
 }
 
 export interface SearchHit {
@@ -23,6 +26,8 @@ export interface SearchHit {
   title: string;
   url: string;
   snippet: string;
+  /** The document's related documents (plan phase 19), when it has any. */
+  related?: string[];
 }
 
 const CHUNK_CHARS = 700;
@@ -42,6 +47,7 @@ export function chunkDocument(doc: CorpusDocument): Chunk[] {
         title: doc.title,
         url: doc.url,
         text,
+        hash: createHash("sha256").update(text).digest("hex").slice(0, 16),
       });
     }
     current = "";
@@ -58,6 +64,20 @@ export function chunkDocument(doc: CorpusDocument): Chunk[] {
   return chunks;
 }
 
+function toHit(
+  chunk: Pick<Chunk, "docId" | "title" | "url" | "text">,
+  related: readonly string[] | undefined,
+): SearchHit {
+  const { text } = chunk;
+  return {
+    id: chunk.docId,
+    title: chunk.title,
+    url: chunk.url,
+    snippet: text.length > SNIPPET_CHARS ? `${text.slice(0, SNIPPET_CHARS)}…` : text,
+    ...(related?.length ? { related: [...related] } : {}),
+  };
+}
+
 export class CorpusSearch {
   private readonly index = new MiniSearch<Chunk>({
     fields: ["title", "text"],
@@ -65,8 +85,43 @@ export class CorpusSearch {
     searchOptions: { boost: { title: 2 }, prefix: true, fuzzy: 0.2 },
   });
 
+  /** Every chunk, in corpus order: what the embeddings cover. */
+  readonly chunks: readonly Chunk[];
+  private readonly byId: ReadonlyMap<string, Chunk>;
+  /** Each document's related ids (plan phase 19), for its hits. */
+  private readonly related: ReadonlyMap<string, readonly string[]>;
+
   constructor(documents: CorpusDocument[]) {
-    this.index.addAll(documents.flatMap(chunkDocument));
+    this.chunks = documents.flatMap(chunkDocument);
+    this.byId = new Map(this.chunks.map((c) => [c.id, c]));
+    this.related = new Map(documents.flatMap((d) => (d.related ? [[d.id, d.related]] : [])));
+    this.index.addAll([...this.chunks]);
+  }
+
+  /** BM25's ranking over both languages: chunk ids, best first; on a tie, `prefer`'s first. */
+  rank(query: string, kinds?: readonly CorpusKind[], prefer?: Locale): string[] {
+    const allowed = kinds?.length ? new Set(kinds) : null;
+    return this.index
+      .search(query, { filter: (r) => !allowed || allowed.has(r["kind"] as CorpusKind) })
+      .sort(
+        (a, b) =>
+          b.score - a.score || Number(a["locale"] !== prefer) - Number(b["locale"] !== prefer),
+      )
+      .map((r) => String(r.id));
+  }
+
+  /** A ranking of chunks as hits: the best chunk per document, at most `limit`. */
+  hits(ranked: readonly string[], limit = 6): SearchHit[] {
+    const seen = new Set<string>();
+    const hits: SearchHit[] = [];
+    for (const id of ranked) {
+      const chunk = this.byId.get(id);
+      if (!chunk || seen.has(chunk.docId)) continue;
+      seen.add(chunk.docId);
+      hits.push(toHit(chunk, this.related.get(chunk.docId)));
+      if (hits.length >= limit) break;
+    }
+    return hits;
   }
 
   /**
@@ -91,13 +146,17 @@ export class CorpusSearch {
         const docId = r["docId"] as string;
         if (seen.has(docId)) continue;
         seen.add(docId);
-        const text = r["text"] as string;
-        hits.push({
-          id: docId,
-          title: r["title"] as string,
-          url: r["url"] as string,
-          snippet: text.length > SNIPPET_CHARS ? `${text.slice(0, SNIPPET_CHARS)}…` : text,
-        });
+        hits.push(
+          toHit(
+            {
+              docId,
+              title: r["title"] as string,
+              url: r["url"] as string,
+              text: r["text"] as string,
+            },
+            this.related.get(docId),
+          ),
+        );
         if (hits.length >= limit) break;
       }
       return hits;

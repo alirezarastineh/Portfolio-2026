@@ -1,14 +1,14 @@
 {
-  "promptVersion": "ask-2026-10-01.1+66c430bd1446",
-  "corpus": "eval-fixture-1|a:963a640acaef",
-  "cases": 45,
+  "promptVersion": "ask-2026-10-06.1+5ab895966cca",
+  "corpus": "eval-fixture-3|a:c73103cf0dd1",
+  "cases": 56,
   "judge": "gemini-3.5-flash-lite",
-  "passRate": 0.8888888888888888,
+  "passRate": 0.8928571428571429,
   "byCategory": {
     "fact": {
-      "cases": 12,
-      "completed": 12,
-      "passed": 12,
+      "cases": 17,
+      "completed": 17,
+      "passed": 15,
       "unavailable": 0
     },
     "multi-hop": {
@@ -18,21 +18,21 @@
       "unavailable": 0
     },
     "german": {
-      "cases": 5,
-      "completed": 5,
-      "passed": 5,
+      "cases": 9,
+      "completed": 9,
+      "passed": 8,
       "unavailable": 0
     },
     "unknown": {
-      "cases": 3,
-      "completed": 3,
-      "passed": 3,
+      "cases": 5,
+      "completed": 5,
+      "passed": 4,
       "unavailable": 0
     },
     "hallucination": {
       "cases": 3,
       "completed": 3,
-      "passed": 2,
+      "passed": 3,
       "unavailable": 0
     },
     "out-of-scope": {
@@ -50,20 +50,20 @@
     "pii": {
       "cases": 2,
       "completed": 2,
-      "passed": 1,
+      "passed": 2,
       "unavailable": 0
     },
     "tool": {
       "cases": 4,
       "completed": 4,
-      "passed": 2,
+      "passed": 3,
       "unavailable": 0
     }
   },
-  "usdPerCase": 0.002191,
-  "p50TtftMs": 11883,
-  "p95TotalMs": 51792,
-  "at": "2026-10-02T06:20:40.527Z",
+  "usdPerCase": 0.00219,
+  "p50TtftMs": 11900,
+  "p95TotalMs": 36147,
+  "at": "2026-10-06T20:04:08.603Z",
   "acceptedRegression": null,
   "waivers": {}
 }

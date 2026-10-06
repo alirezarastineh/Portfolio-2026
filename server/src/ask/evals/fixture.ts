@@ -129,7 +129,11 @@ const documents: CorpusDocument[] = [
       "Problem: Manual data entry took four people full time.",
       "AI architecture: OCR, then an LLM extracts fields into a JSON schema; low-confidence fields go to a human review queue.",
       "Infra: Serverless on AWS; retries and dead-letter queues per stage.",
+      // As the assembled corpus reads a pipeline diagram with the admin's description (plan phase 17).
+      "[image: Borealis pipeline diagram]",
+      "[image description: Scanned freight PDFs land in an S3 bucket → Tesseract OCR reads each page → an LLM fills the JSON schema → fields under 0.9 confidence go to a review queue in Retool → approved records load nightly into Snowflake]",
     ].join("\n"),
+    images: [{ file: "borealis-pipeline.png", alt: "Borealis pipeline diagram" }],
   }),
   doc({
     id: "post:evals-first@en",
@@ -142,6 +146,30 @@ const documents: CorpusDocument[] = [
       "Published: 2025-11-04",
       "A prompt change is a code change, so it gets tests: a set of real questions with expected facts, citations and refusals.",
       "Every change runs the set; a lower pass rate blocks the merge. An LLM judge scores faithfulness, but deterministic checks come first.",
+    ].join("\n"),
+  }),
+  // Long: its last part, past the core's 1,500-character clip, says MLOps (plan phase 18), and
+  // nothing a word search could take for "LLM ops" or a German question (retrieval.ts).
+  doc({
+    id: "post:llm-in-production@en",
+    kind: "post",
+    locale: "en",
+    title: "Shipping language models to real users",
+    url: "/en/writing/llm-in-production",
+    text: [
+      "Shipping language models to real users",
+      "Published: 2026-02-10",
+      "What changes when a language model leaves the notebook and meets real users.",
+      "Streaming comes first. Nobody waits eight seconds for a paragraph; they wait two for the first words, so every answer streams, and the interface shows progress from the first token.",
+      "Timeouts come second. A provider that answers in two seconds at noon answers in twenty at night, so each call has a first-token deadline, and a slow provider hands over to the next one before any text is shown.",
+      "Fallbacks come third. Two providers and three models sit behind one interface; a breaker opens on repeated failures and closes again after a quiet period, so a bad hour costs a slower answer, not an error.",
+      "Budgets come fourth. Every feature has a daily cap, the visitors keep a reserve, and background work stops at its line before it can spend what an answer needs.",
+      "Observability comes fifth. Each answer keeps its trace: the models tried, the tools called, the tokens spent, what was cited and what was dropped, so a bad answer can be explained a week later.",
+      "Caching deserves a paragraph of its own: the fixed part of every prompt stays byte for byte the same, so the provider can serve it from its cache, and a change to it is a deliberate, measured event rather than an accident of string formatting.",
+      "Guardrails sit on both sides of the model. Visitor text is data, never instructions, and every answer passes a filter on its way out that removes anything that looks like a copy of the instructions or a secret, before the visitor sees it.",
+      "Evaluation comes last and gates everything else: a fixed set of questions runs before any change, and nothing ships that lowers the pass rate.",
+      "We call that last part MLOps for prompts: every prompt has a version, an owner and an eval set, and a change ships only when its evals pass.",
+      "Rollbacks are one click: the previous prompt version stays deployed beside the new one for a week.",
     ].join("\n"),
   }),
   doc({
@@ -196,10 +224,26 @@ const documents: CorpusDocument[] = [
       "Languages: English (fluent), German (professional), Persian (native)",
     ].join("\n"),
   }),
+  // Written in German only: every reading language's core holds it (plan phase 16).
+  doc({
+    id: "post:kosten-im-griff@de",
+    kind: "post",
+    locale: "de",
+    title: "Kosten im Griff: Budgets für LLM-Funktionen",
+    url: "/de/writing/kosten-im-griff",
+    text: [
+      "Kosten im Griff: Budgets für LLM-Funktionen",
+      "Published: 2026-03-02",
+      "Jede LLM-Funktion bekommt ein eigenes Tagesbudget, und ein fester Anteil bleibt für Besucher reserviert.",
+      "Interne Werkzeuge stoppen an ihrer Grenze; die Antworten für Besucher laufen weiter.",
+    ].join("\n"),
+  }),
 ];
 
 const base: Corpus = {
-  key: "eval-fixture-1",
+  // 2: the German-only post (plan phase 16); 3: a described diagram (phase 17) and a long
+  // post past the clip (phase 18). A new key keeps runs on an older fixture apart.
+  key: "eval-fixture-3",
   documents,
   text: "",
   projects: [
@@ -251,6 +295,18 @@ const base: Corpus = {
   ],
   posts: [
     { slug: "evals-first", locale: "en", title: "Evals first", url: "/en/writing/evals-first" },
+    {
+      slug: "llm-in-production",
+      locale: "en",
+      title: "Shipping language models to real users",
+      url: "/en/writing/llm-in-production",
+    },
+    {
+      slug: "kosten-im-griff",
+      locale: "de",
+      title: "Kosten im Griff: Budgets für LLM-Funktionen",
+      url: "/de/writing/kosten-im-griff",
+    },
   ],
 };
 
@@ -279,6 +335,23 @@ const faq: FaqEntry[] = [
       en: {
         question: "Would he relocate?",
         answer: "Within the EU, yes; he prefers remote-first teams.",
+      },
+    },
+    updatedAt: "2026-09-01T00:00:00.000Z",
+  },
+  {
+    // A careful topic the FAQ answers without a figure (plan phase 20's newspaper test).
+    id: "c9d0e1f2-0000-4000-8000-000000000003",
+    position: 2,
+    isVisible: true,
+    translations: {
+      en: {
+        question: "What are his rates?",
+        answer: "They depend on the engagement; he sends a quote after a first call.",
+      },
+      de: {
+        question: "Wie hoch sind seine Sätze?",
+        answer: "Das hängt vom Auftrag ab; ein Angebot schickt er nach einem ersten Gespräch.",
       },
     },
     updatedAt: "2026-09-01T00:00:00.000Z",

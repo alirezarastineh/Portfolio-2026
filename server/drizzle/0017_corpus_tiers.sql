@@ -1,0 +1,1 @@
+ALTER TABLE "ai_settings" ADD COLUMN "corpus_tiers" jsonb DEFAULT '{"promoted":[],"demoted":[]}'::jsonb NOT NULL;

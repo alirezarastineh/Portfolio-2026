@@ -67,6 +67,13 @@ function sessionId(): string {
             <p class="m-0 text-accent-orange">&gt; {{ text(m) }}</p>
           } @else {
             <div class="flex flex-col gap-1">
+              @if (reasoning(m); as thought) {
+                <!-- Plan phase 23: the model's thoughts, for the admin only; evidence, not proof. -->
+                <details class="rounded-md border border-border px-2 py-1 text-xs">
+                  <summary class="cursor-pointer text-muted-foreground">Reasoning</summary>
+                  <p class="m-0 mt-1 whitespace-pre-wrap text-muted-foreground">{{ thought }}</p>
+                </details>
+              }
               @for (step of steps(m); track $index) {
                 <p class="m-0 text-muted-foreground">› {{ step }}</p>
               }
@@ -185,6 +192,16 @@ export class AssistantPlaygroundComponent {
       .filter((p) => p.type === "text")
       .map((p) => p.text)
       .join("\n\n");
+  }
+
+  /** The model's thought summaries (plan phase 23), or null without any. */
+  protected reasoning(m: PlaygroundMessage): string | null {
+    const thought = m.parts
+      .filter((p) => p.type === "reasoning")
+      .map((p) => p.text.trim())
+      .filter(Boolean)
+      .join("\n\n");
+    return thought || null;
   }
 
   protected steps(m: PlaygroundMessage): string[] {

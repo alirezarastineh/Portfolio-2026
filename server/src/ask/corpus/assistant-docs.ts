@@ -68,6 +68,10 @@ export function assistantDocuments(
         title: t.question,
         url: `/${locale}#about`,
         text: `Q: ${t.question}\nA: ${t.answer}`,
+        // When this language's words last changed (plan phase 19): what it is true as of.
+        ...((t.updatedAt ?? entry.updatedAt)
+          ? { updated: (t.updatedAt ?? entry.updatedAt).slice(0, 10) }
+          : {}),
       });
     }
     documents.push({

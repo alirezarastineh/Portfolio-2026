@@ -25,6 +25,8 @@ const OUTCOME_LABELS: Record<ToolOutcome, string> = {
   no_hits: "no hits",
   error: "error",
   "cut-off": "cut off",
+  duplicate: "already provided",
+  budget_exhausted: "budget spent",
 };
 
 const count = new Intl.NumberFormat("en-US");

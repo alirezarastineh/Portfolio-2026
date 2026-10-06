@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, isNotNull, ne, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 
 import type { DbExecutor } from "../content/build.js";
 import { getDb } from "../db/client.js";
@@ -13,6 +13,7 @@ import {
 } from "./audit.js";
 import type { AskConfig } from "./config.js";
 import { askChain, askConfig } from "./deps.js";
+import { ESCALATED_ROUTE } from "./router.js";
 import {
   DEEP_ROUTE,
   errorRateVerdict,
@@ -62,11 +63,14 @@ async function judgedScores(db: DbExecutor, model: string, since?: Date): Promis
   return rows.map((row) => row.score);
 }
 
-/** How the deep route's visitor answers ended, newest first; an aborted one says nothing. */
+/**
+ * How the deep route's visitor answers ended, newest first, those that moved
+ * up to it mid-way included (plan phase 20); an aborted one says nothing.
+ */
 async function deepEndings(db: DbExecutor, since?: Date): Promise<string[]> {
   const conditions: SQL[] = [
     eq(aiMessages.source, "terminal"),
-    eq(aiMessages.route, "deep"),
+    inArray(aiMessages.route, ["deep", ESCALATED_ROUTE]),
     ne(aiMessages.finishReason, "aborted"),
   ];
   if (since) conditions.push(gt(aiMessages.createdAt, since));

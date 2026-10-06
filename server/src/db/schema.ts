@@ -14,6 +14,7 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
+  real,
   smallint,
   text,
   timestamp,
@@ -351,6 +352,13 @@ export const mediaAssets = pgTable(
     blurDataUri: text("blur_data_uri"),
     altEn: text("alt_en"),
     altDe: text("alt_de"),
+    /**
+     * What a diagram or screenshot shows, for the assistant (plan phase 17):
+     * its parts and how they connect. The copilot drafts it, the admin saves
+     * it; the assistant reads it at once, and no page sends it to visitors.
+     */
+    descriptionEn: text("description_en"),
+    descriptionDe: text("description_de"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by").references(() => adminUsers.id, { onDelete: "set null" }),
   },
@@ -672,6 +680,14 @@ export const aiSettings = pgTable(
       .$type<Partial<Record<string, boolean>>>()
       .notNull()
       .default({}),
+    /**
+     * The corpus tiers the admin applied (`ask/perception.ts` suggests them):
+     * document ids held whole at the front of the core, or cut shorter.
+     */
+    corpusTiers: jsonb("corpus_tiers")
+      .$type<{ promoted: string[]; demoted: string[] }>()
+      .notNull()
+      .default({ promoted: [], demoted: [] }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -817,6 +833,25 @@ export const aiReviews = pgTable("ai_reviews", {
   note: text("note"),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * The assistant's search vectors (plan phase 18, `ask/embeddings.ts`): one per
+ * chunk of the published corpus and model, keyed by a hash of the chunk's
+ * text, so a changed chunk gets a new one. Written only by the API that ran
+ * the migrations; a row older than 30 days whose chunk is no longer in the
+ * live corpus is pruned.
+ */
+export const aiEmbeddings = pgTable(
+  "ai_embeddings",
+  {
+    contentHash: text("content_hash").notNull(),
+    model: text("model").notNull(),
+    dims: integer("dims").notNull(),
+    vector: real("vector").array().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.contentHash, t.model] })],
+);
 
 /**
  * The published corpus as it was, per corpus key (`ask/corpus/snapshots.ts`):

@@ -151,6 +151,176 @@ function outcomesView(metric: string, rotate: boolean) {
   };
 }
 
+/** `GET /admin/assistant/perception`: a month of answers; Project One is fetched often. */
+function perceptionView(tiers: { promoted: string[]; demoted: string[] }) {
+  const promoted = tiers.promoted.includes("project:project-one@en");
+  return {
+    days: 30,
+    answers: 40,
+    cache: {
+      first: { steps: 30, input: 30_000, cached: 0, hits: 0 },
+      later: { steps: 10, input: 12_000, cached: 9_000, hits: 8 },
+    },
+    fetches: { whole: 1, rest: 6, handle: 2, unknown: 0 },
+    rereadRatio: 1 / 9,
+    healthyReread: 0.05,
+    tokens: { input: 40_000, output: 4_000, inputPerAnswer: 1_000, helpful: 30, perHelpful: 1_467 },
+    usdPerAnswer: 0.0021,
+    byLayout: {
+      both: {
+        answers: 25,
+        cache: {
+          first: { steps: 20, input: 24_000, cached: 0, hits: 0 },
+          later: { steps: 5, input: 2_000, cached: 0, hits: 0 },
+        },
+        fetches: { whole: 1, rest: 4, handle: 0, unknown: 0 },
+        rereadRatio: 0.2,
+        tokens: {
+          input: 30_000,
+          output: 2_500,
+          inputPerAnswer: 1_200,
+          helpful: 18,
+          perHelpful: 1_806,
+        },
+        usdPerAnswer: 0.0025,
+      },
+      locale: {
+        answers: 15,
+        cache: {
+          first: { steps: 10, input: 6_000, cached: 0, hits: 0 },
+          later: { steps: 5, input: 10_000, cached: 9_000, hits: 5 },
+        },
+        fetches: { whole: 0, rest: 2, handle: 2, unknown: 0 },
+        rereadRatio: 0,
+        tokens: { input: 10_000, output: 1_500, inputPerAnswer: 667, helpful: 12, perHelpful: 958 },
+        usdPerAnswer: 0.0018,
+      },
+    },
+    localeMix: [
+      { page: "en", reading: "en", answers: 34 },
+      { page: "en", reading: "de", answers: 6 },
+    ],
+    documents: [
+      { id: "project:project-one@en", fetched: 12, cited: 20 },
+      { id: "profile@en", fetched: 1, cited: 25 },
+    ],
+    coreTokens: { en: 1_341, de: 1_557 },
+    rules: { promoteShare: 0.2, promoteMinAnswers: 20, demoteMinAnswers: 200 },
+    limits: { promoted: 6, demoted: 30 },
+    tiers,
+    suggestions: {
+      promote: promoted
+        ? []
+        : [
+            {
+              id: "project:project-one@en",
+              title: "Project One",
+              fetched: 12,
+              cited: 20,
+              why: "fetched in 30 % of 40 answers",
+            },
+          ],
+      demote: [],
+      considered: [
+        {
+          id: "*",
+          title: "2 documents never fetched nor cited",
+          fetched: 0,
+          cited: 0,
+          why: "40 answers; clipping harder needs 200",
+        },
+      ],
+    },
+    titles: { "project:project-one@en": "Project One", "profile@en": "Alireza Rastineh" },
+    search: { semantic: { answers: 5, converted: 3 }, words: { answers: 4, converted: 1 } },
+    tools: {
+      answers: 40,
+      tools: [
+        {
+          name: "get_document",
+          calls: 10,
+          callsPerAnswer: 0.25,
+          outcomes: { ok: 4, not_found: 1, duplicate: 2, budget_exhausted: 3 },
+          citedAfter: 0.71,
+        },
+      ],
+    },
+    window: {
+      sessions: 30,
+      sessionsTrimmed: 3,
+      afterTrim: { answers: 4, rephrased: 1 },
+      otherwise: { answers: 36, rephrased: 2 },
+    },
+  };
+}
+
+/** `GET /admin/assistant/router`: a week of routing, one lite answer that went wrong. */
+function routerView() {
+  return {
+    days: 7,
+    answers: 42,
+    tiers: [
+      {
+        tier: "lookup",
+        answers: 12,
+        p50TtftMs: 800,
+        p90TtftMs: 1_460,
+        usdPerAnswer: 0.0009,
+        helpfulRate: 0.92,
+      },
+      {
+        tier: "lite",
+        answers: 25,
+        p50TtftMs: 1_600,
+        p90TtftMs: 3_100,
+        usdPerAnswer: 0.0021,
+        helpfulRate: 0.84,
+      },
+      {
+        tier: "escalated",
+        answers: 3,
+        p50TtftMs: 2_400,
+        p90TtftMs: 2_400,
+        usdPerAnswer: 0.006,
+        helpfulRate: 1,
+      },
+      {
+        tier: "deep",
+        answers: 2,
+        p50TtftMs: 4_000,
+        p90TtftMs: 5_000,
+        usdPerAnswer: 0.01,
+        helpfulRate: 0.5,
+      },
+      {
+        tier: "answer-only",
+        answers: 0,
+        p50TtftMs: null,
+        p90TtftMs: null,
+        usdPerAnswer: null,
+        helpfulRate: null,
+      },
+    ],
+    sensitive: { answers: 3, byTopic: { compensation: 2, family: 1 } },
+    escalation: { answers: 3, rate: 0.075, byReason: { "projects-fetched": 3 } },
+    falseSimple: {
+      rate: 1 / 37,
+      kept: 37,
+      candidates: 1,
+      byReason: { flagged: 0, "thumbs-down": 1, rephrased: 0 },
+      listed: [
+        {
+          id: "m_falsesimple01",
+          createdAt: "2026-10-04T09:30:00.000Z",
+          question: "Which of his projects scaled the furthest?",
+          tier: "lite",
+          reasons: ["thumbs-down"],
+        },
+      ],
+    },
+  };
+}
+
 /** A review week's label shares before anyone gave a verdict. */
 function noVerdicts() {
   return Object.fromEntries(VERDICT_LABELS.map((l) => [l, { good: 0, bad: 0 }]));
@@ -417,6 +587,8 @@ function defaults(): Record<string, Answer> {
     "GET /admin/assistant/trust": trustView(),
     "GET /admin/assistant/runs": { runs: [] },
     "GET /admin/assistant/outcomes": outcomesView("helpfulRate", false),
+    "GET /admin/assistant/perception": perceptionView({ promoted: [], demoted: [] }),
+    "GET /admin/assistant/router": routerView(),
     "GET /admin/assistant/judge": {
       fixtureJudge: "gemini-flash-lite",
       visitorJudge: "gemini-flash-lite",
@@ -796,6 +968,164 @@ test.describe("admin", () => {
     expect(unmocked).toEqual([]);
   });
 
+  test("the Overview's perception section applies a tier suggestion, then removes it", async ({
+    page,
+    baseURL,
+  }) => {
+    const sent: unknown[] = [];
+    const windows: (string | null)[] = [];
+    const health = {
+      ...(defaults()["GET /admin/assistant/health"] as Record<string, unknown>),
+      corpus: {
+        key: "en:12|de:12|a:x",
+        documents: { profile: 2, project: 6 },
+        coreChars: 6_059,
+        coreTokens: 1_557,
+        byLocale: { en: { chars: 5_666, tokens: 1_341 }, de: { chars: 6_059, tokens: 1_557 } },
+        embeddings: { on: true, model: "gemini-embedding-2", chunks: 30, embedded: 28 },
+      },
+    };
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/health": health,
+      "GET /admin/assistant/perception": (call: number) => ({
+        status: 200,
+        body: perceptionView(
+          call === 2
+            ? { promoted: ["project:project-one@en"], demoted: [] }
+            : { promoted: [], demoted: [] },
+        ),
+      }),
+      "PUT /admin/assistant/perception/tiers": () => ({
+        status: 200,
+        body: { tiers: { promoted: [], demoted: [] } },
+      }),
+    });
+    page.on("request", (r) => {
+      if (r.method() === "PUT" && r.url().endsWith("/admin/assistant/perception/tiers")) {
+        sent.push(r.postDataJSON());
+      }
+      if (r.method() === "GET" && r.url().includes("/admin/assistant/perception")) {
+        windows.push(new URL(r.url()).searchParams.get("days"));
+      }
+    });
+    await openAdmin(page, "/admin/assistant");
+
+    // The prefix per answer language, in the corpus line above.
+    await expect(
+      page.getByText(
+        /per answer language: English 5,666 characters, about 1,341 tokens; German 6,059, about 1,557/,
+      ),
+    ).toBeVisible();
+
+    // Search by meaning: how many passages have their vector (plan phase 18).
+    await expect(
+      page.getByText(/Search by meaning \(gemini-embedding-2\): 28 of 30 passages have a vector/),
+    ).toBeVisible();
+
+    const perception = page.getByRole("region", { name: "Perception" });
+    await expect(perception.getByText("1,341 / 1,557")).toBeVisible();
+    await expect(
+      perception.getByText(
+        "Searches: By meaning: 3 of 5 led to a citation · By words alone: 1 of 4 led to a citation.",
+      ),
+    ).toBeVisible();
+    await expect(perception.getByText("0 % / 75 %")).toBeVisible();
+    await expect(perception.getByText("11 %", { exact: true })).toBeVisible();
+    await expect(perception.getByText("English page, German core: 6")).toBeVisible();
+    // Before and after, side by side: the gate's cost and cached share.
+    const after = perception.getByRole("row", { name: /A core per language \(after\)/ });
+    await expect(after).toContainText("667");
+    await expect(after).toContainText("$0.00180");
+    await expect(after).toContainText("0 % / 90 %");
+    await expect(perception.getByRole("row", { name: /both languages \(before\)/ })).toContainText(
+      "$0.00250",
+    );
+    // How each tool fared (plan phase 21), column by column: per answer, not found, not
+    // allowed, no hits, repeated, over the budget, then cited.
+    const fetches = perception.getByRole("row", { name: /^get_document/ });
+    await expect(fetches.getByRole("cell")).toHaveText([
+      "0.25",
+      "10 %",
+      "0 %",
+      "0 %",
+      "20 %",
+      "30 %",
+      "71 %",
+    ]);
+    // The conversation window (plan phase 22).
+    await expect(
+      perception.getByText(/Conversation window: 3 of 30 sessions trimmed \(10 %\)/),
+    ).toBeVisible();
+
+    await perception.getByRole("button", { name: "Promote Project One" }).click();
+    await expect.poll(() => sent).toEqual([{ promoted: ["project:project-one@en"], demoted: [] }]);
+    const applied = perception.getByRole("listitem").filter({ hasText: "Promoted: Project One" });
+    await expect(applied).toBeVisible();
+    await expect(perception.getByRole("button", { name: "Promote Project One" })).toHaveCount(0);
+
+    const { violations } = await new AxeBuilder({ page })
+      .include("section[aria-labelledby=assistant-perception]")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+      .analyze();
+    expect(violations.map((v) => v.id)).toEqual([]);
+
+    await applied.getByRole("button", { name: "Remove the tier of Project One" }).click();
+    await expect.poll(() => sent).toHaveLength(2);
+    expect(sent[1]).toEqual({ promoted: [], demoted: [] });
+    await expect(perception.getByRole("button", { name: "Promote Project One" })).toBeVisible();
+
+    // A shorter window, e.g. right after a deploy.
+    // Each section names its own window, so a screen reader can tell them apart.
+    await perception.getByLabel("Perception window").selectOption("7");
+    await expect.poll(() => windows.at(-1)).toBe("7");
+    expect(windows[0]).toBe("30");
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the Overview's routing section shows the false-simple rate and what is behind it", async ({
+    page,
+    baseURL,
+  }) => {
+    const windows: (string | null)[] = [];
+    const unmocked = await fakeApi(page, baseURL, {});
+    page.on("request", (r) => {
+      if (r.method() === "GET" && r.url().includes("/admin/assistant/router")) {
+        windows.push(new URL(r.url()).searchParams.get("days"));
+      }
+    });
+    await openAdmin(page, "/admin/assistant");
+
+    const routing = page.getByRole("region", { name: "Routing" });
+    await expect(
+      routing.getByText("1 of 37 answers kept on the lite route went wrong (3 %): 1 thumbs-down"),
+    ).toBeVisible();
+    const lookup = routing.getByRole("row", { name: /Lookup \(minimal thinking\)/ });
+    await expect(lookup).toContainText("0.8 s / 1.5 s");
+    await expect(lookup).toContainText("92 %");
+    await expect(routing.getByRole("row", { name: /moved up to deep/ })).toContainText("$0.00600");
+    // A tier without answers stays out of the table.
+    await expect(routing.getByRole("row", { name: /Answer-only/ })).toHaveCount(0);
+    await expect(
+      routing.getByText(/3 moved up to the deep chain mid-answer \(8 % of those routed lite\)/),
+    ).toBeVisible();
+    await expect(
+      routing.getByText("Careful answers (the newspaper test): 3 (pay and rates 2, family 1)."),
+    ).toBeVisible();
+    const candidate = routing.getByRole("listitem").filter({ hasText: "scaled the furthest" });
+    await expect(candidate).toContainText("lite · thumbs-down · m_falsesimple01");
+
+    const { violations } = await new AxeBuilder({ page })
+      .include("section[aria-labelledby=assistant-routing]")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+      .analyze();
+    expect(violations.map((v) => v.id)).toEqual([]);
+
+    await routing.getByLabel("Routing window").selectOption("30");
+    await expect.poll(() => windows.at(-1)).toBe("30");
+    expect(windows[0]).toBe("7");
+    expect(unmocked).toEqual([]);
+  });
+
   test("the inbox reads in two panes: J opens, E archives and opens the next", async ({
     page,
     baseURL,
@@ -1130,6 +1460,75 @@ test.describe("admin", () => {
     expect(unmocked).toEqual([]);
   });
 
+  test("the Playground shows the model's thoughts collapsed above its answer", async ({
+    page,
+    baseURL,
+  }) => {
+    const unmocked = await fakeApi(page, baseURL);
+    // Plan phase 23: the playground's answers stream their thoughts (a UI message stream).
+    const chunks = [
+      { type: "start", messageId: "m_playground01", messageMetadata: { createdAt: Date.now() } },
+      { type: "start-step" },
+      { type: "reasoning-start", id: "r1" },
+      { type: "reasoning-delta", id: "r1", delta: "The profile says Berlin; cite it." },
+      { type: "reasoning-end", id: "r1" },
+      { type: "text-start", id: "t1" },
+      { type: "text-delta", id: "t1", delta: "He is based in Berlin [^profile@en]." },
+      { type: "text-end", id: "t1" },
+      { type: "finish-step" },
+      { type: "finish", finishReason: "stop", messageMetadata: { model: "gemini-3.5-flash-lite" } },
+    ];
+    // Registered after the fake API, so it answers this one call.
+    await page.route(
+      (url) => url.pathname === "/admin/assistant/playground",
+      (route) => {
+        const request = route.request();
+        const headers = {
+          ...CORS,
+          "access-control-allow-origin": request.headers()["origin"] ?? "*",
+        };
+        if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+        return route.fulfill({
+          status: 200,
+          headers: {
+            ...headers,
+            "content-type": "text/event-stream",
+            "x-vercel-ai-ui-message-stream": "v1",
+          },
+          body: [...chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`), "data: [DONE]\n\n"].join(
+            "",
+          ),
+        });
+      },
+    );
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Playground" }).click();
+    await page.getByLabel("Question for the draft assistant").fill("Where is he based?");
+    await page.getByRole("button", { name: "Ask", exact: true }).click();
+
+    const answer = page.getByText("He is based in Berlin [^profile@en].");
+    await expect(answer).toBeVisible();
+    const thoughts = page.locator("details", { hasText: "Reasoning" });
+    await expect(thoughts).toBeVisible();
+    // Above the answer, in the document's order.
+    const above = await thoughts.evaluate(
+      (details, text) =>
+        Boolean(details.compareDocumentPosition(text!) & Node.DOCUMENT_POSITION_FOLLOWING),
+      await answer.elementHandle(),
+    );
+    expect(above).toBe(true);
+    const thought = page.getByText("The profile says Berlin; cite it.");
+    await expect(thought).toBeHidden();
+    await thoughts.locator("summary").click();
+    await expect(thought).toBeVisible();
+    const { violations } = await new AxeBuilder({ page })
+      .include("app-assistant-playground")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+      .analyze();
+    expect(violations.map((v) => v.id)).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
   test("the Evals tab follows a background run it did not start, until it ends", async ({
     page,
     baseURL,
@@ -1193,6 +1592,10 @@ test.describe("admin", () => {
               usd: 0.002,
               judge: null,
               attempts: [],
+              // Plan phase 23: a failed case keeps an excerpt of its reasoning.
+              ...(passed
+                ? {}
+                : { reasoning: "The FAQ names no project, so I answered from memory." }),
             },
     });
     const unmocked = await fakeApi(page, baseURL, {
@@ -1224,6 +1627,13 @@ test.describe("admin", () => {
     await expect(page.getByText("3 of 3 cases done")).toBeVisible();
     await expect(page.locator("strong", { hasText: "2/3" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Cancel the run" })).toHaveCount(0);
+
+    // The failed case shows how it reasoned (plan phase 23).
+    await page.locator("summary", { hasText: "fact-b" }).click();
+    await expect(page.getByText("Its reasoning (an excerpt):")).toBeVisible();
+    await expect(
+      page.getByText("The FAQ names no project, so I answered from memory."),
+    ).toBeVisible();
     expect(unmocked).toEqual([]);
   });
 
@@ -1631,6 +2041,48 @@ test.describe("admin", () => {
     await page.getByRole("button", { name: "Delete 1" }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
     await expect.poll(() => cleaned).toEqual([["a2"]]);
+  });
+
+  test("the media library drafts a description for the assistant and saves it", async ({
+    page,
+    baseURL,
+  }) => {
+    const saved: unknown[] = [];
+    const asked: unknown[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "POST /admin/ai/copilot": {
+        text: "OCR → LLM: page text\nLLM → review queue: low-confidence fields",
+        model: "gemini-flash",
+      },
+      "PATCH /admin/media/a1": () => ({ status: 200, body: { ok: true } }),
+    });
+    page.on("request", (r) => {
+      if (r.method() === "PATCH" && r.url().endsWith("/admin/media/a1"))
+        saved.push(r.postDataJSON());
+      if (r.method() === "POST" && r.url().endsWith("/admin/ai/copilot"))
+        asked.push(r.postDataJSON());
+    });
+    await openAdmin(page, "/admin/media");
+
+    await page.getByRole("button", { name: "Details of architecture.png" }).click();
+    const details = page.locator("hlm-sheet-content");
+    const section = details.getByRole("region", { name: "Description for the assistant" });
+    await expect(section.getByRole("button", { name: "Save description" })).toBeDisabled();
+    await section.getByRole("button", { name: "Describe the image in English with AI" }).click();
+    await expect(section.getByLabel("Assistant description, en")).toHaveValue(
+      "OCR → LLM: page text\nLLM → review queue: low-confidence fields",
+    );
+    expect(asked).toEqual([{ task: "describe", mediaId: "a1", locale: "en" }]);
+    await section.getByRole("button", { name: "Save description" }).click();
+    await expect
+      .poll(() => saved)
+      .toEqual([
+        {
+          descriptionEn: "OCR → LLM: page text\nLLM → review queue: low-confidence fields",
+          descriptionDe: null,
+        },
+      ]);
+    expect(unmocked).toEqual([]);
   });
 
   test("each project's visibility switch names its own project", async ({ page, baseURL }) => {

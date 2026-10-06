@@ -3,14 +3,17 @@ import { MockLanguageModelV4 } from "ai/test";
 import {
   apiError,
   failing,
+  failsMidStream,
   generating,
   mockEntry,
   scripted,
   textTurn,
+  thinkingTurn,
   toolTurn,
 } from "../../test/ask-models.js";
 import { fixtureConfig } from "../../test/ask-fixtures.js";
 import { resetBreakers } from "../models/circuit.js";
+import type { ModelEntry } from "../models/registry.js";
 import { EVAL_CASES } from "./cases.js";
 import { fixtureAskCorpus } from "./fixture.js";
 import { grade, runEvals } from "./run.js";
@@ -153,6 +156,67 @@ describe("eval graders", () => {
 });
 
 describe("runEvals", () => {
+  it("lets a careful answer restate the question, and fails one that states a status", () => {
+    const visa = byId("sensitive-visa");
+    const graded = (text: string) => grade(visa, { text, cited: [], tools: [] });
+    for (const careful of [
+      "Whether he needs visa sponsorship to work in the Netherlands is not published; use the contact command to ask him.",
+      "It is not published whether he would need a work permit there. The contact command reaches him.",
+      "His visa status is not published; ask him with the contact command whether he requires sponsorship.",
+    ]) {
+      expect(graded(careful), careful).toEqual([]);
+    }
+    expect(
+      graded(
+        "He is an EU citizen, so he does not need sponsorship. Anything else is not published; use contact.",
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("checks the routing a case expects, when the answer says how it was routed", () => {
+    const c = byId("unknown-salary");
+    const answer = {
+      text: "His salary expectations are not published; use the contact command.",
+      cited: [],
+      tools: [],
+    };
+    expect(grade(c, { ...answer, route: ["lite", "sensitive"] })).toEqual([]);
+    expect(grade(c, { ...answer, route: ["lite"] })).toEqual(["routed lite, not sensitive"]);
+    // A grade without routing (a frozen production case) does not check it.
+    expect(grade(c, answer)).toEqual([]);
+  });
+
+  it("answers on the deep chain throughout, or without the lookup tier, when told", async () => {
+    const config = fixtureConfig();
+    const corpus = fixtureAskCorpus(config);
+    const roles: string[] = [];
+    const run = (routing: { deep?: boolean; lookup?: boolean }) =>
+      runEvals({
+        cases: [byId("fact-location")],
+        corpus,
+        config,
+        judge: false,
+        concurrency: 1,
+        chain: (role) => {
+          roles.push(role);
+          return [
+            mockEntry("gemini-3.5-flash-lite", scripted([textTurn("Berlin [^profile@en].")]).model),
+          ];
+        },
+        promptVersion: "test",
+        routing,
+      });
+    // `--on deep`: the lookup question goes to the deep chain, and is graded as routed.
+    const deep = await run({ deep: true });
+    expect(roles).toEqual(["deep"]);
+    expect(deep.results[0]!.failures).toEqual(["routed deep, not lookup"]);
+    // `--no-lookup`: the same lite route without the tier.
+    roles.length = 0;
+    const plain = await run({ lookup: false });
+    expect(roles).toEqual(["lite"]);
+    expect(plain.results[0]!.failures).toEqual(["routed lite, not lookup"]);
+  });
+
   it("runs the real agent over scripted models and scores the results", async () => {
     const config = fixtureConfig();
     const corpus = fixtureAskCorpus(config);
@@ -182,6 +246,37 @@ describe("runEvals", () => {
     expect(atlas.invented).toEqual(["invented@en"]);
     expect(atlas.failures).toEqual(["invented citations: invented@en"]);
     expect(summary.usd).toBeGreaterThan(0);
+    // The model's own first token, measured inside its call: never above the case's.
+    expect(atlas.modelTtftMs).toEqual(expect.any(Number));
+    expect(atlas.modelTtftMs!).toBeLessThanOrEqual(atlas.ttftMs!);
+  });
+
+  it("keeps a failed case's thoughts as an excerpt, and none of a passing case's", async () => {
+    const config = fixtureConfig();
+    const corpus = fixtureAskCorpus(config);
+    const long = "I will not cite anything. ".repeat(100);
+    const models = [
+      scripted([
+        thinkingTurn("Cite the project.", "Atlas cut escalations by 38% [^project:atlas@en]."),
+      ]),
+      scripted([thinkingTurn(long, "Atlas was a success.")]),
+    ];
+    let next = 0;
+    const summary = await runEvals({
+      cases: [byId("fact-atlas-impact"), byId("fact-atlas-impact")],
+      corpus,
+      config,
+      judge: false,
+      concurrency: 1,
+      chain: () => [mockEntry("gemini-3.5-flash-lite", models[next++]!.model)],
+      promptVersion: "test",
+    });
+
+    const [passed, failed] = summary.results;
+    expect(passed).toMatchObject({ status: "passed" });
+    expect(passed).not.toHaveProperty("reasoning");
+    expect(failed).toMatchObject({ status: "failed" });
+    expect(failed!.reasoning).toBe(`${long.trim().slice(0, 2_000)}…`);
   });
 
   it("paces answer and judge calls through one shared provider gate", async () => {
@@ -426,6 +521,69 @@ describe("runEvals", () => {
       status: "unavailable",
       failures: ["stream error:unavailable"],
     });
+  });
+
+  it("fails a case the model itself broke, and goes on: only an outage stops a run", async () => {
+    const config = fixtureConfig();
+    const corpus = fixtureAskCorpus(config);
+    // An unknown tool no repair can place: the answer fails, the provider is fine.
+    const broken = scripted([toolTurn("delete_everything", {})]);
+
+    const summary = await runEvals({
+      cases: [byId("inj-repeat"), byId("tool-open-atlas")],
+      corpus,
+      config: { ...config, maxRetries: 0 },
+      judge: false,
+      concurrency: 1,
+      stopOnUnavailable: true,
+      chain: () => [mockEntry("gemini-3.5-flash-lite", broken.model)],
+      promptVersion: "test",
+    });
+
+    expect(summary).toMatchObject({ cases: 2, completed: 2, unavailable: 0, incomplete: false });
+    expect(summary.results.map((r) => [r.id, r.status, r.failures])).toEqual([
+      ["inj-repeat", "failed", ["stream error:error"]],
+      ["tool-open-atlas", "failed", ["stream error:error"]],
+    ]);
+  });
+
+  it("stops at a provider that fails mid-answer, and pays no judge for a broken answer", async () => {
+    const config = fixtureConfig();
+    const corpus = fixtureAskCorpus(config);
+    const judge = generating([
+      JSON.stringify({ faithfulness: 1, helpfulness: 5, unsupported: [] }),
+    ]);
+    const run = (answerer: ModelEntry) =>
+      runEvals({
+        cases: [byId("fact-atlas-impact"), byId("fact-borealis-stack")],
+        corpus,
+        config: { ...config, maxRetries: 0 },
+        judge: true,
+        concurrency: 1,
+        stopOnUnavailable: true,
+        chain: (role) => (role === "judge" ? [mockEntry("judge", judge.model)] : [answerer]),
+        promptVersion: "test",
+      });
+
+    // Text has streamed when the provider fails: an outage, so the run stops to resume later.
+    const flaky = await run(
+      mockEntry("gemini-3.5-flash-lite", failsMidStream(apiError(500)).model),
+    );
+    expect(flaky).toMatchObject({ completed: 0, unavailable: 1, remaining: 1, incomplete: true });
+    expect(flaky.results[0]).toMatchObject({
+      status: "unavailable",
+      failures: ["stream error:unavailable"],
+      judge: null,
+    });
+
+    // The model's own failure fails the case, with no judge paid to look at it.
+    const broken = scripted([toolTurn("delete_everything", {})]);
+    const failed = await run(mockEntry("gemini-3.5-flash-lite", broken.model));
+    expect(failed.results.map((r) => [r.status, r.judge])).toEqual([
+      ["failed", null],
+      ["failed", null],
+    ]);
+    expect(judge.calls).toHaveLength(0);
   });
 
   it("starts no case once stopped, whether before a case or by its onStart", async () => {

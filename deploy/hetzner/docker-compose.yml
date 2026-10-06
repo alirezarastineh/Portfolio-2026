@@ -136,6 +136,11 @@ services:
       SERVER_AI_SESSION_RATE_PER_HOUR: ${SERVER_AI_SESSION_RATE_PER_HOUR:-}
       SERVER_AI_MAX_CONCURRENT: ${SERVER_AI_MAX_CONCURRENT:-}
       SERVER_AI_EXPLICIT_CACHE: ${SERVER_AI_EXPLICIT_CACHE:-}
+      # Search by meaning (plan phase 18): off unless set to true here and
+      # switched on in the admin; empty model and timeout mean the defaults.
+      SERVER_AI_EMBEDDINGS: ${SERVER_AI_EMBEDDINGS:-}
+      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-}
+      SERVER_AI_EMBEDDING_TIMEOUT_MS: ${SERVER_AI_EMBEDDING_TIMEOUT_MS:-}
       # Signs answers so only this server's own can come back as history.
       # Optional (falls back to IP_HASH_SALT). `openssl rand -hex 32`.
       ASK_SIGNING_KEY: ${ASK_SIGNING_KEY:-}

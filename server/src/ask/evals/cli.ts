@@ -1,9 +1,12 @@
 import { loadEnvFiles } from "../../lib/env.js";
 import { getAskConfig } from "../config.js";
 import { getAskCorpus } from "../corpus/index.js";
+import { embedInMemory, setEmbeddingDeps } from "../embeddings.js";
+import type { ModelCall } from "../models/fallback.js";
 import { buildChain } from "../models/registry.js";
 import { PROMPT_HASH, PROMPT_VERSION } from "../prompt.js";
 import { loadEncoder } from "../tokens.js";
+import { summarizeCalls } from "../usage.js";
 import { hasFlag, optionValues } from "./args.js";
 import {
   BASELINE_PATH,
@@ -20,6 +23,7 @@ import { EVAL_CASES } from "./cases.js";
 import { fixtureAskCorpus } from "./fixture.js";
 import { pairwiseCli, pairwiseSides } from "./pairwise-cli.js";
 import { productionCli } from "./production-cli.js";
+import { runRetrieval } from "./retrieval.js";
 import { FREE_TIER_EVAL_PACING, FREE_TIER_RATE_LIMIT_RETRY, runEvals } from "./run.js";
 
 /**
@@ -42,9 +46,23 @@ import { FREE_TIER_EVAL_PACING, FREE_TIER_RATE_LIMIT_RETRY, runEvals } from "./r
  *                                 sees both answers twice, swapped (pairwise-cli.ts)
  *   --candidate-prompt <file>     rank the current prompt (A) against this one (B),
  *                                 on the lite model unless --pairwise names the sides
+ *   --candidate-reminder <file>   rank the prompt without (A) and with (B) this
+ *                                 text after the corpus
+ *   --compare-core                rank one core with both languages (A, before plan
+ *                                 phase 16) against a core per language (B)
+ *   SERVER_AI_EMBEDDINGS=1        search by meaning too: the corpus is embedded in memory
+ *                                 first (paid; plan phase 18)
+ *   --retrieval                   with SERVER_AI_EMBEDDINGS: the search alone, the
+ *                                 expected document's rank by words and by words and
+ *                                 meaning (retrieval.ts; a few query embeddings)
+ *   --no-lookup                   leave the lookup tier out (plan phase 20): run the
+ *                                 lookup cases with and without it to compare their
+ *                                 time to the first token
  *   --suite production            the cases frozen from visitor answers, each against
  *                                 its own corpus snapshot (reads the database through
  *                                 the tunnel, writes nothing; report only)
+ *   --on deep                     with --suite production: answer them on the deep
+ *                                 chain (the router report's false-simple replay)
  *
  * Exits 1 when the run fails the gate against baseline.json (a lower pass
  * rate, or a cost or latency rise above its limit) and is not recorded, 2
@@ -81,6 +99,15 @@ await loadEncoder();
 
 const live = values("corpus")[0] === "live";
 const corpus = live ? await getAskCorpus(config) : fixtureAskCorpus(config);
+if (config.embeddings.enabled) {
+  // Search by meaning (plan phase 18): this run's corpus embedded in memory. A paid run the
+  // user starts, so the production switch does not apply; nothing is written or recorded.
+  setEmbeddingDeps({ available: () => Promise.resolve(true) });
+  const embedded = await embedInMemory(corpus, config);
+  console.log(
+    `Embedded ${embedded.passages} passage(s) for search by meaning (${config.embeddings.model}, $${summarizeCalls(embedded.calls).usd.toFixed(4)}).`,
+  );
+}
 const filters = values("case");
 const cases = EVAL_CASES.filter(
   (c) =>
@@ -88,15 +115,42 @@ const cases = EVAL_CASES.filter(
     (!filters.length || filters.some((f) => c.id === f || c.category === f || c.id.startsWith(f))),
 );
 
-if (values("suite")[0] === "production") {
-  // The frozen visitor cases, each against its own snapshot (read-only).
-  process.exit(await productionCli(config, { judge: !flag("no-judge") }));
+if (flag("retrieval")) {
+  // The search alone, by words and by words and meaning (plan phase 18, retrieval.ts).
+  if (!config.embeddings.enabled) {
+    console.error("--retrieval compares with search by meaning: set SERVER_AI_EMBEDDINGS=true.");
+    process.exit(2);
+  }
+  const spent: ModelCall[] = [];
+  const ranks = (rank: number | null) => (rank === null ? "–" : String(rank)).padStart(5);
+  console.log(`\n${"case".padEnd(22)}words  both  (rank of the expected document, 1 = first)`);
+  for (const r of await runRetrieval(corpus, config, spent)) {
+    const fellBack = r.semantic ? "" : "  (fell back to words)";
+    console.log(`${r.id.padEnd(22)}${ranks(r.words)}${ranks(r.hybrid)}${fellBack}`);
+  }
+  console.log(`\nQueries embedded: $${summarizeCalls(spent).usd.toFixed(5)}`);
+  process.exit(0);
 }
 
-const pairwise = values("pairwise")[0];
-const candidatePrompt = values("candidate-prompt")[0];
-if (pairwise || candidatePrompt) {
-  const planned = pairwiseSides(config, pairwise, candidatePrompt);
+if (values("suite")[0] === "production") {
+  // The frozen visitor cases, each against its own snapshot (read-only); `--on deep`
+  // replays them on the deep chain, the router report's false-simple candidates first.
+  const on = values("on")[0];
+  if (on !== undefined && on !== "deep") {
+    console.error("--on takes `deep`: the production cases answered on the deep chain.");
+    process.exit(2);
+  }
+  process.exit(await productionCli(config, { judge: !flag("no-judge"), deep: on === "deep" }));
+}
+
+const choice = {
+  pairwise: values("pairwise")[0],
+  candidatePrompt: values("candidate-prompt")[0],
+  candidateReminder: values("candidate-reminder")[0],
+  compareCore: flag("compare-core"),
+};
+if (choice.pairwise || choice.candidatePrompt || choice.candidateReminder || choice.compareCore) {
+  const planned = pairwiseSides(config, choice);
   if ("error" in planned) {
     console.error(planned.error);
     process.exit(2);
@@ -125,11 +179,23 @@ const summary = await runEvals({
   stopOnUnavailable: true,
   judge: !flag("no-judge"),
   promptVersion: `${PROMPT_VERSION}+${PROMPT_HASH}`,
+  // `--no-lookup`: the lookup tier left out, to compare its time to the first token.
+  ...(flag("no-lookup") ? { routing: { lookup: false } } : {}),
   onResult: (r) => {
     const mark = resultMark(r.status, r.passed);
-    const meta = `${r.model ?? "no model"} · ${(r.totalMs / 1000).toFixed(1)} s`;
+    // The model's own first token, no pacing wait in it: the lookup A/B reads this.
+    const first = r.modelTtftMs == null ? "" : ` · first token ${r.modelTtftMs} ms`;
+    const meta = `${r.model ?? "no model"} · ${(r.totalMs / 1000).toFixed(1)} s${first}`;
     const failures = r.passed ? "" : `\n    ${r.failures.join("\n    ")}`;
-    console.log(`${mark} ${r.id.padEnd(22)} ${meta}${failures}`);
+    // A failed case's answer, to read a grader's miss off the run, and its thoughts (plan phase
+    // 23): evidence of why, not proof. The first lines of each.
+    const excerpt = (label: string, text: string) => {
+      const more = text.length > 400 ? " …" : "";
+      return `\n    ${label}: ${text.slice(0, 400).replaceAll(/\s+/g, " ")}${more}`;
+    };
+    const answer = r.status === "failed" && r.answer ? excerpt("answer", r.answer) : "";
+    const thoughts = r.reasoning ? excerpt("thoughts", r.reasoning) : "";
+    console.log(`${mark} ${r.id.padEnd(22)} ${meta}${failures}${answer}${thoughts}`);
   },
 });
 

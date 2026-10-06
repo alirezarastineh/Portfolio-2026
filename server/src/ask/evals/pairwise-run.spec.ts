@@ -7,10 +7,12 @@ import { fixtureConfig } from "../../test/ask-fixtures.js";
 import {
   apiError,
   failing,
+  failsMidStream,
   generating,
   mockEntry,
   scripted,
   textTurn,
+  toolTurn,
 } from "../../test/ask-models.js";
 import { resetBreakers } from "../models/circuit.js";
 import { EVAL_CASES } from "./cases.js";
@@ -67,6 +69,22 @@ describe("pairwise runs", () => {
       passed: { a: 1, b: 0 },
       swapAgreement: 1,
     });
+  });
+
+  it("gives each side its own core layout and its own line after the corpus", async () => {
+    const a = scripted([textTurn(A_TEXT)]);
+    const b = scripted([textTurn(B_TEXT)]);
+    const run = options([verdict("1"), verdict("2")]);
+    run.a = { label: "A", chain: [mockEntry("model-a", a.model)], layout: "both" };
+    run.b = { label: "B", chain: [mockEntry("model-b", b.model)], afterCorpus: "Cite it all." };
+    await runPairwise(run);
+    const [seenByA, seenByB] = [a.calls[0], b.calls[0]].map(promptText);
+    // A: Part C's core holds the German Atlas whole; B: a handle line, and the reminder.
+    expect(seenByA).toContain("id: project:atlas@de");
+    expect(seenByA).not.toContain("Also in German");
+    expect(seenByA).not.toContain("Cite it all.");
+    expect(seenByB).toContain("- project:atlas@de: Atlas (/de/work/atlas)");
+    expect(seenByB).toContain("Cite it all.");
   });
 
   it("lets a one-model side think past the interactive first-chunk timeout", async () => {
@@ -130,6 +148,38 @@ describe("pairwise runs", () => {
     run.config = fixtureConfig({ retryBaseDelayMs: 1, retryMaxDelayMs: 1 });
     run.cases = EVAL_CASES.filter((c) => c.category === "fact").slice(0, 3);
     run.b = { label: "down", chain: [mockEntry("down", failing(apiError(500), "down").model)] };
+    const results: { status: string; reasons: string[] }[] = [];
+    const summary = await runPairwise({ ...run, onResult: (r) => void results.push(r) });
+    expect(results).toEqual([
+      expect.objectContaining({ status: "unavailable", reasons: ["answer B failed"] }),
+    ]);
+    expect(run.judgeCalls).toHaveLength(0);
+    expect(summary).toMatchObject({ judged: 0, unavailable: 1 });
+  });
+
+  it("lets a side whose answer failed on its own forfeit, without paying the judge", async () => {
+    const run = options([verdict("1"), verdict("2")]);
+    // A tool no name repair can reach: the answer fails, and it is the model's doing.
+    const broken = scripted([toolTurn("delete_everything", {})]);
+    run.b = { label: "broken", chain: [mockEntry("broken", broken.model)] };
+    run.cases = EVAL_CASES.filter((c) => c.category === "fact").slice(0, 2);
+    const results: { status: string; outcome: string | null; reasons: string[] }[] = [];
+    const summary = await runPairwise({ ...run, onResult: (r) => void results.push(r) });
+    // The run goes on: a forfeit is a result, not an outage.
+    expect(results).toHaveLength(2);
+    expect(results[0]).toMatchObject({
+      status: "judged",
+      outcome: "a",
+      reasons: ["forfeit: answer B (error:error) failed, not judged"],
+    });
+    expect(run.judgeCalls).toHaveLength(0);
+    // Counted for A, but not as the judge's agreement with itself.
+    expect(summary).toMatchObject({ judged: 2, tally: { a: 2 }, swapAgreement: null });
+  });
+
+  it("stops at a side whose provider failed mid-answer: an outage, not a loss", async () => {
+    const run = options([verdict("1"), verdict("2")]);
+    run.b = { label: "flaky", chain: [mockEntry("flaky", failsMidStream(apiError(500)).model)] };
     const results: { status: string; reasons: string[] }[] = [];
     const summary = await runPairwise({ ...run, onResult: (r) => void results.push(r) });
     expect(results).toEqual([

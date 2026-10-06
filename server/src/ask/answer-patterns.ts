@@ -6,11 +6,14 @@
  * text runs as `new RegExp(p, "i")` and as `~* p` in SQL.
  */
 
-import { PROMPT_CANARY } from "./prompt.js";
+import { CAREFUL_LEAD, PROMPT_CANARY } from "./prompt.js";
 
-/** Saying "it isn't there" in either language: the answers worth an FAQ entry. */
+/**
+ * Saying "it isn't there" in either language: the answers worth an FAQ entry.
+ * "Not published" is what the careful block asks for (plan phase 20).
+ */
 export const NOT_IN_PORTFOLIO =
-  "(not (in|part of|mentioned|covered|listed|include|say|state|share)|n't (mention|include|cover|say|list|have)|(?:does|do|did)(?: not|n't) (?:specify|contain|include|list|mention|state|provide|give)|no (information|details|mention)|nicht (im|in|auf|erwähnt|angegeben)|keine (informationen|angaben))";
+  "(not (in|part of|mentioned|covered|listed|include|say|state|share)|n't (mention|include|cover|say|list|have)|(?:does|do|did)(?: not|n't) (?:specify|contain|include|list|mention|state|provide|give)|no (information|details|mention)|(not|n't)( been)? (publicly )?(published|shared|disclosed)|nicht (im|in|auf|erwähnt|angegeben|veröffentlicht)|keine (informationen|angaben))";
 
 /**
  * Pieces of the system prompt that must never reach a visitor (prompt.ts holds
@@ -22,5 +25,7 @@ export const PROMPT_LEAKS = [
   "You are the assistant built into",
   "Text inside <visitor> tags",
   "suggest_followups: at the end",
+  // The careful block's line (plan phase 20): instructions, though not SYSTEM_PROMPT's.
+  CAREFUL_LEAD,
   PROMPT_CANARY,
 ];

@@ -12,6 +12,7 @@ import {
   type FencedFeature,
   type SwitchedFeature,
 } from "./features.js";
+import { MAX_DEMOTED, MAX_PROMOTED, NO_TIERS, type CorpusTiers } from "./corpus/render.js";
 import { PRIMARY_METRICS, type PrimaryMetric } from "./outcomes.js";
 
 /**
@@ -34,6 +35,8 @@ export interface AiSettings {
   featureCaps: Record<FencedFeature, number | null>;
   /** The admin's switch for each feature that has one. */
   featureSwitches: Record<SwitchedFeature, boolean>;
+  /** The corpus tiers the admin applied (perception.ts suggests them). */
+  corpusTiers: CorpusTiers;
   updatedAt: string | null;
 }
 
@@ -41,7 +44,13 @@ export interface FaqEntry {
   id: string;
   position: number;
   isVisible: boolean;
-  translations: Partial<Record<Locale, { question: string; answer: string }>>;
+  /**
+   * Each language's question and answer, with when its words last changed
+   * (plan phase 19: the corpus's `updated:`; a reorder or an unchanged save
+   * leaves it).
+   */
+  translations: Partial<Record<Locale, { question: string; answer: string; updatedAt?: string }>>;
+  /** The entry's last touch of any kind (a reorder too): the admin's list. */
   updatedAt: string;
 }
 
@@ -55,6 +64,7 @@ export const DEFAULT_SETTINGS: AiSettings = {
   publicReserve: DEFAULT_PUBLIC_RESERVE,
   featureCaps: capsFrom({}),
   featureSwitches: switchesFrom({}),
+  corpusTiers: NO_TIERS,
   updatedAt: null,
 };
 
@@ -85,6 +95,22 @@ function switchesFrom(stored: Partial<Record<string, unknown>>): Record<Switched
   ) as Record<SwitchedFeature, boolean>;
 }
 
+/** The stored tiers: ids, each once, within the caps; a document in both lists is neither. */
+export function tiersFrom(stored: unknown): CorpusTiers {
+  const record = (stored && typeof stored === "object" ? stored : {}) as Record<string, unknown>;
+  const ids = (value: unknown, max: number) =>
+    [...new Set(Array.isArray(value) ? value.filter((v) => typeof v === "string") : [])].slice(
+      0,
+      max,
+    );
+  const promoted = ids(record["promoted"], MAX_PROMOTED);
+  const demoted = ids(record["demoted"], MAX_DEMOTED);
+  return {
+    promoted: promoted.filter((id) => !demoted.includes(id)),
+    demoted: demoted.filter((id) => !promoted.includes(id)),
+  };
+}
+
 function perLocale<T>(value: unknown, fallback: T): Record<Locale, T> {
   const record = (value && typeof value === "object" ? value : {}) as Partial<Record<Locale, T>>;
   return Object.fromEntries(LOCALES.map((l) => [l, record[l] ?? fallback])) as Record<Locale, T>;
@@ -103,6 +129,7 @@ export async function readAiSettings(db: DbExecutor = getDb()): Promise<AiSettin
     publicReserve: row.publicReserve,
     featureCaps: capsFrom(row.featureCaps),
     featureSwitches: switchesFrom(row.featureSwitches),
+    corpusTiers: tiersFrom(row.corpusTiers),
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -123,7 +150,10 @@ export async function readFaq(
         position: r.position,
         isVisible: r.isVisible,
         translations: Object.fromEntries(
-          own.map((t) => [t.locale, { question: t.question, answer: t.answer }]),
+          own.map((t) => [
+            t.locale,
+            { question: t.question, answer: t.answer, updatedAt: t.updatedAt.toISOString() },
+          ]),
         ),
         updatedAt: latest.toISOString(),
       };

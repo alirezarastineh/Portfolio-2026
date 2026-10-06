@@ -44,6 +44,20 @@ export function textTurn(...deltas: string[]): LanguageModelV4StreamPart[] {
   ];
 }
 
+/** Thoughts, then a plain text answer: a model returning its thoughts (plan phase 23). */
+export function thinkingTurn(thought: string, text: string): LanguageModelV4StreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    { type: "reasoning-start", id: "r1" },
+    { type: "reasoning-delta", id: "r1", delta: thought },
+    { type: "reasoning-end", id: "r1" },
+    { type: "text-start", id: "t1" },
+    { type: "text-delta", id: "t1", delta: text },
+    { type: "text-end", id: "t1" },
+    finish("stop"),
+  ];
+}
+
 /** One tool call, then the model waits for the result (next turn). */
 export function toolTurn(
   toolName: string,
@@ -83,10 +97,10 @@ export function scripted(turns: LanguageModelV4StreamPart[][], modelId = "mock")
   const calls: LanguageModelV4CallOptions[] = [];
   const model = new MockLanguageModelV4({
     modelId,
-    doStream: async (options) => {
+    doStream: (options) => {
       calls.push(options);
       const chunks = turns[Math.min(i++, turns.length - 1)]!;
-      return { stream: simulateReadableStream({ chunks, chunkDelayInMs: null }) };
+      return Promise.resolve({ stream: simulateReadableStream({ chunks, chunkDelayInMs: null }) });
     },
   });
   return { model, calls };
@@ -108,9 +122,9 @@ export function failing(error: unknown, modelId = "failing"): ScriptedModel {
   const calls: LanguageModelV4CallOptions[] = [];
   const model = new MockLanguageModelV4({
     modelId,
-    doStream: async (options) => {
+    doStream: (options) => {
       calls.push(options);
-      throw error;
+      return Promise.reject(error);
     },
   });
   return { model, calls };
@@ -121,13 +135,13 @@ export function silent(modelId = "silent"): ScriptedModel {
   const calls: LanguageModelV4CallOptions[] = [];
   const model = new MockLanguageModelV4({
     modelId,
-    doStream: async (options) => {
+    doStream: (options) => {
       calls.push(options);
-      return {
+      return Promise.resolve({
         stream: new ReadableStream<LanguageModelV4StreamPart>({
           pull: () => new Promise(() => {}),
         }),
-      };
+      });
     },
   });
   return { model, calls };
@@ -138,9 +152,9 @@ export function failsMidStream(error: unknown, modelId = "flaky"): ScriptedModel
   const calls: LanguageModelV4CallOptions[] = [];
   const model = new MockLanguageModelV4({
     modelId,
-    doStream: async (options) => {
+    doStream: (options) => {
       calls.push(options);
-      return {
+      return Promise.resolve({
         stream: simulateReadableStream<LanguageModelV4StreamPart>({
           chunks: [
             { type: "stream-start", warnings: [] },
@@ -150,7 +164,7 @@ export function failsMidStream(error: unknown, modelId = "flaky"): ScriptedModel
           ],
           chunkDelayInMs: null,
         }),
-      };
+      });
     },
   });
   return { model, calls };
@@ -190,15 +204,15 @@ export function generating(texts: string[], modelId = "gen"): ScriptedModel {
   const calls: LanguageModelV4CallOptions[] = [];
   const model = new MockLanguageModelV4({
     modelId,
-    doGenerate: async (options) => {
+    doGenerate: (options) => {
       calls.push(options);
       const text = texts[Math.min(i++, texts.length - 1)]!;
-      return {
+      return Promise.resolve({
         content: [{ type: "text", text }],
         finishReason: { unified: "stop", raw: "stop" },
         usage: usage(50, 10),
         warnings: [],
-      };
+      });
     },
   });
   return { model, calls };

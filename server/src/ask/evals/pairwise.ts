@@ -46,8 +46,9 @@ export interface PairwiseCaseResult {
   id: string;
   category: string;
   /**
-   * `judged` when both orders were judged; `unavailable` when an answer or a
-   * judgment could not be had (quota, outage), so the case can be resumed.
+   * `judged` when both orders were judged, or a side forfeited (its answer
+   * failed on its own; `verdicts` is then null); `unavailable` when an answer
+   * or a judgment could not be had (quota, outage), so the case can be resumed.
    */
   status: "judged" | "unavailable";
   a: PairwiseSide;
@@ -77,7 +78,10 @@ export interface PairwiseSummary {
   passed: { a: number; b: number };
   tally: PairwiseTally;
   byCategory: Record<string, PairwiseTally>;
-  /** Share of judged cases whose two orders agreed; null when none was judged. */
+  /**
+   * Share of the cases the judge saw whose two orders agreed (a forfeit is
+   * not one); null when it saw none.
+   */
   swapAgreement: number | null;
   usd: number;
 }
@@ -95,9 +99,12 @@ export function summarizePairwise(input: {
   const byCategory: Record<string, PairwiseTally> = {};
   const passed = { a: 0, b: 0 };
   let judged = 0;
+  /** Cases the judge saw in both orders: what the swap agreement is about. */
+  let seen = 0;
   for (const result of input.results) {
     if (result.status !== "judged" || !result.outcome) continue;
     judged++;
+    if (result.verdicts) seen++;
     tally[result.outcome]++;
     byCategory[result.category] ??= emptyTally();
     byCategory[result.category][result.outcome]++;
@@ -114,7 +121,7 @@ export function summarizePairwise(input: {
     passed,
     tally,
     byCategory,
-    swapAgreement: judged ? (judged - tally.inconsistent) / judged : null,
+    swapAgreement: seen ? (seen - tally.inconsistent) / seen : null,
     usd: input.results.reduce((sum, r) => sum + r.usd, 0),
   };
 }

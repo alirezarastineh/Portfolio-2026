@@ -32,6 +32,8 @@ import type {
 } from "./assistant-types";
 import type { EvalCaseRow, FreezeBody } from "./eval-cases";
 import type { OutcomesView, PrimaryMetric } from "./outcomes";
+import type { CorpusTiers, PerceptionView } from "./perception";
+import type { RouterView } from "./routing";
 import type { JudgeStatus } from "./pairwise";
 
 export type {
@@ -490,11 +492,12 @@ export class AdminApiService {
 
   /** Gemini's own token count of the prefix (a free API call). */
   assistantTokenCount() {
-    return this.request<{ model: string; totalTokens: number | null; estimate: number }>(
-      "POST",
-      "/admin/assistant/corpus/count",
-      {},
-    );
+    return this.request<{
+      model: string;
+      totalTokens: number | null;
+      estimate: number;
+      byLocale?: Record<Locale, { totalTokens: number | null; estimate: number }>;
+    }>("POST", "/admin/assistant/corpus/count", {});
   }
 
   assistantUsage(days = 30) {
@@ -631,6 +634,21 @@ export class AdminApiService {
     return this.request<{ ok: true }>("PUT", "/admin/assistant/primary-metric", { metric });
   }
 
+  /** What the assistant reads and how it uses it, with tier suggestions (plan phase 16). */
+  assistantPerception(days = 30) {
+    return this.request<PerceptionView>("GET", `/admin/assistant/perception?days=${days}`);
+  }
+
+  /** The corpus tiers to apply, whole. */
+  setCorpusTiers(tiers: CorpusTiers) {
+    return this.request<{ tiers: CorpusTiers }>("PUT", "/admin/assistant/perception/tiers", tiers);
+  }
+
+  /** How answers were routed and how each tier fared, the false-simple rate (plan phase 20). */
+  assistantRouting(days = 7) {
+    return this.request<RouterView>("GET", `/admin/assistant/router?days=${days}`);
+  }
+
   /** Judges the reviewed answers the visitor judge has not scored yet (for its calibration). */
   startJudgeRun() {
     return this.request<{ id: string }>("POST", "/admin/assistant/runs", { kind: "judge" });
@@ -715,7 +733,16 @@ export class AdminApiService {
     });
   }
 
-  updateMediaAlt(id: string, alt: { altEn?: string | null; altDe?: string | null }) {
+  /** Alt text, and the description for the assistant (plan phase 17); a key left out stays. */
+  updateMediaAlt(
+    id: string,
+    alt: {
+      altEn?: string | null;
+      altDe?: string | null;
+      descriptionEn?: string | null;
+      descriptionDe?: string | null;
+    },
+  ) {
     return this.request<{ ok: true }>("PATCH", `/admin/media/${id}`, alt);
   }
 
@@ -756,6 +783,9 @@ export interface MediaAsset {
   blurDataUri: string | null;
   altEn: string | null;
   altDe: string | null;
+  /** What a diagram or screenshot shows, for the assistant only (plan phase 17). */
+  descriptionEn?: string | null;
+  descriptionDe?: string | null;
   createdAt: string;
   /** Absolute, for previewing in the admin. */
   url: string;

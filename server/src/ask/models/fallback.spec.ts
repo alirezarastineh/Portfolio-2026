@@ -7,17 +7,20 @@ import {
   drain,
   failing,
   failsMidStream,
+  finish,
   mockEntry,
   scripted,
   silent,
   textTurn,
 } from "../../test/ask-models.js";
+import { errorCode } from "../agent.js";
 import { breakerSnapshot, recordFailure, resetBreakers, tryAcquire } from "./circuit.js";
 import {
   AllModelsFailedError,
   classifyError,
   createFallbackModel,
   newTrace,
+  ProviderStreamError,
   type FallbackOptions,
 } from "./fallback.js";
 
@@ -67,6 +70,94 @@ describe("createFallbackModel", () => {
     expect(trace.calls[0]).toMatchObject({ model: "a", finishReason: "stop" });
     expect(trace.calls[0]!.usage?.inputTokens.total).toBe(100);
     expect(trace.firstTokenAt).not.toBeNull();
+  });
+
+  it("times the first token by the first part a visitor could see, not by a thought", async () => {
+    // Plan phase 23: the admin's answers return thoughts first; a thought still meets the
+    // first-chunk deadline, but the first token is the text's, as in a visitor's answer.
+    let clock = 1_000;
+    let push!: ReadableStreamDefaultController<LanguageModelV4StreamPart>;
+    const parts = new ReadableStream<LanguageModelV4StreamPart>({
+      start: (c) => {
+        push = c;
+      },
+    });
+    const thinking = new MockLanguageModelV4({
+      modelId: "a",
+      doStream: () => Promise.resolve({ stream: parts }),
+    });
+    const { model, trace } = fallback([mockEntry("a", thinking)], { now: () => clock });
+
+    push.enqueue({ type: "stream-start", warnings: [] });
+    push.enqueue({ type: "reasoning-start", id: "r" });
+    push.enqueue({ type: "reasoning-delta", id: "r", delta: "Thinking." });
+    const { stream } = await model.doStream(call);
+    expect(trace.firstTokenAt).toBeNull();
+
+    clock = 1_500;
+    push.enqueue({ type: "reasoning-end", id: "r" });
+    push.enqueue({ type: "text-start", id: "t" });
+    push.enqueue({ type: "text-delta", id: "t", delta: "Hello" });
+    push.enqueue({ type: "text-end", id: "t" });
+    push.enqueue(finish("stop"));
+    push.close();
+    const out = await drain(stream);
+
+    expect(textOf(out)).toBe("Hello");
+    expect(out.some((p) => p.type === "reasoning-delta")).toBe(true);
+    expect(trace.calls[0]!.ttftMs).toBe(500);
+    expect(trace.firstTokenAt).toBe(1_500);
+  });
+
+  it("holds a model asked for its thoughts to the visitors' deadline for its first text", async () => {
+    // A thought at once, the text only after the first-chunk deadline.
+    const thinker = (modelId: string) =>
+      new MockLanguageModelV4({
+        modelId,
+        doStream: () =>
+          Promise.resolve({
+            stream: new ReadableStream<LanguageModelV4StreamPart>({
+              start(c) {
+                c.enqueue({ type: "stream-start", warnings: [] });
+                c.enqueue({ type: "reasoning-start", id: "r" });
+                c.enqueue({ type: "reasoning-delta", id: "r", delta: "Thinking." });
+                c.enqueue({ type: "reasoning-end", id: "r" });
+                setTimeout(() => {
+                  try {
+                    for (const part of textTurn("slow").slice(1)) c.enqueue(part);
+                    c.close();
+                  } catch {
+                    // Cancelled: the fallback moved on.
+                  }
+                }, 80);
+              },
+            }),
+          }),
+      });
+
+    // Plan phase 23: thoughts asked for the admin's answer are not its start, so the answer
+    // fails over exactly as a visitor's (which never asks for them) would.
+    const asked = fallback(
+      [
+        { ...mockEntry("a", thinker("a")), thoughts: true },
+        mockEntry("b", scripted([textTurn("fast")]).model),
+      ],
+      { firstChunkTimeoutMs: 30 },
+    );
+    expect(textOf(await drain((await asked.model.doStream(call)).stream))).toBe("fast");
+    expect(asked.trace.attempts.map((x) => `${x.model}:${x.outcome}`)).toEqual([
+      "a:timeout",
+      "b:ok",
+    ]);
+
+    // A thought a model sends unasked (an OpenRouter reasoning model) is its answer starting.
+    const unasked = fallback(
+      [mockEntry("c", thinker("c")), mockEntry("d", scripted([textTurn("unused")]).model)],
+      { firstChunkTimeoutMs: 30 },
+    );
+    const parts = await drain((await unasked.model.doStream(call)).stream);
+    expect(textOf(parts)).toBe("slow");
+    expect(unasked.trace.attempts.map((x) => `${x.model}:${x.outcome}`)).toEqual(["c:ok"]);
   });
 
   it("moves on after a rate limit and keeps that model out until its pause ends", async () => {
@@ -199,6 +290,14 @@ describe("createFallbackModel", () => {
 
     expect(textOf(parts)).toBe("Partial ");
     expect(parts.at(-1)?.type).toBe("error");
+    // Named the provider's failure: an outage to the evals and the visitor, not the model's.
+    const last = parts.at(-1) as { error: unknown };
+    expect(last.error).toBeInstanceOf(ProviderStreamError);
+    expect(last.error).toMatchObject({
+      model: "a",
+      cause: expect.objectContaining({ statusCode: 500 }),
+    });
+    expect(errorCode(last.error)).toBe("unavailable");
     expect(b.calls).toHaveLength(0);
     expect(trace.calls.map((c) => c.model)).toEqual(["a"]);
   });

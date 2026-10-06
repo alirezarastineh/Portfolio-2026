@@ -113,6 +113,26 @@ export const TRUST_REGISTRY: readonly TrustEntry[] = [
     built: true,
   },
   {
+    action: "embeddings.backfill",
+    actor: "system",
+    level: "L2",
+    approver: "none",
+    enforcement:
+      "embeddings.ts backfillEmbeddings: only where the migrations ran (index.ts), with the deploy's flag and the admin's switch; fenced per batch as `embeddings`; writes only ai_embeddings, derived from published text",
+    reversible: true,
+    built: true,
+  },
+  {
+    action: "corpus.tiers",
+    actor: "system",
+    level: "L0",
+    approver: "admin",
+    enforcement:
+      "perception.ts suggests from 30 days of fetches and citations, no model involved; the admin applies each (perception-routes.ts), audited",
+    reversible: true,
+    built: true,
+  },
+  {
     action: "agent.propose",
     actor: "agent",
     level: "L0",
