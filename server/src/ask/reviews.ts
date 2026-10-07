@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
  * The weekly human review (the evaluation stack's fourth layer): a random 5 %
  * of the week's visitor answers, at least 10 and at most 30, plus every
  * answer something already flagged (a check, a thumbs-down, an "it isn't
- * there"). Teams fail by reviewing nothing or everything; this is enough to
+ * there", the judge finding it unfaithful: plan phase 26). Teams fail by reviewing nothing or everything; this is enough to
  * catch drift and to calibrate the judge (plan phase 10) against people.
  *
  * The sample is a pure function of the week and the answers in it: the same
@@ -63,11 +63,14 @@ export function reviewReasons(signals: {
   thumbsDown: boolean;
   unknown: boolean;
   flags: readonly string[];
+  /** A judge found it below the faithful line (the nightly judge, plan phase 26). */
+  unfaithful?: boolean;
 }): string[] {
   return [
     ...(signals.thumbsDown ? ["thumbs down"] : []),
     ...(signals.unknown ? ["didn't know"] : []),
     ...signals.flags.map((flag) => `check:${flag}`),
+    ...(signals.unfaithful ? ["judge:unfaithful"] : []),
   ];
 }
 

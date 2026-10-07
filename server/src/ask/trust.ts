@@ -87,7 +87,8 @@ export const TRUST_REGISTRY: readonly TrustEntry[] = [
     actor: "insights",
     level: "L2",
     approver: "none",
-    enforcement: "admin.ts insights: reads redacted questions, returns topics, writes nothing",
+    enforcement:
+      "insights.ts: reads the redacted questions of 30 days, fenced as `insights`; writes the run to ai_insight_snapshots (topics with example questions), pruned within 60 days of the run",
     reversible: true,
     built: true,
   },
@@ -98,7 +99,7 @@ export const TRUST_REGISTRY: readonly TrustEntry[] = [
     approver: "admin",
     enforcement:
       kind === "judge"
-        ? "runs/routes.ts: started by the admin; fenced per item (runs/paid.ts); writes only ai_messages.judge, with a judge that already answers visitors"
+        ? "runs/routes.ts: started by the admin, or nightly (`judge.nightly`); fenced per item (runs/paid.ts); writes only ai_messages.judge, with a judge that already answers visitors"
         : "runs/routes.ts: started by the admin; fenced per item (runs/paid.ts); fixture data only",
     reversible: true,
     built: true,
@@ -129,6 +130,66 @@ export const TRUST_REGISTRY: readonly TrustEntry[] = [
     approver: "admin",
     enforcement:
       "perception.ts suggests from 30 days of fetches and citations, no model involved; the admin applies each (perception-routes.ts), audited",
+    reversible: true,
+    built: true,
+  },
+  {
+    action: "journal.diagnose",
+    actor: "system",
+    level: "L0",
+    approver: "admin",
+    enforcement:
+      "journal.ts: no model; reads the answer, its snapshot and today's corpus, and proposes an entry the admin edits, accepts or retires (journal-routes.ts); writes only ai_journal, no visitor text",
+    reversible: true,
+    built: true,
+  },
+  {
+    action: "journal.replay",
+    actor: "run",
+    level: "L2",
+    approver: "admin",
+    enforcement:
+      "runs/replay-work.ts: started and confirmed by the admin; fenced per chain as `agent` (off until switched on); the question goes only to chains that already answer visitors; writes only usage and, once every chain has answered, the entry's replay and analysis (never a field the admin edited, never an entry fixed or retired)",
+    reversible: true,
+    built: true,
+  },
+  {
+    action: "insights.auto",
+    actor: "system",
+    level: "L2",
+    approver: "none",
+    enforcement:
+      "learning-monitor.ts: only when the adaptive trigger fires (failures rose, 10 new answers since the last run); fenced as `autoInsights` (off until switched on, its own cap); writes only ai_insight_snapshots, pruned within 60 days of the run",
+    reversible: true,
+    built: true,
+  },
+  {
+    action: "lesson.propose",
+    actor: "admin",
+    level: "L0",
+    approver: "admin",
+    enforcement:
+      "lessons-routes.ts: the admin's words, kept only when corroborated (3 decided journal entries, or an unanswered insight topic of 5 questions); never reaches the prompt or an answer",
+    reversible: true,
+    built: true,
+  },
+  {
+    action: "judge.nightly",
+    actor: "system",
+    level: "L2",
+    approver: "none",
+    enforcement:
+      "nightly-judge.ts: a judge run over the previous day's sample and flagged answers, at most 40; fenced as `nightlyJudge` (off until switched on, its own cap; an answer projected to cross it, by the dearest of this night and the last ones, is not started); writes only ai_messages.judge",
+    reversible: true,
+    built: true,
+  },
+  {
+    action: "lesson.retire",
+    actor: "system",
+    level: "L2",
+    approver: "none",
+    enforcement:
+      "learning-monitor.ts: below 0.5 effectiveness after 5 applications, audited; the admin reopens it, and it is measured again from then",
     reversible: true,
     built: true,
   },

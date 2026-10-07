@@ -1,5 +1,5 @@
 import { DecimalPipe } from "@angular/common";
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, inject, OnInit, output, signal } from "@angular/core";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmToggleGroupImports } from "@spartan-ng/helm/toggle-group";
@@ -16,6 +16,7 @@ import {
 } from "../answer-trace";
 import { FormSkeletonComponent } from "../components/load-state.component";
 import type { ConversationFilter, ConversationRow, ToolOutcome } from "../assistant-types";
+import { DiagnoseAnswerComponent } from "./diagnose-answer.component";
 import { FreezeCaseComponent } from "./freeze-case.component";
 
 const FILTERS: { id: ConversationFilter; label: string }[] = [
@@ -47,6 +48,7 @@ const TONE_CLASS: Record<Tone, string> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DecimalPipe,
+    DiagnoseAnswerComponent,
     FormSkeletonComponent,
     FreezeCaseComponent,
     HlmBadge,
@@ -83,7 +85,7 @@ const TONE_CLASS: Record<Tone, string> = {
           @for (row of rows(); track row.id) {
             <li class="flex flex-col gap-2 rounded-lg border border-border p-4 text-sm">
               <div class="flex flex-wrap items-baseline justify-between gap-2">
-                <p class="m-0 font-medium">{{ row.question }}</p>
+                <p class="m-0 font-medium" [id]="'question-' + row.id">{{ row.question }}</p>
                 <p class="m-0 font-mono text-xs text-muted-foreground">
                   {{ when(row.createdAt) }} · {{ row.locale.toUpperCase() }} · session
                   {{ row.session }}
@@ -141,7 +143,14 @@ const TONE_CLASS: Record<Tone, string> = {
                 </p>
               }
               @if (source() === "terminal") {
-                <app-freeze-case [message]="row" />
+                <div class="flex flex-wrap items-start gap-2">
+                  <app-diagnose-answer
+                    [messageId]="row.id"
+                    [describedBy]="'question-' + row.id"
+                    (opened)="toJournal.emit($event)"
+                  />
+                  <app-freeze-case [message]="row" [describedBy]="'question-' + row.id" />
+                </div>
               }
               @if (row.trace?.steps.length) {
                 @let steps = row.trace!.steps;
@@ -187,6 +196,9 @@ const TONE_CLASS: Record<Tone, string> = {
 })
 export class AssistantConversationsComponent implements OnInit {
   private readonly api = inject(AdminApiService);
+
+  /** A failure journal entry to open (plan phase 24: Diagnose). */
+  readonly toJournal = output<string>();
 
   protected readonly filters = FILTERS;
   protected readonly filter = signal<ConversationFilter>("all");

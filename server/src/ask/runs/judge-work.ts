@@ -1,9 +1,9 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import { getDb } from "../../db/client.js";
-import { aiMessages, aiReviews } from "../../db/schema.js";
+import { aiCorpusSnapshots, aiMessages, aiReviews } from "../../db/schema.js";
 import { askConfig, askCorpus, askEvalPacing, askVisitorJudges } from "../deps.js";
-import type { AnswerJudgment, CalibrationPair } from "../evals/calibration.js";
+import type { AnswerJudgment, CalibrationPair, NightlyPick } from "../evals/calibration.js";
 import {
   createModelCallGate,
   FREE_TIER_RATE_LIMIT_RETRY,
@@ -48,13 +48,42 @@ export async function calibrationPairs(judge: string): Promise<CalibrationPair[]
     .where(and(GROUNDED_GIVEN, sql`${aiMessages.judge} ->> 'model' = ${judge}`));
 }
 
+type DocumentsById = ReadonlyMap<string, { id: string; text: string }>;
+
+/** A nightly run's params (plan phase 26): the day it judges, and each pick with its reason. */
+export interface NightlyParams {
+  nightly: true;
+  day: string;
+  judge: string;
+  picks: { id: string; pick: NightlyPick }[];
+}
+
 interface JudgeContext {
   config: AskConfig;
   chain: ModelEntry[];
   corpus: AskCorpus;
+  /** The documents of each snapshot read so far in this run, by corpus key (null: none kept). */
+  snapshots: Map<string, Promise<DocumentsById | null>>;
+  /** The nightly run's picks; null for a calibration run. */
+  picks: ReadonlyMap<string, NightlyPick> | null;
   beforeModelCall?: (entry: ModelEntry, signal?: AbortSignal) => Promise<void>;
   calls: ModelCall[];
   paid: ReturnType<typeof paidItems>;
+}
+
+/** The documents an answer read, as its snapshot holds them; null when none was kept. */
+function snapshotDocuments(ctx: JudgeContext, key: string | null): Promise<DocumentsById | null> {
+  if (!key) return Promise.resolve(null);
+  let documents = ctx.snapshots.get(key);
+  if (!documents) {
+    documents = getDb()
+      .select({ documents: aiCorpusSnapshots.documents })
+      .from(aiCorpusSnapshots)
+      .where(eq(aiCorpusSnapshots.key, key))
+      .then(([row]) => (row ? new Map(row.documents.map((d) => [d.id, d])) : null));
+    ctx.snapshots.set(key, documents);
+  }
+  return documents;
 }
 
 async function judgeOne(
@@ -71,6 +100,7 @@ async function judgeOne(
       locale: aiMessages.locale,
       answer: aiMessages.answerExcerpt,
       cited: aiMessages.citedIds,
+      corpusKey: aiMessages.corpusKey,
     })
     .from(aiMessages)
     .where(eq(aiMessages.id, key));
@@ -87,7 +117,11 @@ async function judgeOne(
     question: message.question,
     locale: message.locale,
     text: message.answer,
-    documents: judgeDocuments(ctx.corpus.byId, message.cited),
+    // What the answer read (its snapshot), not what the corpus says since.
+    documents: judgeDocuments(
+      (await snapshotDocuments(ctx, message.corpusKey)) ?? ctx.corpus.byId,
+      message.cited,
+    ),
     abortSignal: ctx.paid.signal,
     rateLimitRetry: FREE_TIER_RATE_LIMIT_RETRY,
     beforeModelCall: ctx.beforeModelCall,
@@ -99,25 +133,37 @@ async function judgeOne(
     return { ok: false, down: !ctx.paid.signal.aborted };
   }
 
+  const pick = ctx.picks?.get(key);
   const judgment: AnswerJudgment = {
     v: 1,
     model: verdict.model,
     ...verdict.value,
     at: new Date().toISOString(),
+    source: ctx.picks ? "nightly" : "calibration",
+    ...(pick ? { pick } : {}),
   };
 
   await getDb().update(aiMessages).set({ judge: judgment }).where(eq(aiMessages.id, key));
-  await ctx.paid.finish(key, "done", judgment);
+  // The run keeps the scores, never the quotes: runs are not pruned, the answer is (90 days).
+  const { unsupported, ...scores } = judgment;
+  await ctx.paid.finish(key, "done", { ...scores, unsupported: unsupported.length });
   return { ok: true };
 }
 
+/** A nightly run's params, or null for a calibration run. */
+export function nightlyParams(params: unknown): NightlyParams | null {
+  const p = params as Partial<NightlyParams> | null;
+  return p?.nightly === true && Array.isArray(p.picks) ? (p as NightlyParams) : null;
+}
+
 /**
- * Judges the reviewed visitor answers that have no verdict from the current
- * judge yet, so its calibration against people can be measured (plan phase
- * 10; the nightly sampled judge of phase 26 writes the same column). Only a
- * model that already answers visitors may read their answers. The judge
- * reads the redacted question, the stored answer excerpt and the documents
- * the answer cited, as the corpus has them now.
+ * Judges visitor answers: the reviewed ones that have no verdict from the
+ * current judge yet, so its calibration against people can be measured (plan
+ * phase 10), or a night's picks (plan phase 26: `nightly-judge.ts`, spent as
+ * `nightlyJudge`). Only a model that already answers visitors may read their
+ * answers. The judge reads the redacted question, the stored answer excerpt
+ * and the documents the answer cited, as its corpus snapshot holds them
+ * (today's corpus when none was kept).
  */
 export const judgeWork: WorkFn = async (work) => {
   const config = askConfig();
@@ -127,8 +173,21 @@ export const judgeWork: WorkFn = async (work) => {
   const pacing = askEvalPacing();
   const beforeModelCall = pacing ? createModelCallGate(pacing) : undefined;
   const calls: ModelCall[] = [];
-  const paid = paidItems(work, calls);
-  const ctx: JudgeContext = { config, chain, corpus, beforeModelCall, calls, paid };
+  const nightly = nightlyParams(work.run.params);
+  // A night stays under its cap: an answer that would cross it waits for a resume.
+  const paid = paidItems(work, calls, { projected: !!nightly });
+  const picks = nightly ? new Map(nightly.picks.map((p) => [p.id, p.pick])) : null;
+  const snapshots = new Map<string, Promise<DocumentsById | null>>();
+  const ctx: JudgeContext = {
+    config,
+    chain,
+    corpus,
+    snapshots,
+    picks,
+    beforeModelCall,
+    calls,
+    paid,
+  };
   let down = false;
 
   for (const key of work.keys) {
@@ -144,6 +203,7 @@ export const judgeWork: WorkFn = async (work) => {
     answers: items.length,
     judged: items.filter((i) => i.status === "done").length,
     judge: chain[0]!.id,
+    ...(nightly ? { day: nightly.day } : {}),
   };
   const stopped = paid.stoppedBy();
   if (stopped) return { status: "failed", error: stopped, summary };

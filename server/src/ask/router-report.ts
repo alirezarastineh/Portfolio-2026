@@ -97,7 +97,12 @@ const share = (part: number, whole: number) => (whole ? part / whole : null);
  * said, a citation made up, every round used. A fallback that answered, a
  * provider's block, a leak or the wrong language says nothing about the route.
  */
-const UNDER_SERVED: readonly CheckFlag[] = ["uncited", "empty", "invented-citation", "max-rounds"];
+export const UNDER_SERVED: readonly CheckFlag[] = [
+  "uncited",
+  "empty",
+  "invented-citation",
+  "max-rounds",
+];
 
 function falseSimpleReasons(row: RouterRow, again: ReadonlySet<string>): FalseSimpleReason[] {
   const reasons: FalseSimpleReason[] = [];

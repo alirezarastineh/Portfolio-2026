@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AssistantSettings, SpendToday } from "./assistant-types";
+import type { AssistantSettings, SpendFeature, SpendToday } from "./assistant-types";
 import { featureRows, spendDraft, spendInput } from "./spending";
 
 const settings: AssistantSettings = {
@@ -20,6 +20,7 @@ const settings: AssistantSettings = {
     autoInsights: null,
     agent: null,
     embeddings: null,
+    nightlyJudge: null,
   },
   featureSwitches: {
     copilot: false,
@@ -27,6 +28,7 @@ const settings: AssistantSettings = {
     autoInsights: false,
     agent: false,
     embeddings: false,
+    nightlyJudge: false,
   },
   updatedAt: null,
 };
@@ -36,7 +38,14 @@ describe("the spending fences in the admin", () => {
     const draft = spendDraft(settings);
     expect(draft.reserve).toBe("50");
     expect(draft.caps).toMatchObject({ copilot: "0.2", eval: "" });
-    expect(draft.switches).toEqual({ copilot: false, judge: true, embeddings: false });
+    expect(draft.switches).toEqual({
+      copilot: false,
+      judge: true,
+      nightlyJudge: false,
+      embeddings: false,
+      autoInsights: false,
+      agent: false,
+    });
 
     const saved = spendInput({ ...draft, reserve: "40", caps: { ...draft.caps, eval: "0.5" } });
     expect(saved).toEqual({
@@ -47,12 +56,22 @@ describe("the spending fences in the admin", () => {
           playground: null,
           copilot: 0.2,
           insights: null,
+          autoInsights: null,
           eval: 0.5,
           pairwise: null,
           judge: null,
+          nightlyJudge: null,
           embeddings: null,
+          agent: null,
         },
-        featureSwitches: { copilot: false, judge: true, embeddings: false },
+        featureSwitches: {
+          copilot: false,
+          judge: true,
+          nightlyJudge: false,
+          embeddings: false,
+          autoInsights: false,
+          agent: false,
+        },
       },
     });
   });
@@ -76,7 +95,15 @@ describe("the spending fences in the admin", () => {
       features: [
         { feature: "terminal", spentUsd: 0.1, capUsd: null, switchedOn: null, state: "ok" },
         { feature: "eval", spentUsd: 0.5, capUsd: 0.5, switchedOn: null, state: "cap" },
-        { feature: "agent", spentUsd: 0, capUsd: null, switchedOn: false, state: "off" },
+        { feature: "autoInsights", spentUsd: 0, capUsd: null, switchedOn: false, state: "off" },
+        // A feature this admin does not know yet (a newer API).
+        {
+          feature: "later" as SpendFeature,
+          spentUsd: 0,
+          capUsd: null,
+          switchedOn: null,
+          state: "ok",
+        },
       ],
     };
     const rows = featureRows(spend, {
@@ -112,8 +139,26 @@ describe("the spending fences in the admin", () => {
         state: null,
       },
     ]);
-    // A feature not built yet stays out until it spends.
-    expect(rows.map((r) => r.feature)).not.toContain("agent");
-    expect(rows).toHaveLength(8);
+    // A feature the admin does not know stays out until it spends.
+    expect(rows.map((r) => r.feature)).not.toContain("later");
+    expect(rows).toHaveLength(11);
+    // Automatic insights (plan phase 25) are built: listed by name, switched off.
+    expect(rows.find((r) => r.feature === "autoInsights")).toEqual({
+      feature: "autoInsights",
+      label: "Automatic insights",
+      todayUsd: 0,
+      periodUsd: 0,
+      capUsd: null,
+      state: "off",
+    });
+    // The admin agents (plan phase 24) are built: listed by name, with nothing spent yet.
+    expect(rows.find((r) => r.feature === "agent")).toEqual({
+      feature: "agent",
+      label: "Admin agents",
+      todayUsd: 0,
+      periodUsd: 0,
+      capUsd: null,
+      state: null,
+    });
   });
 });

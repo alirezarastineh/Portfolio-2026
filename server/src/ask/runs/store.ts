@@ -115,6 +115,32 @@ export async function finishItem(
   await refreshProgress(runId);
 }
 
+/** How many earlier runs of the same work a run's first projection looks at. */
+const PROJECTED_FROM = 7;
+
+/**
+ * What a run's next item is projected to cost: the dearest item of this run
+ * and of the last runs of the same kind and the same `nightly` flag (a new
+ * night projects its first answer from the last nights'). Zero with none.
+ */
+export async function dearestItemUsd(run: Pick<RunRow, "id" | "kind" | "params">): Promise<number> {
+  const nightly = (run.params as { nightly?: unknown } | null)?.nightly === true;
+  const { rows } = await getDb().execute<{ usd: number }>(sql`
+    select coalesce(max(i.usd), 0)::float8 as usd
+    from ai_run_items i
+    where i.run_id = ${run.id}
+       or i.run_id in (
+         select r.id from ai_runs r
+         where r.kind = ${run.kind}
+           and r.id <> ${run.id}
+           and coalesce(r.params ->> 'nightly' = 'true', false) = ${nightly}
+         order by r.created_at desc
+         limit ${PROJECTED_FROM}
+       )
+  `);
+  return rows[0]?.usd ?? 0;
+}
+
 export async function refreshProgress(runId: string): Promise<void> {
   await getDb().execute(sql`
     update ai_runs r set

@@ -16,10 +16,12 @@ export const FEATURES = [
   "eval",
   "pairwise",
   "judge",
-  // Reserved for the phases that build them (25, 29, 18): fenced from the start.
+  // Insights the adaptive trigger runs (phase 25), the admin agents (phase 24's replay, Part F),
+  // search by meaning (phase 18), the nightly sampled judge (phase 26).
   "autoInsights",
   "agent",
   "embeddings",
+  "nightlyJudge",
 ] as const;
 export type Feature = (typeof FEATURES)[number];
 
@@ -37,6 +39,7 @@ export const SWITCH_DEFAULTS = {
   autoInsights: false,
   agent: false,
   embeddings: false,
+  nightlyJudge: false,
 } as const satisfies Partial<Record<FencedFeature, boolean>>;
 export type SwitchedFeature = keyof typeof SWITCH_DEFAULTS;
 export const SWITCHED_FEATURES = Object.keys(SWITCH_DEFAULTS) as SwitchedFeature[];

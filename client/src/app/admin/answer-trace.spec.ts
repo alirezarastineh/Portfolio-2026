@@ -7,10 +7,11 @@ import {
   checkTone,
   dayRows,
   droppedRate,
-  shareOf,
   passedOverLine,
+  reasonLabel,
   refusalsByDay,
   refusalTotals,
+  shareOf,
   stepLine,
   toolOutcomeLabel,
   toolTone,
@@ -188,5 +189,13 @@ describe("assistant signals", () => {
       droppedRate([day({ answers: 8, withDropped: 1 }), day({ answers: 2, withDropped: 1 })]),
     ).toEqual({ answers: 10, withDropped: 2, rate: 0.2 });
     expect(droppedRate([])).toEqual({ answers: 0, withDropped: 0, rate: 0 });
+  });
+});
+
+describe("review queue reasons", () => {
+  it("says each in words: a check, the nightly judge, people as they are", () => {
+    expect(reasonLabel("judge:unfaithful")).toBe("judged unfaithful");
+    expect(reasonLabel("check:uncited")).toBe(checkLabel("uncited"));
+    expect(reasonLabel("thumbs down")).toBe("thumbs down");
   });
 });

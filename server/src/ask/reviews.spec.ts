@@ -85,6 +85,10 @@ describe("the review queue", () => {
       reviewReasons({ thumbsDown: true, unknown: true, flags: ["uncited", "language"] }),
     ).toEqual(["thumbs down", "didn't know", "check:uncited", "check:language"]);
     expect(reviewReasons({ thumbsDown: false, unknown: false, flags: [] })).toEqual([]);
+    // The nightly judge (plan phase 26): after people's signals and the checks.
+    expect(
+      reviewReasons({ thumbsDown: true, unknown: false, flags: ["uncited"], unfaithful: true }),
+    ).toEqual(["thumbs down", "check:uncited", "judge:unfaithful"]);
   });
 });
 

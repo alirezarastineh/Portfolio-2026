@@ -130,16 +130,27 @@ export function stateFor(
   };
 }
 
+/**
+ * What `feature`'s next call would get. `projectedUsd` is what that call will
+ * cost, when the caller knows (a run's dearest item so far, plan phase 26): it
+ * counts as spent already, so the call is refused when it would cross a line,
+ * not only once a line is crossed.
+ */
 export async function availability(
   config: AskConfig,
   settings: AiSettings,
   feature: Feature,
+  projectedUsd = 0,
 ): Promise<Availability> {
   // Off needs no database: the spend is read only when it can matter.
   if (offReason(config, settings, feature)) {
     return stateFor(config, settings, feature, { totalUsd: 0, ownUsd: 0 });
   }
-  return stateFor(config, settings, feature, await spendToday(feature));
+  const spend = await spendToday(feature);
+  return stateFor(config, settings, feature, {
+    totalUsd: spend.totalUsd + projectedUsd,
+    ownUsd: spend.ownUsd + projectedUsd,
+  });
 }
 
 const REFUSALS: Record<SpendLine, string> = {

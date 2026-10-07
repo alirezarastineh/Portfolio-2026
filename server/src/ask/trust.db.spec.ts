@@ -96,7 +96,14 @@ let seq = 0;
 /** Visitor answers as the log keeps them, oldest first, a minute apart. */
 async function seed(
   count: number,
-  row: (i: number) => { model?: string; route?: string; finishReason?: string; judged?: number },
+  row: (i: number) => {
+    model?: string;
+    route?: string;
+    finishReason?: string;
+    judged?: number;
+    /** Which run judged it, and why it was picked (plan phase 26); absent on older verdicts. */
+    judgedAs?: { source: "calibration" | "nightly"; pick?: "sample" | "flagged" };
+  },
 ) {
   const start = Date.now() - (count + 1) * 60_000;
   await getDb()
@@ -126,6 +133,7 @@ async function seed(
                   helpfulness: 3,
                   unsupported: [],
                   at: new Date().toISOString(),
+                  ...r.judgedAs,
                 },
         };
       }),
@@ -168,6 +176,23 @@ describe("migration 0016: the audit log", () => {
 });
 
 describe("the trust monitor", () => {
+  it("demotes on the nightly random sample, never on flagged picks or calibration verdicts (plan phase 26)", async () => {
+    const min = TRUST_RULES.judgedMinimum;
+    // Bad, but picked for being flagged, or reviewed: a biased sample, not evidence.
+    await seed(min, (i) => ({
+      judged: 0.2,
+      judgedAs: i % 2 ? { source: "nightly", pick: "flagged" } : { source: "calibration" },
+    }));
+    const held = await admin.post("/admin/assistant/trust/check", {});
+    expect(await held.json()).toMatchObject({ demoted: [] });
+
+    await seed(min, () => ({ judged: 0.5, judgedAs: { source: "nightly", pick: "sample" } }));
+    const check = await admin.post("/admin/assistant/trust/check", {});
+    expect(await check.json()).toMatchObject({ demoted: ["model:gemini-3.5-flash-lite"] });
+    const demotion = (await auditRows()).find((r) => r.action === "demote");
+    expect(demotion?.reason).toBe("faithfulness 0.50 over 20 judged answers (floor 0.8)");
+  });
+
   it("demotes a model below the faithfulness floor; visitors get the next one until the admin reinstates it", async () => {
     await seed(TRUST_RULES.judgedMinimum, () => ({ judged: 0.5 }));
 

@@ -45,13 +45,19 @@ export interface TrustCheck {
   refused: string[];
 }
 
-/** A chat model's judged faithfulness on visitor answers, newest first. */
+/**
+ * A chat model's judged faithfulness on visitor answers, newest first: the
+ * nightly random sample and verdicts older than it (plan phase 26). The
+ * nightly flagged picks and the calibration runs' verdicts (reviewed answers,
+ * every flagged one among them) lean toward bad answers: no demotion on them.
+ */
 async function judgedScores(db: DbExecutor, model: string, since?: Date): Promise<number[]> {
   const faithfulness = sql<number>`(${aiMessages.judge} ->> 'faithfulness')::float8`;
   const conditions: SQL[] = [
     eq(aiMessages.source, "terminal"),
     eq(aiMessages.model, model),
     isNotNull(sql`${aiMessages.judge} ->> 'faithfulness'`),
+    sql`(${aiMessages.judge} ->> 'source' is null or ${aiMessages.judge} ->> 'pick' = 'sample')`,
   ];
   if (since) conditions.push(gt(aiMessages.createdAt, since));
   const rows = await db

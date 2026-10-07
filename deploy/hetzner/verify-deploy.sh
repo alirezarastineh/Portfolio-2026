@@ -355,6 +355,16 @@ if [[ "$(db_value "select count(*) from information_schema.tables where table_na
 else
   fail "ai_embeddings missing — migration 0019_embeddings not applied?"
 fi
+if [[ "$(db_value "select count(*) from information_schema.tables where table_name = 'ai_journal'")" == "1" ]]; then
+  pass "the failure journal exists (migration 0020)"
+else
+  fail "ai_journal missing — migration 0020_journal not applied?"
+fi
+if [[ "$(db_value "select count(*) from information_schema.tables where table_name in ('ai_insight_snapshots', 'ai_lessons')")" == "2" ]]; then
+  pass "the insights runs and the lessons exist (migration 0021)"
+else
+  fail "ai_insight_snapshots or ai_lessons missing — migration 0021_lessons not applied?"
+fi
 check "the assistant's search and tokenizer load in the api container" \
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T api \
   node -e "Promise.all([import('minisearch'), import('js-tiktoken/lite'), import('js-tiktoken/ranks/o200k_base')]).then(() => process.exit(0), () => process.exit(1))"

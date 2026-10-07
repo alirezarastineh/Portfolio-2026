@@ -13,8 +13,10 @@ import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-
 import { AssistantConversationsComponent } from "../../admin/assistant/assistant-conversations.component";
 import { AssistantEvalCasesComponent } from "../../admin/assistant/assistant-eval-cases.component";
 import { AssistantEvalsComponent } from "../../admin/assistant/assistant-evals.component";
+import { AssistantFaithfulnessComponent } from "../../admin/assistant/assistant-faithfulness.component";
 import { AssistantFaqComponent } from "../../admin/assistant/assistant-faq.component";
 import { AssistantInsightsComponent } from "../../admin/assistant/assistant-insights.component";
+import { AssistantJournalComponent } from "../../admin/assistant/assistant-journal.component";
 import { AssistantOutcomesComponent } from "../../admin/assistant/assistant-outcomes.component";
 import { AssistantPerceptionComponent } from "../../admin/assistant/assistant-perception.component";
 import { AssistantOverviewComponent } from "../../admin/assistant/assistant-overview.component";
@@ -34,6 +36,7 @@ type Tab =
   | "insights"
   | "playground"
   | "evals"
+  | "journal"
   | "trust";
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
@@ -47,14 +50,16 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "insights", label: "Insights" },
   { id: "playground", label: "Playground" },
   { id: "evals", label: "Evals" },
+  { id: "journal", label: "Journal" },
   { id: "trust", label: "Trust" },
 ];
 
 /**
  * The portfolio assistant ("Ask my portfolio"): health and cost, its
  * settings, the FAQ it cites, what visitors asked and their weekly review, a
- * playground against the draft, the eval suite and pairwise comparisons, and
- * trust: what may act, what was demoted, the alerts and the audit log.
+ * playground against the draft, the eval suite and pairwise comparisons, the
+ * failure journal (why answers failed, plan phase 24), and trust: what may
+ * act, what was demoted, the alerts and the audit log.
  */
 @Component({
   selector: "app-admin-assistant",
@@ -64,8 +69,10 @@ const TABS: { id: Tab; label: string }[] = [
     AssistantConversationsComponent,
     AssistantEvalCasesComponent,
     AssistantEvalsComponent,
+    AssistantFaithfulnessComponent,
     AssistantFaqComponent,
     AssistantInsightsComponent,
+    AssistantJournalComponent,
     AssistantOutcomesComponent,
     AssistantPerceptionComponent,
     AssistantOverviewComponent,
@@ -96,7 +103,7 @@ const TABS: { id: Tab; label: string }[] = [
       </app-page-header>
 
       <div hlmTabs class="min-w-0 gap-6" [tab]="strip()" (tabActivated)="select($any($event))">
-        <!-- One row that scrolls, with arrows where it overflows: nine tabs wrapped onto two rows below md. -->
+        <!-- One row that scrolls, with arrows where it overflows: ten tabs wrapped onto two rows below md. -->
         <hlm-paginated-tabs-list tabListLabel="Assistant sections">
           @for (option of tabs; track option.id) {
             <button [hlmTabsTrigger]="option.id">{{ option.label }}</button>
@@ -113,8 +120,10 @@ const TABS: { id: Tab; label: string }[] = [
                     <app-assistant-overview
                       class="flex flex-col gap-6"
                       (toTrust)="select('trust')"
+                      (toInsights)="select('insights')"
                     />
                     <app-assistant-outcomes />
+                    <app-assistant-faithfulness />
                     <app-assistant-perception />
                     <app-assistant-routing />
                   </div>
@@ -126,13 +135,13 @@ const TABS: { id: Tab; label: string }[] = [
                   <app-assistant-faq [seed]="faqSeed()" (seedTaken)="faqSeed.set(null)" />
                 }
                 @case ("conversations") {
-                  <app-assistant-conversations />
+                  <app-assistant-conversations (toJournal)="openJournal($event)" />
                 }
                 @case ("reviews") {
                   <app-assistant-reviews />
                 }
                 @case ("insights") {
-                  <app-assistant-insights (toFaq)="toFaq($event)" />
+                  <app-assistant-insights (toFaq)="toFaq($event)" (toJournal)="select('journal')" />
                 }
                 @case ("playground") {
                   <app-assistant-playground />
@@ -143,6 +152,9 @@ const TABS: { id: Tab; label: string }[] = [
                     <app-assistant-pairwise />
                     <app-assistant-eval-cases />
                   </div>
+                }
+                @case ("journal") {
+                  <app-assistant-journal [focus]="journalFocus()" />
                 }
                 @case ("trust") {
                   <app-assistant-trust />
@@ -166,6 +178,8 @@ export default class AdminAssistantPage {
   /** The tab strip's own state, put back when a switch is refused. */
   protected readonly strip = signal<Tab>("overview");
   protected readonly faqSeed = signal<string | null>(null);
+  /** The journal entry Diagnose opened (plan phase 24). */
+  protected readonly journalFocus = signal<string | null>(null);
 
   protected async select(next: Tab): Promise<void> {
     const current = this.tab();
@@ -186,6 +200,11 @@ export default class AdminAssistantPage {
       this.unsaved.clearAll();
     }
     this.tab.set(next);
+  }
+
+  protected openJournal(entry: string): void {
+    this.journalFocus.set(entry);
+    void this.select("journal");
   }
 
   protected toFaq(question: string): void {

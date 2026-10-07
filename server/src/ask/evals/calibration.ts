@@ -21,7 +21,13 @@ export interface AnswerJudgment {
   helpfulness: number;
   unsupported: string[];
   at: string;
+  /** Which run judged it (plan phase 26); absent on older verdicts. */
+  source?: "calibration" | "nightly";
+  /** Why the nightly run picked it: the random sample, or flagged (not counted toward demotion). */
+  pick?: NightlyPick;
 }
+
+export type NightlyPick = "sample" | "flagged";
 
 export interface CalibrationPair {
   faithfulness: number;

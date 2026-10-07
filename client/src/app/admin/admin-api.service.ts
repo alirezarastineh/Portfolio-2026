@@ -31,6 +31,16 @@ import type {
   TrustView,
 } from "./assistant-types";
 import type { EvalCaseRow, FreezeBody } from "./eval-cases";
+import type { JournalEntry, JournalPatch, JournalStatus, JournalView } from "./journal";
+import type { FaithfulnessView } from "./faithfulness";
+import type {
+  InsightSnapshot,
+  InsightsView,
+  Lesson,
+  LessonInput,
+  LessonPatch,
+  LessonsView,
+} from "./lessons";
 import type { OutcomesView, PrimaryMetric } from "./outcomes";
 import type { CorpusTiers, PerceptionView } from "./perception";
 import type { RouterView } from "./routing";
@@ -534,11 +544,13 @@ export class AdminApiService {
 
   /** Groups recent visitor questions into topics; one model call, cached for a while. */
   assistantInsights(refresh = false) {
-    return this.request<{ topics: InsightTopic[]; analysed: number; cached?: boolean }>(
-      "POST",
-      `/admin/assistant/insights${refresh ? "?refresh=1" : ""}`,
-      {},
-    );
+    return this.request<{
+      topics: InsightTopic[];
+      analysed: number;
+      cached?: boolean;
+      /** The kept run the topics come from (plan phase 25). */
+      snapshot?: InsightSnapshot;
+    }>("POST", `/admin/assistant/insights${refresh ? "?refresh=1" : ""}`, {});
   }
 
   /** A week's review queue; the current week when none is named. */
@@ -647,6 +659,88 @@ export class AdminApiService {
   /** How answers were routed and how each tier fared, the false-simple rate (plan phase 20). */
   assistantRouting(days = 7) {
     return this.request<RouterView>("GET", `/admin/assistant/router?days=${days}`);
+  }
+
+  /** The failure journal (plan phase 24): its entries, newest first, and the counts per status. */
+  assistantJournal(status?: JournalStatus) {
+    const query = status ? `?status=${status}` : "";
+    return this.request<JournalView>("GET", `/admin/assistant/journal${query}`);
+  }
+
+  /**
+   * Diagnoses a visitor's answer (no model): a proposed entry, or the proposed
+   * one analysed again. `expected` names the document that holds the answer;
+   * null forgets an earlier one.
+   */
+  diagnoseAnswer(messageId: string, expected?: string | null) {
+    return this.request<{ entry: JournalEntry }>("POST", "/admin/assistant/journal/diagnose", {
+      messageId,
+      ...(expected === undefined ? {} : { expected }),
+    });
+  }
+
+  updateJournalEntry(id: string, patch: JournalPatch) {
+    return this.request<{ entry: JournalEntry }>(
+      "PATCH",
+      `/admin/assistant/journal/${encodeURIComponent(id)}`,
+      patch,
+    );
+  }
+
+  deleteJournalEntry(id: string) {
+    return this.request<{ ok: true }>(
+      "DELETE",
+      `/admin/assistant/journal/${encodeURIComponent(id)}`,
+    );
+  }
+
+  /** Replays an entry's question on both chains (paid): a background run of kind `agent`. */
+  startReplayRun(entry: string) {
+    return this.request<{ id: string }>("POST", "/admin/assistant/runs", { kind: "agent", entry });
+  }
+
+  /** Lessons (plan phase 25): each with its effect measured now, and the counts per status. */
+  assistantLessons() {
+    return this.request<LessonsView>("GET", "/admin/assistant/lessons");
+  }
+
+  /** A lesson from three decided journal entries, or from an unanswered insight topic. */
+  createLesson(body: LessonInput) {
+    return this.request<{ lesson: Lesson }>("POST", "/admin/assistant/lessons", body);
+  }
+
+  updateLesson(id: string, patch: LessonPatch) {
+    return this.request<{ lesson: Lesson }>(
+      "PATCH",
+      `/admin/assistant/lessons/${encodeURIComponent(id)}`,
+      patch,
+    );
+  }
+
+  deleteLesson(id: string) {
+    return this.request<{ ok: true }>(
+      "DELETE",
+      `/admin/assistant/lessons/${encodeURIComponent(id)}`,
+    );
+  }
+
+  /** The last insights run and the trigger's last verdict, with no model call. */
+  latestInsights() {
+    return this.request<InsightsView>("GET", "/admin/assistant/insights");
+  }
+
+  /** Judged faithfulness per model and route, and the last nightly judge run (plan phase 26). */
+  assistantFaithfulness(days = 30) {
+    return this.request<FaithfulnessView>("GET", `/admin/assistant/faithfulness?days=${days}`);
+  }
+
+  /** An automatic insights run, seen: the Overview's notice goes. */
+  insightsSeen(id: string) {
+    return this.request<{ ok: true }>(
+      "POST",
+      `/admin/assistant/insights/${encodeURIComponent(id)}/seen`,
+      {},
+    );
   }
 
   /** Judges the reviewed answers the visitor judge has not scored yet (for its calibration). */

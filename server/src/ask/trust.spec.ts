@@ -38,6 +38,45 @@ describe("the trust registry (plan phase 14)", () => {
     ]);
     expect(TRUST_REGISTRY.some((e) => e.level === "L3")).toBe(false);
   });
+
+  it("lets Diagnose only propose, and its replay only run when the admin starts it (plan phase 24)", () => {
+    expect(TRUST_REGISTRY.find((e) => e.action === "journal.diagnose")).toMatchObject({
+      actor: "system",
+      level: "L0",
+      approver: "admin",
+      built: true,
+    });
+    expect(TRUST_REGISTRY.find((e) => e.action === "journal.replay")).toMatchObject({
+      actor: "run",
+      level: "L2",
+      approver: "admin",
+      built: true,
+    });
+  });
+
+  it("lets the nightly judge run only within its own fence (plan phase 26)", () => {
+    const entry = TRUST_REGISTRY.find((e) => e.action === "judge.nightly");
+    expect(entry).toMatchObject({ actor: "system", level: "L2", built: true });
+    expect(entry?.enforcement).toMatch(/nightlyJudge/);
+  });
+
+  it("lets the learning check run insights and retire a lesson, and only the admin propose one (plan phase 25)", () => {
+    const entry = (action: string) => TRUST_REGISTRY.find((e) => e.action === action);
+    expect(entry("insights.auto")).toMatchObject({ actor: "system", level: "L2", built: true });
+    expect(entry("insights.auto")?.enforcement).toMatch(/autoInsights/);
+    expect(entry("lesson.retire")).toMatchObject({
+      actor: "system",
+      level: "L2",
+      reversible: true,
+      built: true,
+    });
+    expect(entry("lesson.propose")).toMatchObject({
+      actor: "admin",
+      level: "L0",
+      approver: "admin",
+      built: true,
+    });
+  });
 });
 
 describe("the nightly schedule", () => {

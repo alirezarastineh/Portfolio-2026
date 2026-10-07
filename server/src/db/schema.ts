@@ -27,6 +27,9 @@ import type { AnswerChecks } from "../ask/checks.js";
 import type { CorpusDocument, PostFacts, ProjectFacts } from "../ask/corpus/build.js";
 import type { AnswerJudgment } from "../ask/evals/calibration.js";
 import type { AskTranscript } from "../ask/handoff.js";
+import type { InsightTopic } from "../ask/insights.js";
+import type { FixType, JournalDiagnosis, JournalStatus, ReplayRecord } from "../ask/journal.js";
+import type { LessonEffect } from "../ask/lessons.js";
 import type { ReviewLabels } from "../ask/reviews.js";
 import type { ToolName } from "../ask/tools.js";
 import type { AnswerTrace } from "../ask/trace.js";
@@ -1043,6 +1046,139 @@ export const aiAudit = pgTable(
       .where(sql`${t.alert} and ${t.seenAt} is null`),
     check("ai_audit_actor_check", sql`${t.actor} in ('admin', 'agent', 'system')`),
     check("ai_audit_decision_check", sql`${t.decision} in ('allowed', 'denied', 'asked')`),
+  ],
+);
+
+/**
+ * The failure journal (plan phase 24, `ask/journal.ts`): why a visitor's
+ * answer failed, with the evidence for and against each hypothesis, the fix
+ * and the transferable heuristic, as Diagnose proposed them and the admin
+ * edited, accepted and linked them. No visitor text: ids, counts, flags and
+ * corpus words; the answers it names are pruned after 90 days, the entry is
+ * kept until the admin deletes it.
+ */
+export const aiJournal = pgTable(
+  "ai_journal",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...timestamps,
+    /** The answers it diagnoses (`ai_messages.id`); they dangle once pruned. */
+    messageIds: jsonb("message_ids").$type<string[]>().notNull().default([]),
+    /** The error: the answer's first symptom, or `reported` (the admin's own call). */
+    category: text("category").notNull(),
+    /** Context, hypotheses with their evidence and ratios, the proposal (`JournalDiagnosis`). */
+    diagnosis: jsonb("diagnosis").$type<JournalDiagnosis>().notNull(),
+    // The admin's fields, first filled from the diagnosis's proposal.
+    rootCause: text("root_cause").notNull().default(""),
+    fixType: text("fix_type").$type<FixType>(),
+    fix: text("fix").notNull().default(""),
+    /** What the fix is: a FAQ id, a prompt version, a document id, a model, a setting. */
+    fixRef: text("fix_ref"),
+    heuristic: text("heuristic").notNull().default(""),
+    /** The regression test: an eval case frozen from the answer. */
+    caseId: uuid("case_id").references(() => aiEvalCases.id, { onDelete: "set null" }),
+    status: text("status").$type<JournalStatus>().notNull().default("proposed"),
+    /** Who moved it on from proposed, and when. */
+    decidedBy: text("decided_by"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    /** A replay's outcomes on today's corpus (no answer text). */
+    replay: jsonb("replay").$type<ReplayRecord>(),
+  },
+  (t) => [
+    index("ai_journal_created_idx").on(t.createdAt.desc()),
+    check(
+      "ai_journal_status_check",
+      sql`${t.status} in ('proposed', 'accepted', 'fixed', 'retired')`,
+    ),
+    check(
+      "ai_journal_fix_type_check",
+      sql`${t.fixType} in ('content', 'faq', 'prompt', 'routing', 'retrieval', 'model', 'infra')`,
+    ),
+    check("ai_journal_decided_by_check", sql`${t.decidedBy} in ('admin', 'system')`),
+  ],
+);
+
+/**
+ * Insights runs (plan phase 25, `ask/insights.ts`): what visitors asked,
+ * grouped into topics by one model call; the admin's and the ones the
+ * adaptive trigger starts. Kept so the last run shows without spending and
+ * the trigger knows what is new; the topics hold example questions (visitor
+ * text), so a run goes within 60 days of it: none outlives the answers' 90 days.
+ */
+export const aiInsightSnapshots = pgTable(
+  "ai_insight_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    trigger: text("trigger").$type<"admin" | "auto">().notNull(),
+    /** The questions read. */
+    analysed: integer("analysed").notNull(),
+    /** The newest answer read, and when it was given (copied in SQL: microseconds kept). */
+    newestMessageId: text("newest_message_id"),
+    newestAt: timestamp("newest_at", { withTimezone: true }),
+    topics: jsonb("topics").$type<InsightTopic[]>().notNull(),
+    /** The trigger's numbers; empty for the admin's runs. */
+    reason: text("reason").notNull().default(""),
+    usd: doublePrecision("usd").notNull().default(0),
+    /** An automatic run's Overview notice, until seen; the admin's are created seen. */
+    seenAt: timestamp("seen_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("ai_insight_snapshots_created_idx").on(t.createdAt.desc()),
+    check("ai_insight_snapshots_trigger_check", sql`${t.trigger} in ('admin', 'auto')`),
+  ],
+);
+
+/**
+ * Lessons (plan phase 25, `ask/lessons.ts`), the failure journal's top tier:
+ * the admin's words, corroborated by three decided journal entries or an
+ * unanswered insight topic; applied as a fix and measured on visitors'
+ * answers since; retired when they do not work. No visitor text: the
+ * statement and the scope are the admin's, the rest ids and counts.
+ */
+export const aiLessons = pgTable(
+  "ai_lessons",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...timestamps,
+    statement: text("statement").notNull(),
+    /** The words of the questions it is about (matched by stem). */
+    scope: jsonb("scope").$type<string[]>().notNull().default([]),
+    source: text("source").$type<"journal" | "insight">().notNull(),
+    journalIds: jsonb("journal_ids").$type<string[]>().notNull().default([]),
+    /** The insight topic it came from: its name and counts, not its example questions. */
+    topic: jsonb("topic").$type<{
+      snapshotId: string;
+      title: string;
+      questions: number;
+      unanswered: boolean;
+    }>(),
+    appliedAs: text("applied_as").$type<"faq" | "content-task" | "prompt-rule" | "eval-case">(),
+    /** What the fix is: an FAQ id, a document, a prompt version, an eval case. */
+    appliedRef: text("applied_ref"),
+    /** When it was applied: the effect compares the answers before with those since. */
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    /**
+     * When the admin last reopened it after a retirement: its effectiveness is
+     * measured again from then (the trust monitor's evidence since reinstating).
+     */
+    reopenedAt: timestamp("reopened_at", { withTimezone: true }),
+    status: text("status").$type<"proposed" | "active" | "retired">().notNull().default("proposed"),
+    /** The effect the nightly check stored last. */
+    effectiveness: jsonb("effectiveness").$type<LessonEffect>(),
+    retiredReason: text("retired_reason"),
+    decidedBy: text("decided_by"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("ai_lessons_created_idx").on(t.createdAt.desc()),
+    check("ai_lessons_source_check", sql`${t.source} in ('journal', 'insight')`),
+    check(
+      "ai_lessons_applied_as_check",
+      sql`${t.appliedAs} in ('faq', 'content-task', 'prompt-rule', 'eval-case')`,
+    ),
+    check("ai_lessons_status_check", sql`${t.status} in ('proposed', 'active', 'retired')`),
+    check("ai_lessons_decided_by_check", sql`${t.decidedBy} in ('admin', 'system')`),
   ],
 );
 

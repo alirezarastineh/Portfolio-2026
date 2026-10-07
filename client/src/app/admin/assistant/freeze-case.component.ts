@@ -1,9 +1,11 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   effect,
   inject,
   input,
+  output,
   signal,
   untracked,
 } from "@angular/core";
@@ -36,7 +38,14 @@ const REFUSALS: Record<string, string> = {
     @if (frozen()) {
       <p class="m-0 font-mono text-xs text-muted-foreground">frozen as an eval case</p>
     } @else if (!open()) {
-      <button hlmBtn size="sm" variant="outline" type="button" (click)="open.set(true)">
+      <button
+        hlmBtn
+        size="sm"
+        variant="outline"
+        type="button"
+        [attr.aria-describedby]="describedBy()"
+        (click)="open.set(true)"
+      >
         Freeze as eval case
       </button>
     } @else {
@@ -90,10 +99,23 @@ const REFUSALS: Record<string, string> = {
           <span>Nothing personal is left in the question</span>
         </label>
         <div class="flex gap-2">
-          <button hlmBtn size="sm" type="submit" [disabled]="saving() || !personalChecked()">
+          <button
+            hlmBtn
+            size="sm"
+            type="submit"
+            [attr.aria-describedby]="describedBy()"
+            [disabled]="saving() || !personalChecked()"
+          >
             Freeze
           </button>
-          <button hlmBtn size="sm" variant="ghost" type="button" (click)="open.set(false)">
+          <button
+            hlmBtn
+            size="sm"
+            variant="ghost"
+            type="button"
+            [attr.aria-describedby]="describedBy()"
+            (click)="open.set(false)"
+          >
             Cancel
           </button>
         </div>
@@ -104,7 +126,13 @@ const REFUSALS: Record<string, string> = {
 export class FreezeCaseComponent {
   private readonly api = inject(AdminApiService);
 
-  readonly message = input.required<ConversationRow>();
+  readonly message = input.required<Pick<ConversationRow, "id" | "question" | "citedIds">>();
+  /** The new case's id, once frozen (the failure journal links it as a regression case). */
+  readonly caseFrozen = output<string>();
+  /** The id of what the buttons act on (a list repeats them), for their description. */
+  readonly describedBy = input<string | null>(null);
+  /** The answer by id: the same answer read again (a list reloaded) keeps the form as it is. */
+  private readonly messageId = computed(() => this.message().id);
 
   protected readonly open = signal(false);
   protected readonly saving = signal(false);
@@ -118,8 +146,9 @@ export class FreezeCaseComponent {
   constructor() {
     // Another answer (the Reviews pane keeps this one): start over, with its citations.
     effect(() => {
-      const message = this.message();
+      this.messageId();
       untracked(() => {
+        const message = this.message();
         this.open.set(false);
         this.frozen.set(false);
         this.question.set(message.question);
@@ -151,6 +180,7 @@ export class FreezeCaseComponent {
       return;
     }
     this.frozen.set(true);
+    this.caseFrozen.emit(result.data.id);
     toast.success("Frozen as an eval case", {
       description: "It re-runs against this answer's corpus with `--suite production`.",
     });

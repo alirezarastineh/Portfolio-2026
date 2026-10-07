@@ -165,6 +165,13 @@ const CHECK_LABELS: Record<string, string> = {
 };
 
 /** A check flag in words (`server/src/ask/checks.ts` defines them). */
+/** A review queue reason in words: a check's flag, the judge's verdict, or people's signals as they are. */
+export function reasonLabel(reason: string): string {
+  // The nightly judge found it unfaithful (plan phase 26).
+  if (reason === "judge:unfaithful") return "judged unfaithful";
+  return reason.startsWith("check:") ? checkLabel(reason.slice("check:".length)) : reason;
+}
+
 export function checkLabel(flag: string): string {
   return CHECK_LABELS[flag] ?? flag;
 }

@@ -1,12 +1,16 @@
 import { DecimalPipe } from "@angular/common";
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
+  ElementRef,
   inject,
+  Injector,
   OnInit,
   output,
   signal,
+  viewChild,
 } from "@angular/core";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmBadge } from "@spartan-ng/helm/badge";
@@ -25,6 +29,7 @@ import {
   type DayRow,
 } from "../answer-trace";
 import type { AssistantHealth, AssistantUsage } from "../assistant-types";
+import { noticeLine } from "../lessons";
 import { featureRows, stateLabel } from "../spending";
 import { trustAlert } from "../trust";
 
@@ -78,9 +83,42 @@ interface ModelTotal {
           </button>
         </div>
       }
+      <!-- Insights the nightly check ran when failures rose (plan phase 25), until seen. -->
+      @if (h.learning?.notice; as notice) {
+        <div
+          id="insights-notice-box"
+          class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3 text-sm"
+        >
+          <p id="insights-notice" class="m-0">{{ noticeText(notice) }}</p>
+          <div class="flex flex-wrap gap-2">
+            <button
+              hlmBtn
+              size="sm"
+              variant="outline"
+              type="button"
+              aria-describedby="insights-notice"
+              (click)="toInsights.emit()"
+            >
+              Open Insights
+            </button>
+            <button
+              hlmBtn
+              size="sm"
+              variant="ghost"
+              type="button"
+              aria-describedby="insights-notice"
+              (click)="seen(notice.id)"
+            >
+              Seen
+            </button>
+          </div>
+        </div>
+      }
       <!-- The dashboard's tiles: a figure, what it means, the detail under it. -->
       <section aria-labelledby="assistant-glance">
-        <h2 id="assistant-glance" class="sr-only">The assistant at a glance</h2>
+        <h2 #glance id="assistant-glance" class="sr-only" tabindex="-1">
+          The assistant at a glance
+        </h2>
         <ul class="m-0 grid list-none gap-3 p-0 sm:grid-cols-3" role="list">
           <li appKpiTile="Status">
             <p
@@ -423,6 +461,8 @@ interface ModelTotal {
 })
 export class AssistantOverviewComponent implements OnInit {
   private readonly api = inject(AdminApiService);
+  private readonly injector = inject(Injector);
+  private readonly glance = viewChild<ElementRef<HTMLElement>>("glance");
 
   protected readonly health = signal<AssistantHealth | null>(null);
   protected readonly usage = signal<AssistantUsage | null>(null);
@@ -450,6 +490,11 @@ export class AssistantOverviewComponent implements OnInit {
 
   /** An alert or a demotion waiting for a person, in a sentence. */
   protected readonly trustLine = computed(() => trustAlert(this.health()?.trust));
+
+  /** Asks the page to open the Insights tab. */
+  readonly toInsights = output<void>();
+
+  protected readonly noticeText = noticeLine;
 
   /** Each feature's spend today and over the period, and what its next call would get. */
   protected readonly features = computed(() => featureRows(this.health()?.spend, this.usage()));
@@ -527,6 +572,19 @@ export class AssistantOverviewComponent implements OnInit {
     this.loadError.set(health.ok ? null : health.error);
     if (health.ok) this.health.set(health.data);
     if (usage.ok) this.usage.set(usage.data);
+  }
+
+  /** The nightly check's insights, seen: the notice goes. */
+  protected async seen(id: string): Promise<void> {
+    const result = await this.api.insightsSeen(id);
+    if (!result.ok) {
+      toast.error("Could not mark the insights seen", { description: result.error });
+      return;
+    }
+    this.health.update((h) => (h ? { ...h, learning: { notice: null } } : h));
+    toast.success("Marked as seen");
+    // The button is gone with the notice: the admin lands on the page's first heading.
+    afterNextRender(() => this.glance()?.nativeElement.focus(), { injector: this.injector });
   }
 
   protected async count(): Promise<void> {

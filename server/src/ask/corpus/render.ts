@@ -100,10 +100,16 @@ function header(d: CorpusDocument, layout: CoreLayout = "locale"): string {
   return [...lines, "---"].join("\n");
 }
 
-function clip(text: string, limit: number | undefined, id: string): string {
+/** `text` up to where a limit cuts it: the last line break past half the limit, else the limit. */
+function cutAt(text: string, limit: number | undefined): string {
   if (!limit || text.length <= limit) return text;
   const cut = text.lastIndexOf("\n", limit);
-  return `${text.slice(0, cut > limit / 2 ? cut : limit)}\n[… continues: get_document("${id}")]`;
+  return text.slice(0, cut > limit / 2 ? cut : limit);
+}
+
+function clip(text: string, limit: number | undefined, id: string): string {
+  const held = cutAt(text, limit);
+  return held === text ? text : `${held}\n[… continues: get_document("${id}")]`;
 }
 
 /**
@@ -116,6 +122,14 @@ export function coreLimit(d: CorpusDocument, layout: CoreLayout = "locale"): num
   const limit = CORE_LIMIT[d.kind];
   if (limit && d.tier === "demoted") return Math.floor(limit / 2);
   return limit;
+}
+
+/**
+ * The part of `d` the core holds (plan phase 24: is a fact before the cut, or
+ * past it?): all of it, or its text up to the cut its limit makes.
+ */
+export function heldText(d: CorpusDocument, layout: CoreLayout = "locale"): string {
+  return cutAt(d.text, coreLimit(d, layout));
 }
 
 /**

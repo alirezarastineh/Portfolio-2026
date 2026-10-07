@@ -20,8 +20,8 @@ export const NOTE_TOPICS = 3;
 export const TOPIC_CHARS = 24;
 const TOPIC_WORD = new RegExp(String.raw`^[\p{Script=Latin}\p{N}]{3,${TOPIC_CHARS}}$`, "u");
 
-/** Words no question is about, in English and German. */
-const FUNCTION_WORDS = new Set(
+/** Words no question is about, in English and German (the failure journal's too, journal.ts). */
+export const FUNCTION_WORDS: ReadonlySet<string> = new Set(
   (
     "what where when which who whom whose why how does did done doing are was were has have had his him " +
     "the and for with about from into this that these those can could would should will any some your " +

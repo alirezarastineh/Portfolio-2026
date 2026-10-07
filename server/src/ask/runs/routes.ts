@@ -4,10 +4,11 @@ import { z } from "zod";
 
 import { askConfig, askVariantChain, askVisitorJudges } from "../deps.js";
 import { EVAL_CASES } from "../evals/cases.js";
-import { spendBlocked } from "./budget.js";
+import { runFeature, spendBlocked } from "./budget.js";
 import { evalWork } from "./eval-work.js";
 import { judgeWork, reviewedToJudge } from "./judge-work.js";
 import { pairwiseWork } from "./pairwise-work.js";
+import { planReplay, replayWork } from "./replay-work.js";
 import {
   cancelRun,
   registerWork,
@@ -16,18 +17,20 @@ import {
   startRun,
   whileStarting,
 } from "./runner.js";
-import { activeRuns, getRun, listRuns, type RunKind, type RunRow } from "./store.js";
+import { activeRuns, getRun, listRuns, type RunRow } from "./store.js";
 
 /**
  * The admin's background runs, under /admin/assistant/runs (the admin
  * router's auth and CSRF apply): start one, follow it, cancel it, resume it.
- * Kinds: the eval suite, a pairwise comparison of two answerers, and judging
- * the reviewed visitor answers (for the judge's calibration).
+ * Kinds: the eval suite, a pairwise comparison of two answerers, judging the
+ * reviewed visitor answers (for the judge's calibration), and an agent's
+ * work: a failure journal entry's replay (plan phase 24).
  */
 
 registerWork("eval", evalWork);
 registerWork("pairwise", pairwiseWork);
 registerWork("judge", judgeWork);
+registerWork("agent", replayWork);
 
 export const runsRouter = new Hono();
 
@@ -52,6 +55,8 @@ const runInput = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("eval"), cases }),
   z.object({ kind: z.literal("pairwise"), a: answerer, b: answerer, cases }),
   z.object({ kind: z.literal("judge") }),
+  // A failure journal entry's replay (plan phase 24).
+  z.object({ kind: z.literal("agent"), entry: z.uuid() }),
 ]);
 
 type Refusal = { error: string; status: 400 | 409 | 503 };
@@ -60,6 +65,7 @@ type Refusal = { error: string; status: 400 | 409 | 503 };
 async function planRun(
   input: z.infer<typeof runInput>,
 ): Promise<{ params: Record<string, unknown>; keys: string[] } | Refusal> {
+  if (input.kind === "agent") return planReplay(input.entry);
   if (input.kind === "judge") {
     const judge = askVisitorJudges(askConfig())[0]?.id;
     if (!judge) return { error: "no_visitor_judge", status: 400 };
@@ -121,7 +127,8 @@ runsRouter.post("/:id/resume", idParam, async (c) => {
     if ((await activeRuns()).length) return { error: "already_running", status: 409 };
     const found = await getRun(c.req.valid("param").id);
     if (!found) return { error: "not_resumable", status: 409 };
-    const blocked = await spendBlocked(found.run.kind as RunKind);
+    // Its own feature: a nightly judge run resumes within `nightlyJudge`'s fences.
+    const blocked = await spendBlocked(runFeature(found.run));
     if (blocked) return { error: blocked, status: 503 };
     const run = await resumeRun(found.run.id);
     return run ? { id: run.id } : { error: "not_resumable", status: 409 };

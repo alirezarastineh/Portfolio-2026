@@ -20,10 +20,13 @@ const LABELS: Partial<Record<SpendFeature, string>> = {
   playground: "Playground",
   copilot: "Copilot",
   insights: "Insights",
+  autoInsights: "Automatic insights",
   eval: "Eval runs",
   pairwise: "Pairwise runs",
   judge: "Judge runs",
+  nightlyJudge: "Nightly judge",
   embeddings: "Search by meaning",
+  agent: "Admin agents",
 };
 
 export const featureLabel = (feature: string): string => LABELS[feature as SpendFeature] ?? feature;
@@ -33,10 +36,13 @@ export const CAPPED: FencedFeature[] = [
   "playground",
   "copilot",
   "insights",
+  "autoInsights",
   "eval",
   "pairwise",
   "judge",
+  "nightlyJudge",
   "embeddings",
+  "agent",
 ];
 
 /** The switches the Settings form offers. */
@@ -52,9 +58,24 @@ export const SWITCHES: { feature: SwitchedFeature; label: string; hint: string }
     hint: "Scoring reviewed visitor answers, to see how far the judge agrees with you.",
   },
   {
+    feature: "nightlyJudge",
+    label: "Nightly judge",
+    hint: "Each night at 02:30 UTC, judges a sample of the day's visitor answers and every flagged one against what they read; an unfaithful one goes to the review queue.",
+  },
+  {
     feature: "embeddings",
     label: "Search by meaning",
     hint: "The assistant's search finds synonyms and the other language: Gemini embeds the published content and each search. The server needs SERVER_AI_EMBEDDINGS as well.",
+  },
+  {
+    feature: "autoInsights",
+    label: "Automatic insights",
+    hint: "Insights run by themselves when the nightly check sees more answers failing: once per rise, shown on the Overview until you mark them seen.",
+  },
+  {
+    feature: "agent",
+    label: "Admin agents",
+    hint: "Replays from the failure journal: a diagnosed answer's question answered again on the lite and the deep chain, after you confirm each one.",
   },
 ];
 

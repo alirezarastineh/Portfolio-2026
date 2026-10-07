@@ -355,6 +355,153 @@ function answerRow(id: string, question: string, change: Record<string, unknown>
   };
 }
 
+const JOURNAL_ID = "6f1c2a3b-0000-4000-8000-000000000001";
+
+/** A failure journal entry as Diagnose proposes it (plan phase 24). */
+function journalEntry(change: Record<string, unknown> = {}) {
+  const proposal = {
+    rootCause:
+      "Context clipped or unused: The core held project:long@en cut at 2,394 of 3,512 characters; kubernetes lies past the cut; It never fetched project:long@en.",
+    fixType: "content",
+    fix: "Promote project:long@en (Overview → Perception holds it whole), or move the fact before the cut at 2,394 characters.",
+    fixRef: "project:long@en",
+    heuristic:
+      "A fact past a document's cut is one fetch away, and models rarely take it: keep what visitors ask about in a document's first part, or hold the document whole.",
+  };
+  const untested = (id: string) => ({
+    id,
+    evidence: [],
+    supporting: 0,
+    contradicting: 0,
+    ratio: 0.5,
+  });
+  return {
+    id: JOURNAL_ID,
+    createdAt: NOW,
+    updatedAt: NOW,
+    messageIds: ["m_diagnose01"],
+    category: "unknown",
+    diagnosis: {
+      v: 1,
+      symptoms: ["unknown"],
+      context: {
+        locale: "en",
+        reading: "en",
+        layout: "locale",
+        route: "lite",
+        model: "gemini-flash",
+        finishReason: "stop",
+        steps: 1,
+        tools: [],
+        corpusKey: "en:1#abc",
+        corpus: "snapshot",
+        promptVersion: "ask-test",
+        traced: true,
+      },
+      located: {
+        id: "project:long@en",
+        named: false,
+        coverage: 1,
+        words: ["kubernetes"],
+        pastCut: ["kubernetes"],
+        position: "rest",
+        held: 2_394,
+        length: 3_512,
+      },
+      addedSince: null,
+      hypotheses: [
+        {
+          id: "context-unused",
+          evidence: [
+            {
+              experiment: "position",
+              supports: true,
+              observation:
+                "The core held project:long@en cut at 2,394 of 3,512 characters; kubernetes lies past the cut",
+            },
+            {
+              experiment: "reads",
+              supports: true,
+              observation: "It never fetched project:long@en",
+            },
+          ],
+          supporting: 2,
+          contradicting: 0,
+          ratio: 1,
+        },
+        untested("retrieval-miss"),
+        {
+          id: "content-missing",
+          evidence: [
+            {
+              experiment: "locate",
+              supports: false,
+              observation:
+                "project:long@en holds 1 of the question's 1 content words (kubernetes), 100 % of their weight",
+            },
+          ],
+          supporting: 0,
+          contradicting: 1,
+          ratio: 0,
+        },
+        untested("degraded-model"),
+        untested("language"),
+        untested("under-routed"),
+        untested("infrastructure"),
+      ],
+      leading: "context-unused",
+      untested: [],
+      next: [],
+      proposal,
+      replayed: false,
+    },
+    ...proposal,
+    caseId: null,
+    status: "proposed",
+    decidedBy: null,
+    decidedAt: null,
+    replay: null,
+    message: {
+      id: "m_diagnose01",
+      question: "Did he move the clusters to Kubernetes?",
+      createdAt: NOW,
+      citedIds: [],
+    },
+    ...change,
+  };
+}
+
+const LESSON_ID = "7a1c2a3b-0000-4000-8000-000000000001";
+const SNAPSHOT_ID = "8b1c2a3b-0000-4000-8000-000000000001";
+const LESSON_STATEMENT =
+  "When a fact sits past a document's cut, move it into the document's first part.";
+const RISE =
+  "failures rose: the last 30: 9 failed; the 30 before: 4 failed; 64 new since the last insights";
+
+/** A lesson as the server keeps it (plan phase 25). */
+function lessonRow(change: Record<string, unknown> = {}) {
+  return {
+    id: LESSON_ID,
+    createdAt: NOW,
+    updatedAt: NOW,
+    statement: LESSON_STATEMENT,
+    scope: ["kubernetes", "clusters"],
+    source: "journal",
+    journalIds: [],
+    topic: null,
+    appliedAs: null,
+    appliedRef: null,
+    appliedAt: null,
+    status: "proposed",
+    effectiveness: null,
+    retiredReason: null,
+    decidedBy: null,
+    decidedAt: null,
+    effect: null,
+    ...change,
+  };
+}
+
 /** The assistant's settings as the Settings tab loads them. */
 function assistantSettings(change: Record<string, unknown> = {}) {
   return {
@@ -374,6 +521,7 @@ function assistantSettings(change: Record<string, unknown> = {}) {
       autoInsights: null,
       agent: null,
       embeddings: null,
+      nightlyJudge: null,
     },
     featureSwitches: {
       copilot: true,
@@ -381,6 +529,7 @@ function assistantSettings(change: Record<string, unknown> = {}) {
       autoInsights: false,
       agent: false,
       embeddings: false,
+      nightlyJudge: false,
     },
     updatedAt: HOUR_AGO,
     ...change,
@@ -526,6 +675,8 @@ function defaults(): Record<string, Answer> {
           { feature: "eval", spentUsd: 0.3, capUsd: 0.3, switchedOn: null, state: "cap" },
           { feature: "copilot", spentUsd: 0, capUsd: null, switchedOn: true, state: "ok" },
           { feature: "agent", spentUsd: 0, capUsd: null, switchedOn: false, state: "off" },
+          { feature: "autoInsights", spentUsd: 0, capUsd: null, switchedOn: false, state: "off" },
+          { feature: "nightlyJudge", spentUsd: 0, capUsd: null, switchedOn: false, state: "off" },
         ],
       },
       inFlight: 0,
@@ -543,6 +694,7 @@ function defaults(): Record<string, Answer> {
       ],
       last24h: { answers: 12, failures: 3, fallbackRate: 0.1, models: [] },
       corpus: null,
+      learning: { notice: null },
     },
     "GET /admin/publications": {
       publications: [
@@ -604,6 +756,23 @@ function defaults(): Record<string, Answer> {
       answerers: ["lite", "deep", "gemini-flash-lite", "gemini-flash"],
     },
     "GET /admin/assistant/eval-cases": { cases: [] },
+    "GET /admin/assistant/journal": {
+      entries: [],
+      counts: { proposed: 0, accepted: 0, fixed: 0, retired: 0 },
+    },
+    "GET /admin/assistant/lessons": {
+      lessons: [],
+      counts: { proposed: 0, active: 0, retired: 0 },
+    },
+    "GET /admin/assistant/insights": { snapshot: null, trigger: null },
+    "GET /admin/assistant/faithfulness": {
+      days: 30,
+      judge: "gemini-flash-lite",
+      judges: [],
+      byModel: [],
+      byRoute: [],
+      nightly: null,
+    },
     "GET /admin/assistant/reviews": {
       week: "2026-W40",
       previous: "2026-W39",
@@ -1194,7 +1363,7 @@ test.describe("admin", () => {
     await openAdmin(page, "/admin/assistant");
 
     const tabs = page.getByRole("tablist", { name: "Assistant sections" });
-    await expect(tabs.getByRole("tab")).toHaveCount(9);
+    await expect(tabs.getByRole("tab")).toHaveCount(10);
     expect((await tabs.boundingBox())?.height ?? 99).toBeLessThan(44);
     await expect(page.getByText("Answering")).toBeVisible();
   });
@@ -1320,23 +1489,43 @@ test.describe("admin", () => {
     const spend = page.getByRole("region", { name: "Spending by feature" });
     await expect(spend.getByRole("row", { name: /Eval runs/ })).toContainText("stopped at its cap");
     await expect(spend.getByRole("row", { name: /Visitors' terminal/ })).toContainText("$0.12");
-    // Work not built yet stays out of the table until it spends.
-    await expect(spend.getByText("agent", { exact: true })).toHaveCount(0);
+    // The admin agents (plan phase 24) are built: listed, off until switched on.
+    await expect(spend.getByRole("row", { name: /Admin agents/ })).toContainText("switched off");
+    await expect(spend.getByRole("row", { name: /Nightly judge/ })).toContainText("switched off");
+    // Automatic insights (plan phase 25) too: no raw feature name is left in the table.
+    await expect(spend.getByRole("row", { name: /Automatic insights/ })).toContainText(
+      "switched off",
+    );
+    await expect(spend.getByText("autoInsights", { exact: true })).toHaveCount(0);
 
     await page.getByRole("tab", { name: "Settings" }).click();
     await page.getByLabel("Kept for visitors (% of the budget)", { exact: true }).fill("60");
     await page.getByLabel("Eval runs", { exact: true }).fill("0.5");
+    // Its cap: the number field (the switch has the same name).
+    await page.getByRole("spinbutton", { name: "Admin agents", exact: true }).fill("0.05");
     // Each switch is named by its own label alone, its hint left out.
     const named = (name: string) => page.getByRole("switch", { name, exact: true });
     await expect(named("Deep model for comparisons and architecture questions")).toBeChecked();
     await expect(named("Judge runs")).toHaveAccessibleDescription(/agrees with you/);
+    await expect(named("Admin agents")).not.toBeChecked();
+    await expect(named("Admin agents")).toHaveAccessibleDescription(/failure journal/);
+    await expect(named("Automatic insights")).not.toBeChecked();
+    await expect(named("Automatic insights")).toHaveAccessibleDescription(/nightly check/);
+    await expect(named("Nightly judge")).not.toBeChecked();
+    await expect(named("Nightly judge")).toHaveAccessibleDescription(/review queue/);
     await named("Copilot").click();
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect.poll(() => saved).toHaveLength(1);
     expect(saved[0]).toMatchObject({
       publicReserve: 0.6,
-      featureCaps: { eval: 0.5, copilot: null, pairwise: null },
-      featureSwitches: { copilot: false, judge: true },
+      featureCaps: { eval: 0.5, copilot: null, pairwise: null, agent: 0.05 },
+      featureSwitches: {
+        copilot: false,
+        judge: true,
+        agent: false,
+        autoInsights: false,
+        nightlyJudge: false,
+      },
     });
     expect(unmocked).toEqual([]);
   });
@@ -1932,6 +2121,747 @@ test.describe("admin", () => {
     await cases.getByRole("button", { name: "Delete" }).last().click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Delete case" }).click();
     await expect.poll(() => deleted).toEqual(["3c1d8a6e-0000-4000-8000-000000000001"]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("Conversations diagnoses an answer, and the Journal replays it, accepts it, links a case and marks it fixed", async ({
+    page,
+    baseURL,
+  }) => {
+    const CASE_ID = "c1d2e3f4-0000-4000-8000-000000000009";
+    const entry = journalEntry();
+    const replayed = journalEntry({
+      replay: {
+        runId: "r_replay",
+        at: NOW,
+        corpusKey: "en:1#def",
+        results: [
+          {
+            chain: "lite",
+            model: "gemini-flash-lite",
+            finishReason: "stop",
+            answered: false,
+            unknown: true,
+            cited: [],
+            flags: [],
+            usd: 0.001,
+            unavailable: false,
+          },
+          {
+            chain: "deep",
+            model: "gemini-flash",
+            finishReason: "stop",
+            answered: true,
+            unknown: false,
+            cited: ["project:long@en"],
+            flags: [],
+            usd: 0.002,
+            unavailable: false,
+          },
+        ],
+      },
+    });
+    const accepted = { ...replayed, status: "accepted", decidedBy: "admin", decidedAt: NOW };
+    const linked = { ...accepted, caseId: CASE_ID };
+    const fixed = { ...linked, status: "fixed" };
+    const counts = { proposed: 1, accepted: 0, fixed: 0, retired: 0 };
+    const patches: unknown[] = [];
+    const runs: unknown[] = [];
+    const diagnoses: unknown[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/conversations": {
+        messages: [
+          answerRow("m_diagnose01", "Did he move the clusters to Kubernetes?", {
+            answer: "That is not in the portfolio.",
+          }),
+        ],
+      },
+      "POST /admin/assistant/journal/diagnose": () => ({ status: 201, body: { entry } }),
+      "GET /admin/assistant/journal": (call: number) => ({
+        status: 200,
+        body: { entries: [call > 1 ? replayed : entry], counts },
+      }),
+      [`PATCH /admin/assistant/journal/${JOURNAL_ID}`]: (call: number) => ({
+        status: 200,
+        body: { entry: [accepted, linked, fixed][Math.min(call, 3) - 1] },
+      }),
+      "POST /admin/assistant/runs": () => ({ status: 202, body: { id: "r_replay" } }),
+      "GET /admin/assistant/runs/r_replay": {
+        run: {
+          id: "r_replay",
+          kind: "agent",
+          status: "done",
+          params: {},
+          progress: { total: 2, done: 2, failed: 0, unavailable: 0 },
+          summary: null,
+          usd: 0.003,
+          error: null,
+          createdAt: NOW,
+          startedAt: NOW,
+          finishedAt: NOW,
+          heartbeatAt: NOW,
+          live: false,
+        },
+        items: [],
+      },
+      "POST /admin/assistant/eval-cases": () => ({ status: 201, body: { id: CASE_ID } }),
+    });
+    page.on("request", (r) => {
+      if (r.method() === "PATCH" && r.url().includes("/admin/assistant/journal/")) {
+        patches.push(r.postDataJSON());
+      }
+      if (r.method() === "POST" && r.url().endsWith("/admin/assistant/runs")) {
+        runs.push(r.postDataJSON());
+      }
+      if (r.method() === "POST" && r.url().endsWith("/admin/assistant/journal/diagnose")) {
+        diagnoses.push(r.postDataJSON());
+      }
+    });
+    await openAdmin(page, "/admin/assistant");
+
+    // Diagnose, no model: one line under the answer, then the journal.
+    await page.getByRole("tab", { name: "Conversations" }).click();
+    const diagnose = page.getByRole("button", { name: "Diagnose" });
+    // Described by the question it acts on: every answer has its own button.
+    await expect(diagnose).toHaveAccessibleDescription("Did he move the clusters to Kubernetes?");
+    await diagnose.click();
+    // The result takes the button's place: focus moves to it, and it is announced.
+    await expect(page.locator(":focus")).toContainText(
+      "H3 Context clipped or unused · 2 for, 0 against · 1.00",
+    );
+    await expect(
+      page.getByRole("status").filter({ hasText: "Diagnosis: H3 Context clipped or unused" }),
+    ).toBeAttached();
+    await page.getByRole("button", { name: "Open in the journal" }).click();
+    await expect(page.getByRole("tab", { name: "Journal" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    const journal = page.getByRole("region", { name: "Failure journal" });
+    // The entry it came for, its evidence open: for and against, as counted.
+    await expect(journal.getByText("It never fetched project:long@en")).toBeVisible();
+    await expect(
+      journal.getByText(
+        "Where the fact sat: project:long@en: cut short in the core, a matching word only past the cut, at 2,394 of 3,512 characters",
+      ),
+    ).toBeVisible();
+
+    const { violations } = await new AxeBuilder({ page })
+      .include("section[aria-labelledby=journal-heading]")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+      .analyze();
+    expect(violations.map((v) => v.id)).toEqual([]);
+
+    // The admin names the document a word search could miss, and diagnoses again.
+    await journal
+      .getByLabel("Document that holds the answer", { exact: true })
+      .fill("project:long");
+    await journal.getByRole("button", { name: "Diagnose again" }).click();
+    await expect
+      .poll(() => diagnoses)
+      .toEqual([
+        { messageId: "m_diagnose01" },
+        { messageId: "m_diagnose01", expected: "project:long" },
+      ]);
+
+    // The replay is paid: it asks first, runs in the background, then the evidence is read again.
+    await journal.getByRole("button", { name: "Replay on both chains (paid)" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Replay" }).click();
+    // Typed while the replay runs: the entry read again keeps what was not saved yet.
+    const mine = "My words: the Kubernetes line sits past the cut of the case study.";
+    const rootCause = journal.getByLabel("Root cause", { exact: true });
+    await rootCause.fill(mine);
+    await expect.poll(() => runs).toEqual([{ kind: "agent", entry: JOURNAL_ID }]);
+    await expect(
+      journal.getByText("deep: gemini-flash answered, citing project:long@en"),
+    ).toBeVisible();
+    await expect(rootCause).toHaveValue(mine);
+
+    await journal.getByRole("button", { name: "Accept", exact: true }).click();
+    await expect.poll(() => patches.length).toBe(1);
+    expect(patches[0]).toMatchObject({
+      status: "accepted",
+      rootCause: mine,
+      fixType: "content",
+      fixRef: "project:long@en",
+    });
+    // Its button is gone: focus stays in the entry, on its heading, and the decision is said.
+    await expect(page.locator(":focus")).toHaveAttribute("id", `journal-${JOURNAL_ID}`);
+    await expect(journal.getByRole("status")).toHaveText("Accept: done");
+
+    // The regression case, frozen from the answer and linked to the entry.
+    await journal.getByRole("button", { name: "Freeze as eval case" }).click();
+    await journal.getByLabel("Nothing personal is left in the question").check();
+    await journal.getByRole("button", { name: "Freeze", exact: true }).click();
+    await expect.poll(() => patches.length).toBe(2);
+    expect(patches[1]).toEqual({ caseId: CASE_ID });
+    await expect(journal.getByText(`regression case ${CASE_ID}`)).toBeVisible();
+
+    await journal.getByRole("button", { name: "Mark fixed" }).click();
+    await expect.poll(() => patches.length).toBe(3);
+    expect(patches[2]).toMatchObject({ status: "fixed" });
+    await expect(journal.getByText("Fixed", { exact: true })).toBeVisible();
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a stopped replay is resumed from its journal entry", async ({ page, baseURL }) => {
+    const resumed: string[] = [];
+    const stopped = {
+      id: "r_stopped",
+      kind: "agent",
+      status: "failed",
+      params: { task: "replay", entry: JOURNAL_ID, messageId: "m_diagnose01" },
+      progress: { total: 2, done: 1, failed: 0, unavailable: 1 },
+      summary: null,
+      usd: 0.001,
+      error:
+        "A model provider stopped answering (quota or outage); resume the run once it is back.",
+      createdAt: NOW,
+      startedAt: NOW,
+      finishedAt: NOW,
+      heartbeatAt: NOW,
+      live: false,
+    };
+    const done = { ...stopped, status: "done", error: null };
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/journal": {
+        entries: [journalEntry()],
+        counts: { proposed: 1, accepted: 0, fixed: 0, retired: 0 },
+      },
+      // Until it is resumed, its newest replay stopped short.
+      "GET /admin/assistant/runs": () => ({
+        status: 200,
+        body: { runs: [resumed.length ? done : stopped] },
+      }),
+      "POST /admin/assistant/runs/r_stopped/resume": () => ({
+        status: 202,
+        body: { id: "r_stopped" },
+      }),
+      "GET /admin/assistant/runs/r_stopped": { run: done, items: [] },
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/r_stopped/resume")) resumed.push(r.url());
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Journal" }).click();
+    const journal = page.getByRole("region", { name: "Failure journal" });
+
+    // Not anchored: a text regex meets the raw text, and the template leaves a space before it.
+    await expect(journal.getByText(/The last replay stopped: A model provider/)).toBeVisible();
+    await expect(journal.getByRole("button", { name: "Replay on both chains (paid)" })).toHaveCount(
+      0,
+    );
+    // Paid: it asks first, then only the chains left answer.
+    await journal.getByRole("button", { name: "Resume the replay (paid)" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Resume" }).click();
+    await expect.poll(() => resumed).toHaveLength(1);
+    // Once it ends, the list is read again: nothing is left to resume.
+    await expect(
+      journal.getByRole("button", { name: "Replay on both chains (paid)" }),
+    ).toBeVisible();
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the Journal promotes three decided entries to a lesson, applies it and shows its effect", async ({
+    page,
+    baseURL,
+  }) => {
+    const ids = [11, 12, 13].map((n) => `6f1c2a3b-0000-4000-8000-0000000000${n}`);
+    const decided = (id: string, status: string, n: number) =>
+      journalEntry({
+        id,
+        status,
+        decidedBy: "admin",
+        decidedAt: NOW,
+        messageIds: [`m_lesson000${n}`],
+        message: { ...journalEntry().message, id: `m_lesson000${n}` },
+      });
+    const entries = [
+      decided(ids[0]!, "accepted", 1),
+      decided(ids[1]!, "fixed", 2),
+      decided(ids[2]!, "accepted", 3),
+      journalEntry(),
+    ];
+    const made = lessonRow({ journalIds: ids });
+    const applied = lessonRow({
+      journalIds: ids,
+      status: "active",
+      appliedAs: "content-task",
+      appliedRef: "project:long@en",
+      appliedAt: NOW,
+      effect: {
+        at: NOW,
+        before: { answers: 3, unknown: 3, down: 0, failed: 3 },
+        after: { answers: 5, unknown: 1, down: 0, failed: 1 },
+        applications: 5,
+        successes: 4,
+        value: 0.8,
+      },
+    });
+    const created: unknown[] = [];
+    const patched: unknown[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/journal": {
+        entries,
+        counts: { proposed: 1, accepted: 2, fixed: 1, retired: 0 },
+      },
+      "POST /admin/assistant/lessons": () => ({ status: 201, body: { lesson: made } }),
+      [`PATCH /admin/assistant/lessons/${LESSON_ID}`]: () => ({
+        status: 200,
+        body: { lesson: applied },
+      }),
+    });
+    page.on("request", (r) => {
+      if (r.url().includes("/admin/assistant/lessons")) {
+        if (r.method() === "POST") created.push(r.postDataJSON());
+        if (r.method() === "PATCH") patched.push(r.postDataJSON());
+      }
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Journal" }).click();
+
+    // Lessons first, the book's retrieval order; then the entries they come from.
+    const lessons = page.getByRole("region", { name: "Lessons" });
+    await expect(lessons.getByText(/No lessons yet/)).toBeVisible();
+    const journal = page.getByRole("region", { name: "Failure journal" });
+    // Only decided entries can corroborate a lesson: the proposed one has no box.
+    const ticks = journal.getByRole("checkbox", { name: "Use in a lesson" });
+    await expect(ticks).toHaveCount(3);
+    await expect(ticks.first()).toHaveAccessibleDescription(/Context clipped or unused/);
+    await ticks.nth(0).check();
+    await ticks.nth(1).check();
+    const promote = journal.getByRole("button", { name: "Make a lesson from 2 selected" });
+    await promote.click();
+    const form = journal.getByRole("form", { name: "A lesson from the selected entries" });
+    await expect(page.locator(":focus")).toHaveText("A lesson from the selected entries");
+    // Cancelled, the form goes and focus is back on the button that opened it.
+    await form.getByRole("button", { name: "Cancel" }).click();
+    await expect(form).toHaveCount(0);
+    await expect(promote).toBeFocused();
+    await promote.click();
+    // Nothing ticked, nothing to promote: the form closes, and ticking again leaves focus put.
+    await ticks.nth(0).uncheck();
+    await ticks.nth(1).uncheck();
+    await expect(form).toHaveCount(0);
+    await ticks.nth(0).check();
+    await ticks.nth(1).check();
+    await expect(promote).toBeVisible();
+    await expect(form).toHaveCount(0);
+    await expect(ticks.nth(1)).toBeFocused();
+    await promote.click();
+    // The corpus words the entries found: a first scope.
+    await expect(form.getByLabel("The questions it is about", { exact: true })).toHaveValue(
+      "kubernetes",
+    );
+    await form.getByLabel("The lesson", { exact: true }).fill(LESSON_STATEMENT);
+    // Two entries do not corroborate a lesson: the form says so and waits.
+    const send = form.getByRole("button", { name: "Make the lesson" });
+    await expect(send).toBeDisabled();
+    await expect(send).toHaveAccessibleDescription(
+      "Select 3 accepted or fixed entries (2 selected).",
+    );
+    await ticks.nth(2).check();
+    await form
+      .getByLabel("The questions it is about", { exact: true })
+      .fill("Kubernetes, clusters");
+    await expect(send).toBeEnabled();
+
+    const { violations } = await new AxeBuilder({ page })
+      .include("section[aria-labelledby=journal-heading]")
+      .include("section[aria-labelledby=lessons-heading]")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+      .analyze();
+    expect(violations.map((v) => v.id)).toEqual([]);
+
+    await send.click();
+    await expect
+      .poll(() => created)
+      .toEqual([
+        {
+          source: "journal",
+          journalIds: ids,
+          statement: LESSON_STATEMENT,
+          scope: ["kubernetes", "clusters"],
+        },
+      ]);
+    // The form is gone: focus lands on the new lesson, and the boxes are cleared.
+    await expect(page.locator(":focus")).toHaveText(LESSON_STATEMENT);
+    await expect(ticks.first()).not.toBeChecked();
+    const card = lessons.getByRole("article", { name: LESSON_STATEMENT });
+    await expect(card.getByText("Proposed", { exact: true })).toBeVisible();
+    await expect(card.getByText("Not applied yet: nothing to measure.")).toBeVisible();
+
+    // Applied as a fix: measured on the answers since.
+    // The options are part of the label's text: matched by its start.
+    await card.getByLabel("Applied as").selectOption("content-task");
+    await card.getByLabel("Reference", { exact: true }).fill("project:long@en");
+    await card.getByRole("button", { name: "Apply", exact: true }).click();
+    await expect
+      .poll(() => patched)
+      .toEqual([{ apply: { as: "content-task", ref: "project:long@en" } }]);
+    await expect(card.getByText("Applied", { exact: true })).toBeVisible();
+    await expect(
+      card.getByText("Effectiveness 0.80: 4 of 5 matching answers since the fix went well."),
+    ).toBeVisible();
+    await expect(
+      card.getByText(
+        "Before: 3 answers: 3 said it isn't there, 0 thumbs down, 3 failed. Since: 5 answers: 1 said it isn't there, 0 thumbs down, 1 failed.",
+      ),
+    ).toBeVisible();
+    await expect(page.locator(":focus")).toHaveText(LESSON_STATEMENT);
+    const scanned = await new AxeBuilder({ page })
+      .include("section[aria-labelledby=lessons-heading]")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+      .analyze();
+    expect(scanned.violations.map((v) => v.id)).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("Insights shows the last run without spending, and an unanswered topic becomes a lesson", async ({
+    page,
+    baseURL,
+  }) => {
+    const topic = (title: string, questions: number, unanswered: boolean) => ({
+      title,
+      summary: `What visitors ask about ${title}.`,
+      questions,
+      examples: [`A question about ${title}?`],
+      unanswered,
+    });
+    const snapshot = {
+      id: SNAPSHOT_ID,
+      createdAt: HOUR_AGO,
+      trigger: "auto",
+      analysed: 64,
+      newestMessageId: "m_newest0001",
+      newestAt: HOUR_AGO,
+      topics: [
+        topic("Kafka and streaming", 6, true),
+        topic("Visa", 4, true),
+        topic("Atlas", 9, false),
+      ],
+      reason: RISE,
+      usd: 0.0004,
+      seenAt: null,
+    };
+    const posts: string[] = [];
+    const created: unknown[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/insights": {
+        snapshot,
+        trigger: {
+          at: HOUR_AGO,
+          decision: "allowed",
+          reason: `the trigger fired and insights ran (${RISE}); 0 lessons measured, 0 retired`,
+        },
+      },
+      [`POST /admin/assistant/insights/${SNAPSHOT_ID}/seen`]: { ok: true },
+      "POST /admin/assistant/lessons": () => ({
+        status: 201,
+        body: { lesson: lessonRow({ source: "insight" }) },
+      }),
+    });
+    page.on("request", (r) => {
+      if (r.method() !== "POST") return;
+      posts.push(new URL(r.url()).pathname);
+      if (r.url().endsWith("/admin/assistant/lessons")) created.push(r.postDataJSON());
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Insights" }).click();
+
+    // The last run kept: no model call to see it.
+    await expect(page.getByText("Kafka and streaming", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(/Run by the nightly check, .*, because failures rose/),
+    ).toBeVisible();
+    await expect(page.getByText(/The nightly check, .*: the trigger fired/)).toBeVisible();
+    // Shown, the nightly check's run is seen: that is the only write.
+    await expect.poll(() => posts).toEqual([`/admin/assistant/insights/${SNAPSHOT_ID}/seen`]);
+
+    // Only an unanswered topic of five questions or more becomes a lesson.
+    const make = page.getByRole("button", { name: "Make a lesson" });
+    await expect(make).toHaveCount(1);
+    await expect(make).toHaveAccessibleDescription("Kafka and streaming");
+    await make.click();
+    const form = page.getByRole("form", { name: "A lesson from “Kafka and streaming”" });
+    await expect(page.locator(":focus")).toHaveText("A lesson from “Kafka and streaming”");
+    // Cancelled, the form goes and focus is back on the topic's button.
+    await form.getByRole("button", { name: "Cancel" }).click();
+    await expect(form).toHaveCount(0);
+    await expect(make).toBeFocused();
+    await make.click();
+    await expect(form.getByLabel("The questions it is about", { exact: true })).toHaveValue(
+      "kafka, streaming",
+    );
+    await form.getByLabel("The lesson", { exact: true }).fill(LESSON_STATEMENT);
+
+    const { violations } = await new AxeBuilder({ page })
+      .include("section[aria-labelledby=insights-heading]")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+      .analyze();
+    expect(violations.map((v) => v.id)).toEqual([]);
+
+    await form.getByRole("button", { name: "Make the lesson" }).click();
+    await expect
+      .poll(() => created)
+      .toEqual([
+        {
+          source: "insight",
+          snapshotId: SNAPSHOT_ID,
+          topic: 0,
+          statement: LESSON_STATEMENT,
+          scope: ["kafka", "streaming"],
+        },
+      ]);
+    // The form is gone: focus lands on the way to the lesson.
+    await expect(page.locator(":focus")).toHaveText("Open the Journal");
+    await page.locator(":focus").click();
+    await expect(page.getByRole("tab", { name: "Journal" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(unmocked).toEqual([]);
+  });
+
+  test("Insights runs again on request, and a lesson names the run its topics come from", async ({
+    page,
+    baseURL,
+  }) => {
+    const FRESH_ID = "8b1c2a3b-0000-4000-8000-000000000002";
+    const run = (id: string, title: string, trigger: string) => ({
+      id,
+      createdAt: id === FRESH_ID ? NOW : HOUR_AGO,
+      trigger,
+      analysed: 64,
+      newestMessageId: "m_newest0001",
+      newestAt: HOUR_AGO,
+      topics: [
+        {
+          title,
+          summary: `What visitors ask about ${title}.`,
+          questions: 7,
+          examples: [`A question about ${title}?`],
+          unanswered: true,
+        },
+      ],
+      reason: trigger === "auto" ? RISE : "",
+      usd: 0.0004,
+      seenAt: NOW,
+    });
+    const fresh = run(FRESH_ID, "Notice period", "admin");
+    const created: unknown[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/insights": {
+        snapshot: run(SNAPSHOT_ID, "Kafka and streaming", "auto"),
+        trigger: null,
+      },
+      // The previous admin's request, which now names its run.
+      "POST /admin/assistant/insights": () => ({
+        status: 200,
+        body: { topics: fresh.topics, analysed: 64, snapshot: fresh },
+      }),
+      "POST /admin/assistant/lessons": () => ({
+        status: 201,
+        body: { lesson: lessonRow({ source: "insight" }) },
+      }),
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/admin/assistant/lessons")) {
+        created.push(r.postDataJSON());
+      }
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Insights" }).click();
+    await expect(page.getByText("Kafka and streaming", { exact: true })).toBeVisible();
+
+    // Run again: the topics and the run a lesson names come from the same answer.
+    await page.getByRole("button", { name: "Refresh" }).click();
+    await expect(page.getByText("Notice period", { exact: true })).toBeVisible();
+    await expect(page.getByText("Kafka and streaming", { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/^Run by you, /)).toBeVisible();
+    await page.getByRole("button", { name: "Make a lesson" }).click();
+    const form = page.getByRole("form", { name: "A lesson from “Notice period”" });
+    await form.getByLabel("The lesson", { exact: true }).fill(LESSON_STATEMENT);
+    await form.getByRole("button", { name: "Make the lesson" }).click();
+    await expect
+      .poll(() => created)
+      .toEqual([
+        {
+          source: "insight",
+          snapshotId: FRESH_ID,
+          topic: 0,
+          statement: LESSON_STATEMENT,
+          scope: ["notice", "period"],
+        },
+      ]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a reopened lesson says it is measured again, and a deleted one leaves focus on the list", async ({
+    page,
+    baseURL,
+  }) => {
+    const reopened = lessonRow({
+      status: "active",
+      appliedAs: "faq",
+      appliedRef: "faq:kafka",
+      appliedAt: HOUR_AGO,
+      reopenedAt: NOW,
+      effect: {
+        at: NOW,
+        since: NOW,
+        before: { answers: 2, unknown: 2, down: 0, failed: 2 },
+        after: { answers: 0, unknown: 0, down: 0, failed: 0 },
+        applications: 0,
+        successes: 0,
+        value: null,
+      },
+    });
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/lessons": {
+        lessons: [reopened],
+        counts: { proposed: 0, active: 1, retired: 0 },
+      },
+      [`DELETE /admin/assistant/lessons/${LESSON_ID}`]: { ok: true },
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Journal" }).click();
+    const lessons = page.getByRole("region", { name: "Lessons" });
+    const card = lessons.getByRole("article", { name: LESSON_STATEMENT });
+    await expect(card.getByText(/Reopened .*: measured again from then\./)).toBeVisible();
+
+    await card.getByRole("button", { name: "Delete", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete lesson" }).click();
+    await expect(card).toHaveCount(0);
+    // Its card, and the button with it, are gone: focus lands on the list's heading.
+    await expect(page.locator(":focus")).toHaveAttribute("id", "lessons-heading");
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the Overview shows the insights the nightly check ran, until they are seen", async ({
+    page,
+    baseURL,
+  }) => {
+    const seen: string[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/health": () => ({
+        status: 200,
+        body: {
+          ...(defaults()["GET /admin/assistant/health"] as Record<string, unknown>),
+          learning: {
+            notice: seen.length
+              ? null
+              : { id: SNAPSHOT_ID, at: HOUR_AGO, reason: RISE, unanswered: 1 },
+          },
+        },
+      }),
+      [`POST /admin/assistant/insights/${SNAPSHOT_ID}/seen`]: { ok: true },
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/seen")) seen.push(r.url());
+    });
+    await openAdmin(page, "/admin/assistant");
+
+    const line = `Insights ran by themselves (${RISE}): 1 topic the assistant could not answer.`;
+    await expect(page.getByText(line)).toBeVisible();
+    const { violations } = await new AxeBuilder({ page })
+      .include("#insights-notice-box")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+      .analyze();
+    expect(violations.map((v) => v.id)).toEqual([]);
+    // Its buttons say which notice they act on.
+    const open = page.getByRole("button", { name: "Open Insights" });
+    await expect(open).toHaveAccessibleDescription(line);
+    await open.click();
+    await expect(page.getByRole("tab", { name: "Insights" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    await page.getByRole("tab", { name: "Overview" }).click();
+    const done = page.getByRole("button", { name: "Seen", exact: true });
+    await expect(done).toHaveAccessibleDescription(line);
+    await done.click();
+    await expect.poll(() => seen).toHaveLength(1);
+    await expect(page.getByText(line)).toHaveCount(0);
+    // The button went with the notice: focus lands on the Overview's first heading.
+    await expect(page.locator(":focus")).toHaveAttribute("id", "assistant-glance");
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the Overview shows judged faithfulness by model and route, the random sample apart", async ({
+    page,
+    baseURL,
+  }) => {
+    const stats = (
+      judged: number,
+      faithfulness: number | null,
+      helpfulness: number | null,
+      below: number,
+    ) => ({ judged, faithfulness, helpfulness, below });
+    const asked: string[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/faithfulness": {
+        days: 30,
+        judge: "gemini-flash-lite",
+        judges: [{ model: "gemini-flash-lite", judged: 14 }],
+        byModel: [
+          {
+            key: "gemini-flash-lite",
+            sampled: stats(9, 0.94, 4.6, 1),
+            all: stats(14, 0.81, 4.1, 4),
+          },
+        ],
+        byRoute: [
+          { key: "lite", sampled: stats(9, 0.94, 4.6, 1), all: stats(12, 0.85, 4.3, 3) },
+          { key: "lite→deep", sampled: stats(0, null, null, 0), all: stats(2, 0.55, 3, 1) },
+        ],
+        nightly: {
+          id: "r_night",
+          at: HOUR_AGO,
+          day: "2026-10-06",
+          status: "failed",
+          judged: 2,
+          total: 5,
+          usd: 0.0002,
+          error: "This kind of run reached its own daily cap.",
+        },
+      },
+    });
+    page.on("request", (r) => {
+      if (r.url().includes("/admin/assistant/faithfulness")) asked.push(new URL(r.url()).search);
+    });
+    await openAdmin(page, "/admin/assistant");
+
+    const section = page.getByRole("region", { name: "Faithfulness" });
+    const byModel = section.getByRole("table", { name: "Judged faithfulness by model" });
+    const model = byModel.getByRole("row", { name: /gemini-flash-lite/ });
+    // The random sample apart from all judged, which leans toward bad answers.
+    await expect(model).toContainText("0.94, 1 of 9 below 0.8");
+    await expect(model).toContainText("0.81, 4 of 14 below 0.8");
+    // Helpfulness too, the sample apart.
+    await expect(model).toContainText("4.6 of 5");
+    await expect(model).toContainText("4.1 of 5");
+    // Who judged the rows: a failover or an earlier judge would show here.
+    await expect(section.getByText(/judged by gemini-flash-lite \(14\)\./)).toBeVisible();
+    const byRoute = section.getByRole("table", { name: "Judged faithfulness by route" });
+    await expect(byRoute.getByRole("row", { name: /Lite, moved up to deep/ })).toContainText(
+      "0.55, 1 of 2 below 0.8",
+    );
+    await expect(
+      section.getByText(
+        "The last night stopped after 2 of 5 answers of 2026-10-06: This kind of run reached its own daily cap.",
+      ),
+    ).toBeVisible();
+
+    const { violations } = await new AxeBuilder({ page })
+      .include("section[aria-labelledby=assistant-faithfulness]")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+      .analyze();
+    expect(violations.map((v) => v.id)).toEqual([]);
+
+    await section.getByLabel("Faithfulness window").selectOption("7");
+    await expect.poll(() => asked).toEqual(["?days=30", "?days=7"]);
     expect(unmocked).toEqual([]);
   });
 

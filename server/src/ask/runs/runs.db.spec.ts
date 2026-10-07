@@ -559,7 +559,12 @@ describe("pairwise and judge runs", () => {
       v: 1,
       model: "gemini-3.5-flash-lite",
       faithfulness: 1,
+      // Plan phase 26: marked as the calibration run's, so the trust monitor leaves it out.
+      source: "calibration",
     });
+    expect(verdict("m_grounded")).not.toHaveProperty("pick");
+    const done = await read(id);
+    expect(done.items[0]!.result).toMatchObject({ faithfulness: 1, unsupported: 0 });
     // Only answers with a grounded verdict are judged.
     expect(verdict("m_na")).toBeNull();
     expect(verdict("m_unreviewed")).toBeNull();

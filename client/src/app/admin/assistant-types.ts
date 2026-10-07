@@ -13,13 +13,15 @@ export type SpendFeature =
   | "judge"
   | "autoInsights"
   | "agent"
-  | "embeddings";
+  | "embeddings"
+  | "nightlyJudge";
 
 /** Everything but the terminal: fenced by the visitors' reserve and its own cap. */
 export type FencedFeature = Exclude<SpendFeature, "terminal">;
 
 /** The features the admin can switch off. */
-export type SwitchedFeature = "copilot" | "judge" | "autoInsights" | "agent" | "embeddings";
+export type SwitchedFeature =
+  "copilot" | "judge" | "autoInsights" | "agent" | "embeddings" | "nightlyJudge";
 
 export interface AssistantSettings {
   enabled: boolean;
@@ -166,6 +168,8 @@ export interface AssistantHealth {
   spend?: SpendToday;
   /** What needs a person (plan phase 14); absent from an older API. */
   trust?: { alerts: number; demoted: Demotion[] };
+  /** Insights the adaptive trigger ran, not seen yet (plan phase 25); absent from an older API. */
+  learning?: { notice: InsightsNotice | null };
   inFlight: number;
   breakers: BreakerRow[];
   last24h: {
@@ -330,6 +334,16 @@ export interface InsightTopic {
   questions: number;
   examples: string[];
   unanswered: boolean;
+}
+
+/** An insights run the adaptive trigger started, not seen yet: the Overview's notice. */
+export interface InsightsNotice {
+  id: string;
+  at: string;
+  /** The trigger's numbers. */
+  reason: string;
+  /** Topics the assistant could not answer. */
+  unanswered: number;
 }
 
 export interface EvalCaseResult {

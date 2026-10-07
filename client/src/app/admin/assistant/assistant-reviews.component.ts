@@ -15,7 +15,7 @@ import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 
 import { AdminApiService } from "../admin-api.service";
-import { checkLabel } from "../answer-trace";
+import { checkLabel, reasonLabel } from "../answer-trace";
 import {
   REVIEW_LABELS,
   type ReviewEntry,
@@ -411,9 +411,7 @@ export class AssistantReviewsComponent implements OnInit {
     }
   }
 
-  protected reasonLabel(reason: string): string {
-    return reason.startsWith("check:") ? checkLabel(reason.slice("check:".length)) : reason;
-  }
+  protected readonly reasonLabel = reasonLabel;
 
   protected when(iso: string): string {
     return new Date(iso).toLocaleString();
