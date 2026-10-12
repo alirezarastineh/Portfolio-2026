@@ -21,6 +21,7 @@ import { NavigationEnd, Router, RouterLink, RouterOutlet } from "@angular/router
 import type { RouteMeta } from "@analogjs/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import {
+  lucideBot,
   lucideBriefcase,
   lucideExternalLink,
   lucideEye,
@@ -64,6 +65,7 @@ import { AdminApiService } from "../admin/admin-api.service";
 import { addAdminStyles } from "../admin/admin-styles";
 import { AdminSessionService } from "../admin/admin-session.service";
 import { isSaveShortcut } from "../admin/components/editor-chrome.component";
+import { CopilotLedger } from "../admin/copilot-ledger";
 import { PublishDialogComponent } from "../admin/components/publish-dialog.component";
 import {
   isShortcutTarget,
@@ -95,6 +97,7 @@ export const routeMeta: RouteMeta = {
     AdminApiService,
     AdminPulseService,
     AdminSessionService,
+    CopilotLedger,
     LivePreviewService,
     MediaLibraryService,
     UiSectionService,
@@ -122,6 +125,7 @@ const NAV: NavItem[] = [
   { path: "/admin/publications", label: "Publications", icon: "lucideHistory", group: "Overview" },
   { path: "/admin/inbox", label: "Inbox", icon: "lucideInbox", group: "Overview" },
   { path: "/admin/assistant", label: "Assistant", icon: "lucideSparkles", group: "Overview" },
+  { path: "/admin/agent", label: "Agent", icon: "lucideBot", group: "Overview" },
   { path: "/admin/hero", label: "Hero & identity", icon: "lucideSquareUser", group: "Content" },
   { path: "/admin/about", label: "About", icon: "lucideFileText", group: "Content" },
   { path: "/admin/skills", label: "Skills", icon: "lucideLayers", group: "Content" },
@@ -187,6 +191,7 @@ function openTab(href: string): void {
   ],
   viewProviders: [
     provideIcons({
+      lucideBot,
       lucideBriefcase,
       lucideCircleCheck,
       lucideExternalLink,

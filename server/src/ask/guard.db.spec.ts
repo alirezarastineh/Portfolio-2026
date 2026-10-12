@@ -89,8 +89,9 @@ function ask(text: string) {
   });
 }
 
+// One draft, one call: a translation explores no leads (tighten drafts three since plan phase 28).
 const copilotRequest = () =>
-  admin.post("/admin/ai/copilot", { task: "tighten", text: "Kurz und knapp.", locale: "de" });
+  admin.post("/admin/ai/copilot", { task: "translate", text: "Short.", from: "en", to: "de" });
 
 describe("migration 0015: usage per feature and the fence settings", () => {
   it("adds ai_usage_features and the settings' reserve, caps and switches", async () => {

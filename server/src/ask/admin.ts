@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { createUIMessageStreamResponse, generateText, type ModelMessage } from "ai";
+import { createUIMessageStreamResponse } from "ai";
 import { and, asc, desc, eq, gte, inArray, lt, notInArray, sql, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -20,7 +20,6 @@ import {
   contactMessages,
 } from "../db/schema.js";
 import { streamAnswer } from "./agent.js";
-import { altImage } from "./alt-image.js";
 import { audit, countOpenAlerts, readDemotions } from "./audit.js";
 import { OUTCOME_COLUMNS, UNKNOWN_ANSWER } from "./outcome-rows.js";
 import type { AskConfig } from "./config.js";
@@ -46,13 +45,7 @@ import { availability, hashWithSalt, refusal, spendByFeature, stateFor } from ".
 import { buildHistory } from "./history.js";
 import type { ModelCall } from "./models/fallback.js";
 import { breakerSnapshot } from "./models/circuit.js";
-import {
-  capsOf,
-  configuredModels,
-  shortName,
-  type ChainRole,
-  type ModelEntry,
-} from "./models/registry.js";
+import { capsOf, configuredModels, type ChainRole } from "./models/registry.js";
 import {
   completedWeeks,
   outcomes,
@@ -93,9 +86,12 @@ import {
 import { journalRouter } from "./journal-routes.js";
 import { lastLearningCheck } from "./learning-monitor.js";
 import { lessonsRouter } from "./lessons-routes.js";
-import { oneShot } from "./one-shot.js";
 import { perceptionRouter } from "./perception-routes.js";
 import { routerReportRouter } from "./router-routes.js";
+import { faqProposalsRouter } from "./agent/faq-routes.js";
+import { proposalsRouter } from "./agent/routes.js";
+import { faqInput, insertFaq } from "./faq.js";
+import { skillsRouter } from "./skills/routes.js";
 import { trustRouter } from "./trust-routes.js";
 import { recordUsage } from "./usage.js";
 
@@ -725,28 +721,6 @@ adminAskRouter.put(
 
 /* --------------------------------------------------------------------- FAQ */
 
-const faqInput = z.object({
-  isVisible: z.boolean(),
-  translations: z
-    .object(
-      Object.fromEntries(
-        LOCALES.map((l) => [
-          l,
-          z
-            .object({
-              question: z.string().trim().min(3).max(300),
-              answer: z.string().trim().min(3).max(3000),
-            })
-            .optional(),
-        ]),
-      ) as Record<
-        (typeof LOCALES)[number],
-        z.ZodOptional<z.ZodObject<{ question: z.ZodString; answer: z.ZodString }>>
-      >,
-    )
-    .refine((t) => Object.values(t).some(Boolean), { message: "at least one language" }),
-});
-
 const idParam = zValidator("param", z.object({ id: z.uuid() }), (result, c) =>
   result.success ? undefined : c.json({ error: "invalid_id" }, 400),
 );
@@ -755,21 +729,7 @@ adminAskRouter.get("/assistant/faq", async (c) => c.json({ faq: await readFaq() 
 
 adminAskRouter.post("/assistant/faq", zValidator("json", faqInput, invalid), async (c) => {
   const input = c.req.valid("json");
-  const id = await getDb().transaction(async (tx) => {
-    const [{ next } = { next: 0 }] = await tx
-      .select({ next: sql<number>`coalesce(max(${aiFaq.position}) + 1, 0)::int` })
-      .from(aiFaq);
-    const [row] = await tx
-      .insert(aiFaq)
-      .values({ position: next, isVisible: input.isVisible })
-      .returning({ id: aiFaq.id });
-    const translations = LOCALES.flatMap((locale) => {
-      const t = input.translations[locale];
-      return t ? [{ faqId: row!.id, locale, ...t }] : [];
-    });
-    await tx.insert(aiFaqTranslations).values(translations);
-    return row!.id;
-  });
+  const id = await getDb().transaction((tx) => insertFaq(tx, input));
   invalidateAssistantCache();
   return c.json({ ok: true, id }, 201);
 });
@@ -1000,6 +960,18 @@ adminAskRouter.route("/assistant/lessons", lessonsRouter);
 adminAskRouter.route("/assistant/faithfulness", faithfulnessRouter);
 
 /**
+ * The content agent's proposals (plan phases 29–30): drafts for the content's
+ * gaps, written into the drafts only on the admin's apply, never published.
+ */
+adminAskRouter.route("/assistant/proposals", proposalsRouter);
+
+/**
+ * The FAQ pipeline's proposals (plan phase 31): FAQ entries drafted from an
+ * insight topic or a journal entry, live only once the admin accepts one.
+ */
+adminAskRouter.route("/assistant/faq-proposals", faqProposalsRouter);
+
+/**
  * The judges and how far the one on visitor answers agrees with reviewers
  * (evals/calibration.ts), plus the answerers a pairwise run can compare.
  */
@@ -1069,170 +1041,5 @@ adminAskRouter.post(
 
 /* ----------------------------------------------------------------- copilot */
 
-const copilotInput = z.discriminatedUnion("task", [
-  z.object({
-    task: z.literal("translate"),
-    text: z.string().min(1).max(20_000),
-    from: z.enum(["en", "de"]),
-    to: z.enum(["en", "de"]),
-    /** Rich-text fields send HTML; the markup must come back unchanged. */
-    html: z.boolean().default(false),
-  }),
-  z.object({
-    task: z.literal("tighten"),
-    text: z.string().min(1).max(2_000),
-    locale: z.enum(["en", "de"]),
-    maxLength: z.number().int().min(10).max(2_000).optional(),
-  }),
-  z.object({
-    task: z.literal("seo"),
-    text: z.string().min(1).max(20_000),
-    locale: z.enum(["en", "de"]),
-    maxLength: z.number().int().min(50).max(320).default(155),
-  }),
-  z.object({
-    task: z.literal("faq-answer"),
-    question: z.string().min(3).max(300),
-    locale: z.enum(["en", "de"]),
-  }),
-  z.object({
-    task: z.literal("alt"),
-    mediaId: z.uuid(),
-    locale: z.enum(["en", "de"]),
-  }),
-  z.object({
-    task: z.literal("describe"),
-    mediaId: z.uuid(),
-    locale: z.enum(["en", "de"]),
-  }),
-]);
-
-const LANGUAGE = { en: "English", de: "German" } as const;
-
-/** Alt text a screen reader reads in one breath; the field itself takes 300. */
-const ALT_MAX = 150;
-/** An image description for the assistant (plan phase 17); the field takes 2,000. */
-const DESCRIBE_MAX = 1_200;
-
-/** One copilot task as a model request: what to tell the model, what to show it, the cap. */
-interface CopilotRequest {
-  instructions: string;
-  prompt: string | ModelMessage[];
-  maxLength?: number;
-  /** The models that can take it: for an image, Gemini's. */
-  accepts?: (entry: ModelEntry) => boolean;
-}
-
-type CopilotResult = CopilotRequest | { answer: unknown; status: 200 | 400 | 404 };
-
-/** Alt or describe: load the image, or the same not-found / not-an-image refusal. */
-async function visionCopilot(
-  mediaId: string,
-  instructions: string,
-  maxLength: number,
-): Promise<CopilotResult> {
-  const picture = await altImage(mediaId);
-  if (!picture.ok) {
-    return {
-      answer: { error: picture.error },
-      status: picture.error === "not_found" ? 404 : 400,
-    };
-  }
-  return {
-    instructions,
-    prompt: [
-      {
-        role: "user",
-        content: [
-          { type: "file", data: picture.image, mediaType: picture.mediaType },
-          { type: "text", text: `The file is called "${picture.name}".` },
-        ],
-      },
-    ],
-    maxLength,
-    accepts: (entry) => entry.provider === "gemini",
-  };
-}
-
-/** The request for a task, or the answer when no model is needed (or the input is unusable). */
-async function copilotRequest(
-  input: z.infer<typeof copilotInput>,
-  config: AskConfig,
-): Promise<CopilotResult> {
-  switch (input.task) {
-    case "translate":
-      if (input.from === input.to) return { answer: { text: input.text }, status: 200 };
-      return {
-        instructions: `Translate the text from ${LANGUAGE[input.from]} to ${LANGUAGE[input.to]} for a senior engineer's portfolio. Keep technical terms, product names, numbers and code unchanged; keep the tone. ${input.html ? "The text is HTML: keep every tag and attribute exactly as it is and translate only the text between tags." : "Return plain text."} Return only the translation.`,
-        prompt: input.text,
-      };
-    case "tighten": {
-      const limit = input.maxLength ? `At most ${input.maxLength} characters. ` : "";
-      return {
-        instructions: `Rewrite the text in ${LANGUAGE[input.locale]} to be shorter and sharper, keeping every fact. ${limit}No quotes, no preamble. Return only the rewritten text.`,
-        prompt: input.text,
-        maxLength: input.maxLength,
-      };
-    }
-    case "seo":
-      return {
-        instructions: `Write a search-result description in ${LANGUAGE[input.locale]} for this page of a senior AI / full-stack engineer's portfolio: specific, factual, no hype, at most ${input.maxLength} characters. Return only the description.`,
-        prompt: input.text.replace(/<[^<>]{1,1000}>/g, " ").slice(0, 8_000),
-        maxLength: input.maxLength,
-      };
-    case "faq-answer": {
-      const corpus = await askCorpus(config);
-      return {
-        // The core an answer in that language reads (corpus/render.ts).
-        instructions: `Draft an answer in ${LANGUAGE[input.locale]} to a question visitors ask about Alireza Rastineh, using only the portfolio documents below. Third person, at most 80 words. If the documents do not answer it, write exactly: NO_ANSWER\n\n# Portfolio documents\n\n${corpus.core[input.locale]}`,
-        prompt: input.question,
-      };
-    }
-    case "alt":
-      return visionCopilot(
-        input.mediaId,
-        `Write the alt text in ${LANGUAGE[input.locale]} for this image on a senior AI / full-stack engineer's portfolio: what it shows that a reader who cannot see it needs, in one sentence of at most ${ALT_MAX} characters. Name the product, diagram or screen if it is clear; no "image of", no quotes, no guessing at text you cannot read. Return only the alt text.`,
-        ALT_MAX,
-      );
-    case "describe":
-      // A diagram needs its relations spelled out: the representation that keeps
-      // what the questions need (plan phase 17, multi-modal fusion).
-      return visionCopilot(
-        input.mediaId,
-        `Describe this image from a senior AI / full-stack engineer's portfolio for an assistant that answers questions about it but cannot see it. Write in ${LANGUAGE[input.locale]}, plain text, at most ${DESCRIBE_MAX} characters. A diagram: name its parts, then each connection on its own line as "A → B: what passes between them". A screenshot or a chart: what it is, and the facts and numbers it shows. Only what you can see or read; never guess at a label or a number you cannot read. Return only the description.`,
-        DESCRIBE_MAX,
-      );
-  }
-}
-
-adminAskRouter.post("/ai/copilot", zValidator("json", copilotInput, invalid), async (c) => {
-  const input = c.req.valid("json");
-  const config = askConfig();
-
-  const request = await copilotRequest(input, config);
-  if ("answer" in request) return c.json(request.answer, request.status);
-  const { instructions, prompt, maxLength, accepts } = request;
-
-  const result = await oneShot(
-    config,
-    "copilot",
-    (model) =>
-      generateText({
-        model,
-        instructions,
-        prompt,
-        maxRetries: 0,
-        maxOutputTokens: 4_000,
-        temperature: 0.2,
-      }).then((r) => r.text.trim()),
-    accepts,
-  );
-  if (!result.ok) return c.json({ error: result.error }, 503);
-  let text = result.value;
-  if (maxLength && text.length > maxLength) {
-    const cut = text.slice(0, maxLength);
-    const lastSpace = cut.lastIndexOf(" ");
-    text = lastSpace > 0 ? cut.slice(0, lastSpace).trimEnd() : cut;
-  }
-  return c.json({ text, model: shortName(result.trace.calls.at(-1)?.model ?? "") });
-});
+// The editor copilot: its skills, their drafts and the editor's verdicts (plan phase 27).
+adminAskRouter.route("/ai", skillsRouter);

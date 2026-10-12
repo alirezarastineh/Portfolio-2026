@@ -198,6 +198,36 @@ export async function drain<T>(stream: ReadableStream<T>): Promise<T[]> {
   }
 }
 
+/** A reply's text, or its text and how the model stopped (cut at its limit, filtered). */
+export type Reply = string | { text: string; stop: "stop" | "length" | "content-filter" };
+
+/**
+ * A model that answers from what it is sent (and its call number): for calls
+ * that run in parallel, where the order they arrive in is not the test's.
+ */
+export function replying(
+  reply: (sent: string, call: number) => Reply,
+  modelId = "reply",
+): ScriptedModel {
+  const calls: LanguageModelV4CallOptions[] = [];
+  const model = new MockLanguageModelV4({
+    modelId,
+    doGenerate: (options) => {
+      calls.push(options);
+      const answer = reply(JSON.stringify(options.prompt), calls.length);
+      const { text, stop } =
+        typeof answer === "string" ? { text: answer, stop: "stop" as const } : answer;
+      return Promise.resolve({
+        content: text ? [{ type: "text", text }] : [],
+        finishReason: { unified: stop, raw: stop },
+        usage: usage(50, 10),
+        warnings: [],
+      });
+    },
+  });
+  return { model, calls };
+}
+
 /** Non-streaming calls (copilot, insights, the judge): each call returns the next text. */
 export function generating(texts: string[], modelId = "gen"): ScriptedModel {
   let i = 0;

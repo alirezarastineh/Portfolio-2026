@@ -130,6 +130,20 @@ const INJECTION = [
   /\b(wiederhol|zeig|gib|druck)\w*\b[^.?!\n]{0,30}\b(wörter|text|alles|zeilen) (über|oberhalb) (dieser|der|meiner) (nachricht|frage|eingabe)\b/i,
 ];
 
+/**
+ * Whether a text reads as an attempt to turn the assistant (the patterns
+ * above): a visitor's question, or (plan phase 31) an FAQ question drafted
+ * from visitors' questions, which must not carry one into the FAQ.
+ */
+export function looksLikeInjection(text: string): boolean {
+  return INJECTION.some((pattern) => pattern.test(text));
+}
+
+/** The patterns as text: part of a skill's version that checks with them. */
+export const INJECTION_PATTERNS: readonly string[] = INJECTION.map(
+  (pattern) => `/${pattern.source}/${pattern.flags}`,
+);
+
 const MARKERS = /\[\^[^\]]+\]/g;
 const HAS_MARKER = /\[\^[^\]]+\]/;
 const ACTIONS = new Set(["navigate", "handoff_contact"]);
@@ -200,7 +214,6 @@ export function checkAnswer(input: CheckInput): AnswerChecks {
   if (input.steps >= input.maxRounds) flags.push("max-rounds");
   if (input.degraded) flags.push("degraded");
   if (input.finishReason === "content-filter") flags.push("blocked");
-  const question = input.question ?? "";
-  if (INJECTION.some((pattern) => pattern.test(question))) flags.push("injection-attempt");
+  if (looksLikeInjection(input.question ?? "")) flags.push("injection-attempt");
   return { v: 1, flags };
 }

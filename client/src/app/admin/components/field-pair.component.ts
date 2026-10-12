@@ -2,12 +2,18 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   inject,
   input,
   signal,
 } from "@angular/core";
-import { FormControl, ReactiveFormsModule } from "@angular/forms";
+import {
+  FormControl,
+  FormResetEvent,
+  PristineChangeEvent,
+  ReactiveFormsModule,
+} from "@angular/forms";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideCopy, lucideSparkles } from "@ng-icons/lucide";
 import { toast } from "@spartan-ng/brain/sonner";
@@ -18,9 +24,15 @@ import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
 import { AdminApiService } from "../admin-api.service";
+import { CopilotLedger } from "../copilot-ledger";
+import { draftOffer, type CopilotDraft, type DraftOffer } from "../copilot-skills";
+import { DraftOfferComponent } from "./draft-offer.component";
 import { FieldIssueComponent } from "./editor-chrome.component";
 
 export type LocaleView = "en" | "de" | "both";
+
+/** Each field pair's drafts are told apart in the ledger by its own number. */
+let fieldPairs = 0;
 
 /**
  * One label, two locales. Every section editor is a stack of these plus a save
@@ -30,6 +42,7 @@ export type LocaleView = "en" | "de" | "both";
   selector: "app-field-pair",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    DraftOfferComponent,
     FieldIssueComponent,
     HlmBadge,
     HlmButton,
@@ -144,7 +157,7 @@ export type LocaleView = "en" | "de" | "both";
                 [rows]="rows()"
                 [attr.maxlength]="maxLength() || null"
                 [attr.aria-invalid]="errorEn() ? true : null"
-                [attr.aria-describedby]="errorEn() ? id() + '-en-issue' : null"
+                [aria-describedby]="describedBy('en')"
                 [formControl]="controlEn()"
               ></textarea>
             } @else {
@@ -155,7 +168,7 @@ export type LocaleView = "en" | "de" | "both";
                 type="text"
                 [attr.maxlength]="maxLength() || null"
                 [attr.aria-invalid]="errorEn() ? true : null"
-                [attr.aria-describedby]="errorEn() ? id() + '-en-issue' : null"
+                [aria-describedby]="describedBy('en')"
                 [formControl]="controlEn()"
               />
             }
@@ -168,6 +181,12 @@ export type LocaleView = "en" | "de" | "both";
                 {{ lengthEn() }} / {{ limit() }}
               </span>
             }
+            <app-draft-offer
+              [offer]="offers().en"
+              [field]="label() + ' EN'"
+              [fieldId]="id() + '-en'"
+              (use)="useDraft('en', $event)"
+            />
           </div>
         }
 
@@ -184,7 +203,7 @@ export type LocaleView = "en" | "de" | "both";
                 [rows]="rows()"
                 [attr.maxlength]="maxLength() || null"
                 [attr.aria-invalid]="errorDe() ? true : null"
-                [attr.aria-describedby]="errorDe() ? id() + '-de-issue' : null"
+                [aria-describedby]="describedBy('de')"
                 [formControl]="controlDe()"
               ></textarea>
             } @else {
@@ -195,7 +214,7 @@ export type LocaleView = "en" | "de" | "both";
                 type="text"
                 [attr.maxlength]="maxLength() || null"
                 [attr.aria-invalid]="errorDe() ? true : null"
-                [attr.aria-describedby]="errorDe() ? id() + '-de-issue' : null"
+                [aria-describedby]="describedBy('de')"
                 [formControl]="controlDe()"
               />
             }
@@ -208,6 +227,12 @@ export type LocaleView = "en" | "de" | "both";
                 {{ lengthDe() }} / {{ limit() }}
               </span>
             }
+            <app-draft-offer
+              [offer]="offers().de"
+              [field]="label() + ' DE'"
+              [fieldId]="id() + '-de'"
+              (use)="useDraft('de', $event)"
+            />
           </div>
         }
       </div>
@@ -245,6 +270,16 @@ export class FieldPairComponent {
   /** Absent outside the admin (and in unit tests): then no AI buttons. */
   private readonly api = inject(AdminApiService, { optional: true });
   protected readonly copilot = computed(() => this.ai() && !!this.api);
+  /** What became of each draft, judged when its field is saved or discarded (plan phase 27). */
+  private readonly ledger = inject(CopilotLedger, { optional: true });
+  private readonly drafts = `field-pair:${++fieldPairs}:`;
+  /** Destroyed: a draft that comes back after that never lands. */
+  private gone = false;
+  /** Per language, the draft's notes and the other drafts, until it is saved or discarded. */
+  protected readonly offers = signal<Record<"en" | "de", DraftOffer | null>>({
+    en: null,
+    de: null,
+  });
   /** Which AI action is running: the target locale of a translation, or "tighten". */
   protected readonly aiBusy = signal<"en" | "de" | "tighten" | null>(null);
 
@@ -271,6 +306,7 @@ export class FieldPairComponent {
   protected readonly germanStale = computed(() => this.editedEn() > this.editedDe());
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => (this.gone = true));
     // Controls are signal inputs, so subscribe whenever the bound control
     // instance changes rather than once in the constructor.
     effect((onCleanup) => {
@@ -305,12 +341,32 @@ export class FieldPairComponent {
       const c = en.statusChanges.subscribe(() => this.errorEn.set(serverError(en)));
       const d = de.statusChanges.subscribe(() => this.errorDe.set(serverError(de)));
 
-      // Runs on rebind and on destroy alike.
+      // A draft's verdict. The editors save with `markAsPristine()`, and discard or
+      // reload with `reset()`, which marks the control pristine and then emits a
+      // reset event in the same call. So a reset abandons the draft at once, and a
+      // pristine control is judged once the tick ends, if its draft still waits.
+      const settled = (control: FormControl<string>, locale: "en" | "de") =>
+        control.events.subscribe((event) => {
+          if (event instanceof FormResetEvent) {
+            this.ledger?.abandon(this.drafts + locale);
+            this.clearOffer(locale);
+          } else if (event instanceof PristineChangeEvent && event.pristine) {
+            queueMicrotask(() => this.ledger?.settle(this.drafts + locale));
+            this.clearOffer(locale);
+          }
+        });
+      const e = settled(en, "en");
+      const f = settled(de, "de");
+
+      // Runs on rebind and on destroy alike: a draft no longer shown here was not saved.
       onCleanup(() => {
         a.unsubscribe();
         b.unsubscribe();
         c.unsubscribe();
         d.unsubscribe();
+        e.unsubscribe();
+        f.unsubscribe();
+        this.ledger?.abandonPrefix(this.drafts);
       });
     });
   }
@@ -330,13 +386,15 @@ export class FieldPairComponent {
       from,
       to,
       html: /<[a-z][^>]*>/i.test(source),
+      // The field's hard limit, checked: a draft over it lands whole, with its note.
+      ...(this.maxLength() ? { maxLength: this.maxLength() } : {}),
     });
     this.aiBusy.set(null);
     if (!result.ok) {
       toast.error("No translation", { description: result.error });
       return;
     }
-    this.apply(to, this.fit(result.data.text));
+    this.apply(to, result.data);
   }
 
   protected async aiTighten(): Promise<void> {
@@ -345,6 +403,7 @@ export class FieldPairComponent {
     const locales: ("en" | "de")[] = view === "both" ? ["en", "de"] : [view];
     this.aiBusy.set("tighten");
     for (const locale of locales) {
+      if (this.gone) break;
       const text = (locale === "en" ? this.controlEn() : this.controlDe()).value ?? "";
       if (!text.trim()) continue;
       const result = await this.api.copilot({
@@ -357,22 +416,68 @@ export class FieldPairComponent {
         toast.error("Not tightened", { description: result.error });
         break;
       }
-      this.apply(locale, this.fit(result.data.text));
+      this.apply(locale, result.data);
     }
     this.aiBusy.set(null);
   }
 
-  private fit(text: string): string {
-    const max = this.maxLength();
-    return max && text.length > max ? text.slice(0, max) : text;
+  /**
+   * A draft into its field, whole (plan phase 28: never cut; a draft over the
+   * field's limit says so in its notes), as the admin's edit; the ledger waits
+   * for the save to judge it.
+   */
+  private apply(locale: "en" | "de", draft: CopilotDraft): void {
+    // Back after the field pair closed: its editor is gone, and the draft never lands.
+    if (this.gone) {
+      this.ledger?.drop(draft);
+      return;
+    }
+    const { control, before } = this.setField(locale, draft.text);
+    this.ledger?.propose(this.drafts + locale, draft, {
+      read: () => control.value ?? "",
+      before,
+    });
+    this.offers.update((offers) => ({ ...offers, [locale]: draftOffer(draft) }));
   }
 
-  private apply(locale: "en" | "de", text: string): void {
+  /** A text into a field as the admin's edit; what the field held before comes back with it. */
+  private setField(
+    locale: "en" | "de",
+    text: string,
+  ): { control: FormControl<string>; before: string } {
     const control = locale === "en" ? this.controlEn() : this.controlDe();
+    const before = control.value ?? "";
     control.setValue(text);
     control.markAsDirty();
     if (locale === "en") this.editedEn.set(++this.tick);
     else this.editedDe.set(++this.tick);
+    return { control, before };
+  }
+
+  /** Another of the drafts offered, into the field: the one judged at the save. */
+  protected useDraft(locale: "en" | "de", index: number): void {
+    const offer = this.offers()[locale];
+    const draft = offer?.drafts[index];
+    if (!offer || !draft) return;
+    this.setField(locale, draft.text);
+    this.ledger?.use(this.drafts + locale, index);
+    this.offers.update((offers) => ({ ...offers, [locale]: { ...offer, chosen: index } }));
+  }
+
+  private clearOffer(locale: "en" | "de"): void {
+    if (this.offers()[locale]) this.offers.update((offers) => ({ ...offers, [locale]: null }));
+  }
+
+  /** The field's description: a save's problem, and the draft's notes. */
+  protected describedBy(locale: "en" | "de"): string | null {
+    const error = locale === "en" ? this.errorEn() : this.errorDe();
+    const ids = [
+      error ? `${this.id()}-${locale}-issue` : null,
+      this.offers()[locale]?.drafts[this.offers()[locale]!.chosen]?.notes.length
+        ? `${this.id()}-${locale}-draft`
+        : null,
+    ].filter(Boolean);
+    return ids.length ? ids.join(" ") : null;
   }
 
   protected copyToGerman(): void {

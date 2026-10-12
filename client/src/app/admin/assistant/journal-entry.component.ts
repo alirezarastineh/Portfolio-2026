@@ -26,6 +26,7 @@ import { AdminApiService } from "../admin-api.service";
 import type { RunRow } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
 import { isActive } from "../eval-runs";
+import { faqProposalWords } from "../faq-proposals";
 import {
   decisionProblem,
   FIX_TYPES,
@@ -360,6 +361,19 @@ const DECISIONS: Record<JournalStatus, string> = {
             </button>
           }
         }
+        @if (proposable()) {
+          <button
+            hlmBtn
+            size="sm"
+            variant="outline"
+            type="button"
+            [attr.aria-describedby]="'journal-' + e.id"
+            [disabled]="drafting()"
+            (click)="draftProposal()"
+          >
+            {{ drafting() ? "Drafting…" : "Draft an FAQ proposal (paid)" }}
+          </button>
+        }
         <button
           hlmBtn
           size="sm"
@@ -395,6 +409,8 @@ export class JournalEntryComponent {
   readonly deleted = output<string>();
   /** A replay ended: the list reads the entry again. */
   readonly replayed = output<void>();
+  /** An FAQ proposal drafted from its question (plan phase 31): it waits in the FAQ tab. */
+  readonly toFaqProposal = output<string>();
 
   protected readonly fixTypes = FIX_TYPES;
   protected readonly statusLabel = statusLabel;
@@ -431,8 +447,29 @@ export class JournalEntryComponent {
     return !!e.message && (e.status === "proposed" || e.status === "accepted");
   });
 
+  /**
+   * An FAQ entry can be drafted for it (plan phase 31): its question is kept,
+   * it is not retired, and it names no other fix (accepting the entry links it).
+   */
+  protected readonly proposable = computed(() => {
+    const e = this.entry();
+    return (
+      !!e.message &&
+      e.status !== "retired" &&
+      !e.fixRef &&
+      (e.fixType === null || e.fixType === "faq")
+    );
+  });
+  protected readonly drafting = signal(false);
+
+  /** Gone (another tab, a filter): a proposal drafted meanwhile is only announced. */
+  private gone = false;
+
   constructor() {
-    inject(DestroyRef).onDestroy(() => clearTimeout(this.timer));
+    inject(DestroyRef).onDestroy(() => {
+      clearTimeout(this.timer);
+      this.gone = true;
+    });
     // The entry as the server has it (a save, a new analysis, the list read again): a field
     // follows it unless the admin has typed in it since, so nothing unsaved is lost.
     effect(() => {
@@ -581,6 +618,34 @@ export class JournalEntryComponent {
       return;
     }
     this.deleted.emit(this.entry().id);
+  }
+
+  /**
+   * The FAQ pipeline (paid: a few model calls under Admin agents): a question
+   * from the visitor's, an answer from the portfolio, both in German, proposed
+   * in the FAQ tab. An entry with an open proposal gets that one back.
+   */
+  protected async draftProposal(): Promise<void> {
+    if (this.drafting()) return;
+    this.drafting.set(true);
+    this.status.set("Drafting an FAQ proposal: this takes up to a minute.");
+    const result = await this.api.draftFaqProposal({
+      source: "journal",
+      entryId: this.entry().id,
+    });
+    this.drafting.set(false);
+    if (!result.ok) {
+      const words = faqProposalWords(result.error, result.detail);
+      this.status.set(`No proposal: ${words}`);
+      toast.error("No proposal", { description: words });
+      return;
+    }
+    this.status.set("");
+    if (this.gone) {
+      toast.success("FAQ proposal drafted: it waits in the FAQ tab.");
+      return;
+    }
+    this.toFaqProposal.emit(result.data.proposal.id);
   }
 
   /** A paid background run: the question answered again on both chains. */

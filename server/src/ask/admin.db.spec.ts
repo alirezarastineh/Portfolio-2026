@@ -538,6 +538,7 @@ describe("admin assistant API", () => {
     const [usage] = await getDb().select().from(aiUsage);
     expect(usage).toMatchObject({ requests: 1, inputTokens: 50 });
 
+    // A draft over its limit is never cut (plan phase 28): it comes back whole, the limit named.
     models.copilot = generating(["A".repeat(400)]);
     const seo = (await (
       await admin.post("/admin/ai/copilot", {
@@ -546,8 +547,9 @@ describe("admin assistant API", () => {
         locale: "en",
         maxLength: 155,
       })
-    ).json()) as { text: string };
-    expect(seo.text.length).toBeLessThanOrEqual(155);
+    ).json()) as { text: string; needsReview: string[] };
+    expect(seo.text).toBe("A".repeat(400));
+    expect(seo.needsReview).toEqual(["245 characters over the limit of 155"]);
   });
 
   it("suggests alt text from the picture itself", async () => {
@@ -562,16 +564,14 @@ describe("admin assistant API", () => {
       media: { id: string };
     };
 
-    models.copilot = generating(["Diagramm der Suchpipeline. ".repeat(10)]);
+    models.copilot = generating(["Diagramm der Suchpipeline."]);
     const res = await admin.post("/admin/ai/copilot", {
       task: "alt",
       mediaId: media.id,
       locale: "de",
     });
     expect(res.status).toBe(200);
-    const { text } = (await res.json()) as { text: string };
-    expect(text.length).toBeLessThanOrEqual(150);
-    expect(text.startsWith("Diagramm der Suchpipeline.")).toBe(true);
+    expect(await res.json()).toMatchObject({ text: "Diagramm der Suchpipeline." });
 
     const prompt = JSON.stringify(models.copilot.calls[0]!.prompt);
     expect(prompt).toContain("German");
@@ -599,7 +599,7 @@ describe("admin assistant API", () => {
     };
 
     models.copilot = generating([
-      "OCR → LLM: page text\nLLM → review queue: low-confidence fields\n".repeat(30),
+      "OCR → LLM: page text\nLLM → review queue: low-confidence fields",
     ]);
     const res = await admin.post("/admin/ai/copilot", {
       task: "describe",
@@ -607,9 +607,9 @@ describe("admin assistant API", () => {
       locale: "en",
     });
     expect(res.status).toBe(200);
-    const { text } = (await res.json()) as { text: string };
-    expect(text.length).toBeLessThanOrEqual(1_200);
-    expect(text.startsWith("OCR → LLM: page text")).toBe(true);
+    expect(await res.json()).toMatchObject({
+      text: "OCR → LLM: page text\nLLM → review queue: low-confidence fields",
+    });
 
     const prompt = JSON.stringify(models.copilot.calls[0]!.prompt);
     expect(prompt).toContain('"mediaType":"image/png"');

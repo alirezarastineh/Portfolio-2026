@@ -234,7 +234,7 @@ function toInput(row: SkillRow): SkillInput {
                         (ngModelChange)="patchTranslation(row.id, locale, { title: $event })"
                         [attr.aria-label]="'Title (' + locale + ')'"
                         [attr.aria-invalid]="issue(row.id, locale, 'title') ? true : null"
-                        [attr.aria-describedby]="
+                        [aria-describedby]="
                           issue(row.id, locale, 'title') ? issueId(row.id, locale, 'title') : null
                         "
                         placeholder="Title"
@@ -251,7 +251,7 @@ function toInput(row: SkillRow): SkillInput {
                         (ngModelChange)="patchTranslation(row.id, locale, { caption: $event })"
                         [attr.aria-label]="'Caption (' + locale + ')'"
                         [attr.aria-invalid]="issue(row.id, locale, 'caption') ? true : null"
-                        [attr.aria-describedby]="
+                        [aria-describedby]="
                           issue(row.id, locale, 'caption')
                             ? issueId(row.id, locale, 'caption')
                             : null

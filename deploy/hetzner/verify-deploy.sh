@@ -365,6 +365,31 @@ if [[ "$(db_value "select count(*) from information_schema.tables where table_na
 else
   fail "ai_insight_snapshots or ai_lessons missing — migration 0021_lessons not applied?"
 fi
+if [[ "$(db_value "select count(*) from information_schema.tables where table_name = 'ai_skill_uses'")" == "1" ]]; then
+  pass "the copilot's drafts table exists (migration 0022)"
+else
+  fail "ai_skill_uses missing — migration 0022_skill_uses not applied?"
+fi
+if [[ "$(db_value "select count(*) from information_schema.columns where table_name = 'ai_skill_uses' and column_name in ('repairs', 'flags', 'candidates', 'pick', 'critic')")" == "5" ]]; then
+  pass "the copilot's drafts record their checks (migration 0023)"
+else
+  fail "ai_skill_uses.repairs/flags/candidates/pick/critic missing — migration 0023_skill_checks not applied?"
+fi
+if [[ "$(db_value "select count(*) from information_schema.tables where table_name = 'ai_proposals'")" == "1" ]]; then
+  pass "the content agent's proposals table exists (migration 0024)"
+else
+  fail "ai_proposals missing — migration 0024_proposals not applied?"
+fi
+if [[ "$(db_value "select count(*) from information_schema.columns where table_name = 'ai_proposals' and column_name = 'stamped_before'")" == "1" ]]; then
+  pass "a reverted proposal can put a translation's date back (migration 0025)"
+else
+  fail "ai_proposals.stamped_before missing — migration 0025_proposal_stamps not applied?"
+fi
+if [[ "$(db_value "select count(*) from information_schema.tables where table_name = 'ai_faq_proposals'")" == "1" ]]; then
+  pass "the FAQ pipeline's proposals table exists (migration 0026)"
+else
+  fail "ai_faq_proposals missing — migration 0026_faq_proposals not applied?"
+fi
 check "the assistant's search and tokenizer load in the api container" \
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T api \
   node -e "Promise.all([import('minisearch'), import('js-tiktoken/lite'), import('js-tiktoken/ranks/o200k_base')]).then(() => process.exit(0), () => process.exit(1))"

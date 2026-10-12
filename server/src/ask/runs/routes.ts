@@ -2,6 +2,8 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { z } from "zod";
 
+import { contentWork, MAX_ITEMS, MAX_USD, planContent } from "../agent/content-work.js";
+import { CONTENT_GOALS } from "../agent/targets.js";
 import { askConfig, askVariantChain, askVisitorJudges } from "../deps.js";
 import { EVAL_CASES } from "../evals/cases.js";
 import { runFeature, spendBlocked } from "./budget.js";
@@ -16,6 +18,7 @@ import {
   runInFlight,
   startRun,
   whileStarting,
+  type WorkFn,
 } from "./runner.js";
 import { activeRuns, getRun, listRuns, type RunRow } from "./store.js";
 
@@ -24,13 +27,20 @@ import { activeRuns, getRun, listRuns, type RunRow } from "./store.js";
  * router's auth and CSRF apply): start one, follow it, cancel it, resume it.
  * Kinds: the eval suite, a pairwise comparison of two answerers, judging the
  * reviewed visitor answers (for the judge's calibration), and an agent's
- * work: a failure journal entry's replay (plan phase 24).
+ * work: a failure journal entry's replay (plan phase 24), or the content
+ * agent's drafts into proposals (plan phase 29).
  */
+
+/** An agent run's work, by its task: one work per kind, so one agent run at a time. */
+const agentWork: WorkFn = (work) =>
+  (work.run.params as { task?: unknown } | null)?.task === "content"
+    ? contentWork(work)
+    : replayWork(work);
 
 registerWork("eval", evalWork);
 registerWork("pairwise", pairwiseWork);
 registerWork("judge", judgeWork);
-registerWork("agent", replayWork);
+registerWork("agent", agentWork);
 
 export const runsRouter = new Hono();
 
@@ -51,12 +61,32 @@ const answerer = z
   .trim()
   .regex(/^[A-Za-z0-9][\w.:/-]{0,99}$/);
 
-const runInput = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("eval"), cases }),
-  z.object({ kind: z.literal("pairwise"), a: answerer, b: answerer, cases }),
-  z.object({ kind: z.literal("judge") }),
-  // A failure journal entry's replay (plan phase 24).
-  z.object({ kind: z.literal("agent"), entry: z.uuid() }),
+/**
+ * The content agent's run (plan phase 29): its goals, each once, and its own
+ * limits. Strict, as the replay's input is: neither takes the other's keys, so a
+ * content run carrying an `entry` is refused, never read as a replay.
+ */
+const contentInput = z.strictObject({
+  kind: z.literal("agent"),
+  task: z.literal("content"),
+  goals: z
+    .array(z.enum(CONTENT_GOALS))
+    .min(1)
+    .max(CONTENT_GOALS.length)
+    .refine((goals) => new Set(goals).size === goals.length, "each goal once"),
+  maxItems: z.number().int().min(1).max(MAX_ITEMS).optional(),
+  maxUsd: z.number().min(0.01).max(MAX_USD).optional(),
+});
+
+const runInput = z.union([
+  z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("eval"), cases }),
+    z.object({ kind: z.literal("pairwise"), a: answerer, b: answerer, cases }),
+    z.object({ kind: z.literal("judge") }),
+    // A failure journal entry's replay (plan phase 24).
+    z.strictObject({ kind: z.literal("agent"), entry: z.uuid() }),
+  ]),
+  contentInput,
 ]);
 
 type Refusal = { error: string; status: 400 | 409 | 503 };
@@ -65,7 +95,9 @@ type Refusal = { error: string; status: 400 | 409 | 503 };
 async function planRun(
   input: z.infer<typeof runInput>,
 ): Promise<{ params: Record<string, unknown>; keys: string[] } | Refusal> {
-  if (input.kind === "agent") return planReplay(input.entry);
+  if (input.kind === "agent") {
+    return "task" in input ? planContent(input) : planReplay(input.entry);
+  }
   if (input.kind === "judge") {
     const judge = askVisitorJudges(askConfig())[0]?.id;
     if (!judge) return { error: "no_visitor_judge", status: 400 };

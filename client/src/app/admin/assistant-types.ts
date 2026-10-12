@@ -450,7 +450,17 @@ export interface RunItem {
 }
 
 export type CopilotInput =
-  | { task: "translate"; text: string; from: Locale; to: Locale; html?: boolean }
+  | {
+      task: "translate";
+      text: string;
+      from: Locale;
+      to: Locale;
+      html?: boolean;
+      /** The field's own limit: a check the draft must pass, never a cut (plan phase 28). */
+      maxLength?: number;
+      /** False skips the second model's reading of a long translation. */
+      critic?: boolean;
+    }
   | { task: "tighten"; text: string; locale: Locale; maxLength?: number }
   | { task: "seo"; text: string; locale: Locale; maxLength?: number }
   | { task: "faq-answer"; question: string; locale: Locale }

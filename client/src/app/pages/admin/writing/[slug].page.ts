@@ -33,6 +33,7 @@ import { countChangedFields } from "../../../admin/changed-fields";
 import { EditorLayoutComponent } from "../../../admin/components/editor-layout.component";
 import { postOutline, type OutlineItem } from "../../../admin/editor-outline";
 import { CopilotSuggestComponent } from "../../../admin/components/copilot-suggest.component";
+import { CopilotLedger } from "../../../admin/copilot-ledger";
 import {
   FieldIssueComponent,
   SaveBarComponent,
@@ -147,7 +148,7 @@ type PostDraft = PostRow;
                   [ngModel]="p.slug"
                   (ngModelChange)="patch({ slug: $event })"
                   [attr.aria-invalid]="issues.get('slug') ? true : null"
-                  [attr.aria-describedby]="issues.get('slug') ? 'post-slug-issue' : null"
+                  [aria-describedby]="issues.get('slug') ? 'post-slug-issue' : null"
                 />
                 <app-field-issue id="post-slug-issue" [message]="issues.get('slug')" />
               </div>
@@ -160,7 +161,7 @@ type PostDraft = PostRow;
                   [ngModel]="localDate()"
                   (ngModelChange)="setDate($event)"
                   [attr.aria-invalid]="issues.get('publishedAt') ? true : null"
-                  [attr.aria-describedby]="
+                  [aria-describedby]="
                     issues.get('publishedAt') ? 'post-date-issue post-date-hint' : 'post-date-hint'
                   "
                 />
@@ -191,9 +192,7 @@ type PostDraft = PostRow;
                   [ngModel]="p.canonicalUrl"
                   (ngModelChange)="patch({ canonicalUrl: $event })"
                   [attr.aria-invalid]="issues.get('canonicalUrl') ? true : null"
-                  [attr.aria-describedby]="
-                    issues.get('canonicalUrl') ? 'post-canonical-issue' : null
-                  "
+                  [aria-describedby]="issues.get('canonicalUrl') ? 'post-canonical-issue' : null"
                 />
                 <app-field-issue id="post-canonical-issue" [message]="issues.get('canonicalUrl')" />
               </div>
@@ -256,7 +255,7 @@ type PostDraft = PostRow;
                     [ngModel]="t.title"
                     (ngModelChange)="patchText(locale, { title: $event })"
                     [attr.aria-invalid]="textIssue(locale, 'title') ? true : null"
-                    [attr.aria-describedby]="
+                    [aria-describedby]="
                       textIssue(locale, 'title') ? 'post-title-' + locale + '-issue' : null
                     "
                   />
@@ -307,13 +306,17 @@ type PostDraft = PostRow;
                       hlmInput
                       maxlength="300"
                       [id]="'post-seo-description-' + locale"
+                      [aria-describedby]="'post-seo-description-' + locale + '-draft'"
                       [ngModel]="t.seoDescription"
                       (ngModelChange)="patchText(locale, { seoDescription: $event })"
                     />
                     <app-copilot-suggest
                       class="self-end"
                       [locale]="locale"
+                      [fieldId]="'post-seo-description-' + locale"
                       [source]="seoSources[locale]"
+                      [target]="seoTarget(locale)"
+                      [current]="seoValues[locale]"
                       (suggested)="patchText(locale, { seoDescription: $event })"
                     />
                   </div>
@@ -346,6 +349,7 @@ export default class AdminPostEditorPage implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly unsaved = inject(UnsavedChangesService);
+  private readonly ledger = inject(CopilotLedger);
 
   private readonly host = inject(ElementRef<HTMLElement>);
 
@@ -393,6 +397,17 @@ export default class AdminPostEditorPage implements OnInit {
     de: () => this.postText("de"),
   };
 
+  /** A search description's name in the copilot's ledger, with its post. */
+  protected seoTarget(locale: Locale, id = this.post()?.id ?? ""): string {
+    return `post:${id}:seo:${locale}`;
+  }
+
+  /** The search description as it reads now: what a draft is judged by when the post is saved. */
+  protected readonly seoValues: Record<Locale, () => string> = {
+    en: () => this.post()?.translations.en?.seoDescription ?? "",
+    de: () => this.post()?.translations.de?.seoDescription ?? "",
+  };
+
   private postText(locale: Locale): string {
     const t = this.post()?.translations[locale];
     if (!t) return "";
@@ -429,7 +444,11 @@ export default class AdminPostEditorPage implements OnInit {
 
   constructor() {
     effect(() => this.unsaved.set("post", this.dirty()));
-    inject(DestroyRef).onDestroy(() => this.unsaved.clear("post"));
+    inject(DestroyRef).onDestroy(() => {
+      this.unsaved.clear("post");
+      // Leaving unsaved: the copilot's drafts were not kept.
+      this.ledger.abandonPrefix("post:");
+    });
   }
 
   ngOnInit(): void {
@@ -442,6 +461,8 @@ export default class AdminPostEditorPage implements OnInit {
   }
 
   private async load(): Promise<void> {
+    // A draft left by an earlier editor (a save that failed after it closed) was not kept.
+    this.ledger.abandonPrefix("post:");
     const slug = this.route.snapshot.paramMap.get("slug");
     const list = await this.api.listPosts();
     const id = list.ok ? list.data.posts.find((p) => p.slug === slug)?.id : undefined;
@@ -518,6 +539,8 @@ export default class AdminPostEditorPage implements OnInit {
     this.post.set(this.pristine ? structuredClone(this.pristine) : null);
     this.revision.update((v) => v + 1);
     this.issues.clear();
+    // Thrown away with the other unsaved edits: the copilot's drafts were not kept.
+    this.ledger.abandonPrefix("post:");
   }
 
   protected async save(): Promise<void> {
@@ -525,6 +548,11 @@ export default class AdminPostEditorPage implements OnInit {
     if (!current || this.saving()) return;
 
     this.saving.set(true);
+    // The copilot's drafts are judged by what this save sends (plan phase 27).
+    const ended = this.ledger.beginSave({
+      [this.seoTarget("en", current.id)]: current.translations.en?.seoDescription ?? "",
+      [this.seoTarget("de", current.id)]: current.translations.de?.seoDescription ?? "",
+    });
     const result = await this.api.updatePost(current.id, {
       slug: current.slug,
       status: current.status,
@@ -535,6 +563,7 @@ export default class AdminPostEditorPage implements OnInit {
       translations: current.translations,
     });
     this.saving.set(false);
+    ended(result.ok);
 
     if (!result.ok) {
       if (result.error === "duplicate_slug") {

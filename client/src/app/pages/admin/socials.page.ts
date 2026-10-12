@@ -127,7 +127,7 @@ function toInput(row: SocialRow): SocialInput {
                   placeholder="GitHub"
                   aria-label="Link label"
                   [attr.aria-invalid]="issues.get(row.id + '.label') ? true : null"
-                  [attr.aria-describedby]="
+                  [aria-describedby]="
                     issues.get(row.id + '.label') ? row.id + '-label-issue' : null
                   "
                 />
@@ -146,9 +146,7 @@ function toInput(row: SocialRow): SocialInput {
                   placeholder="https://…"
                   aria-label="Link URL"
                   [attr.aria-invalid]="issues.get(row.id + '.href') ? true : null"
-                  [attr.aria-describedby]="
-                    issues.get(row.id + '.href') ? row.id + '-href-issue' : null
-                  "
+                  [aria-describedby]="issues.get(row.id + '.href') ? row.id + '-href-issue' : null"
                 />
                 <app-field-issue
                   [id]="row.id + '-href-issue'"

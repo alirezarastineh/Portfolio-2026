@@ -11,6 +11,7 @@ import { AdminPulseService } from "../../admin/pulse.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 
 import { AssistantConversationsComponent } from "../../admin/assistant/assistant-conversations.component";
+import { AssistantCopilotComponent } from "../../admin/assistant/assistant-copilot.component";
 import { AssistantEvalCasesComponent } from "../../admin/assistant/assistant-eval-cases.component";
 import { AssistantEvalsComponent } from "../../admin/assistant/assistant-evals.component";
 import { AssistantFaithfulnessComponent } from "../../admin/assistant/assistant-faithfulness.component";
@@ -37,6 +38,7 @@ type Tab =
   | "playground"
   | "evals"
   | "journal"
+  | "copilot"
   | "trust";
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
@@ -51,6 +53,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "playground", label: "Playground" },
   { id: "evals", label: "Evals" },
   { id: "journal", label: "Journal" },
+  { id: "copilot", label: "Copilot" },
   { id: "trust", label: "Trust" },
 ];
 
@@ -58,8 +61,9 @@ const TABS: { id: Tab; label: string }[] = [
  * The portfolio assistant ("Ask my portfolio"): health and cost, its
  * settings, the FAQ it cites, what visitors asked and their weekly review, a
  * playground against the draft, the eval suite and pairwise comparisons, the
- * failure journal (why answers failed, plan phase 24), and trust: what may
- * act, what was demoted, the alerts and the audit log.
+ * failure journal (why answers failed, plan phase 24), the editor copilot's
+ * skills and how often their drafts are kept (plan phase 27), and trust: what
+ * may act, what was demoted, the alerts and the audit log.
  */
 @Component({
   selector: "app-admin-assistant",
@@ -67,6 +71,7 @@ const TABS: { id: Tab; label: string }[] = [
   imports: [
     AdminPageHeaderComponent,
     AssistantConversationsComponent,
+    AssistantCopilotComponent,
     AssistantEvalCasesComponent,
     AssistantEvalsComponent,
     AssistantFaithfulnessComponent,
@@ -103,7 +108,7 @@ const TABS: { id: Tab; label: string }[] = [
       </app-page-header>
 
       <div hlmTabs class="min-w-0 gap-6" [tab]="strip()" (tabActivated)="select($any($event))">
-        <!-- One row that scrolls, with arrows where it overflows: ten tabs wrapped onto two rows below md. -->
+        <!-- One row that scrolls, with arrows where it overflows: eleven tabs wrapped onto two rows below md. -->
         <hlm-paginated-tabs-list tabListLabel="Assistant sections">
           @for (option of tabs; track option.id) {
             <button [hlmTabsTrigger]="option.id">{{ option.label }}</button>
@@ -132,7 +137,11 @@ const TABS: { id: Tab; label: string }[] = [
                   <app-assistant-settings />
                 }
                 @case ("faq") {
-                  <app-assistant-faq [seed]="faqSeed()" (seedTaken)="faqSeed.set(null)" />
+                  <app-assistant-faq
+                    [seed]="faqSeed()"
+                    [proposal]="faqProposal()"
+                    (seedTaken)="faqSeed.set(null)"
+                  />
                 }
                 @case ("conversations") {
                   <app-assistant-conversations (toJournal)="openJournal($event)" />
@@ -141,7 +150,11 @@ const TABS: { id: Tab; label: string }[] = [
                   <app-assistant-reviews />
                 }
                 @case ("insights") {
-                  <app-assistant-insights (toFaq)="toFaq($event)" (toJournal)="select('journal')" />
+                  <app-assistant-insights
+                    (toFaq)="toFaq($event)"
+                    (toFaqProposal)="openFaqProposal($event)"
+                    (toJournal)="select('journal')"
+                  />
                 }
                 @case ("playground") {
                   <app-assistant-playground />
@@ -154,7 +167,13 @@ const TABS: { id: Tab; label: string }[] = [
                   </div>
                 }
                 @case ("journal") {
-                  <app-assistant-journal [focus]="journalFocus()" />
+                  <app-assistant-journal
+                    [focus]="journalFocus()"
+                    (toFaqProposal)="openFaqProposal($event)"
+                  />
+                }
+                @case ("copilot") {
+                  <app-assistant-copilot />
                 }
                 @case ("trust") {
                   <app-assistant-trust />
@@ -178,6 +197,8 @@ export default class AdminAssistantPage {
   /** The tab strip's own state, put back when a switch is refused. */
   protected readonly strip = signal<Tab>("overview");
   protected readonly faqSeed = signal<string | null>(null);
+  /** An FAQ proposal just drafted from Insights or the Journal (plan phase 31): shown first. */
+  protected readonly faqProposal = signal<string | null>(null);
   /** The journal entry Diagnose opened (plan phase 24). */
   protected readonly journalFocus = signal<string | null>(null);
 
@@ -199,6 +220,8 @@ export default class AdminAssistantPage {
       }
       this.unsaved.clearAll();
     }
+    // A drafted proposal takes focus once: coming back to the FAQ later, it does not.
+    if (next !== "faq") this.faqProposal.set(null);
     this.tab.set(next);
   }
 
@@ -209,6 +232,11 @@ export default class AdminAssistantPage {
 
   protected toFaq(question: string): void {
     this.faqSeed.set(question);
+    void this.select("faq");
+  }
+
+  protected openFaqProposal(id: string): void {
+    this.faqProposal.set(id);
     void this.select("faq");
   }
 }

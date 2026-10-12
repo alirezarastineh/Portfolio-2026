@@ -22,7 +22,11 @@ type TextareaVariants = VariantProps<typeof textareaVariants>;
 
 @Directive({
   selector: "[hlmTextarea]",
-  hostDirectives: [{ directive: BrnTextarea, inputs: ["id"] }, BrnFieldControlDescribedBy],
+  hostDirectives: [
+    { directive: BrnTextarea, inputs: ["id"] },
+    // Exposed: brn owns the attribute, so a template's `[attr.aria-describedby]` loses to it.
+    { directive: BrnFieldControlDescribedBy, inputs: ["aria-describedby"] },
+  ],
   host: {
     "data-slot": "textarea",
   },

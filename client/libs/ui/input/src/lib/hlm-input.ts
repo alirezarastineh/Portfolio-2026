@@ -22,7 +22,11 @@ type InputVariants = VariantProps<typeof inputVariants>;
 
 @Directive({
   selector: "[hlmInput]",
-  hostDirectives: [{ directive: BrnInput, inputs: ["id"] }, BrnFieldControlDescribedBy],
+  hostDirectives: [
+    { directive: BrnInput, inputs: ["id"] },
+    // Exposed: brn owns the attribute, so a template's `[attr.aria-describedby]` loses to it.
+    { directive: BrnFieldControlDescribedBy, inputs: ["aria-describedby"] },
+  ],
 })
 export class HlmInput {
   /** Controls the error visual state of the input.

@@ -190,9 +190,13 @@ describe("a night's run", () => {
     const sampled = picks.filter((p) => p.pick === "sample").map((p) => p.id);
     expect(sampled).toHaveLength(3);
     const flagged = [day[4]!, day[9]!, day[12]!];
-    expect(picks.filter((p) => p.pick === "flagged").map((p) => p.id)).toEqual(
-      flagged.filter((f) => !sampled.includes(f)),
-    );
+    // In the night's own (hashed) order, which moves with the day: compared as a set.
+    expect(
+      picks
+        .filter((p) => p.pick === "flagged")
+        .map((p) => p.id)
+        .sort(),
+    ).toEqual(flagged.filter((f) => !sampled.includes(f)).sort());
     const all = await verdicts();
     for (const pick of picks) {
       expect(all.get(pick.id)).toMatchObject({

@@ -189,6 +189,31 @@ export function detectLanguage(text: string): Locale | null {
   return de > en ? "de" : "en";
 }
 
+/** Whether a sentence starts at `at`: nothing before it but spaces, a stop or an opening mark. */
+function startsSentence(text: string, at: number): boolean {
+  let i = at - 1;
+  while (i >= 0 && /\s/.test(text[i]!)) i--;
+  return i < 0 || /[.!?:;„“"‚‘«»(–—•-]/.test(text[i]!);
+}
+
+/**
+ * The common words of each language in a text, and nothing else: the copilot's
+ * language gate (skills/gates.ts) reads these, since a place name with an
+ * umlaut ("Senior engineer in Düsseldorf") says nothing about an English text.
+ * A common word counts in lower case, or capitalised where a sentence starts:
+ * mid-sentence, a capital makes it part of a name ("Red Hat", "Built With").
+ */
+export function commonWords(text: string): Record<Locale, number> {
+  const counts = { de: 0, en: 0 };
+  for (const match of text.matchAll(/\p{L}+/gu)) {
+    const word = match[0].toLowerCase();
+    if (word !== match[0] && !startsSentence(text, match.index)) continue;
+    if (GERMAN_WORDS.has(word)) counts.de++;
+    if (ENGLISH_WORDS.has(word)) counts.en++;
+  }
+  return counts;
+}
+
 /**
  * The newest visitor message with a clear language decides, so a lone
  * "Borealis?" after a German question is answered in German. Null when none

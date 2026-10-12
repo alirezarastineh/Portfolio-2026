@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   inject,
   OnInit,
   signal,
@@ -36,6 +37,9 @@ import {
 } from "../../admin/admin-api.service";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import { MediaTileComponent } from "../../admin/components/media-tile.component";
+import { DraftOfferComponent } from "../../admin/components/draft-offer.component";
+import { CopilotLedger } from "../../admin/copilot-ledger";
+import { draftOffer, type CopilotDraft, type DraftOffer } from "../../admin/copilot-skills";
 import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 import {
   formatBytes,
@@ -78,6 +82,7 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
   selector: "app-admin-media",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    DraftOfferComponent,
     AdminPageHeaderComponent,
     FormsModule,
     HlmAlert,
@@ -418,8 +423,16 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
                       hlmInput
                       maxlength="300"
                       [id]="'alt-' + locale"
+                      [aria-describedby]="
+                        offerFor('alt', asset.id, locale) ? 'alt-' + locale + '-draft' : null
+                      "
                       [ngModel]="alt()[locale]"
                       (ngModelChange)="setAlt(locale, $event)"
+                    />
+                    <app-draft-offer
+                      [offer]="offerFor('alt', asset.id, locale)"
+                      [field]="'Alt text ' + locale.toUpperCase()"
+                      [fieldId]="'alt-' + locale"
                     />
                   </div>
                 }
@@ -476,10 +489,20 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
                       rows="5"
                       maxlength="2000"
                       [id]="'description-' + locale"
+                      [aria-describedby]="
+                        offerFor('describe', asset.id, locale)
+                          ? 'description-' + locale + '-draft'
+                          : null
+                      "
                       [ngModel]="description()[locale]"
                       [ngModelOptions]="{ standalone: true }"
                       (ngModelChange)="setDescription(locale, $event)"
                     ></textarea>
+                    <app-draft-offer
+                      [offer]="offerFor('describe', asset.id, locale)"
+                      [field]="'Assistant description ' + locale.toUpperCase()"
+                      [fieldId]="'description-' + locale"
+                    />
                   </div>
                 }
                 <div class="flex justify-end">
@@ -538,6 +561,8 @@ export default class AdminMediaPage implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly confirm = inject(ConfirmService);
   protected readonly library = inject(MediaLibraryService);
+  /** The copilot's drafts (alt text, descriptions), judged when saved (plan phase 27). */
+  private readonly ledger = inject(CopilotLedger);
 
   protected readonly filters = FILTERS;
   protected readonly locales: Locale[] = ["en", "de"];
@@ -624,6 +649,41 @@ export default class AdminMediaPage implements OnInit {
     );
   });
 
+  /** Destroyed: a draft that comes back after that never lands. */
+  private gone = false;
+  /** Each draft's notes (plan phase 28), by its field, while it waits for a save. */
+  private readonly offers = signal<Record<string, { value: DraftOffer; tracked: boolean }>>({});
+
+  protected offerFor(kind: "alt" | "describe", id: string, locale: Locale): DraftOffer | null {
+    const target = `media:${kind}:${id}:${locale}`;
+    const offer = this.offers()[target];
+    if (!offer) return null;
+    return !offer.tracked || this.ledger.waits(target) ? offer.value : null;
+  }
+
+  private offerDraft(target: string, draft: CopilotDraft): void {
+    const value = draftOffer(draft);
+    this.offers.update((all) => {
+      const next = { ...all };
+      if (value) next[target] = { value, tracked: Boolean(draft.suggestionId) };
+      else delete next[target];
+      return next;
+    });
+  }
+
+  constructor() {
+    // Leaving the page: a draft not saved was not kept.
+    inject(DestroyRef).onDestroy(() => {
+      this.gone = true;
+      this.ledger.abandonPrefix("media:");
+    });
+  }
+
+  /** The file's details still open, and the page still here, when a draft comes back. */
+  private landsOn(asset: MediaAsset): boolean {
+    return !this.gone && this.activeId() === asset.id;
+  }
+
   ngOnInit(): void {
     void this.library.load(true);
     void this.loadReconcile();
@@ -650,16 +710,22 @@ export default class AdminMediaPage implements OnInit {
   /* ---- details ---- */
 
   protected open(asset: MediaAsset): void {
+    // The fields start again from what is saved: drafts of another file are gone unsaved.
+    this.ledger.abandonPrefix("media:");
+    this.offers.set({});
     this.activeId.set(asset.id);
     this.alt.set({ en: asset.altEn ?? "", de: asset.altDe ?? "" });
     this.description.set({ en: asset.descriptionEn ?? "", de: asset.descriptionDe ?? "" });
   }
 
   protected onSheet(state: string): void {
-    if (state === "closed") this.activeId.set(null);
+    if (state !== "closed") return;
+    this.ledger.abandonPrefix("media:");
+    this.activeId.set(null);
   }
 
   protected close(): void {
+    this.ledger.abandonPrefix("media:");
     this.activeId.set(null);
   }
 
@@ -675,24 +741,42 @@ export default class AdminMediaPage implements OnInit {
       toast.error("No suggestion", { description: result.error });
       return;
     }
+    // Closed, or another file opened meanwhile: the draft never lands (in either file).
+    if (!this.landsOn(asset)) {
+      this.ledger.drop(result.data);
+      return;
+    }
+    const before = this.alt()[locale];
     this.setAlt(locale, result.data.text);
+    this.ledger.propose(`media:alt:${asset.id}:${locale}`, result.data, {
+      read: () => this.alt()[locale],
+      before,
+    });
+    this.offerDraft(`media:alt:${asset.id}:${locale}`, result.data);
   }
 
   protected async saveAlt(asset: MediaAsset): Promise<void> {
     const alt = this.alt();
+    const sent = { en: alt.en.trim(), de: alt.de.trim() };
     this.savingAlt.set(true);
+    // The copilot's drafts are judged by what this save sends, even if the details close meanwhile.
+    const ended = this.ledger.beginSave({
+      [`media:alt:${asset.id}:en`]: sent.en,
+      [`media:alt:${asset.id}:de`]: sent.de,
+    });
     const result = await this.api.updateMediaAlt(asset.id, {
-      altEn: alt.en.trim() || null,
-      altDe: alt.de.trim() || null,
+      altEn: sent.en || null,
+      altDe: sent.de || null,
     });
     this.savingAlt.set(false);
+    ended(result.ok);
     if (!result.ok) {
       toast.error("Not saved", { description: result.error });
       return;
     }
     toast.success("Alt text saved", { description: "Live after the next publish." });
     await this.library.load(true);
-    this.alt.set({ en: alt.en.trim(), de: alt.de.trim() });
+    this.alt.set(sent);
   }
 
   protected setDescription(locale: Locale, text: string): void {
@@ -708,24 +792,40 @@ export default class AdminMediaPage implements OnInit {
       toast.error("No description", { description: result.error });
       return;
     }
+    if (!this.landsOn(asset)) {
+      this.ledger.drop(result.data);
+      return;
+    }
+    const before = this.description()[locale];
     this.setDescription(locale, result.data.text);
+    this.ledger.propose(`media:describe:${asset.id}:${locale}`, result.data, {
+      read: () => this.description()[locale],
+      before,
+    });
+    this.offerDraft(`media:describe:${asset.id}:${locale}`, result.data);
   }
 
   protected async saveDescription(asset: MediaAsset): Promise<void> {
     const d = this.description();
+    const sent = { en: d.en.trim(), de: d.de.trim() };
     this.savingDescription.set(true);
+    const ended = this.ledger.beginSave({
+      [`media:describe:${asset.id}:en`]: sent.en,
+      [`media:describe:${asset.id}:de`]: sent.de,
+    });
     const result = await this.api.updateMediaAlt(asset.id, {
-      descriptionEn: d.en.trim() || null,
-      descriptionDe: d.de.trim() || null,
+      descriptionEn: sent.en || null,
+      descriptionDe: sent.de || null,
     });
     this.savingDescription.set(false);
+    ended(result.ok);
     if (!result.ok) {
       toast.error("Not saved", { description: result.error });
       return;
     }
     toast.success("Description saved", { description: "The assistant reads it from now on." });
     await this.library.load(true);
-    this.description.set({ en: d.en.trim(), de: d.de.trim() });
+    this.description.set(sent);
   }
 
   protected async copyPath(asset: MediaAsset): Promise<void> {

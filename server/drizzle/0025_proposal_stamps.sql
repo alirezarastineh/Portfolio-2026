@@ -1,0 +1,1 @@
+ALTER TABLE "ai_proposals" ADD COLUMN "stamped_before" timestamp with time zone;

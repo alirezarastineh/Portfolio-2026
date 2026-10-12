@@ -133,7 +133,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                         [ngModel]="d[active()][locale].title"
                         (ngModelChange)="patch(locale, { title: $event })"
                         [attr.aria-invalid]="issue(locale, 'title') ? true : null"
-                        [attr.aria-describedby]="
+                        [aria-describedby]="
                           issue(locale, 'title') ? 'legal-title-' + locale + '-issue' : null
                         "
                       />

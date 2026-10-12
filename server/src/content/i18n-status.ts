@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, inArray } from "drizzle-orm";
 
 import {
   aiFaq,
@@ -40,7 +40,8 @@ export interface I18nItem {
  */
 const STALE_AFTER_MS = 1_000;
 
-function isEmpty(value: unknown): boolean {
+/** No text: empty, `<p></p>`, only spaces; an array or object only of such. The content agent reads gaps the same way. */
+export function isEmpty(value: unknown): boolean {
   if (Array.isArray(value)) return value.every((item) => isEmpty(item));
   if (typeof value === "string") {
     // Rich text: `<p></p>` is empty too.
@@ -146,15 +147,23 @@ export async function i18nStatus(db: DbExecutor): Promise<I18nItem[]> {
     if (item) items.push(item);
   };
 
+  const sectionRows = await db
+    .select({
+      section: contentDocuments.section,
+      locale: contentDocuments.locale,
+      data: contentDocuments.data,
+      updatedAt: contentDocuments.updatedAt,
+    })
+    .from(contentDocuments)
+    .where(
+      inArray(
+        contentDocuments.section,
+        SECTIONS.map((s) => s.section),
+      ),
+    );
+
   for (const { section, label, fields } of SECTIONS) {
-    const rows = await db
-      .select({
-        locale: contentDocuments.locale,
-        data: contentDocuments.data,
-        updatedAt: contentDocuments.updatedAt,
-      })
-      .from(contentDocuments)
-      .where(eq(contentDocuments.section, section));
+    const rows = sectionRows.filter((r) => r.section === section);
     const flat = rows.map((r) => ({
       ...(fields ? (r.data as Record<string, unknown>) : leaves(r.data)),
       locale: r.locale,

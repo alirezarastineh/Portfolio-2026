@@ -8,6 +8,7 @@ import {
   Injector,
   input,
   OnInit,
+  output,
   signal,
 } from "@angular/core";
 import { toast } from "@spartan-ng/brain/sonner";
@@ -147,6 +148,7 @@ const decided = (entry: JournalEntry) => entry.status === "accepted" || entry.st
                 (changed)="replace($event)"
                 (deleted)="drop($event)"
                 (replayed)="load()"
+                (toFaqProposal)="toFaqProposal.emit($event)"
               />
             </li>
           } @empty {
@@ -165,6 +167,8 @@ export class AssistantJournalComponent implements OnInit {
 
   /** The entry the admin came to see: listed first, its evidence open. */
   readonly focus = input<string | null>(null);
+  /** An FAQ proposal drafted from an entry (plan phase 31): it waits in the FAQ tab. */
+  readonly toFaqProposal = output<string>();
 
   protected readonly filter = signal<Filter>("all");
   protected readonly data = signal<JournalView | null>(null);

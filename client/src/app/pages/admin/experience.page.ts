@@ -303,7 +303,7 @@ function blankDraft(): Draft {
                     [ngModel]="d.orgName"
                     (ngModelChange)="patch({ orgName: $event })"
                     [attr.aria-invalid]="issues.get('orgName') ? true : null"
-                    [attr.aria-describedby]="issues.get('orgName') ? 'exp-org-issue' : null"
+                    [aria-describedby]="issues.get('orgName') ? 'exp-org-issue' : null"
                   />
                   <app-field-issue id="exp-org-issue" [message]="issues.get('orgName')" />
                 </div>
@@ -317,7 +317,7 @@ function blankDraft(): Draft {
                     [ngModel]="d.orgUrl"
                     (ngModelChange)="patch({ orgUrl: $event })"
                     [attr.aria-invalid]="issues.get('orgUrl') ? true : null"
-                    [attr.aria-describedby]="issues.get('orgUrl') ? 'exp-url-issue' : null"
+                    [aria-describedby]="issues.get('orgUrl') ? 'exp-url-issue' : null"
                   />
                   <app-field-issue id="exp-url-issue" [message]="issues.get('orgUrl')" />
                 </div>
@@ -332,7 +332,7 @@ function blankDraft(): Draft {
                     [ngModel]="d.startDate"
                     (ngModelChange)="patch({ startDate: $event })"
                     [attr.aria-invalid]="issues.get('startDate') ? true : null"
-                    [attr.aria-describedby]="issues.get('startDate') ? 'exp-start-issue' : null"
+                    [aria-describedby]="issues.get('startDate') ? 'exp-start-issue' : null"
                   />
                   <app-field-issue id="exp-start-issue" [message]="issues.get('startDate')" />
                 </div>
@@ -346,7 +346,7 @@ function blankDraft(): Draft {
                     [ngModel]="d.endDate ?? ''"
                     (ngModelChange)="patch({ endDate: $event || null })"
                     [attr.aria-invalid]="issues.get('endDate') ? true : null"
-                    [attr.aria-describedby]="issues.get('endDate') ? 'exp-end-issue' : null"
+                    [aria-describedby]="issues.get('endDate') ? 'exp-end-issue' : null"
                   />
                   <app-field-issue id="exp-end-issue" [message]="issues.get('endDate')" />
                 </div>
@@ -393,9 +393,7 @@ function blankDraft(): Draft {
                     [ngModel]="d.credentialUrl"
                     (ngModelChange)="patch({ credentialUrl: $event })"
                     [attr.aria-invalid]="issues.get('credentialUrl') ? true : null"
-                    [attr.aria-describedby]="
-                      issues.get('credentialUrl') ? 'exp-cred-url-issue' : null
-                    "
+                    [aria-describedby]="issues.get('credentialUrl') ? 'exp-cred-url-issue' : null"
                   />
                   <app-field-issue
                     id="exp-cred-url-issue"
@@ -434,7 +432,7 @@ function blankDraft(): Draft {
                     [ngModel]="d.translations[locale].title"
                     (ngModelChange)="patchText(locale, { title: $event })"
                     [attr.aria-invalid]="textIssue(locale, 'title') ? true : null"
-                    [attr.aria-describedby]="
+                    [aria-describedby]="
                       textIssue(locale, 'title') ? 'exp-title-' + locale + '-issue' : null
                     "
                   />

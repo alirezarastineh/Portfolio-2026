@@ -50,6 +50,7 @@ import { FieldIssues, focusFirstInvalid } from "../../../admin/issues";
 import { toastIssues } from "../../../admin/save-feedback";
 import { isLocale } from "../../../content/locale";
 import { CopilotSuggestComponent } from "../../../admin/components/copilot-suggest.component";
+import { CopilotLedger } from "../../../admin/copilot-ledger";
 import type { LocaleView } from "../../../admin/components/field-pair.component";
 import {
   GalleryEditorComponent,
@@ -233,7 +234,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                   [ngModel]="p.slug"
                   (ngModelChange)="patch({ slug: $event })"
                   [attr.aria-invalid]="issues.get('slug') ? true : null"
-                  [attr.aria-describedby]="issues.get('slug') ? 'slug-issue' : null"
+                  [aria-describedby]="issues.get('slug') ? 'slug-issue' : null"
                 />
                 <app-field-issue id="slug-issue" [message]="issues.get('slug')" />
               </div>
@@ -247,7 +248,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                   [ngModel]="p.category"
                   (ngModelChange)="patch({ category: $event })"
                   [attr.aria-invalid]="issues.get('category') ? true : null"
-                  [attr.aria-describedby]="issues.get('category') ? 'category-issue' : null"
+                  [aria-describedby]="issues.get('category') ? 'category-issue' : null"
                 />
                 <app-field-issue id="category-issue" [message]="issues.get('category')" />
               </div>
@@ -260,7 +261,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                   [ngModel]="p.periodStart ?? ''"
                   (ngModelChange)="patch({ periodStart: $event || null })"
                   [attr.aria-invalid]="issues.get('periodStart') ? true : null"
-                  [attr.aria-describedby]="issues.get('periodStart') ? 'periodStart-issue' : null"
+                  [aria-describedby]="issues.get('periodStart') ? 'periodStart-issue' : null"
                 />
                 <app-field-issue id="periodStart-issue" [message]="issues.get('periodStart')" />
               </div>
@@ -273,7 +274,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                   [ngModel]="p.periodEnd ?? ''"
                   (ngModelChange)="patch({ periodEnd: $event || null })"
                   [attr.aria-invalid]="issues.get('periodEnd') ? true : null"
-                  [attr.aria-describedby]="
+                  [aria-describedby]="
                     issues.get('periodEnd') ? 'periodEnd-issue periodEnd-hint' : 'periodEnd-hint'
                   "
                 />
@@ -292,7 +293,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                     [ngModel]="p[link.key]"
                     (ngModelChange)="patchLink(link.key, $event)"
                     [attr.aria-invalid]="issues.get(link.key) ? true : null"
-                    [attr.aria-describedby]="issues.get(link.key) ? link.key + '-issue' : null"
+                    [aria-describedby]="issues.get(link.key) ? link.key + '-issue' : null"
                   />
                   <app-field-issue [id]="link.key + '-issue'" [message]="issues.get(link.key)" />
                 </div>
@@ -369,21 +370,23 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                     } @else if (field.multiline) {
                       <textarea
                         hlmTextarea
+                        [id]="field.key + '-' + locale"
                         [rows]="field.rows ?? 3"
                         [attr.maxlength]="field.maxLength ?? null"
                         [ngModel]="textOf(locale, field.key)"
                         (ngModelChange)="patchText(locale, field.key, $event)"
                         [attr.aria-label]="field.label + ' (' + locale + ')'"
                         [attr.aria-invalid]="textIssue(locale, field.key) ? true : null"
-                        [attr.aria-describedby]="
-                          textIssue(locale, field.key) ? field.key + '-' + locale + '-issue' : null
-                        "
+                        [aria-describedby]="describedBy(locale, field.key)"
                       ></textarea>
                       @if (field.key === "seoDescription") {
                         <app-copilot-suggest
                           class="self-end"
                           [locale]="locale"
+                          [fieldId]="'seoDescription-' + locale"
                           [source]="seoSources[locale]"
+                          [target]="seoTarget(locale)"
+                          [current]="seoValues[locale]"
                           (suggested)="patchText(locale, 'seoDescription', $event)"
                         />
                       }
@@ -395,7 +398,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                         (ngModelChange)="patchText(locale, field.key, $event)"
                         [attr.aria-label]="field.label + ' (' + locale + ')'"
                         [attr.aria-invalid]="textIssue(locale, field.key) ? true : null"
-                        [attr.aria-describedby]="
+                        [aria-describedby]="
                           textIssue(locale, field.key) ? field.key + '-' + locale + '-issue' : null
                         "
                       />
@@ -543,6 +546,7 @@ export default class AdminProjectEditorPage implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly unsaved = inject(UnsavedChangesService);
+  private readonly ledger = inject(CopilotLedger);
 
   private readonly host = inject(ElementRef<HTMLElement>);
 
@@ -578,6 +582,17 @@ export default class AdminProjectEditorPage implements OnInit {
   protected readonly seoSources: Record<Locale, () => string> = {
     en: () => this.pageText("en"),
     de: () => this.pageText("de"),
+  };
+
+  /** A search description's name in the copilot's ledger, with its project. */
+  protected seoTarget(locale: Locale, id = this.project()?.id ?? ""): string {
+    return `project:${id}:seo:${locale}`;
+  }
+
+  /** The search description as it reads now: what a draft is judged by when the project is saved. */
+  protected readonly seoValues: Record<Locale, () => string> = {
+    en: () => this.textOf("en", "seoDescription"),
+    de: () => this.textOf("de", "seoDescription"),
   };
 
   private pageText(locale: Locale): string {
@@ -643,7 +658,11 @@ export default class AdminProjectEditorPage implements OnInit {
 
   constructor() {
     effect(() => this.unsaved.set("project", this.dirty()));
-    inject(DestroyRef).onDestroy(() => this.unsaved.clear("project"));
+    inject(DestroyRef).onDestroy(() => {
+      this.unsaved.clear("project");
+      // Leaving unsaved: the copilot's drafts were not kept.
+      this.ledger.abandonPrefix("project:");
+    });
   }
 
   ngOnInit(): void {
@@ -660,6 +679,8 @@ export default class AdminProjectEditorPage implements OnInit {
   }
 
   private async load(): Promise<void> {
+    // A draft left by an earlier editor (a save that failed after it closed) was not kept.
+    this.ledger.abandonPrefix("project:");
     const slug = this.route.snapshot.paramMap.get("slug");
     const list = await this.api.listProjects();
     const id = list.ok ? list.data.projects.find((p) => p.slug === slug)?.id : undefined;
@@ -705,6 +726,15 @@ export default class AdminProjectEditorPage implements OnInit {
     return this.issues.get(`translations.${locale}.${key}`);
   }
 
+  /** A text field's description: its save problem, and the search description's draft notes. */
+  protected describedBy(locale: Locale, key: TextKey): string | null {
+    const ids = [
+      this.textIssue(locale, key) ? `${key}-${locale}-issue` : null,
+      key === "seoDescription" ? `${key}-${locale}-draft` : null,
+    ].filter((id) => id !== null);
+    return ids.length ? ids.join(" ") : null;
+  }
+
   protected patchGallery(gallery: GalleryItem[]): void {
     this.patch({ gallery });
   }
@@ -739,6 +769,8 @@ export default class AdminProjectEditorPage implements OnInit {
     this.project.set(this.pristine ? structuredClone(this.pristine) : null);
     this.revision.update((v) => v + 1);
     this.issues.clear();
+    // Thrown away with the other unsaved edits: the copilot's drafts were not kept.
+    this.ledger.abandonPrefix("project:");
   }
 
   protected async save(): Promise<void> {
@@ -746,6 +778,11 @@ export default class AdminProjectEditorPage implements OnInit {
     if (!current || this.saving()) return;
 
     this.saving.set(true);
+    // The copilot's drafts are judged by what this save sends (plan phase 27).
+    const ended = this.ledger.beginSave({
+      [this.seoTarget("en", current.id)]: current.translations.en.seoDescription ?? "",
+      [this.seoTarget("de", current.id)]: current.translations.de.seoDescription ?? "",
+    });
     const result = await this.api.updateProject(current.id, {
       slug: current.slug,
       coverId: current.coverId,
@@ -767,6 +804,7 @@ export default class AdminProjectEditorPage implements OnInit {
       },
     });
     this.saving.set(false);
+    ended(result.ok);
 
     if (!result.ok) {
       if (result.error === "duplicate_slug") {

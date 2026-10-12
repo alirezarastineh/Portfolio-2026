@@ -78,7 +78,7 @@ export const TRUST_REGISTRY: readonly TrustEntry[] = [
     level: "L0",
     approver: "admin",
     enforcement:
-      "admin.ts copilotRequest returns text; the editor keeps it only on the admin's Save",
+      "skills/registry.ts: a versioned skill returns a draft; the editor keeps it only on the admin's Save, then reports kept, edited or discarded (ai_skill_uses: ids and word counts, no text)",
     reversible: true,
     built: true,
   },
@@ -198,18 +198,30 @@ export const TRUST_REGISTRY: readonly TrustEntry[] = [
     actor: "agent",
     level: "L0",
     approver: "admin",
-    enforcement: "Plan phase 29: proposals only; the admin applies each one",
+    enforcement:
+      "agent/content-work.ts: writes only ai_proposals and ai_skill_uses, never the content; the admin applies each one (plan phase 30)",
     reversible: true,
-    built: false,
+    built: true,
   },
   {
     action: "agent.apply",
     actor: "agent",
     level: "L1",
     approver: "admin",
-    enforcement: "Plan phase 30: writes drafts, reversible from `before`; never publishes",
+    enforcement:
+      "agent/apply.ts, loaded only by the proposals' routes (trust.spec.ts): on the admin's decision, a compare-and-set into the drafts (a field changed since is stale, never overwritten); reverted from `before`; never publishes",
     reversible: true,
-    built: false,
+    built: true,
+  },
+  {
+    action: "faq.propose",
+    actor: "agent",
+    level: "L0",
+    approver: "admin",
+    enforcement:
+      "agent/faq-chain.ts: a chain of gated skills the admin starts per insight topic or journal entry, fenced as `agent`; writes only ai_faq_proposals and ai_skill_uses (trust.spec.ts); the FAQ entry is written only by the admin's accept (agent/faq-decide.ts, loaded only by its routes), linked to its source and measured by a lesson",
+    reversible: true,
+    built: true,
   },
   {
     action: "publish",

@@ -54,6 +54,55 @@ describe("the trust registry (plan phase 14)", () => {
     });
   });
 
+  it("lets the copilot's skills only draft: the admin keeps or discards each one (plan phase 27)", () => {
+    const entry = TRUST_REGISTRY.find((e) => e.action === "copilot.suggest");
+    expect(entry).toMatchObject({
+      actor: "copilot",
+      level: "L0",
+      approver: "admin",
+      reversible: true,
+      built: true,
+    });
+    expect(entry?.enforcement).toMatch(/skills\/registry\.ts/);
+    expect(entry?.enforcement).toMatch(/ai_skill_uses: ids and word counts, no text/);
+  });
+
+  it("lets the content agent only propose, and the admin apply each proposal (plan phases 29–30)", () => {
+    // Proposing never writes the content: proved below ("the content agent proposes…").
+    expect(TRUST_REGISTRY.find((e) => e.action === "agent.propose")).toMatchObject({
+      actor: "agent",
+      level: "L0",
+      approver: "admin",
+      built: true,
+    });
+    // Applying writes the drafts on the admin's decision only, reversibly, and never publishes.
+    const apply = TRUST_REGISTRY.find((e) => e.action === "agent.apply");
+    expect(apply).toMatchObject({
+      actor: "agent",
+      level: "L1",
+      approver: "admin",
+      reversible: true,
+      built: true,
+    });
+    expect(apply?.enforcement).toMatch(/agent\/apply\.ts/);
+    expect(apply?.enforcement).toMatch(/loaded only by the proposals' routes/);
+    expect(apply?.enforcement).toMatch(/never publishes/);
+  });
+
+  it("lets the FAQ pipeline only propose: the admin's accept writes the FAQ (plan phase 31)", () => {
+    // Proved below ("the FAQ pipeline proposes…").
+    const propose = TRUST_REGISTRY.find((e) => e.action === "faq.propose");
+    expect(propose).toMatchObject({
+      actor: "agent",
+      level: "L0",
+      approver: "admin",
+      reversible: true,
+      built: true,
+    });
+    expect(propose?.enforcement).toMatch(/agent\/faq-chain\.ts/);
+    expect(propose?.enforcement).toMatch(/only by the admin's accept/);
+  });
+
   it("lets the nightly judge run only within its own fence (plan phase 26)", () => {
     const entry = TRUST_REGISTRY.find((e) => e.action === "judge.nightly");
     expect(entry).toMatchObject({ actor: "system", level: "L2", built: true });
@@ -173,8 +222,12 @@ describe("the demotion rules", () => {
 /* ------------------------------------------------- publish is human only */
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-/** What agent code may take from the publish module: a read-only build and an error class. */
-const READ_ONLY_PUBLISH = new Set(["buildAll", "PublicationError"]);
+/**
+ * What agent code may take from the publish module: a read-only build, an error
+ * class, and the pure `canonicalJson` (the sections' save compares documents with
+ * it, and the content agent's apply saves a section through it: plan phase 30).
+ */
+const READ_ONLY_PUBLISH = new Set(["buildAll", "PublicationError", "canonicalJson"]);
 const PUBLISH = "content/publish.ts";
 
 // An import's clause never crosses a `;`, so an `export type X = …;` before an
@@ -352,6 +405,331 @@ const described = (found: Import[]) =>
       (i) => `${i.from}: ${i.to === PUBLISH ? i.names.join(",") : `${i.to} ${i.names.join(",")}`}`,
     )
     .sort();
+
+/** The editors' content tables: the drafts and the live FAQ, which the content agent must never write. */
+const CONTENT_TABLES = [
+  "projects",
+  "projectTranslations",
+  "projectGallery",
+  "experiences",
+  "experienceTranslations",
+  "posts",
+  "postTranslations",
+  "skills",
+  "skillTranslations",
+  "contentDocuments",
+  "mediaAssets",
+  "mediaVariants",
+  "siteProfile",
+  "profileResumes",
+  "socials",
+  "aiFaq",
+  "aiFaqTranslations",
+];
+/** The tables a proof forbids writing, and how a write to one reads in SQL. */
+interface Forbidden {
+  tables: readonly string[];
+  /** A SQL write to one, named outright (quoted or not, `public.` or not) or in a template. */
+  sqlWrite: RegExp;
+  /** One named for SQL to use as it likes. */
+  identifier: RegExp;
+}
+
+function forbidding(tables: readonly string[]): Forbidden {
+  const names = tables.map((t) => t.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`));
+  return {
+    tables,
+    sqlWrite: new RegExp(
+      String.raw`\b(?:insert\s+into|update|delete\s+from|merge\s+into|truncate(?:\s+table)?|alter\s+table|drop\s+table)\s+(?:only\s+)?(?:"?public"?\s*\.\s*)?(?:"|\$\{\s*(?:\w+\.)?)?(?:${[...names, ...tables].join("|")})\b`,
+      "i",
+    ),
+    identifier: new RegExp(
+      String.raw`sql\s*\.\s*(?:identifier|raw)\(\s*[\`"'][^\`"']*\b(?:${names.join("|")})\b`,
+      "i",
+    ),
+  };
+}
+
+/** The content agent's proposing (plan phase 29): never the content. */
+const CONTENT = forbidding(CONTENT_TABLES);
+/** The FAQ chain's drafting (plan phase 31): nor a lesson or the journal, which the admin's accept links. */
+const FAQ_CHAIN = forbidding([...CONTENT_TABLES, "aiLessons", "aiJournal"]);
+/** An import from the schema: its clause, and where it comes from. */
+const SCHEMA_IMPORT = /^\s*import\s+(type\s+)?([\s\S]*?)\s+from\s+["']([^"']+)["'];?/gm;
+
+/**
+ * A module's text with its comments blanked out, and with `strings` its quoted
+ * strings too; template literals are kept (they hold SQL and `${…}`). Every
+ * character keeps its place, so a match's index is the same in the source.
+ */
+function blanked(text: string, strings: boolean): string {
+  let out = "";
+  let state: "code" | "line" | "block" | "quoted" = "code";
+  let quote = "";
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    const next = text[i + 1];
+    if (state === "code") {
+      if (c === "/" && next === "/") state = "line";
+      else if (c === "/" && next === "*") state = "block";
+      else if (c === "'" || c === '"') {
+        state = "quoted";
+        quote = c;
+        out += strings ? " " : c;
+        continue;
+      }
+      out += state === "code" ? c : " ";
+    } else if (state === "line") {
+      if (c === "\n") state = "code";
+      out += c === "\n" ? c : " ";
+    } else if (state === "block") {
+      if (c === "*" && next === "/") {
+        state = "code";
+        i++;
+        out += "  ";
+      } else out += c === "\n" ? c : " ";
+    } else if (c === "\\") {
+      out += strings ? "  " : c + (next ?? "");
+      i++;
+    } else {
+      if (c === quote) state = "code";
+      out += strings && c !== "\n" ? " " : c;
+    }
+  }
+  return out;
+}
+
+/**
+ * How a module could write a content table: a schema binding used for anything
+ * but a read (`.from(t)`, a join, a column `t.col`): written, aliased, kept in a
+ * variable, passed to a helper. Aliases and namespace imports are followed; a
+ * namespace used bare (destructured, passed on) counts. SQL that writes one,
+ * `sql.identifier` or `sql.raw` naming one, and an import that cannot be
+ * followed count too. Comments say nothing either way.
+ */
+function contentWriteIn(text: string, forbidden: Forbidden = CONTENT): string | null {
+  const prose = blanked(text, false);
+  if (UNFOLLOWABLE.test(prose)) return "an import that cannot be followed";
+  if (forbidden.sqlWrite.test(prose)) return "SQL that writes a content table";
+  if (forbidden.identifier.test(prose)) return "a content table named for SQL";
+
+  const imports = [...prose.matchAll(SCHEMA_IMPORT)];
+  const bindings = new Set<string>();
+  const namespaces: string[] = [];
+  for (const m of imports) {
+    if (m[1] || !/(^|\/)db\/schema(\.js)?$/.test(m[3]!)) continue;
+    const clause = m[2]!.trim();
+    const ns = /^\*\s+as\s+(\w+)$/.exec(clause);
+    if (ns) namespaces.push(ns[1]!);
+    const named = /\{([\s\S]*)\}/.exec(clause)?.[1] ?? "";
+    for (const part of named.split(",")) {
+      const [name, alias] = part
+        .trim()
+        .replace(/^type\s+/, "")
+        .split(/\s+as\s+/)
+        .map((s) => s.trim());
+      if (name && forbidden.tables.includes(name)) bindings.add(alias ?? name);
+    }
+  }
+  const names = [
+    ...bindings,
+    ...namespaces.flatMap((ns) => [
+      ...forbidden.tables.map((t) => String.raw`${ns}\s*\.\s*${t}`),
+      // A namespace used bare could hand any table on.
+      String.raw`${ns}(?!\s*\.)`,
+    ]),
+  ];
+  if (!names.length) return null;
+  const code = blanked(text, true);
+  const inImport = (at: number) => imports.some((m) => at >= m.index && at < m.index + m[0].length);
+  const mention = new RegExp(String.raw`(?<![\w$.])(?:${names.join("|")})(?![\w$])`, "g");
+  for (const m of code.matchAll(mention)) {
+    if (inImport(m.index)) continue;
+    const end = m.index + m[0].length;
+    const after = code.slice(end, end + 40);
+    const before = code.slice(Math.max(0, m.index - 40), m.index);
+    const column = /^\s*\.\s*[\w$]+(?![\w$])(?!\s*\()/.test(after);
+    const readFrom = /\.(?:from|innerJoin|leftJoin|rightJoin|fullJoin)\(\s*$/.test(before);
+    // A whole row selected: `.select({ project: projects })`.
+    const selected = /\.select(?:Distinct)?\(\s*\{[^(){}]*$/.test(
+      code.slice(Math.max(0, m.index - 200), m.index),
+    );
+    if (!column && !readFrom && !selected) {
+      return `${m[0].replace(/\s+/g, "")} used for more than a read`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Every module `entry` loads (relative imports, type-only ones aside) that
+ * could write a forbidden table (the content's, by default), and how.
+ */
+function contentWrites(
+  entry: string,
+  read: (file: string) => string | null,
+  root: string,
+  forbidden: Forbidden = CONTENT,
+): string[] {
+  const seen = new Set<string>();
+  const queue = [entry];
+  const writers: string[] = [];
+  while (queue.length) {
+    const file = queue.pop()!;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const text = read(file);
+    // The publish module is fenced by the publish proof: an agent module may load only its
+    // read-only exports (`READ_ONLY_PUBLISH`), so its own writes are out of the agent's reach.
+    if (text === null || file === PUBLISH) continue;
+    const how = file === "db/schema.ts" ? null : contentWriteIn(text, forbidden);
+    if (how) writers.push(`${file}: ${how}`);
+    for (const imp of importsOf(file, text, root)) queue.push(imp.to);
+  }
+  return writers.sort();
+}
+
+describe("the content agent proposes, and never writes the content (plan phase 29)", () => {
+  it("loads no module that could write a content table, however it would", () => {
+    expect(contentWrites("ask/agent/content-work.ts", readSource, SRC)).toEqual([]);
+  });
+
+  it("would catch a write however it is spelled, and wherever it is imported from", () => {
+    const schema = (names: string) => `import { ${names} } from "../db/schema.js";\n`;
+    const planted: Record<string, string> = {
+      "ask/agent/content-work.ts": [
+        "plain",
+        "alias",
+        "namespace",
+        "bare",
+        "helper",
+        "variable",
+        "sql",
+        "identifier",
+        "truncate",
+        "merge",
+        "computed",
+        "reader",
+      ]
+        .map((name) => `import "../${name}.js";`)
+        .join("\n"),
+      "ask/plain.ts": `${schema("projectTranslations")}db.update(projectTranslations).set({});`,
+      "ask/alias.ts": `${schema("projectTranslations as pt")}db.update(pt).set({});`,
+      "ask/namespace.ts": `import * as s from "../db/schema.js";\ndb.insert(s.aiFaq).values({});`,
+      "ask/bare.ts": `import * as s from "../db/schema.js";\nconst { contentDocuments: docs } = s;`,
+      "ask/helper.ts": `${schema("mediaAssets")}write(tx, mediaAssets);`,
+      "ask/variable.ts": `${schema("postTranslations")}const table = postTranslations;`,
+      "ask/sql.ts": 'db.execute(sql`update "public"."project_translations" set hook = \'\'`);',
+      "ask/identifier.ts": 'db.execute(sql`delete from ${sql.identifier("content_documents")}`);',
+      "ask/truncate.ts": "db.execute(sql`truncate table skill_translations`);",
+      "ask/merge.ts": "db.execute(sql`merge into ai_faq using x on true`);",
+      "ask/computed.ts": "const m = await import(`../${name}.js`);",
+      // Reads only: from, joins, columns; and a table named in a comment or a label.
+      "ask/reader.ts": `${schema("projects, projectTranslations")}// we update projects elsewhere\nconst label = "the projects";\ndb.select({ id: projects.id }).from(projects).innerJoin(projectTranslations, eq(projectTranslations.projectId, projects.id));`,
+    };
+    expect(contentWrites("ask/agent/content-work.ts", (f) => planted[f] ?? null, SRC)).toEqual([
+      "ask/alias.ts: pt used for more than a read",
+      "ask/bare.ts: s used for more than a read",
+      "ask/computed.ts: an import that cannot be followed",
+      "ask/helper.ts: mediaAssets used for more than a read",
+      "ask/identifier.ts: a content table named for SQL",
+      "ask/merge.ts: SQL that writes a content table",
+      "ask/namespace.ts: s.aiFaq used for more than a read",
+      "ask/plain.ts: projectTranslations used for more than a read",
+      "ask/sql.ts: SQL that writes a content table",
+      "ask/truncate.ts: SQL that writes a content table",
+      "ask/variable.ts: postTranslations used for more than a read",
+    ]);
+  });
+});
+
+/** Every module of the API, specs aside. */
+const allSources = () =>
+  readdirSync(SRC).flatMap((name) => {
+    if (statSync(join(SRC, name)).isDirectory()) return sources(name);
+    return name.endsWith(".ts") && !name.includes(".spec.") ? [name] : [];
+  });
+
+/** The modules among `files` that load `target` (type-only imports aside). */
+function importersOf(
+  target: string,
+  files: readonly string[],
+  read: (file: string) => string | null,
+): string[] {
+  return files
+    .filter((file) => importsOf(file, read(file) ?? "", SRC).some((i) => i.to === target))
+    .sort();
+}
+
+describe("the content agent's apply runs only on the admin's decision (plan phase 30)", () => {
+  it("is loaded by the proposals' routes alone, which only the admin router mounts", () => {
+    const files = allSources();
+    expect(importersOf("ask/agent/apply.ts", files, readSource)).toEqual(["ask/agent/routes.ts"]);
+    expect(importersOf("ask/agent/routes.ts", files, readSource)).toEqual(["ask/admin.ts"]);
+  });
+
+  it("would see it loaded however the import is spelled", () => {
+    const planted: Record<string, string> = {
+      "ask/agent.ts": 'const decide = await import("./agent/apply.js");',
+      "ask/runs/runner.ts": 'export { applyProposal } from "../agent/apply.js";',
+      "ask/agent/content-work.ts": 'import * as decide from "./apply.js";',
+      "ask/agent/routes.ts": 'import { applyProposal } from "./apply.js";',
+      // Erased at build: it loads nothing.
+      "ask/agent/types.ts": 'import type { Decided } from "./apply.js";',
+    };
+    expect(
+      importersOf("ask/agent/apply.ts", Object.keys(planted), (f) => planted[f] ?? null),
+    ).toEqual([
+      "ask/agent.ts",
+      "ask/agent/content-work.ts",
+      "ask/agent/routes.ts",
+      "ask/runs/runner.ts",
+    ]);
+  });
+});
+
+describe("the FAQ pipeline proposes; only the admin's accept writes the FAQ (plan phase 31)", () => {
+  it("drafts with no module that could write the FAQ, a lesson, the journal or the content", () => {
+    expect(contentWrites("ask/agent/faq-chain.ts", readSource, SRC, FAQ_CHAIN)).toEqual([]);
+  });
+
+  it("would catch the chain writing a lesson or the journal, however it is spelled", () => {
+    const schema = (names: string) => `import { ${names} } from "../../db/schema.js";\n`;
+    const planted: Record<string, string> = {
+      "ask/agent/faq-chain.ts": [
+        `${schema("aiJournal, aiFaqProposals")}`,
+        // Reads and its own table: fine.
+        "db.select({ id: aiJournal.id }).from(aiJournal);",
+        "db.insert(aiFaqProposals).values({});",
+        'import "./lesson.js";',
+        'import "./journal.js";',
+      ].join("\n"),
+      "ask/agent/lesson.ts": `${schema("aiLessons")}db.update(aiLessons).set({});`,
+      "ask/agent/journal.ts": "db.execute(sql`update ai_journal set fix_ref = ${id}`);",
+    };
+    expect(
+      contentWrites("ask/agent/faq-chain.ts", (f) => planted[f] ?? null, SRC, FAQ_CHAIN),
+    ).toEqual([
+      "ask/agent/journal.ts: SQL that writes a content table",
+      "ask/agent/lesson.ts: aiLessons used for more than a read",
+    ]);
+    // The content agent's proof leaves lessons and the journal to others.
+    expect(contentWrites("ask/agent/faq-chain.ts", (f) => planted[f] ?? null, SRC)).toEqual([]);
+  });
+
+  it("decides only from its routes, which only the admin router mounts", () => {
+    const files = allSources();
+    expect(importersOf("ask/agent/faq-decide.ts", files, readSource)).toEqual([
+      "ask/agent/faq-routes.ts",
+    ]);
+    expect(importersOf("ask/agent/faq-routes.ts", files, readSource)).toEqual(["ask/admin.ts"]);
+    // The FAQ is written by the form's Save and by an accept, nowhere else.
+    expect(importersOf("ask/faq.ts", files, readSource)).toEqual([
+      "ask/admin.ts",
+      "ask/agent/faq-decide.ts",
+    ]);
+  });
+});
 
 describe("no writes from a laptop on the tunnel", () => {
   it("knows the production tunnel by its address, and nothing else", () => {

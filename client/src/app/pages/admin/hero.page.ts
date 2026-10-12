@@ -196,7 +196,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                     [attr.maxlength]="field.maxLength ?? null"
                     [class.uppercase]="field.key === 'locationCountry'"
                     [attr.aria-invalid]="identityIssue(field.key) ? true : null"
-                    [attr.aria-describedby]="identityIssue(field.key) ? field.key + '-issue' : null"
+                    [aria-describedby]="identityIssue(field.key) ? field.key + '-issue' : null"
                   />
                   <app-field-issue
                     [id]="field.key + '-issue'"

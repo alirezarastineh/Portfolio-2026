@@ -38,7 +38,9 @@ function message(id: string, name: string, status: string) {
 }
 
 /** What each admin endpoint answers; a function may vary its answer per call. */
-type Answer = unknown | ((call: number) => { status: number; body: unknown });
+type Reply = { status: number; body: unknown };
+/** A fixed body, or a reply per call (a promise, to hold it back until the test lets it go). */
+type Answer = unknown | ((call: number) => Reply | Promise<Reply>);
 
 interface FixtureProject {
   slug: string;
@@ -93,6 +95,43 @@ function projectRow(en: FixtureProject, de: FixtureProject, i: number) {
     updatedAt: NOW,
     translations: { en: text(en), de: text(de) },
   };
+}
+
+/** A post as the post editor loads it (`GET /admin/posts/w1`), English only. */
+function postRow() {
+  return {
+    id: "w1",
+    slug: "shipping-llms",
+    status: "draft",
+    publishedAt: null,
+    coverId: null,
+    coverPath: null,
+    tags: ["llm"],
+    canonicalUrl: "",
+    translations: {
+      en: {
+        title: "Shipping language models",
+        excerpt: "What it takes to ship a model to real users.",
+        body: "<p>A week of evals before every release.</p>",
+        seoTitle: "",
+        seoDescription: "",
+      },
+      de: null,
+    },
+    createdAt: HOUR_AGO,
+    updatedAt: HOUR_AGO,
+  };
+}
+
+/** A copilot reply held back until the test lets it go: the editor can close meanwhile. */
+function heldDraft(text: string, suggestionId: string) {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const answer = async () => {
+    await held;
+    return { status: 200, body: { text, model: "gemini-flash", suggestionId } };
+  };
+  return { answer, release };
 }
 
 function mediaAsset(id: string, name: string, change: Record<string, unknown> = {}) {
@@ -251,6 +290,121 @@ function perceptionView(tiers: { promoted: string[]; demoted: string[] }) {
       afterTrim: { answers: 4, rephrased: 1 },
       otherwise: { answers: 36, rephrased: 2 },
     },
+  };
+}
+
+/** A copilot skill version's numbers (`GET /admin/ai/skills`), nothing used unless given. */
+function skillVersion(version: string, change: Record<string, unknown> = {}) {
+  return {
+    version,
+    current: true,
+    uses: 0,
+    kept: 0,
+    edited: 0,
+    discarded: 0,
+    abstained: 0,
+    waiting: 0,
+    repaired: 0,
+    needsEye: 0,
+    alternativesKept: 0,
+    revised: 0,
+    decided: 0,
+    keepRate: null,
+    editRate: null,
+    medianEdit: null,
+    flagged: false,
+    first: null,
+    last: null,
+    ...change,
+  };
+}
+
+/** `GET /admin/ai/skills`: translate unused, the search description's current version flagged. */
+function copilotSkillsView() {
+  const skill = (
+    id: string,
+    version: string,
+    versions: unknown[],
+    more: {
+      models?: string;
+      gates?: string[];
+      leads?: string[];
+      critic?: boolean;
+      agent?: unknown[];
+    } = {},
+  ) => ({
+    id,
+    description: `What ${id} does, in a sentence long enough to read as one.`,
+    whenToUse: `When ${id} is what the field needs.`,
+    models: more.models ?? "text",
+    version,
+    gates: more.gates ?? [],
+    leads: more.leads ?? [],
+    critic: more.critic ?? false,
+    template: `The instructions ${id} sends.`,
+    versions,
+    agent: more.agent ?? [],
+  });
+  return {
+    rules: { keepFloor: 0.5, minimumDecided: 10 },
+    skills: [
+      skill("translate", "aaaaaaaaaaaa", [skillVersion("aaaaaaaaaaaa")], {
+        gates: ["tags", "numbers"],
+        critic: true,
+        // The content agent's drafts (plan phase 30), counted apart.
+        agent: [
+          skillVersion("aaaaaaaaaaaa", {
+            uses: 6,
+            kept: 4,
+            edited: 1,
+            discarded: 1,
+            decided: 6,
+            keepRate: 5 / 6,
+            editRate: 1 / 6,
+            medianEdit: 3,
+          }),
+        ],
+      }),
+      skill(
+        "seo",
+        "bbbbbbbbbbbb",
+        [
+          skillVersion("bbbbbbbbbbbb", {
+            uses: 14,
+            kept: 4,
+            edited: 1,
+            discarded: 7,
+            waiting: 2,
+            decided: 12,
+            keepRate: 5 / 12,
+            editRate: 1 / 12,
+            medianEdit: 2,
+            flagged: true,
+            first: HOUR_AGO,
+            last: NOW,
+            repaired: 2,
+            needsEye: 1,
+            alternativesKept: 3,
+          }),
+          skillVersion("cccccccccccc", {
+            current: false,
+            uses: 10,
+            kept: 9,
+            discarded: 1,
+            decided: 10,
+            keepRate: 0.9,
+            editRate: 0,
+            first: HOUR_AGO,
+            last: HOUR_AGO,
+          }),
+        ],
+        {
+          gates: ["length", "min-length", "bare", "language"],
+          leads: ["outcome", "problem", "stack"],
+        },
+      ),
+      skill("alt", "dddddddddddd", [skillVersion("dddddddddddd")], { models: "vision" }),
+    ],
   };
 }
 
@@ -738,6 +892,8 @@ function defaults(): Record<string, Answer> {
     "GET /admin/assistant/settings": { settings: assistantSettings(), env: ASSISTANT_ENV },
     "GET /admin/assistant/trust": trustView(),
     "GET /admin/assistant/runs": { runs: [] },
+    "GET /admin/assistant/proposals": { proposals: [] },
+    "GET /admin/assistant/faq-proposals": { proposals: [] },
     "GET /admin/assistant/outcomes": outcomesView("helpfulRate", false),
     "GET /admin/assistant/perception": perceptionView({ promoted: [], demoted: [] }),
     "GET /admin/assistant/router": routerView(),
@@ -773,6 +929,8 @@ function defaults(): Record<string, Answer> {
       byRoute: [],
       nightly: null,
     },
+    "GET /admin/ai/skills": copilotSkillsView(),
+    "POST /admin/ai/copilot/outcomes": { recorded: 1 },
     "GET /admin/assistant/reviews": {
       week: "2026-W40",
       previous: "2026-W39",
@@ -843,7 +1001,7 @@ async function fakeApi(
     }
     const { status, body } =
       typeof answer === "function"
-        ? (answer as (n: number) => { status: number; body: unknown })(call)
+        ? await (answer as (n: number) => Reply | Promise<Reply>)(call)
         : { status: 200, body: answer };
     return route.fulfill({ status, headers, json: body });
   };
@@ -1363,9 +1521,632 @@ test.describe("admin", () => {
     await openAdmin(page, "/admin/assistant");
 
     const tabs = page.getByRole("tablist", { name: "Assistant sections" });
-    await expect(tabs.getByRole("tab")).toHaveCount(10);
+    await expect(tabs.getByRole("tab")).toHaveCount(11);
     expect((await tabs.boundingBox())?.height ?? 99).toBeLessThan(44);
     await expect(page.getByText("Answering")).toBeVisible();
+  });
+
+  test("the Copilot tab shows each skill's keep rate per version, and flags one kept under half the time", async ({
+    page,
+    baseURL,
+  }) => {
+    const unmocked = await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Copilot" }).click();
+
+    const section = page.getByRole("region", { name: "The copilot's skills" });
+    await expect(section.getByRole("heading", { level: 3 })).toHaveText([
+      "Translate",
+      "Search description",
+      "Alt text",
+    ]);
+    const seo = section.getByRole("article", { name: "Search description" });
+    const table = seo.getByRole("table", {
+      name: "Search description: what became of its drafts, per version",
+    });
+    const current = table.getByRole("row", { name: /bbbbbbbbbbbb/ });
+    await expect(current.getByRole("rowheader")).toContainText("(current)");
+    await expect(current.getByRole("rowheader")).toContainText("kept under 50 %");
+    await expect(current.getByRole("cell")).toHaveText([
+      "14",
+      "4",
+      "1",
+      "7",
+      "0",
+      "2",
+      "42 %",
+      "8 %",
+      "2 words",
+    ]);
+    const older = table.getByRole("row", { name: /cccccccccccc/ });
+    await expect(older.getByRole("rowheader")).not.toContainText("kept under");
+    await expect(older.getByRole("cell").nth(6)).toHaveText("90 %");
+    // The content agent's drafts of a version, in a row of their own.
+    const agentRow = section
+      .getByRole("table", { name: "Translate: what became of its drafts, per version" })
+      .getByRole("row", { name: /agent proposals/ });
+    await expect(agentRow.getByRole("rowheader")).toContainText(
+      "aaaaaaaaaaaa (current) · agent proposals",
+    );
+    await expect(agentRow.getByRole("cell")).toHaveText([
+      "6",
+      "4",
+      "1",
+      "1",
+      "0",
+      "0",
+      "83 %",
+      "17 %",
+      "3 words",
+    ]);
+    await expect(
+      seo.getByText("Kept 42 % of the time over 12 decided drafts: under 50 %."),
+    ).toBeVisible();
+    // How each version made its drafts, one line each (plan phase 28).
+    await expect(
+      seo
+        .getByRole("list", { name: "Search description: how each version made its drafts" })
+        .getByRole("listitem"),
+    ).toHaveText([
+      "bbbbbbbbbbbb · Of 14 drafts: 2 repaired, 1 needed your eye, 3 kept from an alternative.",
+      "cccccccccccc · Of 10 drafts: 0 repaired, 0 needed your eye, 0 kept from an alternative.",
+    ]);
+    await expect(
+      seo.getByText("within the limit, long enough, no preamble or quotes, in the right language"),
+    ).toBeVisible();
+    await expect(
+      seo.getByText("3, each from its own angle (outcome first, problem first, how it was built)", {
+        exact: false,
+      }),
+    ).toBeVisible();
+
+    const translate = section.getByRole("article", { name: "Translate" });
+    await expect(
+      translate.getByText("0 of the 10 decided drafts a rate needs.", { exact: false }),
+    ).toBeVisible();
+    await expect(translate.getByText("Second reading", { exact: true })).toBeVisible();
+    await expect(
+      translate.getByText("0 revised by a second reading", { exact: false }),
+    ).toBeVisible();
+    await expect(
+      section.getByRole("article", { name: "Alt text" }).getByText("A model that reads images"),
+    ).toBeVisible();
+
+    await seo.getByText("What version bbbbbbbbbbbb tells the model").click();
+    await expect(seo.getByText("The instructions seo sends.")).toBeVisible();
+
+    const { violations } = await new AxeBuilder({ page })
+      .include("app-assistant-copilot")
+      .analyze();
+    expect(violations).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a tightened field saved as it is reports kept, and one discarded reports discarded", async ({
+    page,
+    baseURL,
+  }) => {
+    const verdicts: unknown[] = [];
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/sections/seo": {
+        section: "seo",
+        updatedAt: HOUR_AGO,
+        data: { en: content("en")["seo"], de: content("de")["seo"] },
+      },
+      "PUT /admin/sections/seo": { ok: true, updatedAt: NOW },
+      "POST /admin/ai/copilot": (n: number) => ({
+        status: 200,
+        body: { text: `Tight title ${n}`, model: "gemini-flash", suggestionId: id(n) },
+      }),
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/admin/ai/copilot/outcomes"))
+        verdicts.push(r.postDataJSON());
+    });
+    await openAdmin(page, "/admin/seo");
+
+    // Both languages tightened, then saved as they came.
+    await page.getByRole("button", { name: "Tighten the Page title with AI" }).click();
+    await expect(page.getByRole("textbox", { name: "Page title DE" })).toHaveValue("Tight title 2");
+    await expect(page.getByRole("textbox", { name: "Page title EN" })).toHaveValue("Tight title 1");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect
+      .poll(() => verdicts)
+      .toEqual([
+        {
+          outcomes: [
+            { id: id(1), outcome: "kept" },
+            { id: id(2), outcome: "kept" },
+          ],
+        },
+      ]);
+
+    // Tightened again, then discarded: the fields go back, and the drafts with them.
+    await page.getByRole("button", { name: "Tighten the Page title with AI" }).click();
+    await expect(page.getByRole("textbox", { name: "Page title DE" })).toHaveValue("Tight title 4");
+    await page.getByRole("button", { name: "Discard" }).click();
+    await expect(page.getByRole("textbox", { name: "Page title EN" })).toHaveValue("Tight title 1");
+    await expect.poll(() => verdicts).toHaveLength(2);
+    expect(verdicts[1]).toEqual({
+      outcomes: [
+        { id: id(3), outcome: "discarded", distance: null },
+        { id: id(4), outcome: "discarded", distance: null },
+      ],
+    });
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a tightened draft that still fails arrives whole with why, and another draft can be used", async ({
+    page,
+    baseURL,
+  }) => {
+    const verdicts: unknown[] = [];
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/sections/seo": {
+        section: "seo",
+        updatedAt: HOUR_AGO,
+        data: { en: content("en")["seo"], de: content("de")["seo"] },
+      },
+      "PUT /admin/sections/seo": { ok: true, updatedAt: NOW },
+      "POST /admin/ai/copilot": (n: number) => ({
+        status: 200,
+        body: {
+          text: `A page title that runs on and on past its limit ${n}`,
+          model: "gemini-flash",
+          suggestionId: id(n),
+          needsReview: ["4 characters over the limit of 60"],
+          lead: "order",
+          alternatives: [
+            { text: `Short title ${n}`, lead: "shortest" },
+            { text: `Sharp title ${n}`, lead: "strongest" },
+          ],
+        },
+      }),
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/admin/ai/copilot/outcomes"))
+        verdicts.push(r.postDataJSON());
+    });
+    await openAdmin(page, "/admin/seo");
+
+    await page.getByRole("button", { name: "Tighten the Page title with AI" }).click();
+    const english = page.getByRole("textbox", { name: "Page title EN" });
+    // Never cut: the whole draft, and why it needs a look, read with the field.
+    await expect(english).toHaveValue("A page title that runs on and on past its limit 1");
+    await expect(page.locator("#seo-title-en-draft")).toHaveText(
+      "Needs your eye: 4 characters over the limit of 60.",
+    );
+    await expect(english).toHaveAttribute("aria-describedby", "seo-title-en-draft");
+    // A polite live region holds the notes, so they are read out as the draft lands.
+    await expect(
+      page.locator("[aria-live=polite]").filter({ has: page.locator("#seo-title-en-draft") }),
+    ).toHaveCount(1);
+    const others = page.getByRole("list", { name: "Other drafts for Page title EN" });
+    await expect(others.getByRole("listitem")).toHaveCount(2);
+    const { violations } = await new AxeBuilder({ page }).include("app-field-pair").analyze();
+    expect(violations).toEqual([]);
+
+    await others
+      .getByRole("button", { name: "Use this draft (shortest) for Page title EN" })
+      .click();
+    await expect(english).toHaveValue("Short title 1");
+    // The button went with the choice: the field it filled has the focus.
+    await expect(english).toBeFocused();
+    await expect(page.locator("#seo-title-en-draft")).toHaveText("");
+    await expect(english).not.toHaveAttribute("aria-describedby");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect
+      .poll(() => verdicts)
+      .toEqual([
+        {
+          outcomes: [
+            { id: id(1), outcome: "kept", pick: 1 },
+            { id: id(2), outcome: "kept", pick: 0 },
+          ],
+        },
+      ]);
+    await expect(others).toHaveCount(0);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a suggested search description reports kept when the project is saved, discarded with its edits", async ({
+    page,
+    baseURL,
+  }) => {
+    const verdicts: unknown[] = [];
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    const unmocked = await fakeApi(page, baseURL, {
+      "PUT /admin/projects/p0": { ok: true },
+      "POST /admin/ai/copilot": (n: number) => ({
+        status: 200,
+        body: {
+          text: `Project one, a portfolio project: draft ${n}.`,
+          model: "gemini-flash",
+          suggestionId: id(n),
+        },
+      }),
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/admin/ai/copilot/outcomes"))
+        verdicts.push(r.postDataJSON());
+    });
+    await openAdmin(page, "/admin/projects/project-one");
+
+    const field = page.getByRole("textbox", { name: "Search description (en)" });
+    const suggest = page.getByRole("button", {
+      name: "Suggest a search description in EN with AI",
+    });
+    await suggest.click();
+    await expect(field).toHaveValue("Project one, a portfolio project: draft 1.");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => verdicts).toEqual([{ outcomes: [{ id: id(1), outcome: "kept" }] }]);
+
+    await suggest.click();
+    await expect(field).toHaveValue("Project one, a portfolio project: draft 2.");
+    await page.getByRole("button", { name: "Discard" }).click();
+    await expect(field).toHaveValue("Project one, a portfolio project: draft 1.");
+    await expect.poll(() => verdicts).toHaveLength(2);
+    expect(verdicts[1]).toEqual({
+      outcomes: [{ id: id(2), outcome: "discarded", distance: null }],
+    });
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a suggested search description offers its other drafts; the one used takes focus and is judged with its pick", async ({
+    page,
+    baseURL,
+  }) => {
+    const verdicts: unknown[] = [];
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    const unmocked = await fakeApi(page, baseURL, {
+      "PUT /admin/projects/p0": { ok: true },
+      "POST /admin/ai/copilot": (n: number) => ({
+        status: 200,
+        body: {
+          text: `Project one made search fast for support teams: draft ${n}.`,
+          model: "gemini-flash",
+          suggestionId: id(n),
+          lead: "outcome",
+          alternatives: [
+            {
+              text: `Support teams waited on search until project one: draft ${n}.`,
+              lead: "problem",
+            },
+            { text: "Too short.", lead: "stack", needsReview: ["10 characters; at least 50"] },
+          ],
+        },
+      }),
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/admin/ai/copilot/outcomes"))
+        verdicts.push(r.postDataJSON());
+    });
+    await openAdmin(page, "/admin/projects/project-one");
+
+    const field = page.getByRole("textbox", { name: "Search description (en)" });
+    await page.getByRole("button", { name: "Suggest a search description in EN with AI" }).click();
+    await expect(field).toHaveValue("Project one made search fast for support teams: draft 1.");
+    const others = page.getByRole("list", { name: "Other drafts for Search description EN" });
+    await expect(others.getByRole("listitem")).toHaveCount(2);
+    const { violations } = await new AxeBuilder({ page })
+      .include("app-copilot-suggest")
+      .include("#seoDescription-en")
+      .analyze();
+    expect(violations).toEqual([]);
+
+    // A draft that still fails: in the field, with its note read with it.
+    await others
+      .getByRole("button", { name: "Use this draft (how it was built) for Search description EN" })
+      .click();
+    await expect(field).toHaveValue("Too short.");
+    await expect(field).toBeFocused();
+    await expect(page.locator("#seoDescription-en-draft")).toHaveText(
+      "Needs your eye: 10 characters; at least 50.",
+    );
+    await expect(field).toHaveAttribute("aria-describedby", "seoDescription-en-draft");
+
+    await others
+      .getByRole("button", { name: "Use this draft (problem first) for Search description EN" })
+      .click();
+    await expect(field).toHaveValue("Support teams waited on search until project one: draft 1.");
+    await expect(field).toBeFocused();
+    await expect(page.locator("#seoDescription-en-draft")).toHaveText("");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect
+      .poll(() => verdicts)
+      .toEqual([{ outcomes: [{ id: id(1), outcome: "kept", pick: 1 }] }]);
+    await expect(others).toHaveCount(0);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a suggested alt text reports kept when saved, discarded when the details close unsaved", async ({
+    page,
+    baseURL,
+  }) => {
+    const verdicts: unknown[] = [];
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    const unmocked = await fakeApi(page, baseURL, {
+      "POST /admin/ai/copilot": (n: number) => ({
+        status: 200,
+        body: {
+          text: `Architekturdiagramm ${n}`,
+          model: "gemini-flash",
+          suggestionId: id(n),
+          // The first draft still fails a check (plan phase 28).
+          ...(n === 1
+            ? { needsReview: ['starts with "image of": say what it shows instead'] }
+            : {}),
+        },
+      }),
+      "PATCH /admin/media/a1": () => ({ status: 200, body: { ok: true } }),
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/admin/ai/copilot/outcomes"))
+        verdicts.push(r.postDataJSON());
+    });
+    await openAdmin(page, "/admin/media");
+
+    const open = page.getByRole("button", { name: "Details of architecture.png" });
+    await open.click();
+    const details = page.locator("hlm-sheet-content");
+    await details.getByRole("button", { name: "Suggest alt text in German with AI" }).click();
+    await expect(details.getByLabel("de", { exact: true })).toHaveValue("Architekturdiagramm 1");
+    await expect(details.locator("#alt-de-draft")).toHaveText(
+      'Needs your eye: starts with "image of": say what it shows instead.',
+    );
+    await expect(details.getByLabel("de", { exact: true })).toHaveAttribute(
+      "aria-describedby",
+      "alt-de-draft",
+    );
+    await details.getByRole("button", { name: "Save alt text" }).click();
+    await expect.poll(() => verdicts).toEqual([{ outcomes: [{ id: id(1), outcome: "kept" }] }]);
+    // Saved: the note goes with the draft.
+    await expect(details.locator("#alt-de-draft")).toHaveText("");
+
+    await details.getByRole("button", { name: "Suggest alt text in German with AI" }).click();
+    await expect(details.getByLabel("de", { exact: true })).toHaveValue("Architekturdiagramm 2");
+    await page.keyboard.press("Escape");
+    await expect.poll(() => verdicts).toHaveLength(2);
+    expect(verdicts[1]).toEqual({
+      outcomes: [{ id: id(2), outcome: "discarded", distance: null }],
+    });
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a drafted FAQ answer reports kept when the entry is saved, discarded when it is cancelled", async ({
+    page,
+    baseURL,
+  }) => {
+    const verdicts: unknown[] = [];
+    const created: unknown[] = [];
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/faq": { faq: [] },
+      "POST /admin/assistant/faq": () => ({ status: 200, body: { ok: true, id: "f1" } }),
+      "POST /admin/ai/copilot": (n: number) => ({
+        status: 200,
+        body: {
+          text: `Yes, within the EU (draft ${n}).`,
+          model: "gemini-flash",
+          suggestionId: id(n),
+          ...(n === 1 ? { needsReview: ["states 2026, which no cited document does"] } : {}),
+        },
+      }),
+    });
+    page.on("request", (r) => {
+      if (r.method() !== "POST") return;
+      if (r.url().endsWith("/admin/ai/copilot/outcomes")) verdicts.push(r.postDataJSON());
+      if (r.url().endsWith("/admin/assistant/faq")) created.push(r.postDataJSON());
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "FAQ" }).click();
+
+    const english = page.locator("fieldset").first();
+    const draft = english.getByRole("button", { name: "Draft an answer from the portfolio" });
+    await page.getByRole("button", { name: "New entry" }).click();
+    await page.locator("#faq-q-en").fill("Is he open to relocating?");
+    await draft.click();
+    await expect(page.locator("#faq-a-en")).toHaveValue("Yes, within the EU (draft 1).");
+    // What the draft still fails, read with the answer (plan phase 28).
+    await expect(page.locator("#faq-a-en-draft")).toHaveText(
+      "Needs your eye: states 2026, which no cited document does.",
+    );
+    await expect(page.locator("#faq-a-en")).toHaveAttribute("aria-describedby", "faq-a-en-draft");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(() => verdicts).toEqual([{ outcomes: [{ id: id(1), outcome: "kept" }] }]);
+    expect(created).toEqual([
+      {
+        isVisible: true,
+        translations: {
+          en: { question: "Is he open to relocating?", answer: "Yes, within the EU (draft 1)." },
+        },
+      },
+    ]);
+
+    await page.getByRole("button", { name: "New entry" }).click();
+    await page.locator("#faq-q-en").fill("Does he speak German?");
+    await draft.click();
+    await expect(page.locator("#faq-a-en")).toHaveValue("Yes, within the EU (draft 2).");
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect.poll(() => verdicts).toHaveLength(2);
+    expect(verdicts[1]).toEqual({
+      outcomes: [{ id: id(2), outcome: "discarded", distance: null }],
+    });
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a suggested search description reports kept when the post is saved, discarded with its edits", async ({
+    page,
+    baseURL,
+  }) => {
+    const verdicts: unknown[] = [];
+    const saved: unknown[] = [];
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    const post = postRow();
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/posts": {
+        posts: [{ ...post, translations: { en: { title: post.translations.en.title } } }],
+      },
+      "GET /admin/posts/w1": { post },
+      "PUT /admin/posts/w1": { ok: true },
+      "POST /admin/ai/copilot": (n: number) => ({
+        status: 200,
+        body: {
+          text: `Shipping language models to real users: draft ${n}.`,
+          model: "gemini-flash",
+          suggestionId: id(n),
+          ...(n === 1 ? { needsReview: ["3 characters over the limit of 155"] } : {}),
+        },
+      }),
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/admin/ai/copilot/outcomes"))
+        verdicts.push(r.postDataJSON());
+      if (r.method() === "PUT" && r.url().endsWith("/admin/posts/w1")) saved.push(r.postDataJSON());
+    });
+    await openAdmin(page, "/admin/writing/shipping-llms");
+
+    const field = page.locator("#post-seo-description-en");
+    const suggest = page.getByRole("button", {
+      name: "Suggest a search description in EN with AI",
+    });
+    await suggest.click();
+    await expect(field).toHaveValue("Shipping language models to real users: draft 1.");
+    // What the draft still fails, read with the field (plan phase 28).
+    await expect(page.locator("#post-seo-description-en-draft")).toHaveText(
+      "Needs your eye: 3 characters over the limit of 155.",
+    );
+    await expect(field).toHaveAttribute("aria-describedby", "post-seo-description-en-draft");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => verdicts).toEqual([{ outcomes: [{ id: id(1), outcome: "kept" }] }]);
+    expect(saved).toEqual([
+      expect.objectContaining({
+        translations: expect.objectContaining({
+          en: expect.objectContaining({
+            seoDescription: "Shipping language models to real users: draft 1.",
+          }),
+        }),
+      }),
+    ]);
+
+    await suggest.click();
+    await expect(field).toHaveValue("Shipping language models to real users: draft 2.");
+    await page.getByRole("button", { name: "Discard" }).click();
+    await expect(field).toHaveValue("Shipping language models to real users: draft 1.");
+    await expect.poll(() => verdicts).toHaveLength(2);
+    expect(verdicts[1]).toEqual({
+      outcomes: [{ id: id(2), outcome: "discarded", distance: null }],
+    });
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a FAQ answer drafted for a form cancelled meanwhile never lands, and reports discarded", async ({
+    page,
+    baseURL,
+  }) => {
+    const verdicts: unknown[] = [];
+    const late = heldDraft("Yes, within the EU.", "00000000-0000-4000-8000-0000000000f1");
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/faq": { faq: [] },
+      "POST /admin/ai/copilot": late.answer,
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/admin/ai/copilot/outcomes"))
+        verdicts.push(r.postDataJSON());
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "FAQ" }).click();
+
+    await page.getByRole("button", { name: "New entry" }).click();
+    await page.locator("#faq-q-en").fill("Is he open to relocating?");
+    await page
+      .locator("fieldset")
+      .first()
+      .getByRole("button", { name: "Draft an answer from the portfolio" })
+      .click();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await page.getByRole("button", { name: "New entry" }).click();
+    late.release();
+    await expect
+      .poll(() => verdicts)
+      .toEqual([
+        {
+          outcomes: [
+            { id: "00000000-0000-4000-8000-0000000000f1", outcome: "discarded", distance: null },
+          ],
+        },
+      ]);
+    // The new entry's answer stays empty.
+    await expect(page.locator("#faq-a-en")).toHaveValue("");
+    expect(unmocked).toEqual([]);
+  });
+
+  test("an alt text suggested for a file closed meanwhile lands in no file, and reports discarded", async ({
+    page,
+    baseURL,
+  }) => {
+    const verdicts: unknown[] = [];
+    const late = heldDraft("Architekturdiagramm", "00000000-0000-4000-8000-0000000000a1");
+    const unmocked = await fakeApi(page, baseURL, { "POST /admin/ai/copilot": late.answer });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/admin/ai/copilot/outcomes"))
+        verdicts.push(r.postDataJSON());
+    });
+    await openAdmin(page, "/admin/media");
+
+    await page.getByRole("button", { name: "Details of architecture.png" }).click();
+    const details = page.locator("hlm-sheet-content");
+    await details.getByRole("button", { name: "Suggest alt text in German with AI" }).click();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Details of old-screenshot.png" }).click();
+    await expect(details.getByRole("heading", { name: "old-screenshot.png" })).toBeVisible();
+    late.release();
+    await expect
+      .poll(() => verdicts)
+      .toEqual([
+        {
+          outcomes: [
+            { id: "00000000-0000-4000-8000-0000000000a1", outcome: "discarded", distance: null },
+          ],
+        },
+      ]);
+    await expect(details.getByLabel("de", { exact: true })).not.toHaveValue("Architekturdiagramm");
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a search description suggested for a project left meanwhile reports discarded", async ({
+    page,
+    baseURL,
+  }) => {
+    const verdicts: unknown[] = [];
+    const late = heldDraft("Project one: a draft.", "00000000-0000-4000-8000-0000000000b1");
+    const unmocked = await fakeApi(page, baseURL, { "POST /admin/ai/copilot": late.answer });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/admin/ai/copilot/outcomes"))
+        verdicts.push(r.postDataJSON());
+    });
+    await openAdmin(page, "/admin/projects/project-one");
+
+    await page.getByRole("button", { name: "Suggest a search description in EN with AI" }).click();
+    // Nothing has changed yet, so the editor lets the admin leave without asking.
+    await page
+      .locator("[data-slot=sidebar-inner]")
+      .getByRole("link", { name: /^Dashboard/ })
+      .click();
+    await expect(page.getByRole("region", { name: "At a glance" })).toBeVisible();
+    late.release();
+    await expect
+      .poll(() => verdicts)
+      .toEqual([
+        {
+          outcomes: [
+            { id: "00000000-0000-4000-8000-0000000000b1", outcome: "discarded", distance: null },
+          ],
+        },
+      ]);
+    expect(unmocked).toEqual([]);
   });
 
   test("the assistant shows the day's signals and an answer's timeline", async ({
@@ -2979,10 +3760,13 @@ test.describe("admin", () => {
   }) => {
     const saved: unknown[] = [];
     const asked: unknown[] = [];
+    const verdicts: unknown[] = [];
+    const suggestionId = "00000000-0000-4000-8000-0000000000d1";
     const unmocked = await fakeApi(page, baseURL, {
       "POST /admin/ai/copilot": {
         text: "OCR → LLM: page text\nLLM → review queue: low-confidence fields",
         model: "gemini-flash",
+        suggestionId,
       },
       "PATCH /admin/media/a1": () => ({ status: 200, body: { ok: true } }),
     });
@@ -2991,6 +3775,8 @@ test.describe("admin", () => {
         saved.push(r.postDataJSON());
       if (r.method() === "POST" && r.url().endsWith("/admin/ai/copilot"))
         asked.push(r.postDataJSON());
+      if (r.method() === "POST" && r.url().endsWith("/admin/ai/copilot/outcomes"))
+        verdicts.push(r.postDataJSON());
     });
     await openAdmin(page, "/admin/media");
 
@@ -3012,6 +3798,10 @@ test.describe("admin", () => {
           descriptionDe: null,
         },
       ]);
+    // Saved as it came: the draft was kept (plan phase 27).
+    await expect
+      .poll(() => verdicts)
+      .toEqual([{ outcomes: [{ id: suggestionId, outcome: "kept" }] }]);
     expect(unmocked).toEqual([]);
   });
 
@@ -3048,6 +3838,471 @@ test.describe("admin", () => {
       .evaluate((el) => el.parentElement!.getAnimations().length);
     expect(animations).toBe(0);
   });
+
+  /** A content agent's proposal (plan phases 29–30), as `GET /admin/assistant/proposals` lists it. */
+  function proposalRow(id: string, label: string, change: Record<string, unknown> = {}) {
+    return {
+      id,
+      createdAt: HOUR_AGO,
+      updatedAt: HOUR_AGO,
+      runId: "00000000-0000-4000-8000-000000000001",
+      goal: "translations",
+      kind: "project",
+      entityId: "p0",
+      field: "hook",
+      locale: "de",
+      label,
+      before: "",
+      after: `Entwurf für ${label}`,
+      skill: "translate",
+      version: "aaaaaaaaaaaa",
+      useId: null,
+      flags: [],
+      notes: [],
+      status: "proposed",
+      decidedAt: null,
+      appliedAt: null,
+      revertedAt: null,
+      changed: false,
+      ...change,
+    };
+  }
+
+  const contentRun = {
+    id: "00000000-0000-4000-8000-000000000001",
+    kind: "agent",
+    status: "done",
+    params: { task: "content", goals: ["translations", "seo"], maxItems: 20, maxUsd: 0.05 },
+    progress: { total: 3, done: 3, failed: 0, unavailable: 0 },
+    summary: { proposed: 2, needsYou: 1, stale: 0 },
+    usd: 0.0123,
+    error: null,
+    createdAt: HOUR_AGO,
+    startedAt: HOUR_AGO,
+    finishedAt: NOW,
+    heartbeatAt: NOW,
+    live: false,
+  };
+
+  test("the Agent page starts a content run, and applies, edits, rejects and reverts its proposals", async ({
+    page,
+    baseURL,
+  }) => {
+    const hook = proposalRow("a1", "Project one · Hook (DE)");
+    const name = proposalRow("a2", "Project one · Name (DE)", { field: "name" });
+    const headline = proposalRow("a3", "Site copy · profile.heroHeadline (DE)", {
+      kind: "section",
+      entityId: "ui",
+      field: "profile.heroHeadline",
+      status: "needs_you",
+      after: "Kurz.",
+      flags: ["min-length"],
+      notes: ["5 characters; at least 50"],
+    });
+    const seo = proposalRow("a4", "Project one · Search description (EN)", {
+      goal: "seo",
+      field: "seoDescription",
+      locale: "en",
+      status: "applied",
+      after: "A retrieval system for support teams.",
+      appliedAt: NOW,
+    });
+    const sent: { url: string; body: unknown }[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/runs": { runs: [contentRun] },
+      "GET /admin/assistant/proposals": { proposals: [hook, name, headline, seo] },
+      "POST /admin/assistant/runs": () => ({ status: 202, body: { id: "r2" } }),
+      "POST /admin/assistant/proposals/a1/apply": {
+        proposal: { ...hook, status: "applied", appliedAt: NOW },
+      },
+      "POST /admin/assistant/proposals/a3/apply": {
+        proposal: { ...headline, status: "applied", after: "Ein längerer, besserer Titel." },
+      },
+      "POST /admin/assistant/proposals/a2/reject": { proposal: { ...name, status: "rejected" } },
+      "POST /admin/assistant/proposals/a4/revert": {
+        proposal: { ...seo, status: "reverted", revertedAt: NOW },
+      },
+    });
+    // What each listing asked for: the server filters by status.
+    const listed: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().includes("/admin/assistant/")) {
+        sent.push({ url: new URL(r.url()).pathname, body: r.postDataJSON() });
+      }
+      const url = new URL(r.url());
+      if (r.method() === "GET" && url.pathname === "/admin/assistant/proposals") {
+        listed.push(url.search);
+      }
+    });
+    await openAdmin(page, "/admin/agent");
+
+    // The run that drafted them, its cost and what it came to.
+    const runs = page.getByRole("region", { name: "Runs" });
+    await expect(runs.getByText(/Done · Translations, Search descriptions/)).toBeVisible();
+    await expect(runs.getByText("3 of 3 items · $0.0123")).toBeVisible();
+    await expect(runs.getByText("2 proposed, 1 need you")).toBeVisible();
+
+    // Open proposals, grouped by what they change; the applied one is under its filter.
+    const proposals = page.getByRole("region", { name: "Proposals" });
+    await expect(proposals.getByRole("heading", { level: 3 })).toHaveText([
+      "Project one",
+      "Site copy",
+    ]);
+    await expect(proposals.getByRole("article")).toHaveCount(3);
+    await expect(proposals.getByText("5 characters; at least 50")).toBeVisible();
+    expect(listed[0]).toBe("?status=proposed%2Cneeds_you");
+    // An editor open on an item would save its old text back: the page says so.
+    await expect(
+      proposals.getByText("An editor already open on the same item keeps the text it loaded", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    const { violations } = await new AxeBuilder({ page }).include("app-admin-agent").analyze();
+    expect(violations).toEqual([]);
+
+    // A run: the goals chosen and the limits, as the API takes them.
+    await page.getByRole("checkbox", { name: "Alt text" }).uncheck();
+    await page.getByLabel("Items, at most").fill("5");
+    await page.getByRole("button", { name: "Start a run" }).click();
+    await expect
+      .poll(() => sent.find((s) => s.url === "/admin/assistant/runs")?.body)
+      .toEqual({
+        kind: "agent",
+        task: "content",
+        goals: ["translations", "seo"],
+        maxItems: 5,
+        maxUsd: 0.05,
+      });
+
+    // Apply: it leaves the open list, and focus lands on the list's heading.
+    await proposals.getByRole("button", { name: "Apply Project one · Hook (DE)" }).click();
+    await expect(proposals.getByRole("article")).toHaveCount(2);
+    await expect(proposals.getByRole("heading", { name: "Proposals" })).toBeFocused();
+    await expect(page.locator("#agent-said")).toHaveText(
+      "Applied to the draft: Project one · Hook (DE).",
+    );
+
+    // Edit, then apply the admin's text.
+    await proposals
+      .getByRole("button", { name: "Edit Site copy · profile.heroHeadline (DE)" })
+      .click();
+    const text = proposals.getByLabel("Text for Site copy · profile.heroHeadline (DE)");
+    await expect(text).toBeFocused();
+    await text.fill("Ein längerer, besserer Titel.");
+    await proposals.getByRole("button", { name: "Apply this text" }).click();
+    await expect
+      .poll(() => sent.find((s) => s.url.endsWith("/a3/apply"))?.body)
+      .toEqual({ text: "Ein längerer, besserer Titel." });
+
+    await proposals.getByRole("button", { name: "Reject Project one · Name (DE)" }).click();
+    await expect(proposals.getByRole("article")).toHaveCount(0);
+    await expect(proposals.getByText("No proposals wait for you.", { exact: false })).toBeVisible();
+
+    // Revert an applied one: the filter asks the server for the applied ones.
+    await page.getByRole("button", { name: "Applied", exact: true }).click();
+    await expect.poll(() => listed.at(-1)).toBe("?status=applied");
+    await proposals
+      .getByRole("button", { name: "Revert Project one · Search description (EN)" })
+      .click();
+    await expect.poll(() => sent.some((s) => s.url.endsWith("/a4/revert"))).toBe(true);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the Agent page applies a selection, and says which were stale", async ({
+    page,
+    baseURL,
+  }) => {
+    const first = proposalRow("b1", "Project one · Hook (DE)");
+    const second = proposalRow("b2", "Project one · Role (DE)", { field: "role", changed: true });
+    const sent: unknown[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/proposals": (n: number) => ({
+        status: 200,
+        body: {
+          proposals:
+            n === 1
+              ? [first, second]
+              : [
+                  { ...first, status: "applied" },
+                  { ...second, status: "stale" },
+                ],
+        },
+      }),
+      "POST /admin/assistant/proposals/decide": {
+        results: [
+          { id: "b1", proposal: { ...first, status: "applied" } },
+          { id: "b2", error: "stale" },
+        ],
+      },
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/admin/assistant/proposals/decide")) {
+        sent.push(r.postDataJSON());
+      }
+    });
+    await openAdmin(page, "/admin/agent");
+    const proposals = page.getByRole("region", { name: "Proposals" });
+    // A field changed since its draft is shown before anything is applied.
+    await expect(
+      proposals.getByText("Its field changed since the draft", { exact: false }),
+    ).toBeVisible();
+
+    await proposals.getByRole("checkbox", { name: "Select Project one · Hook (DE)" }).check();
+    await proposals.getByRole("checkbox", { name: "Select Project one · Role (DE)" }).check();
+    await proposals.getByRole("button", { name: "Apply selected" }).click();
+    await expect.poll(() => sent).toEqual([{ ids: ["b1", "b2"], action: "apply" }]);
+    await expect(page.locator("#agent-said")).toHaveText(
+      "Applied 1; 1 not: Its field changed since the draft, so nothing was overwritten: it is stale now.",
+    );
+    // Read again: neither is open now.
+    await expect(proposals.getByRole("article")).toHaveCount(0);
+    expect(unmocked).toEqual([]);
+  });
+
+  /** An FAQ pipeline proposal (plan phase 31), as `GET /admin/assistant/faq-proposals` lists it. */
+  function faqProposalRow(change: Record<string, unknown> = {}) {
+    return {
+      id: "f0000000-0000-4000-8000-000000000001",
+      createdAt: NOW,
+      updatedAt: NOW,
+      source: "insight",
+      snapshotId: SNAPSHOT_ID,
+      topicIndex: 0,
+      topic: {
+        snapshotId: SNAPSHOT_ID,
+        title: "Relocation and remote work",
+        questions: 6,
+        unanswered: true,
+      },
+      journalId: null,
+      questionEn: "Is he open to relocating?",
+      questionDe: "Ist er offen für einen Umzug?",
+      answerEn: "Yes, within the EU.",
+      answerDe: "Ja, innerhalb der EU.",
+      uses: {},
+      flags: [],
+      notes: [],
+      usd: 0.0012,
+      status: "proposed",
+      decidedAt: null,
+      faqId: null,
+      lessonId: null,
+      lessons: [],
+      newLesson: null,
+      ...change,
+    };
+  }
+
+  test("the FAQ pipeline drafts an entry from an insight topic; accepted, it is used and measured", async ({
+    page,
+    baseURL,
+  }) => {
+    const FAQ_ID = "fa000000-0000-4000-8000-000000000001";
+    const open = faqProposalRow();
+    const accepted = { ...open, status: "accepted", faqId: FAQ_ID, lessonId: LESSON_ID };
+    const edited = "Ja, innerhalb der EU, nach Absprache.";
+    const snapshot = {
+      id: SNAPSHOT_ID,
+      createdAt: HOUR_AGO,
+      trigger: "admin",
+      analysed: 64,
+      newestMessageId: "m_newest0001",
+      newestAt: HOUR_AGO,
+      topics: [
+        {
+          title: "Relocation and remote work",
+          summary: "Visitors ask whether he would move for a role.",
+          questions: 6,
+          examples: ["Would he move to Berlin?"],
+          unanswered: true,
+        },
+      ],
+      reason: "",
+      usd: 0.0004,
+      seenAt: HOUR_AGO,
+    };
+    const entry = {
+      id: FAQ_ID,
+      position: 0,
+      isVisible: true,
+      translations: {
+        en: { question: open.questionEn, answer: open.answerEn },
+        de: { question: open.questionDe, answer: edited },
+      },
+      updatedAt: NOW,
+    };
+    const sent: { url: string; body: unknown }[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/insights": { snapshot, trigger: null },
+      "POST /admin/assistant/faq-proposals": () => ({ status: 201, body: { proposal: open } }),
+      "GET /admin/assistant/faq-proposals": (n: number) => ({
+        status: 200,
+        body: { proposals: n === 1 ? [open] : [accepted] },
+      }),
+      "GET /admin/assistant/faq": (n: number) => ({
+        status: 200,
+        body: { faq: n === 1 ? [] : [entry] },
+      }),
+      [`POST /admin/assistant/faq-proposals/${open.id}/accept`]: {
+        proposal: accepted,
+        linked: { journal: false, lesson: LESSON_ID },
+      },
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().includes("/admin/assistant/faq-proposals")) {
+        sent.push({ url: new URL(r.url()).pathname, body: r.postDataJSON() });
+      }
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Insights" }).click();
+
+    // Paid, and named by its topic.
+    const draftIt = page.getByRole("button", { name: "Draft an FAQ proposal (paid)" });
+    await expect(draftIt).toHaveAccessibleDescription("Relocation and remote work");
+    await draftIt.click();
+    await expect
+      .poll(() => sent[0])
+      .toEqual({
+        url: "/admin/assistant/faq-proposals",
+        body: { source: "insight", snapshotId: SNAPSHOT_ID, topic: 0 },
+      });
+
+    // The FAQ tab, the proposal's heading focused.
+    await expect(page.getByRole("tab", { name: "FAQ" })).toHaveAttribute("aria-selected", "true");
+    const heading =
+      "From the insight topic “Relocation and remote work” (6 questions, not answered)";
+    await expect(page.locator(":focus")).toHaveText(heading);
+    const proposals = page.getByRole("region", { name: "Proposals" });
+    const card = proposals.getByRole("article", { name: heading });
+    await expect(
+      card.getByRole("group", { name: /^en$/i }).getByLabel("Question", { exact: true }),
+    ).toHaveValue("Is he open to relocating?");
+    await card
+      .getByRole("group", { name: /^de$/i })
+      .getByLabel("Answer", { exact: true })
+      .fill(edited);
+    // Measured by a new lesson, in the admin's words, about the topic's words.
+    await expect(card.locator("select")).toHaveValue("new");
+    await expect(card.getByLabel("Words its questions contain")).toHaveValue(
+      "relocation, remote, work",
+    );
+    const { violations } = await new AxeBuilder({ page })
+      .include("app-faq-proposals")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+      .analyze();
+    expect(violations.map((v) => v.id)).toEqual([]);
+
+    await card.getByRole("button", { name: "Accept" }).click();
+    await expect
+      .poll(() => sent[1])
+      .toEqual({
+        url: `/admin/assistant/faq-proposals/${open.id}/accept`,
+        body: {
+          isVisible: true,
+          translations: {
+            en: { question: open.questionEn, answer: open.answerEn },
+            de: { question: open.questionDe, answer: edited },
+          },
+          lesson: {
+            statement:
+              "When visitors ask about relocation and remote work, the FAQ entry answers it from the portfolio.",
+            scope: ["relocation", "remote", "work"],
+          },
+        },
+      });
+    // Used now: the entry is listed with where it came from; the proposal is gone.
+    await expect(proposals.getByRole("article")).toHaveCount(0);
+    await expect(page.getByText("From insights: Relocation and remote work")).toBeVisible();
+    await expect(proposals.getByRole("heading", { name: "Proposals" })).toBeFocused();
+    await expect(
+      proposals.getByText("Accepted: it is an FAQ entry now, used at once; a lesson measures it."),
+    ).toBeAttached();
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a journal entry's FAQ proposal with a content gap waits for the admin's words, or is rejected", async ({
+    page,
+    baseURL,
+  }) => {
+    const gap = faqProposalRow({
+      id: "f0000000-0000-4000-8000-000000000002",
+      source: "journal",
+      snapshotId: null,
+      topicIndex: null,
+      topic: null,
+      journalId: JOURNAL_ID,
+      answerEn: "",
+      answerDe: "",
+      status: "needs_you",
+      notes: [
+        "Content gap: the portfolio does not answer this question, so no answer was drafted. Write it yourself, or add it to the portfolio first.",
+      ],
+      newLesson:
+        "a lesson from the journal needs 3 accepted or fixed entries: make it in the Journal, then link it here",
+    });
+    const sent: { url: string; body: unknown }[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/journal": {
+        entries: [journalEntry({ fixType: "faq", fixRef: null })],
+        counts: { proposed: 1, accepted: 0, fixed: 0, retired: 0 },
+      },
+      "POST /admin/assistant/faq-proposals": () => ({ status: 201, body: { proposal: gap } }),
+      "GET /admin/assistant/faq-proposals": (n: number) => ({
+        status: 200,
+        body: { proposals: n === 1 ? [gap] : [{ ...gap, status: "rejected" }] },
+      }),
+      "GET /admin/assistant/faq": { faq: [] },
+      [`POST /admin/assistant/faq-proposals/${gap.id}/reject`]: {
+        proposal: { ...gap, status: "rejected" },
+      },
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().includes("/admin/assistant/faq-proposals")) {
+        sent.push({ url: new URL(r.url()).pathname, body: r.postDataJSON() });
+      }
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Journal" }).click();
+    await page.getByRole("button", { name: "Draft an FAQ proposal (paid)" }).click();
+    await expect
+      .poll(() => sent[0])
+      .toEqual({
+        url: "/admin/assistant/faq-proposals",
+        body: { source: "journal", entryId: JOURNAL_ID },
+      });
+
+    await expect(page.locator(":focus")).toHaveText("From a journal entry");
+    const card = page
+      .getByRole("region", { name: "Proposals" })
+      .getByRole("article", { name: "From a journal entry" });
+    await expect(card.getByText("Content gap:", { exact: false })).toBeVisible();
+    // Nothing was invented: the answers are the admin's to write.
+    const accept = card.getByRole("button", { name: "Accept" });
+    await expect(accept).toBeDisabled();
+    await expect(
+      card.getByText(
+        "Write both the question and the answer in EN (3 characters or more), or leave both empty.",
+      ),
+    ).toBeVisible();
+    // A journal lesson is made in the Journal: here it is not measured.
+    await expect(card.locator("select")).toHaveValue("none");
+    await expect(card.getByText("No new lesson from here:", { exact: false })).toBeVisible();
+    await card
+      .getByRole("group", { name: /^en$/i })
+      .getByLabel("Answer", { exact: true })
+      .fill("He is, within the EU.");
+    await expect(card.getByText("in DE (3 characters or more)", { exact: false })).toBeVisible();
+
+    await card.getByRole("button", { name: "Reject" }).click();
+    await expect.poll(() => sent[1]?.url).toBe(`/admin/assistant/faq-proposals/${gap.id}/reject`);
+    await expect(card).toHaveCount(0);
+    await expect(
+      page
+        .getByRole("region", { name: "Proposals" })
+        .getByText("Rejected: nothing reached the FAQ."),
+    ).toBeAttached();
+    expect(unmocked).toEqual([]);
+  });
 });
 
 test.describe("admin accessibility", () => {
@@ -3061,6 +4316,7 @@ test.describe("admin accessibility", () => {
       "/admin/projects/project-one",
       "/admin/inbox",
       "/admin/media",
+      "/admin/agent",
     ]) {
       test(`${path} in the ${colorScheme} theme has no accessibility violations`, async ({
         page,

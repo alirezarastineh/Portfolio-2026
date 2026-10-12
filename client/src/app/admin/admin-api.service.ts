@@ -30,6 +30,15 @@ import type {
   RunRow,
   TrustView,
 } from "./assistant-types";
+import type { ContentGoal, Proposal, ProposalStatus } from "./agent";
+import type {
+  AcceptBody,
+  FaqProposal,
+  FaqProposalRow,
+  FaqProposalSource,
+  FaqProposalStatus,
+} from "./faq-proposals";
+import type { CopilotDraft, CopilotSkillsView, DraftVerdict } from "./copilot-skills";
 import type { EvalCaseRow, FreezeBody } from "./eval-cases";
 import type { JournalEntry, JournalPatch, JournalStatus, JournalView } from "./journal";
 import type { FaithfulnessView } from "./faithfulness";
@@ -542,6 +551,40 @@ export class AdminApiService {
     return this.request<{ ok: true }>("PATCH", "/admin/assistant/faq-order", { ids });
   }
 
+  /** The FAQ pipeline's proposals in some statuses (all when none), newest first (plan phase 31). */
+  faqProposals(statuses: readonly FaqProposalStatus[] = []) {
+    const query = statuses.length ? `?status=${encodeURIComponent(statuses.join(","))}` : "";
+    return this.request<{ proposals: FaqProposal[]; limited?: boolean }>(
+      "GET",
+      `/admin/assistant/faq-proposals${query}`,
+    );
+  }
+
+  /** Drafts an FAQ proposal from a topic or a journal entry (paid), or returns its open one. */
+  draftFaqProposal(source: FaqProposalSource) {
+    return this.request<{ proposal: FaqProposalRow; existing?: boolean }>(
+      "POST",
+      "/admin/assistant/faq-proposals",
+      source,
+    );
+  }
+
+  /** Accepts a proposal with the admin's text: an FAQ entry, used at once. */
+  acceptFaqProposal(id: string, body: AcceptBody) {
+    return this.request<{
+      proposal: FaqProposalRow;
+      linked: { journal: boolean; lesson: string | null };
+    }>("POST", `/admin/assistant/faq-proposals/${encodeURIComponent(id)}/accept`, body);
+  }
+
+  rejectFaqProposal(id: string) {
+    return this.request<{ proposal: FaqProposalRow }>(
+      "POST",
+      `/admin/assistant/faq-proposals/${encodeURIComponent(id)}/reject`,
+      {},
+    );
+  }
+
   /** Groups recent visitor questions into topics; one model call, cached for a while. */
   assistantInsights(refresh = false) {
     return this.request<{
@@ -699,6 +742,58 @@ export class AdminApiService {
     return this.request<{ id: string }>("POST", "/admin/assistant/runs", { kind: "agent", entry });
   }
 
+  /** The content agent (plan phase 29, paid): drafts for the content's gaps, into proposals. */
+  startContentRun(input: { goals: ContentGoal[]; maxItems: number; maxUsd: number }) {
+    return this.request<{ id: string }>("POST", "/admin/assistant/runs", {
+      kind: "agent",
+      task: "content",
+      ...input,
+    });
+  }
+
+  /**
+   * The content agent's proposals in some statuses (all when none), newest
+   * first, at most 200: `limited` when there are more (plan phase 30).
+   */
+  proposals(statuses: readonly ProposalStatus[] = []) {
+    const query = statuses.length ? `?status=${encodeURIComponent(statuses.join(","))}` : "";
+    return this.request<{ proposals: Proposal[]; limited?: boolean }>(
+      "GET",
+      `/admin/assistant/proposals${query}`,
+    );
+  }
+
+  /** Writes a proposal's draft, or the admin's edit of it, to the draft content. */
+  applyProposal(id: string, text?: string) {
+    return this.request<{ proposal: Proposal }>(
+      "POST",
+      `/admin/assistant/proposals/${encodeURIComponent(id)}/apply`,
+      text === undefined ? {} : { text },
+    );
+  }
+
+  rejectProposal(id: string) {
+    return this.request<{ proposal: Proposal }>(
+      "POST",
+      `/admin/assistant/proposals/${encodeURIComponent(id)}/reject`,
+    );
+  }
+
+  /** Puts back what an applied proposal's field held before. */
+  revertProposal(id: string) {
+    return this.request<{ proposal: Proposal }>(
+      "POST",
+      `/admin/assistant/proposals/${encodeURIComponent(id)}/revert`,
+    );
+  }
+
+  /** Applies or rejects several proposals, each on its own: a result per id. */
+  decideProposals(ids: string[], action: "apply" | "reject") {
+    return this.request<{
+      results: ({ id: string; proposal: Proposal } | { id: string; error: string })[];
+    }>("POST", "/admin/assistant/proposals/decide", { ids, action });
+  }
+
   /** Lessons (plan phase 25): each with its effect measured now, and the counts per status. */
   assistantLessons() {
     return this.request<LessonsView>("GET", "/admin/assistant/lessons");
@@ -779,7 +874,17 @@ export class AdminApiService {
 
   /** A draft from the editor copilot; nothing is saved. */
   copilot(input: CopilotInput) {
-    return this.request<{ text: string; model: string }>("POST", "/admin/ai/copilot", input);
+    return this.request<CopilotDraft>("POST", "/admin/ai/copilot", input);
+  }
+
+  /** What became of drafts (kept, edited, discarded), by their ids: no text (plan phase 27). */
+  reportDrafts(outcomes: DraftVerdict[]) {
+    return this.request<{ recorded: number }>("POST", "/admin/ai/copilot/outcomes", { outcomes });
+  }
+
+  /** The copilot's skills and how often their drafts are kept, per version. */
+  copilotSkills() {
+    return this.request<CopilotSkillsView>("GET", "/admin/ai/skills");
   }
 
   /* ---- media ---- */

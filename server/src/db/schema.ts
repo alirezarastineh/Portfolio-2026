@@ -1182,4 +1182,216 @@ export const aiLessons = pgTable(
   ],
 );
 
+/**
+ * The copilot's drafts (plan phase 27, `ask/skills/`): one row per draft a
+ * skill wrote, with the skill's version, and what the admin did with it,
+ * decided once by the editor (kept as it was, edited, discarded) or at once
+ * by the server (abstained: faq-answer's NO_ANSWER). No text of any kind:
+ * the editor compares the draft with what it saved and reports the size of
+ * the edit in words. `id` is the suggestion id the editor reports against.
+ */
+export const aiSkillUses = pgTable(
+  "ai_skill_uses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    skill: text("skill").notNull(),
+    version: text("version").notNull(),
+    /** Who asked: the admin's copilot, or (plan phase 29) the content agent's proposals. */
+    source: text("source").$type<"copilot" | "agent">().notNull().default("copilot"),
+    /** The model that answered (a fallback, maybe). */
+    model: text("model").notNull().default(""),
+    /** The draft's length in words. */
+    words: integer("words").notNull(),
+    /** Null until decided. */
+    outcome: text("outcome").$type<"kept" | "edited" | "discarded" | "abstained">(),
+    /**
+     * Words inserted plus words deleted between the draft and the saved text: 0
+     * when kept; null when nothing was saved (abandoned, replaced) or it abstained.
+     */
+    editDistance: integer("edit_distance"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    // Plan phase 28: how the draft was made and checked.
+    /** Repairs across the candidates: drafts written after each one's first. */
+    repairs: smallint("repairs").notNull().default(0),
+    /** The gates the returned draft still fails, by id (never their messages: those can quote it). */
+    flags: jsonb("flags").$type<string[]>().notNull().default([]),
+    /** Drafts offered: 1, or the explored leads (the top pick and its alternatives). */
+    candidates: smallint("candidates").notNull().default(1),
+    /** Which candidate the admin kept, when there were several: 0 is the top pick. */
+    pick: smallint("pick"),
+    /** The translation critic: no problem, a revision kept, a revision refused; null when none read it. */
+    critic: text("critic").$type<"ok" | "revised" | "refused">(),
+  },
+  (t) => [
+    index("ai_skill_uses_skill_version_idx").on(t.skill, t.version),
+    index("ai_skill_uses_created_idx").on(t.createdAt.desc()),
+    check("ai_skill_uses_source_check", sql`${t.source} in ('copilot', 'agent')`),
+    check(
+      "ai_skill_uses_outcome_check",
+      sql`${t.outcome} in ('kept', 'edited', 'discarded', 'abstained')`,
+    ),
+    check("ai_skill_uses_edit_distance_check", sql`${t.editDistance} >= 0`),
+    check("ai_skill_uses_repairs_check", sql`${t.repairs} >= 0`),
+    check("ai_skill_uses_candidates_check", sql`${t.candidates} >= 1`),
+    check("ai_skill_uses_pick_check", sql`${t.pick} >= 0 and ${t.pick} < ${t.candidates}`),
+    check("ai_skill_uses_critic_check", sql`${t.critic} in ('ok', 'revised', 'refused')`),
+  ],
+);
+
+/**
+ * Where a proposal stands: drafted (`proposed`), drafted but failing a check
+ * or not drafted at all (`needs_you`); then the admin's decision and its
+ * application (plan phase 30): accepted, rejected, applied, reverted, or stale
+ * when its field changed before it could be applied.
+ */
+export type ProposalStatus =
+  "proposed" | "needs_you" | "accepted" | "rejected" | "applied" | "reverted" | "stale";
+
+/**
+ * The content agent's proposals (plan phase 29): a draft for one gap in the
+ * content (a translation, alt text, a search description), never written to
+ * the content: the admin reviews, applies and reverts each (phase 30). It holds
+ * the admin's own content (the field before, the draft), gate ids and notes;
+ * no visitor text. Kept until deleted.
+ */
+export const aiProposals = pgTable(
+  "ai_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /** The run that drafted it; the proposal outlives the run. */
+    runId: uuid("run_id").references(() => aiRuns.id, { onDelete: "set null" }),
+    goal: text("goal").$type<"translations" | "alt" | "seo">().notNull(),
+    kind: text("kind")
+      .$type<"section" | "project" | "experience" | "skill" | "post" | "media">()
+      .notNull(),
+    /** The row's id, a section's name, or the image's id. */
+    entityId: text("entity_id").notNull(),
+    /** A column, a section's dotted path, or `alt` for an image. */
+    field: text("field").notNull(),
+    locale: localeEnum("locale").notNull(),
+    /** What the admin reads: "Atlas · Hook (DE)". */
+    label: text("label").notNull(),
+    /** The field's text when the draft was made: an apply refuses a field changed since. */
+    before: text("before").notNull().default(""),
+    /** The draft, finished; null when none could be written. */
+    after: text("after"),
+    skill: text("skill").notNull(),
+    version: text("version").notNull(),
+    /** The draft's record in the skills' table, decided when the admin applies or rejects it. */
+    useId: uuid("use_id").references(() => aiSkillUses.id, { onDelete: "set null" }),
+    /** The gates the draft still fails, by id. */
+    flags: jsonb("flags").$type<string[]>().notNull().default([]),
+    /** What they say, or why there is no draft: the admin's review reads them. */
+    notes: jsonb("notes").$type<string[]>().notNull().default([]),
+    status: text("status").$type<ProposalStatus>().notNull(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    revertedAt: timestamp("reverted_at", { withTimezone: true }),
+    /**
+     * A translation row's own date before the apply, copied in SQL (microseconds
+     * kept): a revert that finds the apply's date still there puts it back, so the
+     * public "updated" date is as it was (plan phase 30). Null for an untimed field.
+     */
+    stampedBefore: timestamp("stamped_before", { withTimezone: true }),
+  },
+  (t) => [
+    // One proposal per target and run: a resumed run never drafts a target twice.
+    uniqueIndex("ai_proposals_run_target_idx").on(
+      t.runId,
+      t.goal,
+      t.kind,
+      t.entityId,
+      t.field,
+      t.locale,
+    ),
+    index("ai_proposals_status_idx").on(t.status),
+    index("ai_proposals_created_idx").on(t.createdAt.desc()),
+    check("ai_proposals_goal_check", sql`${t.goal} in ('translations', 'alt', 'seo')`),
+    check(
+      "ai_proposals_kind_check",
+      sql`${t.kind} in ('section', 'project', 'experience', 'skill', 'post', 'media')`,
+    ),
+    check(
+      "ai_proposals_status_check",
+      sql`${t.status} in ('proposed', 'needs_you', 'accepted', 'rejected', 'applied', 'reverted', 'stale')`,
+    ),
+  ],
+);
+
+/** An FAQ proposal's state: drafted, drafted with a gap or a failing check, or decided. */
+export type FaqProposalStatus = "proposed" | "needs_you" | "accepted" | "rejected";
+
+/** The fields the FAQ chain drafts, each a skill's draft. */
+export type FaqDraftField = "questionEn" | "questionDe" | "answerEn" | "answerDe";
+
+/**
+ * The FAQ pipeline's proposals (plan phase 31, `ask/agent/faq-chain.ts`): an
+ * FAQ entry drafted by a chain of gated skills from an insight topic or a
+ * journal entry, held until the admin accepts it (then it is the FAQ entry
+ * `faq_id`, its effect measured by the lesson `lesson_id`) or rejects it. No
+ * visitor text: the source's ids, a topic's name and counts (never its example
+ * questions), and the drafts, which a model wrote.
+ */
+export const aiFaqProposals = pgTable(
+  "ai_faq_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...timestamps,
+    source: text("source").$type<"insight" | "journal">().notNull(),
+    /** The insights run and the topic's place in it; the run is pruned within 60 days. */
+    snapshotId: uuid("snapshot_id").references(() => aiInsightSnapshots.id, {
+      onDelete: "set null",
+    }),
+    topicIndex: smallint("topic_index"),
+    /** The topic's run, name and counts, kept past the run: what a new lesson is corroborated by. */
+    topic: jsonb("topic").$type<{
+      snapshotId: string;
+      title: string;
+      questions: number;
+      unanswered: boolean;
+    }>(),
+    journalId: uuid("journal_id").references(() => aiJournal.id, { onDelete: "set null" }),
+    /** The drafts, empty where none was written (a content gap, a step that failed). */
+    questionEn: text("question_en").notNull().default(""),
+    questionDe: text("question_de").notNull().default(""),
+    answerEn: text("answer_en").notNull().default(""),
+    answerDe: text("answer_de").notNull().default(""),
+    /** Each draft's record in the skills' table, decided when the admin decides. */
+    uses: jsonb("uses").$type<Partial<Record<FaqDraftField, string>>>().notNull().default({}),
+    /** The gates a draft still fails, by field and id (`answerDe:numbers`). */
+    flags: jsonb("flags").$type<string[]>().notNull().default([]),
+    /** What the admin reads: a content gap, a step not drafted, the critic's notes. */
+    notes: jsonb("notes").$type<string[]>().notNull().default([]),
+    /** What the chain cost. */
+    usd: doublePrecision("usd").notNull().default(0),
+    status: text("status").$type<FaqProposalStatus>().notNull(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    /** The FAQ entry it became, and the lesson that measures it. */
+    faqId: uuid("faq_id").references(() => aiFaq.id, { onDelete: "set null" }),
+    lessonId: uuid("lesson_id").references(() => aiLessons.id, { onDelete: "set null" }),
+  },
+  (t) => [
+    index("ai_faq_proposals_created_idx").on(t.createdAt.desc()),
+    // One open proposal per source: drafting it again returns that one.
+    uniqueIndex("ai_faq_proposals_open_topic_idx")
+      .on(t.snapshotId, t.topicIndex)
+      .where(sql`${t.status} in ('proposed', 'needs_you')`),
+    uniqueIndex("ai_faq_proposals_open_entry_idx")
+      .on(t.journalId)
+      .where(sql`${t.status} in ('proposed', 'needs_you')`),
+    check(
+      "ai_faq_proposals_source_check",
+      sql`(${t.source} = 'insight' and ${t.topic} is not null and ${t.topicIndex} is not null and ${t.journalId} is null)
+        or (${t.source} = 'journal' and ${t.topic} is null and ${t.topicIndex} is null and ${t.snapshotId} is null)`,
+    ),
+    check(
+      "ai_faq_proposals_status_check",
+      sql`${t.status} in ('proposed', 'needs_you', 'accepted', 'rejected')`,
+    ),
+  ],
+);
+
 export type Locale = (typeof localeEnum.enumValues)[number];

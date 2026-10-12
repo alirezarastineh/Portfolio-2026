@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   ElementRef,
   inject,
   Injector,
@@ -18,6 +19,7 @@ import { HlmSpinner } from "@spartan-ng/helm/spinner";
 
 import { AdminApiService } from "../admin-api.service";
 import type { InsightTopic } from "../assistant-types";
+import { faqProposalWords } from "../faq-proposals";
 import { scopeFromTitle, topicProblem, type InsightSnapshot, type InsightsView } from "../lessons";
 import { LessonFormComponent } from "./lesson-form.component";
 
@@ -26,7 +28,8 @@ import { LessonFormComponent } from "./lesson-form.component";
  * last 30 days of questions (redacted), and what the assistant could not
  * answer. Each run is kept (plan phase 25): the last one shows here without
  * a model call, the admin's or the one the nightly check ran when failures
- * rose. Each topic can become an FAQ entry, and an unanswered one a lesson.
+ * rose. Each topic can become an FAQ entry (by hand, or drafted by the FAQ
+ * pipeline into a proposal: plan phase 31), and an unanswered one a lesson.
  */
 @Component({
   selector: "app-assistant-insights",
@@ -99,6 +102,18 @@ import { LessonFormComponent } from "./lesson-form.component";
                 >
                   Turn into FAQ entry
                 </button>
+                @if (snapshotId()) {
+                  <button
+                    hlmBtn
+                    variant="outline"
+                    size="sm"
+                    [attr.aria-describedby]="'insight-topic-' + $index"
+                    [disabled]="drafting() !== null"
+                    (click)="draftProposal($index)"
+                  >
+                    {{ drafting() === $index ? "Drafting…" : "Draft an FAQ proposal (paid)" }}
+                  </button>
+                }
                 @if (lessonReady()[$index] && lessonFor() !== $index) {
                   <button
                     hlmBtn
@@ -152,6 +167,8 @@ export class AssistantInsightsComponent implements OnInit {
   readonly toFaq = output<string>();
   /** A lesson was made: it lives in the Journal tab. */
   readonly toJournal = output<void>();
+  /** An FAQ proposal drafted from a topic (plan phase 31): it waits in the FAQ tab. */
+  readonly toFaqProposal = output<string>();
 
   private readonly api = inject(AdminApiService);
   private readonly injector = inject(Injector);
@@ -165,6 +182,8 @@ export class AssistantInsightsComponent implements OnInit {
   protected readonly lessonFor = signal<number | null>(null);
   /** The topic a lesson was just made from. */
   protected readonly made = signal<number | null>(null);
+  /** The topic an FAQ proposal is being drafted for (one at a time). */
+  protected readonly drafting = signal<number | null>(null);
   protected readonly said = signal("");
   private readonly journalLink = viewChild<ElementRef<HTMLElement>>("journalLink");
 
@@ -190,6 +209,12 @@ export class AssistantInsightsComponent implements OnInit {
 
   /** The latest request: an earlier, slower answer never overwrites a later one. */
   private latest = 0;
+  /** Left (another tab): a proposal drafted meanwhile is only announced. */
+  private gone = false;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => (this.gone = true));
+  }
 
   ngOnInit(): void {
     void this.load();
@@ -242,6 +267,32 @@ export class AssistantInsightsComponent implements OnInit {
     this.view.update((v) => ({ trigger: v?.trigger ?? null, snapshot: run }));
     this.show(result.data.topics, result.data.analysed, !!result.data.cached);
     await this.seen(run);
+  }
+
+  /**
+   * The FAQ pipeline (plan phase 31, paid: a few model calls under Admin
+   * agents): a question, an answer from the portfolio and both in German,
+   * proposed in the FAQ tab. A topic with an open proposal gets that one back.
+   */
+  protected async draftProposal(topic: number): Promise<void> {
+    const snapshotId = this.snapshotId();
+    if (!snapshotId || this.drafting() !== null) return;
+    this.drafting.set(topic);
+    this.said.set("Drafting an FAQ proposal: this takes up to a minute.");
+    const result = await this.api.draftFaqProposal({ source: "insight", snapshotId, topic });
+    this.drafting.set(null);
+    if (!result.ok) {
+      const words = faqProposalWords(result.error, result.detail);
+      this.said.set(`No proposal: ${words}`);
+      toast.error("No proposal", { description: words });
+      return;
+    }
+    // Left meanwhile: the proposal waits all the same; only announce it.
+    if (this.gone) {
+      toast.success("FAQ proposal drafted: it waits in the FAQ tab.");
+      return;
+    }
+    this.toFaqProposal.emit(result.data.proposal.id);
   }
 
   /** The form is gone: back to the topic's button. */
