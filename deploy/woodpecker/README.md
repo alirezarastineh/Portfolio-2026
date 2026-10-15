@@ -186,35 +186,25 @@ then allows local forwards, and `permitopen` limits them to Woodpecker's gRPC po
    `agent.env`, run `up -d` again. Reports open from Windows at
    `\\wsl.localhost\Ubuntu\srv\ci-reports`.
 
-5. **Keep WSL running.** By default WSL shuts an idle distro down after 15 seconds, and its VM
-   after a minute; the agent would stop with them.
-   - Turn both off with Microsoft's documented settings. This is the whole
-     `%UserProfile%\.wslconfig`, with step 1's caps included:
-
-     ```ini
-     [general]
-     instanceIdleTimeout=-1
-
-     [wsl2]
-     memory=12GB
-     processors=6
-     swap=4GB
-     vmIdleTimeout=-1
-     ```
-
-   - After a reboot, something has to start the distro once. Then systemd starts Docker, and Docker
-     restarts the tunnel and the agent. A task at logon does it (PowerShell, once):
+5. **Keep WSL running.** WSL stops a distro about 15 seconds after the last Windows process using
+   it exits, and the agent stops with it.
+   - A task at logon holds one hidden WSL session open, with no time limit, and runs on battery too.
+     A notebook's default task settings would block it there. In PowerShell, once:
 
      ```powershell
-     $action  = New-ScheduledTaskAction -Execute "wsl.exe" -Argument "-d Ubuntu --exec true"
-     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-     Register-ScheduledTask -TaskName "WSL start (Woodpecker agent)" -Action $action -Trigger $trigger
-     wsl --shutdown
-     Start-ScheduledTask -TaskName "WSL start (Woodpecker agent)"
+     $action   = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -WindowStyle Hidden -Command "wsl.exe -d Ubuntu --exec sleep infinity"'
+     $trigger  = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+     $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+     Register-ScheduledTask -TaskName 'WSL keep-alive (Woodpecker agent)' -Action $action -Trigger $trigger -Settings $settings
+     Start-ScheduledTask -TaskName 'WSL keep-alive (Woodpecker agent)'
      ```
 
+   - Add `vmIdleTimeout=-1` under `[wsl2]` in `.wslconfig` as well.
+   - Don't rely on `[general] instanceIdleTimeout=-1` from Microsoft's docs: WSL 2.6.1 ignored it,
+     and the distro still stopped after 15 seconds.
+   - A `conhost --headless` wrapper exits at once and holds nothing.
    - Check it: close every WSL window and wait two minutes. `wsl -l -v` should still show Ubuntu as
-     Running, and Woodpecker's Agents page should show a recent last contact.
+     Running, and Task Scheduler should show the task as Running.
 
 6. **Daily cleanup.** In WSL:
 
@@ -310,6 +300,8 @@ compose start woodpecker-server && rm /tmp/woodpecker.sqlite
 
 - **Pipelines stay pending:** the PC is off or asleep, WSL stopped, or the tunnel is down. On the
   PC, check `docker compose … logs tunnel woodpecker-agent`.
+- **A pipeline stays pending although the agent is back:** it was handed to an agent session that
+  vanished (WSL stopped mid-pickup). Restart it from its page.
 - **`Permission denied (publickey)` in the tunnel log:** the `authorized_keys` line or its file
   modes (Part 2).
 - **`administratively prohibited` in the tunnel log:** the `permitopen` port doesn't match
