@@ -105,8 +105,10 @@ then allows local forwards, and `permitopen` limits them to Woodpecker's gRPC po
 
 ## Part 3: The agent, on your PC
 
-1. **WSL2 with Ubuntu.** In PowerShell as administrator, run `wsl --install -d Ubuntu-24.04`,
-   restart if asked, then open Ubuntu and create your Linux user.
+1. **WSL2 with Ubuntu.** If `wsl -l -v` already lists an Ubuntu distro, use it. The commands
+   below call it `Ubuntu`; use your distro's name if it differs. Otherwise, in PowerShell as
+   administrator, run `wsl --install -d Ubuntu-24.04` (that distro is named `Ubuntu-24.04`), restart
+   if asked, then open it and create your Linux user.
    - `cat /etc/wsl.conf` must show `systemd=true` under `[boot]`. If it doesn't, add those two lines
      and run `wsl --shutdown` in PowerShell.
    - Cap WSL's share of the PC in `%UserProfile%\.wslconfig`, then run `wsl --shutdown`:
@@ -119,8 +121,9 @@ then allows local forwards, and `permitopen` limits them to Woodpecker's gRPC po
      swap=4GB
      ```
 
-2. **Docker Engine in WSL** (in Ubuntu). Don't also install Docker Desktop: its WSL integration
-   would take over the `docker` command.
+2. **Docker Engine in WSL** (in Ubuntu). If Docker Desktop is installed, keep it closed while the
+   agent runs. Or untick this distro under Settings → Resources → WSL integration: when it runs, it
+   mounts its own socket at `/var/run/docker.sock`, and its `docker` command takes over.
 
    ```bash
    sudo apt-get update && sudo apt-get install -y ca-certificates curl
@@ -139,7 +142,8 @@ then allows local forwards, and `permitopen` limits them to Woodpecker's gRPC po
    docker run --rm hello-world
    ```
 
-3. **The tunnel key.** Use the host name or IP you SSH to production with:
+3. **The tunnel key.** Use the production host's IP for `<production host>` here and in
+   `agent.env`: the tunnel then needs no DNS, which a company network or VPN may answer wrongly.
 
    ```bash
    mkdir -p ~/woodpecker/keys && chmod 700 ~/woodpecker ~/woodpecker/keys
@@ -180,18 +184,18 @@ then allows local forwards, and `permitopen` limits them to Woodpecker's gRPC po
 
    The containers keep the config they were created with. After a change to the compose file or
    `agent.env`, run `up -d` again. Reports open from Windows at
-   `\\wsl.localhost\Ubuntu-24.04\srv\ci-reports`.
+   `\\wsl.localhost\Ubuntu\srv\ci-reports`.
 
 5. **Keep WSL running.** WSL stops a distro once no Windows process holds it open, and the agent
    would stop with it. A task at logon holds it (PowerShell, once):
 
    ```powershell
-   $action  = New-ScheduledTaskAction -Execute "conhost.exe" -Argument "--headless wsl.exe -d Ubuntu-24.04 --exec sleep infinity"
+   $action  = New-ScheduledTaskAction -Execute "conhost.exe" -Argument "--headless wsl.exe -d Ubuntu --exec sleep infinity"
    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
    Register-ScheduledTask -TaskName "WSL keep-alive (Woodpecker agent)" -Action $action -Trigger $trigger
    ```
 
-   Check it: close every terminal, wait a minute, and `wsl -l -v` should still show Ubuntu-24.04 as
+   Check it: close every terminal, wait a minute, and `wsl -l -v` should still show Ubuntu as
    Running.
 
 6. **Daily cleanup.** In WSL:

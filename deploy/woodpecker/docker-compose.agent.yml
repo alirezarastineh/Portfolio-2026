@@ -40,6 +40,14 @@ services:
     volumes:
       # id_ed25519 and known_hosts, kept outside the repository.
       - ${WOODPECKER_TUNNEL_KEYS:?WOODPECKER_TUNNEL_KEYS is required}:/keys:ro
+    networks:
+      default:
+        # A fixed address the agent dials without any DNS lookup. On a WSL
+        # host, Docker's resolver passes the lookups it can't answer (the AAAA
+        # ones under the host's search domains, gRPC's _grpc_config TXT probe)
+        # to WSL's DNS bridge, where they can hang until the agent's login
+        # times out.
+        ipv4_address: 172.30.250.10
 
   woodpecker-agent:
     image: woodpeckerci/woodpecker-agent:v3.19.0
@@ -49,7 +57,7 @@ services:
     depends_on:
       - tunnel
     environment:
-      WOODPECKER_SERVER: tunnel:9000
+      WOODPECKER_SERVER: 172.30.250.10:9000
       WOODPECKER_AGENT_SECRET: ${WOODPECKER_AGENT_SECRET:?WOODPECKER_AGENT_SECRET is required}
       WOODPECKER_BACKEND: docker
       # Two workflows at once; .wslconfig caps what WSL may take from the PC.
@@ -62,6 +70,13 @@ services:
       - woodpecker-agent-config:/etc/woodpecker
       # Steps run as sibling containers on WSL's Docker.
       - /var/run/docker.sock:/var/run/docker.sock
+
+networks:
+  default:
+    ipam:
+      config:
+        # Clear of Docker's other bridges and of typical office and home LANs.
+        - subnet: 172.30.250.0/24
 
 volumes:
   woodpecker-agent-config:
