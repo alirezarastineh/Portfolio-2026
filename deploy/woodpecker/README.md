@@ -186,17 +186,35 @@ then allows local forwards, and `permitopen` limits them to Woodpecker's gRPC po
    `agent.env`, run `up -d` again. Reports open from Windows at
    `\\wsl.localhost\Ubuntu\srv\ci-reports`.
 
-5. **Keep WSL running.** WSL stops a distro once no Windows process holds it open, and the agent
-   would stop with it. A task at logon holds it (PowerShell, once):
+5. **Keep WSL running.** By default WSL shuts an idle distro down after 15 seconds, and its VM
+   after a minute; the agent would stop with them.
+   - Turn both off with Microsoft's documented settings. This is the whole
+     `%UserProfile%\.wslconfig`, with step 1's caps included:
 
-   ```powershell
-   $action  = New-ScheduledTaskAction -Execute "conhost.exe" -Argument "--headless wsl.exe -d Ubuntu --exec sleep infinity"
-   $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-   Register-ScheduledTask -TaskName "WSL keep-alive (Woodpecker agent)" -Action $action -Trigger $trigger
-   ```
+     ```ini
+     [general]
+     instanceIdleTimeout=-1
 
-   Check it: close every terminal, wait a minute, and `wsl -l -v` should still show Ubuntu as
-   Running.
+     [wsl2]
+     memory=12GB
+     processors=6
+     swap=4GB
+     vmIdleTimeout=-1
+     ```
+
+   - After a reboot, something has to start the distro once. Then systemd starts Docker, and Docker
+     restarts the tunnel and the agent. A task at logon does it (PowerShell, once):
+
+     ```powershell
+     $action  = New-ScheduledTaskAction -Execute "wsl.exe" -Argument "-d Ubuntu --exec true"
+     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+     Register-ScheduledTask -TaskName "WSL start (Woodpecker agent)" -Action $action -Trigger $trigger
+     wsl --shutdown
+     Start-ScheduledTask -TaskName "WSL start (Woodpecker agent)"
+     ```
+
+   - Check it: close every WSL window and wait two minutes. `wsl -l -v` should still show Ubuntu as
+     Running, and Woodpecker's Agents page should show a recent last contact.
 
 6. **Daily cleanup.** In WSL:
 
