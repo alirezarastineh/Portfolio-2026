@@ -38,7 +38,9 @@ proposalsRouter.get(
   zValidator("query", z.object({ run: z.uuid().optional(), status: statuses.optional() }), invalid),
   async (c) => {
     const { run, status } = c.req.valid("query");
-    const proposals = await listProposals({ runId: run, statuses: status }, LISTED);
+    // One past the page tells whether there are more.
+    const listed = await listProposals({ runId: run, statuses: status }, LISTED + 1);
+    const proposals = listed.slice(0, LISTED);
     // An open one whose field moved on since its draft: applying it would turn it stale.
     const open = proposals.filter((p) => p.status === "proposed" || p.status === "needs_you");
     const now = await readTargets(
@@ -52,7 +54,7 @@ proposalsRouter.get(
         return { ...p, changed: target?.current !== p.before };
       }),
       // More than these: the oldest are not listed.
-      limited: proposals.length === LISTED,
+      limited: listed.length > LISTED,
     });
   },
 );

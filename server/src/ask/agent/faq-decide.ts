@@ -11,6 +11,7 @@ import {
   type FaqProposalStatus,
 } from "../../db/schema.js";
 import { audit } from "../audit.js";
+import { looksLikeInjection } from "../checks.js";
 import { faqInput, insertFaq, type FaqInput } from "../faq.js";
 import { HEURISTIC_MIN_WORDS } from "../journal.js";
 import { cleanScope, corroborationProblem } from "../lessons.js";
@@ -65,7 +66,8 @@ type Refusal =
       error: "unknown_lesson" | "lesson_elsewhere" | "vague_statement" | "empty_scope";
       status: 400;
     }
-  | { ok: false; error: "not_corroborated"; status: 400; reason: string };
+  | { ok: false; error: "not_corroborated"; status: 400; reason: string }
+  | { ok: false; error: "instruction"; status: 400; locale: "en" | "de" };
 
 export type FaqDecision =
   | { ok: true; proposal: FaqProposal; linked: { journal: boolean; lesson: string | null } }
@@ -234,6 +236,15 @@ async function locked(tx: DbExecutor, id: string): Promise<FaqProposal | null> {
  * writes nothing.
  */
 export async function acceptFaqProposal(id: string, input: AcceptInput): Promise<FaqDecision> {
+  // The questions come from visitors' words: one that reads as an order to the assistant never
+  // enters the FAQ from here, as drafted (the chain's `instruction` gate) or as edited. An FAQ
+  // entry about the assistant's own defences is the admin's to write in the FAQ form.
+  for (const locale of ["en", "de"] as const) {
+    const question = input.translations[locale]?.question;
+    if (question && looksLikeInjection(question)) {
+      return { ok: false, error: "instruction", status: 400, locale };
+    }
+  }
   const outcome = await getDb().transaction(async (tx) => {
     const p = await locked(tx, id);
     if (!p) return { ok: false, error: "not_found", status: 404 } as const;

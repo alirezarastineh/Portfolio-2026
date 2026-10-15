@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { targetsProdTunnel } from "../db/migrate.js";
 import { fixtureConfig, fixtureCorpus } from "../test/ask-fixtures.js";
 import { mockEntry, scripted } from "../test/ask-models.js";
+import { MCP_TOOL_NAMES } from "./mcp/tools.js";
 import { buildTools, TOOL_NAMES } from "./tools.js";
 import { nextCheckAt, startTrustMonitor, stopTrustMonitor } from "./trust-monitor.js";
 import {
@@ -454,6 +455,14 @@ function forbidding(tables: readonly string[]): Forbidden {
 const CONTENT = forbidding(CONTENT_TABLES);
 /** The FAQ chain's drafting (plan phase 31): nor a lesson or the journal, which the admin's accept links. */
 const FAQ_CHAIN = forbidding([...CONTENT_TABLES, "aiLessons", "aiJournal"]);
+/** The MCP endpoint (plan phase 32): reads; nor the proposals the agents draft. */
+const MCP_READS = forbidding([
+  ...CONTENT_TABLES,
+  "aiLessons",
+  "aiJournal",
+  "aiFaqProposals",
+  "aiProposals",
+]);
 /** An import from the schema: its clause, and where it comes from. */
 const SCHEMA_IMPORT = /^\s*import\s+(type\s+)?([\s\S]*?)\s+from\s+["']([^"']+)["'];?/gm;
 
@@ -730,6 +739,78 @@ describe("the FAQ pipeline proposes; only the admin's accept writes the FAQ (pla
     ]);
   });
 });
+
+describe("agents outside read over MCP, and write only their counts (plan phase 32)", () => {
+  it("registers each MCP tool as an outside agent's read, within bounds", () => {
+    for (const tool of MCP_TOOL_NAMES) {
+      expect(
+        TRUST_REGISTRY.find((e) => e.action === `mcp.${tool}`),
+        tool,
+      ).toMatchObject({
+        actor: "external",
+        level: "L2",
+        approver: "none",
+        built: true,
+      });
+    }
+    // The registry names them itself (it loads nothing): the same four, in the same order.
+    expect(TRUST_REGISTRY.filter((e) => e.actor === "external").map((e) => e.action)).toEqual(
+      MCP_TOOL_NAMES.map((tool) => `mcp.${tool}`),
+    );
+  });
+
+  it("serves with no module that could write the content, the FAQ, a lesson, the journal or a proposal", () => {
+    expect(contentWrites("ask/mcp/route.ts", readSource, SRC, MCP_READS)).toEqual([]);
+  });
+
+  it("is mounted by the app alone", () => {
+    expect(importersOf("ask/mcp/route.ts", allSources(), readSource)).toEqual(["app.ts"]);
+  });
+
+  // One import deep, not the whole reach: deps.ts loads the model registry and the eval runner,
+  // and the corpus loads the registry for the models' names, without calling them. That nothing
+  // calls one is mcp.db.spec.ts's to show.
+  it("talks to no model itself, nor through what it imports directly, and takes only the config and the corpus from the deps", () => {
+    const files = sources("ask/mcp");
+    expect(providerTalkers(files, readSource)).toEqual([]);
+    const fromDeps = files
+      .flatMap((file) => importsOf(file, readSource(file) ?? "", SRC))
+      .filter((i) => i.to === "ask/deps.ts")
+      .flatMap((i) => i.names);
+    expect([...new Set(fromDeps)].sort()).toEqual(["askConfig", "askCorpus"]);
+  });
+
+  it("would see a module that talks to a model, its own or one it imports directly", () => {
+    const planted: Record<string, string> = {
+      "ask/mcp/route.ts":
+        'import { hybridSearch } from "../embeddings.js";\nimport type { LanguageModel } from "ai";',
+      "ask/mcp/tools.ts": 'import { generateText } from "ai";',
+      "ask/embeddings.ts": 'import { embed } from "ai";',
+      // Types only: erased at build.
+      "ask/mcp/protocol.ts": 'import type { UIMessage } from "ai";',
+    };
+    expect(
+      providerTalkers(["ask/mcp/route.ts", "ask/mcp/tools.ts", "ask/mcp/protocol.ts"], (f) =>
+        planted[f] === undefined ? null : planted[f],
+      ),
+    ).toEqual(["ask/embeddings.ts", "ask/mcp/tools.ts"]);
+  });
+});
+
+/** A value import from the AI SDK or a provider: a module that can call a model itself. */
+const PROVIDER =
+  /^\s*import\s+(?!type\b)[^;]*?\sfrom\s+["'](?:ai|@ai-sdk\/[\w-]+|@openrouter\/[\w-]+)["']/m;
+
+/** Among `files` and the modules they load directly, those that talk to a model provider. */
+function providerTalkers(
+  files: readonly string[],
+  read: (file: string) => string | null,
+): string[] {
+  const loaded = files.flatMap((file) => importsOf(file, read(file) ?? "", SRC).map((i) => i.to));
+  return [...new Set([...files, ...loaded])]
+    .filter((file) => PROVIDER.test(blanked(read(file) ?? "", false)))
+    .sort();
+}
 
 describe("no writes from a laptop on the tunnel", () => {
   it("knows the production tunnel by its address, and nothing else", () => {

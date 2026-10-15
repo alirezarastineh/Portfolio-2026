@@ -19,6 +19,7 @@ import { HlmSpinner } from "@spartan-ng/helm/spinner";
 
 import { AdminApiService } from "../admin-api.service";
 import type { InsightTopic } from "../assistant-types";
+import { FaqDraftsService } from "../faq-drafts.service";
 import { faqProposalWords } from "../faq-proposals";
 import { scopeFromTitle, topicProblem, type InsightSnapshot, type InsightsView } from "../lessons";
 import { LessonFormComponent } from "./lesson-form.component";
@@ -171,6 +172,7 @@ export class AssistantInsightsComponent implements OnInit {
   readonly toFaqProposal = output<string>();
 
   private readonly api = inject(AdminApiService);
+  private readonly drafts = inject(FaqDraftsService);
   private readonly injector = inject(Injector);
   /** The last run kept and the nightly check's last word; null until loaded. */
   protected readonly view = signal<InsightsView | null>(null);
@@ -287,6 +289,8 @@ export class AssistantInsightsComponent implements OnInit {
       toast.error("No proposal", { description: words });
       return;
     }
+    // An FAQ tab open meanwhile reads its list again.
+    this.drafts.announce(result.data.proposal.id);
     // Left meanwhile: the proposal waits all the same; only announce it.
     if (this.gone) {
       toast.success("FAQ proposal drafted: it waits in the FAQ tab.");

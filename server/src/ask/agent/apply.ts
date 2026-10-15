@@ -1,4 +1,4 @@
-import { and, eq, sql, type AnyColumn } from "drizzle-orm";
+import { and, eq, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
@@ -125,7 +125,8 @@ function checked(
   if (!fields.fields.includes(p.field)) return notText(p.field, text);
   const result = (fields.schema.shape[p.field] as z.ZodType).safeParse(text);
   if (!result.success) return { ok: false, issues: result.error.issues };
-  const value = String(result.data);
+  if (typeof result.data !== "string") return notText(p.field, text);
+  const value = result.data;
   return { ok: true, text: RICH[p.kind]?.includes(p.field) ? sanitizeRichText(value) : value };
 }
 
@@ -158,22 +159,30 @@ function withLeaf(
 }
 
 /**
- * The date an apply gives a translation, and its proposal's `applied_at`: one
- * transaction's `now()`, so the two are equal; to the millisecond, as the
- * editors' saves keep dates (a JS `Date`), so a save that leaves the words as
- * they are keeps it equal too.
+ * A decision's own date (`applied_at` where no translation is dated,
+ * `decided_at`): the transaction's `now()`, to the millisecond, as the
+ * editors' saves keep dates (a JS `Date`).
  */
 const appliedStamp = () => sql`date_trunc('milliseconds', now())`;
 
 /**
+ * The date a write gives a translation: now, to the millisecond, and always
+ * after the one it has. Two applies on one row in the same millisecond (a
+ * batch) would otherwise share a date, and a revert of the first, finding its
+ * date still on the row, would take the second's date back.
+ */
+const nextStamp = () =>
+  sql`date_trunc('milliseconds', greatest(now(), updated_at + interval '1 millisecond'))`;
+
+/**
  * The date a revert gives a translation: the one from before the apply while
- * the row still has the apply's (nothing else in it changed since); else now.
- * Compared and copied in SQL, microseconds and all.
+ * the row still has the apply's (nothing else in it changed since); else a
+ * new one. Compared and copied in SQL, microseconds and all.
  */
 const revertedStamp = (id: string) =>
   sql`case when updated_at = (select ap.applied_at from ${aiProposals} as ap where ap.id = ${id})
-    then coalesce((select ap.stamped_before from ${aiProposals} as ap where ap.id = ${id}), ${appliedStamp()})
-    else ${appliedStamp()} end`;
+    then coalesce((select ap.stamped_before from ${aiProposals} as ap where ap.id = ${id}), ${nextStamp()})
+    else ${nextStamp()} end`;
 
 /** An image's alt text in one language, compare-and-set. */
 async function swapAlt(tx: Tx, p: Proposal, expected: string, next: string): Promise<void> {
@@ -217,7 +226,9 @@ async function swapLeaf(
 /**
  * One text column of an entity's translation, compare-and-set. Its date moves
  * with an apply, as an editor's save moves it (the date before kept on the
- * proposal); a revert puts the earlier one back (`revertedStamp`).
+ * proposal); a revert puts the earlier one back (`revertedStamp`). Returns
+ * the apply's date for the proposal (`applied_at`): the row's own, copied in
+ * SQL, where the row is dated.
  */
 async function swapText(
   tx: Tx,
@@ -225,22 +236,23 @@ async function swapText(
   expected: string,
   next: string,
   mode: "apply" | "revert",
-): Promise<void> {
+): Promise<SQL> {
   const locale = p.locale as Locale;
   const { texts, owner, stamped } = TABLES[p.kind];
   if (!TEXT_FIELDS[p.kind].fields.includes(p.field)) throw new Moved();
   const column = (texts as unknown as Record<string, AnyColumn>)[p.field]!;
+  const row = sql`from ${texts} as t
+    where t.${sql.identifier(owner.name)} = ${p.entityId} and t.locale = ${locale}`;
   if (stamped && mode === "apply") {
-    // The row's date before this apply, kept for a revert.
+    // The row locked first: an editor's save cannot land between reading its date here and
+    // the write below, so the date kept for a revert is the one this apply replaces.
+    await tx.execute(sql`select 1 ${row} for update of t`);
     await tx
       .update(aiProposals)
-      .set({
-        stampedBefore: sql`(select t.updated_at from ${texts} as t
-          where t.${sql.identifier(owner.name)} = ${p.entityId} and t.locale = ${locale})`,
-      })
+      .set({ stampedBefore: sql`(select t.updated_at ${row})` })
       .where(eq(aiProposals.id, p.id));
   }
-  const stamp = mode === "apply" ? appliedStamp() : revertedStamp(p.id);
+  const stamp = mode === "apply" ? nextStamp() : revertedStamp(p.id);
   const rows = await tx
     .update(texts)
     // One text column of a translations table, checked against `TEXT_FIELDS` above.
@@ -248,12 +260,14 @@ async function swapText(
     .where(and(eq(owner, p.entityId), eq(texts.locale, locale), eq(column, expected)))
     .returning({ id: owner });
   if (!rows.length) throw new Moved();
+  return stamped ? sql`(select t.updated_at ${row})` : appliedStamp();
 }
 
 /**
  * Writes `next` into the proposal's field if it still holds `expected`; throws
  * `Moved` otherwise. The check and the write are one statement (or, for a
  * section, one row lock), so an edit landing in between is never overwritten.
+ * Returns the date the apply is recorded with (`applied_at`).
  */
 async function swap(
   tx: Tx,
@@ -262,9 +276,15 @@ async function swap(
   next: string,
   adminId: string,
   mode: "apply" | "revert",
-): Promise<void> {
-  if (p.kind === "media") return swapAlt(tx, p, expected, next);
-  if (p.kind === "section") return swapLeaf(tx, p, expected, next, adminId);
+): Promise<SQL> {
+  if (p.kind === "media") {
+    await swapAlt(tx, p, expected, next);
+    return appliedStamp();
+  }
+  if (p.kind === "section") {
+    await swapLeaf(tx, p, expected, next, adminId);
+    return appliedStamp();
+  }
   return swapText(tx, { ...p, kind: p.kind }, expected, next, mode);
 }
 
@@ -301,8 +321,9 @@ export async function applyProposal(id: string, adminId: string, text?: string):
     const value = checked(p, wanted);
     if (!value.ok)
       return { ok: false as const, error: "invalid_input" as const, issues: value.issues };
+    let at: SQL;
     try {
-      await swap(tx, p, p.before, value.text, adminId, "apply");
+      at = await swap(tx, p, p.before, value.text, adminId, "apply");
     } catch (error) {
       if (!(error instanceof Moved)) throw error;
       const stale = await settle(tx, id, { status: "stale", stampedBefore: null });
@@ -322,8 +343,8 @@ export async function applyProposal(id: string, adminId: string, text?: string):
     const applied = await settle(tx, id, {
       status: "applied",
       after: value.text,
-      appliedAt: appliedStamp(),
-      decidedAt: appliedStamp(),
+      appliedAt: at,
+      decidedAt: at,
     });
     await audit(
       {

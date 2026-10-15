@@ -30,6 +30,7 @@ import {
 } from "../answer-trace";
 import type { AssistantHealth, AssistantUsage } from "../assistant-types";
 import { noticeLine } from "../lessons";
+import { mcpSummary } from "../mcp-usage";
 import { featureRows, stateLabel } from "../spending";
 import { trustAlert } from "../trust";
 
@@ -368,6 +369,19 @@ interface ModelTotal {
               {{ refused().kinds || "No request refused at the gate." }}
             </p>
           </li>
+          <li appKpiTile="MCP calls (30 days)">
+            <p class="m-0 text-h3 tabular-nums">{{ mcp().calls }}</p>
+            <p class="m-0 text-xs text-muted-foreground">
+              @if (mcp().calls || mcp().refused) {
+                {{ mcp().tools || "No tool called yet." }}
+                @if (mcp().refused) {
+                  · {{ mcp().refused }} refused ({{ mcp().reasons }})
+                }
+              } @else {
+                No agent has read the portfolio over MCP yet.
+              }
+            </p>
+          </li>
           <li appKpiTile="Invented citations (30 days)">
             <p class="m-0 text-h3 tabular-nums">{{ dropped().rate * 100 | number: "1.0-1" }} %</p>
             <p class="m-0 text-xs text-muted-foreground">
@@ -540,6 +554,9 @@ export class AssistantOverviewComponent implements OnInit {
       kinds: totals.map((t) => `${t.kind} ${t.count}`).join(" · "),
     };
   });
+
+  /** What agents asked of the read-only MCP endpoint (plan phase 32). */
+  protected readonly mcp = computed(() => mcpSummary(this.usage()?.mcp ?? []));
 
   protected readonly dropped = computed(() => droppedRate(this.usage()?.answers ?? []));
 

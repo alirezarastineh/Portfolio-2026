@@ -361,6 +361,61 @@ test.describe("feeds and files", () => {
     expect((await request.get("/fr/rss.xml")).status()).toBe(404);
   });
 
+  test("llms.txt indexes the portfolio for language models, in each language", async ({
+    request,
+  }) => {
+    // The convention's root file is the English one.
+    for (const path of ["/llms.txt", "/en/llms.txt"]) {
+      const res = await request.get(path);
+      expect(res.status(), path).toBe(200);
+      expect(res.headers()["content-type"], path).toContain("text/plain");
+      const text = await res.text();
+      expect(text, path).toMatch(/^# \S.*\n\n> \S/);
+      expect(text, path).toContain(`](${SITE}/en/work/`);
+      expect(text, path).toContain(`](${SITE}/en/writing/`);
+      // For agents: the read-only MCP endpoint on the API, and the agent card.
+      expect(text, path).toMatch(
+        /\n- \[MCP\]\(https:\/\/[^)\s]+\/v1\/mcp\): read-only MCP endpoint/,
+      );
+      expect(text, path).toContain(`- [Agent card](${SITE}/.well-known/agent-card.json)`);
+      expect(text, path).toContain(`- [Deutsche Fassung](${SITE}/de/llms.txt)`);
+    }
+    const de = await (await request.get("/de/llms.txt")).text();
+    expect(de).toContain("## Für Agenten");
+    expect(de).toContain(`- [English version](${SITE}/en/llms.txt)`);
+    expect((await request.get("/fr/llms.txt")).status()).toBe(404);
+  });
+
+  test("the agent card says what the assistant can do, and where its tools are", async ({
+    request,
+  }) => {
+    const res = await request.get("/.well-known/agent-card.json");
+    expect(res.status()).toBe(200);
+    expect(res.headers()["content-type"]).toContain("application/json");
+    const card = (await res.json()) as {
+      supportedInterfaces: unknown[];
+      provider: { url: string };
+      documentationUrl: string;
+      description: string;
+      skills: { id: string }[];
+      capabilities: { extensions: { params: { endpoint: string } }[] };
+    };
+    expect(card).toMatchObject({
+      supportedInterfaces: [],
+      provider: { url: SITE },
+      documentationUrl: `${SITE}/llms.txt`,
+    });
+    expect(card.description).toContain("The site's assistant is an AI");
+    expect(card.description).toContain("this card lists no A2A interface");
+    expect(card.skills.map((s) => s.id)).toEqual([
+      "search_portfolio",
+      "get_document",
+      "list_projects",
+      "get_resume",
+    ]);
+    expect(card.capabilities.extensions[0]!.params.endpoint).toMatch(/^https:\/\/[^/]+\/v1\/mcp$/);
+  });
+
   test("/en/resume.pdf redirects to the uploaded CV", async ({ request }) => {
     const res = await request.get("/en/resume.pdf", { maxRedirects: 0 });
     expect(res.status()).toBe(302);

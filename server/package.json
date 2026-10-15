@@ -23,18 +23,18 @@
     "ai:eval": "tsx src/ask/evals/cli.ts"
   },
   "dependencies": {
-    "@ai-sdk/google": "^4.0.93",
-    "@ai-sdk/provider": "^4.0.26",
-    "@hono/node-server": "^2.1.4",
+    "@ai-sdk/google": "^4.0.96",
+    "@ai-sdk/provider": "^4.0.27",
+    "@hono/node-server": "^2.1.5",
     "@hono/zod-validator": "^0.9.1",
     "@langchain/core": "^1.2.17",
     "@langchain/google-genai": "^2.3.2",
-    "@langchain/langgraph": "^1.4.21",
+    "@langchain/langgraph": "^1.5.0",
     "@node-rs/argon2": "^2.2.2",
     "@openrouter/ai-sdk-provider": "^3.1.0",
-    "@sentry/node": "^11.6.0",
-    "ai": "^7.0.137",
-    "dotenv": "^18.0.7",
+    "@sentry/node": "^11.7.0",
+    "ai": "^7.0.141",
+    "dotenv": "^18.0.8",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.13",
     "js-tiktoken": "^1.0.21",
@@ -43,11 +43,11 @@
     "pdf-parse": "^2.4.5",
     "pg": "^8.23.1",
     "qrcode": "^1.5.4",
-    "resend": "^6.32.1",
-    "sanitize-html": "^2.18.0",
+    "resend": "^6.33.0",
+    "sanitize-html": "^2.18.1",
     "sharp": "^0.35.5",
     "shiki": "^4.5.0",
-    "zod": "^4.6.6"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -67,7 +67,7 @@
     "prettier": "3.9.10",
     "tsx": "^4.23.15",
     "typescript": "6.0.3",
-    "typescript-eslint": "^8.71.1",
+    "typescript-eslint": "^8.71.2",
     "vitest": "^5.0.4"
   }
 }

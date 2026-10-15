@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { getDb } from "../../db/client.js";
 import {
@@ -20,7 +20,7 @@ import { SkillAnswer, type Failure, type SkillContext } from "../skills/skill.js
 import { recordUse } from "../skills/uses.js";
 import { recordUsage, summarizeCalls } from "../usage.js";
 import { contentGlossary } from "./glossary.js";
-import { criticNotes } from "./verdicts.js";
+import { criticNotes, decideUse } from "./verdicts.js";
 
 /**
  * The FAQ pipeline (plan phase 31, the book's Prompt Chaining with gates and
@@ -82,7 +82,8 @@ export async function faqSource(
       .filter(Boolean)
       .slice(0, 5);
     return {
-      key: `insight:${snapshot.id}:${input.topic}`,
+      // A topic is re-found under its name by a later run (as lessons find it): one chain for it.
+      key: `insight:${topic.title}`,
       kept: {
         source: "insight",
         snapshotId: snapshot.id,
@@ -132,14 +133,18 @@ export async function faqSource(
 
 const OPEN: FaqProposalStatus[] = ["proposed", "needs_you"];
 
-/** The source's open proposal, if it has one. */
+/**
+ * The source's open proposal, if it has one: a journal entry's, or a topic's
+ * by its name, from any insights run (a topic is re-found under its name, so
+ * a later run's draft would be a second entry about the same thing).
+ */
 async function openProposal(source: FaqSource): Promise<FaqProposal | null> {
   const { kept } = source;
   const where =
     kept.source === "insight"
       ? and(
-          eq(aiFaqProposals.snapshotId, kept.snapshotId!),
-          eq(aiFaqProposals.topicIndex, kept.topicIndex!),
+          eq(aiFaqProposals.source, "insight"),
+          sql`${aiFaqProposals.topic} ->> 'title' = ${kept.topic!.title}`,
         )
       : eq(aiFaqProposals.journalId, kept.journalId!);
   const [row] = await getDb()
@@ -166,6 +171,8 @@ const cameEmpty = (field: FaqDraftField) =>
   `${FIELD_NAMES[field]}: every draft came back empty (a safety filter, maybe). Write it yourself.`;
 const unanswerable = (field: FaqDraftField) =>
   `${FIELD_NAMES[field]}: not drafted, the question is not one to answer (3 to ${FAQ_QUESTION_MAX} characters). Rewrite it, then draft the answer in the FAQ form.`;
+export const INSTRUCTION_STOP =
+  "Not answered or translated: the question reads as an instruction to the assistant. Rewrite it and write the rest yourself, or reject this proposal.";
 
 /** A step's draft, recorded in the skills' table; "down" when no model answered. */
 interface Drafted {
@@ -295,25 +302,36 @@ async function draftTheRest(
   if (got.drafted("answerDe", answerDe)) got.keep("answerDe", answerDe);
 }
 
-/** The proposal written; the source's open one when another chain's landed first. */
+/**
+ * The proposal written; the source's open one when another chain's landed
+ * first (another process: this one runs one chain per source), whose drafts
+ * then were never offered: discarded, as the editors' ledger discards a draft
+ * that came back too late.
+ */
 async function store(source: FaqSource, got: Gathered, usd: number): Promise<DraftOutcome> {
-  const [row] = await getDb()
-    .insert(aiFaqProposals)
-    .values({
-      ...source.kept,
-      ...got.texts,
-      uses: got.uses,
-      flags: got.flags,
-      notes: got.notes,
-      usd,
-      status: got.status,
-    })
-    .onConflictDoNothing()
-    .returning();
-  if (row) return { ok: true, proposal: row, existing: false };
   const open = await openProposal(source);
-  if (!open) throw new Error("the FAQ proposal was not stored");
-  return { ok: true, proposal: open, existing: true };
+  const [row] = open
+    ? []
+    : await getDb()
+        .insert(aiFaqProposals)
+        .values({
+          ...source.kept,
+          ...got.texts,
+          uses: got.uses,
+          flags: got.flags,
+          notes: got.notes,
+          usd,
+          status: got.status,
+        })
+        .onConflictDoNothing()
+        .returning();
+  if (row) return { ok: true, proposal: row, existing: false };
+  await Promise.all(
+    Object.values(got.uses).map((id) => decideUse(id, { outcome: "discarded", distance: null })),
+  );
+  const theirs = open ?? (await openProposal(source));
+  if (!theirs) throw new Error("the FAQ proposal was not stored");
+  return { ok: true, proposal: theirs, existing: true };
 }
 
 /** The chain, fenced as `agent`; the proposal it writes, or why there is none. */
@@ -339,7 +357,13 @@ async function runChain(source: FaqSource): Promise<DraftOutcome> {
     if (question === "down") return { ok: false, error: "unavailable", status: 503 };
     if (!question.text) return { ok: false, error: "empty_draft", status: 502 };
     got.keep("questionEn", question);
-    await draftTheRest(session, ctx, question.text, glossary, got);
+    // A question still reading as an order to the assistant after its repairs goes no further:
+    // the answer step takes the question as the admin's own words, unfenced.
+    if (question.failures.some((failure) => failure.gate === "instruction")) {
+      got.notes.push(INSTRUCTION_STOP);
+    } else {
+      await draftTheRest(session, ctx, question.text, glossary, got);
+    }
     return await store(source, got, summarizeCalls(session.calls()).usd);
   } finally {
     const calls = session.calls();
@@ -364,14 +388,17 @@ export async function draftFaqProposal(input: FaqSourceInput): Promise<DraftOutc
   if ("error" in source) {
     return { ok: false, error: source.error, status: source.error === "question_gone" ? 409 : 404 };
   }
-  const open = await openProposal(source);
-  if (open) return { ok: true, proposal: open, existing: true };
   const running = drafting.get(source.key);
   if (running !== undefined) {
     const outcome = await running;
     return outcome.ok ? { ...outcome, existing: true } : outcome;
   }
-  const chain = runChain(source).finally(() => drafting.delete(source.key));
+  // The open one is read once this request holds the source: a chain that ended while this
+  // request read the source has stored its proposal by then, so it is never drafted twice.
+  const chain = (async (): Promise<DraftOutcome> => {
+    const open = await openProposal(source);
+    return open ? { ok: true, proposal: open, existing: true } : runChain(source);
+  })().finally(() => drafting.delete(source.key));
   drafting.set(source.key, chain);
   return chain;
 }

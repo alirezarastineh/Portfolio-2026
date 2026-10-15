@@ -10,10 +10,13 @@ import {
   posts,
   projectTranslations,
   projects,
+  siteProfile,
 } from "../../db/schema.js";
 import { seed } from "../../db/seed.js";
+import { fixtureConfig } from "../../test/ask-fixtures.js";
 import { resetDb } from "../../test/helpers.js";
 import { getCorpus, resetCorpusMemo } from "./build.js";
+import { getAskCorpus, resetAskCorpusMemo } from "./index.js";
 
 beforeEach(async () => {
   await resetDb();
@@ -101,5 +104,21 @@ describe("getCorpus", () => {
 
     await getDb().update(posts).set({ status: "draft" }).where(eq(posts.id, live!.id));
     expect((await getCorpus()).text).toContain("Public note"); // still live until the next publish
+  });
+
+  it("carries the published site's origin, which the assistant's corpus passes on (plan phase 32)", async () => {
+    const siteOf = async () => {
+      resetAskCorpusMemo();
+      const [built, assembled] = [await getCorpus(), await getAskCorpus(fixtureConfig())];
+      return [built.siteUrl, assembled.siteUrl];
+    };
+    await getDb().update(siteProfile).set({ siteUrl: "https://example.test/en/about" });
+    await publishAll();
+    expect(await siteOf()).toEqual(["https://example.test", "https://example.test"]);
+
+    // Not a URL: none, and the MCP tools' links stay relative.
+    await getDb().update(siteProfile).set({ siteUrl: "not a url" });
+    await publishAll();
+    expect(await siteOf()).toEqual([undefined, undefined]);
   });
 });

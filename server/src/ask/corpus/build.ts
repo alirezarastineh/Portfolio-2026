@@ -102,6 +102,12 @@ export interface Corpus {
   text: string;
   projects: ProjectFacts[];
   posts: PostFacts[];
+  /**
+   * The site's public origin as the content declares it (`identity.siteUrl`), for
+   * absolute links where a page-relative one is not enough (the MCP tools, plan
+   * phase 32). Absent in snapshots and fixtures: links stay relative there.
+   */
+  siteUrl?: string;
 }
 
 interface LiveLocale {
@@ -457,7 +463,21 @@ async function buildCorpus(
         url: `/${locale}/writing/${p.slug}`,
       })),
     ),
+    ...siteUrlOf(live),
   };
+}
+
+/** The first language's declared origin, when it is a URL. */
+function siteUrlOf(live: Pick<LiveLocale, "core">[]): Pick<Corpus, "siteUrl"> {
+  for (const { core } of live) {
+    try {
+      const origin = new URL(core.identity.siteUrl).origin;
+      if (origin !== "null") return { siteUrl: origin };
+    } catch {
+      // Not a URL: try the next language.
+    }
+  }
+  return {};
 }
 
 /**

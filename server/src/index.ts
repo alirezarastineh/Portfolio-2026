@@ -3,6 +3,7 @@ import { serve } from "@hono/node-server";
 import { createApp } from "./app.js";
 import { getAskConfig } from "./ask/config.js";
 import { flushGuardEvents, startGuardEventFlush } from "./ask/guard-events.js";
+import { flushMcpUsage, startMcpUsageFlush } from "./ask/mcp/usage.js";
 import { startAskPruning } from "./ask/log.js";
 import { checkModels } from "./ask/models/registry.js";
 import { abortAllAsks } from "./ask/route.js";
@@ -74,6 +75,8 @@ if (migrated) {
   startLearningMonitor();
   // Search vectors are written here too (plan phase 18), when the deploy and the admin turn them on.
   allowEmbeddingBackfill();
+  // What agents asked over MCP (plan phase 32): a laptop's own calls stay out of the Overview.
+  startMcpUsageFlush();
 }
 
 startAuthAttemptPruning();
@@ -141,10 +144,18 @@ function shutdown(signal: string): void {
   // Background runs stop as interrupted; they can be resumed after the restart.
   abortAllRuns();
   server.close((error) => {
-    // The last minute of refusal counts goes in before the pool closes.
-    const database = flushGuardEvents()
-      .catch((flushError: unknown) => console.error("[ask] guard events not written", flushError))
-      .then(() => closeDb());
+    // The last minute of refusal and MCP counts goes in before the pool closes; MCP's only
+    // where migrations ran, as its flush.
+    const database = Promise.allSettled([
+      flushGuardEvents().catch((flushError: unknown) =>
+        console.error("[ask] guard events not written", flushError),
+      ),
+      migrated
+        ? flushMcpUsage().catch((flushError: unknown) =>
+            console.error("[mcp] usage counts not written", flushError),
+          )
+        : undefined,
+    ]).then(() => closeDb());
     void Promise.allSettled([database, flushSentry()])
       .then((results) => {
         for (const result of results) {

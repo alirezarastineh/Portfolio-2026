@@ -936,6 +936,21 @@ export const aiGuardEvents = pgTable(
 );
 
 /**
+ * The MCP endpoint's calls (`ask/mcp/usage.ts`, plan phase 32), per UTC day and
+ * name: a method, `tools/call:<tool>` or `refused:<reason>`, from a fixed set.
+ * Aggregates only, no request content; kept like `ai_guard_events`.
+ */
+export const aiMcpUsage = pgTable(
+  "ai_mcp_usage",
+  {
+    day: date("day", { mode: "string" }).notNull(),
+    name: text("name").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.name] })],
+);
+
+/**
  * Long, paid work run in the background (`ask/runs/`): the eval suite today;
  * the pairwise and nightly judges, insights and the content agent later. At
  * most one queued or running run per kind; its items are the checkpoint a

@@ -13,9 +13,14 @@ import {
   aiSkillUses,
   contentDocuments,
   contentPointers,
+  experiences,
+  experienceTranslations,
   mediaAssets,
+  posts,
+  postTranslations,
   projects,
   projectTranslations,
+  skillTranslations,
 } from "../../db/schema.js";
 import { seed } from "../../db/seed.js";
 import { eventually, fixtureConfig, fixtureCorpus } from "../../test/ask-fixtures.js";
@@ -111,12 +116,25 @@ const revert = (id: string) => admin.post(`/admin/assistant/proposals/${id}/reve
 const reject = (id: string) => admin.post(`/admin/assistant/proposals/${id}/reject`, {});
 
 /** A translation row's own date, as Postgres keeps it (microseconds and all). */
-async function stampOf(projectId: string, locale: Locale): Promise<string> {
+async function stampOf(
+  id: string,
+  locale: Locale,
+  table = "project_translations",
+  owner = "project_id",
+): Promise<string> {
   const { rows } = await getDb().execute<{ at: string }>(
-    sql`select updated_at::text as at from project_translations
-      where project_id = ${projectId} and locale = ${locale}`,
+    sql`select updated_at::text as at from ${sql.identifier(table)}
+      where ${sql.identifier(owner)} = ${id} and locale = ${locale}`,
   );
   return rows[0]!.at;
+}
+
+/** Whether date `a` is after date `b`, compared in Postgres. */
+async function isAfter(a: string, b: string): Promise<boolean> {
+  const { rows } = await getDb().execute<{ later: boolean }>(
+    sql`select ${a}::timestamptz > ${b}::timestamptz as later`,
+  );
+  return rows[0]!.later;
 }
 
 /** A German site-copy leaf set to `value` in the drafts. */
@@ -305,6 +323,105 @@ describe("deciding the content agent's proposals (plan phase 30)", () => {
     expect((await proposal(blank)).status).toBe("proposed");
   });
 
+  it("applies and reverts an experience's, a skill's and a post's text: dated where they are, a post's body sanitized", async () => {
+    const [experience] = await getDb()
+      .insert(experiences)
+      .values({ orgName: "Northwind", startDate: "2020-01-01", position: 0 })
+      .returning({ id: experiences.id });
+    await getDb()
+      .insert(experienceTranslations)
+      .values([
+        { experienceId: experience!.id, locale: "en", title: "Lead", summary: "Led search." },
+        { experienceId: experience!.id, locale: "de", title: "Leitung", summary: "" },
+      ]);
+    const [post] = await getDb()
+      .insert(posts)
+      .values({ slug: "a-post" })
+      .returning({ id: posts.id });
+    await getDb()
+      .insert(postTranslations)
+      .values([
+        { postId: post!.id, locale: "en", title: "A post", body: "<p>Hello.</p>" },
+        { postId: post!.id, locale: "de", title: "Ein Beitrag", body: "" },
+      ]);
+    const [skill] = await getDb()
+      .select()
+      .from(skillTranslations)
+      .where(eq(skillTranslations.locale, "de"))
+      .limit(1);
+    const skillRow = and(
+      eq(skillTranslations.skillId, skill!.skillId),
+      eq(skillTranslations.locale, "de"),
+    );
+    await getDb().update(skillTranslations).set({ caption: "" }).where(skillRow);
+    const experienceText = async () =>
+      (
+        await getDb()
+          .select()
+          .from(experienceTranslations)
+          .where(
+            and(
+              eq(experienceTranslations.experienceId, experience!.id),
+              eq(experienceTranslations.locale, "de"),
+            ),
+          )
+      )[0]!.summary;
+    const postBody = async () =>
+      (
+        await getDb()
+          .select()
+          .from(postTranslations)
+          .where(and(eq(postTranslations.postId, post!.id), eq(postTranslations.locale, "de")))
+      )[0]!.body;
+    const caption = async () =>
+      (await getDb().select().from(skillTranslations).where(skillRow))[0]!.caption;
+    const experienceDate = () =>
+      stampOf(experience!.id, "de", "experience_translations", "experience_id");
+    const postDate = () => stampOf(post!.id, "de", "post_translations", "post_id");
+    const experienceBefore = await experienceDate();
+    const postBefore = await postDate();
+
+    const summary = await propose({
+      kind: "experience",
+      entityId: experience!.id,
+      field: "summary",
+      label: "Northwind · Summary (DE)",
+      after: "Leitete die Suche.",
+    });
+    const skillCaption = await propose({
+      kind: "skill",
+      entityId: skill!.skillId,
+      field: "caption",
+      label: "Skill · Caption (DE)",
+      after: "Eine Unterschrift.",
+    });
+    const body = await propose({
+      kind: "post",
+      entityId: post!.id,
+      field: "body",
+      label: "A post · Body (DE)",
+      after: "<p>Hallo.<script>alert(1)</script></p>",
+    });
+    for (const id of [summary, skillCaption, body]) expect((await apply(id)).status).toBe(200);
+
+    expect(await experienceText()).toBe("Leitete die Suche.");
+    expect(await experienceDate()).not.toBe(experienceBefore);
+    expect(await caption()).toBe("Eine Unterschrift.");
+    // A skill's translation has no date: nothing kept for a revert.
+    expect((await proposal(skillCaption)).stampedBefore).toBeNull();
+    expect(await postBody()).toContain("Hallo.");
+    expect(await postBody()).not.toContain("<script");
+    expect(await postDate()).not.toBe(postBefore);
+
+    // Reverted: each text back, and the dated ones' dates too.
+    for (const id of [summary, skillCaption, body]) expect((await revert(id)).status).toBe(200);
+    expect(await experienceText()).toBe("");
+    expect(await experienceDate()).toBe(experienceBefore);
+    expect(await caption()).toBe("");
+    expect(await postBody()).toBe("");
+    expect(await postDate()).toBe(postBefore);
+  });
+
   it("keeps a site-copy leaf's token: a text without it is refused, and an unknown leaf too", async () => {
     await setLeaf("projectCard.caseLabel", "");
     const leaf = await propose({
@@ -334,7 +451,7 @@ describe("deciding the content agent's proposals (plan phase 30)", () => {
     });
   });
 
-  it("applies a site-copy leaf through its section's lock, moving its token, and alt text to an image", async () => {
+  it("applies and reverts a site-copy leaf through its section's lock, moving its token, and an image's alt text", async () => {
     const [row] = await getDb()
       .select()
       .from(contentDocuments)
@@ -380,6 +497,21 @@ describe("deciding the content agent's proposals (plan phase 30)", () => {
     expect((await apply(alt)).status).toBe(200);
     const [stored] = await getDb().select().from(mediaAssets).where(eq(mediaAssets.id, image!.id));
     expect(stored!.altEn).toBe("The search pipeline's stages.");
+
+    // Reverted, each holds again what it held: the leaf through the same lock, its token moved.
+    const uiDe = and(eq(contentDocuments.section, "ui"), eq(contentDocuments.locale, "de"));
+    const aMinuteAgo = new Date(Date.now() - 60_000);
+    await getDb().update(contentDocuments).set({ updatedAt: aMinuteAgo }).where(uiDe);
+    expect((await revert(leaf)).status).toBe(200);
+    const [reverted] = await getDb().select().from(contentDocuments).where(uiDe);
+    expect((reverted!.data as typeof data).profile.heroHeadline).toBe("");
+    expect(reverted!.updatedAt.getTime()).toBeGreaterThan(aMinuteAgo.getTime());
+    expect((await revert(alt)).status).toBe(200);
+    const [restored] = await getDb()
+      .select()
+      .from(mediaAssets)
+      .where(eq(mediaAssets.id, image!.id));
+    expect(restored!.altEn).toBe("");
   });
 
   it("rejects without writing, refuses a decided one, and reverts only what still holds", async () => {
@@ -463,6 +595,70 @@ describe("deciding the content agent's proposals (plan phase 30)", () => {
     expect((await proposal(id)).status).toBe("rejected");
   });
 
+  it("keeps for a revert the date the apply replaced, even when an editor's save landed while it waited", async () => {
+    const [project] = await projectsInOrder();
+    await setText(project!.id, "de", { hook: "" });
+    const id = await propose({ entityId: project!.id });
+    // An editor's save holds the translation's row; the admin applies meanwhile.
+    const editor = await getPool().connect();
+    let saved: string;
+    try {
+      await editor.query("BEGIN");
+      await editor.query(
+        "SELECT 1 FROM project_translations WHERE project_id = $1 AND locale = 'de' FOR UPDATE",
+        [project!.id],
+      );
+      const applying = apply(id);
+      await waitingOnLock();
+      // It saves another field of the same translation, which dates it.
+      const { rows } = await editor.query<{ at: string }>(
+        `UPDATE project_translations SET role = 'Von Hand.', updated_at = date_trunc('milliseconds', now())
+          WHERE project_id = $1 AND locale = 'de' RETURNING updated_at::text AS at`,
+        [project!.id],
+      );
+      saved = rows[0]!.at;
+      await editor.query("COMMIT");
+      expect((await applying).status).toBe(200);
+    } finally {
+      editor.release();
+    }
+    // The date kept is the save's, so a revert dates the row as the editor left it.
+    expect((await revert(id)).status).toBe(200);
+    expect(await stampOf(project!.id, "de")).toBe(saved);
+    expect((await text(project!.id, "de")).role).toBe("Von Hand.");
+  });
+
+  it("dates each apply after the translation's last date, so a revert never takes a later apply's date back", async () => {
+    const [project] = await projectsInOrder();
+    await setText(project!.id, "de", { hook: "", role: "" });
+    const first = await propose({ entityId: project!.id });
+    const second = await propose({ entityId: project!.id, field: "role", after: "Leitung." });
+    expect((await apply(first)).status).toBe(200);
+    // As if the first apply were dated at or after the moment the second starts (one batch,
+    // the same millisecond): its date, on the row and on the proposal, an hour ahead.
+    await getDb().execute(
+      sql`update project_translations set updated_at = date_trunc('milliseconds', now() + interval '1 hour')
+        where project_id = ${project!.id} and locale = 'de'`,
+    );
+    await getDb().execute(
+      sql`update ai_proposals set applied_at = (select updated_at from project_translations
+        where project_id = ${project!.id} and locale = 'de') where id = ${first}`,
+    );
+    const firstAt = await stampOf(project!.id, "de");
+    expect((await apply(second)).status).toBe(200);
+    // Dated after the first, and recorded with that same date.
+    const secondAt = await stampOf(project!.id, "de");
+    expect(await isAfter(secondAt, firstAt)).toBe(true);
+    const { rows } = await getDb().execute<{ at: string }>(
+      sql`select applied_at::text as at from ai_proposals where id = ${second}`,
+    );
+    expect(rows[0]!.at).toBe(secondAt);
+    // Reverting the first dates the row after the second's date, never back to the first's.
+    expect((await revert(first)).status).toBe(200);
+    expect((await text(project!.id, "de")).role).toBe("Leitung.");
+    expect(await isAfter(await stampOf(project!.id, "de"), secondAt)).toBe(true);
+  });
+
   it("applies a needs-you proposal only with the admin's text", async () => {
     const [project] = await projectsInOrder();
     await setText(project!.id, "de", { hook: "" });
@@ -527,5 +723,54 @@ describe("deciding the content agent's proposals (plan phase 30)", () => {
     ]) {
       expect((await admin.post("/admin/assistant/proposals/decide", body)).status).toBe(400);
     }
+
+    // A selection rejected: each on its own, an applied one refused, the drafts discarded.
+    const rejected = await admin.post("/admin/assistant/proposals/decide", {
+      ids: [broken, first],
+      action: "reject",
+    });
+    expect(await rejected.json()).toEqual({
+      results: [
+        { id: broken, proposal: expect.objectContaining({ status: "rejected" }) },
+        { id: first, error: "not_open" },
+      ],
+    });
+    expect(await use((await proposal(broken)).useId)).toMatchObject({ outcome: "discarded" });
+    expect((await text(project!.id, "de")).hook).toBe("Ein neuer Haken.");
+  });
+
+  it("lists the newest 200, and says there are more only when there are", async () => {
+    const rows = (count: number, from: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        runId,
+        goal: "translations" as const,
+        kind: "project" as const,
+        entityId: `entity-${from + i}`,
+        field: "hook",
+        locale: "de" as const,
+        label: `${from + i} · Hook (DE)`,
+        after: "Ein Haken.",
+        skill: "translate",
+        version: "v",
+        status: "proposed" as const,
+        // A second apart, so "newest" is plain.
+        createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, from + i)),
+      }));
+    type Listed = { proposals: { label: string }[]; limited: boolean };
+    const list = async () =>
+      (await (await admin.get("/admin/assistant/proposals?status=proposed")).json()) as Listed;
+
+    await getDb().insert(aiProposals).values(rows(200, 0));
+    const all = await list();
+    expect(all.proposals).toHaveLength(200);
+    expect(all.limited).toBe(false);
+
+    await getDb().insert(aiProposals).values(rows(1, 200));
+    const more = await list();
+    expect(more.proposals).toHaveLength(200);
+    expect(more.limited).toBe(true);
+    // Newest first: the oldest is the one not listed.
+    expect(more.proposals[0]!.label).toBe("200 · Hook (DE)");
+    expect(more.proposals.map((p) => p.label)).not.toContain("0 · Hook (DE)");
   });
 });

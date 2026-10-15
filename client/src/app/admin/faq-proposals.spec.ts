@@ -6,11 +6,15 @@ import {
   acceptProblem,
   faqProposalWords,
   isOpenProposal,
+  lessonExample,
   measureChoices,
   provenanceOf,
   sourceLine,
   type FaqProposal,
 } from "./faq-proposals";
+
+const STATEMENT =
+  "When visitors ask about relocation and remote work, the FAQ entry answers it from the portfolio.";
 
 function proposal(change: Partial<FaqProposal> = {}): FaqProposal {
   return {
@@ -55,7 +59,19 @@ describe("the FAQ proposals' helpers (plan phase 31)", () => {
         proposal({ topic: { snapshotId: "s", title: "Rates", questions: 1, unanswered: false } }),
       ),
     ).toBe("From the insight topic “Rates” (1 question)");
-    expect(sourceLine(proposal({ source: "journal", topic: null }))).toBe("From a journal entry");
+    // A journal proposal is told apart by its drafted question (its line names its buttons).
+    expect(sourceLine(proposal({ source: "journal", topic: null }))).toBe(
+      "From a journal entry: “Is he open to relocating?”",
+    );
+    expect(sourceLine(proposal({ source: "journal", topic: null, questionEn: "" }))).toBe(
+      "From a journal entry: “Ist er offen für einen Umzug?”",
+    );
+    expect(
+      sourceLine(proposal({ source: "journal", topic: null, questionEn: "", questionDe: "" })),
+    ).toBe("From a journal entry");
+    expect(
+      sourceLine(proposal({ source: "journal", topic: null, questionEn: `${"Why ".repeat(30)}?` })),
+    ).toHaveLength("From a journal entry: “”".length + 80);
     const made = provenanceOf([
       proposal({ status: "accepted", faqId: "f1" }),
       proposal({ id: "p2", source: "journal", topic: null, status: "accepted", faqId: "f2" }),
@@ -75,8 +91,14 @@ describe("the FAQ proposals' helpers (plan phase 31)", () => {
     expect(acceptForm(linked).measure).toBe("lesson:l1");
     const fresh = acceptForm(proposal());
     expect(fresh.measure).toBe("new");
-    expect(fresh.statement).toBe(
-      "When visitors ask about relocation and remote work, the FAQ entry answers it from the portfolio.",
+    // A lesson is the admin's words: none written for them, an example shown beside the field.
+    expect(fresh.statement).toBe("");
+    expect(lessonExample(proposal())).toBe(STATEMENT);
+    expect(lessonExample(proposal({ topic: null }))).toBe(
+      "When visitors ask about this question, the FAQ entry answers it from the portfolio.",
+    );
+    expect(acceptProblem(fresh)).toBe(
+      "Write the lesson as a rule someone can follow: at least 8 words (0 so far). Or choose “Not measured”.",
     );
     expect(fresh.scope).toBe("relocation, remote, work");
     const journal = proposal({
@@ -89,7 +111,7 @@ describe("the FAQ proposals' helpers (plan phase 31)", () => {
   });
 
   it("accepts a language written whole, and sends only what was written", () => {
-    const form = acceptForm(proposal());
+    const form = { ...acceptForm(proposal()), statement: STATEMENT };
     expect(acceptProblem(form)).toBeNull();
     expect(acceptBody(form)).toEqual({
       isVisible: true,
@@ -97,11 +119,7 @@ describe("the FAQ proposals' helpers (plan phase 31)", () => {
         en: { question: "Is he open to relocating?", answer: "Yes, within the EU." },
         de: { question: "Ist er offen für einen Umzug?", answer: "Ja, innerhalb der EU." },
       },
-      lesson: {
-        statement:
-          "When visitors ask about relocation and remote work, the FAQ entry answers it from the portfolio.",
-        scope: ["relocation", "remote", "work"],
-      },
+      lesson: { statement: STATEMENT, scope: ["relocation", "remote", "work"] },
     });
 
     // A content gap: the answers are the admin's to write.
@@ -141,6 +159,10 @@ describe("the FAQ proposals' helpers (plan phase 31)", () => {
     expect(faqProposalWords("http_503")).toBe(
       "The API failed (HTTP 503): try again; its log says why.",
     );
+    expect(faqProposalWords("instruction", { locale: "de" })).toBe(
+      "The question (DE) reads as an instruction to the assistant, which the FAQ does not take from a draft: rewrite it.",
+    );
+    expect(faqProposalWords("instruction")).toMatch(/^The question reads as an instruction/);
     expect(faqProposalWords("something_new")).toBe("something_new");
   });
 });

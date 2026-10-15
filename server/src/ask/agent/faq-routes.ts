@@ -41,8 +41,9 @@ faqProposalsRouter.get(
   "/",
   zValidator("query", z.object({ status: statuses.optional() }), invalid),
   async (c) => {
-    const proposals = await listFaqProposals(c.req.valid("query").status ?? [], LISTED);
-    return c.json({ proposals, limited: proposals.length === LISTED });
+    // One past the page tells whether there are more.
+    const listed = await listFaqProposals(c.req.valid("query").status ?? [], LISTED + 1);
+    return c.json({ proposals: listed.slice(0, LISTED), limited: listed.length > LISTED });
   },
 );
 
@@ -69,6 +70,9 @@ function answer(c: Context, decision: FaqDecision): Response {
   if (decision.ok) return c.json({ proposal: decision.proposal, linked: decision.linked });
   if (decision.error === "not_corroborated") {
     return c.json({ error: decision.error, detail: { reason: decision.reason } }, 400);
+  }
+  if (decision.error === "instruction") {
+    return c.json({ error: decision.error, detail: { locale: decision.locale } }, 400);
   }
   return c.json({ error: decision.error }, decision.status);
 }

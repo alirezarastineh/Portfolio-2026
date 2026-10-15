@@ -239,6 +239,15 @@ export interface AssistantUsage {
   checks: { flag: string; count: number }[];
   /** What each feature spent per day; days before the split have none. */
   features?: { day: string; feature: string; requests: number; usd: number }[];
+  /** What agents asked over MCP per day (plan phase 32); an older API sends none. */
+  mcp?: McpUsageRow[];
+}
+
+/** A day's count of one MCP name: a method, `tools/call:<tool>` or `refused:<reason>`. */
+export interface McpUsageRow {
+  day: string;
+  name: string;
+  count: number;
 }
 
 export interface Attempt {

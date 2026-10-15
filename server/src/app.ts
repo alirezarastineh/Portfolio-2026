@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 
 import { setAskDeps, type AskDeps } from "./ask/deps.js";
+import { createMcpRouter } from "./ask/mcp/route.js";
 import { createAskRouter } from "./ask/route.js";
 import { adminOrigins } from "./auth/middleware.js";
 import { getPool } from "./db/client.js";
@@ -76,6 +77,8 @@ export function createApp(options: { ask?: AskDeps } = {}): Hono {
 
   app.route("/contact", contactRouter);
   app.route("/v1/ask", createAskRouter());
+  // Read-only MCP for agents (plan phase 32): the site's own origins only, among browsers.
+  app.route("/v1/mcp", createMcpRouter(corsOrigins));
   app.route("/v2/content", contentV2Router);
   // Public: uploaded images must be fetchable by anyone viewing the portfolio.
   app.route("/media", mediaRouter);

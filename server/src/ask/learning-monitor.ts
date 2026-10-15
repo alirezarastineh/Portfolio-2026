@@ -6,6 +6,7 @@ import { captureError } from "../lib/sentry.js";
 import { audit, type AuditAlternative } from "./audit.js";
 import type { AskConfig } from "./config.js";
 import { askConfig } from "./deps.js";
+import { pruneFaqProposals } from "./agent/faq-prune.js";
 import { pruneInsightSnapshots, runInsights } from "./insights.js";
 import {
   evictionReason,
@@ -25,11 +26,18 @@ import { rephrased, type OutcomeRow } from "./outcomes.js";
  * it looked at and what it did, the considered-but-rejected record. It reads
  * stored answers only; the one model call is the insights run. The same
  * nightly tick prunes the insights runs (they quote visitors' questions),
- * whatever the assistant's state.
+ * then the open FAQ proposals drafted from visitor text that is gone (plan
+ * phase 31), whatever the assistant's state.
  */
 
 const LOCK = 8_741_221;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The insights runs first: an open FAQ proposal drafted from a pruned run goes with it. */
+async function pruneVisitorCopies(): Promise<void> {
+  await pruneInsightSnapshots();
+  await pruneFaqProposals();
+}
 
 /** Why insights did not run, in words: the audit row and the Insights tab say it. */
 const NOT_RUN: Record<string, string> = {
@@ -222,7 +230,8 @@ export function nextLearningCheckAt(now: Date): Date {
 /**
  * Nightly at 03:30 UTC. Started only where migrations ran, so a laptop on the
  * tunnel never writes to the shared database. The check is skipped while the
- * deploy has the assistant off; the insights runs are pruned either way. The
+ * deploy has the assistant off; the insights runs and the open FAQ proposals
+ * drafted from gone visitor text are pruned either way. The
  * check, the prune and the config can be swapped in tests.
  */
 export function startLearningMonitor(
@@ -237,12 +246,12 @@ export function startLearningMonitor(
   const {
     now = new Date(),
     check: run = runLearningCheck,
-    prune = pruneInsightSnapshots,
+    prune = pruneVisitorCopies,
     config: read = askConfig,
   } = options;
   const tick = () => {
     void prune().catch((error: unknown) => {
-      console.error("[learning] pruning insights runs failed", error);
+      console.error("[learning] pruning insights runs or FAQ proposals failed", error);
       captureError(error, { phase: "insights-prune" });
     });
     const config = read();

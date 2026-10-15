@@ -226,6 +226,32 @@ export async function recordRequest(ipHash: string, sessionHash: string): Promis
     .values([{ bucket: `ip:${ipHash}` }, { bucket: `session:${sessionHash}` }]);
 }
 
+/**
+ * The MCP endpoint's limits per IP (plan phase 32): reads with no model behind
+ * them, so wider than the visitors' questions, and in a bucket of their own,
+ * so agents and visitors never use up each other's.
+ */
+export const MCP_RATE = { perHour: 120, perDay: 1_000 } as const;
+
+export async function checkMcpRate(
+  ipHash: string,
+  now = Date.now(),
+): Promise<{ ok: true } | { ok: false; retryAfter: number }> {
+  const bucket = `mcp:${ipHash}`;
+  const waits = await Promise.all([
+    overLimit({ bucket, limit: MCP_RATE.perHour, windowMs: HOUR_MS }, now),
+    overLimit({ bucket, limit: MCP_RATE.perDay, windowMs: DAY_MS }, now),
+  ]);
+  const retryAfter = Math.max(0, ...waits.filter((wait): wait is number => wait !== null));
+  return retryAfter ? { ok: false, retryAfter } : { ok: true };
+}
+
+export async function recordMcpRequest(ipHash: string): Promise<void> {
+  await getDb()
+    .insert(aiRateEvents)
+    .values({ bucket: `mcp:${ipHash}` });
+}
+
 export async function pruneRateEvents(now = Date.now()): Promise<void> {
   await getDb()
     .delete(aiRateEvents)

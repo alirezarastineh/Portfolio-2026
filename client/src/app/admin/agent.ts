@@ -177,6 +177,40 @@ export const startWords = (code: string): string =>
     ? `The run's limits are out of range: ${RUN_LIMITS.items.min}–${RUN_LIMITS.items.max} items, $${RUN_LIMITS.usd.min}–$${RUN_LIMITS.usd.max}.`
     : agentWords(code);
 
+/** A run's cancel and resume refused (`runs/routes.ts`), in words. */
+const RUN_WORDS: Record<string, string> = {
+  not_found: "That run is gone.",
+  not_cancellable: "That run has ended: there is nothing to cancel.",
+  not_resumable: "That run cannot be resumed: only a failed, interrupted or cancelled one can.",
+};
+
+export const runWords = (code: string): string => RUN_WORDS[code] ?? agentWords(code);
+
+/** A problem with a text, as the API sends it (a zod issue, its bounds included). */
+export interface TextIssue {
+  message: string;
+  code?: string;
+  maximum?: unknown;
+  minimum?: unknown;
+}
+
+/**
+ * Why the field refused a text, in words: its length, or what it must keep
+ * (a site-copy leaf's token: "must contain {i}").
+ */
+export function textWords(issues: readonly TextIssue[] | undefined): string {
+  const issue = issues?.[0];
+  const refused = "The text does not fit the field";
+  if (!issue) return `${refused}.`;
+  if (issue.code === "too_big" && typeof issue.maximum === "number") {
+    return `${refused}: at most ${issue.maximum} characters.`;
+  }
+  if (issue.code === "too_small" && typeof issue.minimum === "number") {
+    return `${refused}: at least ${issue.minimum} ${issue.minimum === 1 ? "character" : "characters"}.`;
+  }
+  return `${refused}: ${issue.message.replace(/\.$/, "")}.`;
+}
+
 /** A field's text as a reader sees it: tags out, the common entities decoded. */
 export function plainText(value: string): string {
   return value

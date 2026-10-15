@@ -12,6 +12,7 @@ import {
   aiFaqTranslations,
   aiFeedback,
   aiGuardEvents,
+  aiMcpUsage,
   aiMessages,
   aiReviews,
   aiSettings,
@@ -455,6 +456,13 @@ adminAskRouter.get("/assistant/usage", async (c) => {
     .where(gte(aiGuardEvents.day, since))
     .orderBy(asc(aiGuardEvents.day), asc(aiGuardEvents.kind));
 
+  // What agents asked over MCP (plan phase 32), per day and name; an older client ignores it.
+  const mcp = await getDb()
+    .select()
+    .from(aiMcpUsage)
+    .where(gte(aiMcpUsage.day, since))
+    .orderBy(asc(aiMcpUsage.day), asc(aiMcpUsage.name));
+
   // What each feature spent per day (features.ts); days before the split have none.
   const features = await getDb()
     .select({
@@ -477,7 +485,7 @@ adminAskRouter.get("/assistant/usage", async (c) => {
     group by f.flag
     order by count desc, f.flag`);
 
-  return c.json({ days, primaryModel, models, answers, guardEvents, checks, features });
+  return c.json({ days, primaryModel, models, answers, guardEvents, checks, features, mcp });
 });
 
 /* ----------------------------------------------------------- conversations */

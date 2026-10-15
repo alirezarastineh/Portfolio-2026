@@ -9,10 +9,12 @@ import {
   isOpen,
   plainText,
   runSummary,
+  runWords,
   splitLabel,
   startWords,
   statusName,
   summaryLine,
+  textWords,
   type Proposal,
 } from "./agent";
 
@@ -109,5 +111,28 @@ describe("the Agent page's helpers (plan phase 30)", () => {
     expect(plainText("<p>Search &amp; <strong>answers</strong>&nbsp;fast</p>")).toBe(
       "Search & answers fast",
     );
+  });
+
+  it("says a run's cancel and resume refusals in words, never a raw code or a proposal's", () => {
+    expect(runWords("not_cancellable")).toBe("That run has ended: there is nothing to cancel.");
+    expect(runWords("not_resumable")).toMatch(/only a failed, interrupted or cancelled one/);
+    expect(runWords("not_found")).toBe("That run is gone.");
+    // The fences read as everywhere.
+    expect(runWords("cap_reached")).toBe(agentWords("cap_reached"));
+    expect(runWords("http_503")).toBe(agentWords("http_503"));
+  });
+
+  it("says why a field refused a text: what it must keep, or its length", () => {
+    expect(textWords([{ code: "custom", message: "must contain {i}" }])).toBe(
+      "The text does not fit the field: must contain {i}.",
+    );
+    expect(
+      textWords([{ code: "too_big", maximum: 200, message: "Too big: expected string…" }]),
+    ).toBe("The text does not fit the field: at most 200 characters.");
+    expect(textWords([{ code: "too_small", minimum: 1, message: "Too small" }])).toBe(
+      "The text does not fit the field: at least 1 character.",
+    );
+    expect(textWords([])).toBe("The text does not fit the field.");
+    expect(textWords(undefined)).toBe("The text does not fit the field.");
   });
 });

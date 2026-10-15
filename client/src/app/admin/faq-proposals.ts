@@ -67,9 +67,21 @@ const STATUS_NAMES: Record<FaqProposalStatus, string> = {
 
 export const proposalStatusName = (status: FaqProposalStatus): string => STATUS_NAMES[status];
 
-/** "From the insight topic “Relocation” (6 questions, not answered)", or "From a journal entry". */
-export function sourceLine(p: Pick<FaqProposalRow, "source" | "topic">): string {
-  if (p.source === "journal") return "From a journal entry";
+const clip = (text: string, max = 80) =>
+  text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+
+/**
+ * "From the insight topic “Relocation” (6 questions, not answered)", or "From
+ * a journal entry: “Is he open to relocating?”": its drafted question tells
+ * two journal proposals apart, since the line names its card and buttons.
+ */
+export function sourceLine(
+  p: Pick<FaqProposalRow, "source" | "topic" | "questionEn" | "questionDe">,
+): string {
+  if (p.source === "journal") {
+    const asked = p.questionEn.trim() || p.questionDe.trim();
+    return asked ? `From a journal entry: “${clip(asked)}”` : "From a journal entry";
+  }
   const t = p.topic;
   if (!t) return "From an insight topic";
   const counts = `${t.questions} ${t.questions === 1 ? "question" : "questions"}${t.unanswered ? ", not answered" : ""}`;
@@ -88,9 +100,6 @@ export function provenanceOf(proposals: readonly FaqProposalRow[]): Map<string, 
   }
   return out;
 }
-
-const clip = (text: string, max = 80) =>
-  text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
 
 /** How the entry's effect can be measured: its source's lessons, a new one when allowed, or not at all. */
 export function measureChoices(
@@ -119,9 +128,12 @@ export interface AcceptForm {
   scope: string;
 }
 
-/** The form a proposal opens with: its drafts, measured by its source's lesson or a new one when it can. */
+/**
+ * The form a proposal opens with: its drafts, measured by its source's lesson
+ * or a new one when it can. A new lesson's words start empty: a lesson is the
+ * admin's words (Phase 25), never one accepted in a click.
+ */
 export function acceptForm(p: FaqProposal): AcceptForm {
-  const title = p.topic?.title ?? "";
   return {
     text: {
       en: { question: p.questionEn, answer: p.answerEn },
@@ -129,11 +141,15 @@ export function acceptForm(p: FaqProposal): AcceptForm {
     },
     visible: true,
     measure: measureChoices(p)[0]!.value,
-    statement: title
-      ? `When visitors ask about ${title.toLowerCase()}, the FAQ entry answers it from the portfolio.`
-      : "",
-    scope: scopeFromTitle(title).join(", "),
+    statement: "",
+    scope: scopeFromTitle(p.topic?.title ?? "").join(", "),
   };
+}
+
+/** What a lesson for the topic could say, shown as an example beside the field, never filled in. */
+export function lessonExample(p: Pick<FaqProposalRow, "topic">): string {
+  const title = p.topic?.title.toLowerCase() ?? "this question";
+  return `When visitors ask about ${title}, the FAQ entry answers it from the portfolio.`;
 }
 
 /** Why the form cannot be accepted yet; null when it can. */
@@ -146,7 +162,9 @@ export function acceptProblem(form: AcceptForm): string | null {
       return `Write both the question and the answer in ${locale.toUpperCase()} (3 characters or more), or leave both empty.`;
     }
   }
-  return form.measure === "new" ? lessonProblem(form.statement, form.scope) : null;
+  if (form.measure !== "new") return null;
+  const problem = lessonProblem(form.statement, form.scope);
+  return problem ? `${problem} Or choose “Not measured”.` : null;
 }
 
 export type AcceptBody = FaqInput & {
@@ -196,6 +214,11 @@ const WORDS: Record<string, string> = {
 export function faqProposalWords(error: string, detail?: unknown): string {
   if (["not_corroborated", "vague_statement", "empty_scope"].includes(error)) {
     return lessonRefusal(error, detail);
+  }
+  if (error === "instruction") {
+    const locale = (detail as { locale?: unknown } | undefined)?.locale;
+    const which = typeof locale === "string" ? ` (${locale.toUpperCase()})` : "";
+    return `The question${which} reads as an instruction to the assistant, which the FAQ does not take from a draft: rewrite it.`;
   }
   if (/^http_5\d\d$/.test(error)) {
     return `The API failed (HTTP ${error.slice(5)}): try again; its log says why.`;

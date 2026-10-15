@@ -2,6 +2,7 @@ import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   effect,
   inject,
   Injector,
@@ -25,6 +26,7 @@ import {
   acceptForm,
   acceptProblem,
   faqProposalWords,
+  lessonExample,
   measureChoices,
   proposalStatusName,
   sourceLine,
@@ -119,6 +121,7 @@ import {
               <span class="text-muted-foreground">Measure its effect</span>
               <select
                 class="h-8 max-w-full rounded-md border border-border bg-background px-2 text-foreground"
+                [attr.aria-describedby]="p.newLesson ? id + '-measure-hint' : null"
                 [ngModel]="f.measure"
                 [ngModelOptions]="{ standalone: true }"
                 (ngModelChange)="update(p, { measure: $event })"
@@ -129,7 +132,9 @@ import {
               </select>
             </label>
             @if (p.newLesson; as reason) {
-              <p class="m-0 text-muted-foreground">No new lesson from here: {{ reason }}.</p>
+              <p [id]="id + '-measure-hint'" class="m-0 text-muted-foreground">
+                No new lesson from here: {{ reason }}.
+              </p>
             }
             @if (f.measure === "new") {
               <div hlmField>
@@ -139,36 +144,41 @@ import {
                   rows="2"
                   maxlength="500"
                   [id]="id + '-statement'"
+                  [aria-describedby]="id + '-statement-hint'"
                   [ngModel]="f.statement"
                   [ngModelOptions]="{ standalone: true }"
                   (ngModelChange)="update(p, { statement: $event })"
                 ></textarea>
               </div>
+              <p [id]="id + '-statement-hint'" class="m-0 text-muted-foreground">
+                A rule someone can follow, at least 8 words: when it applies and what it does. For
+                example: “{{ example(p) }}”
+              </p>
               <div hlmField>
                 <label hlmFieldLabel [for]="id + '-scope'">Words its questions contain</label>
                 <input
                   hlmInput
                   [id]="id + '-scope'"
+                  [aria-describedby]="id + '-scope-hint'"
                   [ngModel]="f.scope"
                   [ngModelOptions]="{ standalone: true }"
                   (ngModelChange)="update(p, { scope: $event })"
                 />
               </div>
-              <p class="m-0 text-muted-foreground">
+              <p [id]="id + '-scope-hint'" class="m-0 text-muted-foreground">
                 Its effect is measured on visitors' questions with these words: how often the
                 assistant could not answer before the entry, and since.
               </p>
             }
           </div>
-          @if (problem(p); as why) {
-            <p class="m-0 text-xs text-accent-orange">{{ why }}</p>
-          }
+          <!-- Always there, so Accept is described by what still stops it (empty when nothing). -->
+          <p [id]="id + '-problem'" class="m-0 text-xs text-accent-orange">{{ problem(p) }}</p>
           <div class="flex flex-wrap gap-2">
             <button
               hlmBtn
               size="sm"
               type="button"
-              [attr.aria-describedby]="id"
+              [attr.aria-describedby]="id + ' ' + id + '-problem'"
               [disabled]="!!busy() || !!problem(p)"
               (click)="accept(p)"
             >
@@ -212,17 +222,24 @@ export class FaqProposalsComponent {
   protected readonly source = sourceLine;
   protected readonly status = (p: FaqProposal) => proposalStatusName(p.status);
   protected readonly choices = measureChoices;
+  protected readonly example = lessonExample;
   /** A decision in flight: the proposal's id. */
   protected readonly busy = signal<string | null>(null);
   protected readonly said = signal("");
   /** The admin's edits, by proposal; a proposal not edited shows its drafts. */
   private readonly forms = signal<Record<string, AcceptForm>>({});
+  /** The drafted proposal focused already: the list read again later leaves focus where it is. */
+  private focused: string | null = null;
+  /** Left (another tab): a decision answered meanwhile is only told in a toast. */
+  private gone = false;
 
   constructor() {
-    // A proposal just drafted elsewhere: its heading takes focus once it is listed.
+    inject(DestroyRef).onDestroy(() => (this.gone = true));
+    // A proposal just drafted elsewhere: its heading takes focus once it is listed, once.
     effect(() => {
       const id = this.focus();
-      if (!id || !this.proposals().some((p) => p.id === id)) return;
+      if (!id || id === this.focused || !this.proposals().some((p) => p.id === id)) return;
+      this.focused = id;
       untracked(() =>
         afterNextRender(() => document.getElementById(`faq-proposal-${id}`)?.focus(), {
           injector: this.injector,
@@ -282,14 +299,22 @@ export class FaqProposalsComponent {
 
   private refused(error: string, detail: unknown): void {
     const words = faqProposalWords(error, detail);
-    this.said.set(`Not done: ${words}`);
     toast.error("Not done", { description: words });
-    // Decided elsewhere, or gone: the list is read again.
-    if (error === "not_open" || error === "not_found") this.decided.emit();
+    if (this.gone) return;
+    this.said.set(`Not done: ${words}`);
+    // Decided elsewhere, or gone: the list is read again, and the card with the button goes.
+    if (error === "not_open" || error === "not_found") {
+      this.decided.emit();
+      this.focusList();
+    }
   }
 
   /** Decided: the proposal leaves the list, so its heading's place goes to the list's. */
   private done(words: string, p: FaqProposal): void {
+    if (this.gone) {
+      toast.success(words);
+      return;
+    }
     this.said.set(words);
     this.forms.update((all) => {
       const rest = { ...all };
@@ -297,6 +322,10 @@ export class FaqProposalsComponent {
       return rest;
     });
     this.decided.emit();
+    this.focusList();
+  }
+
+  private focusList(): void {
     afterNextRender(() => document.getElementById("faq-proposals-title")?.focus(), {
       injector: this.injector,
     });

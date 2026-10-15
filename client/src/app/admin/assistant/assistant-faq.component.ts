@@ -27,6 +27,7 @@ import { ConfirmService } from "../components/confirm-dialog.component";
 import { DraftOfferComponent } from "../components/draft-offer.component";
 import { CopilotLedger } from "../copilot-ledger";
 import { draftOffer, type DraftOffer } from "../copilot-skills";
+import { FaqDraftsService } from "../faq-drafts.service";
 import { isOpenProposal, provenanceOf, type FaqProposal } from "../faq-proposals";
 import { FaqProposalsComponent } from "./faq-proposals.component";
 
@@ -205,6 +206,7 @@ export class AssistantFaqComponent implements OnInit {
   private readonly confirm = inject(ConfirmService);
   /** A drafted answer's verdict, judged when the entry is saved (plan phase 27). */
   private readonly ledger = inject(CopilotLedger);
+  private readonly drafts = inject(FaqDraftsService);
 
   protected readonly locales = LOCALES;
   protected readonly entries = signal<FaqEntry[]>([]);
@@ -241,6 +243,13 @@ export class AssistantFaqComponent implements OnInit {
         this.replaceForm(emptyForm(question));
         this.seedTaken.emit();
       });
+    });
+    // A proposal drafted in Insights or the Journal lands while this tab is open: read the list
+    // again, so it shows (the ones announced before this tab opened are in its first read).
+    const since = this.drafts.drafted()?.n ?? 0;
+    effect(() => {
+      const drafted = this.drafts.drafted();
+      if (drafted && drafted.n > since) untracked(() => void this.load());
     });
     // Leaving with the form open: a drafted answer not saved was not kept.
     inject(DestroyRef).onDestroy(() => {

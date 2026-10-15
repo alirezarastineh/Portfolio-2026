@@ -23,5 +23,11 @@ export default defineConfig({
     setupFiles: ["src/test-setup.ts"],
     include: ["src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}", "vite-plugins/**/*.spec.ts"],
     reporters: ["default"],
+    // Vitest 5 caches transformed modules on disk between runs (on by default). The Angular
+    // plugin (2.8) names each component's inline styles by a hash it keeps in memory while it
+    // transforms the component, so a module served from that cache imports a style id the plugin
+    // never registered: every run after the first failed to load the specs of components with
+    // inline styles ("Cannot find module …virtual:angular:jit:style:inline;…").
+    fsModuleCache: false,
   },
 });

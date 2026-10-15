@@ -967,5 +967,6 @@ describe("properties", () => {
       ),
       runs(40),
     );
-  });
+    // Forty answers through the real agent: about 2 s alone, past the 5 s default under load.
+  }, 20_000);
 });

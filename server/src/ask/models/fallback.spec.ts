@@ -110,7 +110,9 @@ describe("createFallbackModel", () => {
   });
 
   it("holds a model asked for its thoughts to the visitors' deadline for its first text", async () => {
-    // A thought at once, the text only after the first-chunk deadline.
+    // A thought at once, the text only well after the first-chunk deadline. Wide margins: under
+    // a loaded run, 30 ms was too short even for the model that answers at once.
+    const deadline = { firstChunkTimeoutMs: 150 };
     const thinker = (modelId: string) =>
       new MockLanguageModelV4({
         modelId,
@@ -129,7 +131,7 @@ describe("createFallbackModel", () => {
                   } catch {
                     // Cancelled: the fallback moved on.
                   }
-                }, 80);
+                }, 600);
               },
             }),
           }),
@@ -142,7 +144,7 @@ describe("createFallbackModel", () => {
         { ...mockEntry("a", thinker("a")), thoughts: true },
         mockEntry("b", scripted([textTurn("fast")]).model),
       ],
-      { firstChunkTimeoutMs: 30 },
+      deadline,
     );
     expect(textOf(await drain((await asked.model.doStream(call)).stream))).toBe("fast");
     expect(asked.trace.attempts.map((x) => `${x.model}:${x.outcome}`)).toEqual([
@@ -153,7 +155,7 @@ describe("createFallbackModel", () => {
     // A thought a model sends unasked (an OpenRouter reasoning model) is its answer starting.
     const unasked = fallback(
       [mockEntry("c", thinker("c")), mockEntry("d", scripted([textTurn("unused")]).model)],
-      { firstChunkTimeoutMs: 30 },
+      deadline,
     );
     const parts = await drain((await unasked.model.doStream(call)).stream);
     expect(textOf(parts)).toBe("slow");

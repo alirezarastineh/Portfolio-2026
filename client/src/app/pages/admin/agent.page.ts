@@ -17,7 +17,7 @@ import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 import { HlmToggleGroupImports } from "@spartan-ng/helm/toggle-group";
 
-import { AdminApiService } from "../../admin/admin-api.service";
+import { AdminApiService, type ApiResult } from "../../admin/admin-api.service";
 import {
   agentWords,
   CONTENT_GOALS,
@@ -31,10 +31,12 @@ import {
   PROPOSAL_FILTERS,
   RUN_LIMITS,
   runSummary,
+  runWords,
   splitLabel,
   startWords,
   statusName,
   summaryLine,
+  textWords,
   type ContentGoal,
   type Proposal,
   type ProposalFilter,
@@ -137,7 +139,7 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
       </section>
 
       <section aria-labelledby="agent-runs-title" class="flex flex-col gap-3">
-        <h2 id="agent-runs-title" class="m-0 text-h4">Runs</h2>
+        <h2 id="agent-runs-title" tabindex="-1" class="m-0 text-h4 outline-none">Runs</h2>
         @if (runsError(); as reason) {
           <app-load-error title="Could not load the runs" [reason]="reason" (retry)="load()" />
         } @else if (runs() === null) {
@@ -534,18 +536,34 @@ export default class AdminAgentPage implements OnInit {
     await this.load();
   }
 
-  protected async cancel(run: RunRow): Promise<void> {
-    const result = await this.api.cancelRun(run.id);
-    if (!result.ok)
-      toast.error("Could not cancel the run", { description: agentWords(result.error) });
-    await this.load();
+  protected cancel(run: RunRow): Promise<void> {
+    return this.controlRun(
+      () => this.api.cancelRun(run.id),
+      "Run cancelled: what it drafted stays below.",
+      "Could not cancel the run",
+    );
   }
 
-  protected async resume(run: RunRow): Promise<void> {
-    const result = await this.api.resumeRun(run.id);
-    if (!result.ok)
-      toast.error("Could not resume the run", { description: agentWords(result.error) });
+  protected resume(run: RunRow): Promise<void> {
+    return this.controlRun(
+      () => this.api.resumeRun(run.id),
+      "Run resumed: it drafts what is left.",
+      "Could not resume the run",
+    );
+  }
+
+  /** Cancel or resume: said either way; the run's button goes or changes, so the Runs heading takes focus. */
+  private async controlRun(
+    call: () => Promise<ApiResult<unknown>>,
+    done: string,
+    refused: string,
+  ): Promise<void> {
+    const result = await call();
+    if (!result.ok) toast.error(refused, { description: runWords(result.error) });
+    if (this.destroyed) return;
+    this.said.set(result.ok ? done : `${refused}: ${runWords(result.error)}`);
     await this.load();
+    this.focusLater("agent-runs-title");
   }
 
   protected runStatus(run: RunRow): string {
@@ -615,18 +633,25 @@ export default class AdminAgentPage implements OnInit {
     this.busy.set(p.id);
     const result = await call();
     this.busy.set(null);
-    if (result.ok) {
-      this.replace([result.data.proposal]);
-      this.editing.set(null);
-      this.said.set(`${done}: ${p.label}.`);
-    } else {
-      const words = agentWords(result.error);
-      this.said.set(`${p.label}: ${words}`);
+    if (!result.ok) {
+      // A refused text says why: what its field must keep, or its length.
+      const words =
+        result.error === "invalid_input" ? textWords(result.issues) : agentWords(result.error);
       toast.error("Not done", { description: words });
+      // Left meanwhile: the decision stands on the server; nothing here to update or focus.
+      if (this.destroyed) return;
+      this.said.set(`${p.label}: ${words}`);
       // It moved on the server (stale, decided in another tab, gone) or the request failed:
       // read the list again. A text refused for its field changed nothing.
       if (!UNCHANGED_BY.has(result.error)) await this.load();
+      this.focusAfter(p.id);
+      return;
     }
+    // Left meanwhile: the decision stands on the server; nothing here to update or focus.
+    if (this.destroyed) return;
+    this.replace([result.data.proposal]);
+    this.editing.set(null);
+    this.said.set(`${done}: ${p.label}.`);
     this.focusAfter(p.id);
   }
 
@@ -636,10 +661,14 @@ export default class AdminAgentPage implements OnInit {
     this.busy.set("batch");
     const result = await this.api.decideProposals(ids, action);
     this.busy.set(null);
+    if (!result.ok) toast.error("Not done", { description: agentWords(result.error) });
+    if (this.destroyed) return;
     if (!result.ok) {
-      toast.error("Not done", { description: agentWords(result.error) });
-      // Some may have been decided before it failed: the server's list says which.
+      this.said.set(`Not done: ${agentWords(result.error)}`);
+      // Some may have been decided before it failed: the server's list says which. The
+      // selection's buttons may go with them: the list's heading takes focus.
       await this.load();
+      this.focusLater("agent-proposals-title");
       return;
     }
     const decided = result.data.results.flatMap((r) => ("proposal" in r ? [r.proposal] : []));
@@ -663,6 +692,8 @@ export default class AdminAgentPage implements OnInit {
 
   /** A decided proposal's buttons go: its heading takes focus, or the list's when it left the filter. */
   private focusAfter(id: string): void {
+    // A destroyed page's injector takes no render hook (NG0911).
+    if (this.destroyed) return;
     afterNextRender(
       () => {
         const heading = document.getElementById(`proposal-${id}`);
@@ -673,6 +704,7 @@ export default class AdminAgentPage implements OnInit {
   }
 
   private focusLater(id: string): void {
+    if (this.destroyed) return;
     afterNextRender(() => document.getElementById(id)?.focus(), { injector: this.injector });
   }
 }

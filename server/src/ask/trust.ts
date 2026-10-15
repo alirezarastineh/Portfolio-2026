@@ -17,8 +17,8 @@ export type TrustLevel = "L0" | "L1" | "L2" | "L3" | "human";
 export interface TrustEntry {
   /** What is done: a tool's name, or a feature's action. */
   action: string;
-  /** Who does it. */
-  actor: "assistant" | "copilot" | "insights" | "run" | "agent" | "system" | "admin";
+  /** Who does it: `external` is an agent outside, over MCP (plan phase 32). */
+  actor: "assistant" | "copilot" | "insights" | "run" | "agent" | "system" | "admin" | "external";
   level: TrustLevel;
   /** Who approves each one: nobody (it acts within bounds), the visitor, the admin. */
   approver: "none" | "visitor" | "admin";
@@ -223,6 +223,20 @@ export const TRUST_REGISTRY: readonly TrustEntry[] = [
     reversible: true,
     built: true,
   },
+  // Agents outside, over MCP (plan phase 32): the same four reads, no model behind them. Named
+  // here rather than imported, so this registry loads nothing; trust.spec.ts holds them equal.
+  ...(["search_portfolio", "get_document", "list_projects", "get_resume"] as const).map(
+    (tool): TrustEntry => ({
+      action: `mcp.${tool}`,
+      actor: "external",
+      level: "L2",
+      approver: "none",
+      enforcement:
+        "mcp/tools.ts: reads the published corpus, words only, no model call (mcp.db.spec.ts, search by meaning on; trust.spec.ts: no module of mcp/, nor one it imports directly, talks to a model, and it takes only the config and the corpus from deps.ts); mcp/route.ts: one JSON-RPC message a request, 64 KB, per-IP limits in a bucket of its own (guard.ts MCP_RATE); writes only rate events and usage counts (mcp.db.spec.ts), never the content, FAQ, lessons, journal or proposals (trust.spec.ts)",
+      reversible: true,
+      built: true,
+    }),
+  ),
   {
     action: "publish",
     actor: "admin",

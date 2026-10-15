@@ -390,6 +390,22 @@ if [[ "$(db_value "select count(*) from information_schema.tables where table_na
 else
   fail "ai_faq_proposals missing — migration 0026_faq_proposals not applied?"
 fi
+if [[ "$(db_value "select count(*) from information_schema.tables where table_name = 'ai_mcp_usage'")" == "1" ]]; then
+  pass "the MCP endpoint's usage table exists (migration 0027)"
+else
+  fail "ai_mcp_usage missing — migration 0027_mcp_usage not applied?"
+fi
+
+echo "== agent-readable portfolio (plan phase 32) =="
+# A 2026-07-28 discovery: the version and capabilities in _meta, mirrored into headers.
+MCP_DISCOVER='{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+check "the MCP endpoint answers a discovery" \
+  bash -c "curl -fsS -X POST '${API}/v1/mcp' -H 'content-type: application/json' -H 'mcp-protocol-version: 2026-07-28' -H 'mcp-method: server/discover' -d '${MCP_DISCOVER}' | grep -q '\"supportedVersions\"'"
+check "the MCP endpoint takes POST only (a GET is 405)" \
+  bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${API}/v1/mcp')\" = 405 ]"
+check "the client serves llms.txt (en)" bash -c "curl -fsS '${CLIENT}/en/llms.txt' | grep -q '^# '"
+check "the client serves the agent card" \
+  bash -c "curl -fsS '${CLIENT}/.well-known/agent-card.json' | grep -q '\"skills\"'"
 check "the assistant's search and tokenizer load in the api container" \
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T api \
   node -e "Promise.all([import('minisearch'), import('js-tiktoken/lite'), import('js-tiktoken/ranks/o200k_base')]).then(() => process.exit(0), () => process.exit(1))"

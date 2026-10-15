@@ -146,6 +146,7 @@ export function assembleCorpus(
     documents,
     projects: base.projects,
     posts: base.posts,
+    ...(base.siteUrl ? { siteUrl: base.siteUrl } : {}),
     byId: new Map(documents.map((d) => [d.id, d])),
     ...renderCorpus(documents),
     search: new CorpusSearch(documents),

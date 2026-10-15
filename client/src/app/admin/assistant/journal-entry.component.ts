@@ -26,6 +26,7 @@ import { AdminApiService } from "../admin-api.service";
 import type { RunRow } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
 import { isActive } from "../eval-runs";
+import { FaqDraftsService } from "../faq-drafts.service";
 import { faqProposalWords } from "../faq-proposals";
 import {
   decisionProblem,
@@ -397,6 +398,7 @@ const DECISIONS: Record<JournalStatus, string> = {
 })
 export class JournalEntryComponent {
   private readonly api = inject(AdminApiService);
+  private readonly drafts = inject(FaqDraftsService);
   private readonly confirm = inject(ConfirmService);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
@@ -641,6 +643,8 @@ export class JournalEntryComponent {
       return;
     }
     this.status.set("");
+    // An FAQ tab open meanwhile reads its list again.
+    this.drafts.announce(result.data.proposal.id);
     if (this.gone) {
       toast.success("FAQ proposal drafted: it waits in the FAQ tab.");
       return;
