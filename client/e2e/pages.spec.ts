@@ -194,7 +194,7 @@ test.describe("case study", () => {
     await page.goto("/en/work/project-one");
     await interactive(page);
     await page.getByRole("link", { name: /Next project/ }).click();
-    await expect(page).toHaveURL(/\/en\/work\/project-two$/);
+    await expect(page).toHaveURL(/\/en\/work\/project-three$/);
 
     // No German version: hreflang says so, and the switch leads to the projects.
     expect(await hreflangs(page)).toEqual({
