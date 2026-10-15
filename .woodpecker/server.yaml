@@ -1,6 +1,7 @@
 # Server checks (plan Phase 2): ci.yml's server job, plus Prettier, the spec
 # typecheck and drizzle-kit check. Steps run as root, which embedded-postgres
-# refuses, so the db specs use a Postgres service: production's image.
+# refuses, so the db specs use a Postgres service: production's image. The
+# checks run in the CI image (ci/Dockerfile), the client's toolchain.
 when:
   - event: [push, manual, cron]
     branch: main
@@ -12,12 +13,17 @@ when:
         - "ci/vitest-report.mjs"
         - ".woodpecker/server.yaml"
 
+# When this pipeline rebuilds the CI image, the checks wait for it.
+depends_on:
+  - name: ci-image
+    optional: true
+
 variables:
-  - &node "node:22-bookworm"
+  - &ci "portfolio-ci:node22-pw1.64.1"
   - &store "/var/lib/woodpecker-cache/pnpm-store:/pnpm-store"
   # Every check after `format`: binaries called directly, no pnpm at run time.
   - &check
-    image: *node
+    image: *ci
     directory: server
     depends_on: [format]
 
@@ -35,12 +41,25 @@ services:
       POSTGRES_DB: portfolio_test
 
 steps:
+  # The clone and the agent's pnpm store belong to root, and every other step
+  # runs as the CI image's node user: this one alone runs as root, to hand them over.
+  - name: owner
+    image: *ci
+    volumes: [*store]
+    backend_options:
+      docker:
+        user: root
+    commands:
+      - chown -R node:node .
+      # -h: the store links to the workspaces of earlier runs, which are gone.
+      - find /pnpm-store ! -user node -exec chown -h node:node {} +
+
   - name: install
-    image: *node
+    image: *ci
     directory: server
+    depends_on: [owner]
     volumes: [*store]
     commands:
-      - npm i -g pnpm@11.0.0
       - pnpm install --frozen-lockfile --store-dir /pnpm-store
 
   # First, before any step writes dist/ or .vitest/ into the workspace.

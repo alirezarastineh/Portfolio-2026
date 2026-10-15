@@ -1,0 +1,25 @@
+# Builds the CI image (ci/Dockerfile) on the agent's Docker (plan Phase 4). No
+# registry: the one agent runs its local image, and agent-cleanup.sh prunes only
+# dangling ones. Never on pull requests: their Dockerfile would replace the tag
+# main uses. For a new Playwright, bump PW_VERSION in ci/Dockerfile and the tag
+# (`&ci`) here and in client.yaml and server.yaml.
+when:
+  - event: manual
+  - event: push
+    branch: main
+    path:
+      include: ["ci/Dockerfile", ".woodpecker/ci-image.yaml"]
+
+variables:
+  - &ci "portfolio-ci:node22-pw1.64.1"
+
+steps:
+  - name: build
+    image: docker:29.9.0-cli
+    volumes: [/var/run/docker.sock:/var/run/docker.sock]
+    environment:
+      TAG: *ci
+    commands:
+      # The Dockerfile copies nothing, so it is sent alone, with no context.
+      - docker build --pull -t "$${TAG}" - < ci/Dockerfile
+      - docker image ls "$${TAG}"
