@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LanguageModelV4CallOptions, LanguageModelV4StreamPart } from "@ai-sdk/provider";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
+import pg from "pg";
 
 import { createApp } from "../../app.js";
 import { getDb, getPool } from "../../db/client.js";
@@ -215,6 +216,31 @@ describe("background eval runs", () => {
     expect(lite.calls).toHaveLength(1);
     const [run] = await getDb().select().from(aiRuns);
     expect(run?.summary).toMatchObject({ cases: 2, completed: 2 });
+  });
+
+  it("can be resumed the moment it reads as stopped, however slowly its worker lets go", async () => {
+    // After the last item the worker lets go of the run: its kind's lock, then
+    // this process. Slowed down here, as a loaded machine can: the run must read
+    // as stopped only once that is over, or a resume right then is refused (409).
+    const query = pg.Client.prototype.query as (this: pg.Client, ...args: unknown[]) => unknown;
+    const slowUnlock = vi.spyOn(pg.Client.prototype, "query").mockImplementation(function (
+      this: pg.Client,
+      ...args: unknown[]
+    ) {
+      if (args[0] !== "SELECT pg_advisory_unlock($1)") return query.apply(this, args);
+      return new Promise((resolve) => setTimeout(resolve, 300)).then(() => query.apply(this, args));
+    } as never);
+    try {
+      lite = answering(["text", "fail"]);
+      const id = await start(["fact-atlas-impact", "inj-repeat"]);
+      await until(id, (v) => v.run.status === "failed");
+
+      lite = answering(["text"]);
+      expect((await admin.post(`/admin/assistant/runs/${id}/resume`, {})).status).toBe(202);
+      await until(id, (v) => v.run.status === "done");
+    } finally {
+      slowUnlock.mockRestore();
+    }
   });
 
   it("at boot, marks a run interrupted only when no live worker holds its lock", async () => {

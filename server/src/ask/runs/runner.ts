@@ -13,6 +13,7 @@ import {
   type ItemStatus,
   type RunKind,
   type RunRow,
+  type RunStatus,
 } from "./store.js";
 
 /**
@@ -103,7 +104,20 @@ async function tryLock(client: pg.PoolClient, kind: RunKind): Promise<boolean> {
   return rows[0]?.ok === true;
 }
 
-async function execute(run: RunRow, controller: AbortController): Promise<void> {
+/** How a run ended, for `launch` to write once the worker has let go of it. */
+interface Ending {
+  status: Exclude<RunStatus, "queued" | "running">;
+  summary?: unknown;
+  error?: string;
+}
+
+const failed = (error: unknown): Ending => ({
+  status: "failed",
+  error: (error as Error).message?.slice(0, 500) ?? "error",
+});
+
+/** Does a run's work under its kind's lock, and says how the run ended. */
+async function execute(run: RunRow, controller: AbortController): Promise<Ending> {
   const kind = run.kind as RunKind;
   const work = workers.get(kind);
   const client = await getPool().connect();
@@ -111,14 +125,8 @@ async function execute(run: RunRow, controller: AbortController): Promise<void> 
   let broken = false;
   try {
     locked = await tryLock(client, kind);
-    if (!locked) {
-      await endRun(run.id, "failed", { error: "another worker holds this kind's lock" });
-      return;
-    }
-    if (!work) {
-      await endRun(run.id, "failed", { error: `no work registered for ${kind}` });
-      return;
-    }
+    if (!locked) return { status: "failed", error: "another worker holds this kind's lock" };
+    if (!work) return { status: "failed", error: `no work registered for ${kind}` };
     console.log(`[runs] ${kind} run ${run.id} started`);
     const outcome = await work({
       run,
@@ -129,18 +137,14 @@ async function execute(run: RunRow, controller: AbortController): Promise<void> 
     });
     if (controller.signal.aborted) {
       const shutdown = String(controller.signal.reason?.message ?? "") === "shutdown";
-      await endRun(run.id, shutdown ? "interrupted" : "cancelled", { summary: outcome.summary });
-    } else if (outcome.status === "done") {
-      await endRun(run.id, "done", { summary: outcome.summary });
-    } else {
-      await endRun(run.id, "failed", { summary: outcome.summary, error: outcome.error });
+      return { status: shutdown ? "interrupted" : "cancelled", summary: outcome.summary };
     }
-    console.log(`[runs] ${kind} run ${run.id} ended`);
+    return outcome.status === "done"
+      ? { status: "done", summary: outcome.summary }
+      : { status: "failed", summary: outcome.summary, error: outcome.error };
   } catch (error) {
     console.error(`[runs] ${kind} run ${run.id} failed`, error);
-    await endRun(run.id, "failed", {
-      error: (error as Error).message?.slice(0, 500) ?? "error",
-    }).catch(() => undefined);
+    return failed(error);
   } finally {
     if (locked) {
       await client.query("SELECT pg_advisory_unlock($1)", [runLockId(kind)]).catch(() => {
@@ -151,10 +155,25 @@ async function execute(run: RunRow, controller: AbortController): Promise<void> 
   }
 }
 
+/**
+ * Starts a run's worker. The run's end is written last, once the worker has let
+ * go of it (its kind's lock, then `inFlight`): a run that reads as stopped can
+ * be resumed, or another of its kind started, at once. Until then it still
+ * reads as running, so both are refused as before.
+ */
 function launch(run: RunRow): void {
   const controller = new AbortController();
   inFlight.set(run.id, controller);
-  void execute(run, controller).finally(() => inFlight.delete(run.id));
+  void execute(run, controller)
+    .catch(failed)
+    .then(async ({ status, ...extra }) => {
+      inFlight.delete(run.id);
+      await endRun(run.id, status, extra);
+      console.log(`[runs] ${run.kind} run ${run.id} ended`);
+    })
+    .catch((error: unknown) => {
+      console.error(`[runs] ${run.kind} run ${run.id}: its end was not saved`, error);
+    });
 }
 
 /** Starts a run of `kind` over `keys`; null when one of the kind is already active. */
