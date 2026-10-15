@@ -11,6 +11,7 @@ when:
         # schema-parity.spec.ts reads the server's copy of the content schema.
         - "server/src/content/**"
         - "ci/vitest-report.mjs"
+        - "ci/save-reports.sh"
         - ".woodpecker/client.yaml"
 
 # When this pipeline rebuilds the CI image, the checks wait for it.
@@ -21,11 +22,14 @@ depends_on:
 variables:
   - &ci "portfolio-ci:node22-pw1.64.1"
   - &store "/var/lib/woodpecker-cache/pnpm-store:/pnpm-store"
-  # Every check after `format`: binaries called directly, no pnpm at run time.
+  # Every check after `install`: binaries called directly, no pnpm at run time.
+  # Woodpecker runs depends_on as levels, each starting once the whole level
+  # before it is done: the checks share the build's level, and e2e waits for
+  # the slowest of them.
   - &check
     image: *ci
     directory: client
-    depends_on: [format]
+    depends_on: [install]
   # The bundle calls this API, and the served pages' CSP must allow it: the
   # build and anything serving it use the same value. No other VITE_* variable:
   # the build inlines every one into the bundle.
@@ -54,10 +58,10 @@ steps:
     commands:
       - pnpm install --frozen-lockfile --store-dir /pnpm-store
 
-  # First, before any step writes into the workspace.
+  # Beside the other checks: Prettier skips what they write, which .gitignore
+  # lists (dist/, the test reports, the caches).
   - name: format
     <<: *check
-    depends_on: [install]
     commands:
       - node_modules/.bin/prettier --check .
 
@@ -110,7 +114,8 @@ steps:
         process.exit(1); }"
 
   # 253 tests, axe included, against the build and a fixture API. CI turns on
-  # retries and forbidOnly. Two workers: the agent shares the PC.
+  # retries and forbidOnly. Two workers: the agent shares the PC, and three were
+  # no faster beside the server's checks (197 s against 204 s) but slowed them.
   - name: e2e
     <<: *check
     depends_on: [build, pw-version]
@@ -126,3 +131,19 @@ steps:
     commands:
       - export CHROME_PATH="$$(node -p "require('@playwright/test').chromium.executablePath()")"
       - node scripts/lhci.mjs
+
+  # Pass or fail, since a failure is when the reports matter: copies them to
+  # the agent's /srv/ci-reports and prints their Windows path. Root, like
+  # `owner`: that folder is root's.
+  - name: reports
+    image: *ci
+    directory: client
+    depends_on: [e2e, lighthouse]
+    when:
+      status: [success, failure]
+    volumes: ["/srv/ci-reports:/srv/ci-reports"]
+    backend_options:
+      docker:
+        user: root
+    commands:
+      - sh ../ci/save-reports.sh playwright-report test-results .lighthouseci

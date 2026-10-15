@@ -239,6 +239,23 @@ Push a commit that contains `.woodpecker/smoke.yaml`.
 Then restart the PC and log in. The agent should come back by itself (Admin → Agents), and a
 re-run of the pipeline should pass.
 
+## Reports
+
+The client workflow's last step, `reports`, runs whether the checks passed or failed. It copies the
+e2e report (`playwright-report/`), the failed tests' traces (`test-results/`) and Lighthouse's
+reports (`.lighthouseci/`) to `/srv/ci-reports/<pipeline>/client/` in WSL, through
+`ci/save-reports.sh`, and prints the folder's Windows path:
+`\\wsl.localhost\Ubuntu\srv\ci-reports\<pipeline>\client`. The pipeline number is in the link of
+the commit's status on GitHub (`…/pipeline/<number>/…`).
+
+- **e2e:** serve the report from the Windows checkout's `client/` folder:
+  `npx playwright show-report "\\wsl.localhost\Ubuntu\srv\ci-reports\<pipeline>\client\playwright-report"`.
+  Each failed test links its trace. Opened as a file, the report shows the failures but can't load
+  the traces.
+- **Lighthouse:** open the `.html` files in `.lighthouseci\reports` directly.
+- `agent-cleanup.sh` deletes reports after 14 days. They belong to root, so from Windows you can
+  read them but not delete them.
+
 ## Upgrade
 
 1. Read the release notes for every version between the current and the target

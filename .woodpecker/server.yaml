@@ -1,7 +1,7 @@
 # Server checks (plan Phase 2): ci.yml's server job, plus Prettier, the spec
-# typecheck and drizzle-kit check. Steps run as root, which embedded-postgres
-# refuses, so the db specs use a Postgres service: production's image. The
-# checks run in the CI image (ci/Dockerfile), the client's toolchain.
+# typecheck and drizzle-kit check. The db specs use a Postgres service,
+# production's image, rather than embedded Postgres. The checks run in the CI
+# image (ci/Dockerfile), the client's toolchain.
 when:
   - event: [push, manual, cron]
     branch: main
@@ -21,11 +21,13 @@ depends_on:
 variables:
   - &ci "portfolio-ci:node22-pw1.64.1"
   - &store "/var/lib/woodpecker-cache/pnpm-store:/pnpm-store"
-  # Every check after `format`: binaries called directly, no pnpm at run time.
+  # Every check after `install`: binaries called directly, no pnpm at run time.
+  # Woodpecker runs depends_on as levels, each starting once the whole level
+  # before it is done: the checks and db share one level.
   - &check
     image: *ci
     directory: server
-    depends_on: [format]
+    depends_on: [install]
 
 services:
   - name: postgres
@@ -62,10 +64,10 @@ steps:
     commands:
       - pnpm install --frozen-lockfile --store-dir /pnpm-store
 
-  # First, before any step writes dist/ or .vitest/ into the workspace.
+  # Beside the other checks: .prettierignore keeps Prettier out of dist/ and
+  # .vitest/, which they write.
   - name: format
     <<: *check
-    depends_on: [install]
     commands:
       - node_modules/.bin/prettier --check .
 
@@ -115,7 +117,7 @@ steps:
   # superuser, which migrate.db.spec.ts needs (roles, CREATE DATABASE umami).
   - name: db
     <<: *check
-    depends_on: [format, wait-pg]
+    depends_on: [install, wait-pg]
     environment:
       TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/portfolio_test
     commands:
