@@ -187,8 +187,12 @@ describe("POST /v1/ask", () => {
     // The corpus it read, exactly: its key plus a digest of the documents.
     expect(row.corpusKey).toBe(snapshotKey(fixtureCorpus(config)));
     expect(row.corpusKey?.startsWith(`${fixtureCorpus(config).key}#`)).toBe(true);
-    // It is kept once, for eval cases frozen from this answer.
-    const snapshots = await getDb().select().from(aiCorpusSnapshots);
+    // It is kept once, for eval cases frozen from this answer. Written just
+    // after the answer's row (agent.ts), so waited for like that row.
+    const snapshots = await eventually(async () => {
+      const rows = await getDb().select().from(aiCorpusSnapshots);
+      return rows.length ? rows : undefined;
+    });
     expect(snapshots.map((s) => s.key)).toEqual([row.corpusKey]);
     expect(snapshots[0]!.documents.map((d) => d.id)).toContain("project:atlas@en");
     expect(row.trace?.steps).toEqual([

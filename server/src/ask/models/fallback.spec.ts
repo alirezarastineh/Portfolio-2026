@@ -38,7 +38,9 @@ function fallback(entries: FallbackOptions["entries"], extra: Partial<FallbackOp
   const model = createFallbackModel({
     entries,
     trace,
-    firstChunkTimeoutMs: 200,
+    // Far from any answer here: a loaded CI box took over 200 ms to deliver a mock's first
+    // chunk and failed over. The timeout tests set their own deadline.
+    firstChunkTimeoutMs: 5_000,
     requestTimeoutMs: 2_000,
     maxRetries: 1,
     retryBaseDelayMs: 1,
@@ -110,9 +112,9 @@ describe("createFallbackModel", () => {
   });
 
   it("holds a model asked for its thoughts to the visitors' deadline for its first text", async () => {
-    // A thought at once, the text only well after the first-chunk deadline. Wide margins: under
-    // a loaded run, 30 ms was too short even for the model that answers at once.
-    const deadline = { firstChunkTimeoutMs: 150 };
+    // A thought at once, the text only well after the first-chunk deadline. Wide margins: a
+    // loaded run has taken over 200 ms to deliver even a first chunk sent at once.
+    const deadline = { firstChunkTimeoutMs: 500, requestTimeoutMs: 10_000 };
     const thinker = (modelId: string) =>
       new MockLanguageModelV4({
         modelId,
@@ -131,7 +133,7 @@ describe("createFallbackModel", () => {
                   } catch {
                     // Cancelled: the fallback moved on.
                   }
-                }, 600);
+                }, 2_000);
               },
             }),
           }),
