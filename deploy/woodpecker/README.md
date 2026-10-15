@@ -61,6 +61,7 @@ ss -ltn | grep -E ':(8030|9030)\b' || echo "both free"
 install -d -m 700 /etc/woodpecker
 install -m 600 /dev/null /etc/woodpecker/server.env
 echo "WOODPECKER_AGENT_SECRET=$(openssl rand -hex 32)" >> /etc/woodpecker/server.env
+echo "WOODPECKER_GRPC_SECRET=$(openssl rand -hex 32)" >> /etc/woodpecker/server.env
 nano /etc/woodpecker/server.env   # add WOODPECKER_GITHUB_CLIENT=… and WOODPECKER_GITHUB_SECRET=…
 
 # Start the server; it should idle well under 100 MB.
@@ -258,6 +259,8 @@ compose start woodpecker-server && rm /tmp/woodpecker.sqlite
   and `~/woodpecker/agent.env`, then run `up -d` on both sides.
 - **OAuth client secret:** generate a new one on GitHub, put it in `server.env`, and run `up -d` on
   production.
+- **gRPC secret:** put a new value in `server.env` and run `up -d` on production. Connected agents
+  authenticate again on their own.
 - **Tunnel key:**
   1. Make a new key pair in `~/woodpecker/keys`.
   2. Replace the line in production's `/home/woodpecker-tunnel/.ssh/authorized_keys`.

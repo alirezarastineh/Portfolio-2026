@@ -48,9 +48,16 @@ services:
       WOODPECKER_GITHUB_CLIENT: ${WOODPECKER_GITHUB_CLIENT:?WOODPECKER_GITHUB_CLIENT is required}
       WOODPECKER_GITHUB_SECRET: ${WOODPECKER_GITHUB_SECRET:?WOODPECKER_GITHUB_SECRET is required}
       WOODPECKER_AGENT_SECRET: ${WOODPECKER_AGENT_SECRET:?WOODPECKER_AGENT_SECRET is required}
+      # Signs the agents' gRPC session tokens. Unset, the server makes a new one
+      # at every start and agents must authenticate again; persisted, they don't.
+      WOODPECKER_GRPC_SECRET: ${WOODPECKER_GRPC_SECRET:?WOODPECKER_GRPC_SECRET is required}
       # Agents come only from the agent compose file; nobody registers their own.
       WOODPECKER_DISABLE_USER_AGENT_REGISTRATION: "true"
       WOODPECKER_DEFAULT_PIPELINE_TIMEOUT: "60"
+      # v4's behaviour now, before any pipeline depends on the old one: a
+      # failing service (the postgres:17 one, say) fails its workflow instead
+      # of being ignored.
+      WOODPECKER_FORCE_IGNORE_SERVICE_FAILURE: "false"
     ports:
       # Loopback only: Docker publishes ports past ufw. Caddy proxies the web
       # UI (Caddyfile); the agent reaches gRPC through an SSH tunnel as a user
