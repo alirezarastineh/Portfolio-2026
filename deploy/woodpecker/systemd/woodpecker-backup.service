@@ -1,0 +1,15 @@
+# Installed as /etc/systemd/system/woodpecker-backup.service on the production
+# host — see deploy/woodpecker/README.md, Part 2. Adjust the path below if the
+# checkout is not /root/Portfolio-2026.
+[Unit]
+Description=Woodpecker CI database backup
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Through bash, so it runs whatever file mode the checkout ends up with.
+ExecStart=/bin/bash /root/Portfolio-2026/deploy/woodpecker/backup.sh
+Nice=10
+IOSchedulingClass=idle

@@ -1,0 +1,67 @@
+name: woodpecker-agent
+
+# Woodpecker CI's agent on the owner's PC, in WSL2 with Docker Engine: it runs
+# every pipeline step as a container on this Docker. It reaches the server's
+# gRPC port on the production host through an SSH tunnel, as a user that may
+# open that one port and nothing else. Setup: README.md, Part 3.
+#
+#   docker compose --env-file ~/woodpecker/agent.env \
+#     -f deploy/woodpecker/docker-compose.agent.yml up -d
+#
+# Pipelines run while this PC and WSL are up; otherwise they wait in the
+# server's queue (pending on GitHub) and start when the agent is back.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  tunnel:
+    image: alpine:3.22
+    restart: unless-stopped
+    logging: *logging
+    # ssh exits when the link dies (sleep, a network change) and Docker starts
+    # it again; the agent then reconnects on its own. The host key must already
+    # be in known_hosts: nothing is trusted on first use.
+    command:
+      - sh
+      - -c
+      - >-
+        apk add --no-cache openssh-client >/dev/null &&
+        exec ssh -N -T
+        -o ServerAliveInterval=30 -o ServerAliveCountMax=3
+        -o ExitOnForwardFailure=yes
+        -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/keys/known_hosts
+        -i /keys/id_ed25519
+        -L 0.0.0.0:9000:127.0.0.1:${WOODPECKER_GRPC_HOST_PORT:-9030}
+        woodpecker-tunnel@${WOODPECKER_TUNNEL_HOST:?WOODPECKER_TUNNEL_HOST is required}
+    volumes:
+      # id_ed25519 and known_hosts, kept outside the repository.
+      - ${WOODPECKER_TUNNEL_KEYS:?WOODPECKER_TUNNEL_KEYS is required}:/keys:ro
+
+  woodpecker-agent:
+    image: woodpeckerci/woodpecker-agent:v3.19.0
+    command: agent
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      - tunnel
+    environment:
+      WOODPECKER_SERVER: tunnel:9000
+      WOODPECKER_AGENT_SECRET: ${WOODPECKER_AGENT_SECRET:?WOODPECKER_AGENT_SECRET is required}
+      WOODPECKER_BACKEND: docker
+      # Two workflows at once; .wslconfig caps what WSL may take from the PC.
+      WOODPECKER_MAX_WORKFLOWS: ${WOODPECKER_MAX_WORKFLOWS:-2}
+      # 2 GiB of /dev/shm per step: Chromium crashes in Docker's 64 MB default,
+      # and lighthouserc.cjs does not pass --disable-dev-shm-usage.
+      WOODPECKER_BACKEND_DOCKER_LIMIT_SHM_SIZE: "2147483648"
+    volumes:
+      # The agent's identity, so a restart does not register a new agent.
+      - woodpecker-agent-config:/etc/woodpecker
+      # Steps run as sibling containers on WSL's Docker.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  woodpecker-agent-config:

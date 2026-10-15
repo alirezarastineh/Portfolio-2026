@@ -1,3 +1,6 @@
 # Ignore artifacts:
 build
 coverage
+# The tsc build and vitest's cache: not in .gitignore here, unlike the client's.
+dist
+.vitest

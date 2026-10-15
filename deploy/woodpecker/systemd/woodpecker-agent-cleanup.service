@@ -1,0 +1,14 @@
+# Installed as /etc/systemd/system/woodpecker-agent-cleanup.service in WSL on
+# the owner's PC — see deploy/woodpecker/README.md, Part 3. The path below is
+# the Windows checkout seen from WSL: adjust it if yours differs.
+[Unit]
+Description=Woodpecker agent housekeeping (old reports, Docker prune)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Through bash, so it runs whatever file mode the checkout ends up with.
+ExecStart=/bin/bash /mnt/c/Users/arastineh/Documents/Portfolio/deploy/woodpecker/agent-cleanup.sh
+Nice=10
+IOSchedulingClass=idle

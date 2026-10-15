@@ -1,0 +1,22 @@
+# Woodpecker CI's web UI and GitHub webhooks, served from the production host.
+# Append this block to /etc/caddy/Caddyfile next to the portfolio's blocks
+# (deploy/hetzner/Caddyfile; never touch persiber.com's), then
+# `caddy validate --config /etc/caddy/Caddyfile` before `systemctl reload caddy`.
+# gRPC is deliberately absent: the agent reaches it through an SSH tunnel.
+
+ci.alirezarastineh.me {
+	# No `encode`: the UI streams step logs as server-sent events, which
+	# compression would buffer.
+	reverse_proxy 127.0.0.1:8030
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	log {
+		output file /var/log/caddy/woodpecker.log
+		format json
+	}
+}

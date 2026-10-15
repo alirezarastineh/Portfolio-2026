@@ -1,0 +1,13 @@
+# Installed as /etc/systemd/system/woodpecker-backup.timer on the production
+# host — see deploy/woodpecker/README.md, Part 2.
+[Unit]
+Description=Nightly Woodpecker CI database backup
+
+[Timer]
+# After the portfolio's own backup (03:15 plus up to 15 minutes).
+OnCalendar=*-*-* 03:45:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

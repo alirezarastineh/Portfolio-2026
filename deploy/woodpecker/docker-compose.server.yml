@@ -1,0 +1,66 @@
+name: woodpecker
+
+# Woodpecker CI's server (web UI, API, GitHub webhooks, the database) on the
+# production host, next to the portfolio stack but in its own compose project.
+# It only coordinates: every build and test runs on the agent, on the owner's
+# PC (docker-compose.agent.yml). Setup, upgrades and backups: README.md.
+#
+#   docker compose --env-file /etc/woodpecker/server.env \
+#     -f deploy/woodpecker/docker-compose.server.yml up -d
+#
+# Secrets come only from that host file (mode 600, never in git); every other
+# setting is here, in the open.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  woodpecker-server:
+    # Pinned, and the agent must run the same version. Upgrades are
+    # deliberate: read the release notes and back up first (3.18 migrated the
+    # log storage, which takes a while).
+    image: woodpeckerci/woodpecker-server:v3.19.0
+    restart: unless-stopped
+    logging: *logging
+    # Sized to stay out of the live site's way on the CCX13: the server only
+    # coordinates and idles well under 100 MB.
+    mem_limit: 256m
+    cpus: 0.5
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      WOODPECKER_HOST: https://${WOODPECKER_DOMAIN:-ci.alirezarastineh.me}
+      # Only the accounts below may log in, and only their repositories count.
+      WOODPECKER_OPEN: "false"
+      WOODPECKER_ADMIN: alirezarastineh
+      WOODPECKER_REPO_OWNERS: alirezarastineh
+      # A GitHub OAuth App with non-expiring tokens; Woodpecker's docs advise
+      # against expiring ones (GitHub Apps). Callback: https://<domain>/authorize.
+      WOODPECKER_GITHUB: "true"
+      # Least privilege: the portfolio repo is public, so the stored token gets
+      # admin:repo_hook and repo:status instead of `repo` (every repository,
+      # private ones too). Set before the first login, when scopes are granted;
+      # changing it later means logging out and in again.
+      WOODPECKER_GITHUB_PUBLIC_ONLY: "true"
+      WOODPECKER_GITHUB_CLIENT: ${WOODPECKER_GITHUB_CLIENT:?WOODPECKER_GITHUB_CLIENT is required}
+      WOODPECKER_GITHUB_SECRET: ${WOODPECKER_GITHUB_SECRET:?WOODPECKER_GITHUB_SECRET is required}
+      WOODPECKER_AGENT_SECRET: ${WOODPECKER_AGENT_SECRET:?WOODPECKER_AGENT_SECRET is required}
+      # Agents come only from the agent compose file; nobody registers their own.
+      WOODPECKER_DISABLE_USER_AGENT_REGISTRATION: "true"
+      WOODPECKER_DEFAULT_PIPELINE_TIMEOUT: "60"
+    ports:
+      # Loopback only: Docker publishes ports past ufw. Caddy proxies the web
+      # UI (Caddyfile); the agent reaches gRPC through an SSH tunnel as a user
+      # that may open this one port (README.md, Part 2).
+      - "127.0.0.1:${WOODPECKER_HTTP_HOST_PORT:-8030}:8000"
+      - "127.0.0.1:${WOODPECKER_GRPC_HOST_PORT:-9030}:9000"
+    volumes:
+      # The SQLite database: users, repos, secrets, pipelines and their logs.
+      # backup.sh copies it nightly.
+      - woodpecker-server-data:/var/lib/woodpecker
+
+volumes:
+  woodpecker-server-data:

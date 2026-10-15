@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const CI = Boolean(process.env["CI"]);
+// GitHub's annotation reporter only where GitHub reads it: Woodpecker sets CI too.
+const GITHUB = Boolean(process.env["GITHUB_ACTIONS"]);
 const PORT = process.env["E2E_PORT"] ?? "4173";
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 /**
@@ -20,7 +22,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: CI,
   retries: CI ? 1 : 0,
-  reporter: CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
+  reporter: CI ? [[GITHUB ? "github" : "list"], ["html", { open: "never" }]] : [["list"]],
   use: {
     baseURL: BASE_URL,
     trace: "retain-on-failure",

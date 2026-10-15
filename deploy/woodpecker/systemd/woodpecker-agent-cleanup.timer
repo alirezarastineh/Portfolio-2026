@@ -1,0 +1,13 @@
+# Installed as /etc/systemd/system/woodpecker-agent-cleanup.timer in WSL on
+# the owner's PC — see deploy/woodpecker/README.md, Part 3.
+[Unit]
+Description=Daily Woodpecker agent housekeeping
+
+[Timer]
+# Midday, when the PC is usually on; Persistent catches up after a day off.
+OnCalendar=*-*-* 12:00:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

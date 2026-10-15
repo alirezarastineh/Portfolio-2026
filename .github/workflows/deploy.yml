@@ -114,7 +114,8 @@ jobs:
           # even if the host's older .env has different analytics values.
           compose pull api client
           compose up -d --no-build api client
-          ./deploy/hetzner/verify-deploy.sh
+          # Through bash: git stores the script without its executable bit.
+          bash deploy/hetzner/verify-deploy.sh
           REMOTE
 
       - name: Remove key
