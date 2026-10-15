@@ -1,0 +1,81 @@
+# Client checks (plan Phase 3): ci.yml's client job, plus Prettier, the spec
+# typecheck and the strict build (no warnings, no prerendered index.html).
+when:
+  - event: [push, manual, cron]
+    branch: main
+  - event: pull_request
+    path:
+      include:
+        - "client/**"
+        # schema-parity.spec.ts reads the server's copy of the content schema.
+        - "server/src/content/**"
+        - "ci/vitest-report.mjs"
+        - ".woodpecker/client.yaml"
+
+variables:
+  - &node "node:22-bookworm"
+  - &store "/var/lib/woodpecker-cache/pnpm-store:/pnpm-store"
+  # Every check after `format`: binaries called directly, no pnpm at run time.
+  - &check
+    image: *node
+    directory: client
+    depends_on: [format]
+  # The bundle calls this API, and the served pages' CSP must allow it: the
+  # build and anything serving it use the same value. No other VITE_* variable:
+  # the build inlines every one into the bundle.
+  - &api
+    VITE_API_BASE_URL: https://api.alirezarastineh.me
+
+steps:
+  - name: install
+    image: *node
+    directory: client
+    volumes: [*store]
+    commands:
+      - npm i -g pnpm@11.0.0
+      - pnpm install --frozen-lockfile --store-dir /pnpm-store
+
+  # First, before any step writes into the workspace.
+  - name: format
+    <<: *check
+    depends_on: [install]
+    commands:
+      - node_modules/.bin/prettier --check .
+
+  - name: lint
+    <<: *check
+    commands:
+      - node_modules/.bin/eslint .
+
+  - name: types
+    <<: *check
+    commands:
+      - node_modules/.bin/ngc -p tsconfig.app.json --noEmit
+
+  - name: e2e-types
+    <<: *check
+    commands:
+      - node_modules/.bin/tsc -p e2e/tsconfig.json
+
+  - name: node-types
+    <<: *check
+    commands:
+      - node_modules/.bin/tsc -p tsconfig.node.json
+
+  - name: spec-types
+    <<: *check
+    commands:
+      - node_modules/.bin/tsc -p tsconfig.spec.json --noEmit
+
+  - name: unit
+    <<: *check
+    commands:
+      - node_modules/.bin/vitest run --reporter=default --reporter=json --outputFile.json=/tmp/vitest-client.json
+      - node ../ci/vitest-report.mjs /tmp/vitest-client.json client
+
+  # vite build, failing on any warning or a prerendered index.html.
+  - name: build
+    <<: *check
+    environment: *api
+    commands:
+      - node scripts/build-check.mjs
