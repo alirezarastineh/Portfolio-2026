@@ -1,0 +1,104 @@
+# Server checks (plan Phase 2): ci.yml's server job, plus Prettier, the spec
+# typecheck and drizzle-kit check. Steps run as root, which embedded-postgres
+# refuses, so the db specs use a Postgres service: production's image.
+when:
+  - event: [push, manual, cron]
+    branch: main
+  - event: pull_request
+    path:
+      include:
+        - "server/**"
+        - "deploy/hetzner/*.sql"
+        - "ci/vitest-report.mjs"
+        - ".woodpecker/server.yaml"
+
+variables:
+  - &node "node:22-bookworm"
+  - &store "/var/lib/woodpecker-cache/pnpm-store:/pnpm-store"
+  # Every check after `format`: binaries called directly, no pnpm at run time.
+  - &check
+    image: *node
+    directory: server
+    depends_on: [format]
+
+services:
+  - name: postgres
+    image: postgres:17-alpine
+    # The agent kills services once the steps are done (exit 137), which the
+    # server's FORCE_IGNORE_SERVICE_FAILURE=false would count as a failed run.
+    # A Postgres that dies mid-run still fails the db step.
+    failure: ignore
+    environment:
+      POSTGRES_PASSWORD: postgres
+      # pg-global-setup.ts needs the database to exist, and its guard wants
+      # "test" in the name.
+      POSTGRES_DB: portfolio_test
+
+steps:
+  - name: install
+    image: *node
+    directory: server
+    volumes: [*store]
+    commands:
+      - npm i -g pnpm@11.0.0
+      - pnpm install --frozen-lockfile --store-dir /pnpm-store
+
+  # First, before any step writes dist/ or .vitest/ into the workspace.
+  - name: format
+    <<: *check
+    depends_on: [install]
+    commands:
+      - node_modules/.bin/prettier --check .
+
+  - name: lint
+    <<: *check
+    commands:
+      - node_modules/.bin/eslint .
+
+  - name: types
+    <<: *check
+    commands:
+      - node_modules/.bin/tsc --noEmit
+
+  - name: spec-types
+    <<: *check
+    commands:
+      - node_modules/.bin/tsc -p tsconfig.spec.json
+
+  - name: build
+    <<: *check
+    commands:
+      - node_modules/.bin/tsc
+
+  # Compares the migration snapshots; needs no database.
+  - name: drizzle-check
+    <<: *check
+    commands:
+      - node_modules/.bin/drizzle-kit check
+
+  - name: unit
+    <<: *check
+    commands:
+      - node_modules/.bin/vitest run --project unit --reporter=default --reporter=json --outputFile.json=/tmp/vitest-unit.json
+      - node ../ci/vitest-report.mjs /tmp/vitest-unit.json unit
+
+  # Nothing checks that a service is ready. Bounded, so a Postgres that never
+  # comes up fails here rather than at the pipeline timeout.
+  - name: wait-pg
+    image: postgres:17-alpine
+    depends_on: []
+    commands:
+      - timeout 120 sh -c 'until pg_isready -h postgres -U postgres -q; do sleep 1; done'
+      - pg_isready -h postgres -U postgres
+
+  # With TEST_DATABASE_URL set, pg-global-setup.ts skips embedded Postgres,
+  # checks the guard and runs the real migrations. The service's user is a
+  # superuser, which migrate.db.spec.ts needs (roles, CREATE DATABASE umami).
+  - name: db
+    <<: *check
+    depends_on: [format, wait-pg]
+    environment:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/portfolio_test
+    commands:
+      - node_modules/.bin/vitest run --project db --reporter=default --reporter=json --outputFile.json=/tmp/vitest-db.json
+      - node ../ci/vitest-report.mjs /tmp/vitest-db.json db
