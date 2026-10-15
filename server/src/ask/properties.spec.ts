@@ -210,7 +210,10 @@ async function chunkByChunk(chunks: string[]) {
   return { text, sources, dropped };
 }
 
-describe("properties", () => {
+// Hundreds of cases per property: milliseconds alone, but CI's agent shares the
+// owner's PC, and a busy moment there made them 20 to 100 times slower (a 74 ms
+// property took 5.8 s), past vitest's 5 s default.
+describe("properties", { timeout: 30_000 }, () => {
   it("citations: any chunking gives the same answer; nothing invented survives; each source once", async () => {
     await fc.assert(citationProperty(throughCitations), runs(300));
   });
@@ -967,6 +970,5 @@ describe("properties", () => {
       ),
       runs(40),
     );
-    // Forty answers through the real agent: about 2 s alone, past the 5 s default under load.
-  }, 20_000);
+  });
 });
