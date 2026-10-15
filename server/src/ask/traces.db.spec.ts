@@ -47,4 +47,9 @@ describe("migration 0010: answer traces and guard events", () => {
       judge: null,
     });
   });
+
+  it("fails on purpose: scratch PR for the CI red check, never merge", async () => {
+    const { rows } = await getDb().execute<{ one: number }>(sql`select 1 as one`);
+    expect(rows).toEqual([{ one: 2 }]);
+  });
 });

@@ -19,4 +19,8 @@ describe("assertTestDatabase", () => {
   it("refuses a database whose name does not say test", () => {
     expect(() => assertTestDatabase("postgresql://u:p@db:5432/portfolio")).toThrow(/must contain/);
   });
+
+  it("fails on purpose: scratch PR for the CI red check, never merge", () => {
+    expect(1).toBe(2);
+  });
 });
