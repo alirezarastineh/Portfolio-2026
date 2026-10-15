@@ -6,7 +6,7 @@ ARG PNPM_VERSION=11.0.0
 FROM node:${NODE_VERSION}-alpine AS base
 WORKDIR /usr/src/app
 RUN --mount=type=cache,target=/root/.npm \
-    npm install -g pnpm@${PNPM_VERSION}
+    npm install -g "pnpm@${PNPM_VERSION}"
 
 # Production dependencies only; bind mounts keep the manifests out of the layer.
 FROM base AS deps

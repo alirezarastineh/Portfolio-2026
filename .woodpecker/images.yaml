@@ -1,0 +1,62 @@
+# Builds the API and client images (plan Phase 6), as ci.yml's docker job does,
+# through the agent's Docker: its BuildKit keeps the layer cache and the
+# Dockerfiles' cache mounts warm between runs. The images are tagged with the
+# commit and never pushed; the last step removes the tags. The Docker socket is
+# root in WSL on the owner's PC, never on production (README.md, Security notes).
+when:
+  - event: [push, manual, cron]
+    branch: main
+  - event: pull_request
+    path:
+      include:
+        - "server/**"
+        - "client/**"
+        - ".woodpecker/images.yaml"
+
+# After the checks, like ci.yml's docker job: beside them, the client's build
+# would slow e2e and skew Lighthouse, and a red run needs no images. Optional,
+# since a pull request runs only the workflows its paths match.
+depends_on:
+  - name: server
+    optional: true
+  - name: client
+    optional: true
+
+variables:
+  - &docker "docker:29.9.0-cli"
+  - &socket "/var/run/docker.sock:/var/run/docker.sock"
+
+steps:
+  - name: api
+    image: *docker
+    depends_on: []
+    volumes: [*socket]
+    commands:
+      - docker buildx build --tag "portfolio/api:$${CI_COMMIT_SHA}" server
+
+  # ci.yml's build arguments: the bundle calls the public API, the server
+  # render calls the compose network's.
+  - name: client
+    image: *docker
+    depends_on: []
+    volumes: [*socket]
+    commands:
+      - >-
+        docker buildx build --tag "portfolio/client:$${CI_COMMIT_SHA}"
+        --build-arg VITE_API_BASE_URL=https://api.alirezarastineh.me
+        --build-arg API_INTERNAL_BASE_URL=http://api:3000
+        client
+
+  # Pass or fail, or the commits' tags would pile up. The layers stay in the
+  # build cache, which agent-cleanup.sh caps; it also removes the tags of a run
+  # that was canceled before this step.
+  - name: untag
+    image: *docker
+    depends_on: [api, client]
+    when:
+      status: [success, failure]
+    volumes: [*socket]
+    commands:
+      - >-
+        docker image ls --format '{{.Repository}}:{{.Tag}}'
+        --filter "reference=portfolio/*:$${CI_COMMIT_SHA}" | xargs -r docker image rm

@@ -1,0 +1,5 @@
+# hadolint's settings: repo.yaml lints every Dockerfile with them (plan Phase 6).
+ignored:
+  # "Non-numeric user-id": a numeric USER matters to Kubernetes' runAsNonRoot,
+  # which nothing here uses. Compose runs these images, and `node` is uid 1000.
+  - DL3066

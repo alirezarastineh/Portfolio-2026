@@ -268,7 +268,8 @@ the commit's status on GitHub (`…/pipeline/<number>/…`).
    -f deploy/woodpecker/docker-compose.server.yml up -d`.
 5. PC: `docker compose --env-file ~/woodpecker/agent.env -f deploy/woodpecker/docker-compose.agent.yml
    up -d`.
-6. Bump the `woodpecker-cli` image in the lint workflow to the same version.
+6. Bump the `woodpecker-cli` image in `.woodpecker/repo.yaml` to the same version: its `workflows`
+   step lints against that version's schema.
 
 ## Restore a backup (production)
 
@@ -302,6 +303,8 @@ compose start woodpecker-server && rm /tmp/woodpecker.sqlite
 - **The Docker socket is root inside WSL, on your PC, not on production.** A workflow that mounts
   it can control the agent's Docker. Never approve a fork's pull request without reading its
   `.woodpecker/` changes.
+  - `ci-image.yaml` and `images.yaml` mount it to build images, with the same trust as building
+    them by hand: only you push, and a stranger's pull request waits for your approval.
 - **Secrets** are added in the repository's Woodpecker settings, never in files.
   - Filter every secret by event: never `pull_request`, and only the events that need it.
   - Filter by image where you can.

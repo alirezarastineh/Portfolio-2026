@@ -1,0 +1,6 @@
+# Findings Trivy may skip, each with its reason (plan Phase 6, repo.yaml).
+
+# "Add HEALTHCHECK instruction": compose gives the api and client services
+# their health checks (deploy/hetzner/docker-compose.yml), and the CI image
+# (ci/Dockerfile) runs pipeline steps, never a service.
+DS-0026

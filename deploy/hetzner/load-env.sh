@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Sourced by the scripts in this folder: `load_env <file>` exports the
 # KEY=VALUE lines of the repo .env.
 #

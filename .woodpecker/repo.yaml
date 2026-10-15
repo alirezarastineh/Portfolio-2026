@@ -1,0 +1,73 @@
+# Infrastructure lint (plan Phase 6): the workflows, the shell scripts, the
+# Dockerfiles, the compose files and the Caddyfiles, each tool from a pinned
+# image. Every step starts at once (`depends_on: []`), so one run reports every
+# failure. Nothing needs the Docker socket or a trusted volume.
+when:
+  - event: [push, manual, cron]
+    branch: main
+  - event: pull_request
+
+steps:
+  # Every workflow in the folder, against the schema of the server's version.
+  - name: workflows
+    image: woodpeckerci/woodpecker-cli:v3.19.0-alpine
+    depends_on: []
+    commands:
+      - woodpecker-cli lint --strict .woodpecker
+
+  # -x with SCRIPTDIR: the deploy scripts source load-env.sh from their folder.
+  - name: shellcheck
+    image: koalaman/shellcheck-alpine:v0.11.0
+    depends_on: []
+    commands:
+      - shellcheck -x --source-path=SCRIPTDIR deploy/hetzner/*.sh deploy/woodpecker/*.sh ci/*.sh
+
+  # Waivers, each with its reason, in .hadolint.yaml.
+  - name: hadolint
+    image: hadolint/hadolint:v2.15.1-alpine
+    depends_on: []
+    commands:
+      - hadolint server/Dockerfile client/Dockerfile ci/Dockerfile
+
+  # `config -q` resolves each stack as compose would start it: its files, its
+  # overlay, every profile. The values below only fill the variables the files
+  # require (`:?`); nothing starts.
+  - name: compose
+    image: docker:29.9.0-cli
+    depends_on: []
+    environment:
+      CONTENT_INVALIDATE_TOKEN: ci
+      IMAGE_TAG: ci
+      PGADMIN_DEFAULT_EMAIL: ci@example.com
+      PGADMIN_DEFAULT_PASSWORD: ci
+      POSTGRES_PASSWORD: ci
+      RESEND_API_KEY: ci
+      WOODPECKER_AGENT_SECRET: ci
+      WOODPECKER_GITHUB_CLIENT: ci
+      WOODPECKER_GITHUB_SECRET: ci
+      WOODPECKER_GRPC_SECRET: ci
+      WOODPECKER_TUNNEL_HOST: ci.example.com
+      WOODPECKER_TUNNEL_KEYS: /keys
+    commands:
+      - docker compose -f compose.yaml config -q
+      - docker compose -f deploy/hetzner/docker-compose.yml -f deploy/hetzner/docker-compose.images.yml --profile "*" config -q
+      - docker compose -f deploy/woodpecker/docker-compose.server.yml config -q
+      - docker compose -f deploy/woodpecker/docker-compose.agent.yml config -q
+
+  # Production's Caddy is 2.11.4 (`caddy version`, 2026-10-15).
+  - name: caddy
+    image: caddy:2.11.4-alpine
+    depends_on: []
+    commands:
+      - caddy adapt --config deploy/hetzner/Caddyfile > /dev/null
+      - caddy adapt --config deploy/woodpecker/Caddyfile > /dev/null
+
+  # The Dockerfiles' misconfigurations: Trivy has no checks for compose files,
+  # which `compose` covers. Waivers, each with its reason, in .trivyignore.
+  # Pinned by digest: Trivy's images 0.69.4 to 0.69.6 were replaced with
+  # malicious ones in March 2026 (CVE-2026-33634), and a tag can be pushed again.
+  - name: trivy
+    image: aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
+    depends_on: []
+    commands:
+      - trivy config --skip-version-check --exit-code 1 .
