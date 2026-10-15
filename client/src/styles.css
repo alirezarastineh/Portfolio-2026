@@ -17,6 +17,7 @@
 
 @import "./styles/prose.css";
 @import "./styles/code.css";
+@import "./styles/scratch-bloat.css";
 
 /* What `@import "tailwindcss/utilities.css" source(none)` expands to, written
    as a plain at-rule so editors' CSS parsers accept it: utilities from the
