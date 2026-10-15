@@ -5,4 +5,4 @@ import { markWhenInteractive } from "./app/app-interactive";
 import { appConfig } from "./app/app.config";
 
 const appRef = await bootstrapApplication(App, appConfig);
-markWhenInteractive(appRef, document);
+void markWhenInteractive(appRef, document);

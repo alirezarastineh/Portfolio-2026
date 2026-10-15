@@ -15,4 +15,13 @@ describe("sentenceCase", () => {
     expect(sentenceCase("Outcomes", "en")).toBe("Outcomes");
     expect(sentenceCase("case_study", "en")).toBe("case_study");
   });
+
+  it("fails on purpose: scratch PR for the CI red check, never merge", () => {
+    expect(sentenceCase("PROBLEM", "en")).toBe("PROBLEM");
+  });
+
+  it("is mistyped on purpose (only the spec typecheck sees it): scratch PR, never merge", () => {
+    const typed: string = "PROBLEM";
+    expect(sentenceCase(String(typed), "en")).toBe("Problem");
+  });
 });
