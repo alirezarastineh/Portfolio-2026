@@ -20,6 +20,7 @@ x-logging: &logging
 services:
   tunnel:
     image: alpine:3.22
+    bogus_key: true
     restart: unless-stopped
     logging: *logging
     # ssh exits when the link dies (sleep, a network change) and Docker starts

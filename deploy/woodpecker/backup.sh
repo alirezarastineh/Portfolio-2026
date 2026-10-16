@@ -25,3 +25,4 @@ docker run --rm \
 gzip "$BACKUP_DIR/woodpecker-$stamp.sqlite"
 find "$BACKUP_DIR" -name 'woodpecker-*.sqlite.gz' -mtime +"$KEEP_DAYS" -delete
 echo "backup: $BACKUP_DIR/woodpecker-$stamp.sqlite.gz"
+ls $BACKUP_DIR

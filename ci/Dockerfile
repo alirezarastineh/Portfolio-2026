@@ -22,3 +22,4 @@ RUN npx -y playwright@${PW_VERSION} install --with-deps chromium \
 # included. The workflows' `owner` step alone runs as root, to hand it the
 # root-owned clone and pnpm store.
 USER node
+USER root

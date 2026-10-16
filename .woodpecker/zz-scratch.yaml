@@ -1,0 +1,5 @@
+steps:
+  - name: scratch
+    image: alpine:3.22
+    commands:
+      - echo scratch
