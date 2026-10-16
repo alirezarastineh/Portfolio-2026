@@ -23,6 +23,14 @@ export default defineConfig({
     setupFiles: ["src/test-setup.ts"],
     include: ["src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}", "vite-plugins/**/*.spec.ts"],
     reporters: ["default"],
+    // On demand: `vitest run --coverage`. CI's thresholds are on its unit step
+    // (.woodpecker/client.yaml), beside the server's.
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.ts"],
+      exclude: ["src/**/*.spec.ts", "src/**/*.d.ts", "src/test-setup.ts"],
+      reporter: ["text-summary", "html", "json-summary"],
+    },
     // Vitest 5 caches transformed modules on disk between runs (on by default). The Angular
     // plugin (2.8) names each component's inline styles by a hash it keeps in memory while it
     // transforms the component, so a module served from that cache imports a style id the plugin

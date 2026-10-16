@@ -32,3 +32,6 @@ fi
 if [ -d "$dest/.lighthouseci/reports" ]; then
   printf 'Lighthouse: the .html files in %s\\.lighthouseci\\reports\n' "$windows"
 fi
+if [ -f "$dest/coverage/index.html" ]; then
+  printf 'coverage: %s\\coverage\\index.html\n' "$windows"
+fi

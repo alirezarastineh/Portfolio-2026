@@ -55,14 +55,16 @@ steps:
     commands:
       - for p in server client; do (cd "$${p}" && pnpm install --prod --frozen-lockfile --store-dir /pnpm-store); done
 
-  # Advisory: OSV's sources beside npm's, over both lockfiles, dev dependencies
-  # too. Pinned by digest, like every tool image; its binary is off the PATH.
+  # Report only: OSV's sources beside npm's, over both lockfiles, dev
+  # dependencies too, so it nearly always lists something. Findings (exit 1)
+  # leave the step green, as the owner chose (2026-10-16); an error still marks
+  # it red. Pinned by digest, like every tool image; its binary is off the PATH.
   - name: osv-scanner
     image: ghcr.io/google/osv-scanner:v2.6.0@sha256:afd838850ac1a0fcc15ff4a041dc9ba11123c3f0d2666217a5f0fcf9222b55fa
     depends_on: [owner]
     failure: ignore
     commands:
-      - /osv-scanner scan source --lockfile server/pnpm-lock.yaml --lockfile client/pnpm-lock.yaml
+      - /osv-scanner scan source --lockfile server/pnpm-lock.yaml --lockfile client/pnpm-lock.yaml || [ $$? -eq 1 ]
 
   # Every HIGH and CRITICAL advisory is listed, and a CRITICAL fails
   # (ci/check-audit.mjs says why not HIGH yet). A failed request fails too.

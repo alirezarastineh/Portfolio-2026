@@ -255,7 +255,12 @@ the commit's status on GitHub (`…/pipeline/<number>/…`).
 - **Lighthouse:** open the `.html` files in `.lighthouseci\reports` directly.
 - **SBOMs:** the images workflow's `reports` step saves a CycloneDX SBOM of each image, what it
   ships down to the last package, to `\\wsl.localhost\Ubuntu\srv\ci-reports\<pipeline>\images\sbom`
-  (about 1.5 MB a pipeline).
+  (about 1 MB a pipeline).
+- **Coverage** (plan Phase 9): open `coverage\index.html` under `…\<pipeline>\client` (the unit
+  tests) or `…\<pipeline>\server` (unit and db merged). The thresholds are flags on the client's
+  `unit` step and the server's `coverage` step, just under the first figures; raise them by hand.
+- **Code health,** in the step logs only: `bundle-size` (the client's assets, against the last main
+  run, whose totals stay in `/var/lib/woodpecker-cache/bundle-size`), `knip` and `cycles`.
 - `agent-cleanup.sh` deletes reports after 14 days. They belong to root, so from Windows you can
   read them but not delete them.
 

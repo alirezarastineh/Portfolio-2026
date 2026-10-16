@@ -1,6 +1,7 @@
 # Client checks (plan Phases 3 and 4): ci.yml's client and e2e jobs, plus
 # Prettier, the spec typecheck and the strict build (no warnings, no
-# prerendered index.html). Every step runs in the CI image (ci/Dockerfile).
+# prerendered index.html), then coverage and code health (Phase 9). Every step
+# runs in the CI image (ci/Dockerfile).
 when:
   - event: [push, manual, cron]
     branch: main
@@ -12,6 +13,7 @@ when:
         - "server/src/content/**"
         - "ci/vitest-report.mjs"
         - "ci/save-reports.sh"
+        - "ci/bundle-size.mjs"
         - ".woodpecker/client.yaml"
 
 # When this pipeline rebuilds the CI image, the checks wait for it.
@@ -90,10 +92,18 @@ steps:
     commands:
       - node_modules/.bin/tsc -p tsconfig.spec.json --noEmit
 
+  # With coverage (plan Phase 9). The thresholds sit just under the first
+  # measured figures (2026-10-16: lines 28.14%, statements 28.13%, functions
+  # 28.21%, branches 32.01%); raise them by hand as tests are added, CI never
+  # writes them. The HTML report goes to the reports.
   - name: unit
     <<: *check
     commands:
-      - node_modules/.bin/vitest run --reporter=default --reporter=json --outputFile.json=/tmp/vitest-client.json
+      - >-
+        node_modules/.bin/vitest run --reporter=default --reporter=json
+        --outputFile.json=/tmp/vitest-client.json --coverage
+        --coverage.thresholds.lines=28 --coverage.thresholds.statements=28
+        --coverage.thresholds.functions=28 --coverage.thresholds.branches=32
       - node ../ci/vitest-report.mjs /tmp/vitest-client.json client
 
   # vite build, failing on any warning or a prerendered index.html.
@@ -123,6 +133,21 @@ steps:
     commands:
       - node_modules/.bin/playwright test --workers=2
 
+  # What browsers download, against the last main run, whose totals the agent
+  # keeps (plan Phase 9). Advisory: Lighthouse gates the bytes per page. Root:
+  # the cache folder is root's.
+  - name: bundle-size
+    image: *ci
+    directory: client
+    depends_on: [build]
+    failure: ignore
+    volumes: ["/var/lib/woodpecker-cache/bundle-size:/bundle-size"]
+    backend_options:
+      docker:
+        user: root
+    commands:
+      - node ../ci/bundle-size.mjs dist/analog/public/assets /bundle-size/main.json
+
   # After e2e, not beside it: a busy machine skews the scores.
   - name: lighthouse
     <<: *check
@@ -131,6 +156,34 @@ steps:
     commands:
       - export CHROME_PATH="$$(node -p "require('@playwright/test').chromium.executablePath()")"
       - node scripts/lhci.mjs
+
+  # Advisory code health (plan Phase 9), last, beside `reports`, pass or fail:
+  # next to e2e or Lighthouse they slowed both (e2e 371 s against 226 s in a
+  # dry run), and alone they take seconds. knip reports unused files, exports
+  # and dependencies (knip.js), and never marks the step red: there are always
+  # some (the owner's choice, 2026-10-16). madge reports circular imports that
+  # survive compilation (type-only imports are skipped); none today, so its red
+  # means a new one. npx resolves only versions published before --before, so a
+  # release newer than the pin's age never runs here.
+  - name: knip
+    <<: *check
+    depends_on: [lighthouse]
+    when:
+      status: [success, failure]
+    failure: ignore
+    commands:
+      - npx --yes --no-update-notifier --before=2026-10-02 knip@6.39.0 --no-progress --no-exit-code
+
+  - name: cycles
+    <<: *check
+    depends_on: [lighthouse]
+    when:
+      status: [success, failure]
+    failure: ignore
+    environment:
+      madge_detectiveOptions__ts__skipTypeImports: "true"
+    commands:
+      - npx --yes --no-update-notifier --before=2026-10-02 madge@8.0.0 --circular --no-spinner --extensions ts --ts-config tsconfig.app.json src
 
   # Pass or fail, since a failure is when the reports matter: copies them to
   # the agent's /srv/ci-reports and prints their Windows path. Root, like
@@ -146,4 +199,4 @@ steps:
       docker:
         user: root
     commands:
-      - sh ../ci/save-reports.sh playwright-report test-results .lighthouseci
+      - sh ../ci/save-reports.sh playwright-report test-results .lighthouseci coverage
