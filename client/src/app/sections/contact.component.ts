@@ -388,6 +388,8 @@ export class ContactSectionComponent {
   protected readonly attachable = signal<AskConversation | null>(null);
   /** The visitor's opt-in to attach it: off unless ticked. */
   protected readonly attach = signal(false);
+  /** Whether the visitor has tried to send: from then on every invalid field shows its error. */
+  private readonly attempted = signal(false);
 
   protected readonly announcement = computed(() => {
     const state = this.state();
@@ -459,9 +461,16 @@ export class ContactSectionComponent {
     );
   }
 
+  /**
+   * Once a field has been typed in, or after a try to send; never on leaving
+   * an untouched field. An error appearing on that blur moved everything below
+   * the field while the pointer was down on the next control: after the
+   * assistant's hand-off, which focuses the empty name, the first click on the
+   * attach box missed it.
+   */
   showError(name: Field): boolean {
     const c = this.form.controls[name];
-    return c.invalid && (c.dirty || c.touched);
+    return c.invalid && (c.dirty || this.attempted());
   }
 
   fieldError(name: Field): string {
@@ -478,6 +487,7 @@ export class ContactSectionComponent {
   private validateForm(): z.infer<typeof contactSchema> | null {
     const raw = this.form.getRawValue();
     this.form.markAllAsTouched();
+    this.attempted.set(true);
     const parsed = contactSchema.safeParse({
       name: raw.name.trim(),
       email: raw.email.trim(),
@@ -550,6 +560,7 @@ export class ContactSectionComponent {
     // Explicitly empty: a plain reset() returns to the initial values, which
     // may be what was typed before the form's code arrived.
     this.form.reset({ name: "", email: "", message: "", website: "" });
+    this.attempted.set(false);
     this.state.set("idle");
     this.errorMsg.set("");
     this.forgetConversation();
