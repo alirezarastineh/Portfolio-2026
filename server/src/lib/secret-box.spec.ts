@@ -38,6 +38,17 @@ describe("secret box", () => {
     expect(() => unseal([prefix, iv, flipped.toString("base64url"), tag].join(":"))).toThrow();
   });
 
+  /**
+   * GCM checks only as many tag bytes as it is given: a 4-byte prefix of the
+   * real tag would let a forgery through after about 2^32 tries, not 2^128.
+   */
+  it("rejects a truncated authentication tag", () => {
+    useKey();
+    const [prefix, iv, ciphertext, tag] = seal(SECRET).split(":");
+    const short = Buffer.from(tag!, "base64url").subarray(0, 4).toString("base64url");
+    expect(() => unseal([prefix, iv, ciphertext, short].join(":"))).toThrow();
+  });
+
   it("rejects a value sealed under a different key", () => {
     useKey();
     const sealed = seal(SECRET);

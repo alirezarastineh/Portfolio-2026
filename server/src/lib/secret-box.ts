@@ -57,7 +57,9 @@ export function unseal(stored: string): string {
     .map((part) => Buffer.from(part, "base64url"));
   if (!iv || !ciphertext || !tag) throw new Error("malformed sealed secret");
 
-  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  // The full 16-byte tag: without a length, GCM checks only as many bytes as
+  // it is given, and Node 22 accepts a tag as short as 4.
+  const decipher = createDecipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
