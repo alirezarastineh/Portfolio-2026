@@ -77,6 +77,10 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
               [href]="footnoteHref(node.id)"
               [attr.aria-label]="citeLabel(node.id)"
               (click)="followCite($event, node.id)"
+              (mouseenter)="lit.set(node.n)"
+              (mouseleave)="lit.set(null)"
+              (focus)="focusCite($event, node.n)"
+              (blur)="lit.set(null)"
               ><sup>[{{ node.n }}]</sup></a
             >
           }
@@ -161,6 +165,7 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
               <li [id]="noteId(note.id)" class="max-w-full">
                 <a
                   class="note chip min-h-6 max-w-full gap-1.5 hover:border-border-strong hover:text-foreground"
+                  [class.lit]="lit() === note.n"
                   [attr.data-n]="note.n"
                   [href]="note.url"
                   (click)="followSource($event, note.url)"
@@ -266,18 +271,8 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
       text-decoration: underline;
     }
 
-    /* Hovering or focusing citation [n] lights up source chip n. Numbered
-       rules, as CSS cannot compare two elements' attributes; an answer cites
-       a handful of sources, and past nine a chip simply stays unlit. */
-    :host:has(.cite[data-n="1"]:is(:hover, :focus-visible)) .note[data-n="1"],
-    :host:has(.cite[data-n="2"]:is(:hover, :focus-visible)) .note[data-n="2"],
-    :host:has(.cite[data-n="3"]:is(:hover, :focus-visible)) .note[data-n="3"],
-    :host:has(.cite[data-n="4"]:is(:hover, :focus-visible)) .note[data-n="4"],
-    :host:has(.cite[data-n="5"]:is(:hover, :focus-visible)) .note[data-n="5"],
-    :host:has(.cite[data-n="6"]:is(:hover, :focus-visible)) .note[data-n="6"],
-    :host:has(.cite[data-n="7"]:is(:hover, :focus-visible)) .note[data-n="7"],
-    :host:has(.cite[data-n="8"]:is(:hover, :focus-visible)) .note[data-n="8"],
-    :host:has(.cite[data-n="9"]:is(:hover, :focus-visible)) .note[data-n="9"] {
+    /* The chip of the citation pointed at or focused (lit). */
+    .note.lit {
       border-color: var(--accent-orange);
       background-color: var(--accent-orange-soft);
       color: var(--foreground);
@@ -373,6 +368,13 @@ export class AskAnswerComponent {
 
   protected readonly copy = this.store.copy;
   protected readonly copied = signal(false);
+  /**
+   * The citation [n] pointed at or focused from the keyboard, whose source chip
+   * lights up. Set by its events: a `:has(.cite:hover)` rule did this until
+   * WebKit, which never re-matches it for citations that arrive with a
+   * streamed answer, left the chip unlit (plan Phase 10's cross-browser run).
+   */
+  protected readonly lit = signal<number | null>(null);
   private readonly now = signal(Date.now());
 
   protected readonly thinking = computed(
@@ -541,6 +543,11 @@ export class AskAnswerComponent {
   protected followCite(event: MouseEvent, id: string): void {
     track("ask_citation_click");
     this.followSource(event, this.footnoteHref(id));
+  }
+
+  /** Focus from the keyboard lights the chip up, as `:focus-visible` did; a click's does not. */
+  protected focusCite(event: FocusEvent, n: number): void {
+    if ((event.target as HTMLElement).matches(":focus-visible")) this.lit.set(n);
   }
 
   protected followSource(event: MouseEvent, url: string): void {
