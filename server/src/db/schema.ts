@@ -1410,3 +1410,6 @@ export const aiFaqProposals = pgTable(
 );
 
 export type Locale = (typeof localeEnum.enumValues)[number];
+
+// A deliberate defect for a scratch PR (plan Phase 7): a table with no migration.
+export const ciRed = pgTable("ci_red", { id: integer("id").primaryKey() });
