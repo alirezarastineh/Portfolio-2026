@@ -1,0 +1,2 @@
+A deliberate defect for a scratch PR (plan Phase 8): never merge.
+api_key = "Zx8vQ2mN7pL4kR9tW1sY6bH3dF5gJ0cX"
