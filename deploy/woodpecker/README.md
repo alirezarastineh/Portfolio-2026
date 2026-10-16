@@ -253,6 +253,9 @@ the commit's status on GitHub (`…/pipeline/<number>/…`).
   Each failed test links its trace. Opened as a file, the report shows the failures but can't load
   the traces.
 - **Lighthouse:** open the `.html` files in `.lighthouseci\reports` directly.
+- **SBOMs:** the images workflow's `reports` step saves a CycloneDX SBOM of each image, what it
+  ships down to the last package, to `\\wsl.localhost\Ubuntu\srv\ci-reports\<pipeline>\images\sbom`
+  (about 1.5 MB a pipeline).
 - `agent-cleanup.sh` deletes reports after 14 days. They belong to root, so from Windows you can
   read them but not delete them.
 
@@ -310,6 +313,19 @@ compose start woodpecker-server && rm /tmp/woodpecker.sqlite
   - Filter by image where you can.
   - Never give a secret a `VITE_` name: the client build inlines every `VITE_*` variable into the
     public bundle.
+- **Leaks and dependencies** (plan Phase 8):
+  - `repo.yaml`'s `gitleaks` scans the working tree on every push and pull request. Its waivers,
+    each with a reason, are in `.gitleaks.toml`, matched by value and file so that they hold when
+    lines move.
+  - `security.yaml` runs when a lockfile changes, on manual runs and nightly. `pnpm audit` lists
+    every HIGH advisory in the production dependencies and fails on a CRITICAL. The licence check
+    fails a production package outside the allowlist, unless `ci/check-licenses.mjs` waives it.
+    osv-scanner and semgrep only report.
+  - `images.yaml` scans each image's SBOM with Trivy the same way: every HIGH listed, a CRITICAL
+    fails. Waivers, each with its reason, go in `.trivyignore`.
+  - To block on HIGH once the HIGHs are fixed or waived: `--fail-on high` in `security.yaml`'s
+    `audit` step, and `--severity HIGH,CRITICAL` in the gate pass of `images.yaml`'s
+    `vulnerabilities` step.
 - **Who can log in:** `WOODPECKER_OPEN=false`, plus a single admin and repository owner. User agent
   registration is off.
 - **The GitHub token** that Woodpecker stores can manage webhooks and commit statuses, nothing more

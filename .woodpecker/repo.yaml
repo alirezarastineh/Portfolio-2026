@@ -1,7 +1,8 @@
 # Infrastructure lint (plan Phase 6): the workflows, the shell scripts, the
-# Dockerfiles, the compose files and the Caddyfiles, each tool from a pinned
-# image. Every step starts at once (`depends_on: []`), so one run reports every
-# failure. Nothing needs the Docker socket or a trusted volume.
+# Dockerfiles, the compose files and the Caddyfiles, plus secrets (Phase 8),
+# each tool from a pinned image. Every step starts at once (`depends_on: []`),
+# so one run reports every failure. Nothing needs the Docker socket or a
+# trusted volume.
 when:
   - event: [push, manual, cron]
     branch: main
@@ -71,3 +72,13 @@ steps:
     depends_on: []
     commands:
       - trivy config --skip-version-check --exit-code 1 .
+
+  # Secrets in the working tree (plan Phase 8). The repo is public; .env*,
+  # DEPLOYMENT.md and .claude/ are git-ignored, so this catches accidents.
+  # Waivers, each with its reason, in .gitleaks.toml. --redact keeps a found
+  # secret out of the log. Pinned by digest, like Trivy.
+  - name: gitleaks
+    image: ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+    depends_on: []
+    commands:
+      - gitleaks dir --config .gitleaks.toml --redact --no-banner --verbose .

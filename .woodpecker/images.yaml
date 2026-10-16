@@ -1,8 +1,9 @@
 # Builds the API and client images (plan Phase 6), as ci.yml's docker job does,
 # through the agent's Docker: its BuildKit keeps the layer cache and the
-# Dockerfiles' cache mounts warm between runs. The images are tagged with the
-# commit and never pushed; the last step removes the tags. The Docker socket is
-# root in WSL on the owner's PC, never on production (README.md, Security notes).
+# Dockerfiles' cache mounts warm between runs. Then an SBOM of each and their
+# known vulnerabilities (Phase 8). The images are tagged with the commit and
+# never pushed; `untag` removes the tags. The Docker socket is root in WSL on
+# the owner's PC, never on production (README.md, Security notes).
 when:
   - event: [push, manual, cron]
     branch: main
@@ -24,7 +25,12 @@ depends_on:
 
 variables:
   - &docker "docker:29.9.0-cli"
+  # Pinned by digest, as in repo.yaml.
+  - &trivy "aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa"
   - &socket "/var/run/docker.sock:/var/run/docker.sock"
+  # Trivy's vulnerability database, 1.5 GB unpacked: kept on the agent and
+  # downloaded again (128 MB) only once it's stale.
+  - &trivy-cache "/var/lib/woodpecker-cache/trivy:/trivy-cache"
 
 steps:
   - name: api
@@ -47,12 +53,47 @@ steps:
         --build-arg API_INTERNAL_BASE_URL=http://api:3000
         client
 
-  # Pass or fail, or the commits' tags would pile up. The layers stay in the
-  # build cache, which agent-cleanup.sh caps; it also removes the tags of a run
-  # that was canceled before this step.
+  # What each image ships, OS packages and node_modules alike, as a CycloneDX
+  # SBOM (plan Phase 8), for the reports and the scan below.
+  - name: sbom
+    image: *trivy
+    depends_on: [api, client]
+    volumes: [*socket, *trivy-cache]
+    commands:
+      - mkdir -p sbom
+      - >-
+        for image in api client; do
+        trivy image --cache-dir /trivy-cache --skip-version-check --quiet --format cyclonedx
+        --output "sbom/$${image}.cdx.json" "portfolio/$${image}:$${CI_COMMIT_SHA}"; done
+      - ls -l sbom
+
+  # Known vulnerabilities that have a fix, read from the SBOMs, so each image
+  # is analysed once. Every HIGH is listed, and a CRITICAL fails the step: the
+  # owner's choice (2026-10-16) while Analog's nx pins HIGHs nobody can fix
+  # here; HIGH blocks once upgrades bring the count down. Waivers, each with
+  # its reason, go in .trivyignore.
+  - name: vulnerabilities
+    image: *trivy
+    depends_on: [sbom]
+    volumes: [*trivy-cache]
+    commands:
+      - >-
+        for image in api client; do echo "== $${image}";
+        trivy sbom --cache-dir /trivy-cache --skip-version-check --quiet --table-mode detailed
+        --severity HIGH,CRITICAL --ignore-unfixed "sbom/$${image}.cdx.json"; done
+      - >-
+        for image in api client; do
+        trivy sbom --cache-dir /trivy-cache --skip-version-check --quiet --severity CRITICAL
+        --ignore-unfixed --exit-code 1 "sbom/$${image}.cdx.json" > /dev/null
+        || { echo "$${image}: a CRITICAL vulnerability, listed above"; exit 1; }; done
+
+  # Pass or fail, or the commits' tags would pile up. After the SBOMs, which
+  # read the images. The layers stay in the build cache, which
+  # agent-cleanup.sh caps; it also removes the tags of a run that was canceled
+  # before this step.
   - name: untag
     image: *docker
-    depends_on: [api, client]
+    depends_on: [sbom]
     when:
       status: [success, failure]
     volumes: [*socket]
@@ -60,3 +101,14 @@ steps:
       - >-
         docker image ls --format '{{.Repository}}:{{.Tag}}'
         --filter "reference=portfolio/*:$${CI_COMMIT_SHA}" | xargs -r docker image rm
+
+  # The SBOMs, to the agent's /srv/ci-reports, as client.yaml saves its
+  # reports. Root, like every step here: that folder is root's.
+  - name: reports
+    image: *docker
+    depends_on: [vulnerabilities, untag]
+    when:
+      status: [success, failure]
+    volumes: ["/srv/ci-reports:/srv/ci-reports"]
+    commands:
+      - sh ci/save-reports.sh sbom

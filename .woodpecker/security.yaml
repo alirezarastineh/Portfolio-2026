@@ -1,0 +1,99 @@
+# Supply chain (plan Phase 8): known vulnerabilities and licences in the
+# production dependencies, plus osv-scanner and semgrep, which only report. It
+# runs when a lockfile or one of its checks changes, on manual runs, and on the
+# nightly cron (Phase 13).
+when:
+  - event: push
+    branch: main
+    path:
+      include:
+        - "server/pnpm-lock.yaml"
+        - "client/pnpm-lock.yaml"
+        - "ci/check-audit.mjs"
+        - "ci/check-licenses.mjs"
+        - ".woodpecker/security.yaml"
+  - event: pull_request
+    path:
+      include:
+        - "server/pnpm-lock.yaml"
+        - "client/pnpm-lock.yaml"
+        - "ci/check-audit.mjs"
+        - "ci/check-licenses.mjs"
+        - ".woodpecker/security.yaml"
+  - event: [manual, cron]
+    branch: main
+
+# When this pipeline rebuilds the CI image, the checks wait for it.
+depends_on:
+  - name: ci-image
+    optional: true
+
+variables:
+  - &ci "portfolio-ci:node22-pw1.64.1"
+  - &store "/var/lib/woodpecker-cache/pnpm-store:/pnpm-store"
+
+# Levels: owner, then install and osv-scanner, then the checks together, so one
+# run reports every failure.
+steps:
+  # As in the other workflows: the clone and the pnpm store go to node.
+  - name: owner
+    image: *ci
+    volumes: [*store]
+    backend_options:
+      docker:
+        user: root
+    commands:
+      - chown -R node:node .
+      - find /pnpm-store ! -user node -exec chown -h node:node {} +
+
+  # Production dependencies only: what the images ship, and what the licence
+  # check reads.
+  - name: install
+    image: *ci
+    depends_on: [owner]
+    volumes: [*store]
+    commands:
+      - for p in server client; do (cd "$${p}" && pnpm install --prod --frozen-lockfile --store-dir /pnpm-store); done
+
+  # Advisory: OSV's sources beside npm's, over both lockfiles, dev dependencies
+  # too. Pinned by digest, like every tool image; its binary is off the PATH.
+  - name: osv-scanner
+    image: ghcr.io/google/osv-scanner:v2.6.0@sha256:afd838850ac1a0fcc15ff4a041dc9ba11123c3f0d2666217a5f0fcf9222b55fa
+    depends_on: [owner]
+    failure: ignore
+    commands:
+      - /osv-scanner scan source --lockfile server/pnpm-lock.yaml --lockfile client/pnpm-lock.yaml
+
+  # Every HIGH and CRITICAL advisory is listed, and a CRITICAL fails
+  # (ci/check-audit.mjs says why not HIGH yet). A failed request fails too.
+  - name: audit
+    image: *ci
+    depends_on: [install]
+    commands:
+      - >-
+        status=0; for p in server client; do
+        (cd "$${p}" && pnpm audit --prod --json > "/tmp/audit-$${p}.json") || true;
+        node ci/check-audit.mjs "/tmp/audit-$${p}.json" "$${p}" || status=1; done; exit $${status}
+
+  # Licences outside the allowlist fail, unless ci/check-licenses.mjs waives the
+  # package. pnpm reads the licences from the store.
+  - name: licenses
+    image: *ci
+    depends_on: [install]
+    volumes: [*store]
+    commands:
+      - >-
+        status=0; for p in server client; do
+        (cd "$${p}" && pnpm licenses list --prod --json --config.store-dir=/pnpm-store
+        > "/tmp/licenses-$${p}.json") || true;
+        node ci/check-licenses.mjs "/tmp/licenses-$${p}.json" "$${p}" || status=1; done;
+        exit $${status}
+
+  # Advisory: semgrep's TypeScript and Node rules over both src trees. Its
+  # metrics stay off; the rules come from semgrep's registry.
+  - name: semgrep
+    image: semgrep/semgrep:1.178.0@sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b
+    depends_on: [install]
+    failure: ignore
+    commands:
+      - semgrep scan --config p/typescript --config p/nodejs --metrics=off --disable-version-check --error server/src client/src

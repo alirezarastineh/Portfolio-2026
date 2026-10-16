@@ -1,0 +1,10 @@
+# gitleaks (repo.yaml): the default rules, with waivers that each state their
+# reason. A waiver names the value and its file, so it holds when lines move.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test values shaped like secrets: the eval corpus's cache key and the leak guard's made-up password"
+condition = "AND"
+paths = ['''^server/src/ask/(?:evals/fixture|leak-guard\.spec)\.ts$''']
+regexes = ['''^eval-fixture-\d+$''', '''^p8sW0rd-Secret$''']
