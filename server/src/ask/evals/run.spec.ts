@@ -155,7 +155,10 @@ describe("eval graders", () => {
   });
 });
 
-describe("runEvals", () => {
+// Whole eval runs through the real agent: about a second each alone, but CI
+// measures coverage beside the client's checks, and one took past vitest's 5 s
+// default there (plan Phase 9).
+describe("runEvals", { timeout: 30_000 }, () => {
   it("lets a careful answer restate the question, and fails one that states a status", () => {
     const visa = byId("sensitive-visa");
     const graded = (text: string) => grade(visa, { text, cited: [], tools: [] });

@@ -54,7 +54,12 @@ export const FIXTURE_BASE: Corpus = {
   posts: [],
 };
 
-/** Settings as a deploy with a Gemini key would have them, tightened for tests. */
+/**
+ * Settings as a deploy with a Gemini key would have them, tightened for tests.
+ * The first-chunk deadline stays loose: a scripted model answers at once, but
+ * on CI's busy agent, measuring coverage, one first chunk took 1.7 s (plan
+ * Phase 9). Specs that test a deadline set their own.
+ */
 export function fixtureConfig(overrides: Partial<AskConfig> = {}): AskConfig {
   const saved = { ...process.env };
   process.env.SERVER_AI_ENABLED = "true";
@@ -64,8 +69,8 @@ export function fixtureConfig(overrides: Partial<AskConfig> = {}): AskConfig {
   try {
     return {
       ...parseAskConfig(),
-      firstChunkTimeoutMs: 300,
-      requestTimeoutMs: 3_000,
+      firstChunkTimeoutMs: 5_000,
+      requestTimeoutMs: 10_000,
       streamTimeoutMs: 10_000,
       retryBaseDelayMs: 1,
       retryMaxDelayMs: 2,
