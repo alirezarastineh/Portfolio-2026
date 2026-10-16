@@ -108,7 +108,7 @@
   /* The hero headline only. */
   --text-display: clamp(3rem, 1.4rem + 6.4vw, 7rem);
   --text-display--line-height: 0.94;
-  --text-display--letter-spacing: -0.045em;
+  --text-display--letter-spacing: -0.02em;
   --text-display--font-weight: 640;
 
   /* With `tabular-nums`. */
