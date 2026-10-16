@@ -2,7 +2,7 @@
 # Housekeeping for the Woodpecker agent's Docker in WSL on the owner's PC, run
 # by systemd/woodpecker-agent-cleanup.timer (README.md, Part 3): pipeline
 # reports older than 14 days, images.yaml's leftover tags, unused images, build
-# cache beyond 20 GB, and the dangling `wp_*` volumes that pipelines leave
+# cache beyond 8 GB, and the dangling `wp_*` volumes that pipelines leave
 # behind.
 set -euo pipefail
 
@@ -23,7 +23,9 @@ fi
 # Dangling images only: a locally built CI image keeps its tag and stays.
 docker image prune -f >/dev/null
 # Docker 28 renamed --keep-storage to --reserved-space; accept either engine.
-docker builder prune -f --reserved-space 20GB >/dev/null 2>&1 ||
-  docker builder prune -f --keep-storage 20GB >/dev/null
+# 8 GB, not more: WSL's disk lives on C:, grows and never shrinks, and C: runs
+# tight; a full C: crashed WSL mid-pipeline (2026-10-15).
+docker builder prune -f --reserved-space 8GB >/dev/null 2>&1 ||
+  docker builder prune -f --keep-storage 8GB >/dev/null
 docker volume ls -q --filter dangling=true --filter name='^wp_' | xargs -r docker volume rm >/dev/null
-echo "cleaned: reports over $KEEP_DAYS days, leftover image tags, dangling images, build cache over 20 GB, wp_* volumes"
+echo "cleaned: reports over $KEEP_DAYS days, leftover image tags, dangling images, build cache over 8 GB, wp_* volumes"
