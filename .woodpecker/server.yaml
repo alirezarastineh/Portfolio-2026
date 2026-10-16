@@ -10,6 +10,8 @@ when:
       include:
         - "server/**"
         - "deploy/hetzner/*.sql"
+        # `migrations` checks that it names every migration.
+        - "deploy/hetzner/verify-deploy.sh"
         - "ci/vitest-report.mjs"
         - ".woodpecker/server.yaml"
 
@@ -96,6 +98,21 @@ steps:
     <<: *check
     commands:
       - node_modules/.bin/drizzle-kit check
+
+  # The project's invariants (plan Phase 7). Every migration is additive (0009
+  # is the one waiver) and in the journal, and verify-deploy.sh checks each one
+  # from 0008 on. Reads files only.
+  - name: migrations
+    <<: *check
+    commands:
+      - node scripts/check-migrations.mjs
+
+  # schema.ts changed without its migration: drizzle-kit generate, writing into
+  # a copy of drizzle/, must find nothing to migrate.
+  - name: drift
+    <<: *check
+    commands:
+      - node scripts/check-drift.mjs
 
   - name: unit
     <<: *check
