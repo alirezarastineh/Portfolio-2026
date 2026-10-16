@@ -24,10 +24,18 @@ for dir in "$@"; do
 done
 
 printf '\n%s\n' "$windows"
-if [ -d "$dest/playwright-report" ]; then
+if [ -f "$dest/playwright-report/index.html" ]; then
   # Opened as a file, the report shows each failure but not its trace: the
   # trace viewer needs it served.
   printf 'e2e report and traces, from client/: npx playwright show-report "%s\\playwright-report"\n' "$windows"
+fi
+# A pull request's screenshots against main's (plan Phase 10): no traces, so
+# the file opens directly, each difference with its expected, actual and diff.
+if [ -f "$dest/playwright-report/visual/index.html" ]; then
+  printf 'visual changes: %s\\playwright-report\\visual\\index.html\n' "$windows"
+fi
+if [ -f "$dest/playwright-report/cross-browser/index.html" ]; then
+  printf 'Firefox and WebKit, from client/: npx playwright show-report "%s\\playwright-report\\cross-browser"\n' "$windows"
 fi
 if [ -d "$dest/.lighthouseci/reports" ]; then
   printf 'Lighthouse: the .html files in %s\\.lighthouseci\\reports\n' "$windows"

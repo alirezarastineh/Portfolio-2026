@@ -20,6 +20,11 @@ declare global {
 
 async function watchProblems(page: Page): Promise<PageProblems> {
   const problems: PageProblems = { cspViolations: [], pageErrors: [], consoleErrors: [] };
+  // The documents the page loaded, for a 404 page's report of its own status below.
+  const documents = new Set<string>();
+  page.on("request", (request) => {
+    if (request.isNavigationRequest()) documents.add(request.url());
+  });
 
   await page.exposeFunction("__reportCspViolation", (violation: string) => {
     problems.cspViolations.push(violation);
@@ -41,8 +46,9 @@ async function watchProblems(page: Page): Promise<PageProblems> {
     const text = message.text();
     // Requests to other origins are aborted below; their failures are expected.
     if (text.includes("ERR_BLOCKED_BY_CLIENT")) return;
-    // Chrome reports a 404 page's own status as a failed load; the status is the point.
-    if (text.startsWith("Failed to load resource") && message.location().url === page.url()) return;
+    // Chrome and WebKit report a 404 page's own status as a failed load; the status is the
+    // point. WebKit reports it before page.url() names the new page, hence the loaded documents.
+    if (text.startsWith("Failed to load resource") && documents.has(message.location().url)) return;
     problems.consoleErrors.push(text);
   });
 

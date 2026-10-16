@@ -240,6 +240,11 @@ test.describe("motion", () => {
   }) => {
     await page.goto("/en");
     await interactive(page);
+    // motion.css reveals on scroll timelines; without them (Firefox) a card is simply there.
+    test.skip(
+      !(await page.evaluate(() => CSS.supports("animation-timeline: view()"))),
+      "no scroll timelines in this browser",
+    );
     const card = page.locator("#projects > div > ul > li").first();
     const opacity = () => card.evaluate((el) => getComputedStyle(el).opacity);
 
@@ -253,7 +258,9 @@ test.describe("motion", () => {
     await expect.poll(opacity).toBe("1");
   });
 
-  test("a held button sinks a little; not under reduced motion", async ({ page }) => {
+  test("a held button sinks a little; not under reduced motion", async ({ page, browserName }) => {
+    // Moving a held link starts a native drag, after which Firefox leaves it :active.
+    test.skip(browserName === "firefox", "Firefox keeps a dragged link :active");
     await page.goto("/en");
     await interactive(page);
     const talk = page.getByRole("link", { name: "Let's talk" });
@@ -402,8 +409,11 @@ test.describe("contact form", () => {
   test("beside it: the email to copy, profiles by handle, and a reply time", async ({
     page,
     context,
+    browserName,
   }) => {
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    // Only Chromium lets a test grant clipboard access and read it back.
+    const readable = browserName === "chromium";
+    if (readable) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     const contact = page.locator("#contact");
     await expect(
       contact.getByRole("link", { name: /^GitHub\s*github\.com\/alirezarastineh$/ }),
@@ -412,9 +422,11 @@ test.describe("contact form", () => {
 
     await contact.getByRole("button", { name: "Copy the email address" }).click();
     await expect(contact.getByRole("button", { name: /^Copied ✓/ })).toBeVisible();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "contact@alirezarastineh.me",
-    );
+    if (readable) {
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+        "contact@alirezarastineh.me",
+      );
+    }
   });
 
   test("a sent message takes focus to the confirmation, which offers another", async ({ page }) => {

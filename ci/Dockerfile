@@ -10,11 +10,13 @@ ARG PW_VERSION=1.64.1
 
 RUN npm install -g pnpm@${PNPM_VERSION} && npm cache clean --force
 
-# Playwright's Chromium and the system libraries it needs. The client's
-# pw-version step fails when the lockfile's @playwright/test moves away from it.
+# Playwright's browsers and the system libraries they need: Chromium for every
+# run, Firefox and WebKit for the nightly cross-browser run (plan Phase 10;
+# about 1 GB more, the owner's go-ahead on 2026-10-16). The client's pw-version
+# step fails when the lockfile's @playwright/test moves away from them.
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     PW_VERSION=${PW_VERSION}
-RUN npx -y playwright@${PW_VERSION} install --with-deps chromium \
+RUN npx -y playwright@${PW_VERSION} install --with-deps chromium firefox webkit \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 

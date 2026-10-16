@@ -1,7 +1,8 @@
 # Client checks (plan Phases 3 and 4): ci.yml's client and e2e jobs, plus
 # Prettier, the spec typecheck and the strict build (no warnings, no
-# prerendered index.html), then coverage and code health (Phase 9). Every step
-# runs in the CI image (ci/Dockerfile).
+# prerendered index.html), then coverage and code health (Phase 9), the visual
+# baselines and, nightly, Firefox and WebKit (Phase 10). Every step runs in the
+# CI image (ci/Dockerfile).
 when:
   - event: [push, manual, cron]
     branch: main
@@ -14,6 +15,7 @@ when:
         - "ci/vitest-report.mjs"
         - "ci/save-reports.sh"
         - "ci/bundle-size.mjs"
+        - "ci/visual.sh"
         - ".woodpecker/client.yaml"
 
 # When this pipeline rebuilds the CI image, the checks wait for it.
@@ -24,6 +26,8 @@ depends_on:
 variables:
   - &ci "portfolio-ci:node22-pw1.64.1"
   - &store "/var/lib/woodpecker-cache/pnpm-store:/pnpm-store"
+  # The visual baselines, one set per CI image (ci/visual.sh).
+  - &visual "/var/lib/woodpecker-cache/visual:/visual"
   # Every check after `install`: binaries called directly, no pnpm at run time.
   # Woodpecker runs depends_on as levels, each starting once the whole level
   # before it is done: the checks share the build's level, and e2e waits for
@@ -39,18 +43,19 @@ variables:
     VITE_API_BASE_URL: https://api.alirezarastineh.me
 
 steps:
-  # The clone and the agent's pnpm store belong to root, and every other step
-  # runs as the CI image's node user: this one alone runs as root, to hand them over.
+  # The clone, the agent's pnpm store and the visual baselines belong to root,
+  # and every other step runs as the CI image's node user: this one alone runs
+  # as root, to hand them over.
   - name: owner
     image: *ci
-    volumes: [*store]
+    volumes: [*store, *visual]
     backend_options:
       docker:
         user: root
     commands:
       - chown -R node:node .
       # -h: the store links to the workspaces of earlier runs, which are gone.
-      - find /pnpm-store ! -user node -exec chown -h node:node {} +
+      - find /pnpm-store /visual ! -user node -exec chown -h node:node {} +
 
   - name: install
     image: *ci
@@ -157,9 +162,9 @@ steps:
       - export CHROME_PATH="$$(node -p "require('@playwright/test').chromium.executablePath()")"
       - node scripts/lhci.mjs
 
-  # Advisory code health (plan Phase 9), last, beside `reports`, pass or fail:
-  # next to e2e or Lighthouse they slowed both (e2e 371 s against 226 s in a
-  # dry run), and alone they take seconds. knip reports unused files, exports
+  # Advisory code health (plan Phase 9), after Lighthouse, beside `visual`,
+  # pass or fail: next to e2e or Lighthouse they slowed both (e2e 371 s against
+  # 226 s in a dry run), and alone they take seconds. knip reports unused files, exports
   # and dependencies (knip.js), and never marks the step red: there are always
   # some (the owner's choice, 2026-10-16). madge reports circular imports that
   # survive compilation (type-only imports are skipped); none today, so its red
@@ -185,13 +190,54 @@ steps:
     commands:
       - npx --yes --no-update-notifier --before=2026-10-02 madge@8.0.0 --circular --no-spinner --extensions ts --ts-config tsconfig.app.json src
 
+  # The visual project (plan Phase 10, ci/visual.sh): main takes the Linux
+  # baselines and keeps them on the agent, one set per CI image; a pull request
+  # compares with them, and the reports keep each difference's images.
+  # Advisory, since a visual change can be intended: read its log. After
+  # Lighthouse, which a busy machine skews.
+  - name: visual
+    <<: *check
+    depends_on: [lighthouse]
+    failure: ignore
+    volumes: [*visual]
+    environment:
+      <<: *api
+      VISUAL_IMAGE: *ci
+    commands:
+      - sh ../ci/visual.sh
+
+  # Nightly, on cron runs only (plan Phase 10): the desktop suite in Firefox
+  # and WebKit, Playwright's own builds of them, which the CI image carries.
+  # Advisory. After `visual`, whose screenshots a busy machine can slow.
+  - name: cross-browser
+    <<: *check
+    depends_on: [visual]
+    when:
+      - event: cron
+    failure: ignore
+    environment:
+      <<: *api
+      E2E_CROSS_BROWSER: "1"
+      # Beside e2e's report and results.
+      PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/cross-browser
+    commands:
+      - >-
+        node_modules/.bin/playwright test --project=firefox --project=webkit --workers=2
+        --output=test-results/cross-browser
+
   # Pass or fail, since a failure is when the reports matter: copies them to
   # the agent's /srv/ci-reports and prints their Windows path. Root, like
   # `owner`: that folder is root's.
   - name: reports
     image: *ci
     directory: client
-    depends_on: [e2e, lighthouse]
+    depends_on:
+      - e2e
+      - lighthouse
+      - visual
+      # Cron runs only: dropped when the step isn't in the pipeline.
+      - name: cross-browser
+        optional: true
     when:
       status: [success, failure]
     volumes: ["/srv/ci-reports:/srv/ci-reports"]

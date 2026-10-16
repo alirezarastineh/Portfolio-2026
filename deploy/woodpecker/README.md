@@ -261,8 +261,19 @@ the commit's status on GitHub (`…/pipeline/<number>/…`).
   `unit` step and the server's `coverage` step, just under the first figures; raise them by hand.
 - **Code health,** in the step logs only: `bundle-size` (the client's assets, against the last main
   run, whose totals stay in `/var/lib/woodpecker-cache/bundle-size`), `knip` and `cycles`.
-- `agent-cleanup.sh` deletes reports after 14 days. They belong to root, so from Windows you can
-  read them but not delete them.
+- **Visual changes** (plan Phase 10, `ci/visual.sh`): every run on main takes the visual project's
+  screenshots afresh and keeps them as the baselines, one set per CI image tag, in
+  `/var/lib/woodpecker-cache/visual/<tag>` (never in git). A pull request compares its build with
+  them. When something changed, its `visual` step is marked red (it's advisory: the workflow stays
+  green), and `playwright-report\visual\index.html` under `…\<pipeline>\client` shows each
+  difference, expected, actual and diff side by side. It opens as a file. The step's log names the
+  main commit the baselines came from: a pull request that is behind main also shows main's later
+  changes.
+- **Firefox and WebKit** (plan Phase 10): the nightly cron run also runs the desktop suite in both,
+  advisory. Serve its report like e2e's: `npx playwright show-report
+  "\\wsl.localhost\Ubuntu\srv\ci-reports\<pipeline>\client\playwright-report\cross-browser"`.
+- `agent-cleanup.sh` deletes reports after 14 days, and visual sets no run has used for 30 days.
+  Reports belong to root, so from Windows you can read them but not delete them.
 
 ## Upgrade
 

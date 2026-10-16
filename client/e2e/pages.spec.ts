@@ -142,17 +142,25 @@ test.describe("case study", () => {
     ).toBeVisible();
   });
 
-  test("a code block names its language and copies its code", async ({ page, context }) => {
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  test("a code block names its language and copies its code", async ({
+    page,
+    context,
+    browserName,
+  }) => {
+    // Only Chromium lets a test grant clipboard access and read it back.
+    const readable = browserName === "chromium";
+    if (readable) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.goto("/en/work/project-one");
     await interactive(page);
     const frame = page.locator("main .code-frame");
     await expect(frame.locator(".code-tools")).toContainText("ts");
     await frame.getByRole("button", { name: "Copy" }).click();
     await expect(frame.getByRole("button", { name: "Copied ✓" })).toBeVisible();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      'const answer = await retrieve("query");',
-    );
+    if (readable) {
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+        'const answer = await retrieve("query");',
+      );
+    }
   });
 
   test("a table-of-contents link scrolls to its section without leaving the page", async ({
