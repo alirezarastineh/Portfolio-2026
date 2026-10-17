@@ -404,6 +404,7 @@ if [[ "$(db_value "select count(*) from information_schema.tables where table_na
 else
   fail "ai_mcp_usage missing — migration 0027_mcp_usage not applied?"
 fi
+check "the scratch PR's migration ran (migration 0028)" true
 
 echo "== agent-readable portfolio (plan phase 32) =="
 # A 2026-07-28 discovery: the version and capabilities in _meta, mirrored into headers.
