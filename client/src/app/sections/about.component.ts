@@ -106,10 +106,11 @@ import { typingAt, type TerminalLine, type TypingState } from "./about-typing";
                 }
               </div>
               <!-- The live prompt: the assistant's shell, loaded as the section
-                 nears the screen (or when asked for). Until then — and on the
-                 server — the same prompt, caret and hint hold its place. Not
-                 \`on viewport\`: that trigger runs during the server render here. -->
-              @defer (when loadShell()) {
+                 nears the screen (or when asked for), and swapped in between
+                 presses (showShell). Until then — and on the server — the same
+                 prompt, caret and hint hold its place. Not \`on viewport\`: that
+                 trigger runs during the server render here. -->
+              @defer (when showShell()) {
                 <app-terminal-shell [active]="finished()" />
               } @placeholder {
                 <!-- A flex column like the shell's, so the margins add up the same. -->
@@ -124,6 +125,7 @@ import { typingAt, type TerminalLine, type TypingState } from "./about-typing";
                     role="group"
                     [attr.aria-label]="starters().suggestions"
                     [class.invisible]="!finished()"
+                    (pointerdown)="holdPress()"
                   >
                     <span class="text-meta text-muted-foreground" aria-hidden="true">{{
                       starters().try
@@ -289,6 +291,25 @@ export class AboutSectionComponent {
 
   /** True once the shell's code should load: near the screen, asked for, or a returning tab. */
   protected readonly loadShell = signal(false);
+  /**
+   * A press on the placeholder's starter questions, until its click has been
+   * handled. Swapped for the shell mid-press, the release lands on the shell's
+   * own button, so neither gets a click and the question is lost: about one
+   * click in four in Firefox, which sends the press and the release further
+   * apart (plan Phase 10's cross-browser run).
+   */
+  private readonly pressing = signal(false);
+  /** The shell's code has arrived, fetched as soon as `loadShell` turns true. */
+  private readonly shellCode = signal(false);
+  /**
+   * The shell replaces the placeholder once its code is here and no press is
+   * under way, so the swap happens in one go. A defer block whose trigger has
+   * fired renders whenever its code arrives, a press or not.
+   */
+  protected readonly showShell = computed(
+    () => this.loadShell() && this.shellCode() && !this.pressing(),
+  );
+  private releasePress?: () => void;
   private stop?: () => void;
 
   constructor() {
@@ -301,6 +322,15 @@ export class AboutSectionComponent {
     effect(() => {
       this.lines();
       untracked(() => this.skip());
+    });
+
+    // The shell's own chunk, the one the defer block loads: once it is here,
+    // the swap waits only for a press to end. A failed fetch leaves the
+    // loading to the defer block.
+    effect(() => {
+      if (!this.loadShell() || this.shellCode()) return;
+      const arrived = () => this.shellCode.set(true);
+      void import("../ask/terminal-shell.component").then(arrived, arrived);
     });
 
     // "Ask my portfolio" wants the prompt now, not after the intro.
@@ -316,8 +346,43 @@ export class AboutSectionComponent {
     inject(DestroyRef).onDestroy(() => {
       this.observer?.disconnect();
       this.shellObserver?.disconnect();
+      this.releasePress?.();
       this.stop?.();
     });
+  }
+
+  /**
+   * Holds the shell back while a press on a starter question plays out: until
+   * its click has run (the question is then the launcher's, which the shell
+   * takes as it renders), a cancelled pointer, 600 ms after a release that
+   * brought no click, or at most 5 s.
+   */
+  protected holdPress(): void {
+    if (this.pressing()) return;
+    this.pressing.set(true);
+    const doc = this.host.nativeElement.ownerDocument;
+    let timer = setTimeout(() => release(), 5_000);
+    const release = () => {
+      clearTimeout(timer);
+      doc.removeEventListener("click", afterClick, true);
+      doc.removeEventListener("pointerup", afterRelease, true);
+      doc.removeEventListener("pointercancel", release, true);
+      this.releasePress = undefined;
+      this.pressing.set(false);
+    };
+    // In a later task, so the click's own handlers run first.
+    const afterClick = () => {
+      clearTimeout(timer);
+      timer = setTimeout(release);
+    };
+    const afterRelease = () => {
+      clearTimeout(timer);
+      timer = setTimeout(release, 600);
+    };
+    doc.addEventListener("click", afterClick, true);
+    doc.addEventListener("pointerup", afterRelease, true);
+    doc.addEventListener("pointercancel", release, true);
+    this.releasePress = release;
   }
 
   protected started(i: number): boolean {
