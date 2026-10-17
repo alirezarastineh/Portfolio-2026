@@ -1,0 +1,27 @@
+# Deploys a green main commit to production (plan Phase 12), started from its
+# pipeline in the UI: Deploy, target `production`. The repository setting
+# "Allow deployments" must be on.
+#
+# DRY RUN: this first version only prints what a deployment pipeline gets, to
+# confirm how Woodpecker names the target on the server. Its real steps (the
+# images to GHCR, then the rollout over SSH) replace it once that is known.
+# Nothing else runs on this event: every other workflow lists its own events.
+when:
+  - event: deployment
+
+steps:
+  - name: show
+    image: docker:29.9.0-cli
+    commands:
+      - echo "event=$${CI_PIPELINE_EVENT} target=$${CI_PIPELINE_DEPLOY_TARGET:-unset} task=$${CI_PIPELINE_DEPLOY_TASK:-unset}"
+      - echo "branch=$${CI_COMMIT_BRANCH:-unset} sha=$${CI_COMMIT_SHA} ref=$${CI_COMMIT_REF:-unset} parent=$${CI_PIPELINE_PARENT:-unset}"
+      - env | grep -E '^(CI_PIPELINE_(EVENT|DEPLOY_TARGET|DEPLOY_TASK|PARENT|NUMBER)|CI_COMMIT_(BRANCH|SHA|REF)|DEPLOY_TARGET)=' | sort
+
+  # The filter the real workflow will use (v3.19 has no `environment` filter;
+  # `evaluate` reads the pipeline's variables).
+  - name: production
+    image: docker:29.9.0-cli
+    when:
+      evaluate: 'CI_PIPELINE_DEPLOY_TARGET == "production"'
+    commands:
+      - echo "the production filter matched"
