@@ -273,8 +273,11 @@ describe("createFallbackModel", () => {
   it("falls back when a model sends nothing before the first-chunk timeout", async () => {
     const a = silent();
     const b = scripted([textTurn("fast")]);
+    // The deadline is the chain's, so the fallback's first chunk must beat it too. Wide
+    // margins: on a loaded CI box (Woodpecker #38) the mock missed 30 ms, and mocks have
+    // taken over 200 ms there.
     const { model, trace } = fallback([mockEntry("a", a.model), mockEntry("b", b.model)], {
-      firstChunkTimeoutMs: 30,
+      firstChunkTimeoutMs: 1_000,
     });
 
     const parts = await drain((await model.doStream(call)).stream);
