@@ -155,7 +155,9 @@ steps:
   # Coverage of unit and db together (plan Phase 9), merged from their blobs,
   # with the thresholds just under the first measured figures (2026-10-16:
   # lines 90.43%, statements 88.79%, functions 91.32%, branches 82.02%). Raise
-  # them by hand as tests are added; CI never writes them.
+  # them by hand as tests are added; CI never writes them. Branches keeps half
+  # a point: a few depend on the tests' timing, so the same code measured
+  # 81.99% to 82.03% (2026-10-17), and 82 failed a run that changed no code.
   - name: coverage
     <<: *check
     depends_on: [unit, db]
@@ -164,7 +166,7 @@ steps:
         node_modules/.bin/vitest run --merge-reports=.vitest/blobs --reporter=json
         --outputFile.json=/tmp/vitest-merged.json --coverage
         --coverage.thresholds.lines=90 --coverage.thresholds.statements=88
-        --coverage.thresholds.functions=91 --coverage.thresholds.branches=82
+        --coverage.thresholds.functions=91 --coverage.thresholds.branches=81.5
 
   # Report only (plan Phase 9): unused files, exports and dependencies, by the
   # rules in knip.js. Its findings never mark the step red (the owner's choice,
