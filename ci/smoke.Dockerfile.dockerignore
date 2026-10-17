@@ -1,0 +1,10 @@
+# The build context of ci/smoke.Dockerfile: only what the stack smoke test
+# reads. Everything else stays out, the .env files and node_modules among it.
+*
+!ci/stack-smoke.sh
+!ci/compose.ci.yml
+!deploy/hetzner/docker-compose.yml
+!deploy/hetzner/verify-deploy.sh
+!deploy/hetzner/load-env.sh
+!server/drizzle/
+!server/src/db/seed/

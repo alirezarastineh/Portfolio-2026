@@ -1,0 +1,13 @@
+# The stack smoke test's overlay (plan Phase 11, ci/stack-smoke.sh), as
+# deploy/hetzner/docker-compose.images.yml is production's: the API and client
+# images this pipeline built, never pulled and never built here.
+#
+#   docker compose --env-file .env -f deploy/hetzner/docker-compose.yml \
+#     -f ci/compose.ci.yml up -d --no-build db api client
+services:
+  api:
+    image: portfolio/api:${IMAGE_TAG:?IMAGE_TAG is required}
+    pull_policy: never
+  client:
+    image: portfolio/client:${IMAGE_TAG:?IMAGE_TAG is required}
+    pull_policy: never

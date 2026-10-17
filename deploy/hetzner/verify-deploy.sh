@@ -25,6 +25,11 @@ load_env "${ENV_FILE}"
 CLIENT="http://127.0.0.1:${CLIENT_HOST_PORT}"
 API="http://127.0.0.1:${API_HOST_PORT}"
 FAILURES=0
+# VERIFY_CI=1: the stack smoke test on the CI agent (ci/stack-smoke.sh, plan
+# Phase 11), which runs db, api and client alone, on loopback. It skips what
+# only production has: pgAdmin, and the edge (Caddy, the public domains).
+# Unset, as on production, every check runs.
+VERIFY_CI="${VERIFY_CI:-}"
 
 pass() { echo "  ok    $1"; }
 fail() { echo "  FAIL  $1"; FAILURES=$((FAILURES + 1)); }
@@ -89,7 +94,11 @@ fi
 echo "== services =="
 check "client responds" curl -fsSI "${CLIENT}"
 check "api /health" curl -fsS "${API}/health"
-check "pgadmin responds" curl -fsSI "http://127.0.0.1:${PGADMIN_HOST_PORT}"
+if [[ -n "${VERIFY_CI}" ]]; then
+  echo "  skip  pgadmin responds (VERIFY_CI: not part of the CI stack)"
+else
+  check "pgadmin responds" curl -fsSI "http://127.0.0.1:${PGADMIN_HOST_PORT}"
+fi
 
 echo "== content read path =="
 check "api serves the v2 core (en)" bash -c "curl -fsS '${API}/v2/content/en' | grep -q '\"version\":2'"
@@ -417,37 +426,41 @@ else
   fail "the api buffers its stream (first byte / end: ${STREAM_TIMES})"
 fi
 
-echo "== edge (Caddy) =="
-SITE="https://${CLIENT_PUBLIC_DOMAIN:-alirezarastineh.me}"
-API_SITE="https://${SERVER_PUBLIC_DOMAIN:-api.alirezarastineh.me}"
-# Compression or proxy buffering would deliver an answer in one lump at the end.
-EDGE_STREAM_TIMES="$(curl -s -o /dev/null -H 'Accept-Encoding: gzip, zstd' -w '%{time_starttransfer} %{time_total}' "${API_SITE}/v1/ask/stream-check" || true)"
-if awk -v t="${EDGE_STREAM_TIMES}" 'BEGIN { split(t, a, " "); exit !(a[2] - a[1] > 0.5) }'; then
-  pass "Caddy passes the assistant's stream through as it happens"
+if [[ -n "${VERIFY_CI}" ]]; then
+  echo "== edge (Caddy): skipped, production only (VERIFY_CI) =="
 else
-  fail "Caddy buffers the assistant's stream (first byte / end: ${EDGE_STREAM_TIMES}) — see the @stream block in the Caddyfile"
+  echo "== edge (Caddy) =="
+  SITE="https://${CLIENT_PUBLIC_DOMAIN:-alirezarastineh.me}"
+  API_SITE="https://${SERVER_PUBLIC_DOMAIN:-api.alirezarastineh.me}"
+  # Compression or proxy buffering would deliver an answer in one lump at the end.
+  EDGE_STREAM_TIMES="$(curl -s -o /dev/null -H 'Accept-Encoding: gzip, zstd' -w '%{time_starttransfer} %{time_total}' "${API_SITE}/v1/ask/stream-check" || true)"
+  if awk -v t="${EDGE_STREAM_TIMES}" 'BEGIN { split(t, a, " "); exit !(a[2] - a[1] > 0.5) }'; then
+    pass "Caddy passes the assistant's stream through as it happens"
+  else
+    fail "Caddy buffers the assistant's stream (first byte / end: ${EDGE_STREAM_TIMES}) — see the @stream block in the Caddyfile"
+  fi
+  STREAM_HEADERS="$(curl -s -D - -o /dev/null -H 'Accept-Encoding: gzip, zstd' "${API_SITE}/v1/ask/stream-check" || true)"
+  if ! grep -qi '^content-encoding' <<<"${STREAM_HEADERS}"; then
+    pass "the assistant's stream is not compressed at the edge"
+  else
+    fail "the assistant's stream is compressed at the edge (it would be buffered)"
+  fi
+  CONTENT_HEADERS="$(curl -s -D - -o /dev/null -H 'Accept-Encoding: gzip' "${API_SITE}/v2/content/en" || true)"
+  if grep -qi '^content-encoding' <<<"${CONTENT_HEADERS}"; then
+    pass "the content JSON is still compressed at the edge"
+  else
+    fail "the content JSON is no longer compressed at the edge"
+  fi
+  # The API's JSON 404 (not the site's HTML one) proves /media/* reaches the API.
+  check "site domain proxies /media/* to the api" \
+    bash -c "curl -s '${SITE}/media/00000000-0000-4000-8000-000000000000.png' | grep -q '\"error\":\"not_found\"'"
+  check "internal _invalidate route is closed at the edge" \
+    bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' -X POST '${SITE}/api/v1/content/_invalidate')\" = 404 ]"
+  # A second policy added by Caddy (the old report-only line) would apply on top
+  # of the container's, without its nonce.
+  check "the edge passes exactly one CSP through (none added by Caddy)" \
+    bash -c "[ \"\$(curl -fsSI '${SITE}/en' | grep -ci '^content-security-policy')\" = 1 ]"
 fi
-STREAM_HEADERS="$(curl -s -D - -o /dev/null -H 'Accept-Encoding: gzip, zstd' "${API_SITE}/v1/ask/stream-check" || true)"
-if ! grep -qi '^content-encoding' <<<"${STREAM_HEADERS}"; then
-  pass "the assistant's stream is not compressed at the edge"
-else
-  fail "the assistant's stream is compressed at the edge (it would be buffered)"
-fi
-CONTENT_HEADERS="$(curl -s -D - -o /dev/null -H 'Accept-Encoding: gzip' "${API_SITE}/v2/content/en" || true)"
-if grep -qi '^content-encoding' <<<"${CONTENT_HEADERS}"; then
-  pass "the content JSON is still compressed at the edge"
-else
-  fail "the content JSON is no longer compressed at the edge"
-fi
-# The API's JSON 404 (not the site's HTML one) proves /media/* reaches the API.
-check "site domain proxies /media/* to the api" \
-  bash -c "curl -s '${SITE}/media/00000000-0000-4000-8000-000000000000.png' | grep -q '\"error\":\"not_found\"'"
-check "internal _invalidate route is closed at the edge" \
-  bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' -X POST '${SITE}/api/v1/content/_invalidate')\" = 404 ]"
-# A second policy added by Caddy (the old report-only line) would apply on top
-# of the container's, without its nonce.
-check "the edge passes exactly one CSP through (none added by Caddy)" \
-  bash -c "[ \"\$(curl -fsSI '${SITE}/en' | grep -ci '^content-security-policy')\" = 1 ]"
 
 echo
 if [[ "${FAILURES}" -gt 0 ]]; then

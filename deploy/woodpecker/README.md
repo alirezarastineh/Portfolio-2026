@@ -275,6 +275,24 @@ the commit's status on GitHub (`…/pipeline/<number>/…`).
 - `agent-cleanup.sh` deletes reports after 14 days, and visual sets no run has used for 30 days.
   Reports belong to root, so from Windows you can read them but not delete them.
 
+## Stack smoke test
+
+`images.yaml`'s `smoke` step (plan Phase 11, `ci/stack-smoke.sh`) boots the two images it just
+built with Postgres, as production runs them: `deploy/hetzner/docker-compose.yml` with
+`ci/compose.ci.yml`. The API applies the real migrations at boot, the API image's own seed publishes
+the seed's content, and `verify-deploy.sh` checks the result with `VERIFY_CI=1`. That flag skips
+the only parts production alone has, pgAdmin and the edge (Caddy and the public domains); without
+it the script runs as before.
+
+- The stack is the compose project `ci-<pipeline>`, with a throwaway `.env`, on loopback ports from
+  `127.0.0.1:20000` up, ten a pipeline, so two runs never meet. It is removed when the test ends,
+  pass or fail; `agent-cleanup.sh` removes what a canceled run leaves.
+- The stack publishes its ports on the host's loopback, as on production, where a step can't reach
+  them. The step builds a small helper image (`ci/smoke.Dockerfile`: bash, curl, the docker CLI and
+  the files the test reads) and runs the test in it, on the host's network.
+- On a failure, the step's log ends with the stack's last log lines, the API's migrations among
+  them.
+
 ## Upgrade
 
 1. Read the release notes for every version between the current and the target
@@ -324,6 +342,8 @@ compose start woodpecker-server && rm /tmp/woodpecker.sqlite
   `.woodpecker/` changes.
   - `ci-image.yaml` and `images.yaml` mount it to build images, with the same trust as building
     them by hand: only you push, and a stranger's pull request waits for your approval.
+  - `images.yaml`'s smoke test also starts a helper container with the socket on the host's
+    network, under the same trust.
 - **Secrets** are added in the repository's Woodpecker settings, never in files.
   - Filter every secret by event: never `pull_request`, and only the events that need it.
   - Filter by image where you can.

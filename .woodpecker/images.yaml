@@ -1,9 +1,10 @@
 # Builds the API and client images (plan Phase 6), as ci.yml's docker job does,
 # through the agent's Docker: its BuildKit keeps the layer cache and the
 # Dockerfiles' cache mounts warm between runs. Then an SBOM of each and their
-# known vulnerabilities (Phase 8). The images are tagged with the commit and
-# never pushed; `untag` removes the tags. The Docker socket is root in WSL on
-# the owner's PC, never on production (README.md, Security notes).
+# known vulnerabilities (Phase 8), and the two booted together as production
+# runs them, checked by verify-deploy.sh (Phase 11). The images are tagged with
+# the commit and never pushed; `untag` removes the tags. The Docker socket is
+# root in WSL on the owner's PC, never on production (README.md, Security notes).
 when:
   - event: [push, manual, cron]
     branch: main
@@ -13,6 +14,13 @@ when:
         - "server/**"
         - "client/**"
         - ".woodpecker/images.yaml"
+        # What the stack smoke test runs.
+        - "ci/stack-smoke.sh"
+        - "ci/compose.ci.yml"
+        - "ci/smoke.Dockerfile*"
+        - "deploy/hetzner/docker-compose.yml"
+        - "deploy/hetzner/verify-deploy.sh"
+        - "deploy/hetzner/load-env.sh"
 
 # After the checks, like ci.yml's docker job: beside them, the client's build
 # would slow e2e and skew Lighthouse, and a red run needs no images. Optional,
@@ -87,20 +95,40 @@ steps:
         --ignore-unfixed --exit-code 1 "sbom/$${image}.cdx.json" > /dev/null
         || { echo "$${image}: a CRITICAL vulnerability, listed above"; exit 1; }; done
 
-  # Pass or fail, or the commits' tags would pile up. After the SBOMs, which
-  # read the images. The layers stay in the build cache, which
-  # agent-cleanup.sh caps; it also removes the tags of a run that was canceled
-  # before this step.
-  - name: untag
+  # The production-like stack smoke test (plan Phase 11, ci/stack-smoke.sh):
+  # both images booted with Postgres from deploy/hetzner/docker-compose.yml, the
+  # real migrations applied at the API's boot, the seed's content published,
+  # then verify-deploy.sh. The stack publishes its ports on the host's
+  # loopback, as on production, which a step can't reach, and Woodpecker 3 has
+  # no network_mode: a helper container on the host's network runs it, through
+  # the socket. Beside `vulnerabilities`, so neither failure hides the other.
+  - name: smoke
     image: *docker
     depends_on: [sbom]
+    volumes: [*socket]
+    commands:
+      - docker buildx build --file ci/smoke.Dockerfile --tag "ci-smoke:$${CI_COMMIT_SHA}" .
+      - >-
+        docker run --rm --network host --group-add "$$(stat -c %g /var/run/docker.sock)"
+        --volume /var/run/docker.sock:/var/run/docker.sock
+        --env CI_PIPELINE_NUMBER --env CI_COMMIT_SHA
+        "ci-smoke:$${CI_COMMIT_SHA}" bash ci/stack-smoke.sh
+
+  # Pass or fail, or the commits' tags would pile up. After the SBOMs and the
+  # smoke test, which use the images; the smoke test's helper goes too. The
+  # layers stay in the build cache, which agent-cleanup.sh caps; it also
+  # removes the tags of a run that was canceled before this step.
+  - name: untag
+    image: *docker
+    depends_on: [sbom, smoke]
     when:
       status: [success, failure]
     volumes: [*socket]
     commands:
       - >-
         docker image ls --format '{{.Repository}}:{{.Tag}}'
-        --filter "reference=portfolio/*:$${CI_COMMIT_SHA}" | xargs -r docker image rm
+        --filter "reference=portfolio/*:$${CI_COMMIT_SHA}"
+        --filter "reference=ci-smoke:$${CI_COMMIT_SHA}" | xargs -r docker image rm
 
   # The SBOMs, to the agent's /srv/ci-reports, as client.yaml saves its
   # reports. Root, like every step here: that folder is root's.

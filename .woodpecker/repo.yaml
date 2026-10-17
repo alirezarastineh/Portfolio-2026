@@ -28,7 +28,7 @@ steps:
     image: hadolint/hadolint:v2.15.1-alpine
     depends_on: []
     commands:
-      - hadolint server/Dockerfile client/Dockerfile ci/Dockerfile
+      - hadolint server/Dockerfile client/Dockerfile ci/Dockerfile ci/smoke.Dockerfile
 
   # `config -q` resolves each stack as compose would start it: its files, its
   # overlay, every profile. The values below only fill the variables the files
@@ -52,6 +52,8 @@ steps:
     commands:
       - docker compose -f compose.yaml config -q
       - docker compose -f deploy/hetzner/docker-compose.yml -f deploy/hetzner/docker-compose.images.yml --profile "*" config -q
+      # The stack smoke test's overlay (plan Phase 11, ci/stack-smoke.sh).
+      - docker compose -f deploy/hetzner/docker-compose.yml -f ci/compose.ci.yml config -q
       - docker compose -f deploy/woodpecker/docker-compose.server.yml config -q
       - docker compose -f deploy/woodpecker/docker-compose.agent.yml config -q
 
