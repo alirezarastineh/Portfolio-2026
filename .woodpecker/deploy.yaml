@@ -1,27 +1,122 @@
-# Deploys a green main commit to production (plan Phase 12), started from its
-# pipeline in the UI: Deploy, target `production`. The repository setting
-# "Allow deployments" must be on.
+# Deploys a green main commit to production (plan Phase 12). Start it from the
+# commit's pipeline in the UI: Deploy, target `production`. The repository
+# setting "Allow deployments" must be on. Nothing else runs on this event:
+# every other workflow lists its own events.
 #
-# DRY RUN: this first version only prints what a deployment pipeline gets, to
-# confirm how Woodpecker names the target on the server. Its real steps (the
-# images to GHCR, then the rollout over SSH) replace it once that is known.
-# Nothing else runs on this event: every other workflow lists its own events.
+# The steps run in order, and a failure skips the rest:
+# 1. guard: production only, main's tip only, and only once every check on
+#    that commit passed (ci/deploy-guard.mjs);
+# 2. images: both images built on the agent and pushed to GHCR as public
+#    packages, which production pulls without logging in;
+# 3. rollout: over SSH, production's forced command (deploy/hetzner/ci-deploy.sh)
+#    fast-forwards its checkout to this commit, then runs rollout.sh: the
+#    pre-deploy backup, the API, the client once the API is healthy, then
+#    verify-deploy.sh;
+# 4. latest: `:latest` names what production runs from then on.
+# The secrets are the deployment event's alone (deploy/woodpecker/README.md,
+# "Deploys"). Woodpecker posts no GitHub status for a deployment started in
+# its UI: the result is in the UI.
 when:
   - event: deployment
+    evaluate: 'CI_PIPELINE_DEPLOY_TARGET == "production"'
+
+variables:
+  - &docker "docker:29.9.0-cli"
+  - &socket "/var/run/docker.sock:/var/run/docker.sock"
+  - &registry "ghcr.io/alirezarastineh/portfolio-2026"
+  # A classic token with write:packages: GHCR takes no fine-grained ones.
+  - &ghcr-token
+    from_secret: ghcr_token
 
 steps:
-  - name: show
-    image: docker:29.9.0-cli
+  - name: guard
+    image: portfolio-ci:node22-pw1.64.1
     commands:
-      - echo "event=$${CI_PIPELINE_EVENT} target=$${CI_PIPELINE_DEPLOY_TARGET:-unset} task=$${CI_PIPELINE_DEPLOY_TASK:-unset}"
-      - echo "branch=$${CI_COMMIT_BRANCH:-unset} sha=$${CI_COMMIT_SHA} ref=$${CI_COMMIT_REF:-unset} parent=$${CI_PIPELINE_PARENT:-unset}"
-      - env | grep -E '^(CI_PIPELINE_(EVENT|DEPLOY_TARGET|DEPLOY_TASK|PARENT|NUMBER)|CI_COMMIT_(BRANCH|SHA|REF)|DEPLOY_TARGET)=' | sort
+      - node ci/deploy-guard.mjs
 
-  # The filter the real workflow will use (v3.19 has no `environment` filter;
-  # `evaluate` reads the pipeline's variables).
-  - name: production
-    image: docker:29.9.0-cli
-    when:
-      evaluate: 'CI_PIPELINE_DEPLOY_TARGET == "production"'
+  # As images.yaml builds them, through the agent's Docker and its warm cache,
+  # then pushed under the commit's tag. The client gets production's public
+  # values (deploy/hetzner/client-public.env); the API reads its secrets at run
+  # time, so neither image holds one. The source label links each package to
+  # the repository on GitHub.
+  - name: images
+    image: *docker
+    volumes: [*socket]
+    environment:
+      REGISTRY: *registry
+      SOURCE: https://github.com/alirezarastineh/Portfolio-2026
+      GHCR_TOKEN: *ghcr-token
     commands:
-      - echo "the production filter matched"
+      - printf '%s' "$${GHCR_TOKEN}" | docker login ghcr.io --username alirezarastineh --password-stdin
+      - >-
+        docker buildx build --push --tag "$${REGISTRY}/api:$${CI_COMMIT_SHA}"
+        --label "org.opencontainers.image.source=$${SOURCE}" server
+      - set -a && . deploy/hetzner/client-public.env && set +a
+      - >-
+        docker buildx build --push --tag "$${REGISTRY}/client:$${CI_COMMIT_SHA}"
+        --label "org.opencontainers.image.source=$${SOURCE}"
+        --build-arg VITE_API_BASE_URL --build-arg VITE_SENTRY_DSN
+        --build-arg VITE_UMAMI_SRC --build-arg VITE_UMAMI_WEBSITE_ID
+        --build-arg VITE_TURNSTILE_SITE_KEY --build-arg API_INTERNAL_BASE_URL=http://api:3000
+        client
+      - docker logout ghcr.io
+      # Production pulls without logging in, so both packages must be public.
+      # The first push creates them private: make them public then
+      # (deploy/woodpecker/README.md, "Deploys"), and deploy again.
+      - >-
+        for image in api client; do DOCKER_CONFIG=$$(mktemp -d) docker buildx imagetools inspect
+        "$${REGISTRY}/$${image}:$${CI_COMMIT_SHA}" > /dev/null
+        || { echo "$${image} is private, and production can't pull it: make the package public, then deploy again"; exit 1; }; done
+
+  # The key can run one command on production, ci-deploy.sh, which reads the
+  # commit from `deploy <sha>`. The rollout runs there as a systemd unit, so a
+  # connection that drops here never cuts it off halfway; this step follows its
+  # log and ends with its exit status.
+  - name: rollout
+    image: *docker
+    environment:
+      DEPLOY_SSH_KEY:
+        from_secret: deploy_ssh_key
+      DEPLOY_KNOWN_HOSTS:
+        from_secret: deploy_known_hosts
+      DEPLOY_HOST:
+        from_secret: deploy_host
+      DEPLOY_USER:
+        from_secret: deploy_user
+    commands:
+      - umask 077 && mkdir -p /tmp/ssh
+      - printf '%s\n' "$${DEPLOY_SSH_KEY}" > /tmp/ssh/key
+      - printf '%s\n' "$${DEPLOY_KNOWN_HOSTS}" > /tmp/ssh/known_hosts
+      - >-
+        ssh -i /tmp/ssh/key -o IdentitiesOnly=yes -o BatchMode=yes
+        -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/ssh/known_hosts
+        -o ServerAliveInterval=15 -o ServerAliveCountMax=4
+        "$${DEPLOY_USER}@$${DEPLOY_HOST}" deploy "$${CI_COMMIT_SHA}"
+
+  # In the registry alone, nothing downloaded: `:latest` follows production,
+  # never a build that failed to roll out. Nothing pulls it.
+  - name: latest
+    image: *docker
+    environment:
+      REGISTRY: *registry
+      GHCR_TOKEN: *ghcr-token
+    commands:
+      - printf '%s' "$${GHCR_TOKEN}" | docker login ghcr.io --username alirezarastineh --password-stdin
+      - >-
+        for image in api client; do docker buildx imagetools create
+        --tag "$${REGISTRY}/$${image}:latest" "$${REGISTRY}/$${image}:$${CI_COMMIT_SHA}"; done
+      - docker logout ghcr.io
+
+  # Pass or fail: the build left both images tagged on the agent.
+  # agent-cleanup.sh removes what a canceled run leaves.
+  - name: untag
+    image: *docker
+    when:
+      status: [success, failure]
+    volumes: [*socket]
+    environment:
+      REGISTRY: *registry
+    commands:
+      - >-
+        docker image ls --format '{{.Repository}}:{{.Tag}}'
+        --filter "reference=$${REGISTRY}/*:$${CI_COMMIT_SHA}" | xargs -r docker image rm

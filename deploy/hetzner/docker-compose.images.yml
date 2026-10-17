@@ -1,6 +1,7 @@
-# Overlay used only by the GitHub deploy workflow (.github/workflows/deploy.yml):
-# run the images CI already built and pushed to GHCR instead of building on the
-# host. The manual flow in DEPLOYMENT.md never loads this file and is unchanged.
+# The deploys' overlay: run the images CI built and pushed to GHCR instead of
+# building on the host. rollout.sh loads it for Woodpecker's deploy
+# (.woodpecker/deploy.yaml), as GitHub's deploy.yml does until it is retired.
+# The manual flow in DEPLOYMENT.md never loads this file and is unchanged.
 #
 #   IMAGE_TAG=<git sha> docker compose --env-file .env \
 #     -f deploy/hetzner/docker-compose.yml -f deploy/hetzner/docker-compose.images.yml \

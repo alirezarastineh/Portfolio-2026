@@ -293,6 +293,88 @@ it the script runs as before.
 - On a failure, the step's log ends with the stack's last log lines, the API's migrations among
   them.
 
+## Deploys
+
+`.woodpecker/deploy.yaml` (plan Phase 12) deploys a green main commit to production. Start it from
+that commit's pipeline: **Deploy**, target `production`, task empty. Woodpecker shows the button
+on successful pipelines once **Allow Deployments** is on in the repository's settings. Deploy only
+main's newest pipeline: the first step refuses any other, and so does production.
+
+The steps run in order, and a failure skips the rest:
+1. **`guard`** (`ci/deploy-guard.mjs`): the target is `production`, the commit is main's tip, and
+   every Woodpecker check on it passed (GitHub's commit statuses).
+2. **`images`:** both images, built on the agent's Docker and pushed to
+   `ghcr.io/alirezarastineh/portfolio-2026/{api,client}:<sha>`, then checked to be public:
+   production pulls them without logging in. The client is built with production's public values,
+   `deploy/hetzner/client-public.env`.
+3. **`rollout`:** SSH to production, whose forced command `deploy/hetzner/ci-deploy.sh`:
+   - fast-forwards the checkout to `origin/main` and refuses unless that is the commit;
+   - runs `deploy/hetzner/rollout.sh` as the systemd unit `portfolio-deploy`, so a connection that
+     drops can't cut it off halfway. It refuses with less than 5 GB free on `/`, which Postgres
+     shares; then the pre-deploy backup (`backup-postgres.sh`), both pulls, the API, the client
+     once the API is healthy, and `verify-deploy.sh`. Once that passes, it removes the earlier
+     deploys' images.
+
+   The step follows the unit's log and ends with its exit status. The log stays on production:
+   `journalctl -u portfolio-deploy`.
+4. **`latest`:** `:latest` then names what production runs.
+5. **`untag`**, pass or fail: removes the images' tags from the agent.
+
+A deployment started in the UI posts no status to GitHub: Woodpecker's GitHub forge reports only
+the deployments GitHub created. Read the result in the UI.
+
+**Rolling back:** revert the commit on main, push, and deploy the revert's pipeline once it's
+green. Production runs main's tip only, so an older pipeline is refused.
+
+### One-time setup
+
+1. **Allow Deployments** in the repository's Woodpecker settings.
+2. **A GHCR token:** a classic one (GHCR takes no fine-grained tokens) with only `write:packages`,
+   made from `https://github.com/settings/tokens/new?scopes=write:packages`. Picked in the form
+   instead, `write:packages` ticks `repo` as well.
+3. **The deploy key,** a key pair of its own, in WSL:
+
+   ```bash
+   ssh-keygen -t ed25519 -N '' -C woodpecker-deploy -f ~/woodpecker/keys/deploy_ed25519
+   cat ~/woodpecker/keys/deploy_ed25519.pub
+   ```
+
+   On production, as root, once the checkout has `deploy/hetzner/ci-deploy.sh` (`git pull
+   --ff-only`), add the public key as one line. `restrict` turns off forwarding and the terminal,
+   and `command` replaces whatever the key asks to run:
+
+   ```bash
+   echo 'restrict,command="bash /root/Portfolio-2026/deploy/hetzner/ci-deploy.sh" ssh-ed25519 AAAA… woodpecker-deploy' \
+     >> /root/.ssh/authorized_keys
+   ```
+
+   Check it from WSL: any other command gets `usage: deploy <40-character commit sha>` (exit 2),
+   never a shell.
+
+   ```bash
+   ssh -i ~/woodpecker/keys/deploy_ed25519 -o IdentitiesOnly=yes \
+     -o UserKnownHostsFile=$HOME/woodpecker/keys/known_hosts root@<production host> whoami
+   ```
+
+4. **Secrets**, in the repository's Woodpecker settings, each for the **deployment** event only:
+
+   | Secret | Value |
+   |---|---|
+   | `ghcr_token` | the token from step 2 |
+   | `deploy_ssh_key` | the private key, `~/woodpecker/keys/deploy_ed25519` |
+   | `deploy_known_hosts` | production's line in `~/woodpecker/keys/known_hosts` (checked in Part 3) |
+   | `deploy_host` | production's IP, as in that line |
+   | `deploy_user` | `root` |
+
+   Leave the image filter empty: Woodpecker 3.19 applies it to plugins only, and refuses a filtered
+   secret in a step that runs commands.
+5. **The packages, after the first deploy's push:** GHCR creates them private, so that run's
+   `images` step stops before production. Make both public: GitHub → Packages →
+   `portfolio-2026/api` → Package settings → Danger Zone → Change visibility → Public, then the same
+   for `portfolio-2026/client`. Deploy again. Public packages cost nothing, and production pulls
+   them without logging in. **A public package can never be made private again.** The images hold
+   no secrets: the client's values are public, and the API reads its keys at run time.
+
 ## Upgrade
 
 1. Read the release notes for every version between the current and the target
@@ -346,9 +428,14 @@ compose start woodpecker-server && rm /tmp/woodpecker.sqlite
     network, under the same trust.
 - **Secrets** are added in the repository's Woodpecker settings, never in files.
   - Filter every secret by event: never `pull_request`, and only the events that need it.
-  - Filter by image where you can.
+  - Filter by image only for a plugin: Woodpecker 3.19 refuses a secret with an image filter in a
+    step that runs commands, which every step here does.
   - Never give a secret a `VITE_` name: the client build inlines every `VITE_*` variable into the
     public bundle.
+- **Deploys** (`deploy.yaml`): its secrets exist for the deployment event alone, and a deployment
+  runs the workflow files of the pipeline it starts from. Deploy main's pipelines only, never a pull
+  request's: that would run the branch's own `deploy.yaml` with the deploy secrets. The deploy key
+  can run one command on production, `ci-deploy.sh`, which deploys main's tip and nothing else.
 - **Leaks and dependencies** (plan Phase 8):
   - `repo.yaml`'s `gitleaks` scans the working tree on every push and pull request. Its waivers,
     each with a reason, are in `.gitleaks.toml`, matched by value and file so that they hold when

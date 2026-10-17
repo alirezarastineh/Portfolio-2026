@@ -2,8 +2,9 @@
 # Housekeeping for the Woodpecker agent's Docker in WSL on the owner's PC, run
 # by systemd/woodpecker-agent-cleanup.timer (README.md, Part 3): pipeline
 # reports older than 14 days, visual baselines no run has used for 30 days,
-# images.yaml's leftover tags and smoke-test stacks, unused images, build cache
-# beyond 8 GB, and the dangling `wp_*` volumes that pipelines leave behind.
+# the image tags and smoke-test stacks that canceled runs leave, unused images,
+# build cache beyond 8 GB, and the dangling `wp_*` volumes that pipelines leave
+# behind.
 set -euo pipefail
 
 REPORTS_DIR=${REPORTS_DIR:-/srv/ci-reports}
@@ -21,13 +22,15 @@ if [ -d "$VISUAL_DIR" ]; then
 fi
 
 # images.yaml tags portfolio/api, portfolio/client and the smoke test's helper,
-# ci-smoke, with each commit and untags them at its end, which a canceled run
-# never reaches. Such a run can also leave its smoke-test stack (the compose
-# project ci-<pipeline>, ci/stack-smoke.sh) up. Only while no pipeline step
-# runs, so a build or a smoke test in progress keeps what it uses.
+# ci-smoke, with each commit, and deploy.yaml the GHCR images it pushes. Both
+# untag them at their end, which a canceled run never reaches. Such a run can
+# also leave its smoke-test stack (the compose project ci-<pipeline>,
+# ci/stack-smoke.sh) up. Only while no pipeline step runs, so a build, a push
+# or a smoke test in progress keeps what it uses.
 if [ -z "$(docker ps -q --filter label=wp_step)" ]; then
   docker image ls --format '{{.Repository}}:{{.Tag}}' \
-    --filter 'reference=portfolio/*' --filter 'reference=ci-smoke' |
+    --filter 'reference=portfolio/*' --filter 'reference=ci-smoke' \
+    --filter 'reference=ghcr.io/alirezarastineh/portfolio-2026/*' |
     xargs -r docker image rm >/dev/null
   for project in $(docker ps -a --filter label=com.docker.compose.project \
     --format '{{.Label "com.docker.compose.project"}}' | { grep -E '^ci-[0-9]+$' || true; } | sort -u); do
