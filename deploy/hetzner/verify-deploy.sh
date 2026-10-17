@@ -123,8 +123,11 @@ else
   fail "SSR renders the published hero headline (got '${HEADLINE}')"
 fi
 
+# A GET, read for its headers: the route answers HEAD with the 404 page, so a
+# `curl -I` piped into `! grep fallback` passed whatever the BFF served.
+# `stale` means the client can't reach the API; `fallback` is the bundled copy.
 check "BFF is serving live content, not the bundled fallback" \
-  bash -c "! curl -fsSI '${CLIENT}/api/v2/content/en' | grep -qi 'x-content-source: fallback'"
+  bash -c "curl -fsS -D - -o /dev/null '${CLIENT}/api/v2/content/en' | grep -qiE '^x-content-source: (api|cache)'"
 check "BFF serves docs (the German imprint)" \
   bash -c "curl -fsS '${CLIENT}/api/v2/content/de/legal/imprint' | grep -q '\"kind\":\"legal\"'"
 check "legal pages render from the CMS" \
