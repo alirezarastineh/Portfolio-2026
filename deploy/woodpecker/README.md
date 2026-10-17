@@ -375,6 +375,46 @@ green. Production runs main's tip only, so an older pipeline is refused.
    them without logging in. **A public package can never be made private again.** The images hold
    no secrets: the client's values are public, and the API reads its keys at run time.
 
+## Schedules and failure email
+
+Three crons (plan Phase 13), added in the repository's Woodpecker settings → **Crons**, each on
+`main`, in the timezone the form sets:
+
+| Cron | Runs | What runs |
+|---|---|---|
+| `nightly` | daily | `server` (the property tests with a random `FC_SEED`), `client` (the visual baselines refreshed, then Firefox and WebKit), `repo`, `images`, `security` |
+| `weekly` | Mondays | `weekly.yaml`: gitleaks over the whole history, `pnpm outdated` (a report), Woodpecker's version against its latest release |
+| `prod-smoke` | daily | `prod-smoke.yaml`: read-only requests to the live site (`ci/prod-smoke.sh`) |
+
+- Each workflow's `when` names its cron (`cron: nightly`), so a cron starts only its own
+  workflows. A cron's **Run now** starts it at once.
+- The server creates each run on time and holds it until the PC's agent is online. After days off,
+  several runs wait and then run one after another; cancel the ones you don't need.
+- A nightly failure in the property tests prints its seed. In `server/`,
+  `FC_SEED=<seed> node_modules/.bin/vitest run --project unit src/ask/properties.spec.ts` repeats it.
+
+**The failure email.** Every workflow ends with an `email` step (`ci/notify.mjs`) that runs once
+one of its steps failed, for pushes to main, cron runs and deployments. It sends one email per
+failed workflow through Resend, from `ci@alirezarastineh.me`, naming the workflow, the run, the
+commit and the pipeline's link.
+- Advisory steps (`failure: ignore`) never fail a workflow, so they send nothing. Pull requests send
+  nothing either: GitHub shows their status.
+- One step per workflow, not a notify workflow after all the others: Woodpecker 3.19 skips a
+  workflow that runs on failure as soon as any of its dependencies passed
+  (`server/model/task.go`, `ShouldRun`), so it would stay silent whenever one failed and another
+  passed.
+- **Secrets**, each for the **Push**, **Cron**, **Deploy** and **Manual** events:
+  - `resend_api_key`: a Resend API key with sending access only, for the domain
+    `alirezarastineh.me`;
+  - `alert_to`: the address the emails go to.
+
+  Add them **before** pushing a workflow that uses them: a missing secret fails the whole pipeline
+  when it is compiled.
+- **The test:** run a pipeline by hand on `main` (the repository → **Run pipeline**) with the
+  variable `NOTIFY_TEST` set to `1`. Every workflow but `prod-smoke` skips such a run, and its first
+  step fails on purpose, so one email arrives: "[CI] prod-smoke failed on main (manual run,
+  NOTIFY_TEST, …)".
+
 ## Upgrade
 
 1. Read the release notes for every version between the current and the target
@@ -414,6 +454,16 @@ compose start woodpecker-server && rm /tmp/woodpecker.sqlite
   1. Make a new key pair in `~/woodpecker/keys`.
   2. Replace the line in production's `/home/woodpecker-tunnel/.ssh/authorized_keys`.
   3. Run `up -d` on the PC.
+- **GHCR token (`ghcr_token`):** make a new classic token with only `write:packages` ("Deploys",
+  One-time setup), put it in the secret, then delete the old token on GitHub. GitHub emails a week
+  before a token expires; until it is replaced, deploys stop at `images`, before production.
+- **Deploy key (`deploy_ssh_key`):**
+  1. Make a new key pair (`ssh-keygen -t ed25519 -N '' -C woodpecker-deploy -f …`).
+  2. Replace the line in production's `/root/.ssh/authorized_keys`, keeping its
+     `restrict,command="…"` prefix.
+  3. Put the new private key in the secret.
+- **Resend key (`resend_api_key`):** create a new sending key in Resend, put it in the secret, then
+  revoke the old one.
 
 ## Security notes
 

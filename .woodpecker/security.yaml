@@ -20,8 +20,12 @@ when:
         - "ci/check-audit.mjs"
         - "ci/check-licenses.mjs"
         - ".woodpecker/security.yaml"
+  # Of the crons, the nightly. A manual run with NOTIFY_TEST=1 is the failure
+  # email's test (prod-smoke.yaml), which runs alone.
   - event: [manual, cron]
     branch: main
+    cron: nightly
+    evaluate: 'NOTIFY_TEST != "1"'
 
 # When this pipeline rebuilds the CI image, the checks wait for it.
 depends_on:
@@ -99,3 +103,21 @@ steps:
     failure: ignore
     commands:
       - semgrep scan --config p/typescript --config p/nodejs --metrics=off --disable-version-check --error server/src client/src
+
+  # On a failure, the owner's email (plan Phase 13, ci/notify.mjs).
+  - name: email
+    image: *ci
+    depends_on: [audit, licenses, semgrep]
+    when:
+      - event: [push, cron, deployment]
+        status: [failure]
+      - event: manual
+        evaluate: 'NOTIFY_TEST == "1"'
+        status: [failure]
+    environment:
+      RESEND_API_KEY:
+        from_secret: resend_api_key
+      ALERT_TO:
+        from_secret: alert_to
+    commands:
+      - node ci/notify.mjs

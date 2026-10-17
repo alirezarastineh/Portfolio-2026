@@ -1,0 +1,48 @@
+# The daily smoke test of the live site (plan Phase 13, ci/prod-smoke.sh):
+# read-only requests from outside, as a visitor's, started by the cron
+# `prod-smoke` (repository settings → Crons).
+#
+# A manual run on main with the variable NOTIFY_TEST=1 runs this workflow
+# alone (every other one skips such a run), and its first step fails on
+# purpose: the email step then sends the failure email, which proves the
+# path end to end.
+when:
+  - event: cron
+    cron: prod-smoke
+  - event: manual
+    branch: main
+    evaluate: 'NOTIFY_TEST == "1"'
+
+variables:
+  - &ci "portfolio-ci:node22-pw1.64.1"
+
+steps:
+  - name: notify-test
+    image: *ci
+    when:
+      evaluate: 'NOTIFY_TEST == "1"'
+    commands:
+      - echo "NOTIFY_TEST=1, so this step fails on purpose and the email step sends its email"
+      - exit 1
+
+  - name: live
+    image: *ci
+    commands:
+      - bash ci/prod-smoke.sh
+
+  # On a failure, the owner's email (plan Phase 13, ci/notify.mjs).
+  - name: email
+    image: *ci
+    when:
+      - event: [push, cron, deployment]
+        status: [failure]
+      - event: manual
+        evaluate: 'NOTIFY_TEST == "1"'
+        status: [failure]
+    environment:
+      RESEND_API_KEY:
+        from_secret: resend_api_key
+      ALERT_TO:
+        from_secret: alert_to
+    commands:
+      - node ci/notify.mjs

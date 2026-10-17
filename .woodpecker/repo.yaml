@@ -4,8 +4,12 @@
 # so one run reports every failure. Nothing needs the Docker socket or a
 # trusted volume.
 when:
+  # Of the crons, the nightly. A manual run with NOTIFY_TEST=1 is the failure
+  # email's test (prod-smoke.yaml), which runs alone.
   - event: [push, manual, cron]
     branch: main
+    cron: nightly
+    evaluate: 'NOTIFY_TEST != "1"'
   - event: pull_request
 
 steps:
@@ -84,3 +88,23 @@ steps:
     depends_on: []
     commands:
       - gitleaks dir --config .gitleaks.toml --redact --no-banner --verbose .
+
+  # On a failure, the owner's email (plan Phase 13, ci/notify.mjs). After every
+  # linter: they all start at once.
+  - name: email
+    image: portfolio-ci:node22-pw1.64.1
+    depends_on:
+      [workflows, shellcheck, hadolint, compose, caddy, trivy, gitleaks]
+    when:
+      - event: [push, cron, deployment]
+        status: [failure]
+      - event: manual
+        evaluate: 'NOTIFY_TEST == "1"'
+        status: [failure]
+    environment:
+      RESEND_API_KEY:
+        from_secret: resend_api_key
+      ALERT_TO:
+        from_secret: alert_to
+    commands:
+      - node ci/notify.mjs

@@ -4,8 +4,12 @@
 # baselines and, nightly, Firefox and WebKit (Phase 10). Every step runs in the
 # CI image (ci/Dockerfile).
 when:
+  # Of the crons, the nightly. A manual run with NOTIFY_TEST=1 is the failure
+  # email's test (prod-smoke.yaml), which runs alone.
   - event: [push, manual, cron]
     branch: main
+    cron: nightly
+    evaluate: 'NOTIFY_TEST != "1"'
   - event: pull_request
     path:
       include:
@@ -250,3 +254,21 @@ steps:
         user: root
     commands:
       - sh ../ci/save-reports.sh playwright-report test-results .lighthouseci coverage
+
+  # On a failure, the owner's email (plan Phase 13, ci/notify.mjs).
+  - name: email
+    image: *ci
+    depends_on: [reports]
+    when:
+      - event: [push, cron, deployment]
+        status: [failure]
+      - event: manual
+        evaluate: 'NOTIFY_TEST == "1"'
+        status: [failure]
+    environment:
+      RESEND_API_KEY:
+        from_secret: resend_api_key
+      ALERT_TO:
+        from_secret: alert_to
+    commands:
+      - node ci/notify.mjs

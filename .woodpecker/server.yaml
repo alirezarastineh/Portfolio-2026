@@ -4,8 +4,12 @@
 # rather than embedded Postgres. The checks run in the CI image (ci/Dockerfile),
 # the client's toolchain.
 when:
+  # Of the crons, the nightly. A manual run with NOTIFY_TEST=1 is the failure
+  # email's test (prod-smoke.yaml), which runs alone.
   - event: [push, manual, cron]
     branch: main
+    cron: nightly
+    evaluate: 'NOTIFY_TEST != "1"'
   - event: pull_request
     path:
       include:
@@ -122,6 +126,13 @@ steps:
   - name: unit
     <<: *check
     commands:
+      # Nightly, the property tests take a random seed (properties.spec.ts
+      # reads FC_SEED; other runs keep its fixed one). A failure prints it, and
+      # FC_SEED=<seed> repeats the run locally.
+      - >-
+        if [ "$${CI_PIPELINE_EVENT}" = cron ]; then
+        FC_SEED=$$(( $$(od -An -N4 -tu4 /dev/urandom) % 2147483647 )); export FC_SEED;
+        echo "FC_SEED=$${FC_SEED}: the property tests' seed for this run"; fi
       - >-
         node_modules/.bin/vitest run --project unit --reporter=default --reporter=json
         --outputFile.json=/tmp/vitest-unit.json --reporter=blob --outputFile.blob=.vitest/blobs/unit.json
@@ -206,3 +217,21 @@ steps:
         user: root
     commands:
       - sh ../ci/save-reports.sh coverage
+
+  # On a failure, the owner's email (plan Phase 13, ci/notify.mjs).
+  - name: email
+    image: *ci
+    depends_on: [reports]
+    when:
+      - event: [push, cron, deployment]
+        status: [failure]
+      - event: manual
+        evaluate: 'NOTIFY_TEST == "1"'
+        status: [failure]
+    environment:
+      RESEND_API_KEY:
+        from_secret: resend_api_key
+      ALERT_TO:
+        from_secret: alert_to
+    commands:
+      - node ci/notify.mjs

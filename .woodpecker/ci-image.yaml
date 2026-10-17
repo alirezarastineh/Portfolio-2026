@@ -2,9 +2,15 @@
 # registry: the one agent runs its local image, and agent-cleanup.sh prunes only
 # dangling ones. Never on pull requests: their Dockerfile would replace the tag
 # main uses. For a new Playwright, bump PW_VERSION in ci/Dockerfile and the tag
-# (`&ci`) here and in client.yaml and server.yaml.
+# in every workflow that names it (`grep -l portfolio-ci: .woodpecker/*.yaml`):
+# the checks run in it, and every workflow's email step.
 when:
+  # On main only: another branch's Dockerfile would replace the tag main uses,
+  # as a pull request's would. A manual run with NOTIFY_TEST=1 is the failure
+  # email's test (prod-smoke.yaml), which runs alone.
   - event: manual
+    branch: main
+    evaluate: 'NOTIFY_TEST != "1"'
   - event: push
     branch: main
     path:
@@ -23,3 +29,21 @@ steps:
       # The Dockerfile copies nothing, so it is sent alone, with no context.
       - docker build --pull -t "$${TAG}" - < ci/Dockerfile
       - docker image ls "$${TAG}"
+
+  # On a failure, the owner's email (plan Phase 13, ci/notify.mjs). A failed
+  # build leaves the previous image, which runs it.
+  - name: email
+    image: *ci
+    when:
+      - event: [push, cron, deployment]
+        status: [failure]
+      - event: manual
+        evaluate: 'NOTIFY_TEST == "1"'
+        status: [failure]
+    environment:
+      RESEND_API_KEY:
+        from_secret: resend_api_key
+      ALERT_TO:
+        from_secret: alert_to
+    commands:
+      - node ci/notify.mjs
