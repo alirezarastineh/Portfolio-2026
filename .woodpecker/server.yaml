@@ -1,8 +1,8 @@
-# Server checks (plan Phase 2): ci.yml's server job, plus Prettier, the spec
-# typecheck and drizzle-kit check, the invariants (Phase 7), coverage and code
-# health (Phase 9). The db specs use a Postgres service, production's image,
-# rather than embedded Postgres. The checks run in the CI image (ci/Dockerfile),
-# the client's toolchain.
+# Server checks (plan Phase 2): eslint, Prettier, the typechecks, the build,
+# drizzle-kit check and the unit and db tests, then the invariants (Phase 7),
+# coverage and code health (Phase 9). The db specs use a Postgres service,
+# production's image, rather than embedded Postgres. The checks run in the CI
+# image (ci/Dockerfile), the client's toolchain.
 when:
   # Of the crons, the nightly. A manual run with NOTIFY_TEST=1 is the failure
   # email's test (prod-smoke.yaml), which runs alone.

@@ -417,18 +417,27 @@ commit and the pipeline's link.
 
 ## Upgrade
 
+The weekly cron's `woodpecker` step (`ci/woodpecker-version.mjs`) fails, and emails, once a newer
+release has been out for two weeks: that is the cue.
+
 1. Read the release notes for every version between the current and the target
    (`github.com/woodpecker-ci/woodpecker/releases`). Some releases migrate the database; 3.18
-   rewrote the log storage, which takes a while.
+   rewrote the log storage, which takes a while. Look out for changes to `depends_on`, workflow
+   `when: status`, secrets, the deployment event and the GitHub forge's statuses: the workflows rely
+   on 3.19's behaviour there.
 2. On production, back up first: `systemctl start woodpecker-backup`.
-3. Change the server's tag in `docker-compose.server.yml` and the agent's in
-   `docker-compose.agent.yml`. They must match. Commit.
+3. In one commit, set the same version in all three pins (the weekly check fails while they differ):
+   - the server's tag in `docker-compose.server.yml`;
+   - the agent's in `docker-compose.agent.yml`;
+   - the `woodpecker-cli` image in `.woodpecker/repo.yaml`, whose `workflows` step lints against
+     that version's schema.
+
+   `weekly.yaml`'s clone pins `woodpeckerci/plugin-git:2.10.1`, 3.19's default clone image. If the
+   new server's default (`shared/constant/constant.go`) differs, pin the same one there.
 4. Production: `git pull --ff-only`, then `docker compose --env-file /etc/woodpecker/server.env
    -f deploy/woodpecker/docker-compose.server.yml up -d`.
 5. PC: `docker compose --env-file ~/woodpecker/agent.env -f deploy/woodpecker/docker-compose.agent.yml
-   up -d`.
-6. Bump the `woodpecker-cli` image in `.woodpecker/repo.yaml` to the same version: its `workflows`
-   step lints against that version's schema.
+   up -d`. The dry-run tools outside the repo name the CLI's tag too.
 
 ## Restore a backup (production)
 

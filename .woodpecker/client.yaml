@@ -1,6 +1,6 @@
-# Client checks (plan Phases 3 and 4): ci.yml's client and e2e jobs, plus
-# Prettier, the spec typecheck and the strict build (no warnings, no
-# prerendered index.html), then coverage and code health (Phase 9), the visual
+# Client checks (plan Phases 3 and 4): eslint, Prettier, the four typechecks,
+# the unit tests, the strict build (no warnings, no prerendered index.html), e2e
+# with axe and Lighthouse, then coverage and code health (Phase 9), the visual
 # baselines and, nightly, Firefox and WebKit (Phase 10). Every step runs in the
 # CI image (ci/Dockerfile).
 when:

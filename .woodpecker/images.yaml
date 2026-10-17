@@ -1,4 +1,4 @@
-# Builds the API and client images (plan Phase 6), as ci.yml's docker job does,
+# Builds the API and client images (plan Phase 6) on every change to main,
 # through the agent's Docker: its BuildKit keeps the layer cache and the
 # Dockerfiles' cache mounts warm between runs. Then an SBOM of each and their
 # known vulnerabilities (Phase 8), and the two booted together as production
@@ -26,9 +26,9 @@ when:
         - "deploy/hetzner/verify-deploy.sh"
         - "deploy/hetzner/load-env.sh"
 
-# After the checks, like ci.yml's docker job: beside them, the client's build
-# would slow e2e and skew Lighthouse, and a red run needs no images. Optional,
-# since a pull request runs only the workflows its paths match.
+# After the checks: beside them, the client's build would slow e2e and skew
+# Lighthouse, and a red run needs no images. Optional, since a pull request
+# runs only the workflows its paths match.
 depends_on:
   - name: server
     optional: true
@@ -52,8 +52,9 @@ steps:
     commands:
       - docker buildx build --tag "portfolio/api:$${CI_COMMIT_SHA}" server
 
-  # ci.yml's build arguments: the bundle calls the public API, the server
-  # render calls the compose network's.
+  # The bundle calls the public API, the server render calls the compose
+  # network's. Production's other public values (Sentry, Umami, Turnstile) are
+  # deploy.yaml's: this image is tested, never shipped.
   - name: client
     image: *docker
     depends_on: []
