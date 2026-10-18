@@ -1,0 +1,369 @@
+# Client checks (the GitHub Actions plan, Phase 4): Woodpecker's client.yaml on
+# GitHub's runners, as five jobs on their own machines. `checks`: Prettier,
+# eslint, the four typechecks, then knip and cycles, which only report. `unit`:
+# the unit tests with coverage. `build`: the strict build (no warnings, no
+# prerendered index.html), then bundle-size, which only reports. `e2e` (with axe)
+# and `lighthouse` serve that build beside each other; Woodpecker runs Lighthouse
+# after e2e, since one busy PC skews the scores. Steps that hold a value run
+# ci/client.sh or ci/code-health.sh, as Woodpecker's do (ci/ci-parity.mjs keeps
+# the two in step). The visual baselines, Firefox and WebKit come in Phase 5.
+name: client
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "client/**"
+      # schema-parity.spec.ts reads the server's copy of the content schema.
+      - "server/src/content/**"
+      - "ci/client.sh"
+      - "ci/code-health.sh"
+      - "ci/vitest-report.mjs"
+      - "ci/bundle-size.mjs"
+      - "ci/visual.sh"
+      - ".github/workflows/client.yml"
+  workflow_call:
+    inputs:
+      nightly:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Per workflow and event, so a push never cancels the nightly. Named literally: a
+# called workflow sees its caller's github.workflow.
+concurrency:
+  group: client-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+
+# Woodpecker's names, which the shared scripts read. A nightly call is a cron
+# run; a pull request's branch is its target, as on Woodpecker; the run number
+# stands in for the pipeline's, and is never 0, a dry run's.
+env:
+  CI_PIPELINE_EVENT: ${{ inputs.nightly && 'cron' || (github.event_name == 'workflow_dispatch' && 'manual') || github.event_name }}
+  CI_COMMIT_BRANCH: ${{ github.base_ref || github.ref_name }}
+  CI_COMMIT_SHA: ${{ github.sha }}
+  CI_PIPELINE_NUMBER: ${{ github.run_number }}
+  CI_WORKFLOW_NAME: client
+
+defaults:
+  run:
+    working-directory: client
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.0.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - name: install
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      - name: format
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node_modules/.bin/prettier --check .
+
+      - name: lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node_modules/.bin/eslint .
+
+      - name: types
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node_modules/.bin/ngc -p tsconfig.app.json --noEmit
+
+      - name: e2e-types
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node_modules/.bin/tsc -p e2e/tsconfig.json
+
+      - name: node-types
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node_modules/.bin/tsc -p tsconfig.node.json
+
+      - name: spec-types
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node_modules/.bin/tsc -p tsconfig.spec.json --noEmit
+
+      # Report only (Woodpecker plan, Phase 9): a finding marks the step and
+      # leaves the job green. knip never fails on unused exports, which there
+      # always are; madge finds no cycle today, so its mark means a new one.
+      - name: knip
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        continue-on-error: true
+        run: sh ../ci/code-health.sh knip
+
+      - name: cycles
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        continue-on-error: true
+        run: sh ../ci/code-health.sh cycles tsconfig.app.json
+
+  unit:
+    name: unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      # The whole repository, as every checkout here: schema-parity.spec.ts reads
+      # the server's copy of the content schema.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.0.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - name: install
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      # With coverage and its thresholds (Woodpecker plan, Phase 9).
+      - name: unit
+        id: unit
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: sh ../ci/client.sh unit
+
+      # The HTML report, pass or fail, as Woodpecker's `reports` saves it.
+      - name: Upload coverage
+        if: ${{ !cancelled() && steps.unit.outcome != 'skipped' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: client-coverage
+          path: client/coverage/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  build:
+    name: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # The bundle calls this API, and the served pages' CSP must allow it: the
+    # build and anything serving it use the same value. No other VITE_* variable:
+    # the build inlines every one into the bundle.
+    env:
+      VITE_API_BASE_URL: https://api.alirezarastineh.me
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.0.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - name: install
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      # vite build, failing on any warning or a prerendered index.html.
+      - name: build
+        id: build
+        run: node scripts/build-check.mjs
+
+      # The newest totals a push to main saved; the key never matches, so the
+      # prefix picks the newest. A pull request reads main's.
+      - name: Restore the bundle baseline
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/bundle-size
+          key: bundle-size-${{ github.run_id }}
+          restore-keys: bundle-size-
+
+      # What browsers download, against the last main run (Woodpecker plan, Phase
+      # 9). Report only: Lighthouse gates the bytes per page. A push to main
+      # writes its totals as the next baseline.
+      - name: bundle-size
+        id: bundle-size
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        continue-on-error: true
+        run: node ../ci/bundle-size.mjs dist/analog/public/assets "$RUNNER_TEMP/bundle-size/main.json"
+
+      # Keys are immutable: each push to main saves a new one, and those unused
+      # for 7 days go.
+      - name: Save the bundle baseline
+        if: ${{ !cancelled() && github.event_name == 'push' && steps.bundle-size.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/bundle-size
+          key: bundle-size-${{ github.run_id }}-${{ github.run_attempt }}
+
+      # As one tar: the server's node_modules/.nitro is hidden, which an
+      # artifact leaves out by default, and its packages link into it, which an
+      # artifact would copy as separate packages.
+      - name: Pack the build
+        run: tar -cf "$RUNNER_TEMP/client-dist.tar" dist
+
+      - name: Upload the build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: client-dist
+          path: ${{ runner.temp }}/client-dist.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  e2e:
+    name: e2e
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      VITE_API_BASE_URL: https://api.alirezarastineh.me
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.0.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - name: install
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: client-dist
+          path: ${{ runner.temp }}
+
+      - name: Unpack the build
+        run: tar -xf "$RUNNER_TEMP/client-dist.tar"
+
+      # The lockfile's Playwright, whose Chromium the browsers' cache is kept for.
+      - name: Find Playwright's version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      # The system libraries every time; the browser only when the cache missed.
+      - name: Install Chromium
+        run: node_modules/.bin/playwright install --with-deps chromium
+
+      # 253 tests, axe included, against the build and a fixture API.
+      - name: e2e
+        id: e2e
+        run: sh ../ci/client.sh e2e
+
+      # The HTML report and the traces of failures, pass or fail.
+      - name: Upload the e2e report
+        if: ${{ !cancelled() && steps.e2e.outcome != 'skipped' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-report
+          path: |
+            client/playwright-report/
+            client/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  lighthouse:
+    name: lighthouse
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      VITE_API_BASE_URL: https://api.alirezarastineh.me
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.0.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - name: install
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: client-dist
+          path: ${{ runner.temp }}
+
+      - name: Unpack the build
+        run: tar -xf "$RUNNER_TEMP/client-dist.tar"
+
+      - name: Find Playwright's version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # Restore only: e2e saves the entry, and two jobs saving one key collide.
+      - name: Restore the browsers
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Chromium
+        run: node_modules/.bin/playwright install --with-deps chromium
+
+      # On Playwright's Chromium, the one e2e drives, as on Woodpecker; not the
+      # runner's own Chrome.
+      - name: lighthouse
+        id: lighthouse
+        run: sh ../ci/client.sh lighthouse
+
+      # The reports, pass or fail. .lighthouseci is hidden, which an artifact
+      # leaves out unless told.
+      - name: Upload the Lighthouse reports
+        if: ${{ !cancelled() && steps.lighthouse.outcome != 'skipped' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lighthouse
+          path: client/.lighthouseci/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14

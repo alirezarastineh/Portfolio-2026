@@ -1,12 +1,14 @@
 // What browsers download (plan Phase 9): the raw and brotli totals of the
 // client's built .js and .css, the largest files, and the change against the
-// last main run, whose totals the agent keeps. Advisory: Lighthouse gates the
-// bytes per page, so this only reports. A push to main saves its totals as the
-// next baseline; dry runs (pipeline 0) and pull requests never do.
+// last main run, whose totals the agent keeps (GitHub Actions: its cache).
+// Advisory: Lighthouse gates the bytes per page, so this only reports. A push to
+// main saves its totals as the next baseline; dry runs (pipeline 0) and pull
+// requests never do.
 //
 // Usage, from client/ after the build:
 //   node ../ci/bundle-size.mjs dist/analog/public/assets [baseline.json]
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -57,30 +59,27 @@ for (const { kind, raw, brotli } of files) {
   totals[kind].raw += raw;
   totals[kind].brotli += brotli;
 }
-console.log(
-  `bundle: ${Object.entries(totals)
-    .map(
-      ([kind, t]) =>
-        `${kind} ${t.files} files, ${kb(t.raw)} raw, ${kb(t.brotli)} brotli`,
-    )
-    .join("; ")}`,
-);
+const sizes = `bundle: ${Object.entries(totals)
+  .map(
+    ([kind, t]) =>
+      `${kind} ${t.files} files, ${kb(t.raw)} raw, ${kb(t.brotli)} brotli`,
+  )
+  .join("; ")}`;
+console.log(sizes);
 
 const baseline =
   baselineFile && existsSync(baselineFile)
     ? JSON.parse(readFileSync(baselineFile, "utf8"))
     : null;
+let change = "no baseline yet: the next push to main saves one";
 if (baseline) {
   const changes = Object.entries(totals).map(([kind, t]) => {
     const before = baseline.totals[kind]?.brotli ?? 0;
     return `${kind} ${signed(t.brotli - before)} brotli (${percent(t.brotli, before)})`;
   });
-  console.log(
-    `  against main #${baseline.pipeline} (${baseline.commit.slice(0, 7)}): ${changes.join(", ")}`,
-  );
-} else {
-  console.log("  no baseline yet: the next push to main saves one");
+  change = `against main #${baseline.pipeline} (${baseline.commit.slice(0, 7)}): ${changes.join(", ")}`;
 }
+console.log(`  ${change}`);
 
 console.log("largest, brotli (raw):");
 for (const f of [...files].sort((a, b) => b.brotli - a.brotli).slice(0, 8)) {
@@ -92,6 +91,17 @@ if (big.length > 0)
   console.log(`over 500 kB raw: ${big.map((f) => f.name).join(", ")}`);
 
 const env = process.env;
+// On GitHub Actions (the GitHub Actions plan, Phase 4), the totals and the
+// change also go to the job's summary and, as a notice, onto the run's page,
+// which shows annotations to readers without a login.
+if (env.GITHUB_STEP_SUMMARY) {
+  appendFileSync(env.GITHUB_STEP_SUMMARY, `- ${sizes}\n- ${change}\n`);
+  const message = `${sizes}\n${change}`
+    .replaceAll("%", "%25")
+    .replaceAll("\r", "%0D")
+    .replaceAll("\n", "%0A");
+  console.log(`::notice title=bundle-size::${message}`);
+}
 if (
   baselineFile &&
   env.CI_PIPELINE_EVENT === "push" &&

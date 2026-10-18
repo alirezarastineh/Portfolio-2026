@@ -2,7 +2,8 @@
 // repo workflows run it. Twins are .woodpecker/<name>.yaml and
 // .github/workflows/<name>.yml; it fails when:
 // - a check step of one twin is missing from the other (checks have lower-case names;
-//   GitHub's setup steps are capitalised, and each CI has a short list of its own);
+//   GitHub's setup steps are capitalised, and each CI has a short list of its own,
+//   plus the steps a later phase brings to GitHub);
 // - an image both CIs name differs in tag or digest;
 // - a GitHub action isn't pinned to a full commit SHA with its version in a comment;
 // - the twins' pull request path filters differ, each CI's own files aside.
@@ -28,6 +29,13 @@ const ONLY = {
   ]),
   // inactivity: GitHub switches schedules off after 60 days without activity.
   github: new Set(["inactivity"]),
+};
+// Steps a GitHub twin gains in a later phase of the GitHub Actions plan, on
+// Woodpecker alone until then. Once GitHub has one, the check fails until it
+// leaves this list, so none stays here by mistake.
+const PENDING = {
+  // Phase 5: the visual baselines in GitHub's cache, then Firefox and WebKit.
+  client: new Set(["visual", "cross-browser"]),
 };
 // Paths in a pull request filter that only one CI's steps read.
 const ONLY_PATHS = [
@@ -121,6 +129,7 @@ const github = existsSync(githubDir)
 
 // Twins: the same steps, the same pull request filter.
 const unpaired = [];
+const waiting = [];
 for (const file of woodpecker) {
   const name = file.replace(/\.yaml$/, "");
   if (!github.includes(`${name}.yml`)) {
@@ -130,9 +139,21 @@ for (const file of woodpecker) {
   const wp = read(`.woodpecker/${file}`);
   const gh = read(`.github/workflows/${name}.yml`);
   const [a, b] = [steps(wp, "woodpecker"), steps(gh, "github")];
+  const pending = PENDING[name] ?? new Set();
   for (const step of a)
-    if (!b.has(step))
+    if (!b.has(step) && !pending.has(step))
       problems.push(`${name}: step ${step} is in Woodpecker only`);
+  for (const step of pending) {
+    if (b.has(step))
+      problems.push(
+        `${name}: step ${step} is on GitHub now: take it off ci-parity.mjs's PENDING list`,
+      );
+    else if (!a.has(step))
+      problems.push(
+        `${name}: step ${step} is PENDING but not in Woodpecker's twin either`,
+      );
+    else waiting.push(`${name} ${step}`);
+  }
   for (const step of b)
     if (!a.has(step)) problems.push(`${name}: step ${step} is in GitHub only`);
   const [pa, pb] = [prPaths(wp, "woodpecker"), prPaths(gh, "github")];
@@ -185,6 +206,9 @@ for (const file of github) {
 const checked = woodpecker.length - unpaired.length;
 console.log(
   `parity: ${checked} twin workflow(s), ${pins.github.size} GitHub image(s), ${github.length} GitHub workflow(s) checked` +
+    (waiting.length
+      ? `; steps on Woodpecker alone until a later phase: ${waiting.join(", ")}`
+      : "") +
     (unpaired.length ? `; no GitHub twin yet: ${unpaired.join(", ")}` : ""),
 );
 if (problems.length) {

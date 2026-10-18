@@ -7,6 +7,11 @@
 set -eu
 cd "$(dirname "$0")/../client"
 
+# On GitHub Actions (Phase 4), vitest's own reporter also puts each failed test
+# on the run's page; vitest adds it by itself only when no reporter is named.
+github=""
+if [ "${GITHUB_ACTIONS:-}" = true ]; then github=--reporter=github-actions; fi
+
 case "${1:-}" in
   # With coverage (Woodpecker plan, Phase 9). The thresholds sit just under the
   # first measured figures (2026-10-16: lines 28.14%, statements 28.13%,
@@ -17,10 +22,19 @@ case "${1:-}" in
   # its components, and took up to 5.8 s against vitest's 5 s default (#40).
   # Local runs keep the default.
   unit)
-    node_modules/.bin/vitest run --reporter=default --reporter=json \
+    status=0
+    node_modules/.bin/vitest run --reporter=default ${github:+"$github"} --reporter=json \
       --outputFile.json=/tmp/vitest-client.json --testTimeout=30000 --coverage \
       --coverage.thresholds.lines=28 --coverage.thresholds.statements=28 \
-      --coverage.thresholds.functions=28 --coverage.thresholds.branches=32
+      --coverage.thresholds.functions=28 --coverage.thresholds.branches=32 || status=$?
+    # On GitHub, the four figures also go on the run's page, pass or fail. A
+    # failed test leaves none (vitest's reportOnFailure is off), so a missing
+    # summary only counts after a clean run.
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ] &&
+      { [ "$status" -eq 0 ] || [ -f coverage/coverage-summary.json ]; }; then
+      node ../ci/vitest-report.mjs --coverage coverage/coverage-summary.json coverage
+    fi
+    if [ "$status" -ne 0 ]; then exit "$status"; fi
     node ../ci/vitest-report.mjs /tmp/vitest-client.json client
     ;;
   # 253 tests, axe included, against the build and a fixture API. CI turns on

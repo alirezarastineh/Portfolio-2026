@@ -12,92 +12,16 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Node and pnpm match the Dockerfiles, so CI checks what production builds.
-# Actions are pinned to a commit SHA, with the release in a comment, as images
-# are pinned by digest (the GitHub Actions plan, Phase 2). The runners are
-# ubuntu-24.04: ubuntu-latest moves to Ubuntu 26.04 from 2026-10-19. Its jobs
-# move into the twins of Woodpecker's workflows, the server's into server.yml
-# (Phase 3).
-env:
-  NODE_VERSION: "22"
-  PNPM_VERSION: "11.0.0"
-
+# GitHub's first workflow. Its jobs moved into the twins of Woodpecker's
+# workflows (the GitHub Actions plan): the server's into server.yml (Phase 3),
+# the client's and e2e into client.yml (Phase 4). The image builds go to
+# images.yml in Phase 6, and this file with them. Actions are pinned to a commit
+# SHA, with the release in a comment, as images are pinned by digest (Phase 2).
+# The runner is ubuntu-24.04: ubuntu-latest moves to Ubuntu 26.04 from
+# 2026-10-19.
 jobs:
-  client:
-    name: Client — lint, typecheck, test, build
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: client
-    steps:
-      # The whole repo, not just client/: schema-parity.spec.ts reads the
-      # server's copy of the content schema.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-          cache-dependency-path: client/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
-        env:
-          VITE_API_BASE_URL: https://api.alirezarastineh.me
-
-  e2e:
-    name: Client — e2e, axe, Lighthouse
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: client
-    # For the whole job, as compose passes it to the container at build and at
-    # run time: the bundle is built to call this API, and the test server's CSP
-    # (connect-src) must allow it, or the browser blocks the contact form's
-    # POST before the test's mock can answer it. Tests never reach it: every
-    # request to another origin is blocked or answered by the test itself.
-    env:
-      VITE_API_BASE_URL: https://api.alirezarastineh.me
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-          cache-dependency-path: client/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      # Content comes from a local fixture API (e2e/fixture-api.mjs).
-      - run: pnpm build
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm e2e
-      # Uses the runner's preinstalled Chrome.
-      - run: pnpm lhci
-      - name: Upload reports
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: e2e-reports
-          path: |
-            client/playwright-report/
-            client/test-results/
-            client/.lighthouseci/
-          if-no-files-found: ignore
-          retention-days: 14
-
   docker:
     name: Docker images build
-    needs: [client, e2e]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
