@@ -148,5 +148,12 @@ if (verified.length > 0) {
 if (problems.length > 0) {
   for (const problem of problems) console.error(`FAIL ${problem}`);
   console.error(`check-migrations: ${problems.length} problem(s)`);
+  // On GitHub Actions, each problem also goes on the run's page, which shows
+  // annotations to readers without a login (the GitHub Actions plan, Phase 3).
+  if (process.env.GITHUB_ACTIONS === "true") {
+    const escape = (text) =>
+      text.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
+    for (const problem of problems) console.log(`::error title=migrations::${escape(problem)}`);
+  }
   process.exit(1);
 }

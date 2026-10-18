@@ -7,6 +7,11 @@
 set -eu
 cd "$(dirname "$0")/../server"
 
+# On GitHub Actions (Phase 3), vitest's own reporter also puts each failed test
+# on the run's page; vitest adds it by itself only when no reporter is named.
+github=""
+if [ "${GITHUB_ACTIONS:-}" = true ]; then github=--reporter=github-actions; fi
+
 case "${1:-}" in
   # unit and db each write a blob report with their coverage, for `coverage` to
   # merge. Their own coverage reports stay in /tmp: run at once, the two would
@@ -20,7 +25,7 @@ case "${1:-}" in
       export FC_SEED
       echo "FC_SEED=${FC_SEED}: the property tests' seed for this run"
     fi
-    node_modules/.bin/vitest run --project unit --reporter=default --reporter=json \
+    node_modules/.bin/vitest run --project unit --reporter=default ${github:+"$github"} --reporter=json \
       --outputFile.json=/tmp/vitest-unit.json --reporter=blob --outputFile.blob=.vitest/blobs/unit.json \
       --coverage --coverage.reportsDirectory=/tmp/coverage --coverage.reporter=json-summary
     node ../ci/vitest-report.mjs /tmp/vitest-unit.json unit
@@ -29,7 +34,7 @@ case "${1:-}" in
   # TEST_DATABASE_URL, pg-global-setup.ts would quietly start embedded Postgres.
   db)
     : "${TEST_DATABASE_URL:?the db specs run against a Postgres service in CI}"
-    node_modules/.bin/vitest run --project db --reporter=default --reporter=json \
+    node_modules/.bin/vitest run --project db --reporter=default ${github:+"$github"} --reporter=json \
       --outputFile.json=/tmp/vitest-db.json --reporter=blob --outputFile.blob=.vitest/blobs/db.json \
       --coverage --coverage.reportsDirectory=/tmp/coverage --coverage.reporter=json-summary
     node ../ci/vitest-report.mjs /tmp/vitest-db.json db
@@ -42,10 +47,16 @@ case "${1:-}" in
   # code measured 81.99% to 82.03% (2026-10-17), and 82 failed a run that
   # changed no code.
   coverage)
+    status=0
     node_modules/.bin/vitest run --merge-reports=.vitest/blobs --reporter=json \
       --outputFile.json=/tmp/vitest-merged.json --coverage \
       --coverage.thresholds.lines=90 --coverage.thresholds.statements=88 \
-      --coverage.thresholds.functions=91 --coverage.thresholds.branches=81.5
+      --coverage.thresholds.functions=91 --coverage.thresholds.branches=81.5 || status=$?
+    # On GitHub, the four figures also go on the run's page, pass or fail.
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+      node ../ci/vitest-report.mjs --coverage coverage/coverage-summary.json coverage
+    fi
+    exit "$status"
     ;;
   *)
     echo "usage: sh ci/server.sh <unit|db|coverage>" >&2

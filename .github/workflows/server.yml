@@ -1,0 +1,209 @@
+# Server checks (the GitHub Actions plan, Phase 3): Woodpecker's server.yaml on
+# GitHub's runners, as two jobs on their own machines. `checks`: Prettier,
+# eslint, the typechecks, the build, drizzle-kit check and the invariants, then
+# knip and cycles, which only report. `tests`: the unit and db specs, the db ones
+# against production's Postgres image, then their merged coverage. Steps that
+# hold a value run ci/server.sh or ci/code-health.sh, as Woodpecker's do
+# (ci/ci-parity.mjs keeps the two in step), and each check runs whatever the
+# others found, so one run reports every failure.
+name: server
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "server/**"
+      - "deploy/hetzner/*.sql"
+      # `migrations` checks that it names every migration.
+      - "deploy/hetzner/verify-deploy.sh"
+      - "ci/server.sh"
+      - "ci/code-health.sh"
+      - "ci/vitest-report.mjs"
+      - ".github/workflows/server.yml"
+  workflow_call:
+    inputs:
+      nightly:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Per workflow and event, so a push never cancels the nightly. Named literally: a
+# called workflow sees its caller's github.workflow.
+concurrency:
+  group: server-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+
+# Woodpecker's names, which the shared scripts read. A nightly call is a cron
+# run; a pull request's branch is its target, as on Woodpecker; the run number
+# stands in for the pipeline's, and is never 0, a dry run's.
+env:
+  CI_PIPELINE_EVENT: ${{ inputs.nightly && 'cron' || (github.event_name == 'workflow_dispatch' && 'manual') || github.event_name }}
+  CI_COMMIT_BRANCH: ${{ github.base_ref || github.ref_name }}
+  CI_COMMIT_SHA: ${{ github.sha }}
+  CI_PIPELINE_NUMBER: ${{ github.run_number }}
+  CI_WORKFLOW_NAME: server
+
+defaults:
+  run:
+    working-directory: server
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.0.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: server/pnpm-lock.yaml
+
+      - name: install
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      # .prettierignore keeps Prettier out of dist/ and .vitest/, which the other
+      # steps write.
+      - name: format
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node_modules/.bin/prettier --check .
+
+      - name: lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node_modules/.bin/eslint .
+
+      - name: types
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node_modules/.bin/tsc --noEmit
+
+      - name: spec-types
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node_modules/.bin/tsc -p tsconfig.spec.json
+
+      - name: build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node_modules/.bin/tsc
+
+      # Compares the migration snapshots; needs no database.
+      - name: drizzle-check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node_modules/.bin/drizzle-kit check
+
+      # The project's invariants (Woodpecker plan, Phase 7). Every migration is
+      # additive (0009 is the one waiver) and in the journal, and verify-deploy.sh
+      # checks each one from 0008 on. Reads files only.
+      - name: migrations
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node scripts/check-migrations.mjs
+
+      # schema.ts changed without its migration: drizzle-kit generate, writing
+      # into a copy of drizzle/, must find nothing to migrate.
+      - name: drift
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node scripts/check-drift.mjs
+
+      # Report only (Woodpecker plan, Phase 9): a finding marks the step and
+      # leaves the job green. Unused files, exports and dependencies: knip never
+      # fails on them.
+      - name: knip
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        continue-on-error: true
+        run: sh ../ci/code-health.sh knip
+
+      # Circular imports that survive compilation. None today, so any finding is
+      # new.
+      - name: cycles
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        continue-on-error: true
+        run: sh ../ci/code-health.sh cycles tsconfig.json
+
+  tests:
+    name: tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Production's image, as on Woodpecker. The health check asks over TCP, so
+    # the steps wait past the image's first start, which serves its init
+    # scripts on the socket alone and then restarts.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          # pg-global-setup.ts needs the database to exist, and its guard wants
+          # "test" in the name.
+          POSTGRES_DB: portfolio_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h localhost -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 60
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.0.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: server/pnpm-lock.yaml
+
+      - name: install
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      # unit and db write a blob report each, with their coverage, for the
+      # `coverage` step to merge; nightly, the property tests take a random seed.
+      # One after the other here: Woodpecker runs them at once.
+      - name: unit
+        id: unit
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: sh ../ci/server.sh unit
+
+      # With TEST_DATABASE_URL set, pg-global-setup.ts skips embedded Postgres,
+      # checks the guard and runs the real migrations. The service's user is a
+      # superuser, which migrate.db.spec.ts needs (roles, CREATE DATABASE umami).
+      - name: db
+        id: db
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/portfolio_test
+        run: sh ../ci/server.sh db
+
+      # Coverage of unit and db together, merged from their blobs, with the
+      # thresholds that ci/server.sh holds. Only once both passed, as on
+      # Woodpecker, whose next level waits for them.
+      - name: coverage
+        id: coverage
+        if: ${{ !cancelled() && steps.unit.outcome == 'success' && steps.db.outcome == 'success' }}
+        run: sh ../ci/server.sh coverage
+
+      # The merged report, pass or fail, as Woodpecker's `reports` saves it.
+      - name: Upload coverage
+        if: ${{ !cancelled() && steps.coverage.outcome != 'skipped' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: server-coverage
+          path: server/coverage/
+          if-no-files-found: ignore
+          retention-days: 14

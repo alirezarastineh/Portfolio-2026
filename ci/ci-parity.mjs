@@ -72,14 +72,15 @@ function steps(text, ci) {
   );
 }
 
-/** Image references: name:tag[@digest] tokens whose tag has a digit. */
+/** Image references: name:tag[@digest] tokens whose tag has a digit. A name of
+ * digits alone is a port mapping (`5432:5432`), not an image. */
 function images(text) {
   const ref =
     /^([a-z0-9]+(?:[._/-][a-z0-9]+)*):(\w[\w.-]*)(@sha256:[0-9a-f]{64})?$/;
   const found = new Map();
   for (const token of uncomment(text).split(/[\s"'`,[\]{}()]+/)) {
     const m = ref.exec(token);
-    if (m && /\d/.test(m[2]))
+    if (m && /\d/.test(m[2]) && !/^\d+$/.test(m[1]))
       found.set(m[1], new Set([...(found.get(m[1]) ?? []), token]));
   }
   return found;

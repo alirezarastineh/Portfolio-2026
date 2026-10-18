@@ -93,6 +93,18 @@ if (problem) {
     );
   }
   console.error(`\ncheck-drift: ${problem}`);
+  // On GitHub Actions, the problem and the migration schema.ts needs also go on
+  // the run's page, which shows annotations to readers without a login (the
+  // GitHub Actions plan, Phase 3).
+  if (process.env.GITHUB_ACTIONS === "true") {
+    const sql = written
+      .filter((path) => path.endsWith(".sql"))
+      .map((path) => readFileSync(join(copy, path), "utf8"))
+      .join("\n");
+    const message = sql ? `${problem}\n${sql}` : problem;
+    const escaped = message.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
+    console.log(`::error title=drift::${escaped}`);
+  }
 } else {
   const tables = /^(\d+) tables$/m.exec(output)?.[1];
   const count = tables ? ` (${tables} tables)` : "";
