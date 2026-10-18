@@ -14,7 +14,8 @@ concurrency:
 
 # Node and pnpm match the Dockerfiles, so CI checks what production builds.
 # Actions are pinned to a commit SHA, with the release in a comment, as images
-# are pinned by digest (the GitHub Actions plan, Phase 2).
+# are pinned by digest (the GitHub Actions plan, Phase 2). The runners are
+# ubuntu-24.04: ubuntu-latest moves to Ubuntu 26.04 from 2026-10-19.
 env:
   NODE_VERSION: "22"
   PNPM_VERSION: "11.0.0"
@@ -22,7 +23,7 @@ env:
 jobs:
   server:
     name: Server — lint, typecheck, test, build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: server
@@ -46,7 +47,7 @@ jobs:
 
   client:
     name: Client — lint, typecheck, test, build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: client
@@ -74,7 +75,7 @@ jobs:
 
   e2e:
     name: Client — e2e, axe, Lighthouse
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: client
@@ -119,7 +120,7 @@ jobs:
   docker:
     name: Docker images build
     needs: [server, client, e2e]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
