@@ -351,6 +351,16 @@ describe("background eval runs", () => {
     });
     expect(res.status).toBe(200);
     await res.text();
+    // The answer's usage, then its log row, are written after its last chunk. Wait for
+    // the row, or the usage can land in the next test's fresh tables: GitHub's runner
+    // put a "terminal" row into the per-kind cap test below (2026-10-18).
+    await eventually(async () => {
+      const [row] = await getDb()
+        .select({ id: aiMessages.id })
+        .from(aiMessages)
+        .where(eq(aiMessages.source, "terminal"));
+      return row;
+    });
 
     // A resume waits behind the same line.
     const resume = await admin.post(`/admin/assistant/runs/${id}/resume`, {});
