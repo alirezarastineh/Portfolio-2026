@@ -62,12 +62,45 @@ steps:
     commands:
       - sh ci/repo.sh gitleaks
 
+  # GitHub Actions' workflows (the GitHub Actions plan, Phase 2), so each CI lints
+  # both definitions: actionlint for their syntax, zizmor for their security.
+  # Pinned by digest.
+  - name: actionlint
+    image: rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+    depends_on: []
+    commands:
+      - sh ci/repo.sh actionlint
+
+  - name: zizmor
+    image: ghcr.io/zizmorcore/zizmor:1.30.1@sha256:a2eb396d886c053073405c7a980f2139ba2248ec172243cfa3841e57196e8101
+    depends_on: []
+    commands:
+      - sh ci/repo.sh zizmor
+
+  # The two CI definitions in step (ci/ci-parity.mjs): node's built-ins only.
+  - name: parity
+    image: portfolio-ci:node22-pw1.64.1
+    depends_on: []
+    commands:
+      - sh ci/repo.sh parity
+
   # On a failure, the owner's email (plan Phase 13, ci/notify.mjs). After every
   # linter: they all start at once.
   - name: email
     image: portfolio-ci:node22-pw1.64.1
     depends_on:
-      [workflows, shellcheck, hadolint, compose, caddy, trivy, gitleaks]
+      [
+        workflows,
+        shellcheck,
+        hadolint,
+        compose,
+        caddy,
+        trivy,
+        gitleaks,
+        actionlint,
+        zizmor,
+        parity,
+      ]
     when:
       - event: [push, cron, deployment]
         status: [failure]

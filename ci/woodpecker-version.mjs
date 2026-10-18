@@ -30,9 +30,10 @@ const versions = Object.entries(pins).map(([name, [file, pattern]]) => {
   return [name, version];
 });
 const pinned = versions[0][1];
-console.log(
-  `pinned: ${versions.map(([name, version]) => `${name} v${version}`).join(", ")}`,
-);
+const formatted = versions
+  .map(([name, version]) => `${name} v${version}`)
+  .join(", ");
+console.log(`pinned: ${formatted}`);
 if (versions.some(([, version]) => version !== pinned)) {
   console.error(
     "the pins differ: the server, the agent and the CLI must run one version",
