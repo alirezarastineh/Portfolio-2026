@@ -58,7 +58,7 @@ jobs:
           docker run --rm --entrypoint sh --volume "$PWD:/repo" --workdir /repo
           docker:29.9.0-cli ci/repo.sh compose
 
-      - name: caddy
+      - name: caddy-adapt
         if: ${{ !cancelled() }}
         run: >-
           docker run --rm --entrypoint sh --volume "$PWD:/repo" --workdir /repo

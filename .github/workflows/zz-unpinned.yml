@@ -1,0 +1,16 @@
+# A deliberate red (GitHub Actions plan, Phase 2): an action by tag, and a step
+# id that doesn't exist.
+name: zz-unpinned
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  red:
+    name: red
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: echo "${{ steps.missing.outputs.value }}"

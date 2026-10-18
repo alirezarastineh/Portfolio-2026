@@ -1,0 +1,2 @@
+# A deliberate gitleaks finding for a scratch red; not a real key.
+api_key = "ZGMQqfFfEFUD1neFqGxYP5Jh0PINJcVX"

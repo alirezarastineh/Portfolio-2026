@@ -1,0 +1,12 @@
+# Called by zz-local.yml.
+name: zz-called
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  hello:
+    name: hello
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "a local reusable workflow ran"

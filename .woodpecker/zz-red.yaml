@@ -1,0 +1,7 @@
+# A deliberate red (GitHub Actions plan, Phase 2): no `when`, which
+# `woodpecker-cli lint --strict` refuses.
+steps:
+  - name: red
+    image: alpine:3.22
+    commands:
+      - echo "a workflow with no when"

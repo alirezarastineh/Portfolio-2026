@@ -1,0 +1,10 @@
+# Whether the SHA-pinning setting lets a local reusable workflow run (the GitHub
+# Actions plan, Phase 2): nightly.yml will call the check workflows this way.
+name: zz-local
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  call:
+    uses: ./.github/workflows/zz-called.yml

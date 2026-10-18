@@ -8,6 +8,7 @@ ci.alirezarastineh.me {
 	# No `encode`: the UI streams step logs as server-sent events, which
 	# compression would buffer.
 	reverse_proxy 127.0.0.1:8030
+	bogus_directive on
 
 	header {
 		Strict-Transport-Security "max-age=31536000"
