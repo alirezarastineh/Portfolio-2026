@@ -257,8 +257,9 @@ the commit's status on GitHub (`…/pipeline/<number>/…`).
   ships down to the last package, to `\\wsl.localhost\Ubuntu\srv\ci-reports\<pipeline>\images\sbom`
   (about 1 MB a pipeline).
 - **Coverage** (plan Phase 9): open `coverage\index.html` under `…\<pipeline>\client` (the unit
-  tests) or `…\<pipeline>\server` (unit and db merged). The thresholds are flags on the client's
-  `unit` step and the server's `coverage` step, just under the first figures; raise them by hand.
+  tests) or `…\<pipeline>\server` (unit and db merged). The thresholds are flags in
+  `ci/client.sh` (`unit`) and `ci/server.sh` (`coverage`), just under the first figures; raise
+  them by hand.
 - **Code health,** in the step logs only: `bundle-size` (the client's assets, against the last main
   run, whose totals stay in `/var/lib/woodpecker-cache/bundle-size`), `knip` and `cycles`.
 - **Visual changes** (plan Phase 10, `ci/visual.sh`): every run on main takes the visual project's
@@ -509,8 +510,8 @@ compose start woodpecker-server && rm /tmp/woodpecker.sqlite
     osv-scanner and semgrep only report.
   - `images.yaml` scans each image's SBOM with Trivy the same way: every HIGH listed, a CRITICAL
     fails. Waivers, each with its reason, go in `.trivyignore`.
-  - To block on HIGH once the HIGHs are fixed or waived: `--fail-on high` in `security.yaml`'s
-    `audit` step, and `--severity HIGH,CRITICAL` in the gate pass of `images.yaml`'s
+  - To block on HIGH once the HIGHs are fixed or waived: `--fail-on high` in `ci/security.sh`'s
+    `audit` step, and `--severity HIGH,CRITICAL` in the gate pass of `ci/images.sh`'s
     `vulnerabilities` step.
 - **Who can log in:** `WOODPECKER_OPEN=false`, plus a single admin and repository owner. User agent
   registration is off.

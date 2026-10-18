@@ -24,7 +24,7 @@ export default defineConfig({
     include: ["src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}", "vite-plugins/**/*.spec.ts"],
     reporters: ["default"],
     // On demand: `vitest run --coverage`. CI's thresholds are on its unit step
-    // (.woodpecker/client.yaml), beside the server's.
+    // (ci/client.sh), beside the server's.
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

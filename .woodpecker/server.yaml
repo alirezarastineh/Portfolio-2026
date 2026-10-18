@@ -2,7 +2,9 @@
 # drizzle-kit check and the unit and db tests, then the invariants (Phase 7),
 # coverage and code health (Phase 9). The db specs use a Postgres service,
 # production's image, rather than embedded Postgres. The checks run in the CI
-# image (ci/Dockerfile), the client's toolchain.
+# image (ci/Dockerfile), the client's toolchain. Steps that hold a value both
+# CIs must agree on (flags, thresholds, pins) run ci/server.sh or
+# ci/code-health.sh, which GitHub Actions calls too.
 when:
   # Of the crons, the nightly. A manual run with NOTIFY_TEST=1 is the failure
   # email's test (prod-smoke.yaml), which runs alone.
@@ -17,6 +19,8 @@ when:
         - "deploy/hetzner/*.sql"
         # `migrations` checks that it names every migration.
         - "deploy/hetzner/verify-deploy.sh"
+        - "ci/server.sh"
+        - "ci/code-health.sh"
         - "ci/vitest-report.mjs"
         - "ci/save-reports.sh"
         - ".woodpecker/server.yaml"
@@ -120,24 +124,12 @@ steps:
     commands:
       - node scripts/check-drift.mjs
 
-  # unit and db also write a blob report each, with their coverage, for the
-  # `coverage` step to merge. Their own coverage reports stay in the step's
-  # /tmp: the two run at once and would share one coverage folder otherwise.
+  # unit and db write a blob report each, with their coverage, for the
+  # `coverage` step to merge; nightly, the property tests take a random seed.
   - name: unit
     <<: *check
     commands:
-      # Nightly, the property tests take a random seed (properties.spec.ts
-      # reads FC_SEED; other runs keep its fixed one). A failure prints it, and
-      # FC_SEED=<seed> repeats the run locally.
-      - >-
-        if [ "$${CI_PIPELINE_EVENT}" = cron ]; then
-        FC_SEED=$$(( $$(od -An -N4 -tu4 /dev/urandom) % 2147483647 )); export FC_SEED;
-        echo "FC_SEED=$${FC_SEED}: the property tests' seed for this run"; fi
-      - >-
-        node_modules/.bin/vitest run --project unit --reporter=default --reporter=json
-        --outputFile.json=/tmp/vitest-unit.json --reporter=blob --outputFile.blob=.vitest/blobs/unit.json
-        --coverage --coverage.reportsDirectory=/tmp/coverage --coverage.reporter=json-summary
-      - node ../ci/vitest-report.mjs /tmp/vitest-unit.json unit
+      - sh ../ci/server.sh unit
 
   # Nothing checks that a service is ready. Bounded, so a Postgres that never
   # comes up fails here rather than at the pipeline timeout.
@@ -157,51 +149,34 @@ steps:
     environment:
       TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/portfolio_test
     commands:
-      - >-
-        node_modules/.bin/vitest run --project db --reporter=default --reporter=json
-        --outputFile.json=/tmp/vitest-db.json --reporter=blob --outputFile.blob=.vitest/blobs/db.json
-        --coverage --coverage.reportsDirectory=/tmp/coverage --coverage.reporter=json-summary
-      - node ../ci/vitest-report.mjs /tmp/vitest-db.json db
+      - sh ../ci/server.sh db
 
   # Coverage of unit and db together (plan Phase 9), merged from their blobs,
-  # with the thresholds just under the first measured figures (2026-10-16:
-  # lines 90.43%, statements 88.79%, functions 91.32%, branches 82.02%). Raise
-  # them by hand as tests are added; CI never writes them. Branches keeps half
-  # a point: a few depend on the tests' timing, so the same code measured
-  # 81.99% to 82.03% (2026-10-17), and 82 failed a run that changed no code.
+  # with the thresholds that ci/server.sh holds.
   - name: coverage
     <<: *check
     depends_on: [unit, db]
     commands:
-      - >-
-        node_modules/.bin/vitest run --merge-reports=.vitest/blobs --reporter=json
-        --outputFile.json=/tmp/vitest-merged.json --coverage
-        --coverage.thresholds.lines=90 --coverage.thresholds.statements=88
-        --coverage.thresholds.functions=91 --coverage.thresholds.branches=81.5
+      - sh ../ci/server.sh coverage
 
-  # Report only (plan Phase 9): unused files, exports and dependencies, by the
-  # rules in knip.js. Its findings never mark the step red (the owner's choice,
-  # 2026-10-16): there are always some. After the tests, beside `coverage`: in
-  # their level it slowed them. npx resolves only versions published before
-  # --before, so a release newer than the pin's age never runs here.
+  # Report only (plan Phase 9): unused files, exports and dependencies, which
+  # never mark the step red. After the tests, beside `coverage`: in their level
+  # it slowed them.
   - name: knip
     <<: *check
     depends_on: [unit, db]
     failure: ignore
     commands:
-      - npx --yes --no-update-notifier --before=2026-10-02 knip@6.39.0 --no-progress --no-exit-code
+      - sh ../ci/code-health.sh knip
 
-  # Circular imports that survive compilation: type-only imports, which
-  # TypeScript erases, are skipped. None today, so any finding is new. After
-  # the tests, like knip.
+  # Circular imports that survive compilation. None today, so any finding is
+  # new. After the tests, like knip.
   - name: cycles
     <<: *check
     depends_on: [unit, db]
     failure: ignore
-    environment:
-      madge_detectiveOptions__ts__skipTypeImports: "true"
     commands:
-      - npx --yes --no-update-notifier --before=2026-10-02 madge@8.0.0 --circular --no-spinner --extensions ts --ts-config tsconfig.json src
+      - sh ../ci/code-health.sh cycles tsconfig.json
 
   # The merged coverage report, to the agent's /srv/ci-reports, pass or fail,
   # as client.yaml saves its reports. Root: that folder is root's.

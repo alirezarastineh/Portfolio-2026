@@ -5,6 +5,7 @@
 # runs them, checked by verify-deploy.sh (Phase 11). The images are tagged with
 # the commit and never pushed; `untag` removes the tags. The Docker socket is
 # root in WSL on the owner's PC, never on production (README.md, Security notes).
+# The builds and the scans run ci/images.sh, which GitHub Actions calls too.
 when:
   # Of the crons, the nightly. A manual run with NOTIFY_TEST=1 is the failure
   # email's test (prod-smoke.yaml), which runs alone.
@@ -18,6 +19,7 @@ when:
         - "server/**"
         - "client/**"
         - ".woodpecker/images.yaml"
+        - "ci/images.sh"
         # What the stack smoke test runs.
         - "ci/stack-smoke.sh"
         - "ci/compose.ci.yml"
@@ -50,55 +52,32 @@ steps:
     depends_on: []
     volumes: [*socket]
     commands:
-      - docker buildx build --tag "portfolio/api:$${CI_COMMIT_SHA}" server
+      - sh ci/images.sh api
 
-  # The bundle calls the public API, the server render calls the compose
-  # network's. Production's other public values (Sentry, Umami, Turnstile) are
-  # deploy.yaml's: this image is tested, never shipped.
   - name: client
     image: *docker
     depends_on: []
     volumes: [*socket]
     commands:
-      - >-
-        docker buildx build --tag "portfolio/client:$${CI_COMMIT_SHA}"
-        --build-arg VITE_API_BASE_URL=https://api.alirezarastineh.me
-        --build-arg API_INTERNAL_BASE_URL=http://api:3000
-        client
+      - sh ci/images.sh client
 
-  # What each image ships, OS packages and node_modules alike, as a CycloneDX
-  # SBOM (plan Phase 8), for the reports and the scan below.
+  # What each image ships, as a CycloneDX SBOM (plan Phase 8), for the reports
+  # and the scan below.
   - name: sbom
     image: *trivy
     depends_on: [api, client]
     volumes: [*socket, *trivy-cache]
     commands:
-      - mkdir -p sbom
-      - >-
-        for image in api client; do
-        trivy image --cache-dir /trivy-cache --skip-version-check --quiet --format cyclonedx
-        --output "sbom/$${image}.cdx.json" "portfolio/$${image}:$${CI_COMMIT_SHA}"; done
-      - ls -l sbom
+      - sh ci/images.sh sbom
 
-  # Known vulnerabilities that have a fix, read from the SBOMs, so each image
-  # is analysed once. Every HIGH is listed, and a CRITICAL fails the step: the
-  # owner's choice (2026-10-16) while Analog's nx pins HIGHs nobody can fix
-  # here; HIGH blocks once upgrades bring the count down. Waivers, each with
-  # its reason, go in .trivyignore.
+  # Known vulnerabilities that have a fix, read from the SBOMs: every HIGH is
+  # listed, and a CRITICAL fails the step.
   - name: vulnerabilities
     image: *trivy
     depends_on: [sbom]
     volumes: [*trivy-cache]
     commands:
-      - >-
-        for image in api client; do echo "== $${image}";
-        trivy sbom --cache-dir /trivy-cache --skip-version-check --quiet --table-mode detailed
-        --severity HIGH,CRITICAL --ignore-unfixed "sbom/$${image}.cdx.json"; done
-      - >-
-        for image in api client; do
-        trivy sbom --cache-dir /trivy-cache --skip-version-check --quiet --severity CRITICAL
-        --ignore-unfixed --exit-code 1 "sbom/$${image}.cdx.json" > /dev/null
-        || { echo "$${image}: a CRITICAL vulnerability, listed above"; exit 1; }; done
+      - sh ci/images.sh vulnerabilities
 
   # The production-like stack smoke test (plan Phase 11, ci/stack-smoke.sh):
   # both images booted with Postgres from deploy/hetzner/docker-compose.yml, the

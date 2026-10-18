@@ -2,7 +2,8 @@
 # Dockerfiles, the compose files and the Caddyfiles, plus secrets (Phase 8),
 # each tool from a pinned image. Every step starts at once (`depends_on: []`),
 # so one run reports every failure. Nothing needs the Docker socket or a
-# trusted volume.
+# trusted volume. Each step runs ci/repo.sh inside its image, as GitHub Actions
+# does with the same pins.
 when:
   # Of the crons, the nightly. A manual run with NOTIFY_TEST=1 is the failure
   # email's test (prod-smoke.yaml), which runs alone.
@@ -18,76 +19,48 @@ steps:
     image: woodpeckerci/woodpecker-cli:v3.19.0-alpine
     depends_on: []
     commands:
-      - woodpecker-cli lint --strict .woodpecker
+      - sh ci/repo.sh workflows
 
-  # -x with SCRIPTDIR: the deploy scripts source load-env.sh from their folder.
   - name: shellcheck
     image: koalaman/shellcheck-alpine:v0.11.0
     depends_on: []
     commands:
-      - shellcheck -x --source-path=SCRIPTDIR deploy/hetzner/*.sh deploy/woodpecker/*.sh ci/*.sh
+      - sh ci/repo.sh shellcheck
 
-  # Waivers, each with its reason, in .hadolint.yaml.
   - name: hadolint
     image: hadolint/hadolint:v2.15.1-alpine
     depends_on: []
     commands:
-      - hadolint server/Dockerfile client/Dockerfile ci/Dockerfile ci/smoke.Dockerfile
+      - sh ci/repo.sh hadolint
 
-  # `config -q` resolves each stack as compose would start it: its files, its
-  # overlay, every profile. The values below only fill the variables the files
-  # require (`:?`); nothing starts.
+  # Every stack resolved as compose would start it; nothing starts.
   - name: compose
     image: docker:29.9.0-cli
     depends_on: []
-    environment:
-      CONTENT_INVALIDATE_TOKEN: ci
-      IMAGE_TAG: ci
-      PGADMIN_DEFAULT_EMAIL: ci@example.com
-      PGADMIN_DEFAULT_PASSWORD: ci
-      POSTGRES_PASSWORD: ci
-      RESEND_API_KEY: ci
-      WOODPECKER_AGENT_SECRET: ci
-      WOODPECKER_GITHUB_CLIENT: ci
-      WOODPECKER_GITHUB_SECRET: ci
-      WOODPECKER_GRPC_SECRET: ci
-      WOODPECKER_TUNNEL_HOST: ci.example.com
-      WOODPECKER_TUNNEL_KEYS: /keys
     commands:
-      - docker compose -f compose.yaml config -q
-      - docker compose -f deploy/hetzner/docker-compose.yml -f deploy/hetzner/docker-compose.images.yml --profile "*" config -q
-      # The stack smoke test's overlay (plan Phase 11, ci/stack-smoke.sh).
-      - docker compose -f deploy/hetzner/docker-compose.yml -f ci/compose.ci.yml config -q
-      - docker compose -f deploy/woodpecker/docker-compose.server.yml config -q
-      - docker compose -f deploy/woodpecker/docker-compose.agent.yml config -q
+      - sh ci/repo.sh compose
 
   # Production's Caddy is 2.11.4 (`caddy version`, 2026-10-15).
   - name: caddy
     image: caddy:2.11.4-alpine
     depends_on: []
     commands:
-      - caddy adapt --config deploy/hetzner/Caddyfile > /dev/null
-      - caddy adapt --config deploy/woodpecker/Caddyfile > /dev/null
+      - sh ci/repo.sh caddy
 
-  # The Dockerfiles' misconfigurations: Trivy has no checks for compose files,
-  # which `compose` covers. Waivers, each with its reason, in .trivyignore.
   # Pinned by digest: Trivy's images 0.69.4 to 0.69.6 were replaced with
   # malicious ones in March 2026 (CVE-2026-33634), and a tag can be pushed again.
   - name: trivy
     image: aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
     depends_on: []
     commands:
-      - trivy config --skip-version-check --exit-code 1 .
+      - sh ci/repo.sh trivy
 
-  # Secrets in the working tree (plan Phase 8). The repo is public; .env*,
-  # DEPLOYMENT.md and .claude/ are git-ignored, so this catches accidents.
-  # Waivers, each with its reason, in .gitleaks.toml. --redact keeps a found
-  # secret out of the log. Pinned by digest, like Trivy.
+  # Secrets in the working tree (plan Phase 8). Pinned by digest, like Trivy.
   - name: gitleaks
     image: ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
     depends_on: []
     commands:
-      - gitleaks dir --config .gitleaks.toml --redact --no-banner --verbose .
+      - sh ci/repo.sh gitleaks
 
   # On a failure, the owner's email (plan Phase 13, ci/notify.mjs). After every
   # linter: they all start at once.

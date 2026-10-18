@@ -6,7 +6,7 @@ export default defineConfig({
     environment: "node",
     // On demand: `vitest run --coverage`. CI runs unit and db as separate steps
     // and merges their coverage, so the thresholds sit on the merge, in
-    // .woodpecker/server.yaml: a partial run would fail them.
+    // ci/server.sh: a partial run would fail them.
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

@@ -21,27 +21,21 @@ variables:
   - &ci "portfolio-ci:node22-pw1.64.1"
 
 steps:
-  # The rules and waivers of repo.yaml's scan (.gitleaks.toml), matched by
-  # value and file, so they hold across the history too. Pinned by digest.
-  # Without a repository, gitleaks scans 0 commits, finds no leaks and exits 0:
-  # the whole history must be there first.
+  # gitleaks over the whole history (ci/weekly.sh), which must be there first.
+  # Pinned by digest.
   - name: history
     image: ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
     depends_on: []
     commands:
-      - test "$$(git rev-parse --is-shallow-repository)" = false
-      - echo "$$(git rev-list --count HEAD) commits"
-      - gitleaks git --config .gitleaks.toml --redact --no-banner --verbose .
+      - sh ci/weekly.sh history
 
-  # Report only, exit 0: there is nearly always something. "Current" reads
-  # missing, since nothing is installed here; compare "Wanted" (the lockfile)
-  # with "Latest".
+  # Report only, exit 0: there is nearly always something.
   - name: outdated
     image: *ci
     depends_on: []
     failure: ignore
     commands:
-      - for p in server client; do echo "== $${p}"; (cd "$${p}" && pnpm outdated) || true; done
+      - sh ci/weekly.sh outdated
 
   - name: woodpecker
     image: *ci
