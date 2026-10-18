@@ -1,8 +1,9 @@
 #!/bin/sh
-# Infrastructure lint (Woodpecker plan, Phases 6 and 8): what both CIs' repo
-# workflows run, from the repo root, each step inside its tool's image. The
-# workflows pin the images.
+# Infrastructure lint (Woodpecker plan, Phases 6 and 8; GitHub Actions plan,
+# Phase 2): what both CIs' repo workflows run, from the repo root, each step
+# inside its tool's image. The workflows pin the images.
 #   sh ci/repo.sh <workflows|shellcheck|hadolint|compose|caddy|trivy|gitleaks>
+#   sh ci/repo.sh <actionlint|zizmor|parity>
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -51,8 +52,25 @@ case "${1:-}" in
   gitleaks)
     gitleaks dir --config .gitleaks.toml --redact --no-banner --verbose .
     ;;
+  # The GitHub workflows' syntax, expressions and types; its image's shellcheck
+  # reads their `run:` scripts. Named files: without them actionlint looks for a
+  # .git directory, which a dry run's copy lacks.
+  actionlint)
+    actionlint -color .github/workflows/*.yml
+    ;;
+  # The GitHub workflows' security: unpinned actions (.github/zizmor.yml wants a
+  # commit SHA for every one), template injection, excessive permissions, a
+  # checkout that keeps its token. Offline, so both CIs get the same findings.
+  zizmor)
+    zizmor --offline --no-progress --config .github/zizmor.yml .github/workflows
+    ;;
+  # The two CI definitions in step: the same steps, image pins and pull request
+  # filters (ci/ci-parity.mjs).
+  parity)
+    node ci/ci-parity.mjs
+    ;;
   *)
-    echo "usage: sh ci/repo.sh <workflows|shellcheck|hadolint|compose|caddy|trivy|gitleaks>" >&2
+    echo "usage: sh ci/repo.sh <workflows|shellcheck|hadolint|compose|caddy|trivy|gitleaks|actionlint|zizmor|parity>" >&2
     exit 2
     ;;
 esac

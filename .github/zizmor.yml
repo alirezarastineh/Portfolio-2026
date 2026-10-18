@@ -1,0 +1,8 @@
+# zizmor's rules for the GitHub workflows (the GitHub Actions plan, Phase 2). Every
+# action is pinned to a commit SHA, as images are pinned by digest: zizmor's default
+# lets actions/* and github/* use a tag.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "*": hash-pin
