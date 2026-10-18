@@ -388,6 +388,10 @@ Three crons (plan Phase 13), added in the repository's Woodpecker settings → *
 
 - Each workflow's `when` names its cron (`cron: nightly`), so a cron starts only its own
   workflows. A cron's **Run now** starts it at once.
+- **3.19.0's form saves a new cron disabled** unless **Enabled** is clicked: the box shows ticked
+  but sends nothing, and the server takes that as off. A disabled cron never fires (**Run now**
+  still works), and the list shows "Disabled" where the next run should be. Click the box off and
+  on before saving, or edit the cron afterwards and tick it.
 - The server creates each run on time and holds it until the PC's agent is online. After days off,
   several runs wait and then run one after another; cancel the ones you don't need.
 - A nightly failure in the property tests prints its seed. In `server/`,
