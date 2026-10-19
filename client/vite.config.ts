@@ -11,6 +11,9 @@ import { bootAfterPaint } from "./vite-plugins/boot-after-paint.ts";
 import { sequentialEnvironments } from "./vite-plugins/sequential-environments.ts";
 import { stripHtmlComments } from "./vite-plugins/strip-html-comments.ts";
 
+// build-check fails on anything written to stderr: scratch PR for the CI red check, never merge.
+console.warn("A deliberate build warning: scratch PR for the CI red check, never merge");
+
 /**
  * Satori shapes text with HarfBuzz, compiled to WebAssembly: `hb.js` reads
  * `hb.wasm` from its own folder at runtime, by a computed path the server
