@@ -1,0 +1,114 @@
+# Image checks (the GitHub Actions plan, Phase 6): Woodpecker's images.yaml on
+# GitHub's runners, as one job. The API and client images, built on the
+# runner's Docker with no layer cache, tagged with the commit and never pushed;
+# an SBOM of each and their known vulnerabilities, from Woodpecker's Trivy
+# image; then the two booted with Postgres as production runs them, the real
+# migrations applied and the seed published, checked by verify-deploy.sh
+# (ci/stack-smoke.sh). Beside the server and client checks: Woodpecker runs it
+# after them, so as not to slow its e2e or skew Lighthouse on one PC. Steps that
+# hold a value run ci/images.sh, as Woodpecker's do (ci/ci-parity.mjs keeps the
+# two in step).
+name: images
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "server/**"
+      - "client/**"
+      - "ci/images.sh"
+      # What the stack smoke test runs.
+      - "ci/stack-smoke.sh"
+      - "ci/compose.ci.yml"
+      - "deploy/hetzner/docker-compose.yml"
+      - "deploy/hetzner/verify-deploy.sh"
+      - "deploy/hetzner/load-env.sh"
+      - ".github/workflows/images.yml"
+  workflow_call:
+    inputs:
+      nightly:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Per workflow and event, so a push never cancels the nightly. Named literally: a
+# called workflow sees its caller's github.workflow.
+concurrency:
+  group: images-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+
+# Woodpecker's names, which the shared scripts read. A nightly call is a cron
+# run; a pull request's branch is its target, as on Woodpecker; the run number
+# stands in for the pipeline's, and is never 0, a dry run's.
+env:
+  CI_PIPELINE_EVENT: ${{ inputs.nightly && 'cron' || (github.event_name == 'workflow_dispatch' && 'manual') || github.event_name }}
+  CI_COMMIT_BRANCH: ${{ github.base_ref || github.ref_name }}
+  CI_COMMIT_SHA: ${{ github.sha }}
+  CI_PIPELINE_NUMBER: ${{ github.run_number }}
+  CI_WORKFLOW_NAME: images
+
+jobs:
+  images:
+    name: images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # On the runner's Docker, whose default builder keeps the images for the
+      # steps below. No layer cache: ci.yml's took 3.4 GB of the 10 GB cache.
+      - name: api
+        id: api
+        run: sh ci/images.sh api
+
+      - name: client
+        id: client
+        if: ${{ !cancelled() }}
+        run: sh ci/images.sh client
+
+      # What each image ships, as a CycloneDX SBOM (Woodpecker plan, Phase 8),
+      # through the runner's Docker socket. Trivy's database (128 MB) is
+      # downloaded on every run, into a folder `vulnerabilities` reads too.
+      - name: sbom
+        id: sbom
+        if: ${{ !cancelled() && steps.api.outcome == 'success' && steps.client.outcome == 'success' }}
+        run: >-
+          docker run --rm --entrypoint sh --volume "$PWD:/repo" --workdir /repo
+          --volume /var/run/docker.sock:/var/run/docker.sock
+          --volume "$RUNNER_TEMP/trivy:/trivy-cache" --env CI_COMMIT_SHA
+          aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
+          ci/images.sh sbom
+
+      # Known vulnerabilities that have a fix, read from the SBOMs: every HIGH is
+      # listed, and a CRITICAL fails the step.
+      - name: vulnerabilities
+        if: ${{ !cancelled() && steps.sbom.outcome == 'success' }}
+        run: >-
+          docker run --rm --entrypoint sh --volume "$PWD:/repo" --workdir /repo
+          --volume "$RUNNER_TEMP/trivy:/trivy-cache" --env CI_COMMIT_SHA
+          aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
+          ci/images.sh vulnerabilities
+
+      # The production-like stack smoke test (Woodpecker plan, Phase 11), on the
+      # runner itself: the stack publishes its ports on loopback, which a step
+      # here shares (Woodpecker needs a helper container on the host's network).
+      # It needs the images only, so it runs whatever the scans found.
+      - name: smoke
+        if: ${{ !cancelled() && steps.api.outcome == 'success' && steps.client.outcome == 'success' }}
+        run: bash ci/stack-smoke.sh
+
+      # The SBOMs, as Woodpecker's `reports` keeps them.
+      - name: Upload the SBOMs
+        if: ${{ !cancelled() && steps.sbom.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom
+          path: sbom/
+          if-no-files-found: error
+          retention-days: 14

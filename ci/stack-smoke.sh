@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The production-like stack smoke test (plan Phase 11), run by the helper that
-# images.yaml starts on the host's network (ci/smoke.Dockerfile):
+# images.yaml starts on the host's network (ci/smoke.Dockerfile), and on GitHub
+# Actions by images.yml on the runner itself (the GitHub Actions plan, Phase 6):
 # - the API and client images this pipeline built, booted with Postgres as
 #   production runs them (deploy/hetzner/docker-compose.yml, ci/compose.ci.yml);
 # - the real migrations, applied at the API's boot;
