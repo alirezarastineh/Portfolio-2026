@@ -31,12 +31,10 @@ const ONLY = {
   github: new Set(["inactivity"]),
 };
 // Steps a GitHub twin gains in a later phase of the GitHub Actions plan, on
-// Woodpecker alone until then. Once GitHub has one, the check fails until it
-// leaves this list, so none stays here by mistake.
-const PENDING = {
-  // Phase 5: the visual baselines in GitHub's cache, then Firefox and WebKit.
-  client: new Set(["visual", "cross-browser"]),
-};
+// Woodpecker alone until then, as { client: new Set(["visual"]) }. Once GitHub
+// has one, the check fails until it leaves this list, so none stays here by
+// mistake. Empty since Phase 5 brought client's visual and cross-browser.
+const PENDING = {};
 // Paths in a pull request filter that only one CI's steps read.
 const ONLY_PATHS = [
   /^\.woodpecker\//,

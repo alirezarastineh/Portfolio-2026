@@ -60,6 +60,8 @@ async function scrollThrough(page: Page): Promise<void> {
 }
 
 test.use({ reducedMotion: "reduce" });
+// Room for the screenshots' 15 s below, on a loaded machine.
+test.describe.configure({ timeout: 60_000 });
 
 for (const theme of THEMES) {
   for (const viewport of VIEWPORTS) {
@@ -81,6 +83,10 @@ for (const theme of THEMES) {
             fullPage: true,
             // Canvas and font anti-aliasing vary by a few pixels between runs.
             maxDiffPixelRatio: 0.001,
+            // A new baseline needs two matching shots, and on a loaded PC one
+            // full-page shot of the longest pages took over 2.5 s: the default
+            // 5 s fit only one (CI #74, home-de at laptop size).
+            timeout: 15_000,
           });
         });
       }

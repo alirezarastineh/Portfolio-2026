@@ -1,0 +1,24 @@
+# The nightly run (the GitHub Actions plan, Phase 5): Woodpecker's `nightly`
+# cron, as one workflow that calls the check workflows with `nightly: true`,
+# which the shared scripts read as a cron run: the visual set taken afresh, and
+# Firefox and WebKit. Manual only for now (Actions → nightly → Run workflow);
+# Phase 8 adds the schedule and the other four workflows.
+name: nightly
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One nightly at a time, never cancelled: a second one waits for the first.
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  client:
+    name: client
+    uses: ./.github/workflows/client.yml
+    with:
+      nightly: true

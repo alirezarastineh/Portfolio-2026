@@ -51,15 +51,25 @@ case "${1:-}" in
     node scripts/lhci.mjs
     ;;
   # The desktop suite in Firefox and WebKit (Woodpecker plan, Phase 10), with
-  # its report and results beside e2e's: the browser given, or both.
+  # its report and results beside e2e's: the browser given, or both. Report
+  # only: on GitHub (Phase 5) a failure also becomes a warning on the run's page
+  # and a line in the job's summary.
   cross-browser)
+    browsers=${2:-firefox and webkit}
     if [ -n "${2:-}" ]; then
       set -- "--project=$2"
     else
       set -- --project=firefox --project=webkit
     fi
+    status=0
     E2E_CROSS_BROWSER=1 PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/cross-browser \
-      node_modules/.bin/playwright test "$@" --workers=2 --output=test-results/cross-browser
+      node_modules/.bin/playwright test "$@" --workers=2 --output=test-results/cross-browser ||
+      status=$?
+    if [ "$status" -ne 0 ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+      echo "::warning title=cross-browser::$browsers exited $status (report only): the failed tests are annotated, and the report is an artifact"
+      echo "- **cross-browser** ($browsers) exited $status (report only)" >> "$GITHUB_STEP_SUMMARY"
+    fi
+    exit "$status"
     ;;
   *)
     echo "usage: sh ci/client.sh <unit|e2e|lighthouse|cross-browser [firefox|webkit]>" >&2

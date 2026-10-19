@@ -6,3 +6,11 @@ rules:
     config:
       policies:
         "*": hash-pin
+  # GitHub's self-repository syntax, `uses: $/…` (2026-07-30), which zizmor 1.30
+  # asks for: actionlint 1.7.12 rejects it ("not following the format"). So
+  # nightly.yml calls the check workflows with `./`, which for a job's call means
+  # the caller's own commit (the GitHub Actions plan, Phase 5), until actionlint
+  # takes `$/`.
+  self-repository:
+    ignore:
+      - nightly.yml
