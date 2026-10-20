@@ -7,6 +7,17 @@ set -eu
 cd "$(dirname "$0")/.."
 store=${PNPM_STORE:-/pnpm-store}
 
+# Ends a report-only step. Both CIs mark a failure on the step alone; on GitHub
+# Actions (the GitHub Actions plan, Phase 7) it also becomes a warning on the
+# run's page, which reads without a login. The tools' images get
+# GITHUB_ACTIONS there, and nothing else of the runner's.
+report_only() {
+  if [ "$2" -ne 0 ] && [ "${GITHUB_ACTIONS:-}" = true ]; then
+    echo "::warning title=$1::$1 exited $2 (report only): its step's log says why"
+  fi
+  exit "$2"
+}
+
 case "${1:-}" in
   # Production dependencies only: what the images ship, and what the licence
   # check reads.
@@ -19,7 +30,9 @@ case "${1:-}" in
   # nearly always lists something. Findings (exit 1) pass, as the owner chose
   # (2026-10-16); an error still fails. Its image keeps the binary off the PATH.
   osv-scanner)
-    /osv-scanner scan source --lockfile server/pnpm-lock.yaml --lockfile client/pnpm-lock.yaml || [ $? -eq 1 ]
+    status=0
+    /osv-scanner scan source --lockfile server/pnpm-lock.yaml --lockfile client/pnpm-lock.yaml || [ $? -eq 1 ] || status=1
+    report_only osv-scanner "$status"
     ;;
   # Every HIGH and CRITICAL advisory is listed, and a CRITICAL fails
   # (ci/check-audit.mjs says why not HIGH yet). A failed request fails too.
@@ -46,7 +59,9 @@ case "${1:-}" in
   # semgrep's TypeScript and Node rules over both src trees. Its metrics stay
   # off; the rules come from semgrep's registry.
   semgrep)
-    semgrep scan --config p/typescript --config p/nodejs --metrics=off --disable-version-check --error server/src client/src
+    status=0
+    semgrep scan --config p/typescript --config p/nodejs --metrics=off --disable-version-check --error server/src client/src || status=$?
+    report_only semgrep "$status"
     ;;
   *)
     echo "usage: sh ci/security.sh <install|osv-scanner|audit|licenses|semgrep>" >&2

@@ -1,0 +1,106 @@
+# Supply chain (the GitHub Actions plan, Phase 7): Woodpecker's security.yaml on
+# GitHub's runners, as one job. Known vulnerabilities and licences in the
+# production dependencies, which block, plus osv-scanner and semgrep, from
+# Woodpecker's images, which only report. It runs when a lockfile or one of its
+# checks changes, and on the nightly call. Every step runs ci/security.sh, as
+# Woodpecker's do (ci/ci-parity.mjs keeps the two in step), and each check runs
+# whatever the others found, so one run reports every failure.
+name: security
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/pnpm-lock.yaml"
+      - "client/pnpm-lock.yaml"
+      - "ci/security.sh"
+      - "ci/check-audit.mjs"
+      - "ci/check-licenses.mjs"
+      - ".github/workflows/security.yml"
+  pull_request:
+    paths:
+      - "server/pnpm-lock.yaml"
+      - "client/pnpm-lock.yaml"
+      - "ci/security.sh"
+      - "ci/check-audit.mjs"
+      - "ci/check-licenses.mjs"
+      - ".github/workflows/security.yml"
+  workflow_call:
+    inputs:
+      nightly:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Per workflow and event, so a push never cancels the nightly. Named literally: a
+# called workflow sees its caller's github.workflow.
+concurrency:
+  group: security-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+
+jobs:
+  security:
+    name: security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.0.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            server/pnpm-lock.yaml
+            client/pnpm-lock.yaml
+      # ci/security.sh installs into PNPM_STORE (Woodpecker's /pnpm-store by
+      # default), and `licenses` reads the licences from it: here, the store
+      # that setup-node caches.
+      - name: Use the cached pnpm store
+        run: echo "PNPM_STORE=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      # Production dependencies only: what the images ship, and what the licence
+      # check reads.
+      - name: install
+        id: install
+        run: sh ci/security.sh install
+
+      # Report only: findings leave the step green, as the owner chose
+      # (2026-10-16); an error marks it. It reads the lockfiles alone, so it runs
+      # whatever `install` did. GITHUB_ACTIONS lets ci/security.sh put a failure
+      # on the run's page.
+      - name: osv-scanner
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: >-
+          docker run --rm --entrypoint sh --volume "$PWD:/repo" --workdir /repo --env GITHUB_ACTIONS
+          ghcr.io/google/osv-scanner:v2.6.0@sha256:afd838850ac1a0fcc15ff4a041dc9ba11123c3f0d2666217a5f0fcf9222b55fa
+          ci/security.sh osv-scanner
+
+      # Every HIGH and CRITICAL advisory is listed, and a CRITICAL fails.
+      - name: audit
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: sh ci/security.sh audit
+
+      # Licences outside the allowlist fail. pnpm reads the licences from the store.
+      - name: licenses
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: sh ci/security.sh licenses
+
+      # Report only: semgrep's TypeScript and Node rules over both src trees.
+      - name: semgrep
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        continue-on-error: true
+        run: >-
+          docker run --rm --entrypoint sh --volume "$PWD:/repo" --workdir /repo --env GITHUB_ACTIONS
+          semgrep/semgrep:1.178.0@sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b
+          ci/security.sh semgrep

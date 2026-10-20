@@ -2,9 +2,13 @@
 // allowlist (plan Phase 8), and prints the count per licence. It reads what
 // `pnpm licenses list --prod --json` writes. Anything else, a GPL, an AGPL or a
 // licence pnpm can't name, needs a waiver below, with its reason.
+// On GitHub Actions (the GitHub Actions plan, Phase 7), the count, the waivers
+// and the problems also go to the job's summary, and the count and each problem
+// onto the run's page as annotations, which read without a login. Woodpecker
+// sets neither, so its output is unchanged.
 //
 // Usage: node ../ci/check-licenses.mjs <licenses.json> [label]
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 
 const [file, label = "licenses"] = process.argv.slice(2);
 if (!file) {
@@ -60,9 +64,25 @@ const allowed = (expression) =>
       branch.split(" AND ").every((id) => ALLOWED.has(id.trim())),
     );
 
+/** On GitHub, a summary line, and with `level` an annotation too. */
+function github(line, level) {
+  const summary = process.env.GITHUB_STEP_SUMMARY;
+  if (!summary) return;
+  appendFileSync(summary, `- ${line}\n`);
+  if (!level) return;
+  // Workflow commands escape %, CR and LF in their message.
+  const message = line
+    .replaceAll("%", "%25")
+    .replaceAll("\r", "%0D")
+    .replaceAll("\n", "%0A");
+  console.log(`::${level} title=licenses::${message}`);
+}
+
 const report = JSON.parse(readFileSync(file, "utf8"));
 if (report.error) {
-  console.error(`${label}: pnpm licenses failed: ${report.error.message}`);
+  const line = `${label}: pnpm licenses failed: ${report.error.message}`;
+  console.error(line);
+  github(line, "error");
   process.exit(1);
 }
 
@@ -85,12 +105,22 @@ for (const [license, packages] of Object.entries(report).sort(
   }
 }
 
-console.log(`${label}: ${total} production packages`);
-for (const line of waived) console.log(`  waived: ${line}`);
+const count = `${label}: ${total} production packages`;
+console.log(count);
+github(count, "notice");
+for (const line of waived) {
+  console.log(`  waived: ${line}`);
+  github(`${label}: waived ${line}`);
+}
 if (total === 0)
   problems.push("no packages listed: was the package installed?");
 if (problems.length > 0) {
-  for (const problem of problems) console.error(`FAIL ${problem}`);
-  console.error(`${label}: ${problems.length} problem(s)`);
+  for (const problem of problems) {
+    console.error(`FAIL ${problem}`);
+    github(`${label}: ${problem}`, "error");
+  }
+  const line = `${label}: ${problems.length} problem(s)`;
+  console.error(line);
+  github(line);
   process.exit(1);
 }
