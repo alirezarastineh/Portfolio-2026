@@ -46,10 +46,54 @@ C:\Users\<user>\.ssh\id_ed25519
 
 It also falls back to the older local path `C:\Users\arastineh\Documents\AI EM SSH\.ssh\id_ed25519`.
 
+## Public pgAdmin login
+
+The pgAdmin container stays bound to `127.0.0.1:5051`. Caddy publishes
+`https://pgadmin.alirezarastineh.me` with a Caddy Basic Auth login in front of
+pgAdmin's own login. This uses Caddy's `basic_auth` directive (Caddy 2.8+). The
+DNS A record for that hostname must point to the Hetzner server; the container
+port remains private to the host.
+
+On the server, create a separate Caddy password. `caddy hash-password` prompts
+without echoing the password; keep the generated hash, not the plaintext:
+
+```bash
+sudo caddy hash-password
+sudoedit /etc/caddy/portfolio-pgadmin.env
+sudo chown root:root /etc/caddy/portfolio-pgadmin.env
+sudo chmod 600 /etc/caddy/portfolio-pgadmin.env
+```
+
+Put the Caddy username and generated hash in `/etc/caddy/portfolio-pgadmin.env`:
+
+```env
+PORTFOLIO_PGADMIN_CADDY_USER=pgadmin
+PORTFOLIO_PGADMIN_CADDY_PASSWORD_HASH=$2a$14$paste-the-generated-hash-here
+```
+
+Ensure the Caddy systemd service loads that file (`sudo systemctl edit caddy`):
+
+```ini
+[Service]
+EnvironmentFile=/etc/caddy/portfolio-pgadmin.env
+```
+
+Add the pgAdmin block from `Caddyfile` to `/etc/caddy/Caddyfile`, then:
+
+```bash
+sudo systemctl daemon-reload
+sudo caddy validate --config /etc/caddy/Caddyfile --envfile /etc/caddy/portfolio-pgadmin.env
+sudo systemctl reload caddy
+```
+
+Caddy obtains the HTTPS certificate automatically. Sign in with the Caddy
+credentials first, then `PGADMIN_DEFAULT_EMAIL` and
+`PGADMIN_DEFAULT_PASSWORD` from the server's `.env`.
+
 ## First Deploy
 
 1. Confirm repo-root `.env` has the production values you want.
-2. Confirm Namecheap DNS points `alirezarastineh.me` and `api.alirezarastineh.me` to the Hetzner IP. (pgAdmin is not public; see `DEPLOYMENT.md`, "pgAdmin access".)
+2. Confirm Namecheap DNS points `alirezarastineh.me`, `api.alirezarastineh.me`, and `pgadmin.alirezarastineh.me` to the Hetzner IP. Set up the Caddy login as described above.
 3. On the Hetzner server:
 
 ```bash
@@ -57,10 +101,11 @@ docker compose --env-file .env -f deploy/hetzner/docker-compose.yml up -d --buil
 ```
 
 4. Add the site blocks from `deploy/hetzner/Caddyfile` to `/etc/caddy/Caddyfile`.
-5. Validate and reload Caddy:
+5. Validate and reload Caddy (the pgAdmin environment file supplies its auth hash):
 
 ```bash
-sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl daemon-reload
+sudo caddy validate --config /etc/caddy/Caddyfile --envfile /etc/caddy/portfolio-pgadmin.env
 sudo systemctl reload caddy
 ```
 

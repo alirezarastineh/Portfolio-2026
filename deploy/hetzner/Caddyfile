@@ -130,10 +130,18 @@ www.alirezarastineh.me {
 	}
 }
 
-# pgAdmin is deliberately NOT exposed publicly any more. It listens on
-# 127.0.0.1:5051 on the host only; reach it through SSH from your machine:
-#
-#   ssh -N -L 5051:127.0.0.1:5051 <user>@<host>    then open http://localhost:5051
-#
-# See DEPLOYMENT.md, "pgAdmin access". Remove the old pgadmin.* site block from
-# the host's Caddyfile and reload Caddy.
+# The container still listens on 127.0.0.1:5051 only. Caddy publishes this
+# hostname with its own login in front of pgAdmin's login. Credentials come
+# from /etc/caddy/portfolio-pgadmin.env on the host, never from this repository.
+pgadmin.alirezarastineh.me {
+	basic_auth {
+		{$PORTFOLIO_PGADMIN_CADDY_USER} {$PORTFOLIO_PGADMIN_CADDY_PASSWORD_HASH}
+	}
+	reverse_proxy 127.0.0.1:5051
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+	}
+}
