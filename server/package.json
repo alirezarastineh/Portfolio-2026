@@ -38,6 +38,7 @@
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.13",
     "js-tiktoken": "^1.0.21",
+    "minimist": "1.2.5",
     "minisearch": "^7.2.0",
     "otpauth": "^9.5.2",
     "pdf-parse": "^2.4.5",
