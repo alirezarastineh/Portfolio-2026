@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import AxeBuilder from "@axe-core/playwright";
 import type { Page, Route } from "@playwright/test";
 
-import { expect, interactive, test } from "./fixtures";
+import { expect, interactive, settled, test } from "./fixtures";
 
 /**
  * The admin against the production build, with its API faked in the browser:
@@ -1402,6 +1402,7 @@ test.describe("admin", () => {
     await expect(applied).toBeVisible();
     await expect(perception.getByRole("button", { name: "Promote Project One" })).toHaveCount(0);
 
+    await settled(page);
     const { violations } = await new AxeBuilder({ page })
       .include("section[aria-labelledby=assistant-perception]")
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
@@ -1453,6 +1454,7 @@ test.describe("admin", () => {
     const candidate = routing.getByRole("listitem").filter({ hasText: "scaled the furthest" });
     await expect(candidate).toContainText("lite · thumbs-down · m_falsesimple01");
 
+    await settled(page);
     const { violations } = await new AxeBuilder({ page })
       .include("section[aria-labelledby=assistant-routing]")
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
@@ -1627,6 +1629,7 @@ test.describe("admin", () => {
     await seo.getByText("What version bbbbbbbbbbbb tells the model").click();
     await expect(seo.getByText("The instructions seo sends.")).toBeVisible();
 
+    await settled(page);
     const { violations } = await new AxeBuilder({ page })
       .include("app-assistant-copilot")
       .analyze();
@@ -1737,6 +1740,7 @@ test.describe("admin", () => {
     ).toHaveCount(1);
     const others = page.getByRole("list", { name: "Other drafts for Page title EN" });
     await expect(others.getByRole("listitem")).toHaveCount(2);
+    await settled(page);
     const { violations } = await new AxeBuilder({ page }).include("app-field-pair").analyze();
     expect(violations).toEqual([]);
 
@@ -1842,6 +1846,7 @@ test.describe("admin", () => {
     await expect(field).toHaveValue("Project one made search fast for support teams: draft 1.");
     const others = page.getByRole("list", { name: "Other drafts for Search description EN" });
     await expect(others.getByRole("listitem")).toHaveCount(2);
+    await settled(page);
     const { violations } = await new AxeBuilder({ page })
       .include("app-copilot-suggest")
       .include("#seoDescription-en")
@@ -2512,6 +2517,7 @@ test.describe("admin", () => {
     await expect(thought).toBeHidden();
     await thoughts.locator("summary").click();
     await expect(thought).toBeVisible();
+    await settled(page);
     const { violations } = await new AxeBuilder({ page })
       .include("app-assistant-playground")
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
@@ -3048,6 +3054,7 @@ test.describe("admin", () => {
       ),
     ).toBeVisible();
 
+    await settled(page);
     const { violations } = await new AxeBuilder({ page })
       .include("section[aria-labelledby=journal-heading]")
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
@@ -3268,6 +3275,7 @@ test.describe("admin", () => {
       .fill("Kubernetes, clusters");
     await expect(send).toBeEnabled();
 
+    await settled(page);
     const { violations } = await new AxeBuilder({ page })
       .include("section[aria-labelledby=journal-heading]")
       .include("section[aria-labelledby=lessons-heading]")
@@ -3311,6 +3319,7 @@ test.describe("admin", () => {
       ),
     ).toBeVisible();
     await expect(page.locator(":focus")).toHaveText(LESSON_STATEMENT);
+    await settled(page);
     const scanned = await new AxeBuilder({ page })
       .include("section[aria-labelledby=lessons-heading]")
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
@@ -3397,6 +3406,7 @@ test.describe("admin", () => {
     );
     await form.getByLabel("The lesson", { exact: true }).fill(LESSON_STATEMENT);
 
+    await settled(page);
     const { violations } = await new AxeBuilder({ page })
       .include("section[aria-labelledby=insights-heading]")
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
@@ -3566,6 +3576,7 @@ test.describe("admin", () => {
 
     const line = `Insights ran by themselves (${RISE}): 1 topic the assistant could not answer.`;
     await expect(page.getByText(line)).toBeVisible();
+    await settled(page);
     const { violations } = await new AxeBuilder({ page })
       .include("#insights-notice-box")
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
@@ -3656,6 +3667,7 @@ test.describe("admin", () => {
       ),
     ).toBeVisible();
 
+    await settled(page);
     const { violations } = await new AxeBuilder({ page })
       .include("section[aria-labelledby=assistant-faithfulness]")
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
@@ -3978,6 +3990,7 @@ test.describe("admin", () => {
         exact: false,
       }),
     ).toBeVisible();
+    await settled(page);
     const { violations } = await new AxeBuilder({ page }).include("app-admin-agent").analyze();
     expect(violations).toEqual([]);
 
@@ -4462,6 +4475,9 @@ test.describe("admin", () => {
     await statement.fill(
       "When visitors ask about relocation and remote work, the FAQ entry answers it from the portfolio.",
     );
+    // Accept enables and fades in: axe reads its colours once the fade is over.
+    await expect(acceptIt).toBeEnabled();
+    await settled(page);
     const { violations } = await new AxeBuilder({ page })
       .include("app-faq-proposals")
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
@@ -4780,6 +4796,7 @@ test.describe("admin accessibility", () => {
         // Loaded: the dashboard's tiles, or the editor's fields.
         await expect(page.locator("[role=status] .sr-only")).toHaveCount(0);
 
+        await settled(page);
         const { violations } = await new AxeBuilder({ page })
           .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
           .analyze();
@@ -4810,6 +4827,7 @@ test.describe("admin accessibility", () => {
       await expect(preview.locator("#contact")).toBeAttached({ timeout: 15_000 });
       await expect(page.locator("[role=status] .sr-only")).toHaveCount(0);
 
+      await settled(page);
       const { violations } = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
         .analyze();

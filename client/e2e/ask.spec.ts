@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Page, Route } from "@playwright/test";
 
-import { expect, interactive, test } from "./fixtures";
+import { expect, interactive, settled, test } from "./fixtures";
 
 /**
  * The About terminal as the portfolio assistant. The API is cross-origin in
@@ -619,6 +619,7 @@ test.describe("assistant terminal", () => {
 });
 
 async function axeViolations(page: Page) {
+  await settled(page);
   const { violations } = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
     .analyze();

@@ -88,6 +88,30 @@ export async function interactive(page: Page): Promise<void> {
   await page.waitForLoadState("networkidle"); // NOSONAR: a floor after the app's own mark (see above)
 }
 
+/**
+ * Waits until the page's CSS transitions and animations have finished, before
+ * axe reads computed colours. A button just enabled fades from 50% to full
+ * opacity over 150 ms (`hlmBtn`: `transition-all`, `data-disabled:opacity-50`),
+ * and caught mid-fade it fails color-contrast that its settled state passes:
+ * WebKit's FAQ pipeline test did, now and then. Infinite animations (a spinner,
+ * the caret) and scroll-driven ones never finish, so they are left out.
+ */
+export async function settled(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter(
+          (animation) =>
+            animation.playState === "running" &&
+            animation.timeline === document.timeline &&
+            Number.isFinite(animation.effect?.getComputedTiming().endTime),
+        )
+        .map((animation) => animation.finished.catch(() => undefined)),
+    ),
+  );
+}
+
 /** Scripts the browser would execute inline (not `src`, not JSON data blocks). */
 export function inlineScripts(html: string): { attrs: string; nonce: string | null }[] {
   const scripts: { attrs: string; nonce: string | null }[] = [];

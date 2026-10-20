@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 
-import { expect, interactive, test } from "./fixtures";
+import { expect, interactive, settled, test } from "./fixtures";
 
 const PAGES = [
   "/en",
@@ -37,6 +37,7 @@ for (const colorScheme of ["dark", "light"] as const) {
         await interactive(page);
         await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
 
+        await settled(page);
         const { violations } = await new AxeBuilder({ page })
           .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
           .analyze();
