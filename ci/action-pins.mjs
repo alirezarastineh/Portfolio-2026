@@ -114,12 +114,14 @@ for (const { pin, label, commit, release, error } of checkedPins) {
     problems.push(`${label}: ${error}`);
     continue;
   }
-  const notes = [];
-  if (commit === pin.sha) notes.push(`${pin.version}'s commit`);
-  else
+  // A wrong SHA is the pin's only problem: its comment can't be trusted either.
+  if (commit !== pin.sha) {
     problems.push(
       `${label}: ${pin.sha} is not ${pin.version}'s commit, ${commit}: ${pin.at.join(", ")}`,
     );
+    continue;
+  }
+  const notes = [`${pin.version}'s commit`];
   const latest = release.tag_name;
   const days = Math.floor(
     (Date.now() - Date.parse(release.published_at)) / 86_400_000,
@@ -134,11 +136,9 @@ for (const { pin, label, commit, release, error } of checkedPins) {
       `${label}: ${latest} has been out for ${days} days: move the pin to its commit ` +
         `(ci/README.md, "Action pins"), reading every release's notes: ${release.html_url}`,
     );
-  if (notes.length > 0) {
-    const line = `${label}: ${notes.join("; ")}`;
-    console.log(line);
-    github(line);
-  }
+  const line = `${label}: ${notes.join("; ")}`;
+  console.log(line);
+  github(line);
 }
 
 const actions = new Set([...pins.values()].map((pin) => pin.repo)).size;

@@ -35,6 +35,9 @@ const ONLY = {
 // has one, the check fails until it leaves this list, so none stays here by
 // mistake. Empty since Phase 5 brought client's visual and cross-browser.
 const PENDING = {};
+// Woodpecker's workflows that GitHub never twins: its CI image, and the deploy,
+// which Woodpecker alone runs (the GitHub Actions plan, decision 1).
+const WOODPECKER_ONLY = new Set(["ci-image", "deploy"]);
 // Paths in a pull request filter that only one CI's steps read.
 const ONLY_PATHS = [
   /^\.woodpecker\//,
@@ -127,11 +130,12 @@ const github = existsSync(githubDir)
 
 // Twins: the same steps, the same pull request filter.
 const unpaired = [];
+const own = [];
 const waiting = [];
 for (const file of woodpecker) {
   const name = file.replace(/\.yaml$/, "");
   if (!github.includes(`${name}.yml`)) {
-    unpaired.push(name);
+    (WOODPECKER_ONLY.has(name) ? own : unpaired).push(name);
     continue;
   }
   const wp = read(`.woodpecker/${file}`);
@@ -201,13 +205,14 @@ for (const file of github) {
   }
 }
 
-const checked = woodpecker.length - unpaired.length;
+const checked = woodpecker.length - unpaired.length - own.length;
 console.log(
   `parity: ${checked} twin workflow(s), ${pins.github.size} GitHub image(s), ${github.length} GitHub workflow(s) checked` +
     (waiting.length
       ? `; steps on Woodpecker alone until a later phase: ${waiting.join(", ")}`
       : "") +
-    (unpaired.length ? `; no GitHub twin yet: ${unpaired.join(", ")}` : ""),
+    (unpaired.length ? `; no GitHub twin yet: ${unpaired.join(", ")}` : "") +
+    (own.length ? `; Woodpecker's own: ${own.join(", ")}` : ""),
 );
 if (problems.length) {
   for (const problem of problems) console.error(`  FAIL ${problem}`);

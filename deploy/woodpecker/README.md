@@ -9,6 +9,10 @@ Woodpecker CI checks every push and pull request, without a second server:
 Pipelines run while the PC is on. Otherwise they wait in the queue (pending on GitHub) and start
 when the agent is back.
 
+GitHub Actions runs the same checks on GitHub's runners, through the same `ci/` scripts, and
+Woodpecker alone deploys: `ci/README.md` describes both CIs, the shared scripts and the parity
+check between them.
+
 ```
 GitHub ──webhooks──► Caddy :443 (production) ──► woodpecker-server 127.0.0.1:8030 (SQLite)
        ◄─statuses───                                  │ gRPC 127.0.0.1:9030
@@ -384,7 +388,7 @@ Three crons (plan Phase 13), added in the repository's Woodpecker settings → *
 | Cron | Runs | What runs |
 |---|---|---|
 | `nightly` | daily | `server` (the property tests with a random `FC_SEED`), `client` (the visual baselines refreshed, then Firefox and WebKit), `repo`, `images`, `security` |
-| `weekly` | Mondays | `weekly.yaml`: gitleaks over the whole history, `pnpm outdated` (a report), Woodpecker's version against its latest release |
+| `weekly` | Mondays | `weekly.yaml`: gitleaks over the whole history, `pnpm outdated` (a report), Woodpecker's version against its latest release, and each GitHub action's pin against its version and latest release (`ci/action-pins.mjs`) |
 | `prod-smoke` | daily | `prod-smoke.yaml`: read-only requests to the live site (`ci/prod-smoke.sh`) |
 
 - Each workflow's `when` names its cron (`cron: nightly`), so a cron starts only its own
