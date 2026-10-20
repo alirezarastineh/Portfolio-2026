@@ -149,11 +149,14 @@ interface RunView {
 }
 const read = async (id: string) =>
   (await (await admin.get(`/admin/assistant/runs/${id}`)).json()) as RunView;
+// A run works in the background: 15 s, as content-work.db.spec.ts waits for one. A
+// loaded CI agent runs the db specs several times slower, and 3 s timed out twice
+// beside the nightly's e2e (Woodpecker #101).
 const until = (id: string, test: (view: RunView) => boolean) =>
   eventually(async () => {
     const view = await read(id);
     return test(view) ? view : undefined;
-  });
+  }, 15_000);
 
 const verdicts = async () =>
   new Map(

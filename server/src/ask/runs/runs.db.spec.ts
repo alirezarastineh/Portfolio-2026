@@ -155,11 +155,13 @@ async function read(id: string): Promise<RunView> {
   return (await (await admin.get(`/admin/assistant/runs/${id}`)).json()) as RunView;
 }
 
+// A run works in the background: 15 s, as nightly-judge.db.spec.ts waits for one,
+// since a loaded CI agent runs the db specs several times slower.
 const until = (id: string, test: (view: RunView) => boolean) =>
   eventually(async () => {
     const view = await read(id);
     return test(view) ? view : undefined;
-  });
+  }, 15_000);
 
 describe("background eval runs", () => {
   it("runs without the request, saving every case with its result and cost", async () => {
