@@ -31,8 +31,14 @@ if [ -f "$dest/playwright-report/index.html" ]; then
 fi
 # A pull request's screenshots against main's (plan Phase 10): no traces, so
 # the file opens directly, each difference with its expected, actual and diff.
+# A comparison writes its report whether anything changed or not: Playwright's
+# .last-run.json says which.
 if [ -f "$dest/playwright-report/visual/index.html" ]; then
-  printf 'visual changes: %s\\playwright-report\\visual\\index.html\n' "$windows"
+  if grep -q '"status": "passed"' "$dest/test-results/visual/.last-run.json" 2> /dev/null; then
+    printf 'visual report, no change: %s\\playwright-report\\visual\\index.html\n' "$windows"
+  else
+    printf 'visual changes: %s\\playwright-report\\visual\\index.html\n' "$windows"
+  fi
 fi
 if [ -f "$dest/playwright-report/cross-browser/index.html" ]; then
   printf 'Firefox and WebKit, from client/: npx playwright show-report "%s\\playwright-report\\cross-browser"\n' "$windows"
