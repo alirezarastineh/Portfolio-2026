@@ -1,0 +1,49 @@
+# The daily smoke test of the live site (the GitHub Actions plan, Phase 8):
+# Woodpecker's prod-smoke.yaml on GitHub's runners, at 18:43 UTC, about 12 hours
+# from Woodpecker's (09:00 local). Read-only requests from outside, as a
+# visitor's (ci/prod-smoke.sh). A failed run emails the owner through GitHub's
+# own notifications.
+#
+# A manual run with `notify_test` fails its first step on purpose, as
+# Woodpecker's NOTIFY_TEST=1 does: GitHub's failure email then proves the path
+# end to end.
+name: prod-smoke
+
+on:
+  # An odd minute: GitHub delays schedules at the top of the hour, under load.
+  schedule:
+    - cron: "43 18 * * *"
+  workflow_dispatch:
+    inputs:
+      notify_test:
+        description: Fail on purpose, to test the failure email
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One run at a time per event, never cancelled.
+concurrency:
+  group: prod-smoke-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  live:
+    name: live
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: notify-test
+        if: ${{ inputs.notify_test }}
+        run: |
+          echo "notify_test is set, so this step fails on purpose and GitHub emails the failure"
+          exit 1
+
+      - name: live
+        run: bash ci/prod-smoke.sh

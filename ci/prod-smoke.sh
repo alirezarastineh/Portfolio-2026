@@ -2,7 +2,9 @@
 # The daily smoke test of the live site (plan Phase 13, .woodpecker/prod-smoke.yaml):
 # what a visitor or a crawler gets from outside, through Caddy. Read-only: no
 # session, no model call, nothing written. Like verify-deploy.sh, it reports
-# every failure in one run.
+# every failure in one run. GitHub's prod-smoke.yml runs it too (the GitHub
+# Actions plan, Phase 8): there each failed check and the result also go on the
+# run's page, which reads without a login, and in the job's summary.
 #   bash ci/prod-smoke.sh [site] [api]
 set -uo pipefail
 
@@ -11,8 +13,15 @@ API="${2:-https://api.alirezarastineh.me}"
 FAILURES=0
 CHECKS=0
 
+on_github() { [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; }
 pass() { echo "  ok    $1"; CHECKS=$((CHECKS + 1)); }
-fail() { echo "  FAIL  $1"; CHECKS=$((CHECKS + 1)); FAILURES=$((FAILURES + 1)); }
+fail() {
+  echo "  FAIL  $1"
+  CHECKS=$((CHECKS + 1))
+  FAILURES=$((FAILURES + 1))
+  # Workflow commands escape % in their message.
+  if on_github; then echo "::error title=live::${1//\%/%25}"; fi
+}
 # The body, the headers or the status of a request; empty or 000 when it fails.
 # Each waits 20 s at most, so a hung site fails the check instead of the step.
 body() { curl -fsS --max-time 20 "$@" 2>/dev/null || true; }
@@ -62,6 +71,11 @@ expect "the MCP endpoint answers a discovery" grep -qF '"supportedVersions"' <<<
 echo
 if [[ "${FAILURES}" -gt 0 ]]; then
   echo "Smoke test FAILED: ${FAILURES} of ${CHECKS} checks."
+  if on_github; then echo "- **live**: ${FAILURES} of ${CHECKS} checks failed" >> "${GITHUB_STEP_SUMMARY}"; fi
   exit 1
 fi
 echo "Smoke test passed: ${CHECKS} checks."
+if on_github; then
+  echo "::notice title=live::${CHECKS} checks passed on ${SITE} and ${API}"
+  echo "- **live**: ${CHECKS} checks passed on ${SITE} and ${API}" >> "${GITHUB_STEP_SUMMARY}"
+fi

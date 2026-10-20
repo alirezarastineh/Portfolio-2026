@@ -3,7 +3,10 @@
 # - gitleaks over the whole history: repo.yaml scans the working tree on every
 #   push, and a secret committed once lives on in git after it is removed;
 # - `pnpm outdated` in both packages, a report only: the owner does upgrades;
-# - Woodpecker's version against its latest release (ci/woodpecker-version.mjs).
+# - Woodpecker's version against its latest release (ci/woodpecker-version.mjs);
+# - each GitHub action's SHA against its version, and its latest release
+#   (ci/action-pins.mjs; the GitHub Actions plan, Phase 8).
+# GitHub's weekly.yml runs the same steps, plus `inactivity`.
 when:
   - event: cron
     cron: weekly
@@ -43,10 +46,18 @@ steps:
     commands:
       - node ci/woodpecker-version.mjs
 
+  # A SHA that isn't its version's commit fails, and so does a newer release
+  # once two weeks old.
+  - name: action-pins
+    image: *ci
+    depends_on: []
+    commands:
+      - node ci/action-pins.mjs
+
   # On a failure, the owner's email (plan Phase 13, ci/notify.mjs).
   - name: email
     image: *ci
-    depends_on: [history, outdated, woodpecker]
+    depends_on: [history, outdated, woodpecker, action-pins]
     when:
       - event: [push, cron, deployment]
         status: [failure]

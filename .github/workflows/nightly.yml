@@ -1,11 +1,16 @@
-# The nightly run (the GitHub Actions plan, Phase 5): Woodpecker's `nightly`
-# cron, as one workflow that calls the check workflows with `nightly: true`,
-# which the shared scripts read as a cron run: the visual set taken afresh, and
-# Firefox and WebKit. Manual only for now (Actions → nightly → Run workflow);
-# Phase 8 adds the schedule and the other four workflows.
+# The nightly run (the GitHub Actions plan, Phases 5 and 8): Woodpecker's
+# `nightly` cron, as one workflow that calls the five check workflows with
+# `nightly: true`, which the shared scripts read as a cron run: a random,
+# printed FC_SEED for the server's property tests, the visual set taken afresh,
+# Firefox and WebKit, and the security checks in full. Daily at 01:17 UTC
+# (Woodpecker's runs at 02:30 local), and by hand: Actions → nightly → Run
+# workflow. A failed run emails the owner through GitHub's own notifications.
 name: nightly
 
 on:
+  # An odd minute: GitHub delays schedules at the top of the hour, under load.
+  schedule:
+    - cron: "17 1 * * *"
   workflow_dispatch:
 
 permissions:
@@ -17,8 +22,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  server:
+    name: server
+    uses: ./.github/workflows/server.yml
+    with:
+      nightly: true
+
   client:
     name: client
     uses: ./.github/workflows/client.yml
+    with:
+      nightly: true
+
+  repo:
+    name: repo
+    uses: ./.github/workflows/repo.yml
+    with:
+      nightly: true
+
+  images:
+    name: images
+    uses: ./.github/workflows/images.yml
+    with:
+      nightly: true
+
+  security:
+    name: security
+    uses: ./.github/workflows/security.yml
     with:
       nightly: true
