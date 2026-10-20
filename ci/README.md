@@ -3,14 +3,13 @@
 Two CIs run the same checks on every push to `main` and every pull request:
 
 - **Woodpecker** (`.woodpecker/`): its server runs on the production host and its agent on the
-  owner's PC (`deploy/woodpecker/README.md`). It gates the work, deploys `main`, and emails
-  failures through Resend.
+  owner's PC (`deploy/woodpecker/README.md`). It emails failures through Resend.
 - **GitHub Actions** runs the same checks on GitHub's runners (`.github/workflows/`), whether the
   PC is on or not, and emails failures through GitHub's own notifications.
 
-Woodpecker alone deploys. `ci/deploy-guard.mjs` reads only Woodpecker's statuses
-(`ci/woodpecker/push/*`) from `main`'s combined status. GitHub's results are check runs, which
-that status leaves out, so they never block or allow a deploy.
+**Either deploys,** by hand, through the same steps (`ci/deploy.sh`) and production's same forced
+command ("Deploys" below). Each deploy's guard (`ci/deploy-guard.mjs`) trusts only its own CI's
+checks on `main`'s tip, so GitHub can deploy, and check, with Woodpecker switched off.
 
 ## One set of checks
 
@@ -29,7 +28,8 @@ One-liners (`eslint .`, the typechecks) stay inline in both.
 | the `nightly` cron | `nightly.yml` | calls the five above with `nightly: true` | daily |
 | `weekly.yaml` | `weekly.yml` | `weekly`: gitleaks over the history, `pnpm outdated`, Woodpecker's version, the action pins, `inactivity` (GitHub) | Mondays |
 | `prod-smoke.yaml` | `prod-smoke.yml` | `live`: read-only requests to the live site | daily |
-| `ci-image.yaml`, `deploy.yaml` | none | Woodpecker's CI image and the deploy | |
+| `deploy.yaml` | `deploy.yml` | `deploy`: `guard`, `images`, `rollout`, `latest` | by hand |
+| `ci-image.yaml` | none | Woodpecker's CI image; GitHub's jobs install their own tools | |
 
 The scripts read Woodpecker's variable names (`CI_PIPELINE_EVENT`, `CI_COMMIT_BRANCH`,
 `CI_COMMIT_SHA`, `CI_PIPELINE_NUMBER`); each GitHub workflow sets them from its own context, a
@@ -45,7 +45,7 @@ Everything else blocks.
 definitions drift:
 - a check step (a lower-case step name) is in one twin only, apart from each CI's short list of its
   own: Woodpecker's `owner`, `wait-pg`, `pw-version`, `reports`, `untag` and `email`, GitHub's
-  `inactivity`;
+  `inactivity`. `ci-image` is Woodpecker's alone, by design;
 - an image both CIs name is pinned to a different tag or digest;
 - a GitHub action isn't pinned to a full commit SHA with its version in a comment;
 - the twins' pull request path filters differ, each CI's own files aside.
@@ -106,6 +106,59 @@ twins, with the same image pin. The parity check fails until both have it.
   a manual run, whoever started it.
 - **The test,** in either: a manual `prod-smoke` with `notify_test` ticked (GitHub) or the variable
   `NOTIFY_TEST=1` (Woodpecker) fails its first step on purpose, so one email arrives.
+
+## Deploys
+
+Either CI deploys `main`'s tip by hand, once its own checks on that commit are green:
+- **GitHub:** Actions → `deploy` → **Run workflow**, on `main` (`.github/workflows/deploy.yml`).
+- **Woodpecker:** **Deploy** on the commit's pipeline, target `production`
+  (`.woodpecker/deploy.yaml`; `deploy/woodpecker/README.md`, "Deploys").
+
+Both run the same steps, and a failure skips the rest:
+1. **`guard`** (`ci/deploy-guard.mjs`): the commit is `main`'s tip, and every check of the deploying
+   CI on it passed: GitHub's workflow runs of the push, or Woodpecker's statuses.
+2. **`images`** (`ci/deploy.sh`): both images built and pushed to
+   `ghcr.io/alirezarastineh/portfolio-2026/{api,client}:<sha>`, then checked to be public, since
+   production pulls them without logging in.
+3. **`rollout`:** SSH to production, whose forced command `deploy/hetzner/ci-deploy.sh`
+   fast-forwards its checkout to the commit and runs `deploy/hetzner/rollout.sh` as a systemd unit:
+   the backup, the API, the client once the API is healthy, `verify-deploy.sh`. Production runs one
+   deploy at a time.
+4. **`latest`:** `:latest` names what production runs from then on.
+
+**Rolling back:** revert the commit on `main`, push, and deploy once its checks are green.
+
+### GitHub's deploy, one-time setup
+1. **The environment:** Settings → Environments → **New environment** `production`; under
+   "Deployment branches and tags", **Selected branches and tags**, and add `main`. Only a run on
+   `main` then sees its secrets.
+2. **A deploy key of GitHub's own,** so each CI's key can be revoked alone:
+   `ssh-keygen -t ed25519 -N '' -C github-deploy -f github-deploy`. On production, as root, add the
+   public key as one line with the same forced command as Woodpecker's:
+   `restrict,command="bash /root/Portfolio-2026/deploy/hetzner/ci-deploy.sh" ssh-ed25519 AAAA… github-deploy`.
+   Any other command then gets `usage: deploy <40-character commit sha>`, never a shell.
+3. **The environment's secrets:** `DEPLOY_SSH_KEY` (the private key, then delete its file),
+   `DEPLOY_KNOWN_HOSTS` (production's `known_hosts` line, as Woodpecker's `deploy_known_hosts`),
+   `DEPLOY_HOST` (production's address, as in that line), `DEPLOY_USER` (`root`).
+4. **The packages:** the workflow pushes with its own token, so each package must let this
+   repository's Actions write: GitHub → Packages → `portfolio-2026/api` → Package settings →
+   **Manage Actions access** → add `Portfolio-2026` with the **Write** role; the same for
+   `portfolio-2026/client`.
+
+### Switching Woodpecker off, and on
+GitHub then checks, schedules and deploys alone. Nothing in the repository changes, and the parity
+check keeps both definitions in step, so Woodpecker can come back.
+- **Off:** in Woodpecker, Settings → Crons: untick **Enabled** on `nightly`, `weekly` and
+  `prod-smoke`; then Settings → Actions → **Disable repository**. On the PC, optionally:
+  `wsl.exe -d Ubuntu --exec docker compose -p woodpecker-agent stop` and
+  `Disable-ScheduledTask -TaskName 'WSL keep-alive (Woodpecker agent)'`.
+- **On:** the reverse (`Enable-ScheduledTask`, `Start-ScheduledTask`, `docker compose -p
+  woodpecker-agent start`, **Enable repository**, the crons ticked again: each must show its next
+  run, not "Disabled"). Woodpecker's deploy then needs a push to `main` first, since its guard
+  wants Woodpecker's own checks on `main`'s tip.
+- **While it's off,** GitHub's weekly still checks Woodpecker's version (`woodpecker`): it fails once
+  a newer release is two weeks old, until the three pins move (`deploy/woodpecker/README.md`,
+  "Upgrade").
 
 ## Action pins
 

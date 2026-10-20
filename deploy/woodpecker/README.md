@@ -9,9 +9,9 @@ Woodpecker CI checks every push and pull request, without a second server:
 Pipelines run while the PC is on. Otherwise they wait in the queue (pending on GitHub) and start
 when the agent is back.
 
-GitHub Actions runs the same checks on GitHub's runners, through the same `ci/` scripts, and
-Woodpecker alone deploys: `ci/README.md` describes both CIs, the shared scripts and the parity
-check between them.
+GitHub Actions runs the same checks on GitHub's runners, through the same `ci/` scripts, and can
+deploy too, so Woodpecker can be switched off: `ci/README.md` describes both CIs, the shared
+scripts, the parity check between them, and how to switch Woodpecker off and on.
 
 ```
 GitHub ──webhooks──► Caddy :443 (production) ──► woodpecker-server 127.0.0.1:8030 (SQLite)
@@ -304,6 +304,10 @@ it the script runs as before.
 that commit's pipeline: **Deploy**, target `production`, task empty. Woodpecker shows the button
 on successful pipelines once **Allow Deployments** is on in the repository's settings. Deploy only
 main's newest pipeline: the first step refuses any other, and so does production.
+
+GitHub Actions deploys the same way, with Woodpecker on or off: `.github/workflows/deploy.yml`, from
+the Actions tab (`ci/README.md`, "Deploys"). Both run `ci/deploy.sh` for the images, the rollout and
+`:latest`, and the same forced command on production.
 
 The steps run in order, and a failure skips the rest:
 1. **`guard`** (`ci/deploy-guard.mjs`): the target is `production`, the commit is main's tip, and

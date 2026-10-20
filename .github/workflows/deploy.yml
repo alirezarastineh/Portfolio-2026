@@ -1,0 +1,79 @@
+# Deploys a green main commit to production (the GitHub Actions plan, Part E):
+# Woodpecker's deploy.yaml on GitHub's runners, so a deploy needs neither the PC
+# nor Woodpecker. Start it by hand: Actions → deploy → Run workflow, on main.
+# The steps run in order, and a failure skips the rest:
+# 1. guard: main's tip only, and only once every GitHub check of its push passed
+#    (ci/deploy-guard.mjs);
+# 2. images: both images built on the runner, pushed to GHCR and checked to be
+#    public (ci/deploy.sh);
+# 3. rollout: production's forced command (deploy/hetzner/ci-deploy.sh), which
+#    fast-forwards its checkout to this commit and runs rollout.sh;
+# 4. latest: `:latest` names what production runs from then on.
+# The SSH values are secrets of the environment `production`, which only main
+# may use; GHCR takes the workflow's own token (ci/README.md, "Deploys"). A
+# failed deploy emails the owner through GitHub's notifications.
+name: deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time, never cancelled: production refuses a second one while
+# the first runs, too.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+# Woodpecker's names, which the shared scripts read: this run is a deployment
+# to production of the commit it started on.
+env:
+  CI_PIPELINE_EVENT: deployment
+  CI_PIPELINE_DEPLOY_TARGET: production
+  CI_COMMIT_BRANCH: ${{ github.ref_name }}
+  CI_COMMIT_SHA: ${{ github.sha }}
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      contents: read
+      actions: read # the guard reads the push's workflow runs
+      packages: write # `images` and `latest` push to GHCR
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: guard
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node ci/deploy-guard.mjs
+
+      # On the runner's Docker, whose default builder pushes as it builds.
+      - name: images
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: sh ci/deploy.sh images
+
+      - name: rollout
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: sh ci/deploy.sh rollout
+
+      - name: latest
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: sh ci/deploy.sh latest

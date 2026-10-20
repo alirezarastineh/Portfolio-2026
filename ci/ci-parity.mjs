@@ -35,9 +35,10 @@ const ONLY = {
 // has one, the check fails until it leaves this list, so none stays here by
 // mistake. Empty since Phase 5 brought client's visual and cross-browser.
 const PENDING = {};
-// Woodpecker's workflows that GitHub never twins: its CI image, and the deploy,
-// which Woodpecker alone runs (the GitHub Actions plan, decision 1).
-const WOODPECKER_ONLY = new Set(["ci-image", "deploy"]);
+// Woodpecker's workflows that GitHub never twins: its CI image, which GitHub's
+// jobs don't need (each installs its own tools). The deploy has a twin since
+// Part E of the GitHub Actions plan.
+const WOODPECKER_ONLY = new Set(["ci-image"]);
 // Paths in a pull request filter that only one CI's steps read.
 const ONLY_PATHS = [
   /^\.woodpecker\//,

@@ -15,7 +15,8 @@
 # 4. latest: `:latest` names what production runs from then on.
 # The secrets are the deployment event's alone (deploy/woodpecker/README.md,
 # "Deploys"). Woodpecker posts no GitHub status for a deployment started in
-# its UI: the result is in the UI.
+# its UI: the result is in the UI. Steps 2–4 run ci/deploy.sh, which GitHub's
+# deploy.yml calls too (the GitHub Actions plan, Part E).
 when:
   - event: deployment
     evaluate: 'CI_PIPELINE_DEPLOY_TARGET == "production"'
@@ -35,43 +36,17 @@ steps:
       - node ci/deploy-guard.mjs
 
   # As images.yaml builds them, through the agent's Docker and its warm cache,
-  # then pushed under the commit's tag. The client gets production's public
-  # values (deploy/hetzner/client-public.env); the API reads its secrets at run
-  # time, so neither image holds one. The source label links each package to
-  # the repository on GitHub.
+  # then pushed under the commit's tag, and checked to be public (ci/deploy.sh).
   - name: images
     image: *docker
     volumes: [*socket]
     environment:
-      REGISTRY: *registry
-      SOURCE: https://github.com/alirezarastineh/Portfolio-2026
       GHCR_TOKEN: *ghcr-token
     commands:
-      - printf '%s' "$${GHCR_TOKEN}" | docker login ghcr.io --username alirezarastineh --password-stdin
-      - >-
-        docker buildx build --push --tag "$${REGISTRY}/api:$${CI_COMMIT_SHA}"
-        --label "org.opencontainers.image.source=$${SOURCE}" server
-      - set -a && . deploy/hetzner/client-public.env && set +a
-      - >-
-        docker buildx build --push --tag "$${REGISTRY}/client:$${CI_COMMIT_SHA}"
-        --label "org.opencontainers.image.source=$${SOURCE}"
-        --build-arg VITE_API_BASE_URL --build-arg VITE_SENTRY_DSN
-        --build-arg VITE_UMAMI_SRC --build-arg VITE_UMAMI_WEBSITE_ID
-        --build-arg VITE_TURNSTILE_SITE_KEY --build-arg API_INTERNAL_BASE_URL=http://api:3000
-        client
-      - docker logout ghcr.io
-      # Production pulls without logging in, so both packages must be public.
-      # The first push creates them private: make them public then
-      # (deploy/woodpecker/README.md, "Deploys"), and deploy again.
-      - >-
-        for image in api client; do DOCKER_CONFIG=$$(mktemp -d) docker buildx imagetools inspect
-        "$${REGISTRY}/$${image}:$${CI_COMMIT_SHA}" > /dev/null
-        || { echo "$${image} is private, and production can't pull it: make the package public, then deploy again"; exit 1; }; done
+      - sh ci/deploy.sh images
 
-  # The key can run one command on production, ci-deploy.sh, which reads the
-  # commit from `deploy <sha>`. The rollout runs there as a systemd unit, so a
-  # connection that drops here never cuts it off halfway; this step follows its
-  # log and ends with its exit status.
+  # Over SSH, production's forced command, ci-deploy.sh; the rollout runs there
+  # as a systemd unit, and this step follows its log (ci/deploy.sh).
   - name: rollout
     image: *docker
     environment:
@@ -84,28 +59,15 @@ steps:
       DEPLOY_USER:
         from_secret: deploy_user
     commands:
-      - umask 077 && mkdir -p /tmp/ssh
-      - printf '%s\n' "$${DEPLOY_SSH_KEY}" > /tmp/ssh/key
-      - printf '%s\n' "$${DEPLOY_KNOWN_HOSTS}" > /tmp/ssh/known_hosts
-      - >-
-        ssh -i /tmp/ssh/key -o IdentitiesOnly=yes -o BatchMode=yes
-        -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/ssh/known_hosts
-        -o ServerAliveInterval=15 -o ServerAliveCountMax=4
-        "$${DEPLOY_USER}@$${DEPLOY_HOST}" deploy "$${CI_COMMIT_SHA}"
+      - sh ci/deploy.sh rollout
 
-  # In the registry alone, nothing downloaded: `:latest` follows production,
-  # never a build that failed to roll out. Nothing pulls it.
+  # `:latest` names what production runs from then on (ci/deploy.sh).
   - name: latest
     image: *docker
     environment:
-      REGISTRY: *registry
       GHCR_TOKEN: *ghcr-token
     commands:
-      - printf '%s' "$${GHCR_TOKEN}" | docker login ghcr.io --username alirezarastineh --password-stdin
-      - >-
-        for image in api client; do docker buildx imagetools create
-        --tag "$${REGISTRY}/$${image}:latest" "$${REGISTRY}/$${image}:$${CI_COMMIT_SHA}"; done
-      - docker logout ghcr.io
+      - sh ci/deploy.sh latest
 
   # Pass or fail: the build left both images tagged on the agent.
   # agent-cleanup.sh removes what a canceled run leaves.
