@@ -22,6 +22,8 @@ port=$((20000 + pipeline % 1000 * 10))
 secret() { od -An -N16 -tx1 /dev/urandom | tr -d ' \n'; }
 password=$(secret)
 token=$(secret)
+# verify-deploy.sh's output, kept for GitHub's annotations below.
+verify_out=$(mktemp)
 
 # A throwaway .env, which compose and verify-deploy.sh read as production's.
 cat > .env << EOF
@@ -43,13 +45,29 @@ SERVER_AI_ENABLED=false
 EOF
 
 compose() { docker compose --env-file .env -f deploy/hetzner/docker-compose.yml -f ci/compose.ci.yml "$@"; }
+# On GitHub Actions (the GitHub Actions plan, Phase 6) the outcome also goes on
+# the run's page, which reads without a login: the checks passed, or the cause of
+# a failure, which is verify-deploy.sh's failed checks or else the API's error.
+on_github() { [ -n "${GITHUB_STEP_SUMMARY:-}" ]; }
+# The API's last logged error: a thrown error's `cause:`, else its header
+# (`DrizzleQueryError: …`), never the fields Node prints after it.
+api_error() {
+  compose logs --no-color api 2> /dev/null | grep -E 'cause: |[A-Za-z]+Error: ' | tail -1 |
+    sed -E 's/^[^|]*\| *//' | cut -c1-300
+}
 finish() {
   local status=$?
   if [ "$status" -ne 0 ]; then
     echo "== the stack's last log lines"
     compose logs --no-color --tail 60 db api client || true
+    if on_github && grep -q '^  FAIL ' "$verify_out"; then
+      grep '^  FAIL ' "$verify_out" | head -10 | sed 's/^  FAIL  */::error title=smoke::/'
+    elif on_github; then
+      echo "::error title=smoke::failed before verify-deploy.sh's checks; the API logged: $(api_error || true)"
+    fi
   fi
   compose down --volumes --remove-orphans --timeout 5 > /dev/null 2>&1 || true
+  rm -f "$verify_out"
   exit "$status"
 }
 trap finish EXIT
@@ -79,5 +97,10 @@ echo "seeded in $((SECONDS - start)) s"
 
 echo "== verify-deploy.sh"
 start=$SECONDS
-VERIFY_CI=1 bash deploy/hetzner/verify-deploy.sh
+VERIFY_CI=1 bash deploy/hetzner/verify-deploy.sh | tee "$verify_out"
 echo "verified in $((SECONDS - start)) s"
+if on_github; then
+  passed=$(grep -c '^  ok ' "$verify_out" || true)
+  echo "::notice title=smoke::verify-deploy.sh: $passed checks passed (VERIFY_CI skips pgAdmin and the edge)"
+  echo "- **smoke**: verify-deploy.sh, $passed checks passed" >> "$GITHUB_STEP_SUMMARY"
+fi

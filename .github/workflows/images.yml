@@ -86,12 +86,13 @@ jobs:
           ci/images.sh sbom
 
       # Known vulnerabilities that have a fix, read from the SBOMs: every HIGH is
-      # listed, and a CRITICAL fails the step.
+      # listed, and a CRITICAL fails the step. GITHUB_ACTIONS lets ci/images.sh
+      # put each CRITICAL on the run's page.
       - name: vulnerabilities
         if: ${{ !cancelled() && steps.sbom.outcome == 'success' }}
         run: >-
           docker run --rm --entrypoint sh --volume "$PWD:/repo" --workdir /repo
-          --volume "$RUNNER_TEMP/trivy:/trivy-cache" --env CI_COMMIT_SHA
+          --volume "$RUNNER_TEMP/trivy:/trivy-cache" --env CI_COMMIT_SHA --env GITHUB_ACTIONS
           aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
           ci/images.sh vulnerabilities
 

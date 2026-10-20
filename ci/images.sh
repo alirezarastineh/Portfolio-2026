@@ -10,6 +10,18 @@ sha=${CI_COMMIT_SHA:?}
 # TRIVY_CACHE, or Woodpecker's /trivy-cache. A stale one is downloaded again
 # (128 MB).
 cache=${TRIVY_CACHE:-/trivy-cache}
+# On GitHub Actions (the GitHub Actions plan, Phase 6), each CRITICAL also goes
+# on the run's page as an error, which reads without a login. Trivy's image
+# gets GITHUB_ACTIONS there, and nothing else of the runner's.
+annotate_critical() {
+  if [ "${GITHUB_ACTIONS:-}" != true ]; then return 0; fi
+  trivy sbom --cache-dir "$cache" --skip-version-check --quiet --severity CRITICAL \
+    --ignore-unfixed --format template --template \
+    '{{range .}}{{range .Vulnerabilities}}{{.VulnerabilityID}} in {{.PkgName}} {{.InstalledVersion}}, fixed in {{.FixedVersion}}{{"\n"}}{{end}}{{end}}' \
+    "sbom/$1.cdx.json" | while IFS= read -r finding; do
+    if [ -n "$finding" ]; then echo "::error title=vulnerabilities::$1: $finding"; fi
+  done
+}
 
 case "${1:-}" in
   api)
@@ -47,8 +59,11 @@ case "${1:-}" in
     done
     for image in api client; do
       trivy sbom --cache-dir "$cache" --skip-version-check --quiet --severity CRITICAL \
-        --ignore-unfixed --exit-code 1 "sbom/$image.cdx.json" > /dev/null ||
-        { echo "$image: a CRITICAL vulnerability, listed above"; exit 1; }
+        --ignore-unfixed --exit-code 1 "sbom/$image.cdx.json" > /dev/null || {
+        echo "$image: a CRITICAL vulnerability, listed above"
+        annotate_critical "$image"
+        exit 1
+      }
     done
     ;;
   *)
