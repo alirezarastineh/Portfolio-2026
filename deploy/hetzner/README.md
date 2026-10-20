@@ -54,6 +54,9 @@ pgAdmin's own login. This uses Caddy's `basic_auth` directive (Caddy 2.8+). The
 DNS A record for that hostname must point to the Hetzner server; the container
 port remains private to the host.
 
+Keep `X-Frame-Options` set to `SAMEORIGIN` in the pgAdmin site block. pgAdmin
+renders editor panels in same-origin frames, which `DENY` would block.
+
 On the server, create a separate Caddy password. `caddy hash-password` prompts
 without echoing the password; keep the generated hash, not the plaintext:
 
