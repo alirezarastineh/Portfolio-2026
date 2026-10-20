@@ -69,7 +69,7 @@ jobs:
         with:
           version: 11.0.0
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -132,7 +132,7 @@ jobs:
         with:
           version: 11.0.0
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -151,7 +151,7 @@ jobs:
       # The HTML report, pass or fail, as Woodpecker's `reports` saves it.
       - name: Upload coverage
         if: ${{ !cancelled() && steps.unit.outcome != 'skipped' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: client-coverage
           path: client/coverage/
@@ -177,7 +177,7 @@ jobs:
         with:
           version: 11.0.0
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -227,7 +227,7 @@ jobs:
         run: tar -cf "$RUNNER_TEMP/client-dist.tar" dist
 
       - name: Upload the build
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: client-dist
           path: ${{ runner.temp }}/client-dist.tar
@@ -251,7 +251,7 @@ jobs:
         with:
           version: 11.0.0
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -262,7 +262,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download the build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: client-dist
           path: ${{ runner.temp }}
@@ -293,7 +293,7 @@ jobs:
       # The HTML report and the traces of failures, pass or fail.
       - name: Upload the e2e report
         if: ${{ !cancelled() && steps.e2e.outcome != 'skipped' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-report
           path: |
@@ -319,7 +319,7 @@ jobs:
         with:
           version: 11.0.0
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -330,7 +330,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download the build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: client-dist
           path: ${{ runner.temp }}
@@ -362,7 +362,7 @@ jobs:
       # leaves out unless told.
       - name: Upload the Lighthouse reports
         if: ${{ !cancelled() && steps.lighthouse.outcome != 'skipped' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: lighthouse
           path: client/.lighthouseci/
@@ -392,7 +392,7 @@ jobs:
         with:
           version: 11.0.0
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -403,7 +403,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download the build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: client-dist
           path: ${{ runner.temp }}
@@ -464,7 +464,7 @@ jobs:
       # that shows them side by side.
       - name: Upload the visual diff
         if: ${{ github.event_name == 'pull_request' && steps.visual.outcome == 'failure' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: visual-diff
           path: |
@@ -498,7 +498,7 @@ jobs:
         with:
           version: 11.0.0
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -509,7 +509,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download the build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: client-dist
           path: ${{ runner.temp }}
@@ -545,7 +545,7 @@ jobs:
       # The HTML report and the traces of failures, pass or fail.
       - name: Upload the cross-browser report
         if: ${{ !cancelled() && steps.cross-browser.outcome != 'skipped' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cross-browser-${{ matrix.browser }}
           path: |
