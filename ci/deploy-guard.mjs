@@ -6,7 +6,8 @@
 // from GitHub's public API without a token (60 calls an hour).
 // GitHub's deploy.yml runs it too (the GitHub Actions plan, Part E): there the
 // checks are GitHub's own, the workflow runs main's push started, read with the
-// workflow's token.
+// workflow's token, and the verdict also goes on the run's page, which reads
+// without a login.
 //
 // Usage: node ci/deploy-guard.mjs (reads Woodpecker's CI_* variables)
 const repo = process.env.CI_REPO || "alirezarastineh/Portfolio-2026";
@@ -20,9 +21,21 @@ const {
 // change, and count whenever they ran.
 const REQUIRED = ["server", "client", "repo", "images"];
 const PREFIX = "ci/woodpecker/push/";
+const onGitHub = process.env.GITHUB_ACTIONS === "true";
+
+/** On GitHub, an annotation; workflow commands escape %, CR and LF. */
+function annotate(level, line) {
+  if (!onGitHub) return;
+  const message = line
+    .replaceAll("%", "%25")
+    .replaceAll("\r", "%0D")
+    .replaceAll("\n", "%0A");
+  console.log(`::${level} title=guard::${message}`);
+}
 
 function refuse(reason) {
   console.error(`deploy refused: ${reason}`);
+  annotate("error", `deploy refused: ${reason}`);
   process.exit(1);
 }
 
@@ -98,16 +111,13 @@ async function githubChecks() {
   );
 }
 
-const checks =
-  process.env.GITHUB_ACTIONS === "true"
-    ? await githubChecks()
-    : await woodpeckerChecks();
+const checks = onGitHub ? await githubChecks() : await woodpeckerChecks();
 const missing = REQUIRED.filter((name) => !checks.has(name));
 if (missing.length > 0) refuse(`no result for ${missing.join(", ")}`);
 const unfinished = [...checks].filter(([, state]) => state !== "success");
 if (unfinished.length > 0) {
   refuse(unfinished.map(([name, state]) => `${name} is ${state}`).join(", "));
 }
-console.log(
-  `deploying ${sha.slice(0, 7)}, main's tip; passed: ${[...checks.keys()].sort().join(", ")}`,
-);
+const verdict = `deploying ${sha.slice(0, 7)}, main's tip; passed: ${[...checks.keys()].sort().join(", ")}`;
+console.log(verdict);
+annotate("notice", verdict);

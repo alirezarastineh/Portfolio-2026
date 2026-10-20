@@ -3,12 +3,18 @@
 # Actions plan, Part E): what both CIs' deploy workflows run, from the repo
 # root, on the CI's Docker. GHCR_TOKEN may push to GHCR (Woodpecker: a classic
 # token with write:packages; GitHub: the workflow's own token), and the
-# DEPLOY_* values reach production's forced command.
+# DEPLOY_* values reach production's forced command. On GitHub Actions, each
+# step's result also goes on the run's page, which reads without a login.
 #   sh ci/deploy.sh <images|rollout|latest>
 set -eu
 cd "$(dirname "$0")/.."
 sha=${CI_COMMIT_SHA:?}
+short=$(printf %.7s "$sha")
 registry=ghcr.io/alirezarastineh/portfolio-2026
+
+github() { # level, message
+  if [ "${GITHUB_ACTIONS:-}" = true ]; then echo "::$1 title=$step::$2"; fi
+}
 
 # The token's check comes first: inside the pipe it would stop only the pipe's
 # own side, and docker login would run anyway.
@@ -17,7 +23,8 @@ login() {
   printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username alirezarastineh --password-stdin
 }
 
-case "${1:-}" in
+step=${1:-}
+case "$step" in
   # Both images, pushed under the commit's tag. The client gets production's
   # public values (deploy/hetzner/client-public.env); the API reads its secrets
   # at run time, so neither image holds one. The source label links each
@@ -38,9 +45,11 @@ case "${1:-}" in
     # The first push creates them private: make them public then
     # (deploy/woodpecker/README.md, "Deploys"), and deploy again.
     for image in api client; do
+      private="$image is private, and production can't pull it: make the package public, then deploy again"
       DOCKER_CONFIG=$(mktemp -d) docker buildx imagetools inspect "$registry/$image:$sha" > /dev/null ||
-        { echo "$image is private, and production can't pull it: make the package public, then deploy again"; exit 1; }
+        { echo "$private"; github error "$private"; exit 1; }
     done
+    github notice "pushed api and client at $short, both public"
     ;;
   # The key can run one command on production, ci-deploy.sh, which reads the
   # commit from `deploy <sha>`. The rollout runs there as a systemd unit, so a
@@ -50,10 +59,17 @@ case "${1:-}" in
     umask 077 && mkdir -p /tmp/ssh
     printf '%s\n' "${DEPLOY_SSH_KEY:?}" > /tmp/ssh/key
     printf '%s\n' "${DEPLOY_KNOWN_HOSTS:?}" > /tmp/ssh/known_hosts
+    status=0
     ssh -i /tmp/ssh/key -o IdentitiesOnly=yes -o BatchMode=yes \
       -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/ssh/known_hosts \
       -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
-      "${DEPLOY_USER:?}@${DEPLOY_HOST:?}" deploy "$sha"
+      "${DEPLOY_USER:?}@${DEPLOY_HOST:?}" deploy "$sha" || status=$?
+    if [ "$status" -eq 0 ]; then
+      github notice "production runs $short: rollout.sh and verify-deploy.sh passed"
+    else
+      github error "the rollout exited $status: its log is in production's journal (journalctl -u portfolio-deploy)"
+    fi
+    exit "$status"
     ;;
   # In the registry alone, nothing downloaded: `:latest` follows production,
   # never a build that failed to roll out. Nothing pulls it.
@@ -63,6 +79,7 @@ case "${1:-}" in
       docker buildx imagetools create --tag "$registry/$image:latest" "$registry/$image:$sha"
     done
     docker logout ghcr.io
+    github notice ":latest names $short, for both images"
     ;;
   *)
     echo "usage: sh ci/deploy.sh <images|rollout|latest>" >&2
