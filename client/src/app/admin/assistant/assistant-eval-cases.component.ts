@@ -15,7 +15,8 @@ import { sortCases, STALE_LABELS, type EvalCaseRow } from "../eval-cases";
 
 /**
  * The production eval cases: visitor answers frozen with the corpus as it was
- * (plan phase 12). They run with `pnpm -C server ai:eval --suite production`.
+ * (plan phase 12), after the questions asked before them, listed first (visitor
+ * plan V3). They run with `pnpm -C server ai:eval --suite production`.
  * Stale ones come first: a document they cite is gone or has changed since,
  * the quarterly review's list. A retired case stops running but keeps its
  * question and snapshot; deleting it removes the question, and the snapshot
@@ -40,6 +41,16 @@ import { sortCases, STALE_LABELS, type EvalCaseRow } from "../eval-cases";
               class="flex flex-col gap-1 rounded-lg border border-border p-3 text-sm"
               [class.opacity-60]="row.status === 'retired'"
             >
+              @if (row.turns?.length) {
+                <ol
+                  class="m-0 flex flex-col gap-0.5 pl-5 text-xs text-muted-foreground"
+                  aria-label="Asked before it"
+                >
+                  @for (turn of row.turns; track $index) {
+                    <li>{{ turn }}</li>
+                  }
+                </ol>
+              }
               <p class="m-0">{{ row.question }}</p>
               <p class="m-0 font-mono text-xs text-muted-foreground">
                 {{ row.locale.toUpperCase() }} · must cite

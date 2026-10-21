@@ -28,6 +28,7 @@ describe("eval cases in the admin", () => {
     const original = "Does Acme GmbH know Alireza?";
     const form = {
       question: ` ${original} `,
+      turns: [],
       mustCite: "profile@en, profile@en",
       mustInclude: "",
       personalChecked: true,
@@ -44,6 +45,39 @@ describe("eval cases in the admin", () => {
     expect(freezeRequest(original, { ...form, personalChecked: false })).toEqual({
       ok: false,
       error: "Confirm that nothing personal is left in the question",
+    });
+  });
+
+  it("sends the earlier questions kept, rewritten, and leaves out the emptied ones", () => {
+    const form = {
+      question: "What did Vesper achieve?",
+      turns: [" Tell me about Vesper. ", "", "  ", "Which stack did it use?"],
+      mustCite: "",
+      mustInclude: "",
+      personalChecked: true,
+    };
+    expect(freezeRequest(form.question, form)).toEqual({
+      ok: true,
+      body: {
+        turns: ["Tell me about Vesper.", "Which stack did it use?"],
+        mustCite: [],
+        mustInclude: [],
+        personalChecked: true,
+      },
+    });
+    // Every one emptied: a lone question again.
+    expect(freezeRequest(form.question, { ...form, turns: ["", " "] })).toEqual({
+      ok: true,
+      body: { mustCite: [], mustInclude: [], personalChecked: true },
+    });
+    expect(freezeRequest(form.question, { ...form, turns: ["ok"] })).toEqual({
+      ok: false,
+      error: "An earlier question needs at least 3 characters; empty it to leave it out",
+    });
+    // The admin's word covers every question kept.
+    expect(freezeRequest(form.question, { ...form, personalChecked: false })).toEqual({
+      ok: false,
+      error: "Confirm that nothing personal is left in the questions",
     });
   });
 

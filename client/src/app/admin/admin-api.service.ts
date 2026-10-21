@@ -645,6 +645,14 @@ export class AdminApiService {
     });
   }
 
+  /** The questions asked before a visitor's answer in its session, at most three, oldest first. */
+  earlierQuestions(messageId: string) {
+    return this.request<{ questions: string[] }>(
+      "GET",
+      `/admin/assistant/eval-cases/earlier/${encodeURIComponent(messageId)}`,
+    );
+  }
+
   /** Deletes a production eval case for good, its question with it. */
   deleteEvalCase(id: string) {
     return this.request<{ ok: true }>(

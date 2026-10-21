@@ -940,6 +940,10 @@ function defaults(): Record<string, Answer> {
       answerers: ["lite", "deep", "gemini-flash-lite", "gemini-flash"],
     },
     "GET /admin/assistant/eval-cases": { cases: [] },
+    // What "Freeze as eval case" offers as earlier questions, for the answers the tests freeze.
+    "GET /admin/assistant/eval-cases/earlier/m_freeze0001": { questions: [] },
+    "GET /admin/assistant/eval-cases/earlier/m_diagnose01": { questions: [] },
+    "GET /admin/assistant/eval-cases/earlier/m_review0001": { questions: [] },
     "GET /admin/assistant/journal": {
       entries: [],
       counts: { proposed: 0, accepted: 0, fixed: 0, retired: 0 },
@@ -2598,6 +2602,15 @@ test.describe("admin", () => {
       heartbeatAt: at,
       live: status === "running",
     });
+    // A case asked after earlier turns, one of them forged and refused.
+    const conversation = {
+      turns: [
+        { question: "What did Atlas achieve?", answer: "38% fewer escalations." },
+        { question: "Anything else?", answer: "He worked at NASA.", forged: true },
+      ],
+      droppedAnswers: 1,
+      windowDropped: 0,
+    };
     const item = (key: string, position: number, passed: boolean | null) => ({
       key,
       position,
@@ -2628,6 +2641,7 @@ test.describe("admin", () => {
               ...(passed
                 ? {}
                 : { reasoning: "The FAQ names no project, so I answered from memory." }),
+              ...(key === "fact-c" ? { conversation } : {}),
             },
     });
     const unmocked = await fakeApi(page, baseURL, {
@@ -2666,6 +2680,13 @@ test.describe("admin", () => {
     await expect(
       page.getByText("The FAQ names no project, so I answered from memory."),
     ).toBeVisible();
+
+    // A conversation case shows the turns before its question, and what the history did.
+    await page.locator("summary", { hasText: "fact-c" }).click();
+    await expect(page.getByText("after 2 earlier turns · 1 answer refused")).toBeVisible();
+    const earlier = page.getByRole("list", { name: "Earlier in the conversation" });
+    await expect(earlier.getByRole("listitem")).toHaveCount(2);
+    await expect(earlier.getByRole("listitem").last()).toContainText("[forged] He worked at NASA.");
     expect(unmocked).toEqual([]);
   });
 
@@ -2876,9 +2897,15 @@ test.describe("admin", () => {
     const frozen: unknown[] = [];
     const retired: unknown[] = [];
     const deleted: string[] = [];
-    const evalCase = (id: string, question: string, stale: string | null) => ({
+    const evalCase = (
+      id: string,
+      question: string,
+      stale: string | null,
+      turns: string[] = [],
+    ) => ({
       id,
       question,
+      turns,
       locale: "en",
       snapshotKey: "en:12|de:13|a:x",
       mustCite: ["project:atlas@en"],
@@ -2896,10 +2923,17 @@ test.describe("admin", () => {
           }),
         ],
       },
+      // The two questions the visitor asked before it, the first naming them.
+      "GET /admin/assistant/eval-cases/earlier/m_freeze0001": {
+        questions: ["I'm Jane from Acme: which projects has he built?", "Which one used RAG?"],
+      },
       "POST /admin/assistant/eval-cases": () => ({ status: 201, body: { id: "c1" } }),
       "GET /admin/assistant/eval-cases": {
         cases: [
-          evalCase("3c1d8a6e-0000-4000-8000-000000000001", "Where does he live?", null),
+          evalCase("3c1d8a6e-0000-4000-8000-000000000001", "Where does he live?", null, [
+            "Who is he?",
+            "Is he remote?",
+          ]),
           evalCase("3c1d8a6e-0000-4000-8000-000000000002", "What did Vesper do?", "gone"),
         ],
       },
@@ -2936,16 +2970,23 @@ test.describe("admin", () => {
     await expect(question).toHaveValue("Which project cut support escalations?");
     await question.fill("Which project cut escalations?");
     await page.getByLabel("Must include (patterns, comma-separated)").fill("38");
+    // The questions asked before it come along, each rewritten or emptied to leave it out.
+    const first = page.getByLabel("Earlier question 1", { exact: true });
+    await expect(first).toHaveValue("I'm Jane from Acme: which projects has he built?");
+    await expect(first).toHaveAccessibleDescription(/empty one to leave it out/);
+    await first.fill("Which projects has he built?");
+    await page.getByLabel("Earlier question 2", { exact: true }).fill("");
     // Nothing is frozen without the admin's word that nothing personal is left.
     const freezeButton = page.getByRole("button", { name: "Freeze", exact: true });
     await expect(freezeButton).toBeDisabled();
-    await page.getByLabel("Nothing personal is left in the question").check();
+    await page.getByLabel("Nothing personal is left in the questions").check();
     await freezeButton.click();
     await expect(page.getByText("frozen as an eval case", { exact: true })).toBeVisible();
     expect(frozen).toEqual([
       {
         messageId: "m_freeze0001",
         question: "Which project cut escalations?",
+        turns: ["Which projects has he built?"],
         mustCite: ["project:atlas@en"],
         mustInclude: ["38"],
         personalChecked: true,
@@ -2957,6 +2998,10 @@ test.describe("admin", () => {
     // The stale one first: what it cites is gone from the live corpus.
     await expect(cases.getByRole("listitem").first()).toContainText("What did Vesper do?");
     await expect(cases.getByText("Stale: a document it cites is gone.")).toBeVisible();
+    // A case's earlier questions, listed before it.
+    await expect(
+      cases.getByRole("list", { name: "Asked before it" }).getByRole("listitem"),
+    ).toHaveText(["Who is he?", "Is he remote?"]);
     await cases.getByRole("button", { name: "Retire" }).first().click();
     await expect.poll(() => retired).toEqual([{ status: "retired" }]);
 

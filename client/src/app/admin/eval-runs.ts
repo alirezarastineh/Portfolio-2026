@@ -1,4 +1,4 @@
-import type { EvalCaseResult, RunItem, RunRow } from "./assistant-types";
+import type { EvalCaseResult, EvalConversation, RunItem, RunRow } from "./assistant-types";
 
 /**
  * How the Evals tab reads background runs: whether one is still going, how far
@@ -61,4 +61,21 @@ export function compareRuns(a: readonly RunItem[], b: readonly RunItem[]): Compa
       return { id, a: va, b: vb, changed: va !== vb && va !== "not run" && vb !== "not run" };
     })
     .sort((x, y) => Number(y.changed) - Number(x.changed));
+}
+
+/**
+ * A conversation case's earlier turns in a line (visitor plan V3): how many,
+ * how many were answered live, and what the history did with them.
+ */
+export function conversationLine(c: EvalConversation): string {
+  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const parts = [`after ${count(c.turns.length, "earlier turn", "earlier turns")}`];
+  const live = c.turns.filter((t) => t.live).length;
+  if (live) parts.push(`${live} answered live`);
+  if (c.droppedAnswers === null) parts.push("stopped at a live turn");
+  else if (c.droppedAnswers) parts.push(`${count(c.droppedAnswers, "answer", "answers")} refused`);
+  if (c.windowDropped) {
+    parts.push(`${count(c.windowDropped, "question", "questions")} past the window`);
+  }
+  return parts.join(" · ");
 }

@@ -6,6 +6,8 @@
 export interface EvalCaseRow {
   id: string;
   question: string;
+  /** The questions asked before it, oldest first; absent from an API that predates them. */
+  turns?: string[];
   locale: "en" | "de";
   snapshotKey: string;
   mustCite: string[];
@@ -38,6 +40,8 @@ export function listInput(text: string): string[] {
 export interface FreezeBody {
   /** Only when the admin rewrote it: the server keeps the redacted question otherwise. */
   question?: string;
+  /** The earlier questions kept, oldest first, as the admin rewrote them (at most three). */
+  turns?: string[];
   mustCite: string[];
   mustInclude: string[];
   /** The admin's word that nothing personal is left: the server refuses a case without it. */
@@ -47,17 +51,33 @@ export interface FreezeBody {
 /** The freeze form as a request, or why it cannot be sent yet. */
 export function freezeRequest(
   original: string,
-  form: { question: string; mustCite: string; mustInclude: string; personalChecked: boolean },
+  form: {
+    question: string;
+    /** The session's earlier questions as edited; an emptied one is left out. */
+    turns: readonly string[];
+    mustCite: string;
+    mustInclude: string;
+    personalChecked: boolean;
+  },
 ): { ok: true; body: FreezeBody } | { ok: false; error: string } {
   const question = form.question.trim();
   if (question.length < 3) return { ok: false, error: "The question needs at least 3 characters" };
+  const turns = form.turns.map((turn) => turn.trim()).filter(Boolean);
+  if (turns.some((turn) => turn.length < 3)) {
+    return {
+      ok: false,
+      error: "An earlier question needs at least 3 characters; empty it to leave it out",
+    };
+  }
   if (!form.personalChecked) {
-    return { ok: false, error: "Confirm that nothing personal is left in the question" };
+    const which = turns.length ? "the questions" : "the question";
+    return { ok: false, error: `Confirm that nothing personal is left in ${which}` };
   }
   return {
     ok: true,
     body: {
       ...(question !== original.trim() ? { question } : {}),
+      ...(turns.length ? { turns } : {}),
       mustCite: listInput(form.mustCite),
       mustInclude: listInput(form.mustInclude),
       personalChecked: true,

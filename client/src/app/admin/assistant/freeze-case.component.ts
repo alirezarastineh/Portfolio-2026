@@ -26,8 +26,9 @@ const REFUSALS: Record<string, string> = {
 /**
  * "Freeze as eval case": a visitor's answer becomes a production eval case
  * that re-runs against the corpus as it was (plan phase 12). The case keeps
- * the redacted question, or the admin's rewrite of it; what it must cite
- * starts as what the answer cited.
+ * the redacted question, or the admin's rewrite of it, and up to three
+ * questions asked before it in the session (visitor plan V3), rewritten the
+ * same way; what it must cite starts as what the answer cited.
  */
 @Component({
   selector: "app-freeze-case",
@@ -44,7 +45,7 @@ const REFUSALS: Record<string, string> = {
         variant="outline"
         type="button"
         [attr.aria-describedby]="describedBy()"
-        (click)="open.set(true)"
+        (click)="openForm()"
       >
         Freeze as eval case
       </button>
@@ -54,6 +55,28 @@ const REFUSALS: Record<string, string> = {
         action="/admin/assistant"
         (submit)="$event.preventDefault(); freeze()"
       >
+        @if (earlier().length) {
+          <div class="flex flex-col gap-1">
+            <p [id]="'freeze-turns-hint-' + message().id" class="m-0 text-muted-foreground">
+              Asked before it in the session, oldest first. A replay answers them first; empty one
+              to leave it out.
+            </p>
+            @for (turn of earlier(); track $index) {
+              <label class="flex flex-col gap-1">
+                <span class="text-muted-foreground">Earlier question {{ $index + 1 }}</span>
+                <textarea
+                  [name]="'freeze-turn-' + $index"
+                  rows="2"
+                  maxlength="600"
+                  class="rounded-md border border-border bg-background px-2 py-1 text-foreground"
+                  [attr.aria-describedby]="'freeze-turns-hint-' + message().id"
+                  [ngModel]="turn"
+                  (ngModelChange)="setTurn($index, $event)"
+                ></textarea>
+              </label>
+            }
+          </div>
+        }
         <div class="flex flex-col gap-1">
           <label class="flex flex-col gap-1">
             <span class="text-muted-foreground">Question</span>
@@ -96,7 +119,7 @@ const REFUSALS: Record<string, string> = {
             [ngModel]="personalChecked()"
             (ngModelChange)="personalChecked.set($event)"
           />
-          <span>Nothing personal is left in the question</span>
+          <span>Nothing personal is left in the {{ keepsTurns() ? "questions" : "question" }}</span>
         </label>
         <div class="flex gap-2">
           <button
@@ -104,7 +127,7 @@ const REFUSALS: Record<string, string> = {
             size="sm"
             type="submit"
             [attr.aria-describedby]="describedBy()"
-            [disabled]="saving() || !personalChecked()"
+            [disabled]="saving() || loadingEarlier() || !personalChecked()"
           >
             Freeze
           </button>
@@ -142,6 +165,13 @@ export class FreezeCaseComponent {
   protected readonly mustInclude = signal("");
   /** The admin's word that nothing personal is left: Freeze waits for it. */
   protected readonly personalChecked = signal(false);
+  /** The session's questions before this answer, as the admin edits them. */
+  protected readonly earlier = signal<string[]>([]);
+  /** Freeze waits for them, or the case would leave them out unseen. */
+  protected readonly loadingEarlier = signal(false);
+  protected readonly keepsTurns = computed(() => this.earlier().some((turn) => turn.trim()));
+  /** The answer whose earlier questions were loaded: reopening the form keeps the edits. */
+  private earlierOf: string | null = null;
 
   constructor() {
     // Another answer (the Reviews pane keeps this one): start over, with its citations.
@@ -155,13 +185,39 @@ export class FreezeCaseComponent {
         this.mustCite.set(message.citedIds.join(", "));
         this.mustInclude.set("");
         this.personalChecked.set(false);
+        this.earlier.set([]);
+        this.loadingEarlier.set(false);
+        this.earlierOf = null;
       });
     });
+  }
+
+  protected openForm(): void {
+    this.open.set(true);
+    void this.loadEarlier();
+  }
+
+  /** What was asked before it: none when the API cannot say (an older API, a pruned answer). */
+  private async loadEarlier(): Promise<void> {
+    const id = this.message().id;
+    if (this.earlierOf === id) return;
+    this.earlierOf = id;
+    this.loadingEarlier.set(true);
+    const result = await this.api.earlierQuestions(id);
+    // Another answer came meanwhile, and started over.
+    if (this.earlierOf !== id) return;
+    this.earlier.set(result.ok ? result.data.questions : []);
+    this.loadingEarlier.set(false);
+  }
+
+  protected setTurn(index: number, text: string): void {
+    this.earlier.update((turns) => turns.map((turn, i) => (i === index ? text : turn)));
   }
 
   protected async freeze(): Promise<void> {
     const request = freezeRequest(this.message().question, {
       question: this.question(),
+      turns: this.earlier(),
       mustCite: this.mustCite(),
       mustInclude: this.mustInclude(),
       personalChecked: this.personalChecked(),

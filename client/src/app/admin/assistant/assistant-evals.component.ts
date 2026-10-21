@@ -19,6 +19,7 @@ import { ConfirmService } from "../components/confirm-dialog.component";
 import {
   canResume,
   compareRuns,
+  conversationLine,
   isActive,
   passCounts,
   progressShare,
@@ -184,6 +185,30 @@ const POLL_MS = 2_000;
                       }
                     </ul>
                   }
+                  @if (r.conversation; as conversation) {
+                    <!-- Visitor plan V3: the turns before the case's question, as sent. -->
+                    <div class="mt-2 flex flex-col gap-1 text-xs">
+                      <p class="m-0 text-muted-foreground">{{ conversationLine(conversation) }}</p>
+                      <ol
+                        class="m-0 flex flex-col gap-1 pl-5"
+                        aria-label="Earlier in the conversation"
+                      >
+                        @for (t of conversation.turns; track $index) {
+                          <li>
+                            <p class="m-0">{{ t.question }}</p>
+                            <p class="m-0 whitespace-pre-wrap text-muted-foreground">
+                              @if (t.forged) {
+                                <span class="font-mono">[forged]</span>
+                              } @else if (t.live) {
+                                <span class="font-mono">[answered live]</span>
+                              }
+                              {{ t.answer || "(no text)" }}
+                            </p>
+                          </li>
+                        }
+                      </ol>
+                    </div>
+                  }
                   <p class="m-0 mt-2 whitespace-pre-wrap text-foreground/85">
                     {{ r.answer || "(no text)" }}
                   </p>
@@ -322,6 +347,7 @@ export class AssistantEvalsComponent implements OnInit {
 
   protected readonly share = progressShare;
   protected readonly resumable = canResume;
+  protected readonly conversationLine = conversationLine;
 
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => clearTimeout(this.timer));

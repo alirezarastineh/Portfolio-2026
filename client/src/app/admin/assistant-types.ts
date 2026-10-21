@@ -378,6 +378,18 @@ export interface EvalCaseResult {
   attempts: Attempt[];
   /** A failed case's thought summary, cut short (plan phase 23); never a visitor's. */
   reasoning?: string;
+  /** A case asked after earlier turns (visitor plan V3): what its conversation came to. */
+  conversation?: EvalConversation;
+}
+
+/** Mirrors `ReplayedConversation` (`server/src/ask/evals/run.ts`). */
+export interface EvalConversation {
+  /** Each earlier turn as sent; a live one with the answer the run generated. */
+  turns: { question: string; answer: string; forged?: true; live?: true }[];
+  /** Earlier answers the history refused; null when the case stopped at a live turn. */
+  droppedAnswers: number | null;
+  /** Earlier questions the window no longer showed. */
+  windowDropped: number | null;
 }
 
 export interface EvalSummary {

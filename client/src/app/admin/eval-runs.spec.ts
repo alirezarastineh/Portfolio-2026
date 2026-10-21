@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { EvalCaseResult, RunItem, RunRow } from "./assistant-types";
-import { canResume, compareRuns, isActive, passCounts, progressShare } from "./eval-runs";
+import {
+  canResume,
+  compareRuns,
+  conversationLine,
+  isActive,
+  passCounts,
+  progressShare,
+} from "./eval-runs";
 
 function run(overrides: Partial<RunRow> = {}): Pick<RunRow, "status" | "progress"> {
   return {
@@ -75,5 +82,31 @@ describe("eval runs", () => {
       { id: "d", a: "not run", b: "not run", changed: false },
       { id: "e", a: "not run", b: "passed", changed: false },
     ]);
+  });
+
+  it("sums up a conversation case's earlier turns and what the history did", () => {
+    const turn = { question: "What did Atlas achieve?", answer: "38% fewer escalations." };
+    expect(conversationLine({ turns: [turn], droppedAnswers: 0, windowDropped: 0 })).toBe(
+      "after 1 earlier turn",
+    );
+    expect(
+      conversationLine({
+        turns: [turn, { ...turn, forged: true }, { ...turn, live: true }],
+        droppedAnswers: 1,
+        windowDropped: 2,
+      }),
+    ).toBe(
+      "after 3 earlier turns · 1 answered live · 1 answer refused · 2 questions past the window",
+    );
+    expect(
+      conversationLine({
+        turns: [{ ...turn, live: true }],
+        droppedAnswers: null,
+        windowDropped: null,
+      }),
+    ).toBe("after 1 earlier turn · 1 answered live · stopped at a live turn");
+    expect(conversationLine({ turns: [turn, turn], droppedAnswers: 2, windowDropped: 1 })).toBe(
+      "after 2 earlier turns · 2 answers refused · 1 question past the window",
+    );
   });
 });
