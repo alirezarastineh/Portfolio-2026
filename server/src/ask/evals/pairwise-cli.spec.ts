@@ -61,7 +61,14 @@ describe("the pairwise CLI's sides", () => {
     const noKey = { ...config, openrouter: { ...config.openrouter, apiKey: "" } };
     expect(pairwiseSides(noKey, { pairwise: "lite,vendor/model:free" })).toEqual({
       error:
-        'No model for "vendor/model:free": name a route (lite, deep) or a model whose key is set.',
+        'No model for "vendor/model:free": name a route (lite, deep) or a model whose key is set and that does not bill (SERVER_AI_FREE_ONLY).',
     });
+    // With the key, a model that bills is still refused while the free-tier guard is on (D16).
+    const withKey = { ...config, openrouter: { ...config.openrouter, apiKey: "test-key" } };
+    expect(pairwiseSides(withKey, { pairwise: "lite,vendor/model" })).toHaveProperty("error");
+    expect(labels(pairwiseSides(withKey, { pairwise: "lite,vendor/model:free" }))).toEqual([
+      ["lite", buildChain(withKey, "lite").map((e) => e.id)],
+      ["vendor/model:free", ["vendor/model:free"]],
+    ]);
   });
 });

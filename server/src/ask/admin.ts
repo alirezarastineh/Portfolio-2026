@@ -46,7 +46,7 @@ import { availability, hashWithSalt, refusal, spendByFeature, stateFor } from ".
 import { buildHistory } from "./history.js";
 import type { ModelCall } from "./models/fallback.js";
 import { breakerSnapshot } from "./models/circuit.js";
-import { capsOf, configuredModels, type ChainRole } from "./models/registry.js";
+import { capsOf, configuredModels, excludedModels, type ChainRole } from "./models/registry.js";
 import {
   completedWeeks,
   outcomes,
@@ -334,6 +334,8 @@ adminAskRouter.get("/assistant/health", async (c) => {
     // Insights the adaptive trigger ran, not seen yet (plan phase 25).
     learning: { notice: await insightsNotice() },
     inFlight: streamsInFlight(),
+    // The free-tier guard (visitor plan V1, D16): whether it is on, and what it left out.
+    models: { freeOnly: config.freeOnly, excluded: excludedModels(config) },
     breakers: breakerSnapshot(configuredModels(config)),
     last24h: {
       answers: rows.length,

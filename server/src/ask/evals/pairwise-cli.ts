@@ -57,7 +57,7 @@ export function pairwiseSides(
   const missing = [a, b].find((_, i) => !chains[i]?.length);
   if (missing) {
     return {
-      error: `No model for "${missing}": name a route (lite, deep) or a model whose key is set.`,
+      error: `No model for "${missing}": name a route (lite, deep) or a model whose key is set and that does not bill (SERVER_AI_FREE_ONLY).`,
     };
   }
   const sideA: PairwiseVariant = { label: a!, chain: chains[0]! };

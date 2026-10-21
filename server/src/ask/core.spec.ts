@@ -5,7 +5,7 @@ import type { ModelMessage, TextStreamPart, ToolSet } from "ai";
 import { fixtureConfig } from "../test/ask-fixtures.js";
 import { drain } from "../test/ask-models.js";
 import { answerOnlyOptions, leakAlert } from "./agent.js";
-import type { AskConfig } from "./config.js";
+import { parseAskConfig, type AskConfig } from "./config.js";
 import type { CorpusDocument } from "./corpus/build.js";
 import type { AskCorpus } from "./corpus/index.js";
 import { renderCompact, renderCore, resolveDocument } from "./corpus/index.js";
@@ -18,6 +18,9 @@ import {
   buildChain,
   capsOf,
   checkModels,
+  excludedModels,
+  freeTierLine,
+  isFreeModel,
   resetLearnedCaps,
   shortName,
   variantChain,
@@ -699,6 +702,88 @@ describe("the judge chain", () => {
     expect(ids({ ...base, judgeModels: ["vendor/judge:free", "gemini-3.5-flash-lite"] })).toEqual([
       "gemini-3.5-flash-lite",
     ]);
+  });
+});
+
+describe("the free-tier guard (visitor plan V1, D16)", () => {
+  const base = fixtureConfig();
+  const billing: AskConfig = {
+    ...base,
+    openrouter: {
+      ...base.openrouter,
+      apiKey: "test-key",
+      models: ["vendor/paid", "vendor/open:free"],
+    },
+    insightFallbackModels: ["vendor/paid-insight", "vendor/open:free"],
+    judgeModels: ["vendor/judge", "gemini-3.5-flash-lite"],
+    copilotModel: "vendor/copilot",
+  };
+  const ids = (config: AskConfig, role: Parameters<typeof buildChain>[1]) =>
+    buildChain(config, role).map((e) => e.id);
+
+  it("tells a model that bills from one that does not", () => {
+    expect(isFreeModel("vendor/open:free")).toBe(true);
+    expect(isFreeModel("vendor/paid")).toBe(false);
+    // A Gemini id says nothing about its key's tier: the deploy keeps billing off.
+    expect(isFreeModel("gemini-3.7-flash")).toBe(true);
+  });
+
+  it("leaves every model that bills out of every chain, a pairwise side too", () => {
+    expect(billing.freeOnly).toBe(true);
+    for (const role of ["lite", "deep", "insight", "copilot", "judge"] as const) {
+      expect(ids(billing, role).filter((id) => !isFreeModel(id))).toEqual([]);
+    }
+    expect(ids(billing, "lite")).toContain("vendor/open:free");
+    expect(ids(billing, "insight")).toContain("vendor/open:free");
+    expect(ids(billing, "judge")).toEqual(["gemini-3.5-flash-lite"]);
+    expect(variantChain(billing, "vendor/paid")).toBeNull();
+    expect(excludedModels(billing)).toEqual([
+      "vendor/paid",
+      "vendor/paid-insight",
+      "vendor/judge",
+      "vendor/copilot",
+    ]);
+  });
+
+  it("keeps them when it is switched off, and says so at boot", () => {
+    const off = { ...billing, freeOnly: false };
+    expect(ids(off, "lite")).toContain("vendor/paid");
+    expect(ids(off, "judge")).toEqual(["vendor/judge", "gemini-3.5-flash-lite"]);
+    expect(ids(off, "copilot")).toContain("vendor/copilot");
+    expect(excludedModels(off)).toEqual([]);
+    expect(freeTierLine(off)).toEqual({
+      warn: true,
+      text: "[ask] free-tier guard off (SERVER_AI_FREE_ONLY=false): billed models may be called",
+    });
+  });
+
+  it("names at boot what may be called and what it left out", () => {
+    const left = freeTierLine(billing);
+    expect(left.warn).toBe(true);
+    expect(left.text).toMatch(/^\[ask\] free tier only: /);
+    expect(left.text).toContain("vendor/open:free");
+    expect(left.text).toMatch(
+      /; left out, they bill: vendor\/paid, vendor\/paid-insight, vendor\/judge, vendor\/copilot$/,
+    );
+    const clean = freeTierLine(base);
+    expect(clean.warn).toBe(false);
+    expect(clean.text).toBe(
+      `[ask] free tier only: ${[...new Set([...ids(base, "lite"), ...ids(base, "deep"), ...ids(base, "insight"), ...ids(base, "copilot"), ...ids(base, "judge")])].join(", ")}`,
+    );
+  });
+
+  it("is on unless SERVER_AI_FREE_ONLY says otherwise", () => {
+    const saved = { ...process.env };
+    try {
+      delete process.env.SERVER_AI_FREE_ONLY;
+      expect(parseAskConfig().freeOnly).toBe(true);
+      process.env.SERVER_AI_FREE_ONLY = "false";
+      expect(parseAskConfig().freeOnly).toBe(false);
+      process.env.SERVER_AI_FREE_ONLY = "perhaps";
+      expect(parseAskConfig().unavailableReason).toMatch(/SERVER_AI_FREE_ONLY/);
+    } finally {
+      process.env = saved;
+    }
   });
 });
 

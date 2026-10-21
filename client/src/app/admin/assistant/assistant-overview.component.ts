@@ -163,6 +163,11 @@ interface ModelTotal {
                   % kept for visitors)
                 </p>
               }
+              @if (h.models?.freeOnly) {
+                <p class="m-0 text-xs text-muted-foreground">
+                  List-price equivalent: the free tier bills nothing
+                </p>
+              }
               @if (h.state.state === "ok" && !h.state.deepAllowed) {
                 <p class="m-0 text-xs text-muted-foreground">
                   Deep model off (over 80 % or disabled)
@@ -239,6 +244,18 @@ interface ModelTotal {
 
       <section class="flex flex-col gap-2">
         <h2 class="m-0 text-sm font-medium">Models</h2>
+        @if (h.models; as guard) {
+          @if (!guard.freeOnly) {
+            <p class="m-0 text-xs text-destructive">
+              Free-tier guard off (SERVER_AI_FREE_ONLY=false): models that bill may be called.
+            </p>
+          } @else if (guard.excluded.length) {
+            <p class="m-0 text-xs text-muted-foreground">
+              Left out by the free-tier guard, since they bill:
+              <span class="font-mono">{{ guard.excluded.join(", ") }}</span>
+            </p>
+          }
+        }
         <div class="overflow-x-auto rounded-lg border border-border">
           <table class="w-full text-sm">
             <thead class="text-left text-xs text-muted-foreground">

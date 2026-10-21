@@ -381,6 +381,7 @@ describe("admin assistant API", () => {
 
     const health = (await (await admin.get("/admin/assistant/health")).json()) as {
       state: { state: string };
+      models: { freeOnly: boolean; excluded: string[] };
       corpus: {
         documents: Record<string, number>;
         coreChars: number;
@@ -390,6 +391,8 @@ describe("admin assistant API", () => {
       };
     };
     expect(health.state.state).toBe("ok");
+    // The free-tier guard is on by default, and the fixture names no model that bills (V1, D16).
+    expect(health.models).toEqual({ freeOnly: true, excluded: [] });
     expect(health.corpus.documents["project"]).toBe(1);
     // Each reading language's core, and the larger one where an older admin reads one figure.
     const corpus = fixtureCorpus(config);

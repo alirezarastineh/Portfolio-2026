@@ -66,6 +66,13 @@ export interface AskConfig {
   sessionRatePerHour: number;
   maxConcurrent: number;
   explicitCache: boolean;
+  /**
+   * `SERVER_AI_FREE_ONLY`, on unless set false (the visitor plan's V1, decision
+   * D16): no model on a billed account is called. OpenRouter marks its free
+   * variants `:free`; a Gemini key's tier cannot be read from the API, so its
+   * project keeping billing off is the deploy's condition (DEPLOYMENT.md).
+   */
+  freeOnly: boolean;
   /** Longest visitor message, in characters. */
   maxMessageChars: number;
 }
@@ -194,6 +201,7 @@ export function parseAskConfig(): AskConfig {
     sessionRatePerHour: read("SERVER_AI_SESSION_RATE_PER_HOUR", positiveInt, 30, errors),
     maxConcurrent: read("SERVER_AI_MAX_CONCURRENT", positiveInt, 8, errors),
     explicitCache: read("SERVER_AI_EXPLICIT_CACHE", flag, false, errors),
+    freeOnly: read("SERVER_AI_FREE_ONLY", flag, true, errors),
     maxMessageChars: 600,
   };
 

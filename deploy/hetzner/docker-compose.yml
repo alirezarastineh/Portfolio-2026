@@ -136,6 +136,9 @@ services:
       SERVER_AI_SESSION_RATE_PER_HOUR: ${SERVER_AI_SESSION_RATE_PER_HOUR:-}
       SERVER_AI_MAX_CONCURRENT: ${SERVER_AI_MAX_CONCURRENT:-}
       SERVER_AI_EXPLICIT_CACHE: ${SERVER_AI_EXPLICIT_CACHE:-}
+      # The free-tier guard (visitor plan V1, D16): on unless set to false; a model
+      # that bills (an OpenRouter id without `:free`) is left out of every chain.
+      SERVER_AI_FREE_ONLY: ${SERVER_AI_FREE_ONLY:-}
       # Search by meaning (plan phase 18): off unless set to true here and
       # switched on in the admin; empty model and timeout mean the defaults.
       SERVER_AI_EMBEDDINGS: ${SERVER_AI_EMBEDDINGS:-}

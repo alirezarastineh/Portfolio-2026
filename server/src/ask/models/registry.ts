@@ -94,6 +94,28 @@ export function capsOf(id: string): ModelCaps & { missing: boolean } {
   return { ...base, ...extra, missing: extra.missing ?? false };
 }
 
+/**
+ * Whether a model can be called without a bill (the visitor plan's V1,
+ * decision D16): an OpenRouter model only as its free variant (`:free`). A
+ * Gemini id says nothing about its key's tier: that the key's project keeps
+ * billing off is the deploy's condition (DEPLOYMENT.md).
+ */
+export function isFreeModel(id: string): boolean {
+  return providerOf(id) === "gemini" || id.endsWith(":free");
+}
+
+/** The configured models the free-tier guard leaves out of every chain; none while it is off. */
+export function excludedModels(config: AskConfig): string[] {
+  if (!config.freeOnly) return [];
+  const named = [
+    ...config.openrouter.models,
+    ...config.insightFallbackModels,
+    ...config.judgeModels,
+    config.copilotModel,
+  ];
+  return [...new Set(named)].filter((id) => !isFreeModel(id));
+}
+
 /** Shown in the terminal's meta line and the admin: `gemini-3.5-flash-lite`, `nemotron-3-super`. */
 export function shortName(id: string): string {
   const name = id.includes("/") ? id.slice(id.indexOf("/") + 1) : id;
@@ -157,6 +179,8 @@ function providers(config: AskConfig): Providers {
 }
 
 function entry(config: AskConfig, id: string, thinking: Thinking | null): ModelEntry | null {
+  // The free-tier guard (D16): a model that bills is left out of every chain, a pairwise side too.
+  if (config.freeOnly && !isFreeModel(id)) return null;
   const provider = providerOf(id);
   const { google, openrouter } = providers(config);
   const key = `${provider}:${id}`;
@@ -348,6 +372,30 @@ export function configuredModels(config: AskConfig): string[] {
     for (const e of buildChain(config, role)) ids.add(e.id);
   }
   return [...ids];
+}
+
+/**
+ * The boot log's line on the free-tier guard (V1): every model a chain may
+ * call, the judges' too, and what the guard left out. A warning when something
+ * was left out or the guard is off.
+ */
+export function freeTierLine(config: AskConfig): { warn: boolean; text: string } {
+  if (!config.freeOnly) {
+    return {
+      warn: true,
+      text: "[ask] free-tier guard off (SERVER_AI_FREE_ONLY=false): billed models may be called",
+    };
+  }
+  const kept = new Set([
+    ...configuredModels(config),
+    ...buildChain(config, "judge").map((e) => e.id),
+  ]);
+  const left = excludedModels(config);
+  const leftOut = left.length ? `; left out, they bill: ${left.join(", ")}` : "";
+  return {
+    warn: left.length > 0,
+    text: `[ask] free tier only: ${[...kept].join(", ") || "no model"}${leftOut}`,
+  };
 }
 
 async function checkGeminiModel(

@@ -171,6 +171,11 @@ export interface AssistantHealth {
   /** Insights the adaptive trigger ran, not seen yet (plan phase 25); absent from an older API. */
   learning?: { notice: InsightsNotice | null };
   inFlight: number;
+  /**
+   * The free-tier guard (the visitor plan's V1, D16): on unless the deploy says otherwise, and the
+   * configured models it left out because they bill. Absent from an older API.
+   */
+  models?: { freeOnly: boolean; excluded: string[] };
   breakers: BreakerRow[];
   last24h: {
     answers: number;

@@ -845,6 +845,8 @@ function defaults(): Record<string, Answer> {
         ],
       },
       inFlight: 0,
+      // The free-tier guard (visitor plan V1): on, and one configured model left out.
+      models: { freeOnly: true, excluded: ["vendor/paid-model"] },
       breakers: [
         {
           model: "gemini-flash",
@@ -2293,6 +2295,13 @@ test.describe("admin", () => {
     await expect(
       page.getByText("All but the terminal stop at $1.00 (50 % kept for visitors)"),
     ).toBeVisible();
+    // The free-tier guard (visitor plan V1): the spend is a list-price figure, and what it left out.
+    await expect(
+      page.getByText("List-price equivalent: the free tier bills nothing"),
+    ).toBeVisible();
+    await expect(page.getByText("Left out by the free-tier guard, since they bill:")).toContainText(
+      "vendor/paid-model",
+    );
     const spend = page.getByRole("region", { name: "Spending by feature" });
     await expect(spend.getByRole("row", { name: /Eval runs/ })).toContainText("stopped at its cap");
     await expect(spend.getByRole("row", { name: /Visitors' terminal/ })).toContainText("$0.12");

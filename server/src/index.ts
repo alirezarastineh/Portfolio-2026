@@ -5,7 +5,7 @@ import { getAskConfig } from "./ask/config.js";
 import { flushGuardEvents, startGuardEventFlush } from "./ask/guard-events.js";
 import { flushMcpUsage, startMcpUsageFlush } from "./ask/mcp/usage.js";
 import { startAskPruning } from "./ask/log.js";
-import { checkModels } from "./ask/models/registry.js";
+import { checkModels, freeTierLine } from "./ask/models/registry.js";
 import { abortAllAsks } from "./ask/route.js";
 import { abortAllRuns, recoverRuns } from "./ask/runs/runner.js";
 import { loadEncoder } from "./ask/tokens.js";
@@ -93,6 +93,9 @@ if (askConfig.unavailableReason) {
 } else if (askConfig.enabled) {
   void loadEncoder();
   void checkModels(askConfig);
+  // Which models may be called, and which the free-tier guard left out (D16).
+  const freeTier = freeTierLine(askConfig);
+  (freeTier.warn ? console.warn : console.log)(freeTier.text);
   if (askConfig.explicitCache) {
     // Reserved: explicit context caching bills storage by the hour and does
     // not pay off at portfolio traffic (the plan, §7.2). Implicit caching of
