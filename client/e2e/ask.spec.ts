@@ -139,14 +139,23 @@ async function pausedStream(page: Page, chunks: Chunk[], cut: number, pause: num
         const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
         const body = new ReadableStream<Uint8Array>({
           async start(controller) {
-            const send = (chunk: unknown) =>
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+            // As a real fetch's body: a stop (the signal) ends it with an AbortError.
+            let aborted = false;
+            init?.signal?.addEventListener("abort", () => {
+              aborted = true;
+              controller.error(new DOMException("The user aborted a request.", "AbortError"));
+            });
+            const send = (chunk: unknown) => {
+              if (!aborted)
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+            };
             for (const chunk of head) {
               send(chunk);
               await wait(50);
             }
             await wait(pause);
             for (const chunk of tail) send(chunk);
+            if (aborted) return;
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
           },
@@ -158,6 +167,20 @@ async function pausedStream(page: Page, chunks: Chunk[], cut: number, pause: num
     },
     { head: chunks.slice(0, cut + 1), tail: chunks.slice(cut + 1), pause },
   );
+}
+
+/** A JSON endpoint of the API answering `{ ok: true }`, its preflight included, with each body kept. */
+async function recordPosts(page: Page, pattern: string): Promise<Record<string, unknown>[]> {
+  const bodies: Record<string, unknown>[] = [];
+  await page.route(pattern, async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers: cors });
+      return;
+    }
+    bodies.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({ headers: cors, json: { ok: true } });
+  });
+  return bodies;
 }
 
 /** The About section's prompt, once its code has loaded. */
@@ -342,6 +365,101 @@ test.describe("assistant terminal", () => {
     expect(problems.pageErrors).toEqual([]);
   });
 
+  test("the browser reports what it saw of an answer, and a thumbs-down says why (visitor plan V2)", async ({
+    page,
+    context,
+    browserName,
+  }) => {
+    // Only Chromium lets a test grant clipboard access; the others copy without asking.
+    if (browserName === "chromium") {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    }
+    const FIRST = "m_e2e00000001";
+    await mockAsk(page, (route, n) =>
+      sse(
+        route,
+        answer({
+          id: `m_e2e0000000${n}`,
+          text: "He runs evals before every prompt change [^project:project-one@en].",
+          sources: [
+            {
+              type: "source-url",
+              sourceId: "project:project-one@en",
+              url: "/en/work/project-one",
+              title: "Project one",
+            },
+          ],
+          ...(n === 1 ? { followups: ["Which stack did he use?"] } : {}),
+        }),
+      ),
+    );
+    const signals = await recordPosts(page, "**/v1/ask/signal");
+    const feedback = await recordPosts(page, "**/v1/ask/feedback");
+    const of = (messageId: string) =>
+      (signals.filter((s) => s["messageId"] === messageId).at(-1)?.["signals"] ?? {}) as Record<
+        string,
+        number | boolean
+      >;
+
+    const prompt = await openPrompt(page);
+    await run(prompt, "How does he test prompts?");
+    const log = page.locator("#about [role=log]");
+    await expect(log).toContainText("He runs evals before every prompt change");
+
+    // Once the stream is over: when its first word showed, and when it ended.
+    await expect.poll(() => typeof of(FIRST)["doneMs"]).toBe("number");
+    expect(of(FIRST)["shownMs"]).toBeGreaterThanOrEqual(0);
+    expect(of(FIRST)["doneMs"]).toBeGreaterThanOrEqual(of(FIRST)["shownMs"] as number);
+    expect(signals[0]).toMatchObject({ sessionId: expect.stringMatching(/^[A-Za-z0-9_-]{16,}$/) });
+
+    // A follow-up asked from it: counted for this answer, the totals sent whole.
+    await log.getByRole("button", { name: "Which stack did he use?" }).click();
+    await expect.poll(() => of(FIRST)["followups"]).toBe(1);
+    expect(typeof of(FIRST)["doneMs"]).toBe("number");
+
+    // A thumbs-down offers three reasons, codes only; the one chosen stays, pressed.
+    await log.getByRole("button", { name: "Not helpful" }).first().click();
+    const why = page.getByRole("group", { name: "What was wrong?" });
+    await expect(why.getByRole("button")).toHaveCount(3);
+    await why.getByRole("button", { name: "didn't answer my question" }).click();
+    await expect(why.getByRole("button")).toHaveCount(1);
+    await expect(why.getByRole("button")).toHaveAttribute("aria-pressed", "true");
+    await expect
+      .poll(() => feedback.at(-1))
+      .toMatchObject({ messageId: FIRST, value: -1, reason: "unanswered" });
+
+    // A copy.
+    await log.getByRole("button", { name: "copy", exact: true }).first().click();
+    await expect.poll(() => of(FIRST)["copies"]).toBe(1);
+
+    // A citation followed counts too, even as it leaves the page.
+    await log
+      .getByRole("link", { name: /sources 1: Project one/ })
+      .first()
+      .click();
+    await expect.poll(() => of(FIRST)["citations"]).toBe(1);
+  });
+
+  test("an answer stopped mid-way says so (visitor plan V2)", async ({ page }) => {
+    const chunks = answer({ text: "A long answer that is still being written when it stops." });
+    // The stream pauses after its first words, long enough to stop it.
+    await pausedStream(page, chunks, 4, 5000);
+    await mockAsk(page, () => undefined);
+    const signals = await recordPosts(page, "**/v1/ask/signal");
+
+    const prompt = await openPrompt(page);
+    await run(prompt, "Tell me everything");
+    await expect(page.locator("#about [role=log]")).toContainText("A long");
+    await prompt.press("Control+c");
+
+    await expect
+      .poll(() => signals.at(-1))
+      .toMatchObject({ messageId: "m_e2e00000001", signals: { stopped: true } });
+    // Its first words showed while it streamed, well before the stop.
+    const { shownMs, doneMs } = signals.at(-1)!["signals"] as { shownMs: number; doneMs: number };
+    expect(shownMs).toBeLessThan(doneMs);
+  });
+
   test("an answer shows while it is still streaming", async ({ page }) => {
     // A mocked route delivers its body at once, which hid a bug: the answer
     // showed only after a reload. Here the stream pauses mid-answer, as a
@@ -443,6 +561,7 @@ test.describe("assistant terminal", () => {
         await sse(route, answer({ id: "m_e2e00000003", text: "Second try worked." }));
       }
     });
+    const signals = await recordPosts(page, "**/v1/ask/signal");
     const prompt = await openPrompt(page);
     const log = page.locator("#about [role=log]");
 
@@ -461,6 +580,10 @@ test.describe("assistant terminal", () => {
     await expect(log).toContainText("That took too long to answer.");
     await log.getByRole("button", { name: /retry/ }).click();
     await expect(log).toContainText("Second try worked.");
+    // The answer that came says its question was asked again (visitor plan V2).
+    await expect
+      .poll(() => signals.filter((s) => s["messageId"] === "m_e2e00000003").at(-1)?.["signals"])
+      .toMatchObject({ retries: 1 });
   });
 
   test("a resting assistant answers from the offline shell and offers contact", async ({

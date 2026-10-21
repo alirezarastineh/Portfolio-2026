@@ -16,7 +16,7 @@ import { isToolUIPart, type ChatStatus } from "ai";
 import { fmt } from "../i18n/interpolate";
 import { LanguageService } from "../services/language.service";
 import { AskStore } from "./ask.store";
-import type { AskMessage, Entry } from "./ask-types";
+import { DOWN_REASONS, type AskMessage, type DownReason, type Entry } from "./ask-types";
 import { AskLinesComponent } from "./ask-lines.component";
 import { citationOrder, plainText, renderMarkdown, type Block } from "./terminal-markdown";
 import { track } from "./track";
@@ -206,7 +206,7 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
             <button
               type="button"
               class="press cursor-pointer rounded-md border border-border px-2 py-1 text-left text-foreground/85 hover:border-accent-orange hover:text-foreground"
-              (click)="ask.emit(item)"
+              (click)="followup(item)"
             >
               {{ item }}
             </button>
@@ -253,6 +253,28 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
             }
           </span>
         </div>
+        <!-- Why the -1 (visitor plan V2): codes, never free text. It appears after the visitor's
+             own click and leaves the focus on -1; once one is chosen, the others go. -->
+        @if (rating() === -1) {
+          <div
+            class="flex flex-wrap items-center gap-1 text-xs text-muted-foreground"
+            role="group"
+            [attr.aria-label]="copy().downReason.ask"
+          >
+            <span aria-hidden="true">{{ copy().downReason.ask }}</span>
+            @for (reason of reasons(); track reason) {
+              <button
+                type="button"
+                class="feedback press"
+                [attr.aria-pressed]="downReason() === reason"
+                [class.text-accent-orange]="downReason() === reason"
+                (click)="giveReason(reason)"
+              >
+                {{ copy().downReason[reason] }}
+              </button>
+            }
+          </div>
+        }
       }
     </div>
   `,
@@ -499,6 +521,18 @@ export class AskAnswerComponent {
     return id ? (this.store.feedback()[id] ?? 0) : 0;
   });
 
+  /** Why the -1, once the visitor said (visitor plan V2). */
+  protected readonly downReason = computed<DownReason | null>(() => {
+    const id = this.message()?.id;
+    return id ? (this.store.downReasons()[id] ?? null) : null;
+  });
+
+  /** The reasons on offer: all three until one is chosen, then that one. */
+  protected readonly reasons = computed<readonly DownReason[]>(() => {
+    const chosen = this.downReason();
+    return chosen ? [chosen] : DOWN_REASONS;
+  });
+
   protected readonly elapsed = computed(() => {
     const started = this.message()?.metadata?.createdAt ?? this.startedAt;
     return `${((this.now() - started) / 1000).toFixed(1)} s`;
@@ -551,9 +585,17 @@ export class AskAnswerComponent {
   }
 
   protected followSource(event: MouseEvent, url: string): void {
+    // Followed, in this tab or another (visitor plan V2): a citation or its chip.
+    this.note("citations");
     if (modified(event) || !url.startsWith("/") || url.startsWith("/media/")) return;
     event.preventDefault();
     void this.router.navigateByUrl(url);
+  }
+
+  /** A follow-up question asked: counted for this answer, then asked. */
+  protected followup(item: string): void {
+    this.note("followups");
+    this.ask.emit(item);
   }
 
   protected rate(value: 1 | -1): void {
@@ -561,14 +603,26 @@ export class AskAnswerComponent {
     if (id && this.rating() !== value) void this.store.rate(id, value);
   }
 
+  protected giveReason(reason: DownReason): void {
+    const id = this.message()?.id;
+    if (id && this.downReason() !== reason) void this.store.rate(id, -1, reason);
+  }
+
   protected async copyAnswer(): Promise<void> {
     try {
       await navigator.clipboard.writeText(plainText(this.text()));
       this.copied.set(true);
+      this.note("copies");
       setTimeout(() => this.copied.set(false), 1500);
     } catch {
       // Clipboard refused (permissions): nothing to do.
     }
+  }
+
+  /** What the visitor did with this answer, for the browser's signals (visitor plan V2). */
+  private note(count: "followups" | "citations" | "copies"): void {
+    const id = this.message()?.id;
+    if (id) this.store.note(id, count);
   }
 }
 

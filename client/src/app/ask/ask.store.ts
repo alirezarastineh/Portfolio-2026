@@ -1,5 +1,5 @@
 import { DOCUMENT } from "@angular/common";
-import { computed, inject } from "@angular/core";
+import { computed, effect, inject } from "@angular/core";
 import { Router } from "@angular/router";
 import { Chat } from "@ai-sdk/angular";
 import {
@@ -19,11 +19,13 @@ import { apiBaseUrl } from "../services/api-base";
 import { ContactService } from "../services/contact.service";
 import { LanguageService } from "../services/language.service";
 import { TURNSTILE_SITE_KEY, turnstileToken } from "../services/turnstile";
+import { AnswerSignals, bump, signalMs, type SignalCount } from "./answer-signals";
 import { answerTrace } from "./answer-trace";
+import { answersByQuestion } from "./answers";
 import { ASK_COPY } from "./ask-copy";
 import { ASK_STORAGE_KEY } from "./ask-storage";
 import { AskTraceService } from "./ask-trace.service";
-import type { AskMessage, Entry, Failure, RemoteConfig } from "./ask-types";
+import type { AskMessage, DownReason, Entry, Failure, RemoteConfig } from "./ask-types";
 import { confirmHandoff } from "./handoff-confirm";
 import {
   helpLines,
@@ -66,6 +68,8 @@ interface AskState {
   limitedUntil: number | null;
   handoff: { summary: string; messageId: string } | null;
   feedback: Record<string, 1 | -1>;
+  /** Why each 👎, when the visitor said (visitor plan V2). */
+  downReasons: Record<string, DownReason>;
   /** The polite live region's text: finished answers and command output, once. */
   announcement: string;
 }
@@ -89,6 +93,8 @@ interface Stored {
   history: string[];
   stats: boolean;
   feedback: Record<string, 1 | -1>;
+  /** Absent from what an older terminal stored. */
+  downReasons?: Record<string, DownReason>;
   messages: AskMessage[];
 }
 
@@ -111,6 +117,11 @@ function forRequest(messages: AskMessage[]) {
     parts: m.parts.filter((p) => p.type === "text").map((p) => ({ type: "text", text: p.text })),
     ...(m.role === "assistant" && m.metadata?.sig ? { metadata: { sig: m.metadata.sig } } : {}),
   }));
+}
+
+/** Whether an answer has words to show yet (visitor plan V2's first visible word). */
+function hasWords(message: AskMessage | undefined): boolean {
+  return !!message?.parts.some((p) => p.type === "text" && p.text.trim());
 }
 
 /** What a reload needs to redraw: tool results are dropped, except where they were acted on. */
@@ -214,6 +225,7 @@ export const AskStore = signalStore(
       limitedUntil: null,
       handoff: null,
       feedback: stored?.feedback ?? {},
+      downReasons: stored?.downReasons ?? {},
       announcement: "",
     };
   }),
@@ -231,6 +243,21 @@ export const AskStore = signalStore(
       turnstileToken: "",
       verified: false,
     },
+    /** When each question was sent and its answer's first word showed (`performance.now()`). */
+    _timings: new Map<string, { sentAt: number; shownAt?: number }>(),
+    /** How often each question was asked again after it failed. */
+    _retries: new Map<string, number>(),
+    /** What the browser saw of each answer, sent to the server (visitor plan V2). */
+    _signals: new AnswerSignals((sessionId, messageId, signals, keepalive) =>
+      fetch(`${apiBaseUrl()}/v1/ask/signal`, {
+        method: "POST",
+        keepalive,
+        // The page's last word goes as plain text, a type a keepalive request may send to
+        // another origin without asking first; the API reads JSON either way.
+        headers: { "content-type": keepalive ? "text/plain;charset=UTF-8" : "application/json" },
+        body: JSON.stringify({ sessionId, messageId, signals }),
+      }),
+    ),
   })),
   withComputed((store) => ({
     copy: computed(() => ASK_COPY[store._lang.lang()]),
@@ -307,6 +334,7 @@ export const AskStore = signalStore(
       },
       onFinish: ({ message, isAbort, isError }) => {
         persist();
+        reportFinish(message, isAbort);
         if (isAbort || isError || message.role !== "assistant") return;
         track("ask_answer");
         // For the hero's trace panel: what this answer did, replayed there.
@@ -328,6 +356,30 @@ export const AskStore = signalStore(
         }
       },
     });
+
+    /**
+     * Once an answer's stream is over (visitor plan V2): the time to its first visible word and
+     * to its end, a stop, and how often its question was asked again before it.
+     */
+    function reportFinish(message: AskMessage, stopped: boolean): void {
+      const entryId = store._next.entryId;
+      const timing = entryId ? store._timings.get(entryId) : undefined;
+      if (message.role !== "assistant" || !entryId || !timing) return;
+      const now = performance.now();
+      // A stream that ended between two renders shows its first word with its last.
+      if (timing.shownAt === undefined && hasWords(message)) timing.shownAt = now;
+      const doneMs = signalMs(now - timing.sentAt);
+      const retries = store._retries.get(entryId) ?? 0;
+      store._signals.report(store.sessionId(), message.id, (totals) => ({
+        ...totals,
+        doneMs,
+        ...(timing.shownAt === undefined
+          ? {}
+          : { shownMs: signalMs(timing.shownAt - timing.sentAt) }),
+        ...(stopped ? { stopped: true } : {}),
+        ...(retries ? { retries } : {}),
+      }));
+    }
 
     function messageFor(failure: Failure, retryAfter?: number): string {
       const copy = ASK_COPY[locale()];
@@ -352,6 +404,7 @@ export const AskStore = signalStore(
           history: store.history().slice(-MAX_HISTORY),
           stats: store.stats(),
           feedback: store.feedback(),
+          downReasons: store.downReasons(),
           messages: forStorage(chat.messages),
         };
         sessionStorage.setItem(ASK_STORAGE_KEY, JSON.stringify(stored));
@@ -416,6 +469,8 @@ export const AskStore = signalStore(
         handoff: null,
         announcement: "",
       });
+      // From here the visitor waits (a Turnstile check included): the first word's time counts it.
+      store._timings.set(entryId, { sentAt: performance.now() });
       track("ask_send");
       store._next.deep = deep;
       store._next.entryId = entryId;
@@ -451,6 +506,7 @@ export const AskStore = signalStore(
         entries: [],
         handoff: null,
         feedback: {},
+        downReasons: {},
         limitedUntil: null,
       });
       store._persist();
@@ -614,6 +670,7 @@ export const AskStore = signalStore(
       },
 
       stop(): void {
+        track("ask_stop");
         void store.chat.stop();
       },
 
@@ -626,6 +683,9 @@ export const AskStore = signalStore(
           retryAfter: undefined,
           offline: undefined,
         });
+        // The answer that comes says it was asked again (visitor plan V2), and is timed afresh.
+        store._retries.set(entryId, (store._retries.get(entryId) ?? 0) + 1);
+        store._timings.set(entryId, { sentAt: performance.now() });
         store._next.deep = entry.deep;
         store._next.entryId = entryId;
         if (!(await readyToAsk(store._next, store._lang.lang()))) {
@@ -651,19 +711,39 @@ export const AskStore = signalStore(
         store._persist();
       },
 
-      async rate(messageId: string, value: 1 | -1): Promise<void> {
-        patchState(store, { feedback: { ...store.feedback(), [messageId]: value } });
+      /** +1 or -1 on an answer; a -1 may come back with its reason (visitor plan V2). */
+      async rate(messageId: string, value: 1 | -1, reason?: DownReason): Promise<void> {
+        const others = Object.fromEntries(
+          Object.entries(store.downReasons()).filter(([id]) => id !== messageId),
+        );
+        patchState(store, {
+          feedback: { ...store.feedback(), [messageId]: value },
+          // A reason belongs to a -1 only, as the server keeps it.
+          downReasons: value === -1 && reason ? { ...others, [messageId]: reason } : others,
+        });
         store._persist();
-        track("ask_feedback");
+        track("ask_feedback", reason ? { reason } : undefined);
         try {
           await fetch(`${apiBaseUrl()}/v1/ask/feedback`, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ sessionId: store.sessionId(), messageId, value }),
+            body: JSON.stringify({
+              sessionId: store.sessionId(),
+              messageId,
+              value,
+              ...(value === -1 && reason ? { reason } : {}),
+            }),
           });
         } catch {
           // Feedback is best effort.
         }
+      },
+
+      /** A follow-up clicked, a citation followed or the answer copied (visitor plan V2). */
+      note(messageId: string, count: Exclude<SignalCount, "retries">): void {
+        if (count === "followups") track("ask_followup");
+        if (count === "copies") track("ask_copy");
+        store._signals.report(store.sessionId(), messageId, (totals) => bump(totals, count));
       },
 
       /** The visitor's answer to "hand this conversation to the contact form?". */
@@ -721,6 +801,22 @@ export const AskStore = signalStore(
   withHooks({
     onInit(store) {
       void store.loadConfig();
+
+      // The answer's first visible word (visitor plan V2): the moment the question being answered
+      // gets text, as the browser shows it.
+      effect(() => {
+        if (store.chat.status !== "streaming") return;
+        const entry = store.entries().find((e) => e.id === store._next.entryId);
+        const timing = entry ? store._timings.get(entry.id) : undefined;
+        if (entry?.kind !== "ask" || !timing || timing.shownAt !== undefined) return;
+        if (hasWords(answersByQuestion(store.chat.messages).get(entry.userId))) {
+          timing.shownAt = performance.now();
+        }
+      });
+
+      // What never reached the server goes once more as the page is left.
+      const flush = () => store._signals.flush();
+      store._doc.defaultView?.addEventListener("pagehide", flush);
     },
   }),
 );

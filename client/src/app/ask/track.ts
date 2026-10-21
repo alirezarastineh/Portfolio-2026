@@ -4,7 +4,16 @@
  * with Do Not Track).
  */
 export type AskEvent =
-  "ask_open" | "ask_send" | "ask_answer" | "ask_citation_click" | "ask_handoff" | "ask_feedback";
+  | "ask_open"
+  | "ask_send"
+  | "ask_answer"
+  | "ask_citation_click"
+  | "ask_handoff"
+  | "ask_feedback"
+  // What visitors do with an answer (visitor plan V2).
+  | "ask_followup"
+  | "ask_stop"
+  | "ask_copy";
 
 export function track(event: AskEvent, data?: Record<string, string>): void {
   try {

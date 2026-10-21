@@ -22,6 +22,13 @@ export interface AnswerMetadata {
 
 export type AskMessage = UIMessage<AnswerMetadata>;
 
+/**
+ * Why a 👎, as the terminal offers it (`FEEDBACK_REASONS` on the server, the visitor plan's V2):
+ * wrong or made up, did not answer the question, too long or too short.
+ */
+export const DOWN_REASONS = ["wrong", "unanswered", "length"] as const;
+export type DownReason = (typeof DOWN_REASONS)[number];
+
 /** Why an answer did not arrive, as the terminal words it. */
 export type Failure =
   | "unavailable"

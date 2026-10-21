@@ -33,6 +33,8 @@ export interface AskCopy {
   helpful: string;
   notHelpful: string;
   thanks: string;
+  /** Why a 👎 (visitor plan V2): the question, and one button per reason. */
+  downReason: { ask: string; wrong: string; unanswered: string; length: string };
   copy: string;
   copied: string;
   handoff: { ask: string; yes: string; no: string; done: string; declined: string };
@@ -116,6 +118,12 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
     helpful: "Helpful",
     notHelpful: "Not helpful",
     thanks: "thanks for the feedback",
+    downReason: {
+      ask: "What was wrong?",
+      wrong: "wrong or made up",
+      unanswered: "didn't answer my question",
+      length: "too long or too short",
+    },
     copy: "copy",
     copied: "copied",
     handoff: {
@@ -203,6 +211,12 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
     helpful: "Hilfreich",
     notHelpful: "Nicht hilfreich",
     thanks: "danke für die Rückmeldung",
+    downReason: {
+      ask: "Was war falsch?",
+      wrong: "falsch oder erfunden",
+      unanswered: "hat meine Frage nicht beantwortet",
+      length: "zu lang oder zu kurz",
+    },
     copy: "kopieren",
     copied: "kopiert",
     handoff: {
