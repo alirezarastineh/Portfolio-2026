@@ -116,6 +116,8 @@ describe("assistant signals", () => {
     ).toEqual({ answers: 10, count: 3, rate: 0.3 });
     expect(checkLabel("invented-citation")).toBe("invented citation");
     expect(checkLabel("injection-attempt")).toBe("injection attempt");
+    expect(checkLabel("repaired")).toBe("repaired: no words at first");
+    expect(checkLabel("ungrounded-figure")).toBe("ungrounded figure");
     expect(checkLabel("something-new")).toBe("something-new");
     expect(checkTone("leak")).toBe("bad");
     expect(checkTone("degraded")).toBe("warn");

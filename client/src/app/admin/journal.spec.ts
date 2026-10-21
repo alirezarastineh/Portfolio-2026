@@ -35,6 +35,7 @@ describe("the failure journal in the admin (plan phase 24)", () => {
     );
     expect(leadingLine({ leading: null, hypotheses: [leading] })).toMatch(/^Undetermined/);
     expect(symptomLabel("unknown")).toBe("didn't know");
+    expect(symptomLabel("ungrounded-figure")).toBe("ungrounded figure");
     expect(symptomLabel("something-new")).toBe("something-new");
   });
 

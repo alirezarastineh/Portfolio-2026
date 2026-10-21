@@ -191,6 +191,7 @@ const SYMPTOMS: Record<string, string> = {
   leak: "leak",
   unknown: "didn't know",
   "invented-citation": "invented citation",
+  "ungrounded-figure": "ungrounded figure",
   empty: "empty",
   uncited: "uncited",
   unfaithful: "unfaithful",

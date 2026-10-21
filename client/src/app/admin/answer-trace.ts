@@ -158,9 +158,13 @@ const CHECK_LABELS: Record<string, string> = {
   leak: "prompt leak",
   empty: "empty",
   "invented-citation": "invented citation",
+  // Visitor plan V7: a figure that no cited document holds.
+  "ungrounded-figure": "ungrounded figure",
   "max-rounds": "used every round",
   degraded: "fallback answered",
   blocked: "blocked by the filter",
+  // Visitor plan V5: no words at first, then one more call or the fixed closing line.
+  repaired: "repaired: no words at first",
   "injection-attempt": "injection attempt",
 };
 
