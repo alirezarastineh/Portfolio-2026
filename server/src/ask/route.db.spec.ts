@@ -705,6 +705,22 @@ describe("POST /v1/ask/signal (visitor plan V2)", () => {
   });
 });
 
+describe("figures checked against their sources (visitor plan V7)", () => {
+  it("flags a figure no cited document holds on the logged row, and not one it does", async () => {
+    only(scripted([textTurn("Atlas cut escalations by 45% [^project:atlas@en].")]));
+    const wrong = (await readUiChunks(await ask("What did Atlas achieve?")))[0]![
+      "messageId"
+    ] as string;
+    expect((await logged(wrong))!.checks?.flags).toContain("ungrounded-figure");
+
+    only(scripted([textTurn("Atlas cut escalations by 38% [^project:atlas@en].")]));
+    const right = (await readUiChunks(await ask("What did Atlas achieve?")))[0]![
+      "messageId"
+    ] as string;
+    expect((await logged(right))!.checks?.flags).not.toContain("ungrounded-figure");
+  });
+});
+
 describe("POST /v1/ask/handoff", () => {
   it("records the visitor's yes to an answer's offer: that session, an offer, the first yes", async () => {
     only(

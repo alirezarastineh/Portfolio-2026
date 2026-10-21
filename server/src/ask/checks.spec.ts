@@ -6,6 +6,7 @@ import {
   CHECK_FLAGS,
   checkAnswer,
   repairReason,
+  ungroundedFigures,
   type CheckFlag,
   type CheckInput,
   type RepairReason,
@@ -24,6 +25,9 @@ import {
 const CITED =
   "Atlas is a retrieval-augmented support assistant [^project:atlas@en] that cut escalations by 38% while keeping answers grounded in the help-centre articles it retrieves for every question it is asked by customers.";
 
+/** What the cited Atlas document says: the 38 % the answers below state. */
+const ATLAS = "Atlas: a support assistant. Impact: cut escalations by 38 % in six months.";
+
 function input(overrides: Partial<CheckInput> = {}): CheckInput {
   return {
     text: CITED,
@@ -35,6 +39,7 @@ function input(overrides: Partial<CheckInput> = {}): CheckInput {
     steps: 1,
     maxRounds: 5,
     degraded: false,
+    citedTexts: [ATLAS],
     ...overrides,
   };
 }
@@ -73,6 +78,11 @@ describe("checks on finished answers", () => {
       flag: "invented-citation",
       raises: { droppedCitations: ["project:nebula@en"] },
       not: { droppedCitations: [] },
+    },
+    {
+      flag: "ungrounded-figure",
+      raises: { citedTexts: [] },
+      not: { citedTexts: [ATLAS] },
     },
     { flag: "max-rounds", raises: { steps: 5 }, not: { steps: 4 } },
     { flag: "degraded", raises: { degraded: true }, not: { degraded: false } },
@@ -235,6 +245,128 @@ describe("checks on finished answers", () => {
     // An unclear visitor language falls back to the page's.
     expect(flags({ text: german, language: null, locale: "de" })).not.toContain("language");
   });
+});
+
+describe("figures checked against their sources (visitor plan V7)", () => {
+  const FOUNDED = "Northwind Labs, founded in 2019 in Berlin, builds support software.";
+  const RATES = "Rates: on request; a project is quoted after a first call.";
+
+  // One row per figure form and near miss: the answer, what it cited, and the figures it owes.
+  const table: {
+    name: string;
+    text: string;
+    cited?: string[];
+    question?: string;
+    careful?: boolean;
+    owed: string[];
+  }[] = [
+    {
+      name: "a document's founding year",
+      text: "Northwind was founded in 2019 [^x].",
+      cited: [FOUNDED],
+      owed: [],
+    },
+    {
+      name: "a year no cited document has",
+      text: "Northwind was founded in 2017 [^x].",
+      cited: [FOUNDED],
+      owed: ["2017"],
+    },
+    {
+      name: "a count up to 12, exempt",
+      text: "He has shipped 3 projects [^x].",
+      cited: [],
+      owed: [],
+    },
+    { name: "12, the last exempt count", text: "He led 12 releases [^x].", cited: [], owed: [] },
+    { name: "13 is a figure", text: "He led 13 releases [^x].", cited: [], owed: ["13"] },
+    {
+      name: "40 % without a source",
+      text: "It cut costs by 40 % [^x].",
+      cited: [ATLAS],
+      owed: ["40"],
+    },
+    {
+      name: "a percentage, written either way",
+      text: "Escalations fell 38% [^x].",
+      cited: [ATLAS],
+      owed: [],
+    },
+    {
+      name: "a small percentage still owed",
+      text: "Errors fell by 5% [^x].",
+      cited: [ATLAS],
+      owed: ["5"],
+    },
+    { name: "a small count with a unit", text: "It runs 5x faster [^x].", cited: [], owed: ["5"] },
+    { name: "a sum of money", text: "His day rate is €9 [^x].", cited: [RATES], owed: ["9"] },
+    {
+      name: "thousands, grouped either way",
+      text: "It served 2,000 users [^x].",
+      cited: ["2.000 Nutzer"],
+      owed: [],
+    },
+    {
+      name: "a decimal, written either way",
+      text: "A 3.5 s cut [^x].",
+      cited: ["3,5 Sekunden"],
+      owed: [],
+    },
+    {
+      name: "a range, each end owed",
+      text: "He was there 2021–2024 [^x].",
+      cited: ["2021 – 2023"],
+      owed: ["2024"],
+    },
+    { name: "an ordinal, exempt", text: "His 23rd release shipped [^x].", cited: [], owed: [] },
+    { name: "a clock time, exempt", text: "He answers by 17:30 [^x].", cited: [], owed: [] },
+    {
+      name: "a figure the visitor typed",
+      text: "For a team of 40, he suggests [^x]…",
+      cited: [],
+      question: "We are 40 people.",
+      owed: [],
+    },
+    {
+      name: "digits in a citation or a link",
+      text: "See [Atlas](/en/work/atlas-2024) [^faq:a1c2e3f4@en].",
+      cited: [],
+      owed: [],
+    },
+    {
+      name: "a careful answer citing nothing owes every figure",
+      text: "He has 2 kids.",
+      careful: true,
+      owed: ["2"],
+    },
+    {
+      name: "a careful answer that cites",
+      text: "His rates come after a first call [^x], within 2 days.",
+      cited: [RATES],
+      careful: true,
+      owed: [],
+    },
+  ];
+
+  for (const row of table) {
+    it(`${row.name}: ${row.owed.length ? row.owed.join(", ") : "nothing owed"}`, () => {
+      const owed = ungroundedFigures({
+        text: row.text,
+        citedTexts: row.cited ?? [],
+        question: row.question ?? "What does he do?",
+        careful: row.careful,
+      });
+      expect(owed).toEqual(row.owed);
+      expect(
+        flags({
+          text: row.text,
+          citedTexts: row.cited ?? [],
+          question: row.question,
+          careful: row.careful,
+        }).includes("ungrounded-figure"),
+      ).toBe(row.owed.length > 0);
+    });
+  }
 });
 
 describe("the verifier: what an answer without words gets (visitor plan V5)", () => {

@@ -1,5 +1,6 @@
 import type { Locale } from "../content/schema.js";
 import { NOT_IN_PORTFOLIO, PROMPT_LEAKS } from "./answer-patterns.js";
+import { numbersOf, type Figure } from "./figures.js";
 import { detectLanguage } from "./language.js";
 import { KEY_SHAPES } from "./leak-guard.js";
 import { PROMPT_CANARY } from "./prompt.js";
@@ -29,6 +30,14 @@ export const CHECK_FLAGS = [
   "empty",
   /** The model cited a document that does not exist (the marker was removed). */
   "invented-citation",
+  /**
+   * A figure in the prose (a value, a percentage, a year, a range) that no
+   * document the answer cited holds, nor the visitor's own words (visitor plan
+   * V7). Counts up to 12 with nothing written onto them, ordinals and clock
+   * times are exempt; on a careful topic, an answer citing nothing owes every
+   * figure. Only a flag: the words were on screen already.
+   */
+  "ungrounded-figure",
   /** The answer used every round the agent has: the last one had to answer. */
   "max-rounds",
   /** A fallback or an answer-only model answered, not the chain's first choice. */
@@ -83,6 +92,10 @@ export interface CheckInput {
   secrets?: readonly string[];
   /** The verifier repaired an answer without words (visitor plan V5). */
   repaired?: boolean;
+  /** The texts of the documents the answer cited, from the corpus it read (visitor plan V7). */
+  citedTexts?: readonly string[];
+  /** The router gave it a careful topic (router.ts `sensitivityOf`). */
+  careful?: boolean;
 }
 
 /** Where a command starts: a line or a sentence, perhaps after "please". */
@@ -169,6 +182,41 @@ const UNCITED_WORDS = 25;
  */
 const FIGURE = /\d/;
 
+/** A link's target or a page's path: digits no claim is made with. */
+const LINKED =
+  /\]\([^)\s]{0,500}\)|\bhttps?:\/\/\S{1,500}|(?<![\w/])\/(?:en|de)(?:[/#]\S{0,200})?/g;
+/** The largest bare count an answer may state without a source ("3 projects", "two of 5"). */
+const COUNT_LIMIT = 12;
+
+/** Whether a figure must be in what the answer cited: not an ordinal, a time, or a bare count. */
+function owesSource(figure: Figure): boolean {
+  if (figure.optional) return false;
+  return figure.unit !== "" || !/^\d+$/.test(figure.value) || Number(figure.value) > COUNT_LIMIT;
+}
+
+/**
+ * The figures an answer states that no document it cited holds, nor the
+ * visitor's own words (visitor plan V7), each once, as `numbersOf` reads them
+ * (2,000 = 2.000; 40 % = 40%). On a careful topic, an answer citing nothing
+ * owes every figure it states, a count included. The same check serves the
+ * tour's and match's critics later.
+ */
+export function ungroundedFigures(
+  input: Pick<CheckInput, "text" | "question" | "citedTexts" | "careful">,
+): string[] {
+  const figures = numbersOf(input.text.replace(MARKERS, " ").replace(LINKED, " ")).filter(
+    (figure) => !figure.optional,
+  );
+  if (input.careful && !HAS_MARKER.test(input.text)) {
+    return [...new Set(figures.map((figure) => figure.value))];
+  }
+  const sources = [...(input.citedTexts ?? []), input.question ?? ""];
+  const known = new Set(sources.flatMap((text) => numbersOf(text).map((figure) => figure.value)));
+  return [...new Set(figures.filter(owesSource).map((figure) => figure.value))].filter(
+    (value) => !known.has(value),
+  );
+}
+
 /** The canary is a leak whoever wrote it first: pasting it must not hide a translated leak. */
 const CANARY = new RegExp(PROMPT_CANARY, "i");
 
@@ -220,6 +268,7 @@ export function checkAnswer(input: CheckInput): AnswerChecks {
     flags.push("empty");
   }
   if (input.droppedCitations.length) flags.push("invented-citation");
+  if (ungroundedFigures(input).length) flags.push("ungrounded-figure");
   if (input.steps >= input.maxRounds) flags.push("max-rounds");
   if (input.degraded) flags.push("degraded");
   if (input.finishReason === "content-filter") flags.push("blocked");

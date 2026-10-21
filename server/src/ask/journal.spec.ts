@@ -902,6 +902,19 @@ describe("each experiment's other outcomes", () => {
     expect(d.proposal).toMatchObject({ fixType: "model", fixRef: MODEL });
   });
 
+  it("reads an ungrounded figure as a symptom about content, and the model's own (visitor plan V7)", () => {
+    const flagged = answer({
+      answer: "Atlas cut escalations by 45%.",
+      flags: ["ungrounded-figure"],
+    });
+    expect(symptomsOf(flagged)).toEqual(["ungrounded-figure"]);
+    expect(categoryOf({ symptoms: symptomsOf(flagged) })).toBe("ungrounded-figure");
+    const d = run({ answer: flagged });
+    expect(observations(d, "degraded-model", true)).toContain(
+      "It stated a figure that no document it cited holds, nor the visitor's question",
+    );
+  });
+
   it("puts the content filter, a slow first token and the token limit in the infrastructure", () => {
     const blocked = run({
       answer: answer({ answer: "", finishReason: "content-filter", flags: ["blocked"] }),

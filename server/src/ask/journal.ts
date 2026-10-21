@@ -54,6 +54,8 @@ export const SYMPTOMS = [
   "leak",
   "unknown",
   "invented-citation",
+  // A figure no cited document holds (visitor plan V7).
+  "ungrounded-figure",
   "empty",
   "uncited",
   "unfaithful",
@@ -269,6 +271,8 @@ const NOT_THERE = new RegExp(NOT_IN_PORTFOLIO, "i");
 /** Symptoms about what an answer said, where using the corpus better would have helped. */
 const CONTENT_SYMPTOMS = new Set<Category>([
   "unknown",
+  // Where the right figure is, if anywhere: in a document it read, or in none (visitor plan V7).
+  "ungrounded-figure",
   "unfaithful",
   "thumbs-down",
   "rephrased",
@@ -437,6 +441,7 @@ export function symptomsOf(answer: DiagnosisAnswer): Symptom[] {
     leak: flags.has("leak"),
     unknown: NOT_THERE.test(answer.answer),
     "invented-citation": flags.has("invented-citation"),
+    "ungrounded-figure": flags.has("ungrounded-figure"),
     empty: flags.has("empty"),
     uncited: flags.has("uncited"),
     unfaithful: answer.faithfulness !== null && answer.faithfulness < FAITHFUL_AT,
@@ -956,6 +961,16 @@ function modelFindings(scene: Scene): Finding[] {
         "model",
         true,
         "It cited a document that does not exist (removed before the visitor saw it)",
+      ),
+    );
+  }
+  if (answer.flags.includes("ungrounded-figure")) {
+    found.push(
+      finding(
+        "degraded-model",
+        "model",
+        true,
+        "It stated a figure that no document it cited holds, nor the visitor's question",
       ),
     );
   }

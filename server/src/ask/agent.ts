@@ -704,6 +704,88 @@ export function streamAnswer(request: AnswerRequest): {
   const done = new Promise<AnswerOutcome>((resolve) => (resolveDone = resolve));
   let finished = false;
 
+  const traceDetails = () => ({
+    routing: {
+      reason: route.reason,
+      ...(route.sensitive ? { sensitive: route.sensitive } : {}),
+      ...(route.lookup ? { lookup: true as const } : {}),
+      ...(route.intent ? { intent: route.intent } : {}),
+    },
+    ...(escalated ? { escalation: { step: escalated.step, reason: escalated.reason } } : {}),
+    ...(request.window ? { window: request.window } : {}),
+    ...(repair ? { repair } : {}),
+    ...(handoff
+      ? {
+          handoff: {
+            by: handoff.by,
+            ...(handoff.replaced ? { replaced: true as const } : {}),
+          },
+        }
+      : {}),
+  });
+
+  const persistOutcome = async (
+    outcome: AnswerOutcome,
+    details: {
+      answering: ReturnType<typeof answeringModel>;
+      tokens: ReturnType<typeof summarizeCalls>["tokens"];
+      toolText: string;
+      secrets: string[];
+    },
+  ) => {
+    if (request.persist === false) return;
+    try {
+      // The source names the feature that spent: the terminal, the playground, an eval.
+      if (trace.calls.length) await recordUsage(trace.calls, request.source);
+      await logAnswer({
+        id: messageId,
+        sessionHash: request.sessionHash,
+        locale,
+        language,
+        source: request.source,
+        route: loggedRoute(details.answering?.answerOnly ?? false, route, escalated !== null),
+        routeReason: route.reason,
+        question: request.question,
+        answer: outcome.text,
+        citedIds: outcome.citedIds,
+        toolCalls: record.toolCalls.map((c) => c.name),
+        model: outcome.model,
+        attempts: trace.attempts,
+        ttftMs: trace.firstTokenAt === null ? null : trace.firstTokenAt - trace.startedAt,
+        totalMs: Date.now() - trace.startedAt,
+        tokens: details.tokens,
+        usd: outcome.usd,
+        finishReason: outcome.finishReason,
+        promptVersion: `${PROMPT_VERSION}+${PROMPT_HASH}`,
+        droppedAnswers: request.droppedAnswers ?? 0,
+        trace: outcome.steps,
+        droppedCitations: dropped,
+        // The documents it saw, exactly (`snapshotKey`), so a case frozen from it replays them.
+        corpusKey: snapshotKey(corpus),
+        checks: outcome.checks,
+      });
+      // The corpus this visitor's answer saw, kept so a case frozen from it
+      // re-runs against the same documents (playground drafts are not kept).
+      if (request.source === "terminal") await recordSnapshot(corpus);
+    } catch (error) {
+      console.error("[ask] could not record the answer", error);
+      captureError(error, { phase: "ask-log" });
+    }
+    // A piece of the instructions or a secret was written for a visitor: the
+    // owner hears of it at once, even when the answer could not be logged.
+    if (request.source === "terminal" && outcome.checks.flags.includes("leak")) {
+      const reached = leakReached({
+        text: outcome.text,
+        question: request.question,
+        toolText: details.toolText,
+        secrets: details.secrets,
+      });
+      await raiseAlert(leakAlert(messageId, leaks, reached)).catch((error: unknown) =>
+        console.error("[ask] leak alert not written", error),
+      );
+    }
+  };
+
   const finish = async (ending: "finished" | "aborted") => {
     if (finished) return;
     finished = true;
@@ -730,25 +812,7 @@ export function streamAnswer(request: AnswerRequest): {
         record,
         trace,
         { locale: reading, layout: corpus.layout, tokens: corpus.coreTokens[reading] },
-        {
-          routing: {
-            reason: route.reason,
-            ...(route.sensitive ? { sensitive: route.sensitive } : {}),
-            ...(route.lookup ? { lookup: true as const } : {}),
-            ...(route.intent ? { intent: route.intent } : {}),
-          },
-          ...(escalated ? { escalation: { step: escalated.step, reason: escalated.reason } } : {}),
-          ...(request.window ? { window: request.window } : {}),
-          ...(repair ? { repair } : {}),
-          ...(handoff
-            ? {
-                handoff: {
-                  by: handoff.by,
-                  ...(handoff.replaced ? { replaced: true as const } : {}),
-                },
-              }
-            : {}),
-        },
+        traceDetails(),
       ),
       checks: checkAnswer({
         text,
@@ -765,6 +829,9 @@ export function streamAnswer(request: AnswerRequest): {
         toolText,
         secrets,
         repaired: repair !== null,
+        // The figures it states, checked against what it cited, as read (visitor plan V7).
+        citedTexts: [...cited].map((id) => corpus.byId.get(id)?.text ?? ""),
+        careful: route.sensitive !== undefined,
       }),
       usd,
       searchCalls,
@@ -779,55 +846,7 @@ export function streamAnswer(request: AnswerRequest): {
       console.error("[ask] answer failed", record.error);
       captureError(record.error, { phase: "ask" });
     }
-    try {
-      if (request.persist === false) {
-        resolveDone(outcome);
-        return;
-      }
-      // The source names the feature that spent: the terminal, the playground, an eval.
-      if (trace.calls.length) await recordUsage(trace.calls, request.source);
-      await logAnswer({
-        id: messageId,
-        sessionHash: request.sessionHash,
-        locale,
-        language,
-        source: request.source,
-        route: loggedRoute(answering?.answerOnly ?? false, route, escalated !== null),
-        routeReason: route.reason,
-        question: request.question,
-        answer: outcome.text,
-        citedIds: outcome.citedIds,
-        toolCalls: record.toolCalls.map((c) => c.name),
-        model: outcome.model,
-        attempts: trace.attempts,
-        ttftMs: trace.firstTokenAt === null ? null : trace.firstTokenAt - trace.startedAt,
-        totalMs: Date.now() - trace.startedAt,
-        tokens,
-        usd,
-        finishReason,
-        promptVersion: `${PROMPT_VERSION}+${PROMPT_HASH}`,
-        droppedAnswers: request.droppedAnswers ?? 0,
-        trace: outcome.steps,
-        droppedCitations: dropped,
-        // The documents it saw, exactly (`snapshotKey`), so a case frozen from it replays them.
-        corpusKey: snapshotKey(corpus),
-        checks: outcome.checks,
-      });
-      // The corpus this visitor's answer saw, kept so a case frozen from it
-      // re-runs against the same documents (playground drafts are not kept).
-      if (request.source === "terminal") await recordSnapshot(corpus);
-    } catch (error) {
-      console.error("[ask] could not record the answer", error);
-      captureError(error, { phase: "ask-log" });
-    }
-    // A piece of the instructions or a secret was written for a visitor: the
-    // owner hears of it at once, even when the answer could not be logged.
-    if (request.source === "terminal" && outcome.checks.flags.includes("leak")) {
-      const reached = leakReached({ text, question: request.question, toolText, secrets });
-      await raiseAlert(leakAlert(messageId, leaks, reached)).catch((error: unknown) =>
-        console.error("[ask] leak alert not written", error),
-      );
-    }
+    await persistOutcome(outcome, { answering, tokens, toolText, secrets });
     resolveDone(outcome);
   };
 
