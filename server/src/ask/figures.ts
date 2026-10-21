@@ -42,10 +42,7 @@ export interface Figure {
 }
 
 /** A percent or currency sign after a number, a space allowed between (German writes "40 %"). */
-const SIGN_AFTER = new RegExp(
-  `^[ ${NO_BREAK}${String.fromCodePoint(0x202f)}]?([%‰€$£])`,
-  "u",
-);
+const SIGN_AFTER = new RegExp(`^[ ${NO_BREAK}${String.fromCodePoint(0x202f)}]?([%‰€$£])`, "u");
 /** A currency sign before a number. */
 const SIGN_BEFORE = /[€$£] ?$/u;
 
