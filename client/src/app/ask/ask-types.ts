@@ -18,6 +18,12 @@ export interface AnswerMetadata {
   totalMs?: number;
   tokens?: { input: number; cached: number; output: number };
   finishReason?: string | null;
+  /**
+   * The hand-off the answer offers (visitor plan V6): by the model's tool, or
+   * by the server when the visitor asked to reach him and the model did not,
+   * with the summary the contact form gets.
+   */
+  handoff?: { by: "tool" | "fallback"; summary: string };
 }
 
 export type AskMessage = UIMessage<AnswerMetadata>;

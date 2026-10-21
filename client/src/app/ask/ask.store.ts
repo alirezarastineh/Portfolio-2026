@@ -35,6 +35,7 @@ import { AskTraceService } from "./ask-trace.service";
 import type { AskMessage, DownReason, Entry, Failure, RemoteConfig } from "./ask-types";
 import { feedbackBody, withDownReason } from "./down-reasons";
 import { confirmHandoff } from "./handoff-confirm";
+import { handoffSummary } from "./handoff-offer";
 import {
   helpLines,
   offlineLines,
@@ -262,12 +263,9 @@ export const AskStore = signalStore(
           .map((e) => (e.id === id && e.kind === "ask" ? { ...e, ...patch } : e)),
       });
 
-    function handleToolPart(part: AskMessage["parts"][number], messageId: string): void {
+    function handleToolPart(part: AskMessage["parts"][number]): void {
       if (!isToolUIPart(part) || part.state !== "output-available") return;
-      if (part.type === "tool-handoff_contact") {
-        const summary = (part.input as { summary?: string } | undefined)?.summary;
-        if (summary) patchState(store, { handoff: { summary, messageId } });
-      } else if (part.type === "tool-navigate") {
+      if (part.type === "tool-navigate") {
         const output = part.output as { ok?: boolean; to?: string } | undefined;
         if (output?.ok && output.to) void store._router.navigateByUrl(output.to);
       }
@@ -337,8 +335,11 @@ export const AskStore = signalStore(
         patchState(store, { announcement: plainText(text) });
 
         for (const part of message.parts) {
-          handleToolPart(part, message.id);
+          handleToolPart(part);
         }
+        // The offer comes after the words (visitor plan V6): the model's, or the server's own.
+        const summary = handoffSummary(message);
+        if (summary) patchState(store, { handoff: { summary, messageId: message.id } });
       },
     });
 

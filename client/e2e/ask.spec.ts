@@ -200,30 +200,39 @@ async function run(prompt: ReturnType<Page["locator"]>, text: string) {
 
 /**
  * An answer that offers the hand-off, with the confirm and contact calls
- * recorded; returns once the offer is on screen.
+ * recorded; returns once the offer is on screen. The model's tool makes the
+ * offer, or the server does when the model made none (visitor plan V6): then
+ * only the finish's metadata carries it.
  */
-async function offerHandoff(page: Page) {
+async function offerHandoff(page: Page, by: "tool" | "fallback" = "tool") {
   const summary = "Wants to discuss a six-month contract for an AI platform.";
+  const tool: Chunk[] = [
+    { type: "tool-input-start", toolCallId: "h1", toolName: "handoff_contact" },
+    {
+      type: "tool-input-available",
+      toolCallId: "h1",
+      toolName: "handoff_contact",
+      input: { summary },
+    },
+    {
+      type: "tool-output-available",
+      toolCallId: "h1",
+      output: { ok: true, awaitingConfirmation: true },
+    },
+  ];
   await mockAsk(page, (route) =>
     sse(route, [
       ...answer({ text: "Happy to help you reach him." }).slice(0, -2),
-      { type: "tool-input-start", toolCallId: "h1", toolName: "handoff_contact" },
-      {
-        type: "tool-input-available",
-        toolCallId: "h1",
-        toolName: "handoff_contact",
-        input: { summary },
-      },
-      {
-        type: "tool-output-available",
-        toolCallId: "h1",
-        output: { ok: true, awaitingConfirmation: true },
-      },
+      ...(by === "tool" ? tool : []),
       { type: "finish-step" },
       {
         type: "finish",
-        finishReason: "tool-calls",
-        messageMetadata: { sig: "s", model: "gemini-3.5-flash-lite" },
+        finishReason: by === "tool" ? "tool-calls" : "stop",
+        messageMetadata: {
+          sig: "s",
+          model: "gemini-3.5-flash-lite",
+          ...(by === "fallback" ? { handoff: { by, summary } } : {}),
+        },
       },
     ]),
   );
@@ -618,6 +627,17 @@ test.describe("assistant terminal", () => {
     await page.getByRole("button", { name: "> send_message()" }).click();
     await expect.poll(() => sent.length).toBe(1);
     expect(sent[0]).toMatchObject({ message: summary, origin: "ask", ask: confirmed[0] });
+  });
+
+  test("the server's own offer, made when the model made none, is confirmed the same way", async ({
+    page,
+  }) => {
+    const { summary, confirm, confirmed } = await offerHandoff(page, "fallback");
+    await expect(page.locator("#about [role=log]")).toContainText("Happy to help you reach him.");
+    await confirm.getByRole("button", { name: "yes" }).click();
+    await expect(page.locator("#contact-message")).toHaveValue(summary);
+    await expect.poll(() => confirmed.length).toBe(1);
+    expect(confirmed[0]).toEqual({ sessionId: expect.any(String), messageId: "m_e2e00000001" });
   });
 
   test("without the tick, the message goes without the conversation", async ({ page }) => {
