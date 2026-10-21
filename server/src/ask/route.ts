@@ -20,6 +20,7 @@ import { shortName } from "./models/registry.js";
 import { routeQuestion } from "./router.js";
 import { assistantState } from "./settings.js";
 import { FEEDBACK_REASONS, SignalLimiter, signalsSchema } from "./signals.js";
+import { OFFERED_HANDOFF } from "./outcome-rows.js";
 import { DEEP_ROUTE, withoutDemoted } from "./trust.js";
 
 /**
@@ -352,7 +353,8 @@ export function createAskRouter(): Hono {
     const { sessionId, messageId } = parsed.data;
 
     // Only the session that got the offer may confirm it, only on an answer
-    // that made one, and the first yes is the one that counts.
+    // that made one (the model's tool, or the server's own, visitor plan V6),
+    // and the first yes is the one that counts.
     const [confirmed] = await getDb()
       .update(aiMessages)
       .set({ handoffConfirmedAt: sql`coalesce(${aiMessages.handoffConfirmedAt}, now())` })
@@ -360,7 +362,7 @@ export function createAskRouter(): Hono {
         and(
           eq(aiMessages.id, messageId),
           eq(aiMessages.sessionHash, hashWithSalt("session", sessionId)),
-          sql`${aiMessages.toolCalls} @> '["handoff_contact"]'::jsonb`,
+          OFFERED_HANDOFF,
         ),
       )
       .returning({ id: aiMessages.id });

@@ -4,6 +4,7 @@ import { fixtureConfig } from "../test/ask-fixtures.js";
 import { EVAL_CASES } from "./evals/cases.js";
 import { fixtureAskCorpus } from "./evals/fixture.js";
 import {
+  contactIntentOf,
   escalationOf,
   routeLabels,
   routeQuestion,
@@ -89,6 +90,120 @@ describe("sensitivityOf (the newspaper test)", () => {
     "How many years of experience does he have in his number crunching?",
   ])("leaves %j alone", (question) => {
     expect(sensitivityOf(question)).toBeNull();
+  });
+});
+
+describe("contactIntentOf (visitor plan V6)", () => {
+  it.each([
+    "I'd like to hire him for a six-month contract. How do we start?",
+    "I’d like to hire him.",
+    "Can we hire Alireza?",
+    "How can I hire him?",
+    "Is it possible to hire him as a contractor?",
+    "We're hiring a staff engineer. Would he be interested?",
+    "Is he available for hire?",
+    "Would he join our team?",
+    "How do I contact him?",
+    "What's the best way to reach him?",
+    "Can I email you about a role?",
+    "How can I get in touch?",
+    "I'd love to get in touch with Alireza.",
+    "Can I speak to him this week?",
+    "My email is jane.doe@example.com, please send him my CV.",
+    "We'd like to interview him for a senior role.",
+    "Can we schedule a call with him?",
+    "I want to work with him on a RAG project.",
+    "We'd be happy to work with him.",
+    "I'm interested in working with Alireza.",
+    "Could we work together on our platform?",
+    "Let's work together.",
+    "We have a project for him.",
+    "Can I get a quote for a small website?",
+    "Could he give us a quote?",
+    "How do we start?",
+    "What are the next steps?",
+    "Wir würden ihn gern einstellen.",
+    "Können wir Alireza beauftragen?",
+    "Kann man ihn für Projekte buchen?",
+    "Wie kann ich ihn kontaktieren?",
+    "Wie erreiche ich ihn?",
+    "Ich möchte Kontakt aufnehmen.",
+    "Wie komme ich mit ihm in Kontakt?",
+    "Können wir mit ihm zusammenarbeiten?",
+    "Wir hätten gern ein Vorstellungsgespräch mit ihm.",
+    "Ich hätte gern ein Angebot für unsere App.",
+    "Kann er uns ein Angebot machen?",
+    "Wir haben ein Projekt für ihn.",
+    "Schick ihm meinen Lebenslauf.",
+    "Wie fangen wir an?",
+  ])("flags %j", (question) => {
+    expect(contactIntentOf(question)).toBe("contact");
+  });
+
+  it.each([
+    // What he did, or what others did with him.
+    "Did he hire engineers?",
+    "Has he hired or led a team?",
+    "Why did Northwind hire him?",
+    "Would a startup hire him for this?",
+    "Who did he work with at Northwind?",
+    "What's it like to work with him?",
+    "Does he interview candidates?",
+    "How did he start his career?",
+    // Words that look like it.
+    "Does he do contract testing?",
+    "How does he handle client contracts?",
+    "Can you quote his post on evals?",
+    "Is there a quote from his manager?",
+    "Tell me about the Contact Form Builder project.",
+    "How did he build the contact form?",
+    "How do we start a RAG project?",
+    "Can I chat with you about his projects?",
+    "What do you call his Atlas pipeline?",
+    "Is he open to new roles?",
+    // German.
+    "Hat er Leute eingestellt?",
+    "Mit wem hat er zusammengearbeitet?",
+    "Wie ist es, mit ihm zu arbeiten?",
+    "Wie geht er mit Kundenverträgen um?",
+    "Was hat er mit Atlas erreicht?",
+    "Welche Angebote nutzt Atlas?",
+    "Wie geht es weiter mit Atlas?",
+    "Wer hat ihn eingestellt?",
+  ])("leaves %j alone", (question) => {
+    expect(contactIntentOf(question)).toBeNull();
+  });
+
+  it("flags exactly the eval cases that ask to reach him, and not the near miss", () => {
+    const flagged = EVAL_CASES.filter((c) => contactIntentOf(c.question)).map((c) => c.id);
+    expect(flagged.sort()).toEqual([
+      "conv-handoff",
+      "pii-send",
+      "tool-hire",
+      "tool-hire-de",
+      "tool-interview",
+    ]);
+    // Every case that expects the offer asks for it.
+    for (const c of EVAL_CASES.filter((c) => c.expectTool?.name === "handoff_contact")) {
+      expect(flagged, c.id).toContain(c.id);
+    }
+  });
+
+  it("keeps the intent on the decision, whatever the route, with its reason unchanged", () => {
+    expect(routeQuestion("How can I hire him?", options)).toEqual({
+      route: "lite",
+      reason: "default",
+      intent: "contact",
+    });
+    expect(routeQuestion("Who do I contact to hire him?", options)).toMatchObject({
+      intent: "contact",
+      lookup: true,
+    });
+    expect(routeQuestion("Why would we hire him over others?", options)).toMatchObject({
+      route: "deep",
+      intent: "contact",
+    });
+    expect(routeQuestion("Where is he based?", options).intent).toBeUndefined();
   });
 });
 

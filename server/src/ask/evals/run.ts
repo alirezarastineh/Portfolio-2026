@@ -65,6 +65,8 @@ export interface CaseResult {
   conversation?: ReplayedConversation;
   /** The verifier's repair, when the answer had no words at first (visitor plan V5). */
   repair?: NonNullable<AnswerOutcome["repair"]>;
+  /** The hand-off offered, and by which path (visitor plan V6); `replaced` when gated. */
+  handoff?: { by: "tool" | "fallback"; replaced?: true };
 }
 
 /** An earlier turn as the case sent it; a live one holds the answer this run generated. */
@@ -317,17 +319,21 @@ function checkTools(
   c: EvalCase,
   tools: { name: string; input: unknown }[],
   failures: string[],
+  handoff?: { by: "tool" | "fallback" } | null,
 ): void {
+  // The server's own hand-off counts as the offer (visitor plan V6), as the visitor sees it.
+  const offered = (name: string) => name === "handoff_contact" && handoff?.by === "fallback";
   if (c.expectTool) {
     const call = tools.find((t) => t.name === c.expectTool!.name);
-    if (!call) {
+    if (!call && !offered(c.expectTool.name)) {
       failures.push(`did not call ${c.expectTool.name}`);
-    } else if (c.expectTool.input) {
+    } else if (call && c.expectTool.input) {
       checkToolInput(c.expectTool.name, c.expectTool.input, call.input, failures);
     }
   }
   for (const name of c.forbidTools ?? []) {
     if (tools.some((t) => t.name === name)) failures.push(`called ${name}`);
+    else if (offered(name)) failures.push(`offered ${name} (the server's fallback)`);
   }
 }
 
@@ -364,6 +370,8 @@ export function grade(
     route?: readonly RouteLabel[];
     /** What the history did with the case's earlier turns; a grade without it does not check them. */
     history?: HistoryRead;
+    /** The hand-off the answer offered, by the model's tool or the server (visitor plan V6). */
+    handoff?: { by: "tool" | "fallback" } | null;
   },
 ): string[] {
   const failures: string[] = [];
@@ -378,7 +386,7 @@ export function grade(
   checkCitations(c, answer.cited, failures);
   checkProse(c, prose, failures);
   if (answer.history) checkHistory(c, answer.history, failures);
-  checkTools(c, answer.tools, failures);
+  checkTools(c, answer.tools, failures, answer.handoff);
   if (c.expectRoute && answer.route && !answer.route.includes(c.expectRoute)) {
     failures.push(`routed ${answer.route.join("+")}, not ${c.expectRoute}`);
   }
@@ -738,6 +746,7 @@ function collectCaseFailures(c: EvalCase, asked: AskedQuestion): string[] {
     tools: outcome.toolCalls.map((t) => ({ name: t.name, input: t.input })),
     route: asked.route,
     history: { droppedAnswers: asked.droppedAnswers, window: outcome.steps?.window },
+    handoff: outcome.handoff,
   });
   if (outcome.droppedCitations.length) {
     failures.push(`invented citations: ${outcome.droppedCitations.join(", ")}`);
@@ -883,6 +892,14 @@ async function runCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
       : {}),
     ...(answered.conversation ? { conversation: answered.conversation } : {}),
     ...(outcome.repair ? { repair: outcome.repair } : {}),
+    ...(outcome.handoff
+      ? {
+          handoff: {
+            by: outcome.handoff.by,
+            ...(outcome.handoff.replaced ? { replaced: true as const } : {}),
+          },
+        }
+      : {}),
   };
 }
 

@@ -15,6 +15,7 @@ import {
   CAREFUL_BLOCKS,
   CAREFUL_LEAD,
   closingLine,
+  CONTACT_BLOCK,
   PROMPT_CANARY,
   REPAIR_LINE,
   SYSTEM_PROMPT,
@@ -311,7 +312,7 @@ describe("the verifier: what an answer without words gets (visitor plan V5)", ()
 
 describe("one definition for the graders and the checks", () => {
   it("every leak pattern is a real piece of the instructions, the careful blocks included", () => {
-    const instructions = [SYSTEM_PROMPT, ...CAREFUL_BLOCKS, REPAIR_LINE].join("\n");
+    const instructions = [SYSTEM_PROMPT, ...CAREFUL_BLOCKS, REPAIR_LINE, CONTACT_BLOCK].join("\n");
     for (const piece of PROMPT_LEAKS) expect(instructions).toContain(piece);
     for (const block of CAREFUL_BLOCKS) expect(block).toContain(CAREFUL_LEAD);
   });

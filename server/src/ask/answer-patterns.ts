@@ -6,7 +6,7 @@
  * text runs as `new RegExp(p, "i")` and as `~* p` in SQL.
  */
 
-import { CAREFUL_LEAD, PROMPT_CANARY, REPAIR_LEAD } from "./prompt.js";
+import { CAREFUL_LEAD, CONTACT_LEAD, PROMPT_CANARY, REPAIR_LEAD } from "./prompt.js";
 
 /**
  * Saying "it isn't there" in either language: the answers worth an FAQ entry.
@@ -27,7 +27,8 @@ export const PROMPT_LEAKS = [
   "suggest_followups: at the end",
   // The careful block's line (plan phase 20): instructions, though not SYSTEM_PROMPT's.
   CAREFUL_LEAD,
-  // The repair line's (visitor plan V5): what an answer without words is told.
+  // The repair line's (visitor plan V5) and the request block's (V6).
   REPAIR_LEAD,
+  CONTACT_LEAD,
   PROMPT_CANARY,
 ];

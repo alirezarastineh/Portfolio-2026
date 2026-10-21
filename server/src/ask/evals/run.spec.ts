@@ -69,6 +69,33 @@ describe("eval graders", () => {
     ).toEqual(['navigate.to was "/en"']);
   });
 
+  it("counts an offer by either path, and a fallback offer where none may be made (visitor plan V6)", () => {
+    const words = { text: "Happy to help: confirm below.", cited: [], tools: [] };
+    const fallback = { by: "fallback" as const };
+    expect(grade(byId("tool-hire"), words)).toEqual(["did not call handoff_contact"]);
+    expect(grade(byId("tool-hire"), { ...words, handoff: fallback })).toEqual([]);
+    expect(
+      grade(byId("tool-hire-de"), { ...words, text: "Gern: bestätige unten.", handoff: fallback }),
+    ).toEqual([]);
+    const team = byId("fact-led-team");
+    const answer = {
+      text: "He leads the three-person LLM platform team at Northwind [^experience:northwind@en].",
+      cited: ["experience:northwind@en"],
+      tools: [],
+    };
+    expect(grade(team, answer)).toEqual([]);
+    expect(grade(team, { ...answer, handoff: fallback })).toEqual([
+      "offered handoff_contact (the server's fallback)",
+    ]);
+    expect(
+      grade(team, {
+        ...answer,
+        tools: [{ name: "handoff_contact", input: {} }],
+        handoff: { by: "tool" },
+      }),
+    ).toEqual(["called handoff_contact"]);
+  });
+
   it("fails a hand-off with no words: only a page opened answers without them (visitor plan V5)", () => {
     const hire = byId("tool-hire");
     const handoff = [{ name: "handoff_contact", input: { summary: "Hire him for six months." } }];

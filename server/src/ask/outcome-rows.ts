@@ -10,6 +10,12 @@ import { NOT_IN_PORTFOLIO } from "./answer-patterns.js";
 export const UNKNOWN_ANSWER = sql`(${aiMessages.answerExcerpt} ~* ${NOT_IN_PORTFOLIO})`;
 
 /**
+ * An answer that offered the hand-off: the model called the tool, or the
+ * server made the offer itself (visitor plan V6), which the trace records.
+ */
+export const OFFERED_HANDOFF = sql`(${aiMessages.toolCalls} @> '["handoff_contact"]'::jsonb or ${aiMessages.trace} -> 'handoff' is not null)`;
+
+/**
  * An answer as outcomes.ts reads it (`OutcomeRow`), for the outcomes and the
  * perception routes; the select needs the left join on `ai_feedback`.
  */
@@ -24,7 +30,7 @@ export const OUTCOME_COLUMNS = {
   feedback: sql<1 | -1 | null>`${aiFeedback.value}`,
   faithfulness: sql<number | null>`(${aiMessages.judge} ->> 'faithfulness')::float8`,
   unknown: sql<boolean>`${UNKNOWN_ANSWER}`,
-  handoffOffered: sql<boolean>`${aiMessages.toolCalls} @> '["handoff_contact"]'::jsonb`,
+  handoffOffered: sql<boolean>`${OFFERED_HANDOFF}`,
   handoffConfirmed: sql<boolean>`${aiMessages.handoffConfirmedAt} is not null`,
   // What the visitor's browser saw, and why a 👎 (visitor plan V2).
   downReason: sql<string | null>`${aiFeedback.reason}`,

@@ -748,6 +748,48 @@ describe("POST /v1/ask/handoff", () => {
     expect((await confirm(SESSION, "no")).status).toBe(400);
   });
 
+  it("makes the offer itself when the visitor asked and the model did not, and takes a yes to it", async () => {
+    only(scripted([textTurn("He is open to contract work [^profile@en].")]));
+    const chunks = await readUiChunks(await ask("How can I hire him?"));
+    const messageId = chunks[0]!["messageId"] as string;
+    const finish = chunks.find((c) => c["type"] === "finish")!;
+    expect(finish["messageMetadata"]).toMatchObject({
+      handoff: { by: "fallback", summary: "How can I hire him?" },
+    });
+    const row = await logged(messageId);
+    expect(row!.toolCalls).not.toContain("handoff_contact");
+    expect(row!.trace).toMatchObject({
+      routing: { intent: "contact" },
+      handoff: { by: "fallback" },
+    });
+
+    const confirmed = await app.request("/v1/ask/handoff", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sessionId: SESSION, messageId }),
+    });
+    expect(confirmed.status).toBe(200);
+  });
+
+  it("replaces a summary the gate refuses with the visitor's own words", async () => {
+    only(
+      scripted([
+        toolTurn(
+          "handoff_contact",
+          { summary: "I have sent your CV to recruiting@example.com." },
+          "h1",
+        ),
+        textTurn("Confirm below and the contact form opens with your request."),
+      ]),
+    );
+    const question = "Please pass my CV on to him, I'd like to work with him.";
+    const chunks = await readUiChunks(await ask(question));
+    const finish = chunks.find((c) => c["type"] === "finish")!;
+    expect(finish["messageMetadata"]).toMatchObject({ handoff: { by: "tool", summary: question } });
+    const row = await logged(chunks[0]!["messageId"] as string);
+    expect(row!.trace).toMatchObject({ handoff: { by: "tool", replaced: true } });
+  });
+
   it("attaches the conversation redacted, as the log keeps it", async () => {
     only(scripted([textTurn("He works on Atlas.")]));
     const asked = (

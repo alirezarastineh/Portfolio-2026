@@ -33,6 +33,13 @@ export interface RouteDecision {
   sensitive?: Sensitivity;
   /** The cheapest tier: the primary model with minimal thinking. */
   lookup?: boolean;
+  /**
+   * The visitor wants to hire, interview, work with or reach him, or asks for
+   * a quote (visitor plan V6, `contactIntentOf`): the answer gets the request
+   * block, and the hand-off is offered by the model or, failing that, the
+   * server. Absent for any other question.
+   */
+  intent?: "contact";
 }
 
 const DEEP_PATTERNS: [RegExp, string][] = [
@@ -156,6 +163,105 @@ const SENSITIVE_PATTERNS: [RegExp, Sensitivity][] = [
   [/\bseine referenzen\b/i, "private"],
 ];
 
+/** Him, as a visitor names him to the assistant: "him", his name, or "you" for the site. */
+const HIM = "(?:him|alireza|rastineh|you)";
+/** Him only: "call you" and "talk to you" are said to the assistant itself. */
+const ONLY_HIM = "(?:him|alireza|rastineh)";
+/** German: "ihn", his name, "dich" ("Sie" is "they" too, so it is left out). */
+const IHN = "(?:ihn|alireza|rastineh|dich)";
+/** The visitor as the one who wants it, in German. */
+const ICH = "(?:ich|wir|mir|uns)";
+/**
+ * The visitor wanting it: "I'd like", "we want", "we're looking", "we'd be happy to", "can we",
+ * "how do I", "let's". An apostrophe is typed straight or curly.
+ */
+const WANT = String.raw`(?:\b(?:i|we)(?:['’]d| would)? (?:like|love|want|hope|plan|need|wish)\b|\b(?:i|we)(?:['’]d| would) be (?:glad|happy|interested|keen|open)\b|\b(?:i|we)(?:['’]re| are|['’]m| am) (?:looking|keen|interested|hoping|planning|thinking)\b|\b(?:can|could|may|might|should|shall) (?:i|we)\b|\bhow (?:can|could|do|would|should|might) (?:i|we)\b|\bis it possible (?:for (?:me|us) )?to\b|\blet['’]?s\b)`;
+/** Someone else doing it: "Why did Northwind hire him?", "Would a startup hire him?". */
+const NOT_THEIRS = String.raw`(?<!\b(?:did|does|had|has|have|would|will|should|might)\s+(?!(?:i|we|you)\b)(?:[\w'’-]+\s+){1,2})`;
+
+/**
+ * Wanting to hire, interview, work with or reach him, asking for a quote, or
+ * "how do we start" (visitor plan V6), English and German. Each pattern needs
+ * the visitor's own intent (I, we, us) or him as its object, and not as
+ * someone else's ("Why did Northwind hire him?"), so a question about what he
+ * did stays ordinary: "Did he hire engineers?", "Has he hired or led a team?",
+ * "Who did he work with?", "What's it like to work with him?", "contract
+ * testing", "How does he handle client contracts?" (a careful question, not a
+ * request), "Can you quote his post?", a project named after a contact form.
+ * The flagged forms and the near misses are tests (router.spec.ts).
+ */
+const CONTACT_PATTERNS: RegExp[] = [
+  // Hiring him, or the visitor hiring.
+  new RegExp(
+    String.raw`${NOT_THEIRS}\b(?:hire|hiring|recruit|recruiting|employ|engage|book|onboard)\s+${HIM}\b`,
+    "i",
+  ),
+  new RegExp(String.raw`${WANT}[^.?!\n]{0,20}\b(?:hire|hiring|recruit|recruiting)\b`, "i"),
+  /\bwe(?:['’]re| are) (?:hiring|recruiting)\b/i,
+  /\b(?:available|open) for hire\b/i,
+  /\b(?:join(?:ing)?|work(?:ing)? for) (?:us|our (?:team|company|startup|project))\b/i,
+  // Reaching him, or sending him something.
+  new RegExp(
+    String.raw`${NOT_THEIRS}\b(?:contact|reach|email|e-mail)\s+${HIM}\b(?!\s+(?:back|later)\b)`,
+    "i",
+  ),
+  new RegExp(String.raw`${NOT_THEIRS}\b(?:call|message|phone)\s+${ONLY_HIM}\b`, "i"),
+  new RegExp(
+    String.raw`${NOT_THEIRS}\b(?:send|forward|pass)\s+${ONLY_HIM}\s+(?:my|our|a|an|the|this)\b`,
+    "i",
+  ),
+  new RegExp(String.raw`\bget (?:in touch|in contact|hold of) with ${HIM}\b`, "i"),
+  /\b(?:i|we)\b[^.?!\n]{0,25}\bget (?:in touch|in contact|hold of)\b/i,
+  new RegExp(String.raw`${NOT_THEIRS}\b(?:talk|speak) (?:to|with) ${ONLY_HIM}\b`, "i"),
+  // Interviewing him, or meeting him.
+  new RegExp(String.raw`${NOT_THEIRS}\binterview(?:ing)? ${HIM}\b`, "i"),
+  new RegExp(
+    String.raw`\b(?:schedule|set up|arrange|book)\b[^.?!\n]{0,20}\b(?:call|interview|meeting|chat)\b[^.?!\n]{0,12}\bwith ${HIM}\b`,
+    "i",
+  ),
+  // Working with him: the visitor's wish, not what working with him is like.
+  new RegExp(
+    String.raw`${WANT}[^.?!\n]{0,25}\b(?:work|collaborate|partner|team up)(?:ing)? (?:together )?with ${HIM}\b`,
+    "i",
+  ),
+  new RegExp(String.raw`${WANT}[^.?!\n]{0,25}\bwork together\b`, "i"),
+  /\b(?:i|we) (?:have|['’]ve got|got) (?:a|an) (?:project|role|position|job|opening|opportunity|contract|gig) (?:for|that)\b/i,
+  // A quote, asked for with its article ("Can you quote his post?" is no request), not one he gave.
+  /\b(?:get|give|send|prepare|request|need|want|like|ask for|have)\b[^.?!\n]{0,15}\ba quote\b(?!\s+(?:from|by|in|about|of|on)\b)/i,
+  /\b(?:get|give|send|prepare|request|need|want|like|ask for|have)\b[^.?!\n]{0,15}\b(?:a|an) (?:quotation|cost estimate|price estimate)\b/i,
+  // "How do we start?", alone: "How do we start a RAG project?" is a question of method.
+  /\bhow (?:do|can|should|would|could) (?:we|i) (?:get )?(?:start|begin|proceed|get started|move forward)\s*(?:with (?:him|you|alireza)\s*)?(?:[?.!]|$)/im,
+  /\bwhat (?:are|['’]re) the next steps\b/i,
+  // German: einstellen, beauftragen, Kontakt aufnehmen, zusammenarbeiten, ein Angebot.
+  new RegExp(
+    String.raw`\b${IHN} (?:[^\s.?!]+ ){0,2}(?:einstellen|anstellen|engagieren|buchen|beauftragen|rekrutieren|kontaktieren|erreichen|anrufen|anschreiben|interviewen)\b`,
+    "i",
+  ),
+  /\b(?:schick|send|leit)\w* (?:ihm|alireza) (?:mein|unser|ein|den|die|das)\w*\b/i,
+  new RegExp(String.raw`\b(?:kontaktier|erreich|schreib|ruf|sprech)\w* (?:ich|wir) ${IHN}\b`, "i"),
+  new RegExp(
+    String.raw`\b${ICH}\b[^.?!\n]{0,40}\b(?:einstellen|anstellen|engagieren|beauftragen)\b`,
+    "i",
+  ),
+  /\bkontakt (?:zu (?:ihm|alireza) )?(?:aufnehmen|herstellen)\b/i,
+  /\bmit (?:ihm|alireza|dir) (?:in )?kontakt\b/i,
+  /\bmit (?:ihm|alireza|dir) (?:zusammenarbeiten|arbeiten|sprechen|reden|telefonieren)\b/i,
+  new RegExp(String.raw`\b${ICH}\b[^.?!\n]{0,40}\bzusammenarbeiten\b`, "i"),
+  /\b(?:vorstellungsgespräch|bewerbungsgespräch|kennenlerngespräch|interview)\b[^.?!\n]{0,30}\bmit (?:ihm|alireza|dir)\b/i,
+  new RegExp(
+    String.raw`\b${ICH}\b[^.?!\n]{0,40}\b(?:ein|einen) (?:angebot|kostenvoranschlag)\b`,
+    "i",
+  ),
+  /\b(?:ich|wir) (?:habe|haben|hätte|hätten) (?:ein|eine|einen) (?:projekt|stelle|position|rolle|auftrag|anfrage) für (?:ihn|alireza|dich)\b/i,
+  /\bwie (?:fangen|starten|beginnen|legen) wir (?:an|los)?\s*(?:[?.!]|$)/im,
+  /\bwie geht es (?:jetzt |nun |dann )?weiter\s*(?:[?.!]|$)/im,
+];
+
+/** Whether the visitor's latest message asks to hire, interview, work with or reach him. */
+export function contactIntentOf(text: string): "contact" | null {
+  return CONTACT_PATTERNS.some((pattern) => pattern.test(text)) ? "contact" : null;
+}
+
 /** A short factual question: who, where, when, which; wer, wo, wann, welche. */
 const LOOKUP_PATTERNS = [/^(?:who|where|when|which)\b/i, /^(?:wer|wo|wann|welche[mnrs]?)\b/i];
 const LOOKUP_MAX_WORDS = 9;
@@ -176,10 +282,13 @@ export function routeQuestion(
   options: { forceDeep: boolean; deepAllowed: boolean; projectNames: readonly string[] },
 ): RouteDecision {
   const sensitive = sensitivityOf(text);
-  const decide = (route: Route, reason: string): RouteDecision =>
-    sensitive
+  const intent = contactIntentOf(text);
+  const decide = (route: Route, reason: string): RouteDecision => ({
+    ...(sensitive
       ? { route, reason: `${reason}+sensitive:${sensitive}`, sensitive }
-      : { route, reason };
+      : { route, reason }),
+    ...(intent ? { intent } : {}),
+  });
 
   const deep = options.forceDeep ? "command" : deepReason(text, options.projectNames);
   if (deep && options.deepAllowed) return decide("deep", deep);

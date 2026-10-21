@@ -30,13 +30,27 @@ const DIGITS = /(?:\+|\b)\d[\d\s()./-]{5,}\d\b/g;
 /** `2021-2023`, `2024-03-01`, `2019/20`: dates, which answers are full of. */
 const DATE_LIKE = /^(?:19|20)\d{2}(?:\s*[-/.]\s*\d{2,4}){1,2}$/;
 
+/** A run of digits worth hiding: seven or more of them, and not a date. */
+const isNumber = (match: string) =>
+  match.replace(/\D/g, "").length >= 7 && !DATE_LIKE.test(match.trim());
+
 export function redact(text: string): string {
   return text
     .replace(EMAIL, "[email]")
     .replace(IBAN, "[number]")
-    .replace(DIGITS, (match) =>
-      match.replace(/\D/g, "").length >= 7 && !DATE_LIKE.test(match.trim()) ? "[number]" : match,
-    );
+    .replace(DIGITS, (match) => (isNumber(match) ? "[number]" : match));
+}
+
+/**
+ * What `redact` would hide in a text, as written: its email addresses,
+ * IBAN-like strings and phone or card numbers (the hand-off's summary gate,
+ * visitor plan V6).
+ */
+export function personalPieces(text: string): string[] {
+  return [
+    ...[...text.matchAll(EMAIL), ...text.matchAll(IBAN)].map((match) => match[0]),
+    ...[...text.matchAll(DIGITS)].map((match) => match[0]).filter(isNumber),
+  ];
 }
 
 export interface AnswerLog {

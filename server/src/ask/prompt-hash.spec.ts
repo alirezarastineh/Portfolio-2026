@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CAREFUL_BLOCKS,
   closingLine,
+  CONTACT_BLOCK,
   hashedPromptText,
   REPAIR_LINE,
   SYSTEM_PROMPT,
@@ -36,5 +37,7 @@ describe("the prompt's hash", () => {
     expect(text).toContain("[What your lookups for this reply returned:]");
     expect(text).toContain(closingLine("en"));
     expect(text).toContain(closingLine("de"));
+    // The request block for a visitor who wants to reach him (visitor plan V6).
+    expect(text).toContain(CONTACT_BLOCK);
   });
 });

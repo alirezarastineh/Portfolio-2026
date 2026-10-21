@@ -132,6 +132,52 @@ describe("the careful block (sensitive questions)", () => {
   });
 });
 
+describe("the request block (visitor plan V6: the visitor wants to reach him)", () => {
+  const CONTACT: RouteDecision = { route: "lite", reason: "default", intent: "contact" };
+
+  it("follows the corpus and the careful block, before the language line, prefix untouched", async () => {
+    const plain = scripted([textTurn("He is based in Berlin [^profile@en].")]);
+    await outcomeOf(answer(LITE, [mockEntry("gemini-3.5-flash-lite", plain.model)]));
+    const asked = scripted([textTurn("Happy to help [^profile@en].")]);
+    const both: RouteDecision = {
+      ...CONTACT,
+      reason: "default+sensitive:compensation",
+      sensitive: "compensation",
+    };
+    await outcomeOf(answer(both, [mockEntry("gemini-3.5-flash-lite", asked.model)]));
+
+    const before = system(plain);
+    const after = system(asked);
+    const language = before.indexOf("\n\n# Required response language");
+    expect(after.startsWith(before.slice(0, language))).toBe(true);
+    const block = after.slice(language);
+    const careful = block.indexOf("# Careful topic");
+    const request = block.indexOf("# Contact request");
+    expect(careful).toBeGreaterThan(0);
+    expect(request).toBeGreaterThan(careful);
+    expect(request).toBeLessThan(block.indexOf("# Required response language"));
+    expect(block).toContain("call handoff_contact with a short, neutral summary");
+    expect(before).not.toContain("# Contact request");
+  });
+
+  it("is left out for a model without tools: the server makes the offer for it", async () => {
+    const answerOnly = scripted([textTurn("He is open to contract work [^profile@en].")]);
+    const entry = { ...mockEntry("vendor/small", answerOnly.model), tools: false };
+    const outcome = await outcomeOf(answer(CONTACT, [entry], {}, "How can I hire him?"));
+    expect(system(answerOnly)).toContain("# Portfolio documents (summaries)");
+    expect(system(answerOnly)).not.toContain("# Contact request");
+    expect(outcome.handoff).toEqual({ by: "fallback", summary: "How can I hire him?" });
+  });
+
+  it("keeps the intent in the trace's routing", async () => {
+    const asked = scripted([textTurn("Happy to help [^profile@en].")]);
+    const outcome = await outcomeOf(
+      answer(CONTACT, [mockEntry("gemini-3.5-flash-lite", asked.model)]),
+    );
+    expect(outcome.steps?.routing).toEqual({ reason: "default", intent: "contact" });
+  });
+});
+
 describe("the lookup tier", () => {
   const thinkingOf = (model: ScriptedModel) =>
     (

@@ -53,10 +53,11 @@ export interface AnswerTrace {
   core?: { locale: Locale; layout: CoreLayout; tokens: number };
   /**
    * How the router sent the answer (plan phase 20, router.ts): its reason,
-   * and the careful topic or the lookup tier when it had one. Missing on
-   * answers from before.
+   * and the careful topic or the lookup tier when it had one, and the
+   * visitor's wish to reach him (visitor plan V6). Missing on answers from
+   * before.
    */
-  routing?: { reason: string; sensitive?: Sensitivity; lookup?: true };
+  routing?: { reason: string; sensitive?: Sensitivity; lookup?: true; intent?: "contact" };
   /**
    * The step from which an answer routed lite ran on the deep chain, and why
    * (plan phase 20, router.ts); absent when it did not move.
@@ -74,6 +75,13 @@ export interface AnswerTrace {
    * closing line. Absent when none was needed.
    */
   repair?: { reason: RepairReason; by: "model" | "fixed-line" };
+  /**
+   * The hand-off offered (visitor plan V6): by the model's tool, or by the
+   * server when the visitor asked to reach him and the model offered nothing;
+   * `replaced` when the gate refused the model's summary. `/v1/ask/handoff`
+   * accepts a yes to it. Absent when none was offered.
+   */
+  handoff?: { by: "tool" | "fallback"; replaced?: true };
 }
 
 function inputText(input: unknown): string {
@@ -102,7 +110,7 @@ export function buildAnswerTrace(
   recorded: readonly RecordedStep[],
   trace: Trace,
   core?: AnswerTrace["core"],
-  route?: Pick<AnswerTrace, "routing" | "escalation" | "window" | "repair">,
+  route?: Pick<AnswerTrace, "routing" | "escalation" | "window" | "repair" | "handoff">,
 ): AnswerTrace {
   const segments: Attempt[][] = [[]];
   for (const attempt of trace.attempts) {
@@ -147,5 +155,6 @@ export function buildAnswerTrace(
     // Zero included: an answer from before plan phase 22 has none, and is not counted untrimmed.
     ...(route?.window ? { window: route.window } : {}),
     ...(route?.repair ? { repair: route.repair } : {}),
+    ...(route?.handoff ? { handoff: route.handoff } : {}),
   };
 }

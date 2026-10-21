@@ -58,7 +58,7 @@ export const SYSTEM_PROMPT = `You are the assistant built into the portfolio web
 # Tools
 - search_portfolio, get_document, list_projects, get_resume: read-only lookups. Prefer the documents already below when they suffice.
 - navigate: only when the visitor asks to open or go to a page; use the page URLs from the documents.
-- handoff_contact: only when the visitor wants to hire, contact or work with Alireza. Write a short, neutral summary of what they want, in their language. The visitor confirms before anything is filled in; you never send anything yourself and must never claim to have sent a message.
+- handoff_contact: only when the visitor wants to hire, interview, contact or work with Alireza, or asks for a quote. Write a short, neutral summary of what they want, in their language. The visitor confirms before anything is filled in; you never send anything yourself and must never claim to have sent a message.
 - suggest_followups: at the end of a helpful answer, together with it, offer 2-3 short follow-up questions the documents can answer. Never call it on its own before answering.
 
 # Security
@@ -110,6 +110,18 @@ export const CAREFUL_BLOCKS: readonly string[] = (Object.keys(CAREFUL_TOPICS) as
   carefulInstruction,
 );
 
+/** The contact block's own words: no answer has a reason to repeat them (answer-patterns.ts). */
+export const CONTACT_LEAD = "This visitor asks to reach Alireza";
+
+/**
+ * The request block (visitor plan V6), for a visitor who wants to hire,
+ * interview, work with or reach him, or asks for a quote (router.ts
+ * `contactIntentOf`). It goes after the corpus, as the careful block does, so
+ * the cached prefix stays the same bytes. A model without tools never gets it:
+ * the server makes the offer for it.
+ */
+export const CONTACT_BLOCK = `# Contact request\n${CONTACT_LEAD}: to hire, interview or work with him, or for a quote.\n- Answer in one or two sentences, citing what you use.\n- Then call handoff_contact with a short, neutral summary of what they want, in their language.\n- The visitor confirms first: never say that anything was sent.`;
+
 /** What a request adds to the fixed instructions. */
 export interface InstructionExtras {
   /** A pairwise eval's candidate in place of `SYSTEM_PROMPT`; never a visitor's request. */
@@ -118,13 +130,19 @@ export interface InstructionExtras {
   afterCorpus?: string;
   /** The careful block's topic, for a sensitive question. */
   careful?: Sensitivity;
+  /** The visitor wants to reach him (visitor plan V6): the request block. */
+  contact?: boolean;
 }
 
-/** The request's own blocks after the corpus: a candidate line, the careful block, the language. */
+/**
+ * The request's own blocks after the corpus: a candidate line, the careful
+ * block, the request block, the language.
+ */
 function tail(locale: Locale | undefined, language: Locale | null, extras: InstructionExtras) {
   return [
     extras.afterCorpus?.trim(),
     extras.careful && carefulInstruction(extras.careful),
+    extras.contact && CONTACT_BLOCK,
     locale && responseLanguageInstruction(locale, language),
   ]
     .filter(Boolean)
@@ -150,12 +168,14 @@ export function buildAnswerOnlyInstructions(
   language: Locale | null = null,
   extras: Omit<InstructionExtras, "afterCorpus"> = {},
 ): string {
-  // No tools and no headers: the lines about fetching and about related documents go.
+  // No tools and no headers: the lines about fetching and about related documents go, and the
+  // request block, which asks for a tool (the server offers the hand-off instead).
   const prompt = (extras.systemPrompt ?? SYSTEM_PROMPT)
     .replace(/\n# Tools[\s\S]*?(?=\n# Security)/, "\n")
     .replace(/- Documents cut short[^\n]*\n/, "")
     .replace(/- For availability, relocation[^\n]*\n/, "");
-  return `${prompt}\n\n# Portfolio documents (summaries)\n\n${compact}${tail(locale, language, extras)}`;
+  const blocks = tail(locale, language, { ...extras, contact: false });
+  return `${prompt}\n\n# Portfolio documents (summaries)\n\n${compact}${blocks}`;
 }
 
 /** The repair line's own words: no answer has a reason to repeat them (answer-patterns.ts). */
@@ -221,9 +241,9 @@ export function wrapVisitor(text: string, locale: Locale): string {
  * builders add around the corpus and the visitor's words, rendered once for
  * each locale and language, the window note in each of its forms, how the
  * corpus itself is laid out (corpus/render.ts, on a fixed sample), the
- * tools' descriptions, inputs and notes (tool-defs.ts, plan phase 21), and
- * the repair's turn and closing line (visitor plan V5), which an answer
- * without words gets.
+ * tools' descriptions, inputs and notes (tool-defs.ts, plan phase 21), the
+ * repair's turn and closing line (visitor plan V5), which an answer without
+ * words gets, and the request block (V6).
  */
 export function hashedPromptText(): string {
   return [
@@ -238,6 +258,7 @@ export function hashedPromptText(): string {
     windowNote(3, ["Atlas", "availability"]),
     windowNote(1, []),
     ...CAREFUL_BLOCKS,
+    CONTACT_BLOCK,
     ...(["en", "de"] as const).flatMap((reading) => [
       renderCore(FORMAT_SAMPLE, reading),
       renderCompact(FORMAT_SAMPLE, reading),

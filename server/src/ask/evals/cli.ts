@@ -24,7 +24,12 @@ import { fixtureAskCorpus } from "./fixture.js";
 import { pairwiseCli, pairwiseSides } from "./pairwise-cli.js";
 import { productionCli } from "./production-cli.js";
 import { runRetrieval } from "./retrieval.js";
-import { FREE_TIER_EVAL_PACING, FREE_TIER_RATE_LIMIT_RETRY, runEvals } from "./run.js";
+import {
+  FREE_TIER_EVAL_PACING,
+  FREE_TIER_RATE_LIMIT_RETRY,
+  runEvals,
+  type CaseResult,
+} from "./run.js";
 
 /**
  * `pnpm ai:eval` — runs the eval suite live against the configured models.
@@ -168,6 +173,19 @@ function resultMark(status: string, passed: boolean): string {
   return passed ? "✓" : "✗";
 }
 
+/** A repair, and which path offered the hand-off (visitor plan V5, V6). */
+function resultNotes(r: Pick<CaseResult, "repair" | "handoff">): string {
+  const notes: string[] = [];
+  if (r.repair) {
+    notes.push(r.repair.by === "fixed-line" ? "closed by the fixed line" : "repaired by the model");
+  }
+  if (r.handoff) {
+    const by = r.handoff.by === "fallback" ? "the server" : "the model";
+    notes.push(`hand-off offered by ${by}${r.handoff.replaced ? ", its summary replaced" : ""}`);
+  }
+  return notes.map((note) => ` · ${note}`).join("");
+}
+
 const summary = await runEvals({
   cases,
   corpus,
@@ -195,7 +213,9 @@ const summary = await runEvals({
     };
     const answer = r.status === "failed" && r.answer ? excerpt("answer", r.answer) : "";
     const thoughts = r.reasoning ? excerpt("thoughts", r.reasoning) : "";
-    console.log(`${mark} ${r.id.padEnd(22)} ${meta}${failures}${answer}${thoughts}`);
+    console.log(
+      `${mark} ${r.id.padEnd(22)} ${meta}${resultNotes(r)}${failures}${answer}${thoughts}`,
+    );
   },
 });
 

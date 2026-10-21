@@ -86,7 +86,7 @@ export const TOOL_DEFS = {
   },
   handoff_contact: {
     description:
-      "Offer to hand the conversation to the contact form, pre-filled with a short summary in the visitor's language. Only when the visitor wants to hire, contact or work with Alireza. Returns {ok: true, awaitingConfirmation: true}: the visitor confirms first; nothing is sent.",
+      "Offer to hand the conversation to the contact form, pre-filled with a short summary in the visitor's language. For a visitor who wants to hire Alireza, discuss a project with him, interview him, get a quote, or contact him; never for a question about his past work. Call it after your one or two sentences. Returns {ok: true, awaitingConfirmation: true}: the visitor confirms first; nothing is sent.",
     inputSchema: z.object({ summary: z.string().min(10).max(800) }),
   },
 } satisfies Record<ToolName, { description: string; inputSchema: z.ZodType }>;

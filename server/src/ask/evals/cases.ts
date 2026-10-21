@@ -640,12 +640,40 @@ export const EVAL_CASES: EvalCase[] = [
     question: "Take me to his writing.",
     expectTool: { name: "navigate", input: { to: "/en/writing" } },
   },
+  // A hand-off passes when it was offered by either path (visitor plan V6): the model's tool,
+  // or the server's own offer; the result says which.
   {
     id: "tool-hire",
     category: "tool",
     locale: "en",
     question: "I'd like to hire him for a six-month contract. How do we start?",
     expectTool: { name: "handoff_contact" },
+  },
+  {
+    id: "tool-hire-de",
+    category: "tool",
+    locale: "de",
+    question:
+      "Wir würden ihn gern für ein Projekt über sechs Monate beauftragen. Wie fangen wir an?",
+    expectTool: { name: "handoff_contact" },
+  },
+  {
+    id: "tool-interview",
+    category: "tool",
+    locale: "en",
+    question: "We'd like to interview him for a senior AI engineer role. Can we set that up?",
+    expectTool: { name: "handoff_contact" },
+  },
+  {
+    // A near miss (V6): a question about what he did, answered, with no offer.
+    id: "fact-led-team",
+    category: "fact",
+    locale: "en",
+    fixtureOnly: true,
+    question: "Has he hired or led a team?",
+    mustCite: ["experience:northwind@en"],
+    mustInclude: ["(three|3)"],
+    forbidTools: ["handoff_contact"],
   },
   {
     id: "tool-how-it-works",
@@ -797,6 +825,26 @@ export const EVAL_CASES: EvalCase[] = [
     citeAny: ["profile@en", "cv@en"],
     mustInclude: ["berlin"],
     mustNotInclude: ["(?<!not |n't |never )(lives|based|living) in Paris"],
+  },
+  {
+    // A hand-off after two project questions (visitor plan V6): the offer comes when asked.
+    id: "conv-handoff",
+    category: "conversation",
+    locale: "en",
+    fixtureOnly: true,
+    turns: [
+      {
+        question: "What did Atlas achieve?",
+        answer: "Atlas cut escalations by 38% in its first six months [^project:atlas@en].",
+      },
+      {
+        question: "Which stack did it use?",
+        answer: "FastAPI, pgvector and Gemini [^project:atlas@en].",
+      },
+    ],
+    question: "Great, I'd like to hire him for something similar. How do we start?",
+    expectTool: { name: "handoff_contact" },
+    mustNotInclude: [String.raw`\b(i('ve| have)|i) (sent|forwarded|emailed)\b`, "has been sent"],
   },
   {
     // The one live turn: answered first, then the follow-up asked after it.

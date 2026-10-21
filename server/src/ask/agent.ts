@@ -41,6 +41,7 @@ import {
 import type { AskConfig } from "./config.js";
 import type { AskCorpus } from "./corpus/index.js";
 import { recordSnapshot, snapshotKey } from "./corpus/snapshots.js";
+import { handoffOffer, type HandoffOffer } from "./handoff.js";
 import { signAnswer } from "./history.js";
 import { logAnswer } from "./log.js";
 import {
@@ -74,6 +75,7 @@ import {
   buildInstructions,
   CAREFUL_BLOCKS,
   closingLine,
+  CONTACT_BLOCK,
   PROMPT_CANARY,
   PROMPT_HASH,
   PROMPT_VERSION,
@@ -115,6 +117,12 @@ export interface AnswerMetadata {
   totalMs?: number;
   tokens?: { input: number; cached: number; output: number };
   finishReason?: string | null;
+  /**
+   * The hand-off this answer offers (visitor plan V6): by the model's tool or
+   * by the server, with the summary the form gets (checked, or the visitor's
+   * own words). The terminal shows the offer from it.
+   */
+  handoff?: { by: HandoffOffer["by"]; summary: string };
 }
 
 export interface AnswerRequest {
@@ -191,6 +199,8 @@ export interface AnswerOutcome {
   reasoning: string | null;
   /** The verifier's repair of an answer without words (visitor plan V5); null when none. */
   repair: NonNullable<AnswerTrace["repair"]> | null;
+  /** The hand-off it offered, by the model or the server (visitor plan V6); null when none. */
+  handoff: HandoffOffer | null;
 }
 
 /** The step trace, or null: a trace that cannot be built must never cost the answer. */
@@ -198,7 +208,7 @@ function safeTrace(
   record: AnswerRecord,
   trace: Trace,
   core: NonNullable<AnswerTrace["core"]>,
-  route: Pick<AnswerTrace, "routing" | "escalation" | "window" | "repair">,
+  route: Pick<AnswerTrace, "routing" | "escalation" | "window" | "repair" | "handoff">,
 ): AnswerTrace | null {
   try {
     return buildAnswerTrace(record.steps, trace, core, route);
@@ -265,8 +275,9 @@ function instructionsFor(
   });
   // A pairwise eval's candidate: built each time, never memoised.
   if (extras.systemPrompt !== undefined || extras.afterCorpus !== undefined) return make();
-  // The key names the reading locale too (it is `language ?? locale`), and the careful topic.
-  const key = `${corpus.key}:${locale}:${language}:${extras.careful ?? ""}`;
+  // The key names the reading locale too (it is `language ?? locale`), the careful topic and
+  // the request block.
+  const key = `${corpus.key}:${locale}:${language}:${extras.careful ?? ""}:${extras.contact ? "contact" : ""}`;
   let memo = instructionsMemo.get(key);
   if (!memo) {
     // A few page/visitor language pairs and topics per corpus; a new corpus pushes the old out.
@@ -306,9 +317,14 @@ const guardMemo = new Map<string, LeakGuard>();
 function guardFor(corpus: AskCorpus, config: AskConfig, systemPrompt?: string): LeakGuard {
   const build = () =>
     buildLeakGuard({
-      // The careful blocks (plan phase 20) and the repair line (visitor plan V5) are
-      // instructions too: never to be repeated.
-      instructions: [systemPrompt ?? SYSTEM_PROMPT, ...CAREFUL_BLOCKS, REPAIR_LINE].join("\n\n"),
+      // The careful blocks (plan phase 20), the repair line and the request block (visitor
+      // plan V5, V6) are instructions too: never to be repeated.
+      instructions: [
+        systemPrompt ?? SYSTEM_PROMPT,
+        ...CAREFUL_BLOCKS,
+        REPAIR_LINE,
+        CONTACT_BLOCK,
+      ].join("\n\n"),
       corpusTexts: corpus.documents.map((d) => d.text),
       quotable: [SCOPE],
       canary: PROMPT_CANARY,
@@ -387,6 +403,14 @@ async function stepsOf(result: {
   }
 }
 
+/** Whether the answer opened the home page's contact section: an offer there would repeat it. */
+function openedContact(calls: AnswerRecord["toolCalls"]): boolean {
+  return calls.some((call) => {
+    const to = (call.input as { to?: unknown } | null)?.to;
+    return call.name === "navigate" && typeof to === "string" && to.endsWith("#contact");
+  });
+}
+
 /** Stop once the model has answered and offered follow-ups: nothing is left to say. */
 const answeredWithFollowups: StopCondition<AskTools> = ({ steps }) => {
   const last = steps.at(-1);
@@ -416,6 +440,7 @@ export function streamAnswer(request: AnswerRequest): {
     systemPrompt: request.systemPrompt,
     afterCorpus: request.afterCorpus,
     careful: route.sensitive,
+    contact: route.intent === "contact",
   };
   const instructions = instructionsFor(corpus, locale, language, extras);
 
@@ -513,6 +538,7 @@ export function streamAnswer(request: AnswerRequest): {
       totalMs: Date.now() - trace.startedAt,
       tokens: { input: tokens.input, cached: tokens.cached, output: tokens.output },
       finishReason: record.finishReason,
+      ...(handoff ? { handoff: { by: handoff.by, summary: handoff.summary } } : {}),
     };
   };
 
@@ -522,6 +548,8 @@ export function streamAnswer(request: AnswerRequest): {
   };
   /** The verifier's one repair, once it ran (visitor plan V5). */
   let repair: AnswerOutcome["repair"] = null;
+  /** The hand-off offered, decided once the words are in (visitor plan V6). */
+  let handoff: HandoffOffer | null = null;
   /** The agent's own model calls, counted before a repair: its call is not a round. */
   let agentCalls: number | null = null;
   const guard = guardFor(corpus, config, request.systemPrompt);
@@ -651,6 +679,16 @@ export function streamAnswer(request: AnswerRequest): {
         agentCalls = trace.calls.length;
         await repairAnswer(writer, reason, await stepsOf(result));
       }
+      // The visitor asked to reach him: the model's offer, its summary checked, or the server's.
+      const call = record.toolCalls.find((c) => c.name === "handoff_contact");
+      handoff = handoffOffer({
+        intent: route.intent === "contact",
+        call: call ? { input: call.input } : null,
+        finished: answerShape(record).ending === "finished",
+        openedContact: openedContact(record.toolCalls),
+        question: request.question,
+        language: reading,
+      });
       if (held.finish) {
         writer.write({
           ...held.finish,
@@ -697,10 +735,19 @@ export function streamAnswer(request: AnswerRequest): {
             reason: route.reason,
             ...(route.sensitive ? { sensitive: route.sensitive } : {}),
             ...(route.lookup ? { lookup: true as const } : {}),
+            ...(route.intent ? { intent: route.intent } : {}),
           },
           ...(escalated ? { escalation: { step: escalated.step, reason: escalated.reason } } : {}),
           ...(request.window ? { window: request.window } : {}),
           ...(repair ? { repair } : {}),
+          ...(handoff
+            ? {
+                handoff: {
+                  by: handoff.by,
+                  ...(handoff.replaced ? { replaced: true as const } : {}),
+                },
+              }
+            : {}),
         },
       ),
       checks: checkAnswer({
@@ -725,6 +772,7 @@ export function streamAnswer(request: AnswerRequest): {
       // Never logged: the eval runner keeps an excerpt of a failed case's (evals/run.ts).
       reasoning: record.reasoning?.trim() || null,
       repair,
+      handoff,
     };
 
     if (record.error && !(record.error instanceof AllModelsFailedError) && ending !== "aborted") {
