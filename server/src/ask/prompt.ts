@@ -18,7 +18,7 @@ import { toolDefinitionsText } from "./tool-defs.js";
  * sensitive question, then a short trusted language instruction.
  */
 
-export const PROMPT_VERSION = "ask-2026-10-06.1";
+export const PROMPT_VERSION = "ask-2026-10-21.1";
 
 /**
  * A confidential line in the instructions (plan phase 15): no answer has a
@@ -158,6 +158,45 @@ export function buildAnswerOnlyInstructions(
   return `${prompt}\n\n# Portfolio documents (summaries)\n\n${compact}${tail(locale, language, extras)}`;
 }
 
+/** The repair line's own words: no answer has a reason to repeat them (answer-patterns.ts). */
+export const REPAIR_LEAD = "Your reply showed the visitor no words";
+
+/**
+ * The one line the repair call reads last (visitor plan V5), after the conversation and what
+ * the answer's lookups returned: the server's text, outside the visitor's fence. It asks only
+ * for what is missing, the words.
+ */
+export const REPAIR_LINE = `[${REPAIR_LEAD}. Answer their latest message now, as the instructions above say: in words, in their language, citing the documents you use. No tools are available for this reply. If you offered the contact form, say in one or two sentences that they can confirm it below; never say that anything was sent.]`;
+
+/** One lookup the answer made, as the repair reads it: the tool, its input and its result. */
+export interface RepairLookup {
+  tool: string;
+  input: string;
+  output: string;
+}
+
+/** What the repair call is told after the conversation: its lookups' results, then the line. */
+export function repairTurn(lookups: readonly RepairLookup[]): string {
+  const results = lookups.map((l) => `- ${l.tool} ${l.input} → ${l.output}`);
+  return [
+    ...(results.length ? ["[What your lookups for this reply returned:]", ...results, ""] : []),
+    REPAIR_LINE,
+  ].join("\n");
+}
+
+/**
+ * What closes an answer the repair could not give words to either (visitor plan V5): the
+ * server's own line in the answer's language, with no model.
+ */
+const CLOSING_LINES: Record<Locale, string> = {
+  en: "I couldn't put an answer together for that. Try asking it another way, or type `contact` to reach Alireza.",
+  de: "Darauf konnte ich keine Antwort zusammenstellen. Frag es gern anders, oder tippe `contact`, um Alireza zu erreichen.",
+};
+
+export function closingLine(language: Locale): string {
+  return CLOSING_LINES[language];
+}
+
 /**
  * What the conversation window dropped (plan phase 22): how many of the
  * visitor's earlier questions are no longer shown, and their most frequent
@@ -181,8 +220,10 @@ export function wrapVisitor(text: string, locale: Locale): string {
  * Every fixed text this file gives the model: the system prompt, what the
  * builders add around the corpus and the visitor's words, rendered once for
  * each locale and language, the window note in each of its forms, how the
- * corpus itself is laid out (corpus/render.ts, on a fixed sample), and the
- * tools' descriptions, inputs and notes (tool-defs.ts, plan phase 21).
+ * corpus itself is laid out (corpus/render.ts, on a fixed sample), the
+ * tools' descriptions, inputs and notes (tool-defs.ts, plan phase 21), and
+ * the repair's turn and closing line (visitor plan V5), which an answer
+ * without words gets.
  */
 export function hashedPromptText(): string {
   return [
@@ -204,6 +245,11 @@ export function hashedPromptText(): string {
     // The rules that pick each header's `related:` (plan phase 19), on a fixed corpus.
     relateSample(),
     toolDefinitionsText(),
+    // The repair's turn with and without lookups, and the closing line (visitor plan V5).
+    repairTurn([{ tool: "get_document", input: '{"id":"profile@en"}', output: '{"text":"…"}' }]),
+    repairTurn([]),
+    closingLine("en"),
+    closingLine("de"),
   ].join("\n\0\n");
 }
 

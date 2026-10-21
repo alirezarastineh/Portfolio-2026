@@ -73,6 +73,16 @@ export const TRUST_REGISTRY: readonly TrustEntry[] = [
     built: true,
   },
   {
+    action: "answer.repair",
+    actor: "system",
+    level: "L2",
+    approver: "none",
+    enforcement:
+      "agent.ts and answer-repair.ts (visitor plan V5): code decides (checks.ts answerShape, repairReason: no words, nothing failed, no page opened); one call on the answer's own chain, tools off, inside the answer's time, its words through the same citations and output guard; else a fixed closing line, no model",
+    reversible: true,
+    built: true,
+  },
+  {
     action: "copilot.suggest",
     actor: "copilot",
     level: "L0",

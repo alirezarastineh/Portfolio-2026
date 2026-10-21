@@ -104,6 +104,13 @@ describe("the trust registry (plan phase 14)", () => {
     expect(propose?.enforcement).toMatch(/only by the admin's accept/);
   });
 
+  it("lets code alone decide an answer's repair: one call, tools off (visitor plan V5)", () => {
+    const entry = TRUST_REGISTRY.find((e) => e.action === "answer.repair");
+    expect(entry).toMatchObject({ actor: "system", level: "L2", approver: "none", built: true });
+    expect(entry?.enforcement).toMatch(/answerShape/);
+    expect(entry?.enforcement).toMatch(/tools off/);
+  });
+
   it("lets the nightly judge run only within its own fence (plan phase 26)", () => {
     const entry = TRUST_REGISTRY.find((e) => e.action === "judge.nightly");
     expect(entry).toMatchObject({ actor: "system", level: "L2", built: true });

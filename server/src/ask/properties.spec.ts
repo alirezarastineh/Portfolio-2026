@@ -1,7 +1,14 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type { LanguageModelV4CallOptions, LanguageModelV4StreamPart } from "@ai-sdk/provider";
-import { simulateReadableStream, type ModelMessage, type TextStreamPart, type ToolSet } from "ai";
+import {
+  readUIMessageStream,
+  simulateReadableStream,
+  type ModelMessage,
+  type TextStreamPart,
+  type ToolSet,
+  type UIMessageChunk,
+} from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 
 import { fixtureConfig, fixtureCorpus } from "../test/ask-fixtures.js";
@@ -33,9 +40,11 @@ import {
 import {
   buildHistory,
   cleanVisitorText,
+  messageText,
   signAnswer,
   trimHistory,
   verifyAnswer,
+  type AskUIMessage,
 } from "./history.js";
 import { redact } from "./log.js";
 import {
@@ -47,7 +56,7 @@ import {
   tryAcquire,
 } from "./models/circuit.js";
 import { createFallbackModel, newTrace } from "./models/fallback.js";
-import { PROMPT_CANARY, SYSTEM_PROMPT, wrapVisitor } from "./prompt.js";
+import { PROMPT_CANARY, REPAIR_LEAD, SYSTEM_PROMPT, wrapVisitor } from "./prompt.js";
 import { DEFAULT_SETTINGS, type AiSettings } from "./settings.js";
 import { citationTransform } from "./stream-transforms.js";
 import { countTokens } from "./tokens.js";
@@ -962,13 +971,152 @@ describe("properties", { timeout: 30_000 }, () => {
           });
           await drain(stream);
           await done;
-          expect(model.calls.length).toBeLessThanOrEqual(maxRounds);
-          if (model.calls.length === maxRounds) {
-            expect(model.calls.at(-1)!.tools ?? []).toHaveLength(0);
+          // The verifier's repair (visitor plan V5) is a call, not a round.
+          const rounds = model.calls.filter((call) => !isRepairCall(call));
+          expect(rounds.length).toBeLessThanOrEqual(maxRounds);
+          expect(model.calls.length - rounds.length).toBeLessThanOrEqual(1);
+          if (rounds.length === maxRounds) {
+            expect(rounds.at(-1)!.tools ?? []).toHaveLength(0);
           }
         },
       ),
       runs(40),
     );
   });
+
+  /* ------------------------------------------------------------- repair */
+
+  it("repair: at most one, never after words; the signature covers the merged text, sent once", async () => {
+    // "marker": a text part whose only words are an invented citation, removed on the way.
+    const step = fc.constantFrom("empty", "words", "marker", "handoff", "followups", "filtered");
+    const reply = fc.constantFrom("empty", "words", "fails");
+    await fc.assert(
+      fc.asyncProperty(
+        fc.array(step, { minLength: 1, maxLength: 4 }),
+        reply,
+        async (steps, repairReply) => {
+          resetBreakers();
+          const config = fixtureConfig();
+          const calls: LanguageModelV4CallOptions[] = [];
+          let rounds = 0;
+          const model = new MockLanguageModelV4({
+            modelId: "repair-property",
+            doStream: (options) => {
+              calls.push(options);
+              if (isRepairCall(options)) {
+                if (repairReply === "fails") return Promise.reject(apiError(400));
+                return Promise.resolve({
+                  stream: simulateReadableStream({
+                    chunks:
+                      repairReply === "words"
+                        ? textTurn("He is in Berlin [^profile@en].")
+                        : EMPTY_STEP,
+                    chunkDelayInMs: null,
+                  }),
+                });
+              }
+              const kind = steps[Math.min(rounds++, steps.length - 1)]!;
+              return Promise.resolve({
+                stream: simulateReadableStream({
+                  chunks: stepChunks(kind, rounds),
+                  chunkDelayInMs: null,
+                }),
+              });
+            },
+          });
+          const sessionId = "repair-property-0001";
+          const { stream, done } = streamAnswer({
+            messages: [{ role: "user", content: wrapVisitor("Where is he based?", "en") }],
+            question: "Where is he based?",
+            locale: "en",
+            language: "en",
+            sessionId,
+            sessionHash: "repair-property",
+            source: "eval",
+            route: { route: "lite", reason: "property" },
+            corpus: fixtureCorpus(config),
+            config,
+            chain: [mockEntry("gemini-3.5-flash-lite", model)],
+            abortSignal: new AbortController().signal,
+            persist: false,
+          });
+          const chunks = (await drain(stream)) as UIMessageChunk[];
+          const outcome = await done;
+
+          const agentCalls = calls.filter((call) => !isRepairCall(call));
+          const repairs = calls.length - agentCalls.length;
+          const agentWords = steps.slice(0, agentCalls.length).includes("words");
+          expect(repairs).toBeLessThanOrEqual(1);
+          if (agentWords) expect(repairs).toBe(0);
+          expect(outcome.repair !== null).toBe(repairs === 1);
+
+          // No answer that finished is left without words, unless the filter stopped it.
+          const failed =
+            outcome.finishReason.startsWith("error") || outcome.finishReason === "aborted";
+          if (!failed && outcome.finishReason !== "content-filter") {
+            expect(outcome.text.replace(/\[\^[^\]]+\]/g, "").trim()).not.toBe("");
+          }
+
+          // One finish carries the metadata, and its signature covers what the browser holds.
+          expect(chunks.filter((c) => c.type === "message-metadata")).toHaveLength(0);
+          const finishes = chunks.filter((c) => c.type === "finish");
+          expect(finishes.length).toBeLessThanOrEqual(1);
+          if (!failed) expect(finishes).toHaveLength(1);
+          for (const chunk of finishes) {
+            const { sig } = (chunk as { messageMetadata: { sig: string } }).messageMetadata;
+            const text = messageText(await browserMessage(chunks));
+            expect(text).toBe(outcome.text);
+            expect(verifyAnswer(sessionId, outcome.messageId, text, sig)).toBe(true);
+          }
+        },
+      ),
+      runs(60),
+    );
+  });
 });
+
+/** A step that ends with nothing at all. */
+const EMPTY_STEP: LanguageModelV4StreamPart[] = [
+  { type: "stream-start", warnings: [] },
+  finish("stop"),
+];
+
+/** One agent step of the repair property's kinds. */
+function stepChunks(kind: string, round: number): LanguageModelV4StreamPart[] {
+  switch (kind) {
+    case "words":
+      return textTurn("Atlas cut escalations [^project:atlas@en].");
+    case "marker":
+      return textTurn("[^project:nebula@en]");
+    case "handoff":
+      return toolTurn(
+        "handoff_contact",
+        { summary: "Wants to hire him for a project." },
+        `h-${round}`,
+      );
+    case "followups":
+      return toolTurn("suggest_followups", { items: ["What does he build?"] }, `f-${round}`);
+    case "filtered":
+      return [{ type: "stream-start", warnings: [] }, finish("content-filter")];
+    default:
+      return EMPTY_STEP;
+  }
+}
+
+/** Whether a call was the verifier's repair: the only one told the repair line. */
+function isRepairCall(call: LanguageModelV4CallOptions): boolean {
+  return JSON.stringify(call.prompt.at(-1)).includes(REPAIR_LEAD);
+}
+
+/** The message as the browser builds it from the chunks. */
+async function browserMessage(chunks: UIMessageChunk[]): Promise<AskUIMessage> {
+  let last: AskUIMessage | undefined;
+  const stream = new ReadableStream<UIMessageChunk>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+      controller.close();
+    },
+  });
+  for await (const message of readUIMessageStream<AskUIMessage>({ stream })) last = message;
+  return last!;
+}

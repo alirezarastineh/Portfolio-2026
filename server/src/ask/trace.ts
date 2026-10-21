@@ -1,4 +1,5 @@
 import type { Locale } from "../content/schema.js";
+import type { RepairReason } from "./checks.js";
 import type { CoreLayout } from "./corpus/render.js";
 import { redact } from "./log.js";
 import type { Attempt, AttemptOutcome, Trace } from "./models/fallback.js";
@@ -67,6 +68,12 @@ export interface AnswerTrace {
    * Absent from before the phase.
    */
   window?: { dropped: number };
+  /**
+   * The verifier's repair of an answer that had no words (visitor plan V5):
+   * why, and who wrote them, one more call on the answer's chain or the fixed
+   * closing line. Absent when none was needed.
+   */
+  repair?: { reason: RepairReason; by: "model" | "fixed-line" };
 }
 
 function inputText(input: unknown): string {
@@ -95,7 +102,7 @@ export function buildAnswerTrace(
   recorded: readonly RecordedStep[],
   trace: Trace,
   core?: AnswerTrace["core"],
-  route?: Pick<AnswerTrace, "routing" | "escalation" | "window">,
+  route?: Pick<AnswerTrace, "routing" | "escalation" | "window" | "repair">,
 ): AnswerTrace {
   const segments: Attempt[][] = [[]];
   for (const attempt of trace.attempts) {
@@ -139,5 +146,6 @@ export function buildAnswerTrace(
     ...(route?.escalation ? { escalation: route.escalation } : {}),
     // Zero included: an answer from before plan phase 22 has none, and is not counted untrimmed.
     ...(route?.window ? { window: route.window } : {}),
+    ...(route?.repair ? { repair: route.repair } : {}),
   };
 }

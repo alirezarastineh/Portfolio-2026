@@ -3,6 +3,7 @@ import { NOT_IN_PORTFOLIO, PROMPT_LEAKS } from "./answer-patterns.js";
 import { detectLanguage } from "./language.js";
 import { KEY_SHAPES } from "./leak-guard.js";
 import { PROMPT_CANARY } from "./prompt.js";
+import type { AnswerRecord } from "./stream-transforms.js";
 
 /**
  * Deterministic checks on every finished answer: free, milliseconds, and the
@@ -34,6 +35,12 @@ export const CHECK_FLAGS = [
   "degraded",
   /** The provider's content filter stopped it. */
   "blocked",
+  /**
+   * The answer had no words when the agent finished, and the verifier repaired it (visitor plan
+   * V5): one more call wrote them, or the fixed closing line did. It counts against `helpful`,
+   * as `degraded` does: the visitor waited for a second try.
+   */
+  "repaired",
   /**
    * The visitor's words tried to override the rules, change the assistant's
    * role, escape the visitor fence or extract the instructions (plan phase
@@ -74,6 +81,8 @@ export interface CheckInput {
   toolText?: string;
   /** The deploy's secrets (leak-guard.ts `deploySecrets`). */
   secrets?: readonly string[];
+  /** The verifier repaired an answer without words (visitor plan V5). */
+  repaired?: boolean;
 }
 
 /** Where a command starts: a line or a sentence, perhaps after "please". */
@@ -214,6 +223,49 @@ export function checkAnswer(input: CheckInput): AnswerChecks {
   if (input.steps >= input.maxRounds) flags.push("max-rounds");
   if (input.degraded) flags.push("degraded");
   if (input.finishReason === "content-filter") flags.push("blocked");
+  if (input.repaired) flags.push("repaired");
   if (looksLikeInjection(input.question ?? "")) flags.push("injection-attempt");
   return { v: 1, flags };
+}
+
+/**
+ * What the verifier reads of an answer as the agent left it (visitor plan V5): whether it has
+ * words (the prose rule above: its text less the citation markers), which acting tools it called,
+ * and how it ended. Pure, and code the model cannot change.
+ */
+export interface AnswerShape {
+  words: boolean;
+  actions: ("navigate" | "handoff_contact")[];
+  ending: "finished" | "filtered" | "failed";
+}
+
+export function answerShape(
+  record: Pick<
+    AnswerRecord,
+    "textOrder" | "texts" | "toolCalls" | "finishReason" | "error" | "aborted"
+  >,
+): AnswerShape {
+  const text = record.textOrder.map((id) => record.texts.get(id) ?? "").join(" ");
+  const actions = [...new Set(record.toolCalls.map((call) => call.name))].filter(
+    (name): name is AnswerShape["actions"][number] => ACTIONS.has(name),
+  );
+  let ending: AnswerShape["ending"] = "finished";
+  if (record.error || record.aborted) ending = "failed";
+  else if (record.finishReason === "content-filter") ending = "filtered";
+  return { words: text.replace(MARKERS, "").trim().length > 0, actions, ending };
+}
+
+/** Why an answer is repaired: no words at all, or a hand-off offered with none. */
+export type RepairReason = "no-words" | "handoff-without-words";
+
+/**
+ * Whether an answer needs its one repair, and why. Never one with words, nor one that failed,
+ * was filtered or aborted (filtering the words cannot undo what came before), nor one that
+ * opened a page: that action answers. A hand-off needs words before its y/n.
+ */
+export function repairReason(shape: AnswerShape): RepairReason | null {
+  if (shape.words || shape.ending !== "finished" || shape.actions.includes("navigate")) {
+    return null;
+  }
+  return shape.actions.includes("handoff_contact") ? "handoff-without-words" : "no-words";
 }

@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { CAREFUL_BLOCKS, hashedPromptText, SYSTEM_PROMPT, windowNote } from "./prompt.js";
+import {
+  CAREFUL_BLOCKS,
+  closingLine,
+  hashedPromptText,
+  REPAIR_LINE,
+  SYSTEM_PROMPT,
+  windowNote,
+} from "./prompt.js";
 import { NOTES, TOOL_DEFS } from "./tool-defs.js";
 
 /**
@@ -24,5 +31,10 @@ describe("the prompt's hash", () => {
     // The window note in both its forms (plan phase 22).
     expect(text).toContain(windowNote(1, []));
     expect(text).toContain(windowNote(3, ["Atlas", "availability"]));
+    // The repair's turn, with its results' header, and the closing line (visitor plan V5).
+    expect(text).toContain(REPAIR_LINE);
+    expect(text).toContain("[What your lookups for this reply returned:]");
+    expect(text).toContain(closingLine("en"));
+    expect(text).toContain(closingLine("de"));
   });
 });

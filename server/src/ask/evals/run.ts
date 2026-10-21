@@ -63,6 +63,8 @@ export interface CaseResult {
   reasoning?: string;
   /** For a case with earlier turns: what its conversation came to. */
   conversation?: ReplayedConversation;
+  /** The verifier's repair, when the answer had no words at first (visitor plan V5). */
+  repair?: NonNullable<AnswerOutcome["repair"]>;
 }
 
 /** An earlier turn as the case sent it; a live one holds the answer this run generated. */
@@ -368,7 +370,11 @@ export function grade(
   // Citation markers are not prose: patterns check the words.
   const prose = answer.text.replace(/\[\^[^\]]+\]/g, "");
 
-  if (!prose.trim() && !c.expectTool) failures.push("empty answer");
+  // No answer without words (visitor plan V5), a hand-off's included: only a page opened answers
+  // without them.
+  if (!prose.trim() && !answer.tools.some((t) => t.name === "navigate")) {
+    failures.push("empty answer");
+  }
   checkCitations(c, answer.cited, failures);
   checkProse(c, prose, failures);
   if (answer.history) checkHistory(c, answer.history, failures);
@@ -876,6 +882,7 @@ async function runCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
         }
       : {}),
     ...(answered.conversation ? { conversation: answered.conversation } : {}),
+    ...(outcome.repair ? { repair: outcome.repair } : {}),
   };
 }
 

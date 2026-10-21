@@ -69,6 +69,15 @@ describe("eval graders", () => {
     ).toEqual(['navigate.to was "/en"']);
   });
 
+  it("fails a hand-off with no words: only a page opened answers without them (visitor plan V5)", () => {
+    const hire = byId("tool-hire");
+    const handoff = [{ name: "handoff_contact", input: { summary: "Hire him for six months." } }];
+    expect(grade(hire, { text: "", cited: [], tools: handoff })).toEqual(["empty answer"]);
+    expect(
+      grade(hire, { text: "Happy to help: confirm below.", cited: [], tools: handoff }),
+    ).toEqual([]);
+  });
+
   it("accepts the production answers that plainly say information is absent", () => {
     expect(
       grade(byId("unknown-salary"), {

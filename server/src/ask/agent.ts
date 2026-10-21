@@ -5,20 +5,39 @@ import type {
   LanguageModelV4Prompt,
 } from "@ai-sdk/provider";
 import {
+  createUIMessageStream,
   hasToolCall,
   isStepCount,
   NoSuchToolError,
+  streamText,
   ToolLoopAgent,
   toUIMessageStream,
   type ModelMessage,
   type StopCondition,
   type UIMessageChunk,
+  type UIMessageStreamWriter,
 } from "ai";
 
 import type { Locale } from "../content/schema.js";
 import { captureError } from "../lib/sentry.js";
+import {
+  closingChunks,
+  lookupsOf,
+  mergeInOrder,
+  renameTextIds,
+  repairMessages,
+  type MergeEnd,
+  type StepResults,
+} from "./answer-repair.js";
 import { raiseAlert } from "./audit.js";
-import { checkAnswer, leakReached, type AnswerChecks } from "./checks.js";
+import {
+  answerShape,
+  checkAnswer,
+  leakReached,
+  repairReason,
+  type AnswerChecks,
+  type RepairReason,
+} from "./checks.js";
 import type { AskConfig } from "./config.js";
 import type { AskCorpus } from "./corpus/index.js";
 import { recordSnapshot, snapshotKey } from "./corpus/snapshots.js";
@@ -54,9 +73,11 @@ import {
   buildAnswerOnlyInstructions,
   buildInstructions,
   CAREFUL_BLOCKS,
+  closingLine,
   PROMPT_CANARY,
   PROMPT_HASH,
   PROMPT_VERSION,
+  REPAIR_LINE,
   SCOPE,
   SYSTEM_PROMPT,
   type InstructionExtras,
@@ -168,6 +189,8 @@ export interface AnswerOutcome {
    * never a visitor's answer; null there, and when the model returned none.
    */
   reasoning: string | null;
+  /** The verifier's repair of an answer without words (visitor plan V5); null when none. */
+  repair: NonNullable<AnswerTrace["repair"]> | null;
 }
 
 /** The step trace, or null: a trace that cannot be built must never cost the answer. */
@@ -175,7 +198,7 @@ function safeTrace(
   record: AnswerRecord,
   trace: Trace,
   core: NonNullable<AnswerTrace["core"]>,
-  route: Pick<AnswerTrace, "routing" | "escalation" | "window">,
+  route: Pick<AnswerTrace, "routing" | "escalation" | "window" | "repair">,
 ): AnswerTrace | null {
   try {
     return buildAnswerTrace(record.steps, trace, core, route);
@@ -283,8 +306,9 @@ const guardMemo = new Map<string, LeakGuard>();
 function guardFor(corpus: AskCorpus, config: AskConfig, systemPrompt?: string): LeakGuard {
   const build = () =>
     buildLeakGuard({
-      // The careful blocks are instructions too (plan phase 20): never to be repeated.
-      instructions: [systemPrompt ?? SYSTEM_PROMPT, ...CAREFUL_BLOCKS].join("\n\n"),
+      // The careful blocks (plan phase 20) and the repair line (visitor plan V5) are
+      // instructions too: never to be repeated.
+      instructions: [systemPrompt ?? SYSTEM_PROMPT, ...CAREFUL_BLOCKS, REPAIR_LINE].join("\n\n"),
       corpusTexts: corpus.documents.map((d) => d.text),
       quotable: [SCOPE],
       canary: PROMPT_CANARY,
@@ -350,6 +374,17 @@ export function answerOnlyOptions(
 function loggedRoute(answerOnly: boolean, route: RouteDecision, escalated: boolean): string {
   if (answerOnly) return "answer-only";
   return escalated ? ESCALATED_ROUTE : route.route;
+}
+
+/** The agent's steps, for what its lookups returned; none if they cannot be read. */
+async function stepsOf(result: {
+  steps: PromiseLike<readonly StepResults[]>;
+}): Promise<readonly StepResults[]> {
+  try {
+    return await result.steps;
+  } catch {
+    return [];
+  }
 }
 
 /** Stop once the model has answered and offered follow-ups: nothing is left to say. */
@@ -481,47 +516,151 @@ export function streamAnswer(request: AnswerRequest): {
     };
   };
 
-  // Started now, read when the response body is pulled.
-  const ui = agent
-    .stream({
-      messages: request.messages,
-      abortSignal: request.abortSignal,
-      timeout: {
-        totalMs: config.streamTimeoutMs + (request.timeoutExtraMs ?? 0),
-        chunkMs: config.chunkTimeoutMs,
-      },
-      experimental_transform: [
-        citationTransform({ corpus, locale: reading, cited, dropped }),
-        // The sandwich's output layer: after the citations, before the words are paced.
-        leakGuardTransform(
-          guardFor(corpus, config, request.systemPrompt),
-          leaks,
-          echoOf(request.question),
-        ),
-        // Thoughts (the admin's answers only) go round the pacing.
-        ...smoothText<AskTools>(),
-        recorderTransform(record),
-      ],
-    })
-    .then((result) =>
-      toUIMessageStream({
-        stream: result.stream,
-        tools: agent.tools,
-        // The playground shows them collapsed; an eval's stream has no reader.
-        sendReasoning: thoughts,
-        sendSources: true,
-        generateMessageId: () => messageId,
-        messageMetadata: ({ part }) => {
-          if (part.type === "start") return { createdAt: Date.now() } satisfies AnswerMetadata;
-          if (part.type === "finish") return metadataAtFinish();
-          return undefined;
+  const onError = (error: unknown) => {
+    record.error ??= error;
+    return errorCode(error);
+  };
+  /** The verifier's one repair, once it ran (visitor plan V5). */
+  let repair: AnswerOutcome["repair"] = null;
+  /** The agent's own model calls, counted before a repair: its call is not a round. */
+  let agentCalls: number | null = null;
+  const guard = guardFor(corpus, config, request.systemPrompt);
+
+  /**
+   * The answer's words go through the same layers whoever writes them: the
+   * citations checked, then the output guard (the sandwich's output layer),
+   * then the pacing, which thoughts (the admin's answers only) go round, then
+   * the recorder.
+   */
+  const transforms = (into: AnswerRecord) => [
+    citationTransform<AskTools>({ corpus, locale: reading, cited, dropped }),
+    leakGuardTransform<AskTools>(guard, leaks, echoOf(request.question)),
+    ...smoothText<AskTools>(),
+    recorderTransform<AskTools>(into),
+  ];
+
+  /**
+   * One more call on the answer's chain, tools off, for the words it lacked
+   * (visitor plan V5), then the fixed closing line if it has none either. Its
+   * words are the answer's (the same record, citations and guard); its failure
+   * is its own, so the closing line answers instead of an error.
+   */
+  async function repairAnswer(
+    writer: UIMessageStreamWriter,
+    reason: RepairReason,
+    steps: readonly StepResults[],
+  ): Promise<void> {
+    const left =
+      trace.startedAt + config.streamTimeoutMs + (request.timeoutExtraMs ?? 0) - Date.now();
+    // The answer's text, steps and tool calls; the repair's own ending.
+    const own: AnswerRecord = {
+      ...record,
+      finishReason: null,
+      error: null,
+      aborted: false,
+      reasoning: record.reasoning === null ? null : "",
+    };
+    let end: MergeEnd = "done";
+    if (left >= config.firstChunkTimeoutMs) {
+      const result = streamText({
+        model: fallbackModel(answeringChain()),
+        // The answer's own bytes: the cached prefix holds.
+        instructions: instructions.text,
+        messages: repairMessages(request.messages, lookupsOf(steps)),
+        abortSignal: request.abortSignal,
+        timeout: { totalMs: left, chunkMs: config.chunkTimeoutMs },
+        maxOutputTokens: config.maxOutputTokens,
+        temperature: 0.3,
+        maxRetries: 0,
+        experimental_transform: [renameTextIds<AskTools>("repair-"), ...transforms(own)],
+      });
+      end = await mergeInOrder(
+        writer,
+        toUIMessageStream({
+          stream: result.stream,
+          sendStart: false,
+          sendFinish: false,
+          sendReasoning: thoughts,
+          sendSources: true,
+          onError: (error) => {
+            own.error ??= error;
+            return errorCode(error);
+          },
+        }),
+        { keep: (chunk) => chunk.type !== "error", onFailure: "end" },
+      );
+    }
+    if (own.reasoning && record.reasoning !== null) record.reasoning += own.reasoning;
+    const words = answerShape(record).words;
+    repair = { reason, by: words || end === "cancelled" ? "model" : "fixed-line" };
+    if (end === "cancelled" || own.aborted) {
+      record.aborted = true;
+      return;
+    }
+    if (!words) {
+      const line = closingLine(reading);
+      for (const chunk of closingChunks("closing", line)) writer.write(chunk);
+      record.textOrder.push("closing");
+      record.texts.set("closing", line);
+    }
+    // The visitor got a finished answer, however its words came.
+    record.finishReason = words && own.finishReason ? own.finishReason : "stop";
+  }
+
+  // Started when the response body is first pulled. One message, perhaps two calls: the
+  // agent's stream without its finish, the repair's when the verifier asks for one, then the
+  // finish, whose metadata and signature cover the whole text.
+  const ui = createUIMessageStream({
+    execute: async ({ writer }) => {
+      const result = await agent.stream({
+        messages: request.messages,
+        abortSignal: request.abortSignal,
+        timeout: {
+          totalMs: config.streamTimeoutMs + (request.timeoutExtraMs ?? 0),
+          chunkMs: config.chunkTimeoutMs,
         },
-        onError: (error) => {
-          record.error ??= error;
-          return errorCode(error);
+        experimental_transform: transforms(record),
+      });
+      const held: { finish?: Extract<UIMessageChunk, { type: "finish" }> } = {};
+      const end = await mergeInOrder(
+        writer,
+        toUIMessageStream({
+          stream: result.stream,
+          tools: agent.tools,
+          // The playground shows them collapsed; an eval's stream has no reader.
+          sendReasoning: thoughts,
+          sendSources: true,
+          generateMessageId: () => messageId,
+          messageMetadata: ({ part }) =>
+            part.type === "start"
+              ? ({ createdAt: Date.now() } satisfies AnswerMetadata)
+              : undefined,
+          onError,
+        }),
+        {
+          keep: (chunk) => {
+            if (chunk.type !== "finish") return true;
+            held.finish = chunk;
+            return false;
+          },
         },
-      }),
-    );
+      );
+      if (end !== "done") return;
+      const reason = repairReason(answerShape(record));
+      if (reason) {
+        agentCalls = trace.calls.length;
+        await repairAnswer(writer, reason, await stepsOf(result));
+      }
+      if (held.finish) {
+        writer.write({
+          ...held.finish,
+          ...(repair ? { finishReason: "stop" as const } : {}),
+          messageMetadata: metadataAtFinish(),
+        });
+      }
+    },
+    onError,
+  });
 
   let resolveDone!: (outcome: AnswerOutcome) => void;
   const done = new Promise<AnswerOutcome>((resolve) => (resolveDone = resolve));
@@ -561,6 +700,7 @@ export function streamAnswer(request: AnswerRequest): {
           },
           ...(escalated ? { escalation: { step: escalated.step, reason: escalated.reason } } : {}),
           ...(request.window ? { window: request.window } : {}),
+          ...(repair ? { repair } : {}),
         },
       ),
       checks: checkAnswer({
@@ -570,19 +710,21 @@ export function streamAnswer(request: AnswerRequest): {
         droppedCitations: dropped,
         toolNames: record.toolCalls.map((c) => c.name),
         finishReason,
-        steps: trace.calls.length,
+        steps: agentCalls ?? trace.calls.length,
         maxRounds: config.agentMaxRounds,
         degraded: usedFallback(trace, answeringChain()),
         guarded: [...leaks],
         question: request.question,
         toolText,
         secrets,
+        repaired: repair !== null,
       }),
       usd,
       searchCalls,
       escalation: escalated?.reason ?? null,
       // Never logged: the eval runner keeps an excerpt of a failed case's (evals/run.ts).
       reasoning: record.reasoning?.trim() || null,
+      repair,
     };
 
     if (record.error && !(record.error instanceof AllModelsFailedError) && ending !== "aborted") {
@@ -645,7 +787,7 @@ export function streamAnswer(request: AnswerRequest): {
   const stream = new ReadableStream<UIMessageChunk>({
     async pull(controller) {
       try {
-        reader ??= (await ui).getReader();
+        reader ??= ui.getReader();
         const { done: ended, value } = await reader.read();
         if (ended) {
           controller.close();
