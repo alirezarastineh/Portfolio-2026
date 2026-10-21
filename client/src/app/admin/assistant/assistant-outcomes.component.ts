@@ -3,6 +3,8 @@ import { toast } from "@spartan-ng/brain/sonner";
 
 import { AdminApiService } from "../admin-api.service";
 import {
+  browserTiles,
+  downReasonLine,
   funnelLine,
   HIGHER_IS_BETTER,
   METRIC_LABELS,
@@ -43,6 +45,32 @@ import {
         <p class="m-0 text-sm">
           <span class="text-muted-foreground">Hand-offs:</span> {{ funnelLine(o.funnel) }}
         </p>
+
+        <!-- What the visitors' browsers saw (visitor plan V2); an older API sends none. -->
+        @if (v.browser; as b) {
+          <section class="flex flex-col gap-2" aria-labelledby="assistant-browser">
+            <h3 id="assistant-browser" class="m-0 text-xs font-medium">
+              In the visitor's browser
+              <span class="font-normal text-muted-foreground"
+                >({{ b.reported }} {{ b.reported === 1 ? "answer" : "answers" }} reported)</span
+              >
+            </h3>
+            <dl class="m-0 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              @for (tile of browserTiles(b); track tile.label) {
+                <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
+                  <dt class="text-xs text-muted-foreground">{{ tile.label }}</dt>
+                  <dd class="m-0 font-mono text-lg">{{ tile.value }}</dd>
+                  @if (tile.detail) {
+                    <dd class="m-0 text-xs text-muted-foreground">{{ tile.detail }}</dd>
+                  }
+                </div>
+              }
+            </dl>
+            @if (downReasonLine(b); as line) {
+              <p class="m-0 text-sm">{{ line }}</p>
+            }
+          </section>
+        }
 
         <div class="flex flex-col gap-2 rounded-lg border border-border p-3 text-sm">
           <label class="flex flex-wrap items-center gap-2">
@@ -91,6 +119,8 @@ export class AssistantOutcomesComponent implements OnInit {
   protected readonly share = share;
   protected readonly usd = usd;
   protected readonly funnelLine = funnelLine;
+  protected readonly browserTiles = browserTiles;
+  protected readonly downReasonLine = downReasonLine;
 
   protected readonly view = signal<OutcomesView | null>(null);
   protected readonly saving = signal(false);

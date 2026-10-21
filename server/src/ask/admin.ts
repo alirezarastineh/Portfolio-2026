@@ -48,6 +48,7 @@ import type { ModelCall } from "./models/fallback.js";
 import { breakerSnapshot } from "./models/circuit.js";
 import { capsOf, configuredModels, excludedModels, type ChainRole } from "./models/registry.js";
 import {
+  browserView,
   completedWeeks,
   outcomes,
   PRIMARY_METRICS,
@@ -568,6 +569,9 @@ adminAskRouter.get("/assistant/reviews", async (c) => {
       unknown: sql<boolean>`${UNKNOWN_ANSWER}`,
       // A judge found it unfaithful (the nightly judge, plan phase 26).
       unfaithful: sql<boolean>`coalesce((${aiMessages.judge} ->> 'faithfulness')::float8 < ${FAITHFUL_AT}, false)`,
+      // Why the thumbs-down, and a stop mid-answer (the browser's signals, visitor plan V2).
+      downReason: aiFeedback.reason,
+      stopped: sql<boolean>`coalesce((${aiMessages.signals} ->> 'stopped')::boolean, false)`,
       reviewed: sql<boolean>`${aiReviews.messageId} is not null`,
     })
     .from(aiMessages)
@@ -696,12 +700,12 @@ adminAskRouter.get("/assistant/outcomes", async (c) => {
 
   const { primaryMetric } = await readAiSettings();
   const weekly = weeklyValues(rows, primaryMetric, weeks);
+  const recent = rows.filter((row) => row.createdAt >= since);
   return c.json({
     days: OUTCOME_DAYS,
-    outcomes: outcomes(
-      rows.filter((row) => row.createdAt >= since),
-      sent?.n ?? 0,
-    ),
+    outcomes: outcomes(recent, sent?.n ?? 0),
+    // What the visitors' browsers saw, and why the 👎s (visitor plan V2).
+    browser: browserView(recent),
     primary: {
       metric: primaryMetric,
       weeks: weekly,

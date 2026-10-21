@@ -1,6 +1,9 @@
 import type { CheckFlag } from "./checks.js";
-import { isAnswered, isHelpful, rephrased, type OutcomeRow } from "./outcomes.js";
+import { isAnswered, isHelpful, percentile, rephrased, type OutcomeRow } from "./outcomes.js";
 import { ESCALATED_ROUTE } from "./router.js";
+
+// Moved to outcomes.ts (visitor plan V2, which needs it there too); still exported from here.
+export { percentile };
 
 /**
  * The router's report (plan phase 20): how a window's visitor answers were
@@ -82,13 +85,6 @@ export interface RouterReport {
 
 /** How many false-simple candidates the report lists. */
 export const LISTED = 25;
-
-/** The `p`-th percentile (0–1) by nearest rank; null for none. */
-export function percentile(values: readonly number[], p: number): number | null {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1))]!;
-}
 
 const share = (part: number, whole: number) => (whole ? part / whole : null);
 

@@ -659,6 +659,38 @@ describe("diagnose", () => {
       /^No document holds most of the question's words: the closest, project:long@en, has 2 of 5 \(migrated, clusters\)/,
     );
   });
+
+  it("weighs the visitor's reason for a thumbs-down, for the hypotheses it points at (visitor plan V2)", () => {
+    const visitor = (d: JournalDiagnosis, id: HypothesisId) =>
+      hypothesis(d, id).evidence.filter((e) => e.experiment === "visitor");
+
+    const wrong = run({ answer: answer({ feedback: -1, downReason: "wrong" }) });
+    for (const id of ["content-missing", "context-unused", "degraded-model"] as const) {
+      expect(visitor(wrong, id)).toEqual([
+        {
+          experiment: "visitor",
+          supports: true,
+          observation: "The visitor marked it wrong or made up",
+        },
+      ]);
+    }
+    expect(visitor(wrong, "retrieval-miss")).toEqual([]);
+
+    const unanswered = run({ answer: answer({ feedback: -1, downReason: "unanswered" }) });
+    for (const id of ["retrieval-miss", "under-routed"] as const) {
+      expect(visitor(unanswered, id)).toHaveLength(1);
+    }
+    expect(visitor(unanswered, "content-missing")).toEqual([]);
+
+    // "Too long or too short" is the prompt's matter, and a reason without a thumbs-down is none.
+    const length = run({ answer: answer({ feedback: -1, downReason: "length" }) });
+    const notDown = run({ answer: answer({ feedback: 1, downReason: "wrong" }) });
+    for (const d of [length, notDown]) {
+      expect(
+        d.hypotheses.flatMap((h) => h.evidence).filter((e) => e.experiment === "visitor"),
+      ).toEqual([]);
+    }
+  });
 });
 
 describe("each experiment's other outcomes", () => {

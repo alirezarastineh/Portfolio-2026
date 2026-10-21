@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { eq } from "drizzle-orm";
+
 import { createApp } from "../app.js";
 import { getDb } from "../db/client.js";
 import { aiFeedback, aiMessages, contactMessages } from "../db/schema.js";
@@ -22,6 +24,7 @@ beforeEach(async () => {
 interface OutcomesView {
   days: number;
   outcomes: Record<string, unknown>;
+  browser: Record<string, unknown>;
   primary: { metric: string; weeks: { week: string; value: number | null }[]; rotate: boolean };
   metrics: string[];
 }
@@ -150,6 +153,43 @@ describe("the assistant's outcomes", () => {
       rotate: false,
     });
     expect(result.metrics).toEqual(["helpfulRate", "thumbsUpRate", "unknownRate", "rephraseRate"]);
+  });
+
+  it("reads what the browsers saw and why the thumbs-downs, from the rows (visitor plan V2)", async () => {
+    await seed();
+    const db = getDb();
+    await db
+      .update(aiMessages)
+      .set({
+        signals: { v: 1, shownMs: 600, doneMs: 1_500, followups: 1 },
+        ttftMs: 400,
+        toolCalls: ["suggest_followups"],
+      })
+      .where(eq(aiMessages.id, "m_first"));
+    await db
+      .update(aiMessages)
+      .set({
+        signals: { v: 1, shownMs: 1_200, doneMs: 3_000, stopped: true },
+        ttftMs: 800,
+        toolCalls: ["suggest_followups"],
+        citedIds: ["profile@en"],
+      })
+      .where(eq(aiMessages.id, "m_flagged"));
+    await db.insert(aiFeedback).values({ messageId: "m_flagged", value: -1, reason: "wrong" });
+
+    expect((await view()).browser).toEqual({
+      reported: 2,
+      shownP50Ms: 600,
+      shownP95Ms: 1_200,
+      serverP50Ms: 400,
+      serverP95Ms: 800,
+      stopRate: 0.5,
+      copyRate: 0,
+      followupRate: 0.5,
+      citationRate: 0,
+      retried: 0,
+      downReasons: { wrong: 1, unanswered: 0, length: 0, none: 0 },
+    });
   });
 
   it("switches the primary metric, and refuses one it does not know", async () => {

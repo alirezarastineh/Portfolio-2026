@@ -164,11 +164,23 @@ const CHECK_LABELS: Record<string, string> = {
   "injection-attempt": "injection attempt",
 };
 
+/** Why a thumbs-down, as the visitor chose it (`FEEDBACK_REASONS` on the server, visitor plan V2). */
+const DOWN_REASONS: Record<string, string> = {
+  wrong: "thumbs down: wrong or made up",
+  unanswered: "thumbs down: didn't answer the question",
+  length: "thumbs down: too long or too short",
+};
+
 /** A check flag in words (`server/src/ask/checks.ts` defines them). */
 /** A review queue reason in words: a check's flag, the judge's verdict, or people's signals as they are. */
 export function reasonLabel(reason: string): string {
   // The nightly judge found it unfaithful (plan phase 26).
   if (reason === "judge:unfaithful") return "judged unfaithful";
+  // The visitor's own signals (visitor plan V2): a thumbs-down's reason, a stop mid-answer.
+  if (reason.startsWith("thumbs down:")) {
+    return DOWN_REASONS[reason.slice("thumbs down:".length)] ?? "thumbs down";
+  }
+  if (reason === "stopped") return "stopped mid-answer";
   return reason.startsWith("check:") ? checkLabel(reason.slice("check:".length)) : reason;
 }
 

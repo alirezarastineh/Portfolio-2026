@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  browserView,
   completedWeeks,
   outcomes,
+  percentile,
   rephrased,
   shouldRotate,
   similarity,
@@ -92,6 +94,52 @@ describe("outcomes", () => {
     expect(result.costPerAnswered).toBeCloseTo(0.002);
     expect(result.costPerHelpful).toBeCloseTo(0.005);
     expect(outcomes([], 0)).toMatchObject({ helpfulRate: null, costPerHelpful: null });
+  });
+
+  it("reads what the browsers saw: times beside the server's, shares of what applies, the 👎's reasons (visitor plan V2)", () => {
+    const rows = [
+      row("a", {
+        signals: { v: 1, shownMs: 900, doneMs: 3_000, followups: 1, citations: 2, copies: 1 },
+        ttftMs: 700,
+        followupsOffered: true,
+        cited: true,
+      }),
+      row("b", {
+        signals: { v: 1, shownMs: 4_000, doneMs: 9_000, stopped: true },
+        ttftMs: 3_500,
+        followupsOffered: true,
+        cited: true,
+        feedback: -1,
+        downReason: "wrong",
+      }),
+      // Asked again after a failure; no follow-ups offered, nothing cited.
+      row("c", { signals: { v: 1, doneMs: 1_000, retries: 1 }, ttftMs: null }),
+      // Its browser never reported: in no share, but its 👎 still counts.
+      row("d", { feedback: -1 }),
+      row("e", { feedback: -1, downReason: "a code from a newer terminal" }),
+    ];
+    expect(browserView(rows)).toEqual({
+      reported: 3,
+      shownP50Ms: 900,
+      shownP95Ms: 4_000,
+      serverP50Ms: 700,
+      serverP95Ms: 3_500,
+      stopRate: 1 / 3,
+      copyRate: 1 / 3,
+      // Of the two that offered follow-ups, one was clicked; of the two citing, one was followed.
+      followupRate: 0.5,
+      citationRate: 0.5,
+      retried: 1,
+      downReasons: { wrong: 1, unanswered: 0, length: 0, none: 2 },
+    });
+    expect(browserView([])).toMatchObject({
+      reported: 0,
+      shownP50Ms: null,
+      stopRate: null,
+      followupRate: null,
+    });
+    // Nearest rank (moved here from the router's report).
+    expect(percentile([300, 100, 200], 0.5)).toBe(200);
   });
 
   it("rotates the primary metric once it moved less than a point in two weekly reviews", () => {

@@ -90,6 +90,25 @@ describe("the review queue", () => {
       reviewReasons({ thumbsDown: true, unknown: false, flags: ["uncited"], unfaithful: true }),
     ).toEqual(["thumbs down", "check:uncited", "judge:unfaithful"]);
   });
+
+  it("names the thumbs-down's reason and a stop mid-answer, as people's signals (visitor plan V2)", () => {
+    expect(
+      reviewReasons({
+        thumbsDown: true,
+        unknown: true,
+        flags: ["uncited"],
+        downReason: "unanswered",
+        stopped: true,
+      }),
+    ).toEqual(["thumbs down:unanswered", "stopped", "didn't know", "check:uncited"]);
+    // A stop alone is a reason; a reason without a thumbs-down is none.
+    expect(reviewReasons({ thumbsDown: false, unknown: false, flags: [], stopped: true })).toEqual([
+      "stopped",
+    ]);
+    expect(
+      reviewReasons({ thumbsDown: false, unknown: false, flags: [], downReason: "wrong" }),
+    ).toEqual([]);
+  });
 });
 
 describe("label stats", () => {

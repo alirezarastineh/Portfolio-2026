@@ -198,4 +198,13 @@ describe("review queue reasons", () => {
     expect(reasonLabel("check:uncited")).toBe(checkLabel("uncited"));
     expect(reasonLabel("thumbs down")).toBe("thumbs down");
   });
+
+  it("says the visitor's own signals: a thumbs-down's reason, a stop (visitor plan V2)", () => {
+    expect(reasonLabel("thumbs down:wrong")).toBe("thumbs down: wrong or made up");
+    expect(reasonLabel("thumbs down:unanswered")).toBe("thumbs down: didn't answer the question");
+    expect(reasonLabel("thumbs down:length")).toBe("thumbs down: too long or too short");
+    // A code this admin does not know yet still reads as a thumbs-down.
+    expect(reasonLabel("thumbs down:other")).toBe("thumbs down");
+    expect(reasonLabel("stopped")).toBe("stopped mid-answer");
+  });
 });

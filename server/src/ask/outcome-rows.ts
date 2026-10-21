@@ -26,4 +26,10 @@ export const OUTCOME_COLUMNS = {
   unknown: sql<boolean>`${UNKNOWN_ANSWER}`,
   handoffOffered: sql<boolean>`${aiMessages.toolCalls} @> '["handoff_contact"]'::jsonb`,
   handoffConfirmed: sql<boolean>`${aiMessages.handoffConfirmedAt} is not null`,
+  // What the visitor's browser saw, and why a 👎 (visitor plan V2).
+  downReason: sql<string | null>`${aiFeedback.reason}`,
+  signals: aiMessages.signals,
+  ttftMs: aiMessages.ttftMs,
+  followupsOffered: sql<boolean>`${aiMessages.toolCalls} @> '["suggest_followups"]'::jsonb`,
+  cited: sql<boolean>`jsonb_array_length(${aiMessages.citedIds}) > 0`,
 };

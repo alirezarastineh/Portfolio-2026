@@ -114,6 +114,27 @@ describe("the review queue API", () => {
     });
   });
 
+  it("queues a stop mid-answer and names the thumbs-down's reason (visitor plan V2)", async () => {
+    await seedWeek();
+    await getDb()
+      .update(aiFeedback)
+      .set({ reason: "unanswered" })
+      .where(eq(aiFeedback.messageId, "m_02"));
+    await getDb()
+      .update(aiMessages)
+      .set({ signals: { v: 1, doneMs: 900, stopped: true } })
+      .where(eq(aiMessages.id, "m_04"));
+    const reasons = Object.fromEntries(
+      (await queueOf("2026-W39")).queue
+        .filter((e) => e.reasons.length)
+        .map((e) => [e.message.id, e.reasons]),
+    );
+    expect(reasons).toMatchObject({
+      m_02: ["thumbs down:unanswered"],
+      m_04: ["stopped"],
+    });
+  });
+
   it("keeps a review, updates it in place and counts only the sample in the label shares", async () => {
     await seedWeek();
     const before = await queueOf("2026-W39");

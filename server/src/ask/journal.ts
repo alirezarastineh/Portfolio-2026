@@ -96,7 +96,8 @@ export type Experiment =
   | "language"
   | "routing"
   | "infrastructure"
-  | "replay";
+  | "replay"
+  | "visitor";
 
 export interface Evidence {
   experiment: Experiment;
@@ -228,6 +229,8 @@ export interface DiagnosisAnswer {
   /** Whether the checks ran on it (rows from before plan phase 6 have none). */
   checked: boolean;
   feedback: 1 | -1 | null;
+  /** Why the thumbs-down, when the visitor said (visitor plan V2, `FEEDBACK_REASONS`). */
+  downReason?: string | null;
   faithfulness: number | null;
   /** The visitor asked again within two minutes (outcomes.ts). */
   rephrased: boolean;
@@ -1116,6 +1119,33 @@ function routingFindings(scene: Scene, projectNames: readonly string[]): Finding
   return found;
 }
 
+/**
+ * What the visitor said was wrong with it (visitor plan V2): the reason given
+ * with a thumbs-down, one finding for each hypothesis it points at. A
+ * visitor's word is evidence, not proof, and it cannot tell those hypotheses
+ * apart: the experiments do. "Too long or too short" points at none: it is the
+ * prompt's matter, or the reader's level's (V10).
+ */
+function visitorFindings(answer: DiagnosisAnswer): Finding[] {
+  if (answer.feedback !== -1) return [];
+  if (answer.downReason === "wrong") {
+    const said = "The visitor marked it wrong or made up";
+    return [
+      finding("content-missing", "visitor", true, said),
+      finding("context-unused", "visitor", true, said),
+      finding("degraded-model", "visitor", true, said),
+    ];
+  }
+  if (answer.downReason === "unanswered") {
+    const said = "The visitor said it did not answer the question";
+    return [
+      finding("retrieval-miss", "visitor", true, said),
+      finding("under-routed", "visitor", true, said),
+    ];
+  }
+  return [];
+}
+
 /** H7: whether the answer failed in the providers or the plumbing rather than in itself. */
 function infrastructureFindings(scene: Scene): Finding[] {
   const { answer, steps } = scene;
@@ -1664,6 +1694,7 @@ export function diagnose(input: DiagnosisInput): JournalDiagnosis {
     ...languageFindings(scene, located),
     ...routingFindings(scene, input.projectNames),
     ...infrastructureFindings(scene),
+    ...visitorFindings(scene.answer),
   );
   if (input.replay) {
     // The chain that answered the visitor: the deep one for an answer routed or moved there.

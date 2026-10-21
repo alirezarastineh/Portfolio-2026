@@ -50,6 +50,7 @@ export async function loadAnswer(messageId: string): Promise<DiagnosisAnswer | n
       totalMs: aiMessages.totalMs,
       checks: aiMessages.checks,
       feedback: aiFeedback.value,
+      downReason: aiFeedback.reason,
       faithfulness: sql<number | null>`(${aiMessages.judge} ->> 'faithfulness')::float8`,
       promptVersion: aiMessages.promptVersion,
       corpusKey: aiMessages.corpusKey,

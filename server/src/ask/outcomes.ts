@@ -1,6 +1,7 @@
 import { QUESTION_FLAGS } from "./checks.js";
 import { FAITHFUL_AT } from "./evals/calibration.js";
 import { isoWeek, weekBounds } from "./reviews.js";
+import { FEEDBACK_REASONS, type AnswerSignals, type FeedbackReason } from "./signals.js";
 
 /**
  * The assistant's outcomes, the evaluation stack's fifth layer: whether
@@ -27,6 +28,16 @@ export interface OutcomeRow {
   unknown: boolean;
   handoffOffered: boolean;
   handoffConfirmed: boolean;
+  /** Why the 👎, when one came with a reason (visitor plan V2). */
+  downReason?: string | null;
+  /** What the visitor's browser saw of the answer (V2); null until it reports. */
+  signals?: AnswerSignals | null;
+  /** The server's time to the first token, for the browser's figure beside it. */
+  ttftMs?: number | null;
+  /** The answer offered follow-up questions. */
+  followupsOffered?: boolean;
+  /** The answer cited at least one document. */
+  cited?: boolean;
 }
 
 /** A near-duplicate question this soon after an answer means the answer did not land. */
@@ -145,6 +156,85 @@ export function outcomes(rows: readonly OutcomeRow[], sent: number): Outcomes {
     usd,
     costPerAnswered: answered.length ? usd / answered.length : null,
     costPerHelpful: helpful ? usd / helpful : null,
+  };
+}
+
+/** The `p`-th percentile (0–1) by nearest rank; null for none. */
+export function percentile(values: readonly number[], p: number): number | null {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1))]!;
+}
+
+/**
+ * What the visitors' browsers saw (the visitor plan's V2): the time to the
+ * first visible word as a visitor waits for it, network and all, beside the
+ * server's own first token; how often an answer was stopped, its follow-ups or
+ * citations followed, it was copied or asked again; and why the 👎s. Each
+ * share counts only the answers it can apply to (a follow-up click needs
+ * follow-ups offered). A stop stays out of `helpful`: it can mean "enough" as
+ * well as "wrong", and the rotation rule can promote a signal once the data
+ * says which.
+ */
+export interface BrowserView {
+  /** Answers whose browser reported anything. */
+  reported: number;
+  shownP50Ms: number | null;
+  shownP95Ms: number | null;
+  /** The server's first token for the same answers: the gap is the network and the page. */
+  serverP50Ms: number | null;
+  serverP95Ms: number | null;
+  /** Shares of the reported answers. */
+  stopRate: number | null;
+  copyRate: number | null;
+  /** Of the reported answers that offered follow-ups. */
+  followupRate: number | null;
+  /** Of the reported answers that cited a document. */
+  citationRate: number | null;
+  /** Answers asked again after they failed. */
+  retried: number;
+  /** The 👎s by reason; `none` when the visitor gave none. */
+  downReasons: Record<FeedbackReason | "none", number>;
+}
+
+export function browserView(rows: readonly OutcomeRow[]): BrowserView {
+  const reported = rows.filter((row) => row.signals);
+  const counted = (pick: (signals: AnswerSignals) => boolean, of: readonly OutcomeRow[]) =>
+    share(of.filter((row) => pick(row.signals!)).length, of.length);
+  const shown = reported
+    .map((row) => row.signals!.shownMs)
+    .filter((ms): ms is number => typeof ms === "number");
+  const server = reported
+    .map((row) => row.ttftMs)
+    .filter((ms): ms is number => typeof ms === "number");
+  const downReasons = Object.fromEntries(
+    [...FEEDBACK_REASONS, "none"].map((reason) => [reason, 0]),
+  ) as BrowserView["downReasons"];
+  for (const row of rows) {
+    if (row.feedback !== -1) continue;
+    const reason = (FEEDBACK_REASONS as readonly string[]).includes(row.downReason ?? "")
+      ? (row.downReason as FeedbackReason)
+      : "none";
+    downReasons[reason]++;
+  }
+  return {
+    reported: reported.length,
+    shownP50Ms: percentile(shown, 0.5),
+    shownP95Ms: percentile(shown, 0.95),
+    serverP50Ms: percentile(server, 0.5),
+    serverP95Ms: percentile(server, 0.95),
+    stopRate: counted((s) => s.stopped === true, reported),
+    copyRate: counted((s) => (s.copies ?? 0) > 0, reported),
+    followupRate: counted(
+      (s) => (s.followups ?? 0) > 0,
+      reported.filter((row) => row.followupsOffered),
+    ),
+    citationRate: counted(
+      (s) => (s.citations ?? 0) > 0,
+      reported.filter((row) => row.cited),
+    ),
+    retried: reported.filter((row) => (row.signals!.retries ?? 0) > 0).length,
+    downReasons,
   };
 }
 

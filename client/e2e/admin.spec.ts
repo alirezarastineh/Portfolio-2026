@@ -187,6 +187,20 @@ function outcomesView(metric: string, rotate: boolean) {
       costPerAnswered: 0.0026,
       costPerHelpful: 0.0033,
     },
+    // What the visitors' browsers saw (visitor plan V2).
+    browser: {
+      reported: 12,
+      shownP50Ms: 1_400,
+      shownP95Ms: 6_200,
+      serverP50Ms: 900,
+      serverP95Ms: 5_100,
+      stopRate: 0.25,
+      copyRate: 0.1,
+      followupRate: 0.5,
+      citationRate: 0.2,
+      retried: 1,
+      downReasons: { wrong: 1, unanswered: 0, length: 0, none: 0 },
+    },
     primary: {
       metric,
       weeks: [
@@ -1301,6 +1315,18 @@ test.describe("admin", () => {
     await expect(
       outcomes.getByText("4 offered → 2 confirmed (50 %) → 1 sent (50 %)"),
     ).toBeVisible();
+    // What the visitors' browsers saw (visitor plan V2), beside the server's first token.
+    const browser = outcomes.getByRole("region", { name: /In the visitor's browser/ });
+    await expect(browser).toContainText("12 answers reported");
+    await expect(browser).toContainText("1.4 s / 6.2 s");
+    await expect(browser).toContainText("the server's first token: 0.9 s / 5.1 s");
+    await expect(browser).toContainText("👎 by reason: 1 wrong or made up");
+    await settled(page);
+    const { violations } = await new AxeBuilder({ page })
+      .include("section[aria-labelledby=assistant-outcomes]")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+      .analyze();
+    expect(violations.map((v) => v.id)).toEqual([]);
     await expect(outcomes.getByText("Flat for two weekly reviews")).toBeVisible();
     await outcomes.getByLabel("Primary metric").selectOption("unknownRate");
     await expect.poll(() => chosen).toEqual([{ metric: "unknownRate" }]);

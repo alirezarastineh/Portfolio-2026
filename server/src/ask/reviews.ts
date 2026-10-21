@@ -65,9 +65,15 @@ export function reviewReasons(signals: {
   flags: readonly string[];
   /** A judge found it below the faithful line (the nightly judge, plan phase 26). */
   unfaithful?: boolean;
+  /** Why the thumbs-down, when the visitor said (visitor plan V2, `FEEDBACK_REASONS`). */
+  downReason?: string | null;
+  /** The visitor stopped it mid-answer (the browser's signals, V2). */
+  stopped?: boolean;
 }): string[] {
+  const down = signals.downReason ? `thumbs down:${signals.downReason}` : "thumbs down";
   return [
-    ...(signals.thumbsDown ? ["thumbs down"] : []),
+    ...(signals.thumbsDown ? [down] : []),
+    ...(signals.stopped ? ["stopped"] : []),
     ...(signals.unknown ? ["didn't know"] : []),
     ...signals.flags.map((flag) => `check:${flag}`),
     ...(signals.unfaithful ? ["judge:unfaithful"] : []),
