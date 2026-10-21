@@ -19,6 +19,7 @@ import { AskStore } from "./ask.store";
 import type { AskMessage, DownReason, Entry } from "./ask-types";
 import { reasonChoices } from "./down-reasons";
 import { AskLinesComponent } from "./ask-lines.component";
+import { linkPolicyFor } from "./link-policy";
 import { citationOrder, plainText, renderMarkdown, type Block } from "./terminal-markdown";
 import { track } from "./track";
 
@@ -425,20 +426,7 @@ export class AskAnswerComponent {
     return [...cited, ...rest].map((s, i) => ({ ...s, n: i + 1 }));
   });
 
-  private readonly linkPolicy = computed(() => {
-    const content = this.lang.content();
-    const known = new Set([
-      ...content.socials.map((s) => s.href),
-      `mailto:${content.identity.contactEmail}`,
-    ]);
-    const site = content.identity.siteUrl.replace(/\/$/, "");
-    return (href: string): "internal" | "external" | null => {
-      if (href.startsWith("/") && !href.startsWith("//")) return "internal";
-      if (known.has(href)) return "external";
-      if (site && href.startsWith(`${site}/`)) return "internal";
-      return null;
-    };
-  });
+  private readonly linkPolicy = computed(() => linkPolicyFor(this.lang.content()));
 
   protected readonly pieces = computed<Piece[]>(() => {
     const copy = this.copy();
