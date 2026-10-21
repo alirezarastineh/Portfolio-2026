@@ -20,7 +20,7 @@ import type { AskMessage, DownReason, Entry } from "./ask-types";
 import { reasonChoices } from "./down-reasons";
 import { AskLinesComponent } from "./ask-lines.component";
 import { linkPolicyFor } from "./link-policy";
-import { citationOrder, plainText, renderMarkdown, type Block } from "./terminal-markdown";
+import { footnotesFor, plainText, renderMarkdown, type Block } from "./terminal-markdown";
 import { track } from "./track";
 
 type AskEntry = Extract<Entry, { kind: "ask" }>;
@@ -420,10 +420,7 @@ export class AskAnswerComponent {
     const sources = (this.message()?.parts ?? []).flatMap((p) =>
       p.type === "source-url" ? [{ id: p.sourceId, url: p.url, title: p.title ?? p.url }] : [],
     );
-    const order = citationOrder(this.text());
-    const cited = order.flatMap((id) => sources.filter((s) => s.id === id));
-    const rest = sources.filter((s) => !order.includes(s.id));
-    return [...cited, ...rest].map((s, i) => ({ ...s, n: i + 1 }));
+    return footnotesFor(this.text(), sources);
   });
 
   private readonly linkPolicy = computed(() => linkPolicyFor(this.lang.content()));

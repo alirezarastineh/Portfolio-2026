@@ -236,6 +236,20 @@ export function citationOrder(text: string): string[] {
   return seen;
 }
 
+/**
+ * The answer's sources as numbered chips: those it cites, in the order it
+ * first cites them, then the rest. A citation [n] names chip n.
+ */
+export function footnotesFor<S extends { id: string }>(
+  text: string,
+  sources: readonly S[],
+): (S & { n: number })[] {
+  const order = citationOrder(text);
+  const cited = order.flatMap((id) => sources.filter((s) => s.id === id));
+  const rest = sources.filter((s) => !order.includes(s.id));
+  return [...cited, ...rest].map((s, i) => ({ ...s, n: i + 1 }));
+}
+
 /** The answer as a screen reader should hear it once: no markers, no Markdown. */
 export function plainText(text: string): string {
   return text

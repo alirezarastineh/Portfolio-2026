@@ -22,6 +22,14 @@ case "${1:-}" in
   # its components, and took up to 5.8 s against vitest's 5 s default (#40).
   # Local runs keep the default.
   unit)
+    # Nightly, the property tests take a random seed (properties.spec.ts reads
+    # FC_SEED; other runs keep its fixed one). A failure prints it, and
+    # FC_SEED=<seed> repeats the run locally.
+    if [ "${CI_PIPELINE_EVENT:-}" = cron ]; then
+      FC_SEED=$(($(od -An -N4 -tu4 /dev/urandom) % 2147483647))
+      export FC_SEED
+      echo "FC_SEED=${FC_SEED}: the property tests' seed for this run"
+    fi
     status=0
     node_modules/.bin/vitest run --reporter=default ${github:+"$github"} --reporter=json \
       --outputFile.json=/tmp/vitest-client.json --testTimeout=30000 --coverage \
