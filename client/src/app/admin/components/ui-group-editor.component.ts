@@ -7,6 +7,7 @@ import {
   ElementRef,
   inject,
   input,
+  OnInit,
   signal,
 } from "@angular/core";
 import { FormBuilder, FormControl, ReactiveFormsModule } from "@angular/forms";
@@ -151,7 +152,7 @@ type StringRecord = Record<string, string>;
     </ng-template>
   `,
 })
-export class UiGroupEditorComponent {
+export class UiGroupEditorComponent implements OnInit {
   readonly group = input.required<UiGroup>();
   readonly title = input.required<string>();
   readonly description = input("");
@@ -229,7 +230,13 @@ export class UiGroupEditorComponent {
     });
     // Leaving a dirty editor must not keep warning about it forever.
     inject(DestroyRef).onDestroy(() => this.unsaved.clear(`ui:${this.group()}`));
-    queueMicrotask(() => void this.load());
+  }
+
+  // Not from the constructor: a page the router creates gets its first check on a later frame,
+  // and a quick answer (a background tab delays that frame) read `fields` before it had a value
+  // (NG0950). By ngOnInit every input is bound.
+  ngOnInit(): void {
+    void this.load();
   }
 
   protected control(locale: Locale, key: string): FormControl<string> {
