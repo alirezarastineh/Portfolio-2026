@@ -93,6 +93,32 @@ async function answered(
     });
 }
 
+/** A question asked `minutes` ago, as the log keeps it. */
+async function askedBefore(
+  id: string,
+  question: string,
+  minutes: number,
+  session = "s",
+  source = "terminal",
+): Promise<void> {
+  await getDb()
+    .insert(aiMessages)
+    .values({
+      id,
+      source,
+      sessionHash: session,
+      locale: "en",
+      route: "lite",
+      totalMs: 1,
+      tokens: { input: 1, cached: 0, output: 1, thoughts: 0 },
+      finishReason: "stop",
+      promptVersion: "p",
+      questionRedacted: question,
+      answerExcerpt: "…",
+      createdAt: new Date(Date.now() - minutes * 60_000),
+    });
+}
+
 const freeze = (body: Record<string, unknown>) =>
   admin.post("/admin/assistant/eval-cases", { personalChecked: true, ...body });
 
@@ -176,6 +202,8 @@ describe("production eval cases", () => {
     expect(row).toMatchObject({
       suite: "production",
       question: "What does project:vesper@en say?",
+      // A lone question, as every case frozen before turns was.
+      turns: null,
       snapshotKey: snapshotKey(corpus),
       mustCite: ["project:vesper@en"],
       mustInclude: ["42"],
@@ -241,6 +269,102 @@ describe("production eval cases", () => {
       chain: () => [mockEntry("gemini-3.5-flash-lite", answer().model)],
     });
     expect(today.results[0]!.failures).toContain("did not cite project:vesper@en");
+  });
+
+  it("take the session's earlier questions as the admin rewrote them, and replay them the same twice", async () => {
+    const corpus = oldCorpus();
+    await recordSnapshot(corpus);
+    await askedBefore("m_earlier_1", "Which projects has he built?", 5);
+    await askedBefore("m_earlier_2", "I'm Jane from Acme: tell me about Vesper.", 4);
+    await askedBefore("m_earlier_3", "Which stack did it use?", 3);
+    await askedBefore("m_earlier_4", "And how long did it take?", 2);
+    await askedBefore("m_other_tab", "A question in another session.", 3, "t");
+    await askedBefore("m_playground_1", "An admin's question.", 3, "s", "playground");
+    await answered("m_vesper", snapshotKey(corpus), ["project:vesper@en"]);
+
+    // The three before it in its session, oldest first: not another session's, nor the admin's.
+    const earlier = async (id: string) => admin.get(`/admin/assistant/eval-cases/earlier/${id}`);
+    expect(await (await earlier("m_vesper")).json()).toEqual({
+      questions: [
+        "I'm Jane from Acme: tell me about Vesper.",
+        "Which stack did it use?",
+        "And how long did it take?",
+      ],
+    });
+    expect(await (await earlier("m_earlier_1")).json()).toEqual({ questions: [] });
+    expect((await earlier("m_playground_1")).status).toBe(404);
+    expect((await earlier("m_unknown_1")).status).toBe(404);
+    expect((await earlier("bad")).status).toBe(400);
+
+    // At most three, each a question the terminal would take.
+    const four = ["One question?", "Two questions?", "Three questions?", "Four questions?"];
+    expect((await freeze({ messageId: "m_vesper", turns: four })).status).toBe(400);
+    expect((await freeze({ messageId: "m_vesper", turns: ["x"] })).status).toBe(400);
+    expect(await getDb().select().from(aiEvalCases)).toHaveLength(0);
+
+    // The visitor's name and company left out; the third question dropped.
+    const turns = ["Tell me about Vesper.", "Which stack did it use?"];
+    const res = await freeze({ messageId: "m_vesper", turns, mustInclude: ["42"] });
+    expect(res.status).toBe(201);
+    const [row] = await getDb().select().from(aiEvalCases);
+    expect(row!.turns).toEqual([
+      { question: "Tell me about Vesper." },
+      { question: "Which stack did it use?" },
+    ]);
+    const listed = (await (await admin.get("/admin/assistant/eval-cases")).json()) as {
+      cases: { turns: string[] }[];
+    };
+    expect(listed.cases[0]!.turns).toEqual(turns);
+
+    // Each earlier question answered first, then the case's, as a visitor's would be.
+    const replay = async () => {
+      const model = scripted([
+        textTurn("Vesper is a cost project [^project:vesper@en]."),
+        textTurn("It used Go [^project:vesper@en]."),
+        textTurn("Vesper cut cloud costs by 42% [^project:vesper@en]."),
+      ]);
+      const suite = await runProductionSuite({
+        config,
+        concurrency: 1,
+        judge: false,
+        promptVersion: "test",
+        chain: () => [mockEntry("gemini-3.5-flash-lite", model.model)],
+      });
+      return { suite, prompts: model.calls.map((call) => call.prompt) };
+    };
+    const first = await replay();
+    const again = await replay();
+    expect(first.suite.results).toEqual([
+      expect.objectContaining({ passed: true, failures: [], cited: ["project:vesper@en"] }),
+    ]);
+    expect(first.suite.results[0]!.conversation).toEqual({
+      turns: [
+        {
+          question: "Tell me about Vesper.",
+          answer: "Vesper is a cost project [^project:vesper@en].",
+          live: true,
+        },
+        {
+          question: "Which stack did it use?",
+          answer: "It used Go [^project:vesper@en].",
+          live: true,
+        },
+      ],
+      droppedAnswers: 0,
+      windowDropped: 0,
+    });
+    // The case's question reached the model after both turns, signed answers included.
+    expect(first.prompts).toHaveLength(3);
+    const last = JSON.stringify(first.prompts[2]);
+    for (const text of [
+      "Tell me about Vesper.",
+      "It used Go",
+      "What does project:vesper@en say?",
+    ]) {
+      expect(last).toContain(text);
+    }
+    expect(again.prompts).toEqual(first.prompts);
+    expect(again.suite.results[0]!.conversation).toEqual(first.suite.results[0]!.conversation);
   });
 
   it("list with their staleness against the live corpus, and retire", async () => {

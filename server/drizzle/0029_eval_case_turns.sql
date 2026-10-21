@@ -1,0 +1,1 @@
+ALTER TABLE "ai_eval_cases" ADD COLUMN "turns" jsonb;

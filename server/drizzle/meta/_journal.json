@@ -204,6 +204,13 @@
       "when": 1792574171240,
       "tag": "0028_answer_signals",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792609637493,
+      "tag": "0029_eval_case_turns",
+      "breakpoints": true
     }
   ]
 }

@@ -888,6 +888,12 @@ export const aiEvalCases = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     suite: text("suite").notNull().default("production"),
     question: text("question").notNull(),
+    /**
+     * The visitor's earlier questions (at most three, oldest first), each as
+     * the admin rewrote it; their answers are generated again at each replay
+     * (visitor plan V3). Null for a lone question.
+     */
+    turns: jsonb("turns").$type<{ question: string }[]>(),
     locale: localeEnum("locale").notNull(),
     snapshotKey: text("snapshot_key")
       .notNull()

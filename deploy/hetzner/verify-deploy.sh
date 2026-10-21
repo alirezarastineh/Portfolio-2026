@@ -413,6 +413,12 @@ if [[ "${SIGNAL_COLUMNS}" == "2" ]]; then
 else
   fail "signal columns (${SIGNAL_COLUMNS}/2) missing — migration 0028_answer_signals not applied?"
 fi
+TURNS_COLUMN="$(db_value "select count(*) from information_schema.columns where table_name = 'ai_eval_cases' and column_name = 'turns'")"
+if [[ "${TURNS_COLUMN}" == "1" ]]; then
+  pass "an eval case keeps the questions before it (migration 0029)"
+else
+  fail "ai_eval_cases.turns missing — migration 0029_eval_case_turns not applied?"
+fi
 
 echo "== agent-readable portfolio (plan phase 32) =="
 # A 2026-07-28 discovery: the version and capabilities in _meta, mirrored into headers.

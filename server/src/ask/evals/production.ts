@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
 
 import { getDb } from "../../db/client.js";
 import { aiCorpusSnapshots, aiEvalCases, aiMessages } from "../../db/schema.js";
@@ -23,6 +23,12 @@ export interface CaseExpectations {
    * logged (redacted) question.
    */
   question?: string;
+  /**
+   * The visitor's earlier questions in the session (visitor plan V3), oldest
+   * first, each as the admin rewrote it. Their answers are generated again
+   * at each replay, so none of the visitor's answers is kept.
+   */
+  turns?: string[];
   mustCite?: string[];
   citeAny?: string[];
   mustInclude?: string[];
@@ -31,8 +37,43 @@ export interface CaseExpectations {
   judge?: boolean;
 }
 
+/** The most earlier questions a frozen case takes. */
+export const MAX_FROZEN_TURNS = 3;
+
 export type FreezeResult =
   { ok: true; id: string } | { ok: false; error: "not_found" | "no_snapshot" };
+
+/**
+ * The questions asked before a visitor's answer in its session, at most
+ * three, oldest first: what "Freeze as eval case" offers as its turns, for
+ * the admin to rewrite or leave out. Null when the answer is not a visitor's.
+ */
+export async function earlierQuestions(messageId: string): Promise<string[] | null> {
+  const db = getDb();
+  const [message] = await db
+    .select({ sessionHash: aiMessages.sessionHash })
+    .from(aiMessages)
+    .where(and(eq(aiMessages.id, messageId), eq(aiMessages.source, "terminal")));
+  if (!message) return null;
+  // Compared in SQL: the row's own timestamp keeps microseconds a JS date would lose.
+  const asked = db
+    .select({ createdAt: aiMessages.createdAt })
+    .from(aiMessages)
+    .where(eq(aiMessages.id, messageId));
+  const rows = await db
+    .select({ question: aiMessages.questionRedacted })
+    .from(aiMessages)
+    .where(
+      and(
+        eq(aiMessages.sessionHash, message.sessionHash),
+        eq(aiMessages.source, "terminal"),
+        lt(aiMessages.createdAt, sql`(${asked})`),
+      ),
+    )
+    .orderBy(desc(aiMessages.createdAt))
+    .limit(MAX_FROZEN_TURNS);
+  return rows.map((row) => row.question).reverse();
+}
 
 /** A case from a logged visitor answer; `mustCite` defaults to what it cited. */
 export async function freezeCase(
@@ -62,6 +103,9 @@ export async function freezeCase(
     .insert(aiEvalCases)
     .values({
       question: expectations.question ?? message.question,
+      turns: expectations.turns?.length
+        ? expectations.turns.map((question) => ({ question }))
+        : null,
       locale: message.locale,
       snapshotKey: snapshot.key,
       mustCite: expectations.mustCite ?? message.citedIds,
@@ -95,6 +139,8 @@ export async function productionCases(): Promise<ProductionCase[]> {
       category: "production",
       locale: row.locale,
       question: row.question,
+      // Each earlier question answered live at the replay, its answer regenerated.
+      ...(row.turns?.length ? { turns: row.turns.map(({ question }) => ({ question })) } : {}),
       ...(row.mustCite.length ? { mustCite: row.mustCite } : {}),
       ...(row.citeAny.length ? { citeAny: row.citeAny } : {}),
       ...(row.mustInclude.length ? { mustInclude: row.mustInclude } : {}),
