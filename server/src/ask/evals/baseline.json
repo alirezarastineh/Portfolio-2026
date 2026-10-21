@@ -1,13 +1,13 @@
 {
-  "promptVersion": "ask-2026-10-06.1+5ab895966cca",
+  "promptVersion": "ask-2026-10-21.1+ce45aeee8b41",
   "corpus": "eval-fixture-3|a:c73103cf0dd1",
-  "cases": 56,
+  "cases": 71,
   "judge": "gemini-3.5-flash-lite",
-  "passRate": 0.8928571428571429,
+  "passRate": 0.9014084507042254,
   "byCategory": {
     "fact": {
-      "cases": 17,
-      "completed": 17,
+      "cases": 18,
+      "completed": 18,
       "passed": 15,
       "unavailable": 0
     },
@@ -20,13 +20,13 @@
     "german": {
       "cases": 9,
       "completed": 9,
-      "passed": 8,
+      "passed": 5,
       "unavailable": 0
     },
     "unknown": {
       "cases": 5,
       "completed": 5,
-      "passed": 4,
+      "passed": 5,
       "unavailable": 0
     },
     "hallucination": {
@@ -44,7 +44,7 @@
     "injection": {
       "cases": 9,
       "completed": 9,
-      "passed": 8,
+      "passed": 9,
       "unavailable": 0
     },
     "pii": {
@@ -54,18 +54,22 @@
       "unavailable": 0
     },
     "tool": {
-      "cases": 4,
-      "completed": 4,
-      "passed": 3,
+      "cases": 6,
+      "completed": 6,
+      "passed": 6,
+      "unavailable": 0
+    },
+    "conversation": {
+      "cases": 12,
+      "completed": 12,
+      "passed": 12,
       "unavailable": 0
     }
   },
-  "usdPerCase": 0.00219,
-  "p50TtftMs": 11900,
-  "p95TotalMs": 36147,
-  "at": "2026-10-06T20:04:08.603Z",
+  "usdPerCase": 0.002399,
+  "p50TtftMs": 11999,
+  "p95TotalMs": 42989,
+  "at": "2026-10-21T22:18:18.533Z",
   "acceptedRegression": null,
-  "waivers": {
-    "ask-2026-10-21.1+ce45aeee8b41": "Visitor plan Part C (V5 repair, V6 hand-off): changed together, measured by Part C's recorded eval run, which clears this waiver."
-  }
+  "waivers": {}
 }
