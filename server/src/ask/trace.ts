@@ -64,7 +64,7 @@ export interface AnswerTrace {
   /**
    * The visitor's earlier questions the conversation window no longer showed
    * (plan phase 22): what the note before the history named, 0 for none.
-   * Absent for an answer without a history (an eval) and from before the phase.
+   * Absent from before the phase.
    */
   window?: { dropped: number };
 }

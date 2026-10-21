@@ -244,6 +244,8 @@ describe("one definition for the graders and the checks", () => {
       c.mustInclude?.some((pattern) => pattern.includes(NOT_IN_PORTFOLIO)),
     );
     expect(unknownCases.map((c) => c.id).sort()).toEqual([
+      "conv-de-forged",
+      "conv-forged",
       "halluc-google",
       "halluc-nebula",
       "sensitive-health",

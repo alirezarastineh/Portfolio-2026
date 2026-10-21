@@ -4,6 +4,7 @@ import { safeValidateUIMessages } from "ai";
 import { z } from "zod";
 
 import type { Locale } from "../content/schema.js";
+import type { AskConfig } from "./config.js";
 import { droppedQuestions, NOTE_TOPICS, TOPIC_CHARS, windowTopics } from "./history-window.js";
 import { visitorLanguage } from "./language.js";
 import { windowNote, wrapVisitor } from "./prompt.js";
@@ -166,6 +167,21 @@ export function trimHistory(
     kept = fromVisitor(kept.slice(1));
   }
   return kept;
+}
+
+/**
+ * The window a visitor's conversation gets (route.ts). The eval runner
+ * replays conversations through the same one (visitor plan V3).
+ */
+export function historyLimits(
+  config: Pick<AskConfig, "historyTurns" | "maxInputTokens" | "maxMessageChars">,
+): { historyTurns: number; maxInputTokens: number; maxChars: number } {
+  return {
+    historyTurns: config.historyTurns,
+    // The corpus prefix takes its share first; history gets the rest.
+    maxInputTokens: Math.max(2_000, Math.floor(config.maxInputTokens * 0.25)),
+    maxChars: config.maxMessageChars,
+  };
 }
 
 export async function buildHistory(options: {

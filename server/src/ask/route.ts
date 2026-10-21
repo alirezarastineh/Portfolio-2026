@@ -15,7 +15,7 @@ import { askChain, askConfig, askCorpus } from "./deps.js";
 import { backfillEmbeddings } from "./embeddings.js";
 import { availability, checkRate, ConcurrencyGate, hashWithSalt, recordRequest } from "./guard.js";
 import { countGuardEvent } from "./guard-events.js";
-import { ASK_MESSAGE_ID, buildHistory } from "./history.js";
+import { ASK_MESSAGE_ID, buildHistory, historyLimits } from "./history.js";
 import { shortName } from "./models/registry.js";
 import { routeQuestion } from "./router.js";
 import { assistantState } from "./settings.js";
@@ -148,10 +148,7 @@ async function admitAsk(c: Context): Promise<AdmitResult> {
     messages: body.messages,
     sessionId: body.sessionId,
     locale: body.locale,
-    historyTurns: config.historyTurns,
-    // The corpus prefix takes its share first; history gets the rest.
-    maxInputTokens: Math.max(2_000, Math.floor(config.maxInputTokens * 0.25)),
-    maxChars: config.maxMessageChars,
+    ...historyLimits(config),
   });
   if (!history.ok) {
     const tooLong = history.error === "too_long";

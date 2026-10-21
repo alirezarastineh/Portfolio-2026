@@ -3,7 +3,6 @@ import { z } from "zod";
 
 import { newTrace } from "../models/fallback.js";
 import type { ModelEntry } from "../models/registry.js";
-import { wrapVisitor } from "../prompt.js";
 import { summarizeCalls } from "../usage.js";
 import type { EvalCase } from "./cases.js";
 import {
@@ -20,6 +19,7 @@ import {
   createModelCallGate,
   createRetryAcquirer,
   JUDGE_FENCE,
+  judgedQuestion,
   judgeDocuments,
   judgeModelFor,
   type AnsweredCase,
@@ -82,7 +82,11 @@ async function judgePair(
       temperature: 0,
       output: Output.object({ schema: pairSchema }),
       instructions: PAIR_INSTRUCTIONS,
-      prompt: `Question:\n${wrapVisitor(c.question, c.locale)}\n\nAnswer 1:\n${first || "(no text)"}\n\nAnswer 2:\n${second || "(no text)"}\n\nDocuments the answers cited:\n${documents}`,
+      prompt: `Question:\n${judgedQuestion(
+        c.question,
+        c.locale,
+        c.turns?.map((t) => t.question),
+      )}\n\nAnswer 1:\n${first || "(no text)"}\n\nAnswer 2:\n${second || "(no text)"}\n\nDocuments the answers cited:\n${documents}`,
     });
     return { choice: CHOICE[result.output.better], reason: result.output.reason };
   } catch (error) {
@@ -98,7 +102,7 @@ function side(answered: AnsweredCase): PairwiseSide {
     answer: answered.outcome.text,
     model: answered.outcome.model,
     failures: answered.failures,
-    usd: answered.outcome.usd,
+    usd: answered.usd,
   };
 }
 

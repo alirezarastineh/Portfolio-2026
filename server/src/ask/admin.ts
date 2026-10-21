@@ -43,7 +43,7 @@ import {
   SWITCHED_FEATURES,
 } from "./features.js";
 import { availability, hashWithSalt, refusal, spendByFeature, stateFor } from "./guard.js";
-import { buildHistory } from "./history.js";
+import { buildHistory, historyLimits } from "./history.js";
 import type { ModelCall } from "./models/fallback.js";
 import { breakerSnapshot } from "./models/circuit.js";
 import { capsOf, configuredModels, excludedModels, type ChainRole } from "./models/registry.js";
@@ -902,8 +902,8 @@ adminAskRouter.post("/assistant/playground", async (c) => {
     messages: body.messages,
     sessionId: body.sessionId,
     locale: body.locale,
-    historyTurns: config.historyTurns,
-    maxInputTokens: Math.max(2_000, Math.floor(config.maxInputTokens * 0.25)),
+    // The admin may try a longer question than a visitor.
+    ...historyLimits(config),
     maxChars: 2_000,
   });
   if (!history.ok) return c.json({ error: history.error }, 400);
