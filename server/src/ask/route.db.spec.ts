@@ -43,6 +43,7 @@ import { verifyAnswer } from "./history.js";
 import { resetBreakers } from "./models/circuit.js";
 import type { ChainRole, ModelEntry } from "./models/registry.js";
 import { invalidateAssistantCache } from "./settings.js";
+import { SIGNALS_PER_HOUR } from "./signals.js";
 
 let config: AskConfig;
 let chain: (role: ChainRole) => ModelEntry[];
@@ -595,7 +596,112 @@ describe("POST /v1/ask/feedback", () => {
     expect((await rate(SESSION, 1)).status).toBe(200);
     expect((await rate(SESSION, -1)).status).toBe(200);
     const rows = await getDb().select().from(aiFeedback);
-    expect(rows).toEqual([expect.objectContaining({ messageId, value: -1 })]);
+    expect(rows).toEqual([expect.objectContaining({ messageId, value: -1, reason: null })]);
+  });
+
+  it("keeps a -1's reason, refuses a code the terminal does not offer, and a +1 clears it (visitor plan V2)", async () => {
+    only(scripted([textTurn("ok")]));
+    const messageId = (await readUiChunks(await ask("Hi")))[0]!["messageId"] as string;
+    await logged(messageId);
+    const rate = (body: Record<string, unknown>) =>
+      app.request("/v1/ask/feedback", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId: SESSION, messageId, ...body }),
+      });
+    const reason = async () => (await getDb().select().from(aiFeedback))[0]?.reason;
+
+    expect((await rate({ value: -1, reason: "wrong" })).status).toBe(200);
+    expect(await reason()).toBe("wrong");
+    expect((await rate({ value: -1, reason: "rude" })).status).toBe(400);
+    expect(await reason()).toBe("wrong");
+    // A reason belongs to a -1 only.
+    expect((await rate({ value: 1, reason: "length" })).status).toBe(200);
+    expect(await reason()).toBeNull();
+  });
+});
+
+describe("POST /v1/ask/signal (visitor plan V2)", () => {
+  const signal = (
+    sessionId: string,
+    messageId: string,
+    signals: unknown,
+    contentType = "application/json",
+  ) =>
+    app.request("/v1/ask/signal", {
+      method: "POST",
+      headers: { "content-type": contentType },
+      body: JSON.stringify({ sessionId, messageId, signals }),
+    });
+  const stored = async (messageId: string) =>
+    (
+      await getDb()
+        .select({ signals: aiMessages.signals })
+        .from(aiMessages)
+        .where(eq(aiMessages.id, messageId))
+    )[0]!.signals;
+  const answered = async () => {
+    only(scripted([textTurn("ok")]));
+    const messageId = (await readUiChunks(await ask("Hi")))[0]!["messageId"] as string;
+    await logged(messageId);
+    return messageId;
+  };
+
+  it("sets the totals the session's browser sends, and only that session's", async () => {
+    // Before its answer is logged, the browser is told to try again.
+    expect((await signal(SESSION, "m_not-logged-yet", { doneMs: 100 })).status).toBe(404);
+    const messageId = await answered();
+    expect((await signal("some-other-session-000", messageId, { stopped: true })).status).toBe(404);
+    expect(await stored(messageId)).toBeNull();
+
+    expect((await signal(SESSION, messageId, { shownMs: 820, doneMs: 2400 })).status).toBe(200);
+    // The same totals again count once; a later batch sets what it carries over the rest.
+    expect((await signal(SESSION, messageId, { shownMs: 820, doneMs: 2400 })).status).toBe(200);
+    expect((await signal(SESSION, messageId, { followups: 1, citations: 2 })).status).toBe(200);
+    expect((await signal(SESSION, messageId, { citations: 3 })).status).toBe(200);
+    expect(await stored(messageId)).toEqual({
+      v: 1,
+      shownMs: 820,
+      doneMs: 2400,
+      followups: 1,
+      citations: 3,
+    });
+  });
+
+  it("refuses what no browser sends: nothing, an unknown field, content, a count past 20, a bad time", async () => {
+    const messageId = await answered();
+    for (const signals of [
+      {},
+      { question: "what is Atlas?" },
+      { copies: 21 },
+      { shownMs: -5 },
+      { shownMs: 1.5 },
+      { doneMs: 600_001 },
+      { stopped: "yes" },
+    ]) {
+      expect((await signal(SESSION, messageId, signals)).status, JSON.stringify(signals)).toBe(400);
+    }
+    expect(await stored(messageId)).toBeNull();
+  });
+
+  it("takes the page's last word as plain text, the type a keepalive request sends", async () => {
+    const messageId = await answered();
+    expect(
+      (await signal(SESSION, messageId, { stopped: true }, "text/plain;charset=UTF-8")).status,
+    ).toBe(200);
+    expect(await stored(messageId)).toEqual({ v: 1, stopped: true });
+  });
+
+  it("stops a session past its hourly share with a 429, and only that session", async () => {
+    // A session of its own: the limiter lives as long as the module.
+    const flood = "signal-flood-session-01";
+    const statuses = new Set<number>();
+    for (let i = 0; i < SIGNALS_PER_HOUR; i++) {
+      statuses.add((await signal(flood, "m_not-logged-yet", { copies: 1 })).status);
+    }
+    expect([...statuses]).toEqual([404]);
+    expect((await signal(flood, "m_not-logged-yet", { copies: 1 })).status).toBe(429);
+    expect((await signal(SESSION, "m_not-logged-yet", { copies: 1 })).status).toBe(404);
   });
 });
 

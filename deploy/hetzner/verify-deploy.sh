@@ -407,6 +407,12 @@ if [[ "$(db_value "select count(*) from information_schema.tables where table_na
 else
   fail "ai_mcp_usage missing — migration 0027_mcp_usage not applied?"
 fi
+SIGNAL_COLUMNS="$(db_value "select count(*) from information_schema.columns where (table_name = 'ai_messages' and column_name = 'signals') or (table_name = 'ai_feedback' and column_name = 'reason')")"
+if [[ "${SIGNAL_COLUMNS}" == "2" ]]; then
+  pass "the browser's signals and the thumbs-down's reason have columns (migration 0028)"
+else
+  fail "signal columns (${SIGNAL_COLUMNS}/2) missing — migration 0028_answer_signals not applied?"
+fi
 
 echo "== agent-readable portfolio (plan phase 32) =="
 # A 2026-07-28 discovery: the version and capabilities in _meta, mirrored into headers.

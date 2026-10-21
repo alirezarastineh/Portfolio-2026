@@ -19,13 +19,15 @@ import { ASK_MESSAGE_ID, buildHistory } from "./history.js";
 import { shortName } from "./models/registry.js";
 import { routeQuestion } from "./router.js";
 import { assistantState } from "./settings.js";
+import { FEEDBACK_REASONS, SignalLimiter, signalsSchema } from "./signals.js";
 import { DEEP_ROUTE, withoutDemoted } from "./trust.js";
 
 /**
  * The public assistant API:
  *   POST /v1/ask           one streamed answer (AI SDK UI message stream)
  *   GET  /v1/ask/config    whether it is on, suggested questions, limits
- *   POST /v1/ask/feedback  +1 / -1 on an answer from this session
+ *   POST /v1/ask/feedback  +1 / -1 on an answer from this session, a -1 with its reason
+ *   POST /v1/ask/signal    what this session's browser saw of an answer (visitor plan V2)
  *   POST /v1/ask/handoff   the visitor's yes to that answer's hand-off offer
  *   GET  /v1/ask/stream-check  three ticks, so a deploy can prove nothing buffers
  *
@@ -52,7 +54,17 @@ const feedbackBody = z.object({
   sessionId: z.string().regex(SESSION_ID),
   messageId: z.string().regex(ASK_MESSAGE_ID),
   value: z.union([z.literal(1), z.literal(-1)]),
+  /** Why a -1 (visitor plan V2): one of the codes the terminal offers. */
+  reason: z.enum(FEEDBACK_REASONS).optional(),
 });
+
+const signalBody = z.object({
+  sessionId: z.string().regex(SESSION_ID),
+  messageId: z.string().regex(ASK_MESSAGE_ID),
+  signals: signalsSchema,
+});
+
+const signalLimiter = new SignalLimiter();
 
 const handoffBody = z.object({
   sessionId: z.string().regex(SESSION_ID),
@@ -290,6 +302,8 @@ export function createAskRouter(): Hono {
     const parsed = feedbackBody.safeParse(await readJson(c));
     if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
     const { sessionId, messageId, value } = parsed.data;
+    // A reason belongs to a -1 only: a +1 clears the one a -1 had.
+    const reason = value === -1 ? (parsed.data.reason ?? null) : null;
 
     // Only the session that received the answer may rate it.
     const [message] = await getDb()
@@ -306,8 +320,32 @@ export function createAskRouter(): Hono {
 
     await getDb()
       .insert(aiFeedback)
-      .values({ messageId, value })
-      .onConflictDoUpdate({ target: aiFeedback.messageId, set: { value, createdAt: new Date() } });
+      .values({ messageId, value, reason })
+      .onConflictDoUpdate({
+        target: aiFeedback.messageId,
+        set: { value, reason, createdAt: new Date() },
+      });
+    return c.json({ ok: true });
+  });
+
+  router.post("/signal", async (c) => {
+    const parsed = signalBody.safeParse(await readJson(c));
+    if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
+    const { sessionId, messageId, signals } = parsed.data;
+    const sessionHash = hashWithSalt("session", sessionId);
+    if (!signalLimiter.take(sessionHash)) return c.json({ error: "rate_limited" }, 429);
+
+    // Only the session that got the answer. The browser sends totals, set over what is there,
+    // so a batch sent twice (a retry, the page's last word) cannot count twice.
+    const [row] = await getDb()
+      .update(aiMessages)
+      .set({
+        signals: sql`coalesce(${aiMessages.signals}, '{"v":1}'::jsonb) || ${JSON.stringify(signals)}::jsonb`,
+      })
+      .where(and(eq(aiMessages.id, messageId), eq(aiMessages.sessionHash, sessionHash)))
+      .returning({ id: aiMessages.id });
+    // The answer is logged once its stream ends: the browser tries again a moment later.
+    if (!row) return c.json({ error: "not_found" }, 404);
     return c.json({ ok: true });
   });
 

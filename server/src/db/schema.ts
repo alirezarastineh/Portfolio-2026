@@ -31,6 +31,7 @@ import type { InsightTopic } from "../ask/insights.js";
 import type { FixType, JournalDiagnosis, JournalStatus, ReplayRecord } from "../ask/journal.js";
 import type { LessonEffect } from "../ask/lessons.js";
 import type { ReviewLabels } from "../ask/reviews.js";
+import type { AnswerSignals } from "../ask/signals.js";
 import type { ToolName } from "../ask/tools.js";
 import type { AnswerTrace } from "../ask/trace.js";
 
@@ -816,6 +817,12 @@ export const aiMessages = pgTable(
     judge: jsonb("judge").$type<AnswerJudgment>(),
     /** When the visitor said yes to this answer's hand-off offer (the outcomes funnel). */
     handoffConfirmedAt: timestamp("handoff_confirmed_at", { withTimezone: true }),
+    /**
+     * What the visitor's browser saw of this answer (visitor plan V2, `ask/signals.ts`): times,
+     * a stop, follow-ups and citations followed, copies, retries. No content; null until the
+     * browser reports.
+     */
+    signals: jsonb("signals").$type<AnswerSignals>(),
   },
   (t) => [
     index("ai_messages_created_idx").on(t.createdAt.desc()),
@@ -917,6 +924,11 @@ export const aiFeedback = pgTable(
       .references(() => aiMessages.id, { onDelete: "cascade" }),
     value: smallint("value").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * Why a 👎 (visitor plan V2): a code the terminal offers (`FEEDBACK_REASONS`), never free
+     * text; null for a 👍 or a 👎 without one. No check constraint: a new code needs no migration.
+     */
+    reason: text("reason"),
   },
   (t) => [check("ai_feedback_value_check", sql`${t.value} in (-1, 1)`)],
 );
