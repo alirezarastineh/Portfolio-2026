@@ -315,15 +315,18 @@ export function buildChain(config: AskConfig, role: ChainRole): ModelEntry[] {
 }
 
 /**
- * The lookup tier (plan phase 20, router.ts): the chain's first model with
- * thinking `minimal`, the rest as they are. A model without a thinking setting
- * (Gemma, OpenRouter, a test's mock) is left alone.
+ * The lookup tier (plan phase 20, router.ts): the primary model with thinking
+ * `minimal`, the rest as they are. Only when the chain starts with the primary:
+ * not every model takes `minimal` (gemini-3.7-flash answers 400), and a chain
+ * led by another (a pairwise side, the deep chain) keeps its own thinking. A
+ * model without a thinking setting (Gemma, OpenRouter, a test's mock) is left
+ * alone.
  */
-export function withMinimalThinking(chain: readonly ModelEntry[]): ModelEntry[] {
+export function withMinimalThinking(chain: readonly ModelEntry[], primary: string): ModelEntry[] {
   const [first, ...rest] = chain;
   const google = first?.providerOptions?.["google"] as
     { thinkingConfig?: Record<string, unknown> } | undefined;
-  if (!first || !google?.thinkingConfig) return [...chain];
+  if (first?.id !== primary || !google?.thinkingConfig) return [...chain];
   const thinkingConfig = { ...google.thinkingConfig, thinkingLevel: "minimal" };
   return [
     {

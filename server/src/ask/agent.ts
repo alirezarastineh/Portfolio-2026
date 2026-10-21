@@ -384,8 +384,10 @@ export function streamAnswer(request: AnswerRequest): {
   };
   const instructions = instructionsFor(corpus, locale, language, extras);
 
-  // The lookup tier: the same chain, its first model thinking minimally (plan phase 20).
-  const chain = thinking(route.lookup ? withMinimalThinking(request.chain) : request.chain);
+  // The lookup tier: the same chain, the primary model thinking minimally (plan phase 20).
+  const chain = thinking(
+    route.lookup ? withMinimalThinking(request.chain, config.gemini.model) : request.chain,
+  );
   const fallbackModel = (entries: ModelEntry[]) =>
     createFallbackModel({
       entries,

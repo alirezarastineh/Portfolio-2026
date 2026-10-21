@@ -823,8 +823,9 @@ describe("the lookup tier", () => {
       ?.thinkingConfig?.thinkingLevel;
 
   it("lets the first model think minimally and leaves the rest as configured", () => {
-    const lite = buildChain(fixtureConfig(), "lite");
-    const lookup = withMinimalThinking(lite);
+    const config = fixtureConfig();
+    const lite = buildChain(config, "lite");
+    const lookup = withMinimalThinking(lite, config.gemini.model);
     expect(lookup.map((e) => e.id)).toEqual(lite.map((e) => e.id));
     expect(thinking(lite[0])).toBe("low");
     expect(thinking(lookup[0])).toBe("minimal");
@@ -838,8 +839,18 @@ describe("the lookup tier", () => {
 
   it("leaves a model without a thinking setting alone", () => {
     const mock = { ...buildChain(fixtureConfig(), "lite")[0]!, providerOptions: undefined };
-    expect(withMinimalThinking([mock])).toEqual([mock]);
-    expect(withMinimalThinking([])).toEqual([]);
+    expect(withMinimalThinking([mock], mock.id)).toEqual([mock]);
+    expect(withMinimalThinking([], mock.id)).toEqual([]);
+  });
+
+  it("leaves a chain another model leads as it is: gemini-3.7-flash refuses minimal thinking", () => {
+    // A pairwise run's deep side kept the router's lookup and asked the deep model for minimal
+    // thinking, which it answers with a 400 (the visitor plan's V1, 2026-10-21).
+    const config = fixtureConfig();
+    const deep = buildChain(config, "deep");
+    expect(deep[0]!.id).toBe("gemini-3.7-flash");
+    expect(withMinimalThinking(deep, config.gemini.model)).toEqual(deep);
+    expect(thinking(withMinimalThinking(deep, config.gemini.model)[0])).toBe("medium");
   });
 });
 

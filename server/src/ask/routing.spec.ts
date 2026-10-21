@@ -138,10 +138,14 @@ describe("the lookup tier", () => {
       model.calls[0]!.providerOptions?.["google"] as
         { thinkingConfig?: { thinkingLevel?: string } } | undefined
     )?.thinkingConfig?.thinkingLevel;
-  const gemini = (model: ScriptedModel): ModelEntry => ({
-    ...mockEntry("gemini-3.5-flash-lite", model.model),
+  const gemini = (
+    model: ScriptedModel,
+    id = "gemini-3.5-flash-lite",
+    level = "low",
+  ): ModelEntry => ({
+    ...mockEntry(id, model.model),
     providerOptions: {
-      google: { thinkingConfig: { thinkingLevel: "low", includeThoughts: false } },
+      google: { thinkingConfig: { thinkingLevel: level, includeThoughts: false } },
     },
   });
 
@@ -155,6 +159,17 @@ describe("the lookup tier", () => {
     const plain = scripted([textTurn("Berlin [^profile@en].")]);
     await outcomeOf(answer(LITE, [gemini(plain)]));
     expect(thinkingOf(plain)).toBe("low");
+  });
+
+  it("asks only the primary model: a chain the deep model leads keeps its thinking", async () => {
+    // A pairwise run's deep side: the router still calls a short question a lookup.
+    const deep = scripted([textTurn("Berlin [^profile@en].")]);
+    await outcomeOf(
+      answer({ route: "lite", reason: "default+lookup", lookup: true }, [
+        gemini(deep, "gemini-3.7-flash", "medium"),
+      ]),
+    );
+    expect(thinkingOf(deep)).toBe("medium");
   });
 });
 
