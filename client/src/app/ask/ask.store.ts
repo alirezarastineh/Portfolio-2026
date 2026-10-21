@@ -47,6 +47,7 @@ import {
   type LocalCommand,
   type OutLine,
 } from "./commands";
+import { forRequest } from "./sent-messages";
 import { plainText } from "./terminal-markdown";
 import { track } from "./track";
 
@@ -63,8 +64,6 @@ import { track } from "./track";
 const MAX_STORED_MESSAGES = 24;
 const MAX_ENTRIES = 60;
 const MAX_HISTORY = 50;
-/** Messages sent back as context; the server keeps fewer still. */
-const MAX_SENT_MESSAGES = 16;
 
 interface AskState {
   sessionId: string;
@@ -115,16 +114,6 @@ function readStored(): Stored | null {
   } catch {
     return null;
   }
-}
-
-/** What the server needs: text, and the signature that lets an answer count as history. */
-function forRequest(messages: AskMessage[]) {
-  return messages.slice(-MAX_SENT_MESSAGES).map((m) => ({
-    id: m.id,
-    role: m.role,
-    parts: m.parts.filter((p) => p.type === "text").map((p) => ({ type: "text", text: p.text })),
-    ...(m.role === "assistant" && m.metadata?.sig ? { metadata: { sig: m.metadata.sig } } : {}),
-  }));
 }
 
 /** What a reload needs to redraw: tool results are dropped, except where they were acted on. */
