@@ -19,13 +19,21 @@ import { apiBaseUrl } from "../services/api-base";
 import { ContactService } from "../services/contact.service";
 import { LanguageService } from "../services/language.service";
 import { TURNSTILE_SITE_KEY, turnstileToken } from "../services/turnstile";
-import { AnswerSignals, bump, signalMs, type SignalCount } from "./answer-signals";
+import {
+  AnswerSignals,
+  bump,
+  finishedTotals,
+  hasWords,
+  signalRequest,
+  type SignalCount,
+} from "./answer-signals";
 import { answerTrace } from "./answer-trace";
 import { answersByQuestion } from "./answers";
 import { ASK_COPY } from "./ask-copy";
 import { ASK_STORAGE_KEY } from "./ask-storage";
 import { AskTraceService } from "./ask-trace.service";
 import type { AskMessage, DownReason, Entry, Failure, RemoteConfig } from "./ask-types";
+import { feedbackBody, withDownReason } from "./down-reasons";
 import { confirmHandoff } from "./handoff-confirm";
 import {
   helpLines,
@@ -117,11 +125,6 @@ function forRequest(messages: AskMessage[]) {
     parts: m.parts.filter((p) => p.type === "text").map((p) => ({ type: "text", text: p.text })),
     ...(m.role === "assistant" && m.metadata?.sig ? { metadata: { sig: m.metadata.sig } } : {}),
   }));
-}
-
-/** Whether an answer has words to show yet (visitor plan V2's first visible word). */
-function hasWords(message: AskMessage | undefined): boolean {
-  return !!message?.parts.some((p) => p.type === "text" && p.text.trim());
 }
 
 /** What a reload needs to redraw: tool results are dropped, except where they were acted on. */
@@ -249,14 +252,7 @@ export const AskStore = signalStore(
     _retries: new Map<string, number>(),
     /** What the browser saw of each answer, sent to the server (visitor plan V2). */
     _signals: new AnswerSignals((sessionId, messageId, signals, keepalive) =>
-      fetch(`${apiBaseUrl()}/v1/ask/signal`, {
-        method: "POST",
-        keepalive,
-        // The page's last word goes as plain text, a type a keepalive request may send to
-        // another origin without asking first; the API reads JSON either way.
-        headers: { "content-type": keepalive ? "text/plain;charset=UTF-8" : "application/json" },
-        body: JSON.stringify({ sessionId, messageId, signals }),
-      }),
+      fetch(...signalRequest(apiBaseUrl(), sessionId, messageId, signals, keepalive)),
     ),
   })),
   withComputed((store) => ({
@@ -365,19 +361,17 @@ export const AskStore = signalStore(
       const entryId = store._next.entryId;
       const timing = entryId ? store._timings.get(entryId) : undefined;
       if (message.role !== "assistant" || !entryId || !timing) return;
-      const now = performance.now();
-      // A stream that ended between two renders shows its first word with its last.
-      if (timing.shownAt === undefined && hasWords(message)) timing.shownAt = now;
-      const doneMs = signalMs(now - timing.sentAt);
-      const retries = store._retries.get(entryId) ?? 0;
-      store._signals.report(store.sessionId(), message.id, (totals) => ({
+      const { shownAt, totals } = finishedTotals({
+        ...timing,
+        now: performance.now(),
+        words: hasWords(message),
+        stopped,
+        retries: store._retries.get(entryId) ?? 0,
+      });
+      timing.shownAt = shownAt;
+      store._signals.report(store.sessionId(), message.id, (current) => ({
+        ...current,
         ...totals,
-        doneMs,
-        ...(timing.shownAt === undefined
-          ? {}
-          : { shownMs: signalMs(timing.shownAt - timing.sentAt) }),
-        ...(stopped ? { stopped: true } : {}),
-        ...(retries ? { retries } : {}),
       }));
     }
 
@@ -713,13 +707,9 @@ export const AskStore = signalStore(
 
       /** +1 or -1 on an answer; a -1 may come back with its reason (visitor plan V2). */
       async rate(messageId: string, value: 1 | -1, reason?: DownReason): Promise<void> {
-        const others = Object.fromEntries(
-          Object.entries(store.downReasons()).filter(([id]) => id !== messageId),
-        );
         patchState(store, {
           feedback: { ...store.feedback(), [messageId]: value },
-          // A reason belongs to a -1 only, as the server keeps it.
-          downReasons: value === -1 && reason ? { ...others, [messageId]: reason } : others,
+          downReasons: withDownReason(store.downReasons(), messageId, value, reason),
         });
         store._persist();
         track("ask_feedback", reason ? { reason } : undefined);
@@ -727,12 +717,7 @@ export const AskStore = signalStore(
           await fetch(`${apiBaseUrl()}/v1/ask/feedback`, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              sessionId: store.sessionId(),
-              messageId,
-              value,
-              ...(value === -1 && reason ? { reason } : {}),
-            }),
+            body: JSON.stringify(feedbackBody(store.sessionId(), messageId, value, reason)),
           });
         } catch {
           // Feedback is best effort.

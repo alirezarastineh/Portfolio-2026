@@ -3,11 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
   AnswerSignals,
   bump,
+  finishedTotals,
+  hasWords,
   MAX_SIGNAL_COUNT,
   MAX_SIGNAL_MS,
   signalMs,
+  signalRequest,
   type SignalTotals,
 } from "./answer-signals";
+import type { AskMessage } from "./ask-types";
 
 /** A send that resolves only when told to, recording what it carried. */
 function deferredSend() {
@@ -77,6 +81,77 @@ describe("the browser's signals (visitor plan V2)", () => {
     // Said once: a second flush has nothing left.
     signals.flush();
     expect(calls).toHaveLength(3);
+  });
+
+  it("count an answer's first word only once it has words", () => {
+    const answer = (...texts: string[]) =>
+      ({
+        id: "m_1",
+        role: "assistant",
+        parts: texts.map((text) => ({ type: "text", text })),
+      }) as AskMessage;
+    expect(hasWords(undefined)).toBe(false);
+    expect(hasWords(answer())).toBe(false);
+    expect(hasWords(answer("  ", "\n"))).toBe(false);
+    expect(hasWords(answer("", "Berlin"))).toBe(true);
+    const toolOnly = {
+      id: "m_2",
+      role: "assistant",
+      parts: [{ type: "step-start" }],
+    } as AskMessage;
+    expect(hasWords(toolOnly)).toBe(false);
+  });
+
+  it("add the end of a stream: its time, its first word's, a stop and the retries", () => {
+    // The first word showed while it streamed: that time stands.
+    expect(
+      finishedTotals({
+        sentAt: 1000,
+        shownAt: 1400,
+        now: 3000,
+        words: true,
+        stopped: false,
+        retries: 0,
+      }),
+    ).toEqual({ shownAt: 1400, totals: { doneMs: 2000, shownMs: 400 } });
+    // The whole stream landed between two renders: its first word showed with its last.
+    expect(
+      finishedTotals({ sentAt: 1000, now: 1900, words: true, stopped: true, retries: 2 }),
+    ).toEqual({ shownAt: 1900, totals: { doneMs: 900, shownMs: 900, stopped: true, retries: 2 } });
+    // No words at all (stopped before any, or only a hand-off): no first word to time.
+    expect(
+      finishedTotals({ sentAt: 1000, now: 1500, words: false, stopped: true, retries: 0 }),
+    ).toEqual({ shownAt: undefined, totals: { doneMs: 500, stopped: true } });
+    // Within the server's bounds, which refuse a whole batch past them.
+    expect(
+      finishedTotals({
+        sentAt: 0,
+        now: MAX_SIGNAL_MS * 2,
+        words: false,
+        stopped: false,
+        retries: 99,
+      }).totals,
+    ).toEqual({ doneMs: MAX_SIGNAL_MS, retries: MAX_SIGNAL_COUNT });
+  });
+
+  it("go as JSON, and as plain text when the page is closing", () => {
+    const [url, init] = signalRequest("https://api.test", "s", "m_1", { copies: 1 }, false);
+    expect(url).toBe("https://api.test/v1/ask/signal");
+    expect(init).toMatchObject({
+      method: "POST",
+      keepalive: false,
+      headers: { "content-type": "application/json" },
+    });
+    expect(JSON.parse(init.body as string)).toEqual({
+      sessionId: "s",
+      messageId: "m_1",
+      signals: { copies: 1 },
+    });
+    const [, last] = signalRequest("https://api.test", "s", "m_1", { copies: 1 }, true);
+    expect(last).toMatchObject({
+      keepalive: true,
+      headers: { "content-type": "text/plain;charset=UTF-8" },
+    });
   });
 
   it("keep each answer's totals apart, and on the session that got the answer", async () => {

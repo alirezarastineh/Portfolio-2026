@@ -16,7 +16,8 @@ import { isToolUIPart, type ChatStatus } from "ai";
 import { fmt } from "../i18n/interpolate";
 import { LanguageService } from "../services/language.service";
 import { AskStore } from "./ask.store";
-import { DOWN_REASONS, type AskMessage, type DownReason, type Entry } from "./ask-types";
+import type { AskMessage, DownReason, Entry } from "./ask-types";
+import { reasonChoices } from "./down-reasons";
 import { AskLinesComponent } from "./ask-lines.component";
 import { citationOrder, plainText, renderMarkdown, type Block } from "./terminal-markdown";
 import { track } from "./track";
@@ -528,10 +529,7 @@ export class AskAnswerComponent {
   });
 
   /** The reasons on offer: all three until one is chosen, then that one. */
-  protected readonly reasons = computed<readonly DownReason[]>(() => {
-    const chosen = this.downReason();
-    return chosen ? [chosen] : DOWN_REASONS;
-  });
+  protected readonly reasons = computed(() => reasonChoices(this.downReason()));
 
   protected readonly elapsed = computed(() => {
     const started = this.message()?.metadata?.createdAt ?? this.startedAt;

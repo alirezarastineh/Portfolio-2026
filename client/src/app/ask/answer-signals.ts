@@ -1,3 +1,4 @@
+import type { AskMessage } from "./ask-types";
 import { confirmHandoff } from "./handoff-confirm";
 
 /**
@@ -31,6 +32,58 @@ export function signalMs(ms: number): number {
 /** One more of a count, within the server's bound. */
 export function bump(totals: SignalTotals, count: SignalCount): SignalTotals {
   return { ...totals, [count]: Math.min(MAX_SIGNAL_COUNT, (totals[count] ?? 0) + 1) };
+}
+
+/** Whether an answer has words to show yet: its first visible word. */
+export function hasWords(message: AskMessage | undefined): boolean {
+  return !!message?.parts.some((p) => p.type === "text" && p.text.trim());
+}
+
+/**
+ * What the end of an answer's stream adds to its totals: the time to its end and to its first
+ * visible word, a stop, and how often its question was asked again before it. A stream that
+ * ended between two renders shows its first word with its last.
+ */
+export function finishedTotals(finish: {
+  sentAt: number;
+  shownAt?: number;
+  now: number;
+  words: boolean;
+  stopped: boolean;
+  retries: number;
+}): { shownAt: number | undefined; totals: SignalTotals } {
+  const shownAt = finish.shownAt ?? (finish.words ? finish.now : undefined);
+  return {
+    shownAt,
+    totals: {
+      doneMs: signalMs(finish.now - finish.sentAt),
+      ...(shownAt === undefined ? {} : { shownMs: signalMs(shownAt - finish.sentAt) }),
+      ...(finish.stopped ? { stopped: true } : {}),
+      ...(finish.retries ? { retries: Math.min(MAX_SIGNAL_COUNT, finish.retries) } : {}),
+    },
+  };
+}
+
+/**
+ * The request that carries an answer's totals. The page's last word goes as plain text, a type a
+ * keepalive request may send to another origin without asking first; the API reads JSON either way.
+ */
+export function signalRequest(
+  apiBase: string,
+  sessionId: string,
+  messageId: string,
+  totals: SignalTotals,
+  keepalive: boolean,
+): [url: string, init: RequestInit] {
+  return [
+    `${apiBase}/v1/ask/signal`,
+    {
+      method: "POST",
+      keepalive,
+      headers: { "content-type": keepalive ? "text/plain;charset=UTF-8" : "application/json" },
+      body: JSON.stringify({ sessionId, messageId, signals: totals }),
+    },
+  ];
 }
 
 /** Sends one answer's totals; `keepalive` for the page's last word. */
