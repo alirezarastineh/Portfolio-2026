@@ -14,6 +14,7 @@ import { demotedSubjects } from "./audit.js";
 import { askChain, askConfig, askCorpus } from "./deps.js";
 import { backfillEmbeddings } from "./embeddings.js";
 import { availability, checkRate, ConcurrencyGate, hashWithSalt, recordRequest } from "./guard.js";
+import { focusOf, focusSchema } from "./focus.js";
 import { countGuardEvent } from "./guard-events.js";
 import { ASK_MESSAGE_ID, buildHistory, historyLimits } from "./history.js";
 import { shortName } from "./models/registry.js";
@@ -48,6 +49,12 @@ const askBody = z.object({
    * Only a published case study or post means anything (`pageDocument`).
    */
   page: z.string().max(PAGE_CHARS).optional(),
+  /**
+   * What the visitor points at on that page (visitor plan V9): a section or a
+   * code block, taken from the page's document, or a selection, trusted only
+   * if the document holds it (`focusOf`).
+   */
+  focus: focusSchema.optional(),
   /** Hidden from people; a bot that fills it gets nothing. */
   website: z.string().max(200).optional(),
   /** While Turnstile is on: needed once per session, on its first question. */
@@ -268,6 +275,7 @@ export function createAskRouter(): Hono {
           droppedAnswers: history.droppedAnswers,
           window: history.window,
           page,
+          focus: body.focus ? focusOf(body.focus, page) : null,
           onClose: () => {
             release();
             inFlight.delete(controller);

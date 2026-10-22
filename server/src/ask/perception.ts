@@ -401,17 +401,24 @@ function answerGroup(rows: readonly ReaderRow[]): AnswerGroup {
 /**
  * Page-aware answers against the rest (visitor plan V8): those asked on a
  * case study or a post, whose page block named it, and how many of them had
- * its text promoted there.
+ * its text promoted there. Among them, the focused ones (V9): about a section,
+ * a code block or a selection, and how many of those the page held.
  */
 export function measurePages(rows: readonly ReaderRow[]): {
   pageAware: AnswerGroup & { promoted: number };
+  focused: AnswerGroup & { verified: number };
   rest: AnswerGroup;
 } {
   const onPage = rows.filter((row) => row.trace?.page);
+  const focused = rows.filter((row) => row.trace?.focus);
   return {
     pageAware: {
       ...answerGroup(onPage),
       promoted: onPage.filter((row) => row.trace!.page!.promoted).length,
+    },
+    focused: {
+      ...answerGroup(focused),
+      verified: focused.filter((row) => row.trace!.focus!.verified).length,
     },
     rest: answerGroup(rows.filter((row) => !row.trace?.page)),
   };

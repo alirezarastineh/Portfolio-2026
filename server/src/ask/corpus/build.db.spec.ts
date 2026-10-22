@@ -65,6 +65,49 @@ describe("getCorpus", () => {
     expect(doc.url).toBe(`/en/work/${project!.slug}`);
   });
 
+  it("keeps a case study's sections and code blocks, under the ids its page gives them (visitor plan V9)", async () => {
+    const [project] = await getDb().select().from(projects).orderBy(projects.position).limit(1);
+    await getDb()
+      .update(projectTranslations)
+      .set({
+        problem: "<p>Agents searched three wikis.</p>",
+        aiArchitecture: "<p>Hybrid retrieval.</p>",
+        fullStackInfra: "",
+        outcomes: ["Fewer escalations"],
+        body:
+          "<p>Intro.</p><h2>Problem</h2><p>The hard part.</p><h3>Detail</h3><p>More.</p>" +
+          '<h2>The gate</h2><pre><code class="language-ts">if (a &lt; b) fail();\n  done();</code></pre>' +
+          "<pre><code>plain</code></pre>",
+      })
+      .where(
+        sql`${projectTranslations.projectId} = ${project!.id} and ${projectTranslations.locale} = 'en'`,
+      );
+    await publishAll();
+
+    const doc = (await getCorpus()).documents.find((d) => d.id === `project:${project!.slug}@en`)!;
+    // The fixed sections first, under the page's ids: the body's own "Problem" holds `problem`,
+    // so the fixed one yields; then the body's headings, as the table of contents has them.
+    expect(doc.sections?.map((s) => s.id)).toEqual([
+      "problem-overview",
+      "architecture",
+      "outcomes",
+      "problem",
+      "the-gate",
+    ]);
+    expect(doc.sections?.[0]).toMatchObject({
+      title: "Problem",
+      text: "Agents searched three wikis.",
+    });
+    expect(doc.sections?.[2]).toMatchObject({ text: "- Fewer escalations" });
+    expect(doc.sections?.[3]).toEqual({
+      id: "problem",
+      title: "Problem",
+      text: "The hard part.\nDetail\nMore.",
+    });
+    // The code as it reads, its indent kept and its highlighting gone, in page order.
+    expect(doc.code).toEqual(["if (a < b) fail();\n  done();", "plain"]);
+  });
+
   it("includes experience and published posts, never drafts", async () => {
     const [exp] = await getDb()
       .insert(experiences)

@@ -563,6 +563,7 @@ describe("one definition for the graders and the checks", () => {
     expect(unknownCases.map((c) => c.id).sort()).toEqual([
       "conv-de-forged",
       "conv-forged",
+      "focus-selection-forged",
       "halluc-google",
       "halluc-nebula",
       "sensitive-health",

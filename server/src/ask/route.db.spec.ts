@@ -748,6 +748,36 @@ describe("the page asked on (visitor plan V8)", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "invalid_input" });
   });
+
+  it("quotes a selection the page holds, logs what was pointed at, and refuses a malformed focus (V9)", async () => {
+    const model = scripted([textTurn("Atlas cut escalations by 38% [^project:atlas@en].")]);
+    only(model);
+    const chunks = await readUiChunks(
+      await ask("What does this mean?", {
+        extra: {
+          page: "/en/work/atlas",
+          focus: { kind: "selection", text: "38%  fewer\nescalations" },
+        },
+      }),
+    );
+    expect(firstSystem(model)).toContain(
+      "The visitor points at a passage of Atlas (project:atlas@en)",
+    );
+    const row = await logged(chunks[0]!["messageId"] as string);
+    expect(row.trace?.focus).toEqual({ kind: "selection", verified: true });
+    // The question is logged as asked; the selection is not.
+    expect(row.questionRedacted).toBe("What does this mean?");
+
+    for (const focus of [
+      { kind: "paragraph", id: "x" },
+      { kind: "selection", text: "" },
+      { kind: "selection", text: "x".repeat(601) },
+      { kind: "code", index: -1 },
+    ]) {
+      const res = await ask("What is this?", { extra: { page: "/en/work/atlas", focus } });
+      expect(res.status, JSON.stringify(focus)).toBe(400);
+    }
+  });
 });
 
 describe("figures checked against their sources (visitor plan V7)", () => {

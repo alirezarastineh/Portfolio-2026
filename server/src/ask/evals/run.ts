@@ -17,6 +17,7 @@ import {
   type Trace,
 } from "../models/fallback.js";
 import { detectLanguage, visitorLanguage } from "../language.js";
+import { focusOf, type FocusRequest } from "../focus.js";
 import type { ChainRole, ModelEntry } from "../models/registry.js";
 import { pageDocument } from "../page.js";
 import { wrapVisitor } from "../prompt.js";
@@ -217,7 +218,7 @@ function checkCitations(c: EvalCase, cited: string[], failures: string[]): void 
 
 function expectedLanguage(c: EvalCase): string | null {
   if (c.language) return c.language;
-  const answerable = ["fact", "multi-hop", "german", "conversation", "page", "production"];
+  const answerable = ["fact", "multi-hop", "german", "conversation", "page", "focus", "production"];
   if (answerable.includes(c.category)) {
     // As the answer's own: the newest question with a clear language decides.
     return visitorLanguage([...(c.turns ?? []).map((t) => t.question), c.question]) ?? c.locale;
@@ -378,6 +379,24 @@ function checkPage(c: EvalCase, page: { id: string } | null, failures: string[])
   }
 }
 
+/** A focus as a failure names it: "section", "selection (not on the page)". */
+function focusName(focus: { kind: string; verified: boolean }): string {
+  return focus.verified ? focus.kind : `${focus.kind} (not on the page)`;
+}
+
+/** Whether the answer read what the visitor pointed at as the case expects (visitor plan V9). */
+function checkFocus(
+  c: EvalCase,
+  focus: { kind: string; verified: boolean } | null,
+  failures: string[],
+): void {
+  const want = c.expectFocus;
+  if (!want) return;
+  if (focus?.kind !== want.kind || focus.verified !== want.verified) {
+    failures.push(`read the focus as ${focus ? focusName(focus) : "none"}, not ${focusName(want)}`);
+  }
+}
+
 /** The deterministic checks; the judge adds its own failures. */
 export function grade(
   c: EvalCase,
@@ -393,6 +412,8 @@ export function grade(
     handoff?: { by: "tool" | "fallback" } | null;
     /** The page its trace records (visitor plan V8); a grade without it does not check it. */
     page?: { id: string } | null;
+    /** What its trace records the visitor pointed at (visitor plan V9); likewise. */
+    focus?: { kind: string; verified: boolean } | null;
   },
 ): string[] {
   const failures: string[] = [];
@@ -408,6 +429,7 @@ export function grade(
   checkProse(c, prose, failures);
   if (answer.history) checkHistory(c, answer.history, failures);
   if (answer.page !== undefined) checkPage(c, answer.page, failures);
+  if (answer.focus !== undefined) checkFocus(c, answer.focus, failures);
   checkTools(c, answer.tools, failures, answer.handoff);
   if (c.expectRoute && answer.route && !answer.route.includes(c.expectRoute)) {
     failures.push(`routed ${answer.route.join("+")}, not ${c.expectRoute}`);
@@ -686,6 +708,8 @@ async function askQuestion(
     corpus: AskCorpus;
     /** The path of the page asked on, as the terminal sends it (visitor plan V8). */
     page?: string;
+    /** What the visitor points at on it, with this question (visitor plan V9). */
+    focus?: FocusRequest;
   },
   acquireRateLimitRetry?: () => boolean,
   variant?: AnswerVariant,
@@ -747,6 +771,7 @@ async function askQuestion(
     window: history.window,
     page,
     ...(options.promotePage === false ? { promotePage: false } : {}),
+    focus: conversation.focus ? focusOf(conversation.focus, page) : null,
     persist: false,
   });
 
@@ -777,6 +802,7 @@ function collectCaseFailures(c: EvalCase, asked: AskedQuestion): string[] {
     history: { droppedAnswers: asked.droppedAnswers, window: outcome.steps?.window },
     handoff: outcome.handoff,
     page: outcome.steps?.page ?? null,
+    focus: outcome.steps?.focus ?? null,
   });
   if (outcome.droppedCitations.length) {
     failures.push(`invented citations: ${outcome.droppedCitations.join(", ")}`);
@@ -798,7 +824,8 @@ export async function answerCase(
 ): Promise<AnsweredCase> {
   const corpus = variant?.layout ? withLayout(options.corpus, variant.layout) : options.corpus;
   const sessionId = `eval-${randomBytes(9).toString("base64url")}`;
-  const ask = (messages: readonly AskUIMessage[]) =>
+  // The page holds for every question; what the visitor points at, for the case's own.
+  const ask = (messages: readonly AskUIMessage[], focus?: FocusRequest) =>
     askQuestion(
       options,
       {
@@ -807,6 +834,7 @@ export async function answerCase(
         sessionId,
         corpus,
         ...(c.page ? { page: c.page } : {}),
+        ...(focus ? { focus } : {}),
       },
       acquireRateLimitRetry,
       variant,
@@ -850,7 +878,7 @@ export async function answerCase(
   }
 
   messages.push(sentMessage("question", "user", c.question));
-  const asked = await ask(messages);
+  const asked = await ask(messages, c.focus);
   usd += asked.outcome.usd;
   return {
     outcome: asked.outcome,

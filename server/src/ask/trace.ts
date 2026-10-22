@@ -88,6 +88,13 @@ export interface AnswerTrace {
    * on any other page, and from before.
    */
   page?: { id: string; promoted: boolean };
+  /**
+   * What the visitor pointed at on the page (visitor plan V9): a section, a
+   * code block or a selection, and whether the page's document holds it (a
+   * section or code block it lacks was ignored; a selection it lacks stayed in
+   * the visitor's message). Absent when they pointed at nothing.
+   */
+  focus?: { kind: "section" | "code" | "selection"; verified: boolean };
 }
 
 function inputText(input: unknown): string {
@@ -116,7 +123,10 @@ export function buildAnswerTrace(
   recorded: readonly RecordedStep[],
   trace: Trace,
   core?: AnswerTrace["core"],
-  route?: Pick<AnswerTrace, "routing" | "escalation" | "window" | "repair" | "handoff" | "page">,
+  route?: Pick<
+    AnswerTrace,
+    "routing" | "escalation" | "window" | "repair" | "handoff" | "page" | "focus"
+  >,
 ): AnswerTrace {
   const segments: Attempt[][] = [[]];
   for (const attempt of trace.attempts) {
@@ -163,5 +173,6 @@ export function buildAnswerTrace(
     ...(route?.repair ? { repair: route.repair } : {}),
     ...(route?.handoff ? { handoff: route.handoff } : {}),
     ...(route?.page ? { page: route.page } : {}),
+    ...(route?.focus ? { focus: route.focus } : {}),
   };
 }

@@ -3,7 +3,7 @@ import { eq, inArray } from "drizzle-orm";
 
 import type { DbExecutor } from "../../content/build.js";
 import { buildAll } from "../../content/publish.js";
-import { htmlToText, imageMarker, mediaImages } from "../../content/sanitize.js";
+import { decodeEntities, htmlToText, imageMarker, mediaImages } from "../../content/sanitize.js";
 import { docKey, LOCALES, type AppContent, type Doc, type Locale } from "../../content/schema.js";
 import { payloadVersion, upcast, upcastDocs } from "../../content/upcast.js";
 import { getDb } from "../../db/client.js";
@@ -57,12 +57,29 @@ export interface CorpusDocument {
    * phase 19, `corpus/related.ts`). Set when the corpus is assembled.
    */
   related?: string[];
+  /**
+   * A case study's or post's sections, as its page shows them (visitor plan
+   * V9): what a visitor can point at with "Ask about this section". Absent
+   * on any other document.
+   */
+  sections?: CorpusSection[];
+  /** Its body's code blocks, in page order: what "Explain" points at (visitor plan V9). */
+  code?: string[];
 }
 
 /** A picture a document shows: its media file and its alt text, as its marker reads. */
 export interface CorpusImage {
   file: string;
   alt: string;
+}
+
+/** A part of a page under one of its `h2`s, by the id that heading has on the page (visitor plan V9). */
+export interface CorpusSection {
+  id: string;
+  title: string;
+  text: string;
+  /** Its pictures, in marker order, for the descriptions the corpus adds (plan phase 17). */
+  images?: CorpusImage[];
 }
 
 /** `/media/<file>` → `<file>`; null for anything else. */
@@ -185,6 +202,112 @@ function pictures() {
   };
 }
 
+/**
+ * A label as the case study sets it for a heading: a single all-caps word
+ * sentence-cased (`PROBLEM` → `Problem`), as the client's `sentenceCase` does.
+ */
+function headingLabel(label: string, locale: Locale): string {
+  const word = label.trim();
+  if (!/^\p{Lu}{4,}$/u.test(word)) return label;
+  const lower = word.toLocaleLowerCase(locale);
+  return lower.charAt(0).toLocaleUpperCase(locale) + lower.slice(1);
+}
+
+/** A section from its HTML: its text, its pictures marked, and those pictures. */
+function sectionOf(id: string, title: string, html: string): CorpusSection {
+  const images = mediaImages(html);
+  return {
+    id,
+    title,
+    text: htmlToText(html, { images: true }),
+    ...(images.length ? { images } : {}),
+  };
+}
+
+const BODY_H2 = /<h2 id="([^"<>]+)">([\s\S]*?)<\/h2>/g;
+
+/**
+ * A rendered body's sections (visitor plan V9): each `h2` the build gave an
+ * id, with what follows it up to the next. Headings come before code is
+ * highlighted, so code never holds one (content/rich-body.ts).
+ */
+export function bodySections(html: string): CorpusSection[] {
+  const heads = [...html.matchAll(BODY_H2)];
+  return heads.map((head, i) =>
+    sectionOf(
+      head[1]!,
+      htmlToText(head[2]!).replace(/\s+/g, " ").trim(),
+      html.slice(head.index + head[0].length, heads[i + 1]?.index ?? html.length),
+    ),
+  );
+}
+
+const CODE_BLOCK = /<pre class="code-block[^"<>]*"><code>([\s\S]*?)<\/code><\/pre>/g;
+
+/** A rendered body's code blocks in page order, as their source: the highlighting's markup out. */
+export function codeBlocks(html: string): string[] {
+  return [...html.matchAll(CODE_BLOCK)].map((m) => decodeEntities(m[1]!.replace(/<[^<>]*>/g, "")));
+}
+
+/**
+ * What a visitor can point at on a case study (visitor plan V9): its fixed
+ * sections under the ids its page gives them (a base a body heading holds
+ * already takes `-overview`, pages/[locale]/work/[slug].page.ts), then the
+ * body's own, then the gallery; and the body's code blocks.
+ */
+function caseStudyParts(
+  project: AppContent["projects"][number],
+  body: Extract<Doc, { kind: "project" }>,
+  locale: Locale,
+  ui: AppContent["ui"],
+): Pick<CorpusDocument, "sections" | "code"> {
+  const taken = new Set(body.toc.map((entry) => entry.id));
+  const id = (base: string) => (taken.has(base) ? `${base}-overview` : base);
+  const card = ui.projectCard;
+  const fixed = (
+    [
+      ["problem", card.problem, project.problem],
+      ["architecture", card.arch, project.aiArchitecture],
+      ["infrastructure", card.infra, project.fullStackInfra],
+    ] as const
+  ).flatMap(([base, label, html]) =>
+    html.trim() ? [sectionOf(id(base), headingLabel(label, locale), html)] : [],
+  );
+  const outcomes: CorpusSection[] = project.outcomes.length
+    ? [
+        {
+          id: id("outcomes"),
+          title: headingLabel(card.outcomes, locale),
+          text: project.outcomes.map((o) => `- ${o}`).join("\n"),
+        },
+      ]
+    : [];
+  const gallery = pictures();
+  const galleryText = body.gallery.map((g) => gallery.picture("Gallery", g, g.caption));
+  const shown: CorpusSection[] = galleryText.length
+    ? [
+        {
+          id: id("gallery"),
+          title: ui.caseStudy.gallery,
+          text: galleryText.join("\n"),
+          ...(gallery.images.length ? { images: gallery.images } : {}),
+        },
+      ]
+    : [];
+  const code = codeBlocks(body.body);
+  return {
+    sections: [...fixed, ...outcomes, ...bodySections(body.body), ...shown],
+    ...(code.length ? { code } : {}),
+  };
+}
+
+/** What a visitor can point at on a post (visitor plan V9): its body's sections and code blocks. */
+function postParts(body: string): Pick<CorpusDocument, "sections" | "code"> {
+  const sections = bodySections(body);
+  const code = codeBlocks(body);
+  return { ...(sections.length ? { sections } : {}), ...(code.length ? { code } : {}) };
+}
+
 function projectDocument(
   project: AppContent["projects"][number],
   doc: Doc | undefined,
@@ -225,6 +348,7 @@ function projectDocument(
     text,
     ...(images.length ? { images } : {}),
     updated: day(project.updatedAt, body?.updatedAt)!,
+    ...(body && project.hasCaseStudy ? caseStudyParts(project, body, locale, ui) : {}),
   };
 }
 
@@ -252,6 +376,7 @@ function postDocument(
     text,
     ...(images.length ? { images } : {}),
     updated: day(post.updatedAt, doc?.kind === "post" ? doc.updatedAt : undefined)!,
+    ...(doc?.kind === "post" ? postParts(doc.body) : {}),
   };
 }
 

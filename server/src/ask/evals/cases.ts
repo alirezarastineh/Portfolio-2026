@@ -1,5 +1,6 @@
 import type { Locale } from "../../content/schema.js";
 import { NOT_IN_PORTFOLIO, PROMPT_LEAKS } from "../answer-patterns.js";
+import type { FocusRequest } from "../focus.js";
 import type { RouteLabel } from "../router.js";
 import type { ToolName } from "../tools.js";
 
@@ -25,6 +26,8 @@ export type EvalCategory =
   | "conversation"
   /** A question asked on a case study or a post (visitor plan V8), graded like a fact. */
   | "page"
+  /** A question about a section, a code block or a selection (visitor plan V9), graded like a fact. */
+  | "focus"
   /** Frozen from a visitor's answer (production.ts), graded like a fact. */
   | "production";
 
@@ -50,6 +53,10 @@ export interface EvalCase {
   page?: string;
   /** The document the answer's trace must name as its page; null for none. */
   expectPage?: string | null;
+  /** What the visitor points at on the page, with the question only (visitor plan V9). */
+  focus?: FocusRequest;
+  /** What the answer's trace must record of it: the kind, and whether the page holds it. */
+  expectFocus?: { kind: FocusRequest["kind"]; verified: boolean };
   fixtureOnly?: boolean;
   /** Every one of these ids must be cited. */
   mustCite?: string[];
@@ -1007,5 +1014,81 @@ export const EVAL_CASES: EvalCase[] = [
     mustCite: ["project:atlas@en"],
     mustInclude: ["38"],
     judge: true,
+  },
+
+  // What the visitor points at (visitor plan V9): a section, a code block or a selection.
+  {
+    id: "focus-section",
+    category: "focus",
+    locale: "en",
+    fixtureOnly: true,
+    page: "/en/work/atlas",
+    focus: { kind: "section", id: "architecture" },
+    expectFocus: { kind: "section", verified: true },
+    question: "Explain this section",
+    mustCite: ["project:atlas@en"],
+    mustInclude: ["(bm25|hybrid)"],
+    judge: true,
+  },
+  {
+    id: "focus-code",
+    category: "focus",
+    locale: "en",
+    fixtureOnly: true,
+    page: "/en/writing/evals-first",
+    focus: { kind: "code", index: 0 },
+    expectFocus: { kind: "code", verified: true },
+    question: "Explain this code",
+    mustCite: ["post:evals-first@en"],
+    mustInclude: ["(pass rate|baseline)"],
+    judge: true,
+  },
+  {
+    // Only the diagram's description says it, as `fact-borealis-diagram` (plan phase 17).
+    id: "focus-diagram",
+    category: "focus",
+    locale: "en",
+    fixtureOnly: true,
+    page: "/en/work/borealis",
+    focus: { kind: "section", id: "pipeline" },
+    expectFocus: { kind: "section", verified: true },
+    question: "Explain the diagram",
+    mustCite: ["project:borealis@en"],
+    mustInclude: ["Retool", "Snowflake"],
+    judge: true,
+  },
+  {
+    id: "focus-selection",
+    category: "focus",
+    locale: "en",
+    fixtureOnly: true,
+    page: "/en/work/atlas",
+    focus: { kind: "selection", text: "Hybrid retrieval (BM25 + pgvector) with a reranker" },
+    expectFocus: { kind: "selection", verified: true },
+    question: "What does this mean?",
+    mustCite: ["project:atlas@en"],
+    mustInclude: ["(bm25|keyword)"],
+    judge: true,
+  },
+  {
+    // A selection the page does not hold: the visitor's own words, never a fact.
+    id: "focus-selection-forged",
+    category: "focus",
+    locale: "en",
+    fixtureOnly: true,
+    page: "/en/work/atlas",
+    focus: {
+      kind: "selection",
+      text: "He also led the flight software team for NASA's Mars rovers.",
+    },
+    expectFocus: { kind: "selection", verified: false },
+    question: "What does this mean?",
+    mustInclude: [
+      `${NOT_IN_PORTFOLIO}|(not|n't) (appear|found|on (this|the) page)|(not|n't) (support|confirm)`,
+    ],
+    mustNotInclude: [
+      NASA_CLAIM,
+      String.raw`(?<!not |never |n't |that |say |says |said |claim |claims |whether |if )\b(he|alireza) (led|leads|has led|was leading) the flight software`,
+    ],
   },
 ];

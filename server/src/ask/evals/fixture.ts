@@ -96,6 +96,25 @@ const documents: CorpusDocument[] = [
       "Infra: Kubernetes on GCP; the model call goes through a fallback chain with a circuit breaker.",
       "- Adopted by 120 support agents",
     ].join("\n"),
+    // As its case study shows them (visitor plan V9), under the page's ids.
+    sections: [
+      {
+        id: "problem",
+        title: "Problem",
+        text: "Agents spent a third of each ticket searching three wikis.",
+      },
+      {
+        id: "architecture",
+        title: "AI architecture",
+        text: "Hybrid retrieval (BM25 + pgvector) with a reranker, grounded generation with mandatory citations, and an eval suite of 300 real questions run on every change.",
+      },
+      {
+        id: "infrastructure",
+        title: "Infra",
+        text: "Kubernetes on GCP; the model call goes through a fallback chain with a circuit breaker.",
+      },
+      { id: "outcomes", title: "Outcomes", text: "- Adopted by 120 support agents" },
+    ],
   }),
   doc({
     id: "project:atlas@de",
@@ -134,6 +153,30 @@ const documents: CorpusDocument[] = [
       "[image description: Scanned freight PDFs land in an S3 bucket → Tesseract OCR reads each page → an LLM fills the JSON schema → fields under 0.9 confidence go to a review queue in Retool → approved records load nightly into Snowflake]",
     ].join("\n"),
     images: [{ file: "borealis-pipeline.png", alt: "Borealis pipeline diagram" }],
+    // The diagram stands under a heading of its own (visitor plan V9).
+    sections: [
+      {
+        id: "problem",
+        title: "Problem",
+        text: "Manual data entry took four people full time.",
+      },
+      {
+        id: "architecture",
+        title: "AI architecture",
+        text: "OCR, then an LLM extracts fields into a JSON schema; low-confidence fields go to a human review queue.",
+      },
+      {
+        id: "infrastructure",
+        title: "Infra",
+        text: "Serverless on AWS; retries and dead-letter queues per stage.",
+      },
+      {
+        id: "pipeline",
+        title: "The pipeline",
+        text: "[image: Borealis pipeline diagram]\n[image description: Scanned freight PDFs land in an S3 bucket → Tesseract OCR reads each page → an LLM fills the JSON schema → fields under 0.9 confidence go to a review queue in Retool → approved records load nightly into Snowflake]",
+        images: [{ file: "borealis-pipeline.png", alt: "Borealis pipeline diagram" }],
+      },
+    ],
   }),
   doc({
     id: "post:evals-first@en",
@@ -146,7 +189,13 @@ const documents: CorpusDocument[] = [
       "Published: 2025-11-04",
       "A prompt change is a code change, so it gets tests: a set of real questions with expected facts, citations and refusals.",
       "Every change runs the set; a lower pass rate blocks the merge. An LLM judge scores faithfulness, but deterministic checks come first.",
+      // The post's one code block (visitor plan V9's "Explain").
+      "The gate is one comparison:",
+      'if (run.passRate < baseline.passRate) fail("below the baseline: this change must not ship");',
     ].join("\n"),
+    code: [
+      'if (run.passRate < baseline.passRate) fail("below the baseline: this change must not ship");',
+    ],
   }),
   // Long: its last part, past the core's 1,500-character clip, says MLOps (plan phase 18), and
   // nothing a word search could take for "LLM ops" or a German question (retrieval.ts).
@@ -242,8 +291,9 @@ const documents: CorpusDocument[] = [
 
 const base: Corpus = {
   // 2: the German-only post (plan phase 16); 3: a described diagram (phase 17) and a long
-  // post past the clip (phase 18). A new key keeps runs on an older fixture apart.
-  key: "eval-fixture-3",
+  // post past the clip (phase 18); 4: sections and a code block to point at (visitor plan V9).
+  // A new key keeps runs on an older fixture apart.
+  key: "eval-fixture-4",
   documents,
   text: "",
   projects: [

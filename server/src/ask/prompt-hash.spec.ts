@@ -4,12 +4,15 @@ import {
   CAREFUL_BLOCKS,
   closingLine,
   CONTACT_BLOCK,
+  FOCUS_SAMPLES,
+  focusInstruction,
   hashedPromptText,
   PAGE_SAMPLE,
   pageInstruction,
   REPAIR_LINE,
   SYSTEM_PROMPT,
   windowNote,
+  withSelection,
 } from "./prompt.js";
 import { NOTES, TOOL_DEFS } from "./tool-defs.js";
 
@@ -46,5 +49,15 @@ describe("the prompt's hash", () => {
     expect(text).toContain(
       `${pageInstruction({ id: PAGE_SAMPLE.id, title: PAGE_SAMPLE.title, url: PAGE_SAMPLE.url })}\n\0`,
     );
+    // The focus block in each form, and a selection the page does not hold (V9).
+    expect(FOCUS_SAMPLES.map((f) => f.kind)).toEqual([
+      "section",
+      "code",
+      "selection",
+      "unverified",
+      "unverified",
+    ]);
+    for (const focus of FOCUS_SAMPLES) expect(text).toContain(focusInstruction(focus));
+    expect(text).toContain(withSelection("q", "s", "en"));
   });
 });

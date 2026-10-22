@@ -70,6 +70,7 @@ import {
   withThoughts,
   type ModelEntry,
 } from "./models/registry.js";
+import type { Focus } from "./focus.js";
 import type { PageDocument } from "./page.js";
 import {
   buildAnswerOnlyInstructions,
@@ -77,6 +78,8 @@ import {
   CAREFUL_BLOCKS,
   closingLine,
   CONTACT_BLOCK,
+  FOCUS_SAMPLES,
+  focusInstruction,
   PAGE_SAMPLE,
   pageInstruction,
   PROMPT_CANARY,
@@ -85,6 +88,7 @@ import {
   REPAIR_LINE,
   SCOPE,
   SYSTEM_PROMPT,
+  withSelection,
   type InstructionExtras,
 } from "./prompt.js";
 import { ESCALATED_ROUTE, escalationOf, type Escalation, type RouteDecision } from "./router.js";
@@ -172,6 +176,8 @@ export interface AnswerRequest {
    * block (default). Off for the eval CLI's `--no-page-promote`, the A/B.
    */
   promotePage?: boolean;
+  /** What the visitor points at on the page (visitor plan V9, `focusOf`). */
+  focus?: Focus | null;
   /**
    * Write the log row and the usage totals (default). Off for evals run from
    * a laptop, whose database is the production one.
@@ -220,7 +226,10 @@ function safeTrace(
   record: AnswerRecord,
   trace: Trace,
   core: NonNullable<AnswerTrace["core"]>,
-  route: Pick<AnswerTrace, "routing" | "escalation" | "window" | "repair" | "handoff" | "page">,
+  route: Pick<
+    AnswerTrace,
+    "routing" | "escalation" | "window" | "repair" | "handoff" | "page" | "focus"
+  >,
 ): AnswerTrace | null {
   try {
     return buildAnswerTrace(record.steps, trace, core, route);
@@ -285,8 +294,11 @@ function instructionsFor(
     text: build(corpus.core[reading]),
     tokens: countTokens(build("")) + corpus.coreTokens[reading] + 16,
   });
-  // A pairwise eval's candidate: built each time, never memoised.
-  if (extras.systemPrompt !== undefined || extras.afterCorpus !== undefined) return make();
+  // A pairwise eval's candidate, and what a visitor points at (an excerpt, perhaps a selection):
+  // built each time, never memoised.
+  if (extras.systemPrompt !== undefined || extras.afterCorpus !== undefined || extras.focus) {
+    return make();
+  }
   // The key names the reading locale too (it is `language ?? locale`), the page and whether its
   // text came along, the careful topic and the request block.
   const promoted = extras.page?.text === undefined ? "" : "+text";
@@ -331,14 +343,16 @@ const guardMemo = new Map<string, LeakGuard>();
 function guardFor(corpus: AskCorpus, config: AskConfig, systemPrompt?: string): LeakGuard {
   const build = () =>
     buildLeakGuard({
-      // The careful blocks (plan phase 20), the repair line, the request block and the page
-      // block's own words (visitor plan V5, V6, V8) are instructions too: never to be repeated.
+      // The careful blocks (plan phase 20), the repair line, the request block and the page and
+      // focus blocks' own words (visitor plan V5, V6, V8, V9) are instructions too: never to be
+      // repeated.
       instructions: [
         systemPrompt ?? SYSTEM_PROMPT,
         ...CAREFUL_BLOCKS,
         REPAIR_LINE,
         CONTACT_BLOCK,
         pageInstruction(PAGE_SAMPLE),
+        ...FOCUS_SAMPLES.map(focusInstruction),
       ].join("\n\n"),
       corpusTexts: corpus.documents.map((d) => d.text),
       quotable: [SCOPE],
@@ -418,6 +432,23 @@ async function stepsOf(result: {
   }
 }
 
+/**
+ * The conversation with its last message, the visitor's question, carrying
+ * their selection too (visitor plan V9): a selection the page does not hold.
+ */
+function withSelectionIn(
+  messages: ModelMessage[],
+  question: string,
+  selection: string,
+  locale: Locale,
+): ModelMessage[] {
+  if (messages.at(-1)?.role !== "user") return messages;
+  return [
+    ...messages.slice(0, -1),
+    { role: "user", content: withSelection(question, selection, locale) },
+  ];
+}
+
 /** Whether the answer opened the home page's contact section: an offer there would repeat it. */
 function openedContact(calls: AnswerRecord["toolCalls"]): boolean {
   return calls.some((call) => {
@@ -469,10 +500,19 @@ export function streamAnswer(request: AnswerRequest): {
           },
         }
       : {}),
+    // What the visitor points at on the page (visitor plan V9): its block, after the page's.
+    ...(request.focus?.block ? { focus: request.focus.block } : {}),
     careful: route.sensitive,
     contact: route.intent === "contact",
   };
   const instructions = instructionsFor(corpus, locale, language, extras);
+  // A selection the page does not hold joins the visitor's question, inside its fence: their
+  // words, as the guard knows them too.
+  const fenced = request.focus?.fenced ?? null;
+  const messages = fenced
+    ? withSelectionIn(request.messages, request.question, fenced, locale)
+    : request.messages;
+  const visitorWords = fenced ? `${request.question}\n${fenced}` : request.question;
 
   // The lookup tier: the same chain, the primary model thinking minimally (plan phase 20).
   const chain = thinking(
@@ -595,7 +635,7 @@ export function streamAnswer(request: AnswerRequest): {
   const transforms = (into: AnswerRecord) => [
     fenceTransform<AskTools>(),
     citationTransform<AskTools>({ corpus, locale: reading, cited, dropped }),
-    leakGuardTransform<AskTools>(guard, leaks, echoOf(request.question)),
+    leakGuardTransform<AskTools>(guard, leaks, echoOf(visitorWords)),
     ...smoothText<AskTools>(),
     recorderTransform<AskTools>(into),
   ];
@@ -627,7 +667,7 @@ export function streamAnswer(request: AnswerRequest): {
         model: fallbackModel(answeringChain()),
         // The answer's own bytes: the cached prefix holds.
         instructions: instructions.text,
-        messages: repairMessages(request.messages, lookupsOf(steps)),
+        messages: repairMessages(messages, lookupsOf(steps)),
         abortSignal: request.abortSignal,
         timeout: { totalMs: left, chunkMs: config.chunkTimeoutMs },
         maxOutputTokens: config.maxOutputTokens,
@@ -674,7 +714,7 @@ export function streamAnswer(request: AnswerRequest): {
   const ui = createUIMessageStream({
     execute: async ({ writer }) => {
       const result = await agent.stream({
-        messages: request.messages,
+        messages,
         abortSignal: request.abortSignal,
         timeout: {
           totalMs: config.streamTimeoutMs + (request.timeoutExtraMs ?? 0),
@@ -756,6 +796,7 @@ export function streamAnswer(request: AnswerRequest): {
         }
       : {}),
     ...(page ? { page: { id: page.document.id, promoted } } : {}),
+    ...(request.focus ? { focus: request.focus.trace } : {}),
   });
 
   const persistOutcome = async (

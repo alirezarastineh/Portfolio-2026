@@ -12,6 +12,7 @@ import {
   toolTurn,
 } from "../../test/ask-models.js";
 import { fixtureConfig } from "../../test/ask-fixtures.js";
+import { focusOf } from "../focus.js";
 import { resetBreakers } from "../models/circuit.js";
 import type { ModelEntry } from "../models/registry.js";
 import { pageDocument } from "../page.js";
@@ -230,6 +231,40 @@ describe("eval graders", () => {
     ]);
     // A grade without the trace's page (a frozen production case) does not check it.
     expect(grade(unknown, cited)).toEqual([]);
+  });
+
+  it("checks what the answer read the visitor as pointing at, when its trace says (visitor plan V9)", () => {
+    const answer = {
+      text: "Hybrid retrieval mixes BM25 with pgvector [^project:atlas@en].",
+      cited: ["project:atlas@en"],
+      tools: [],
+    };
+    const section = byId("focus-section");
+    expect(grade(section, { ...answer, focus: { kind: "section", verified: true } })).toEqual([]);
+    expect(grade(section, { ...answer, focus: null })).toEqual([
+      "read the focus as none, not section",
+    ]);
+    expect(
+      grade(byId("focus-selection-forged"), {
+        text: "That passage is not in the Atlas case study.",
+        cited: [],
+        tools: [],
+        focus: { kind: "selection", verified: true },
+      }),
+    ).toEqual(["read the focus as selection, not selection (not on the page)"]);
+    // A grade without the trace's focus does not check it.
+    expect(grade(section, answer)).toEqual([]);
+  });
+
+  it("every focus case points at what its page holds, or, forged, at what it does not", () => {
+    const corpus = fixtureAskCorpus(fixtureConfig());
+    const focused = EVAL_CASES.filter((c) => c.focus);
+    expect(focused.map((c) => c.category)).toEqual(focused.map(() => "focus"));
+    for (const c of focused) {
+      const page = pageDocument(corpus, c.page, c.language ?? c.locale);
+      expect(page, c.id).not.toBeNull();
+      expect(focusOf(c.focus!, page).trace, c.id).toEqual(c.expectFocus);
+    }
   });
 
   it("every page case's path names the document it expects, as the route maps it", () => {

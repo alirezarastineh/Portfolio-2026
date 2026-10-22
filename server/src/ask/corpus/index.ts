@@ -6,7 +6,13 @@ import { getAskConfig, type AskConfig } from "../config.js";
 import { assistantState, type AiSettings, type FaqEntry } from "../settings.js";
 import { countTokens } from "../tokens.js";
 import { assistantDocuments } from "./assistant-docs.js";
-import { getCorpus, getDraftCorpus, type Corpus, type CorpusDocument } from "./build.js";
+import {
+  getCorpus,
+  getDraftCorpus,
+  type Corpus,
+  type CorpusDocument,
+  type CorpusImage,
+} from "./build.js";
 import { imageDescriptions, NO_DESCRIPTIONS, type ImageDescriptions } from "./media.js";
 import { relate } from "./related.js";
 import { applyTiers, renderCompact, renderCore, type CoreLayout } from "./render.js";
@@ -97,31 +103,52 @@ function revision(
 }
 
 /**
- * The document with each described picture's description after its marker
- * (plan phase 17): the reading language's, else the other's. The markers
- * stand in the order of `images`, so two pictures with the same alt are told
- * apart by their order.
+ * `text` with each described picture's description after its marker: the
+ * document's language's, else the other's. The markers stand in the order of
+ * `images`, so two pictures with the same alt are told apart by their order.
  */
-export function describeImages(d: CorpusDocument, descriptions: ImageDescriptions): CorpusDocument {
-  if (!d.images?.length || !descriptions.size) return d;
-  const other = d.locale === "en" ? "de" : "en";
-  let text = d.text;
+function described(
+  text: string,
+  images: readonly CorpusImage[],
+  locale: Locale,
+  descriptions: ImageDescriptions,
+): string {
+  const other = locale === "en" ? "de" : "en";
+  let out = text;
   let from = 0;
-  for (const image of d.images) {
+  for (const image of images) {
     const marker = imageMarker(image.alt);
-    const at = text.indexOf(marker, from);
+    const at = out.indexOf(marker, from);
     if (at < 0) continue;
     from = at + marker.length;
     const own = descriptions.get(image.file);
-    const description = (own?.[d.locale] ?? own?.[other])
-      ?.replaceAll("[", "(")
-      .replaceAll("]", ")");
+    const description = (own?.[locale] ?? own?.[other])?.replaceAll("[", "(").replaceAll("]", ")");
     if (!description) continue;
     const added = `\n[image description: ${description}]`;
-    text = `${text.slice(0, from)}${added}${text.slice(from)}`;
+    out = `${out.slice(0, from)}${added}${out.slice(from)}`;
     from += added.length;
   }
-  return text === d.text ? d : { ...d, text };
+  return out;
+}
+
+/**
+ * The document with each described picture's description after its marker
+ * (plan phase 17), in its text and in the text of the section that shows it
+ * (visitor plan V9).
+ */
+export function describeImages(d: CorpusDocument, descriptions: ImageDescriptions): CorpusDocument {
+  if (!descriptions.size) return d;
+  const text = d.images?.length ? described(d.text, d.images, d.locale, descriptions) : d.text;
+  let sectionsChanged = false;
+  const sections = d.sections?.map((s) => {
+    if (!s.images?.length) return s;
+    const sectionText = described(s.text, s.images, d.locale, descriptions);
+    if (sectionText === s.text) return s;
+    sectionsChanged = true;
+    return { ...s, text: sectionText };
+  });
+  if (text === d.text && !sectionsChanged) return d;
+  return { ...d, text, ...(sectionsChanged ? { sections } : {}) };
 }
 
 export function assembleCorpus(

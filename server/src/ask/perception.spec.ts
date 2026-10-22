@@ -258,6 +258,21 @@ describe("page-aware answers (visitor plan V8)", () => {
     expect(rest).toEqual({ answers: 3, rounds: 2.5, ttftP50Ms: 1_200, helpful: 2 / 3 });
   });
 
+  it("counts the answers about a section, a code block or a selection, and those the page held (V9)", () => {
+    const onAtlas = { id: "project:atlas@en", promoted: false };
+    const focusedOn = (focus: AnswerTrace["focus"], helpful: boolean) => ({
+      ...answered([lite()], 700, helpful, onAtlas),
+      trace: { v: 1 as const, steps: [lite()], page: onAtlas, focus },
+    });
+    const { focused, pageAware } = measurePages([
+      focusedOn({ kind: "section", verified: true }, true),
+      focusedOn({ kind: "selection", verified: false }, false),
+      answered([lite(), lite()], 1_100, true, onAtlas),
+    ]);
+    expect(focused).toEqual({ answers: 2, rounds: 1, ttftP50Ms: 700, helpful: 0.5, verified: 1 });
+    expect(pageAware.answers).toBe(3);
+  });
+
   it("counts a step no model answered as no round, and has nothing to divide by without answers", () => {
     const unanswered: TraceStep = { ...lite(), model: null, tokens: null };
     const { pageAware, rest } = measurePages([

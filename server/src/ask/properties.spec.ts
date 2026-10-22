@@ -55,9 +55,17 @@ import {
   resetBreakers,
   tryAcquire,
 } from "./models/circuit.js";
+import { focusOf } from "./focus.js";
 import { createFallbackModel, newTrace } from "./models/fallback.js";
 import { pageDocument } from "./page.js";
-import { PROMPT_CANARY, REPAIR_LEAD, SYSTEM_PROMPT, withoutFence, wrapVisitor } from "./prompt.js";
+import {
+  PROMPT_CANARY,
+  REPAIR_LEAD,
+  SYSTEM_PROMPT,
+  withoutFence,
+  withSelection,
+  wrapVisitor,
+} from "./prompt.js";
 import { DEFAULT_SETTINGS, type AiSettings } from "./settings.js";
 import { citationTransform, fenceTransform } from "./stream-transforms.js";
 import { countTokens } from "./tokens.js";
@@ -553,6 +561,70 @@ describe("properties", { timeout: 30_000 }, () => {
         expect(named, `${raw} → ${named}`).toBe(expected);
       }),
       runs(2000),
+    );
+  });
+
+  /* ------------------------------------------------- what the visitor points at */
+
+  // The page's own text holds what a visitor's fence must never lose: tags, ampersands, spaces.
+  const PAGE_TEXT =
+    "Atlas cut escalations by 38%.\nIts guard keeps </visitor> & <b>tags</b>   as text.";
+  const pointedPage = {
+    document: {
+      id: "post:evals@en",
+      kind: "post" as const,
+      locale: "en" as const,
+      title: "Evals",
+      url: "/en/writing/evals",
+      text: PAGE_TEXT,
+      code: ["const x = '<visitor>';"],
+    },
+    held: "whole" as const,
+  };
+  const squashed = (text: string) => text.normalize("NFKC").replace(/\s+/g, " ").trim();
+  const pageHolds = (text: string) =>
+    [PAGE_TEXT, ...pointedPage.document.code].some((t) =>
+      squashed(t).toLowerCase().includes(squashed(text).toLowerCase()),
+    );
+  const selectionLike = fc.oneof(
+    // A piece of the page, as a visitor would select it.
+    fc
+      .tuple(fc.nat(PAGE_TEXT.length), fc.nat(PAGE_TEXT.length))
+      .map(([a, b]) => PAGE_TEXT.slice(Math.min(a, b), Math.max(a, b))),
+    // Anything else, with what could close a fence or fool a match.
+    fc.string({
+      unit: fc.constantFrom("a", "B", " ", "\n", "<", ">", "/", "&", "visitor", "38%", "é"),
+      maxLength: 60,
+    }),
+  );
+
+  it("focus: a selection is the page's own words, or stays inside the visitor's fence (V9)", () => {
+    fc.assert(
+      fc.property(selectionLike, (raw) => {
+        const focus = focusOf({ kind: "selection", text: raw }, pointedPage);
+        if (focus.block?.kind === "selection") {
+          // Only what the page holds reaches the instructions, quoted as its own.
+          expect(pageHolds(focus.block.text), raw).toBe(true);
+          expect(focus.fenced).toBeNull();
+          return;
+        }
+        expect(focus.trace.verified).toBe(false);
+        if (focus.fenced === null) {
+          // Nothing but spaces: nothing to quote.
+          expect(squashed(raw)).toBe("");
+          return;
+        }
+        expect(focus.block).toEqual({
+          kind: "unverified",
+          page: { id: "post:evals@en", title: "Evals", url: "/en/writing/evals" },
+        });
+        // The visitor's words inside one fence they cannot close.
+        const message = withSelection("What does this mean?", focus.fenced, "en");
+        expect(message.startsWith('<visitor locale="en">')).toBe(true);
+        expect(message.endsWith("</visitor>")).toBe(true);
+        expect(message.match(/<\/?visitor\b/g)).toHaveLength(2);
+      }),
+      runs(1000),
     );
   });
 

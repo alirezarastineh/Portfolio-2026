@@ -72,6 +72,6 @@
   "at": "2026-10-21T22:18:18.533Z",
   "acceptedRegression": null,
   "waivers": {
-    "ask-2026-10-22.1+58a3e95f34fb": "Visitor plan Part D (V8 page-aware answers): measured by Part D's recorded eval run, which clears this waiver."
+    "ask-2026-10-22.1+0b06ee38130f": "Visitor plan Part D (V8 page-aware answers, V9 what the visitor points at): changed together, measured by Part D's recorded eval run, which clears this waiver."
   }
 }
