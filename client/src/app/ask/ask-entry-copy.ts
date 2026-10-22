@@ -34,6 +34,13 @@ export interface AskEntryCopy {
     sourcesCount: string;
     cached: string;
     fallback: string;
+    /** A real answer's lookups and removed references, `{n}` (visitor plan V12). */
+    lookup: string;
+    lookups: string;
+    removed: string;
+    /** A move from lite to deep mid-way: `{why}`, one of `escalation`. */
+    escalated: string;
+    escalation: { "projects-fetched": string; "search-spans-projects": string };
   };
 }
 
@@ -62,6 +69,14 @@ export const ASK_ENTRY_COPY: Record<Locale, AskEntryCopy> = {
       sourcesCount: "{n} verified",
       cached: "{p}% cached",
       fallback: "fallback",
+      lookup: "1 lookup",
+      lookups: "{n} lookups",
+      removed: "{n} removed",
+      escalated: "lite → deep · {why}",
+      escalation: {
+        "projects-fetched": "two projects read",
+        "search-spans-projects": "search spans two projects",
+      },
     },
   },
   de: {
@@ -88,6 +103,14 @@ export const ASK_ENTRY_COPY: Record<Locale, AskEntryCopy> = {
       sourcesCount: "{n} geprüft",
       cached: "{p} % gecacht",
       fallback: "Ausweichmodell",
+      lookup: "1 Abfrage",
+      lookups: "{n} Abfragen",
+      removed: "{n} entfernt",
+      escalated: "lite → deep · {why}",
+      escalation: {
+        "projects-fetched": "zwei Projekte gelesen",
+        "search-spans-projects": "Suche über zwei Projekte",
+      },
     },
   },
 };

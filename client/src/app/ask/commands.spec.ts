@@ -54,6 +54,13 @@ describe("parseInput", () => {
     expect(parseInput("cat is a nice animal right")).toMatchObject({ kind: "ask" });
   });
 
+  it("knows inspect alone, completes it, and reads more words as a question (visitor plan V12)", () => {
+    expect(parseInput("inspect")).toEqual({ kind: "local", name: "inspect", arg: "" });
+    expect(parseInput(" Inspect ")).toEqual({ kind: "local", name: "inspect", arg: "" });
+    expect(parseInput("inspect his evals")).toMatchObject({ kind: "ask" });
+    expect(complete("insp", content)).toBe("inspect");
+  });
+
   it("knows level with one word or none, and a question about a level is a question (visitor plan V10)", () => {
     expect(parseInput("level expert")).toEqual({ kind: "local", name: "level", arg: "expert" });
     expect(parseInput("LEVEL Plain")).toEqual({ kind: "local", name: "level", arg: "plain" });

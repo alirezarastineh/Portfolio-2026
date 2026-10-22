@@ -20,6 +20,7 @@ import type { AskMessage, DownReason, Entry } from "./ask-types";
 import { reasonChoices } from "./down-reasons";
 import { AskLinesComponent } from "./ask-lines.component";
 import { linkPolicyFor } from "./link-policy";
+import { failoverLine, pageTitle, receiptAlways, receiptClauses, sourceFacts } from "./receipt";
 import { footnotesFor, plainText, renderMarkdown, type Block } from "./terminal-markdown";
 import { track } from "./track";
 
@@ -30,15 +31,20 @@ interface Footnote {
   n: number;
   url: string;
   title: string;
+  /** The document's kind as a glyph, and the month it last changed (visitor plan V12). */
+  glyph: string | null;
+  updated: string | null;
 }
 
 type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; blocks: Block[] };
 
 /**
  * One answer as the terminal shows it: tool steps as dim shell output, the
- * text (safe Markdown, citations as footnote numbers), footnotes, follow-up
- * suggestions, an optional meta line, and feedback. While it is being
- * written: "thinking… 1.2 s", then a caret at the end of the text.
+ * text (safe Markdown, citations as footnote numbers), footnotes with each
+ * source's kind and date, follow-up suggestions, an optional meta line,
+ * feedback, and the receipt with its "inspect" (visitor plan V12). While it
+ * is being written: "thinking… 1.2 s" (and a failover, if one keeps the
+ * visitor waiting), then a caret at the end of the text.
  */
 @Component({
   selector: "app-ask-answer",
@@ -155,6 +161,13 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
           <span class="ml-2 hidden text-xs sm:inline">{{ copy().stopHint }}</span>
         </p>
       }
+      <!-- A failover before the first words (visitor plan V12): the terminal's live region says
+           it once; here it may change (2 of 3, 3 of 3), so it is not read again. -->
+      @if (failover(); as line) {
+        <p class="m-0 text-xs text-muted-foreground" aria-hidden="true" data-failover>
+          {{ line }}
+        </p>
+      }
 
       <!-- The sources, as chips; a citation [n] in the text lights up chip n. -->
       @if (footnotes().length) {
@@ -171,9 +184,17 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
                   [attr.data-n]="note.n"
                   [href]="note.url"
                   (click)="followSource($event, note.url)"
-                  ><span class="text-muted-foreground" aria-hidden="true">[{{ note.n }}]</span
-                  ><span class="min-w-0 wrap-break-word">{{ note.title }}</span></a
-                >
+                  ><span class="text-muted-foreground" aria-hidden="true">[{{ note.n }}]</span>
+                  @if (note.glyph) {
+                    <span class="text-muted-foreground" aria-hidden="true">{{ note.glyph }}</span>
+                  }
+                  <span class="min-w-0 wrap-break-word">{{ note.title }}</span>
+                  @if (note.updated) {
+                    <span class="shrink-0 text-muted-foreground"
+                      ><span aria-hidden="true">· </span>{{ note.updated }}</span
+                    >
+                  }
+                </a>
               </li>
             }
           </ol>
@@ -253,8 +274,32 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
             @if (rating()) {
               <span>{{ copy().thanks }}</span>
             }
+            <!-- The receipt waits behind this unless it must show, or stats is on (visitor plan V12). -->
+            @if (receiptToggle()) {
+              <button
+                type="button"
+                class="feedback press"
+                [attr.aria-expanded]="opened()"
+                (click)="opened.set(!opened())"
+              >
+                {{ copy().receipt.toggle }}
+              </button>
+            }
           </span>
         </div>
+        <!-- How it was made, as counts and codes; "inspect" opens what the log keeps of it. -->
+        @if (receiptShown()) {
+          <p class="m-0 text-xs text-muted-foreground" data-receipt>
+            <span aria-hidden="true"># </span>{{ receipt().join(" · ") }}
+            <button
+              type="button"
+              class="feedback press -ml-1 text-accent-orange"
+              (click)="inspect.emit(message()!.id)"
+            >
+              {{ copy().receipt.inspect }}
+            </button>
+          </p>
+        }
         <!-- Why the -1 (visitor plan V2): codes, never free text. It appears after the visitor's
              own click and leaves the focus on -1; once one is chosen, the others go. -->
         @if (rating() === -1) {
@@ -385,6 +430,8 @@ export class AskAnswerComponent {
 
   readonly ask = output<string>();
   readonly retry = output<void>();
+  /** `inspect` for this answer, by its message id (visitor plan V12). */
+  readonly inspect = output<string>();
 
   protected readonly store = inject(AskStore);
   private readonly lang = inject(LanguageService);
@@ -417,11 +464,48 @@ export class AskAnswerComponent {
   );
 
   protected readonly footnotes = computed<Footnote[]>(() => {
+    const locale = this.lang.lang();
+    const copy = this.copy();
     const sources = (this.message()?.parts ?? []).flatMap((p) =>
-      p.type === "source-url" ? [{ id: p.sourceId, url: p.url, title: p.title ?? p.url }] : [],
+      p.type === "source-url"
+        ? [
+            {
+              id: p.sourceId,
+              url: p.url,
+              title: p.title ?? p.url,
+              ...sourceFacts(p.providerMetadata, locale, copy),
+            },
+          ]
+        : [],
     );
     return footnotesFor(this.text(), sources);
   });
+
+  /** The server moved past a busy model, until this answer's first words (visitor plan V12). */
+  protected readonly failover = computed(() => {
+    const status = this.store.failover();
+    if (!status || !this.live() || status.entryId !== this.entry().id || this.text()) return null;
+    return failoverLine(status, this.copy().failover);
+  });
+
+  /** The receipt's clauses (visitor plan V12): what the answer did, from its metadata only. */
+  protected readonly receipt = computed(() => {
+    const meta = this.message()?.metadata;
+    const page = meta?.receipt?.page;
+    return receiptClauses(meta, this.copy().receipt, {
+      pageTitle: page ? pageTitle(page, this.lang.content()) : null,
+      about: this.entry().about,
+    });
+  });
+  /** Opened with "how was this answered?". */
+  protected readonly opened = signal(false);
+  private readonly always = computed(() => receiptAlways(this.message()?.metadata?.receipt));
+  protected readonly receiptToggle = computed(
+    () => this.receipt().length > 0 && !this.always() && !this.store.stats(),
+  );
+  protected readonly receiptShown = computed(
+    () => this.receipt().length > 0 && (this.always() || this.store.stats() || this.opened()),
+  );
 
   private readonly linkPolicy = computed(() => linkPolicyFor(this.lang.content()));
 

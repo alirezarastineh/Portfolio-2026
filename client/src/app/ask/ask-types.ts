@@ -25,9 +25,41 @@ export interface AnswerMetadata {
    * with the summary the contact form gets.
    */
   handoff?: { by: "tool" | "fallback"; summary: string };
+  /** What the answer did, as counts and codes (visitor plan V12, `server/src/ask/receipt.ts`). */
+  receipt?: AnswerReceipt;
+}
+
+/** The server's receipt: the receipt line and the hero's trace panel read it, nothing else. */
+export interface AnswerReceipt {
+  lookups: number;
+  sources: number;
+  /** Invented references removed before the visitor saw them. */
+  removed: number;
+  escalation?: "projects-fetched" | "search-spans-projects";
+  /** The careful topic's code; the receipt says only that it was one. */
+  careful?: string;
+  /** The case study or post asked on, by document id (`project:atlas@en`). */
+  page?: string;
+  focus?: { kind: "section" | "code" | "selection"; verified: boolean };
+  level?: "plain" | "expert";
+  repair?: {
+    reason: "no-words" | "handoff-without-words" | "echo" | "stub";
+    by: "model" | "fixed-line";
+  };
 }
 
 export type AskMessage = UIMessage<AnswerMetadata>;
+
+/**
+ * A transient part during an answer (visitor plan V12): the server moved on
+ * from a model that failed before its first chunk. Shown until the first
+ * words; never part of the message.
+ */
+export interface FailoverStatus {
+  code: "failover";
+  position: number;
+  of: number;
+}
 
 /**
  * Why a 👎, as the terminal offers it (`FEEDBACK_REASONS` on the server, the visitor plan's V2):
@@ -51,7 +83,14 @@ export type Failure =
 
 /** One thing typed at the prompt and what came back. */
 export type Entry =
-  | { id: string; kind: "local"; input: string; lines: OutLine[] }
+  | {
+      id: string;
+      kind: "local";
+      input: string;
+      lines: OutLine[];
+      /** Its text for a copy button, where the output is worth keeping (`inspect`). */
+      copy?: string;
+    }
   | {
       id: string;
       kind: "ask";

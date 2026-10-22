@@ -34,10 +34,19 @@ import type { AskAbout, AskFocus } from "./ask-launcher.service";
 import { isLevel, readLevel, storeLevel, type Level } from "./ask-level";
 import { ASK_STORAGE_KEY } from "./ask-storage";
 import { AskTraceService } from "./ask-trace.service";
-import type { AskMessage, DownReason, Entry, Failure, RemoteConfig } from "./ask-types";
+import type {
+  AskMessage,
+  DownReason,
+  Entry,
+  Failure,
+  FailoverStatus,
+  RemoteConfig,
+} from "./ask-types";
 import { feedbackBody, withDownReason } from "./down-reasons";
 import { confirmHandoff } from "./handoff-confirm";
 import { handoffSummary } from "./handoff-offer";
+import { fetchInspect, inspectLines, linesText } from "./inspect";
+import { failoverLine } from "./receipt";
 import {
   helpLines,
   offlineLines,
@@ -82,6 +91,11 @@ interface AskState {
   downReasons: Record<string, DownReason>;
   /** How technical the visitor wants answers (visitor plan V10), kept in this browser. */
   level: Level;
+  /**
+   * The server moved past a busy model for the question being answered
+   * (visitor plan V12): shown until its first words, never kept.
+   */
+  failover: { entryId: string; position: number; of: number } | null;
   /** The polite live region's text: finished answers and command output, once. */
   announcement: string;
 }
@@ -224,6 +238,7 @@ export const AskStore = signalStore(
       feedback: stored?.feedback ?? {},
       downReasons: stored?.downReasons ?? {},
       level: readLevel(),
+      failover: null,
       announcement: "",
     };
   }),
@@ -323,9 +338,29 @@ export const AskStore = signalStore(
           const remote = store.remote();
           if (remote) patchState(store, { remote: { ...remote, state: failure } });
         }
-        patchState(store, { announcement: plainText(messageFor(failure, retryAfter)) });
+        patchState(store, {
+          announcement: plainText(messageFor(failure, retryAfter)),
+          failover: null,
+        });
+      },
+      // A transient part: the server moved past a busy model (visitor plan V12). Never part of
+      // the message, so never stored or sent back; said once per question, shown until words.
+      onData: (part) => {
+        const status = part.type === "data-status" ? (part.data as Partial<FailoverStatus>) : null;
+        const entryId = store._next.entryId;
+        if (status?.code !== "failover" || !entryId) return;
+        const { position, of } = status;
+        if (typeof position !== "number" || typeof of !== "number") return;
+        const first = store.failover()?.entryId !== entryId;
+        patchState(store, {
+          failover: { entryId, position, of },
+          ...(first
+            ? { announcement: failoverLine({ position, of }, ASK_COPY[locale()].failover) }
+            : {}),
+        });
       },
       onFinish: ({ message, isAbort, isError }) => {
+        patchState(store, { failover: null });
         persist();
         reportFinish(message, isAbort);
         if (isAbort || isError || message.role !== "assistant") return;
@@ -413,11 +448,13 @@ export const AskStore = signalStore(
     const locale = (): Locale => store._lang.lang();
     const content = () => store._lang.content();
 
-    function show(input: string, lines: OutLine[]): void {
+    /** A command's output; `copy` gives it a copy button with that text. */
+    function show(input: string, lines: OutLine[], copy?: string): void {
       patchState(store, {
-        entries: [...store.entries(), { id: newId(), kind: "local" as const, input, lines }].slice(
-          -MAX_ENTRIES,
-        ),
+        entries: [
+          ...store.entries(),
+          { id: newId(), kind: "local" as const, input, lines, ...(copy ? { copy } : {}) },
+        ].slice(-MAX_ENTRIES),
         announcement: lines.map((l) => (l.label ? `${l.label}: ${l.text}` : l.text)).join("\n"),
       });
       store._persist();
@@ -508,6 +545,7 @@ export const AskStore = signalStore(
         feedback: {},
         downReasons: {},
         limitedUntil: null,
+        failover: null,
       });
       store._persist();
     }
@@ -563,6 +601,39 @@ export const AskStore = signalStore(
       const next = !store.stats();
       patchState(store, { stats: next });
       show(input, [{ text: next ? copy.cmd.statsOn : copy.cmd.statsOff, tone: "dim" }]);
+    }
+
+    /**
+     * `inspect` (visitor plan V12): how one of this session's answers was made,
+     * as the log keeps it: the newest finished one, or the one asked about.
+     */
+    async function inspectAnswer(input: string, messageId?: string): Promise<void> {
+      const copy = store.copy();
+      const id =
+        messageId ??
+        store.chat.messages.filter((m) => m.role === "assistant" && m.metadata?.sig).at(-1)?.id;
+      if (!id) {
+        show(input, [{ text: copy.inspect.noAnswer, tone: "dim" }]);
+        return;
+      }
+      track("ask_inspect");
+      const result = await fetchInspect(() =>
+        fetch(`${apiBaseUrl()}/v1/ask/inspect`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId: store.sessionId(), messageId: id }),
+        }),
+      );
+      if (!result.ok) {
+        show(input, [
+          result.missing
+            ? { text: copy.inspect.missing, tone: "dim" }
+            : { text: copy.inspect.failed, tone: "error" },
+        ]);
+        return;
+      }
+      const lines = inspectLines(result.view, copy, locale());
+      show(input, lines, linesText(input, store._lang.t().about.terminalPrompt, lines));
     }
 
     function handleHistory(input: string): void {
@@ -643,6 +714,9 @@ export const AskStore = signalStore(
           break;
         case "stats":
           handleStats(input);
+          break;
+        case "inspect":
+          void inspectAnswer(input);
           break;
         case "history":
           handleHistory(input);
@@ -728,6 +802,11 @@ export const AskStore = signalStore(
       toggleStats(): void {
         patchState(store, { stats: !store.stats() });
         store._persist();
+      },
+
+      /** How this answer was made (visitor plan V12): its receipt's "inspect". */
+      inspect(messageId: string): Promise<void> {
+        return inspectAnswer("inspect", messageId);
       },
 
       /** +1 or -1 on an answer; a -1 may come back with its reason (visitor plan V2). */

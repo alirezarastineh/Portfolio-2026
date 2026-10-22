@@ -66,7 +66,7 @@ export function traceView(
       rows: [
         { step: "query", detail: copy.starters[0] ?? "", time: "", bar: null },
         { step: "route", detail: "lite", ...span("route") },
-        { step: "retrieve", detail: t.tools, ...span("retrieve") },
+        { step: "retrieve", detail: `${t.tools} · ${t.lookup}`, ...span("retrieve") },
         { step: "generate", detail: t.model, ...span("generate") },
         { step: "cite", detail: t.sources, ...span("cite") },
         {
@@ -83,6 +83,10 @@ export function traceView(
   const seconds = total === null ? "–" : duration(total, locale);
   const model = trace.model ?? "–";
   const generating = total !== null && trace.ttftMs !== null;
+  // The answer's real steps (visitor plan V12): a move to the deep model, every lookup counted,
+  // and the references it removed.
+  const lookups = trace.lookups === 1 ? t.lookup : fmt(t.lookups, { n: trace.lookups });
+  const cited = trace.sources ? fmt(t.sourcesCount, { n: trace.sources }) : t.noSources;
   return {
     id: trace.id,
     live: true,
@@ -90,10 +94,17 @@ export function traceView(
     summary: fmt(t.lastSummary, { model, s: seconds }),
     rows: [
       { step: "query", detail: trace.question, time: "", bar: null },
-      { step: "route", detail: trace.route ?? "lite", time: "", bar: null },
+      {
+        step: "route",
+        detail: trace.escalation
+          ? fmt(t.escalated, { why: t.escalation[trace.escalation] })
+          : (trace.route ?? "lite"),
+        time: "",
+        bar: null,
+      },
       {
         step: "retrieve",
-        detail: trace.tools.length ? trace.tools.join(", ") : t.noTools,
+        detail: trace.tools.length ? `${trace.tools.join(", ")} · ${lookups}` : t.noTools,
         time: "",
         bar: null,
       },
@@ -107,7 +118,7 @@ export function traceView(
       },
       {
         step: "cite",
-        detail: trace.sources ? fmt(t.sourcesCount, { n: trace.sources }) : t.noSources,
+        detail: trace.removed ? `${cited} · ${fmt(t.removed, { n: trace.removed })}` : cited,
         time: "",
         bar: null,
       },

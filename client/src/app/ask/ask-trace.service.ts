@@ -7,14 +7,20 @@ import { Injectable, signal } from "@angular/core";
 export interface AnswerTrace {
   question: string;
   route: "lite" | "deep" | null;
+  /** Why it moved from the fast to the thorough model mid-way (visitor plan V12); null if not. */
+  escalation: "projects-fetched" | "search-spans-projects" | null;
   model: string | null;
   fallback: boolean;
   ttftMs: number | null;
   totalMs: number | null;
   /** The retrieval tools it called, in order, each once. */
   tools: string[];
+  /** Its lookups, every call counted (visitor plan V12). */
+  lookups: number;
   /** Sources cited, each checked against the site's content by the server. */
   sources: number;
+  /** Invented references the server removed before the visitor saw them (visitor plan V12). */
+  removed: number;
   /** Share of the prompt served from the model's cache. */
   cachedPct: number | null;
 }

@@ -24,6 +24,7 @@ export type LocalCommand =
   | "lang"
   | "level"
   | "stats"
+  | "inspect"
   | "history"
   | "clear"
   | "reset"
@@ -50,6 +51,7 @@ export const COMMANDS = [
   "level ",
   "deep ",
   "stats",
+  "inspect",
   "history",
   "clear",
   "reset",
@@ -67,6 +69,7 @@ const EXACT: Record<string, LocalCommand> = {
   resume: "cv",
   contact: "contact",
   stats: "stats",
+  inspect: "inspect",
   history: "history",
   clear: "clear",
   reset: "reset",

@@ -76,7 +76,21 @@ const MAX_INPUT_LINES = 6;
             <!-- prettier-ignore -->
             <p class="m-0 flex flex-wrap items-baseline gap-x-2"><span class="text-accent-orange" aria-hidden="true">{{ prompt() }}</span><span class="sr-only">{{ copy().you }}:</span><span class="min-w-0 whitespace-pre-wrap wrap-break-word text-foreground">{{ entry.input }}</span>@if (entry.kind === "ask" && entry.about) {<span class="min-w-0 wrap-break-word text-muted-foreground">· {{ entry.about.label }}</span>}</p>
             @if (entry.kind === "local") {
-              <app-ask-lines class="pb-3" [lines]="entry.lines" />
+              <app-ask-lines [class.pb-3]="!entry.copy" [lines]="entry.lines" />
+              <!-- Output worth keeping (inspect's timeline, visitor plan V12) can be copied whole. -->
+              @if (entry.copy; as text) {
+                <button
+                  type="button"
+                  class="press mb-3 min-h-6 cursor-pointer text-xs text-muted-foreground hover:text-foreground"
+                  (click)="copyOutput(entry.id, text)"
+                >
+                  @if (copiedId() === entry.id) {
+                    {{ copy().copied }}<span aria-hidden="true"> ✓</span>
+                  } @else {
+                    {{ copy().copy }}
+                  }
+                </button>
+              }
             } @else {
               <app-ask-answer
                 [entry]="entry"
@@ -86,6 +100,7 @@ const MAX_INPUT_LINES = 6;
                 [latest]="entry.id === latestAskId()"
                 (ask)="send($event)"
                 (retry)="store.retry(entry.id)"
+                (inspect)="inspectAnswer($event)"
               />
             }
           </div>
@@ -222,6 +237,8 @@ export class TerminalShellComponent {
 
   protected readonly expanded = signal(false);
   protected readonly focused = signal(false);
+  /** The output just copied, for its button's "copied ✓". */
+  protected readonly copiedId = signal<string | null>(null);
   private readonly value = signal("");
   /** Where ↑/↓ are in the history; null while typing something new. */
   private historyIndex: number | null = null;
@@ -361,6 +378,22 @@ export class TerminalShellComponent {
   protected start(question: string): void {
     this.reportOpen("starter");
     this.send(question);
+  }
+
+  /** An answer's "inspect": its timeline comes at the end of the log, which follows it down. */
+  protected inspectAnswer(messageId: string): void {
+    this.stick = true;
+    void this.store.inspect(messageId);
+  }
+
+  protected async copyOutput(id: string, text: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text);
+      this.copiedId.set(id);
+      setTimeout(() => this.copiedId.set(null), 1500);
+    } catch {
+      // Clipboard refused (permissions): nothing to do.
+    }
   }
 
   private handleArrowKey(event: KeyboardEvent, el: HTMLTextAreaElement): boolean {

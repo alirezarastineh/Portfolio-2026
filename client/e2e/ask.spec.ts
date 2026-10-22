@@ -65,6 +65,47 @@ function answer(options: {
   ];
 }
 
+/** An answer whose finish carries the server's receipt (visitor plan V12). */
+function withReceipt(chunks: Chunk[], receipt: Record<string, unknown>): Chunk[] {
+  return chunks.map((chunk) =>
+    chunk["type"] === "finish"
+      ? {
+          ...chunk,
+          messageMetadata: {
+            ...(chunk["messageMetadata"] as Chunk),
+            ...(receipt["escalation"] ? { route: "deep" } : {}),
+            receipt,
+          },
+        }
+      : chunk,
+  );
+}
+
+/** What `POST /v1/ask/inspect` answers for the first answer: the server's projection. */
+const INSPECTED = {
+  v: 1,
+  id: "m_e2e00000001",
+  at: "2026-10-22T14:03:00.000Z",
+  prompt: "ask-2026-10-22.1+982317ef9de8",
+  route: "lite",
+  reason: "default",
+  model: "gemini-3.1-flash-lite",
+  ttftMs: 6_640,
+  totalMs: 7_900,
+  steps: [
+    {
+      model: "gemini-3.1-flash-lite",
+      ttftMs: 640,
+      tokens: { input: 9_000, cached: 8_000, output: 60 },
+      passedOver: [{ model: "gemini-3.5-flash-lite", outcome: "timeout", ms: 6_000 }],
+      tools: [{ name: "search_portfolio", input: "evals", outcome: "ok", chars: 812 }],
+    },
+  ],
+  citations: { kept: ["project:project-one@en"], removed: 0 },
+  guard: {},
+  flags: ["degraded"],
+};
+
 const SEARCH_STEP: Chunk[] = [
   { type: "tool-input-start", toolCallId: "s1", toolName: "search_portfolio" },
   {
@@ -678,7 +719,7 @@ test.describe("assistant terminal", () => {
     // The hero's trace panel replays that answer instead of the example.
     const trace = page.locator("#hero figure");
     await expect(trace).toContainText("your last question · 1.3 s");
-    await expect(trace).toContainText("search_portfolio");
+    await expect(trace).toContainText("search_portfolio · 1 lookup");
     await expect(trace).not.toContainText("example trace");
   });
 
@@ -882,6 +923,134 @@ test.describe("assistant terminal", () => {
     await run(prompt, "level of his German?");
     await expect.poll(() => mock.bodies.length).toBe(3);
     expect(mock.bodies[2]).not.toHaveProperty("level");
+  });
+
+  test("an answer's receipt shows by itself on a careful topic, otherwise when asked, and inspect shows what the log keeps (visitor plan V12)", async ({
+    page,
+    context,
+    browserName,
+  }) => {
+    if (browserName === "chromium") {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    }
+    const dated = {
+      type: "source-url",
+      sourceId: "project:project-one@en",
+      url: "/en/work/project-one",
+      title: "Project one",
+      providerMetadata: { portfolio: { kind: "project", updated: "2026-09-12" } },
+    };
+    await mockAsk(page, (route, n) =>
+      sse(
+        route,
+        withReceipt(
+          answer({
+            id: `m_e2e0000000${n}`,
+            text:
+              n === 1
+                ? "He runs evals first [^project:project-one@en]."
+                : "Only what is published [^project:project-one@en].",
+            tools: n === 1 ? SEARCH_STEP : [],
+            sources: [dated],
+          }),
+          n === 1
+            ? { lookups: 1, sources: 1, removed: 0 }
+            : {
+                lookups: 2,
+                sources: 1,
+                removed: 1,
+                careful: "compensation",
+                escalation: "projects-fetched",
+              },
+        ),
+      ),
+    );
+    const inspected: Record<string, unknown>[] = [];
+    await page.route("**/v1/ask/inspect", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: cors });
+        return;
+      }
+      inspected.push(route.request().postDataJSON() as Record<string, unknown>);
+      await route.fulfill({ headers: cors, json: INSPECTED });
+    });
+    const prompt = await openPrompt(page);
+    const log = page.locator("#about [role=log]");
+
+    await run(prompt, "How does he test prompts?");
+    await expect(log).toContainText("He runs evals first");
+    // The chip says what the source is and when it last changed.
+    await expect(log.getByRole("link", { name: /Project one.*updated Sep 2026/ })).toBeVisible();
+    // An ordinary answer's receipt waits behind the question.
+    const receipt = log.locator("[data-receipt]");
+    await expect(receipt).toHaveCount(0);
+    const how = log.getByRole("button", { name: "how was this answered?" });
+    await expect(how).toHaveAttribute("aria-expanded", "false");
+    await how.click();
+    await expect(how).toHaveAttribute("aria-expanded", "true");
+    await expect(receipt).toHaveText(/fast model · 1 lookup · 1 source checked/);
+
+    // Its "inspect": that answer's timeline, from the log, for this session.
+    await receipt.getByRole("button", { name: "inspect" }).click();
+    await expect(log).toContainText("lite · reason: default");
+    await expect(log).toContainText('↳ search "evals" → ok · 812 chars');
+    await expect(log).toContainText("↳ passed over gemini-3.5-flash-lite: timeout after 6.0 s");
+    expect(inspected[0]).toEqual({ sessionId: expect.any(String), messageId: "m_e2e00000001" });
+    // Its name turns to "copied ✓": the locator takes either, so it stays on the timeline's button.
+    const copyButton = log.getByRole("button", { name: /^cop(y|ied)/ }).last();
+    await copyButton.click();
+    await expect(copyButton).toHaveText(/copied/);
+    if (browserName === "chromium") {
+      const copied = await page.evaluate(() => navigator.clipboard.readText());
+      expect(copied).toContain("user@portfolio:~$ inspect");
+      expect(copied).toMatch(/route {11}lite · reason: default/);
+    }
+    expect(await axeViolations(page)).toEqual([]);
+
+    // A careful answer, with a reference removed and a move to the deep model: it shows by itself.
+    await run(prompt, "What does he earn?");
+    await expect(log).toContainText("Only what is published");
+    await expect(receipt.last()).toHaveText(
+      /moved to the thorough model: it read two projects · 2 lookups · 1 source checked · 1 invented reference removed · careful topic: published facts only/,
+    );
+    await expect(log.getByRole("button", { name: "how was this answered?" })).toHaveCount(1);
+    // The hero's panel replays that answer's real steps.
+    const trace = page.locator("#hero figure");
+    await expect(trace).toContainText("lite → deep · two projects read");
+    await expect(trace).toContainText("1 verified · 1 removed");
+
+    // Typed, inspect asks about the newest answer.
+    await run(prompt, "inspect");
+    await expect.poll(() => inspected.length).toBe(2);
+    expect(inspected[1]).toMatchObject({ messageId: "m_e2e00000002" });
+  });
+
+  test("a failover before the first words is said once, and never kept (visitor plan V12)", async ({
+    page,
+  }) => {
+    const [start, ...rest] = answer({ text: "From the second model." });
+    const chunks = [
+      start!,
+      { type: "data-status", data: { code: "failover", position: 2, of: 3 }, transient: true },
+      ...rest,
+    ];
+    // The status, then a pause before the first words, as a failover's wait.
+    await pausedStream(page, chunks, 1, 2500);
+    await mockAsk(page, () => undefined);
+    const prompt = await openPrompt(page);
+    await run(prompt, "Is he available?");
+
+    const status = page.locator("#about [data-failover]");
+    await expect(status).toHaveText("the first model is busy, trying another (2 of 3)");
+    await expect(page.locator("#about [aria-live=polite]")).toHaveText(
+      "the first model is busy, trying another (2 of 3)",
+    );
+    await expect(page.locator("#about [role=log]")).toContainText("From the second model.");
+    await expect(status).toHaveCount(0);
+    // Not part of the message: the tab keeps the answer, never the status.
+    const kept = await page.evaluate(() => sessionStorage.getItem("ask:v1") ?? "");
+    expect(kept).toContain("From the second model.");
+    expect(kept).not.toMatch(/failover|data-status/);
   });
 
   test("the reader pages' server HTML has none of the ask buttons: the browser adds them", async ({

@@ -1,5 +1,12 @@
 import type { Locale } from "../content/locale";
 
+/** A count in words: none, one, and `{n}` of them. */
+export interface Counted {
+  none: string;
+  one: string;
+  many: string;
+}
+
 /**
  * The terminal's own words: command output, states, controls. Loaded with the
  * terminal, not the page. The visitor-facing sentences that belong to the site
@@ -37,6 +44,82 @@ export interface AskCopy {
   downReason: { ask: string; wrong: string; unanswered: string; length: string };
   copy: string;
   copied: string;
+  /** A source chip's date (visitor plan V12): `{date}`, its month. */
+  updated: string;
+  /** While a failover keeps the visitor waiting (visitor plan V12): `{position}` of `{of}`. */
+  failover: { first: string; next: string };
+  /** The answer's receipt (visitor plan V12): counts in three forms, `{n}` the number. */
+  receipt: {
+    toggle: string;
+    inspect: string;
+    fast: string;
+    thorough: string;
+    /** `{why}`: one of `escalation`. */
+    escalated: string;
+    escalation: { "projects-fetched": string; "search-spans-projects": string };
+    lookups: Counted;
+    sources: Counted;
+    removed: Counted;
+    careful: string;
+    /** `{title}`: the case study's or post's. */
+    page: string;
+    /** `{label}`: what the visitor pointed at, as their question showed it. */
+    focus: { section: string; code: string; selection: string };
+    focusMissing: { section: string; code: string; selection: string };
+    /** `{level}`: plain or expert. */
+    level: string;
+    repair: {
+      "no-words": string;
+      "handoff-without-words": string;
+      echo: string;
+      stub: string;
+      fixed: string;
+    };
+  };
+  /** `inspect` (visitor plan V12): what the log keeps of an answer, as a timeline. */
+  inspect: {
+    noAnswer: string;
+    missing: string;
+    failed: string;
+    /** `{id}`, `{at}`, `{prompt}`. */
+    head: string;
+    labels: {
+      route: string;
+      careful: string;
+      page: string;
+      focus: string;
+      level: string;
+      /** `{n}`: the step's number. */
+      step: string;
+      cited: string;
+      removed: string;
+      guard: string;
+      checks: string;
+      repair: string;
+      time: string;
+    };
+    /** `{reason}`: the router's codes. */
+    reason: string;
+    /** `{step}`, `{why}`. */
+    moved: string;
+    /** `{model}`, `{ttft}`, `{input}`, `{cached}`, `{output}`. */
+    model: string;
+    noModel: string;
+    /** `{model}`, `{outcome}`, `{ms}`. */
+    passedOver: string;
+    /** `{label}`, `{outcome}`, `{chars}`. */
+    tool: string;
+    promoted: string;
+    found: string;
+    notFound: string;
+    /** `{reason}`. */
+    byModel: string;
+    byLine: string;
+    /** `{total}`, `{ttft}`. */
+    time: string;
+    nothing: string;
+    none: string;
+  };
   handoff: { ask: string; yes: string; no: string; done: string; declined: string };
   opening: string;
   tool: {
@@ -95,6 +178,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         ["level plain|standard|expert", "how technical answers are"],
         ["deep <question>", "ask the slower, more thorough model"],
         ["stats", "show model, latency and cache under answers"],
+        ["inspect", "how the last answer was made: its steps and checks"],
         ["history · clear · reset", "as in any shell"],
       ],
       footer: "Anything else is a question for the AI assistant.",
@@ -131,6 +215,83 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
     },
     copy: "copy",
     copied: "copied",
+    updated: "updated {date}",
+    failover: {
+      first: "the first model is busy, trying another ({position} of {of})",
+      next: "that one is busy too, trying another ({position} of {of})",
+    },
+    receipt: {
+      toggle: "how was this answered?",
+      inspect: "inspect",
+      fast: "fast model",
+      thorough: "thorough model",
+      escalated: "moved to the thorough model: {why}",
+      escalation: {
+        "projects-fetched": "it read two projects",
+        "search-spans-projects": "the search spans two projects",
+      },
+      lookups: { none: "no lookups", one: "1 lookup", many: "{n} lookups" },
+      sources: { none: "nothing cited", one: "1 source checked", many: "{n} sources checked" },
+      removed: {
+        none: "",
+        one: "1 invented reference removed",
+        many: "{n} invented references removed",
+      },
+      careful: "careful topic: published facts only",
+      page: "page: {title}",
+      focus: {
+        section: "section: {label}",
+        code: "code block: {label}",
+        selection: "selection quoted from the page",
+      },
+      focusMissing: {
+        section: "section not found on the page",
+        code: "code block not found on the page",
+        selection: "selection not found on the page: read as your words",
+      },
+      level: "level: {level}",
+      repair: {
+        "no-words": "repaired: the first try had no words",
+        "handoff-without-words": "repaired: the first try offered the hand-off without words",
+        echo: "repaired: the first try only repeated the question",
+        stub: "repaired: the first try stopped after a word or two",
+        fixed: "closed with a fixed line: no model had words",
+      },
+    },
+    inspect: {
+      noAnswer: "No answer to inspect yet.",
+      missing: "Nothing is kept for that answer: it may be older than 90 days, or deleted.",
+      failed: "Could not load how that answer was made just now.",
+      head: "inspect {id} · {at} · prompt {prompt}",
+      labels: {
+        route: "route",
+        careful: "careful",
+        page: "page",
+        focus: "focus",
+        level: "level",
+        step: "step {n}",
+        cited: "cited",
+        removed: "removed",
+        guard: "guard",
+        checks: "checks",
+        repair: "repair",
+        time: "time",
+      },
+      reason: "reason: {reason}",
+      moved: "moved to the thorough model at step {step}: {why}",
+      model: "{model} · first token {ttft} · {input} in ({cached} cached) · {output} out",
+      noModel: "no model could answer",
+      passedOver: "↳ passed over {model}: {outcome} after {ms}",
+      tool: "↳ {label} → {outcome} · {chars} chars",
+      promoted: "its text came with the question",
+      found: "found on the page",
+      notFound: "not found on the page",
+      byModel: "{reason} · words by the model",
+      byLine: "{reason} · a fixed closing line",
+      time: "{total} · first token {ttft}",
+      nothing: "nothing removed",
+      none: "none",
+    },
     handoff: {
       ask: "Hand this conversation to the contact form?",
       yes: "yes",
@@ -195,6 +356,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         ["level plain|standard|expert", "wie technisch Antworten sind"],
         ["deep <frage>", "das langsamere, gründlichere Modell fragen"],
         ["stats", "Modell, Latenz und Cache unter Antworten zeigen"],
+        ["inspect", "wie die letzte Antwort entstand: Schritte und Prüfungen"],
         ["history · clear · reset", "wie in jeder Shell"],
       ],
       footer: "Alles andere ist eine Frage an den KI-Assistenten.",
@@ -231,6 +393,85 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
     },
     copy: "kopieren",
     copied: "kopiert",
+    updated: "aktualisiert {date}",
+    failover: {
+      first: "das erste Modell ist ausgelastet, ich versuche ein anderes ({position} von {of})",
+      next: "auch dieses ist ausgelastet, ich versuche ein anderes ({position} von {of})",
+    },
+    receipt: {
+      toggle: "wie entstand diese Antwort?",
+      inspect: "inspect",
+      fast: "schnelles Modell",
+      thorough: "gründliches Modell",
+      escalated: "zum gründlichen Modell gewechselt: {why}",
+      escalation: {
+        "projects-fetched": "es hat zwei Projekte gelesen",
+        "search-spans-projects": "die Suche betrifft zwei Projekte",
+      },
+      lookups: { none: "keine Abfragen", one: "1 Abfrage", many: "{n} Abfragen" },
+      sources: { none: "nichts zitiert", one: "1 Quelle geprüft", many: "{n} Quellen geprüft" },
+      removed: {
+        none: "",
+        one: "1 erfundener Verweis entfernt",
+        many: "{n} erfundene Verweise entfernt",
+      },
+      careful: "heikles Thema: nur veröffentlichte Fakten",
+      page: "Seite: {title}",
+      focus: {
+        section: "Abschnitt: {label}",
+        code: "Codeblock: {label}",
+        selection: "Auswahl aus der Seite zitiert",
+      },
+      focusMissing: {
+        section: "Abschnitt nicht auf der Seite gefunden",
+        code: "Codeblock nicht auf der Seite gefunden",
+        selection: "Auswahl nicht auf der Seite gefunden: als deine Worte gelesen",
+      },
+      level: "level: {level}",
+      repair: {
+        "no-words": "repariert: der erste Versuch blieb ohne Text",
+        "handoff-without-words": "repariert: der erste Versuch bot die Übergabe ohne Text an",
+        echo: "repariert: der erste Versuch wiederholte nur die Frage",
+        stub: "repariert: der erste Versuch brach nach ein, zwei Wörtern ab",
+        fixed: "mit einer festen Zeile beendet: kein Modell hatte Text",
+      },
+    },
+    inspect: {
+      noAnswer: "Noch keine Antwort zum Untersuchen.",
+      missing:
+        "Zu dieser Antwort ist nichts gespeichert: Sie ist vielleicht älter als 90 Tage oder gelöscht.",
+      failed: "Wie diese Antwort entstand, ließ sich gerade nicht laden.",
+      head: "inspect {id} · {at} · Prompt {prompt}",
+      labels: {
+        route: "Route",
+        careful: "heikel",
+        page: "Seite",
+        focus: "Fokus",
+        level: "level",
+        step: "Schritt {n}",
+        cited: "zitiert",
+        removed: "entfernt",
+        guard: "Ausgabefilter",
+        checks: "Prüfungen",
+        repair: "Reparatur",
+        time: "Zeit",
+      },
+      reason: "Grund: {reason}",
+      moved: "in Schritt {step} zum gründlichen Modell gewechselt: {why}",
+      model:
+        "{model} · erstes Token {ttft} · {input} rein ({cached} aus dem Cache) · {output} raus",
+      noModel: "kein Modell konnte antworten",
+      passedOver: "↳ übersprungen {model}: {outcome} nach {ms}",
+      tool: "↳ {label} → {outcome} · {chars} Zeichen",
+      promoted: "ihr Text kam mit der Frage",
+      found: "auf der Seite gefunden",
+      notFound: "nicht auf der Seite gefunden",
+      byModel: "{reason} · Text vom Modell",
+      byLine: "{reason} · eine feste Schlusszeile",
+      time: "{total} · erstes Token {ttft}",
+      nothing: "nichts entfernt",
+      none: "keine",
+    },
     handoff: {
       ask: "Dieses Gespräch an das Kontaktformular übergeben?",
       yes: "ja",
