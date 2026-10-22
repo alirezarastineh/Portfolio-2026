@@ -30,6 +30,7 @@ import {
   type StepResults,
 } from "./answer-repair.js";
 import { raiseAlert } from "./audit.js";
+import { wasForgotten } from "./forget.js";
 import {
   answerShape,
   checkAnswer,
@@ -858,36 +859,40 @@ export function streamAnswer(request: AnswerRequest): {
     try {
       // The source names the feature that spent: the terminal, the playground, an eval.
       if (trace.calls.length) await recordUsage(trace.calls, request.source);
-      await logAnswer({
-        id: messageId,
-        sessionHash: request.sessionHash,
-        locale,
-        language,
-        source: request.source,
-        route: loggedRoute(details.answering?.answerOnly ?? false, route, escalated !== null),
-        routeReason: route.reason,
-        question: request.question,
-        answer: outcome.text,
-        citedIds: outcome.citedIds,
-        toolCalls: record.toolCalls.map((c) => c.name),
-        model: outcome.model,
-        attempts: trace.attempts,
-        ttftMs: trace.firstTokenAt === null ? null : trace.firstTokenAt - trace.startedAt,
-        totalMs: Date.now() - trace.startedAt,
-        tokens: details.tokens,
-        usd: outcome.usd,
-        finishReason: outcome.finishReason,
-        promptVersion: `${PROMPT_VERSION}+${PROMPT_HASH}`,
-        droppedAnswers: request.droppedAnswers ?? 0,
-        trace: outcome.steps,
-        droppedCitations: dropped,
-        // The documents it saw, exactly (`snapshotKey`), so a case frozen from it replays them.
-        corpusKey: snapshotKey(corpus),
-        checks: outcome.checks,
-      });
-      // The corpus this visitor's answer saw, kept so a case frozen from it
-      // re-runs against the same documents (playground drafts are not kept).
-      if (request.source === "terminal") await recordSnapshot(corpus);
+      // Its visitor had this session forgotten while it was being written (visitor plan V14):
+      // it is not logged. Its spend, an aggregate, still counts, and a leak still alerts.
+      if (!wasForgotten(request.sessionHash)) {
+        await logAnswer({
+          id: messageId,
+          sessionHash: request.sessionHash,
+          locale,
+          language,
+          source: request.source,
+          route: loggedRoute(details.answering?.answerOnly ?? false, route, escalated !== null),
+          routeReason: route.reason,
+          question: request.question,
+          answer: outcome.text,
+          citedIds: outcome.citedIds,
+          toolCalls: record.toolCalls.map((c) => c.name),
+          model: outcome.model,
+          attempts: trace.attempts,
+          ttftMs: trace.firstTokenAt === null ? null : trace.firstTokenAt - trace.startedAt,
+          totalMs: Date.now() - trace.startedAt,
+          tokens: details.tokens,
+          usd: outcome.usd,
+          finishReason: outcome.finishReason,
+          promptVersion: `${PROMPT_VERSION}+${PROMPT_HASH}`,
+          droppedAnswers: request.droppedAnswers ?? 0,
+          trace: outcome.steps,
+          droppedCitations: dropped,
+          // The documents it saw, exactly (`snapshotKey`), so a case frozen from it replays them.
+          corpusKey: snapshotKey(corpus),
+          checks: outcome.checks,
+        });
+        // The corpus this visitor's answer saw, kept so a case frozen from it
+        // re-runs against the same documents (playground drafts are not kept).
+        if (request.source === "terminal") await recordSnapshot(corpus);
+      }
     } catch (error) {
       console.error("[ask] could not record the answer", error);
       captureError(error, { phase: "ask-log" });

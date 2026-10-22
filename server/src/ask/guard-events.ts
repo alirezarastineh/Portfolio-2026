@@ -6,10 +6,11 @@ import { utcDay } from "./guard.js";
 
 /**
  * The requests the public assistant turned away, counted per UTC day and
- * kind: what the gate refused, which the answers table never sees. Counts
- * gather in memory and are written once a minute, so a flood of bad requests
- * costs one upsert per kind, not one write per request. A crash loses at most
- * a minute of counts.
+ * kind: what the gate refused, which the answers table never sees; and, as
+ * the same kind of aggregate, each conversation a visitor deleted (`forget`).
+ * Counts gather in memory and are written once a minute, so a flood of bad
+ * requests costs one upsert per kind, not one write per request. A crash
+ * loses at most a minute of counts.
  */
 
 export const GUARD_EVENT_KINDS = [
@@ -22,12 +23,16 @@ export const GUARD_EVENT_KINDS = [
   "resting",
   "rate_limited",
   "busy",
+  // Not a refusal: a visitor deleted what the log kept of their conversation (visitor plan V14).
+  "forgotten",
 ] as const;
 
 export type GuardEventKind = (typeof GUARD_EVENT_KINDS)[number];
 
 /** The kinds that are a request turned away: the public scorecard's refusals (visitor plan V13). */
-export const REFUSAL_KINDS: readonly GuardEventKind[] = GUARD_EVENT_KINDS;
+export const REFUSAL_KINDS: readonly GuardEventKind[] = GUARD_EVENT_KINDS.filter(
+  (kind) => kind !== "forgotten",
+);
 
 export interface GuardEventRow {
   day: string;

@@ -111,6 +111,19 @@ describe("the trust registry (plan phase 14)", () => {
     expect(entry?.enforcement).toMatch(/tools off/);
   });
 
+  it("lets a visitor delete only their own session's answers, on their own yes (visitor plan V14)", () => {
+    const entry = TRUST_REGISTRY.find((e) => e.action === "ask.forget");
+    expect(entry).toMatchObject({
+      actor: "visitor",
+      level: "L0",
+      approver: "visitor",
+      reversible: false,
+      built: true,
+    });
+    expect(entry?.enforcement).toMatch(/session-verified/);
+    expect(entry?.enforcement).toMatch(/that session's visitor answers only/);
+  });
+
   it("lets the nightly judge run only within its own fence (plan phase 26)", () => {
     const entry = TRUST_REGISTRY.find((e) => e.action === "judge.nightly");
     expect(entry).toMatchObject({ actor: "system", level: "L2", built: true });

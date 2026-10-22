@@ -17,8 +17,20 @@ export type TrustLevel = "L0" | "L1" | "L2" | "L3" | "human";
 export interface TrustEntry {
   /** What is done: a tool's name, or a feature's action. */
   action: string;
-  /** Who does it: `external` is an agent outside, over MCP (plan phase 32). */
-  actor: "assistant" | "copilot" | "insights" | "run" | "agent" | "system" | "admin" | "external";
+  /**
+   * Who does it: `external` is an agent outside, over MCP (plan phase 32); `visitor`, a
+   * visitor's own call on their own data (visitor plan V14).
+   */
+  actor:
+    | "assistant"
+    | "copilot"
+    | "insights"
+    | "run"
+    | "agent"
+    | "system"
+    | "admin"
+    | "external"
+    | "visitor";
   level: TrustLevel;
   /** Who approves each one: nobody (it acts within bounds), the visitor, the admin. */
   approver: "none" | "visitor" | "admin";
@@ -69,6 +81,16 @@ export const TRUST_REGISTRY: readonly TrustEntry[] = [
     approver: "visitor",
     enforcement:
       "The tool only acknowledges; the terminal asks yes or no (ask.store.ts answerHandoff), and the visitor sends the prefilled form",
+    reversible: false,
+    built: true,
+  },
+  {
+    action: "ask.forget",
+    actor: "visitor",
+    level: "L0",
+    approver: "visitor",
+    enforcement:
+      "route.ts /v1/ask/forget (visitor plan V14): only after the visitor's yes in the terminal (ask.store.ts answerForget); session-verified by the salted hashes of the tab's own session ids (the current one, and those before its resets, which only that tab holds), that session's visitor answers only, in one transaction with the insights runs' quotes of its questions (forget.ts, forget.db.spec.ts); per-address limits (guard.ts FORGET_RATE); counted as an aggregate (guard-events.ts `forgotten`), never whose",
     reversible: false,
     built: true,
   },

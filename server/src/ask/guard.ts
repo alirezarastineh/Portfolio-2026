@@ -240,6 +240,12 @@ export const MCP_RATE = { perHour: 120, perDay: 1_000 } as const;
  */
 export const SCORECARD_RATE = { perHour: 60, perDay: 300 } as const;
 
+/**
+ * `forget`'s limits per IP (visitor plan V14): a delete is rare and cheap, but
+ * one for each made-up session id would be a flood of them.
+ */
+export const FORGET_RATE = { perHour: 10, perDay: 30 } as const;
+
 /** An hourly and a daily limit on one per-address bucket. */
 async function checkBucket(
   bucket: string,
@@ -278,6 +284,19 @@ export async function recordScorecardRequest(ipHash: string): Promise<void> {
   await getDb()
     .insert(aiRateEvents)
     .values({ bucket: `scorecard:${ipHash}` });
+}
+
+export function checkForgetRate(
+  ipHash: string,
+  now = Date.now(),
+): Promise<{ ok: true } | { ok: false; retryAfter: number }> {
+  return checkBucket(`forget:${ipHash}`, FORGET_RATE, now);
+}
+
+export async function recordForgetRequest(ipHash: string): Promise<void> {
+  await getDb()
+    .insert(aiRateEvents)
+    .values({ bucket: `forget:${ipHash}` });
 }
 
 export async function pruneRateEvents(now = Date.now()): Promise<void> {

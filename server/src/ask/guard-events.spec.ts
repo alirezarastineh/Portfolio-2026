@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   countGuardEvent,
   flushGuardEvents,
+  GUARD_EVENT_KINDS,
   pendingGuardEvents,
+  REFUSAL_KINDS,
   type GuardEventRow,
 } from "./guard-events.js";
 
@@ -50,5 +52,11 @@ describe("guard events", () => {
       }),
     ).rejects.toThrow("database down");
     expect(pendingGuardEvents()).toEqual([{ day: "2026-09-30", kind: "busy", count: 2 }]);
+  });
+
+  it("counts a visitor's forget beside the refusals, never as one (visitor plan V13, V14)", () => {
+    expect(GUARD_EVENT_KINDS).toContain("forgotten");
+    expect(REFUSAL_KINDS).not.toContain("forgotten");
+    expect([...REFUSAL_KINDS, "forgotten"].sort()).toEqual([...GUARD_EVENT_KINDS].sort());
   });
 });
