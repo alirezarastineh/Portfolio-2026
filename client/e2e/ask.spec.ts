@@ -106,6 +106,38 @@ const INSPECTED = {
   flags: ["degraded"],
 };
 
+/** What `GET /v1/ask/scorecard` answers while published (visitor plan V13). */
+const SCORECARD = {
+  v: 1,
+  prompt: "ask-2026-10-22.1+982317ef9de8",
+  recorded: {
+    measured: true,
+    at: "2026-10-22T15:18:24.510Z",
+    cases: 84,
+    completed: 84,
+    passed: 76,
+    passRate: 76 / 84,
+    judge: "gemini-3.5-flash-lite",
+    categories: [
+      { name: "fact", cases: 18, completed: 18, passed: 14 },
+      { name: "page", cases: 5, completed: 5, passed: 5 },
+    ],
+  },
+  live: {
+    days: 30,
+    minimum: 20,
+    answers: 51,
+    unanswered: { share: 4 / 55, n: 55 },
+    citationsVerified: { share: 0.96, n: 40 },
+    repaired: { share: 0.02, n: 51 },
+    figuresFlagged: null,
+    firstWordMs: { median: 1_800, n: 30 },
+    refusals: { invalid_input: 16, rate_limited: 2 },
+  },
+  judge: null,
+  at: "2026-10-22T20:00:00.000Z",
+};
+
 const SEARCH_STEP: Chunk[] = [
   { type: "tool-input-start", toolCallId: "s1", toolName: "search_portfolio" },
   {
@@ -1051,6 +1083,62 @@ test.describe("assistant terminal", () => {
     const kept = await page.evaluate(() => sessionStorage.getItem("ask:v1") ?? "");
     expect(kept).toContain("From the second model.");
     expect(kept).not.toMatch(/failover|data-status/);
+  });
+
+  test("evals prints the published scorecard, and its last line asks how the assistant works (visitor plan V13)", async ({
+    page,
+  }) => {
+    const mock = await mockAsk(
+      page,
+      (route) => sse(route, answer({ text: "It answers from this site's content." })),
+      { scorecard: true },
+    );
+    const served: string[] = [];
+    await page.route("**/v1/ask/scorecard", async (route) => {
+      served.push(route.request().method());
+      await route.fulfill({ headers: cors, json: SCORECARD });
+    });
+    const prompt = await openPrompt(page);
+    const log = page.locator("#about [role=log]");
+    // The config has come: it says whether the scorecard is published.
+    await expect(page.locator("#about app-terminal-window header").first()).toContainText("online");
+
+    await run(prompt, "help");
+    await expect(log).toContainText("how well the assistant does: its tests and live checks");
+    await run(prompt, "evals");
+    await expect(log).toContainText("76 of 84 cases passed (90.5%)");
+    await expect(log).toContainText("fact 14/18 · page 5/5");
+    await expect(log).toContainText("every reference real in 96% of 40 answers that cite");
+    await expect(log).toContainText("figures");
+    await expect(log).toContainText("not enough answers yet");
+    await expect(log).toContainText("invalid_input 16 · rate_limited 2");
+    expect(served).toEqual(["GET"]);
+    expect(await axeViolations(page)).toEqual([]);
+
+    // Its last line asks the assistant, which answers from the system card.
+    await log.getByRole("button", { name: "how this assistant works ›" }).click();
+    await expect(log).toContainText("It answers from this site's content.");
+    expect(JSON.stringify(mock.bodies[0]!.messages)).toContain("How does this assistant work?");
+  });
+
+  test("unpublished, evals says so without asking, and help leaves it out (visitor plan V13)", async ({
+    page,
+  }) => {
+    await mockAsk(page, () => undefined, { scorecard: false });
+    let asked = 0;
+    await page.route("**/v1/ask/scorecard", async (route) => {
+      asked++;
+      await route.fulfill({ status: 404, headers: cors, json: { error: "not_published" } });
+    });
+    const prompt = await openPrompt(page);
+    const log = page.locator("#about [role=log]");
+    await expect(page.locator("#about app-terminal-window header").first()).toContainText("online");
+    await run(prompt, "help");
+    await expect(log).toContainText("inspect");
+    await expect(log).not.toContainText("how well the assistant does");
+    await run(prompt, "evals");
+    await expect(log).toContainText("The scorecard is not published.");
+    expect(asked).toBe(0);
   });
 
   test("the reader pages' server HTML has none of the ask buttons: the browser adds them", async ({

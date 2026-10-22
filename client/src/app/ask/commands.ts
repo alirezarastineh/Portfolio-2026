@@ -25,6 +25,7 @@ export type LocalCommand =
   | "level"
   | "stats"
   | "inspect"
+  | "evals"
   | "history"
   | "clear"
   | "reset"
@@ -52,6 +53,7 @@ export const COMMANDS = [
   "deep ",
   "stats",
   "inspect",
+  "evals",
   "history",
   "clear",
   "reset",
@@ -70,6 +72,7 @@ const EXACT: Record<string, LocalCommand> = {
   contact: "contact",
   stats: "stats",
   inspect: "inspect",
+  evals: "evals",
   history: "history",
   clear: "clear",
   reset: "reset",
@@ -145,12 +148,21 @@ export interface OutLine {
   href?: string;
   /** A site path the router can open, rather than a file or another site. */
   internal?: boolean;
+  /** A question the line asks when clicked: the terminal's own kind of link. */
+  ask?: string;
 }
 
-export function helpLines(copy: AskCopy, disclosure: string): OutLine[] {
+/** `help`; `evals` is listed only while the scorecard is published (visitor plan V13). */
+export function helpLines(
+  copy: AskCopy,
+  disclosure: string,
+  options: { scorecard?: boolean } = {},
+): OutLine[] {
+  const rows = [...copy.help.rows];
+  if (options.scorecard) rows.splice(rows.length - 1, 0, copy.help.evals);
   return [
     { text: copy.help.title, tone: "dim" },
-    ...copy.help.rows.map(([label, text]) => ({ label, text })),
+    ...rows.map(([label, text]) => ({ label, text })),
     { text: copy.help.footer },
     { text: disclosure, tone: "dim" },
   ];

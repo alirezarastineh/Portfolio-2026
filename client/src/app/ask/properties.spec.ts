@@ -237,7 +237,17 @@ describe("the shell", () => {
     // A command word followed by more words than it takes: a question, as typed.
     const tooMany = fc.oneof(
       fc.tuple(
-        fc.constantFrom("help", "whoami", "cv", "contact", "stats", "inspect", "history", "clear"),
+        fc.constantFrom(
+          "help",
+          "whoami",
+          "cv",
+          "contact",
+          "stats",
+          "inspect",
+          "evals",
+          "history",
+          "clear",
+        ),
         fc.array(prose, { minLength: 1, maxLength: 5 }),
       ),
       fc.tuple(fc.constant("cat"), fc.array(prose, { minLength: 2, maxLength: 5 })),
@@ -266,6 +276,7 @@ describe("the shell", () => {
       "contact",
       "stats",
       "inspect",
+      "evals",
       "history",
       "clear",
       "reset",

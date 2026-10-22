@@ -15,7 +15,9 @@ export type AskEvent =
   | "ask_stop"
   | "ask_copy"
   // How an answer was made, asked for (visitor plan V12).
-  | "ask_inspect";
+  | "ask_inspect"
+  // The public scorecard, read (visitor plan V13).
+  | "ask_evals";
 
 export function track(event: AskEvent, data?: Record<string, string>): void {
   try {

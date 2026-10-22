@@ -47,6 +47,7 @@ import { confirmHandoff } from "./handoff-confirm";
 import { handoffSummary } from "./handoff-offer";
 import { fetchInspect, inspectLines, linesText } from "./inspect";
 import { failoverLine } from "./receipt";
+import { fetchScorecard, scorecardLines } from "./scorecard";
 import {
   helpLines,
   offlineLines,
@@ -636,6 +637,30 @@ export const AskStore = signalStore(
       show(input, lines, linesText(input, store._lang.t().about.terminalPrompt, lines));
     }
 
+    /** `evals` (visitor plan V13): the public scorecard, while the admin publishes it. */
+    async function handleEvals(input: string): Promise<void> {
+      const copy = store.copy();
+      if (store.remote()?.scorecard === false) {
+        show(input, [{ text: copy.evals.off, tone: "dim" }]);
+        return;
+      }
+      track("ask_evals");
+      const result = await fetchScorecard(() => fetch(`${apiBaseUrl()}/v1/ask/scorecard`));
+      if (result.ok) {
+        show(input, scorecardLines(result.card, copy, locale()));
+      } else if (result.reason === "limited") {
+        show(input, [
+          { text: fmt(copy.errors.rateLimited, { s: result.retryAfter }), tone: "error" },
+        ]);
+      } else {
+        show(input, [
+          result.reason === "off"
+            ? { text: copy.evals.off, tone: "dim" }
+            : { text: copy.evals.failed, tone: "error" },
+        ]);
+      }
+    }
+
     function handleHistory(input: string): void {
       const copy = store.copy();
       const past = store.history().slice(0, -1);
@@ -676,7 +701,12 @@ export const AskStore = signalStore(
       const l = locale();
       switch (parsed.name) {
         case "help":
-          show(input, helpLines(copy, store._lang.t().ask.disclosure));
+          show(
+            input,
+            helpLines(copy, store._lang.t().ask.disclosure, {
+              scorecard: store.remote()?.scorecard === true,
+            }),
+          );
           break;
         case "whoami":
           show(input, whoamiLines(c, l, copy));
@@ -717,6 +747,9 @@ export const AskStore = signalStore(
           break;
         case "inspect":
           void inspectAnswer(input);
+          break;
+        case "evals":
+          void handleEvals(input);
           break;
         case "history":
           handleHistory(input);

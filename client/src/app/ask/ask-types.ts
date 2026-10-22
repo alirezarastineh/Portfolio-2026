@@ -113,4 +113,6 @@ export interface RemoteConfig {
   suggestions: Record<string, string[]>;
   limits: { maxChars: number; historyTurns: number };
   model: string;
+  /** Whether the scorecard is published (visitor plan V13); absent from an older API. */
+  scorecard?: boolean;
 }

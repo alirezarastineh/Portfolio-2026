@@ -1,9 +1,9 @@
-import { ChangeDetectionStrategy, Component, inject, input } from "@angular/core";
+import { ChangeDetectionStrategy, Component, inject, input, output } from "@angular/core";
 import { Router } from "@angular/router";
 
 import type { OutLine } from "./commands";
 
-/** What a shell command printed: plain lines, two-column rows, links. */
+/** What a shell command printed: plain lines, two-column rows, links, and lines that ask. */
 @Component({
   selector: "app-ask-lines",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -12,12 +12,14 @@ import type { OutLine } from "./commands";
   template: `
     @for (line of lines(); track $index) {
       <!-- prettier-ignore -->
-      <p class="m-0 whitespace-pre-wrap wrap-break-word" [class]="toneClass(line)">@if (line.label) {<span class="inline-block min-w-[16ch] pr-3 text-accent-orange">{{ line.label }}</span>}@if (line.href) {<a class="underline decoration-border underline-offset-4 hover:decoration-accent-orange" [href]="line.href" (click)="follow($event, line)">{{ line.text }}</a>} @else {<ng-container>{{ line.text }}</ng-container>}</p>
+      <p class="m-0 whitespace-pre-wrap wrap-break-word" [class]="toneClass(line)">@if (line.label) {<span class="inline-block min-w-[16ch] pr-3 text-accent-orange">{{ line.label }}</span>}@if (line.ask) {<button type="button" class="min-h-6 cursor-pointer text-left text-accent-orange underline decoration-border underline-offset-4 hover:decoration-accent-orange" (click)="ask.emit(line.ask)">{{ line.text }}</button>} @else if (line.href) {<a class="underline decoration-border underline-offset-4 hover:decoration-accent-orange" [href]="line.href" (click)="follow($event, line)">{{ line.text }}</a>} @else {<ng-container>{{ line.text }}</ng-container>}</p>
     }
   `,
 })
 export class AskLinesComponent {
   readonly lines = input.required<OutLine[]>();
+  /** A line's question, asked (the system card's line in `evals`, visitor plan V13). */
+  readonly ask = output<string>();
   private readonly router = inject(Router);
 
   protected toneClass(line: OutLine): string {

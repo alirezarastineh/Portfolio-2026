@@ -76,7 +76,11 @@ const MAX_INPUT_LINES = 6;
             <!-- prettier-ignore -->
             <p class="m-0 flex flex-wrap items-baseline gap-x-2"><span class="text-accent-orange" aria-hidden="true">{{ prompt() }}</span><span class="sr-only">{{ copy().you }}:</span><span class="min-w-0 whitespace-pre-wrap wrap-break-word text-foreground">{{ entry.input }}</span>@if (entry.kind === "ask" && entry.about) {<span class="min-w-0 wrap-break-word text-muted-foreground">· {{ entry.about.label }}</span>}</p>
             @if (entry.kind === "local") {
-              <app-ask-lines [class.pb-3]="!entry.copy" [lines]="entry.lines" />
+              <app-ask-lines
+                [class.pb-3]="!entry.copy"
+                [lines]="entry.lines"
+                (ask)="send($event)"
+              />
               <!-- Output worth keeping (inspect's timeline, visitor plan V12) can be copied whole. -->
               @if (entry.copy; as text) {
                 <button

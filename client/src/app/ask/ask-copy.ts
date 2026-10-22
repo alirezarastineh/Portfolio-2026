@@ -15,7 +15,8 @@ export interface Counted {
  */
 export interface AskCopy {
   inputLabel: string;
-  help: { title: string; rows: [string, string][]; footer: string };
+  /** `evals`' row is listed only while the scorecard is published (visitor plan V13). */
+  help: { title: string; rows: [string, string][]; evals: [string, string]; footer: string };
   thinking: string;
   stopHint: string;
   interrupted: string;
@@ -120,6 +121,43 @@ export interface AskCopy {
     nothing: string;
     none: string;
   };
+  /** `evals` (visitor plan V13): the public scorecard, `{rate}` a share, `{n}` its answers. */
+  evals: {
+    off: string;
+    failed: string;
+    /** `{prompt}`. */
+    head: string;
+    labels: {
+      recorded: string;
+      /** `{days}`. */
+      live: string;
+      citations: string;
+      repaired: string;
+      figures: string;
+      firstWord: string;
+      refusals: string;
+      judge: string;
+    };
+    /** `{date}`, `{passed}`, `{completed}`, `{rate}`, `{judge}`. */
+    recorded: string;
+    /** `{reason}`: the waiver's. */
+    notMeasured: string;
+    notMeasuredBare: string;
+    /** `{n}` answers; `{n}`, `{rate}` unanswered. */
+    answers: string;
+    unanswered: string;
+    citations: string;
+    repaired: string;
+    figures: string;
+    /** `{time}`, `{n}`. */
+    firstWord: string;
+    judge: string;
+    notEnough: string;
+    none: string;
+    /** The line that asks for the system card, and its question. */
+    systemCard: string;
+    systemCardQuestion: string;
+  };
   handoff: { ask: string; yes: string; no: string; done: string; declined: string };
   opening: string;
   tool: {
@@ -181,6 +219,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         ["inspect", "how the last answer was made: its steps and checks"],
         ["history · clear · reset", "as in any shell"],
       ],
+      evals: ["evals", "how well the assistant does: its tests and live checks"],
       footer: "Anything else is a question for the AI assistant.",
     },
     thinking: "thinking…",
@@ -292,6 +331,35 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       nothing: "nothing removed",
       none: "none",
     },
+    evals: {
+      off: "The scorecard is not published.",
+      failed: "Could not load the scorecard just now.",
+      head: "evals · how the assistant does · prompt {prompt}",
+      labels: {
+        recorded: "recorded run",
+        live: "last {days} days",
+        citations: "citations",
+        repaired: "repaired",
+        figures: "figures",
+        firstWord: "first word",
+        refusals: "turned away",
+        judge: "judge",
+      },
+      recorded: "{date} · {passed} of {completed} cases passed ({rate}) · judged by {judge}",
+      notMeasured: "this version is not measured yet: {reason}",
+      notMeasuredBare: "this version is not measured yet",
+      answers: "{n} answers to visitors",
+      unanswered: "{n} unanswered ({rate})",
+      citations: "every reference real in {rate} of {n} answers that cite",
+      repaired: "{rate} written again: the first try had no words",
+      figures: "{rate} state a figure no cited source holds",
+      firstWord: "median {time} in visitors' browsers ({n} answers)",
+      judge: "median faithfulness {rate} in a nightly sample of {n} answers",
+      notEnough: "not enough answers yet",
+      none: "none",
+      systemCard: "how this assistant works ›",
+      systemCardQuestion: "How does this assistant work?",
+    },
     handoff: {
       ask: "Hand this conversation to the contact form?",
       yes: "yes",
@@ -359,6 +427,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         ["inspect", "wie die letzte Antwort entstand: Schritte und Prüfungen"],
         ["history · clear · reset", "wie in jeder Shell"],
       ],
+      evals: ["evals", "wie gut der Assistent ist: Tests und laufende Prüfungen"],
       footer: "Alles andere ist eine Frage an den KI-Assistenten.",
     },
     thinking: "denkt nach…",
@@ -471,6 +540,36 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       time: "{total} · erstes Token {ttft}",
       nothing: "nichts entfernt",
       none: "keine",
+    },
+    evals: {
+      off: "Die Leistungsübersicht ist nicht veröffentlicht.",
+      failed: "Die Leistungsübersicht ließ sich gerade nicht laden.",
+      head: "evals · wie gut der Assistent ist · Prompt {prompt}",
+      labels: {
+        recorded: "Testlauf",
+        live: "letzte {days} Tage",
+        citations: "Quellen",
+        repaired: "repariert",
+        figures: "Zahlen",
+        firstWord: "erstes Wort",
+        refusals: "abgewiesen",
+        judge: "Bewerter",
+      },
+      recorded:
+        "{date} · {passed} von {completed} Fällen bestanden ({rate}) · bewertet von {judge}",
+      notMeasured: "diese Version ist noch nicht gemessen: {reason}",
+      notMeasuredBare: "diese Version ist noch nicht gemessen",
+      answers: "{n} Antworten an Besucher",
+      unanswered: "{n} ohne Antwort ({rate})",
+      citations: "jeder Verweis echt in {rate} von {n} Antworten mit Quellen",
+      repaired: "{rate} neu geschrieben: der erste Versuch blieb ohne Text",
+      figures: "{rate} nennen eine Zahl, die keine zitierte Quelle enthält",
+      firstWord: "Median {time} im Browser der Besucher ({n} Antworten)",
+      judge: "Median der Quellentreue {rate} in einer nächtlichen Stichprobe von {n} Antworten",
+      notEnough: "noch nicht genug Antworten",
+      none: "keine",
+      systemCard: "wie dieser Assistent funktioniert ›",
+      systemCardQuestion: "Wie funktioniert dieser Assistent?",
     },
     handoff: {
       ask: "Dieses Gespräch an das Kontaktformular übergeben?",
