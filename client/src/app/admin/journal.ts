@@ -306,7 +306,8 @@ export const REFUSALS: Record<string, string> = {
   reserve_reached: "Today's spend reached the share kept for visitors.",
   assistant_resting: "Today's budget is spent.",
   already_running: "Another paid run is going; try once it ends.",
-  answer_gone: "The answer was pruned: there is no question left to replay.",
+  answer_gone:
+    "The answer is gone, deleted by the visitor or pruned: there is no question left to replay.",
   not_replayable: "A fixed or retired entry is not replayed.",
   no_chain: "No chain is configured to replay on.",
 };

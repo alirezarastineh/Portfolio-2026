@@ -98,6 +98,8 @@ describe("assistant signals", () => {
       { day: "2026-09-29", kind: "busy", count: 1 },
       { day: "2026-09-30", kind: "honeypot", count: 2 },
       { day: "2026-09-30", kind: "rate_limited", count: 5 },
+      // A visitor's forget (visitor plan V14) is counted beside the refusals, never as one.
+      { day: "2026-09-30", kind: "forgotten", count: 3 },
     ];
     expect(refusalsByDay(rows)).toEqual([
       { day: "2026-09-30", total: 7, kinds: "rate_limited 5 · honeypot 2" },

@@ -103,10 +103,18 @@ export interface RefusalDay {
   kinds: string;
 }
 
+/**
+ * A guard event that is no refusal: a visitor deleted their conversation
+ * (`forget`, visitor plan V14), counted beside the refusals, never as one.
+ */
+const NOT_REFUSED = new Set(["forgotten"]);
+
 /** Requests turned away, per day, newest first. */
 export function refusalsByDay(rows: readonly GuardEventRow[]): RefusalDay[] {
   const days = new Map<string, GuardEventRow[]>();
-  for (const row of rows) days.set(row.day, [...(days.get(row.day) ?? []), row]);
+  for (const row of rows) {
+    if (!NOT_REFUSED.has(row.kind)) days.set(row.day, [...(days.get(row.day) ?? []), row]);
+  }
   return [...days]
     .map(([day, kinds]) => ({
       day,
@@ -122,7 +130,9 @@ export function refusalsByDay(rows: readonly GuardEventRow[]): RefusalDay[] {
 /** Totals per kind over the period, most frequent first. */
 export function refusalTotals(rows: readonly GuardEventRow[]): { kind: string; count: number }[] {
   const totals = new Map<string, number>();
-  for (const row of rows) totals.set(row.kind, (totals.get(row.kind) ?? 0) + row.count);
+  for (const row of rows) {
+    if (!NOT_REFUSED.has(row.kind)) totals.set(row.kind, (totals.get(row.kind) ?? 0) + row.count);
+  }
   return [...totals]
     .map(([kind, n]) => ({ kind, count: n }))
     .sort((a, b) => b.count - a.count || a.kind.localeCompare(b.kind));

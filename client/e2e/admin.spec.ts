@@ -3257,6 +3257,27 @@ test.describe("admin", () => {
     expect(unmocked).toEqual([]);
   });
 
+  test("the Journal says when an entry's answer is gone: deleted by the visitor, or pruned (visitor plan V14)", async ({
+    page,
+    baseURL,
+  }) => {
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/journal": {
+        entries: [journalEntry({ message: null })],
+        counts: { proposed: 1, accepted: 0, fixed: 0, retired: 0 },
+      },
+    });
+    await openAdmin(page, "/admin/assistant");
+    await page.getByRole("tab", { name: "Journal" }).click();
+    const journal = page.getByRole("region", { name: "Failure journal" });
+    await expect(
+      journal.getByText(/The answer is gone, deleted by the visitor or pruned after 90 days/),
+    ).toBeVisible();
+    // The diagnosis stays.
+    await expect(journal.getByText(/Evidence · \d+ hypotheses/)).toBeVisible();
+    expect(unmocked).toEqual([]);
+  });
+
   test("the Journal promotes three decided entries to a lesson, applies it and shows its effect", async ({
     page,
     baseURL,

@@ -103,7 +103,7 @@ const DECISIONS: Record<JournalStatus, string> = {
         @if (e.message) {
           “{{ e.message.question }}” · {{ e.message.id }}
         } @else {
-          The answer was pruned (after 90 days); the diagnosis stays.
+          The answer is gone, deleted by the visitor or pruned after 90 days; the diagnosis stays.
         }
       </p>
 
