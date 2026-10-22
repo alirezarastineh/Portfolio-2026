@@ -2,6 +2,7 @@ import { smoothStream, type StreamTextTransform, type TextStreamPart, type ToolS
 
 import type { Locale } from "../content/schema.js";
 import { resolveDocument, type AskCorpus } from "./corpus/index.js";
+import { withoutFence } from "./prompt.js";
 import { searchResult, toolOutcome, type ToolOutcome } from "./tools.js";
 
 /**
@@ -101,6 +102,41 @@ export function citationTransform<TOOLS extends ToolSet>(options: {
         }
         if (part.type === "text-end") {
           handleTextEnd(part.id, out);
+        }
+        out.enqueue(part);
+      },
+    });
+  };
+}
+
+/** A tail that may still grow into a fence tag (prompt.ts): `<`, `</vis`, `<visitor locale="d`. */
+const FENCE_TAIL = /<\/?(?:visitor(?:\s[^<>]{0,60})?|visito|visit|visi|vis|vi|v)?$/i;
+
+/**
+ * The visitor fence never belongs in an answer (visitor plan V5's follow-up):
+ * a model that echoes the visitor's message back writes it with its tags,
+ * which only the instructions explain. They are removed as the text streams:
+ * what is held is cleaned with each new chunk, and a tail that could still
+ * become a tag waits until it closes or cannot be one. The words between the
+ * tags stay: the verifier reads an echo for what it is.
+ */
+export function fenceTransform<TOOLS extends ToolSet>(): StreamTextTransform<TOOLS> {
+  return () => {
+    const pending = new Map<string, string>();
+    return new TransformStream<TextStreamPart<TOOLS>, TextStreamPart<TOOLS>>({
+      transform(part, out) {
+        if (part.type === "text-delta") {
+          const text = withoutFence((pending.get(part.id) ?? "") + part.text);
+          const cut = FENCE_TAIL.exec(text)?.index ?? text.length;
+          pending.set(part.id, text.slice(cut));
+          const ready = text.slice(0, cut);
+          if (ready) out.enqueue({ ...part, text: ready });
+          return;
+        }
+        if (part.type === "text-end") {
+          const rest = pending.get(part.id);
+          pending.delete(part.id);
+          if (rest) out.enqueue({ type: "text-delta", id: part.id, text: rest });
         }
         out.enqueue(part);
       },

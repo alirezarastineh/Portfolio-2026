@@ -236,6 +236,21 @@ export function wrapVisitor(text: string, locale: Locale): string {
   return `<visitor locale="${locale}">${escaped}</visitor>`;
 }
 
+/** The fence's tags as an answer may echo them: `<visitor locale="de">`, `</visitor>`. */
+const FENCE = /<\/?visitor(?:\s[^<>]{0,60})?>/gi;
+
+/**
+ * A text without the fence's tags, removed until none is left: the pieces
+ * around one can make another. The fence never belongs in an answer.
+ */
+export function withoutFence(text: string): string {
+  for (let rest = text; ;) {
+    const next = rest.replace(FENCE, "");
+    if (next === rest) return rest;
+    rest = next;
+  }
+}
+
 /**
  * Every fixed text this file gives the model: the system prompt, what the
  * builders add around the corpus and the visitor's words, rendered once for

@@ -88,6 +88,7 @@ import { ESCALATED_ROUTE, escalationOf, type Escalation, type RouteDecision } fr
 import {
   answerText,
   citationTransform,
+  fenceTransform,
   newAnswerRecord,
   recorderTransform,
   smoothText,
@@ -555,12 +556,13 @@ export function streamAnswer(request: AnswerRequest): {
   const guard = guardFor(corpus, config, request.systemPrompt);
 
   /**
-   * The answer's words go through the same layers whoever writes them: the
-   * citations checked, then the output guard (the sandwich's output layer),
-   * then the pacing, which thoughts (the admin's answers only) go round, then
-   * the recorder.
+   * The answer's words go through the same layers whoever writes them: an
+   * echoed visitor fence dropped, the citations checked, then the output guard
+   * (the sandwich's output layer), then the pacing, which thoughts (the
+   * admin's answers only) go round, then the recorder.
    */
   const transforms = (into: AnswerRecord) => [
+    fenceTransform<AskTools>(),
     citationTransform<AskTools>({ corpus, locale: reading, cited, dropped }),
     leakGuardTransform<AskTools>(guard, leaks, echoOf(request.question)),
     ...smoothText<AskTools>(),
@@ -619,7 +621,7 @@ export function streamAnswer(request: AnswerRequest): {
       );
     }
     if (own.reasoning && record.reasoning !== null) record.reasoning += own.reasoning;
-    const words = answerShape(record).words;
+    const words = answerShape(record, request.question).words;
     repair = { reason, by: words || end === "cancelled" ? "model" : "fixed-line" };
     if (end === "cancelled" || own.aborted) {
       record.aborted = true;
@@ -674,7 +676,7 @@ export function streamAnswer(request: AnswerRequest): {
         },
       );
       if (end !== "done") return;
-      const reason = repairReason(answerShape(record));
+      const reason = repairReason(answerShape(record, request.question));
       if (reason) {
         agentCalls = trace.calls.length;
         await repairAnswer(writer, reason, await stepsOf(result));

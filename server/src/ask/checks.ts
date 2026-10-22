@@ -3,7 +3,7 @@ import { NOT_IN_PORTFOLIO, PROMPT_LEAKS } from "./answer-patterns.js";
 import { numbersOf, type Figure } from "./figures.js";
 import { detectLanguage } from "./language.js";
 import { KEY_SHAPES } from "./leak-guard.js";
-import { PROMPT_CANARY } from "./prompt.js";
+import { PROMPT_CANARY, withoutFence } from "./prompt.js";
 import type { AnswerRecord } from "./stream-transforms.js";
 
 /**
@@ -279,33 +279,73 @@ export function checkAnswer(input: CheckInput): AnswerChecks {
 
 /**
  * What the verifier reads of an answer as the agent left it (visitor plan V5): whether it has
- * words (the prose rule above: its text less the citation markers), which acting tools it called,
- * and how it ended. Pure, and code the model cannot change.
+ * words of its own (the prose rule above: its text less the citation markers), which acting
+ * tools it called, and how it ended. Pure, and code the model cannot change.
  */
 export interface AnswerShape {
+  /** Words of its own: not none, not the visitor's question echoed back, not a stub. */
   words: boolean;
+  /**
+   * Text that holds no answer (both seen in the recorded eval run of 2026-10-22): the visitor's
+   * own question echoed back, fence and all, or a stub of a word or two, uncited and unfinished
+   * ("Alire").
+   */
+  hollow?: "echo" | "stub";
   actions: ("navigate" | "handoff_contact")[];
   ending: "finished" | "filtered" | "failed";
 }
+
+/** The most words a stub has: an answer this short, uncited and without a sentence end, is one. */
+const STUB_WORDS = 2;
+/** A sentence's end, perhaps inside a closing quote or bracket. */
+const SENTENCE_END = /[.!?…]["'”’»)\]]*$/u;
+
+/** A text's words, as the verifier reads them: no fence, no markers, on one line. */
+const proseOf = (text: string) =>
+  withoutFence(text).replace(MARKERS, " ").replace(/\s+/g, " ").trim();
+
+/** A text as an echo is compared: its words, lower case, no end mark. */
+const echoForm = (text: string) =>
+  proseOf(text)
+    .toLowerCase()
+    .replace(/(?:^|(?<=[^.!?…\s]))[.!?…\s]+$/u, "");
 
 export function answerShape(
   record: Pick<
     AnswerRecord,
     "textOrder" | "texts" | "toolCalls" | "finishReason" | "error" | "aborted"
   >,
+  /** The visitor's latest message: an answer part that only repeats it is none of its own. */
+  question = "",
 ): AnswerShape {
-  const text = record.textOrder.map((id) => record.texts.get(id) ?? "").join(" ");
+  const parts = record.textOrder.map((id) => record.texts.get(id) ?? "");
+  const asked = echoForm(question);
+  const echoed = (part: string) => asked !== "" && echoForm(part) === asked;
+  const own = parts.filter((part) => !echoed(part)).join(" ");
+  const prose = proseOf(own);
+  const stub =
+    prose !== "" &&
+    prose.split(" ").length <= STUB_WORDS &&
+    !HAS_MARKER.test(own) &&
+    !SENTENCE_END.test(prose);
+  let hollow: AnswerShape["hollow"];
+  if (stub) hollow = "stub";
+  else if (!prose && parts.some(echoed)) hollow = "echo";
+
   const actions = [...new Set(record.toolCalls.map((call) => call.name))].filter(
     (name): name is AnswerShape["actions"][number] => ACTIONS.has(name),
   );
   let ending: AnswerShape["ending"] = "finished";
   if (record.error || record.aborted) ending = "failed";
   else if (record.finishReason === "content-filter") ending = "filtered";
-  return { words: text.replace(MARKERS, "").trim().length > 0, actions, ending };
+  return { words: prose !== "" && !stub, ...(hollow ? { hollow } : {}), actions, ending };
 }
 
-/** Why an answer is repaired: no words at all, or a hand-off offered with none. */
-export type RepairReason = "no-words" | "handoff-without-words";
+/**
+ * Why an answer is repaired: no words at all, a hand-off offered with none, the visitor's
+ * question echoed back, or a stub.
+ */
+export type RepairReason = "no-words" | "handoff-without-words" | "echo" | "stub";
 
 /**
  * Whether an answer needs its one repair, and why. Never one with words, nor one that failed,
@@ -316,5 +356,6 @@ export function repairReason(shape: AnswerShape): RepairReason | null {
   if (shape.words || shape.ending !== "finished" || shape.actions.includes("navigate")) {
     return null;
   }
-  return shape.actions.includes("handoff_contact") ? "handoff-without-words" : "no-words";
+  if (shape.actions.includes("handoff_contact")) return "handoff-without-words";
+  return shape.hollow ?? "no-words";
 }

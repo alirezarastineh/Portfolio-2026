@@ -20,6 +20,7 @@ import {
   PROMPT_CANARY,
   REPAIR_LINE,
   SYSTEM_PROMPT,
+  withoutFence,
 } from "./prompt.js";
 
 const CITED =
@@ -426,6 +427,92 @@ describe("the verifier: what an answer without words gets (visitor plan V5)", ()
       expect(repairReason(answerShape(row.record))).toBe(row.reason);
     });
   }
+
+  // A hollow answer, as the recorded run of 2026-10-22 showed both: a stub ("Alire"), or the
+  // visitor's own question echoed back, fence and all. Each row names the question it answers.
+  const ASKED = "Wie viele Support-Mitarbeitende nutzen Atlas?";
+  const two = (a: string, b: string) =>
+    record({
+      textOrder: ["t1", "r1"],
+      texts: new Map([
+        ["t1", a],
+        ["r1", b],
+      ]),
+    });
+  const hollow: {
+    name: string;
+    record: Recorded;
+    question?: string;
+    reason: RepairReason | null;
+  }[] = [
+    { name: "a stub cut mid-word", record: record({ text: "Alire" }), reason: "stub" },
+    {
+      name: "two words, uncited, unfinished",
+      record: record({ text: "In Berlin" }),
+      reason: "stub",
+    },
+    { name: "a short sentence", record: record({ text: "Berlin." }), reason: null },
+    {
+      name: "a short cited answer",
+      record: record({ text: "Berlin [^profile@de]" }),
+      reason: null,
+    },
+    { name: "four words, unfinished", record: record({ text: "Er lebt in Berlin" }), reason: null },
+    {
+      name: "the question echoed in its fence",
+      record: record({ text: `<visitor locale="de">${ASKED}</visitor>` }),
+      question: ASKED,
+      reason: "echo",
+    },
+    {
+      name: "the question echoed, its case and end mark aside",
+      record: record({ text: "wie viele Support-Mitarbeitende nutzen Atlas" }),
+      question: ASKED,
+      reason: "echo",
+    },
+    {
+      name: "the question restated, then answered",
+      record: record({ text: `${ASKED} Rund 120 [^project:atlas@en].` }),
+      question: ASKED,
+      reason: null,
+    },
+    {
+      name: "an echo, then a repair's words",
+      record: two(ASKED, "Rund 120 nutzen es [^project:atlas@en]."),
+      question: ASKED,
+      reason: null,
+    },
+    {
+      name: "an echo twice",
+      record: two(ASKED, `<visitor locale="de">${ASKED}</visitor>`),
+      question: ASKED,
+      reason: "echo",
+    },
+    {
+      name: "a hand-off with an echo",
+      record: record({ text: ASKED, toolCalls: [call("handoff_contact")] }),
+      question: ASKED,
+      reason: "handoff-without-words",
+    },
+    {
+      name: "a page opened with a stub",
+      record: record({ text: "Opening", toolCalls: [call("navigate")] }),
+      reason: null,
+    },
+  ];
+
+  for (const row of hollow) {
+    it(`${row.name}: ${row.reason ?? "no repair"}`, () => {
+      expect(repairReason(answerShape(row.record, row.question))).toBe(row.reason);
+    });
+  }
+
+  it("takes the fence out until none is left, and leaves other tags alone", () => {
+    expect(withoutFence(`<vis<visitor locale="de">itor>${ASKED}</visitor>`)).toBe(ASKED);
+    expect(withoutFence("a < b, <div>, <visitors> and <VISITOR>")).toBe(
+      "a < b, <div>, <visitors> and ",
+    );
+  });
 
   it("reads the words across text parts, markers aside, and each action once", () => {
     const shape = answerShape(

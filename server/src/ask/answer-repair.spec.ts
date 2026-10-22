@@ -245,6 +245,44 @@ describe("an answer without words gets one repair (visitor plan V5)", () => {
     expect(outcome.steps?.steps.at(-1)?.model).toBeNull();
   });
 
+  it("an echo of the question loses its fence and counts as no words: repaired", async () => {
+    const question = "Where is he based?";
+    const { chunks, outcome, calls } = await answer(
+      scripted([
+        // The fence split across chunks, as a model may stream it.
+        [
+          { type: "stream-start", warnings: [] },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: '<visitor locale="en">Where is ' },
+          { type: "text-delta", id: "t1", delta: "he based?</visi" },
+          { type: "text-delta", id: "t1", delta: "tor>" },
+          { type: "text-end", id: "t1" },
+          finish("stop"),
+        ],
+        textTurn("He is based in Berlin [^profile@en]."),
+      ]),
+      { question },
+    );
+    expect(calls).toHaveLength(2);
+    expect(outcome.repair).toEqual({ reason: "echo", by: "model" });
+    expect(outcome.text).toBe(`${question}\n\nHe is based in Berlin [^profile@en].`);
+    expect(JSON.stringify(chunks)).not.toContain("visitor");
+  });
+
+  it("a stub of a word, uncited and unfinished, is repaired; a short sentence is not", async () => {
+    const stub = await answer(
+      scripted([textTurn("Alire"), textTurn("He is based in Berlin [^profile@en].")]),
+      { question: "Where is he based?" },
+    );
+    expect(stub.outcome.repair).toEqual({ reason: "stub", by: "model" });
+    expect(stub.outcome.text).toBe("Alire\n\nHe is based in Berlin [^profile@en].");
+
+    resetBreakers();
+    const short = await answer(scripted([textTurn("Berlin.")]), { question: "Where is he based?" });
+    expect(short.calls).toHaveLength(1);
+    expect(short.outcome.repair).toBeNull();
+  });
+
   it("the repair's text parts never reuse the agent's ids: each word is signed once", async () => {
     // The agent's part "t1" holds only an invented marker (removed); the repair's is "t1" too.
     const { chunks, outcome } = await answer(

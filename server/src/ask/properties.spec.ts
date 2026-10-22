@@ -56,9 +56,9 @@ import {
   tryAcquire,
 } from "./models/circuit.js";
 import { createFallbackModel, newTrace } from "./models/fallback.js";
-import { PROMPT_CANARY, REPAIR_LEAD, SYSTEM_PROMPT, wrapVisitor } from "./prompt.js";
+import { PROMPT_CANARY, REPAIR_LEAD, SYSTEM_PROMPT, withoutFence, wrapVisitor } from "./prompt.js";
 import { DEFAULT_SETTINGS, type AiSettings } from "./settings.js";
-import { citationTransform } from "./stream-transforms.js";
+import { citationTransform, fenceTransform } from "./stream-transforms.js";
 import { countTokens } from "./tokens.js";
 import { allowedPath } from "./tools.js";
 
@@ -219,6 +219,67 @@ async function chunkByChunk(chunks: string[]) {
   return { text, sources, dropped };
 }
 
+/* ---------------------------------------------------------------- fence */
+
+/** The visitor fence's tags, and what the transform must never let through. */
+const FENCE_TAG = /<\/?visitor(?:\s[^<>]{0,60})?>/i;
+
+async function throughFence(chunks: string[]): Promise<string> {
+  const parts: TextStreamPart<ToolSet>[] = [
+    { type: "text-start", id: "t" },
+    ...chunks.map((text) => ({ type: "text-delta" as const, id: "t", text })),
+    { type: "text-end", id: "t" },
+  ];
+  const input = new ReadableStream<TextStreamPart<ToolSet>>({
+    start(c) {
+      for (const p of parts) c.enqueue(p);
+      c.close();
+    },
+  });
+  const out = await drain(input.pipeThrough(fenceTransform()({ tools: {}, stopStream: () => {} })));
+  return out.map((p) => (p.type === "text-delta" ? p.text : "")).join("");
+}
+
+/** Text with the fence's pieces in it on purpose: tags, their fragments, and tags like them. */
+const fencedText = fc
+  .tuple(
+    fc.array(
+      fc.oneof(
+        { weight: 3, arbitrary: fc.stringMatching(/^[A-Za-z ?.]{0,8}$/) },
+        {
+          weight: 2,
+          arbitrary: fc.constantFrom(
+            '<visitor locale="de">',
+            '<visitor locale="en">',
+            "</visitor>",
+            "<visitor>",
+            '<VISITOR locale="de">',
+          ),
+        },
+        {
+          weight: 2,
+          arbitrary: fc.constantFrom(
+            "<",
+            "</",
+            "<vis",
+            "itor>",
+            ">",
+            "/",
+            "<visitors>",
+            "<div>",
+            "a < b",
+          ),
+        },
+      ),
+      { maxLength: 12 },
+    ),
+    fc.array(fc.nat(), { maxLength: 8 }),
+  )
+  .map(([segments, points]) => {
+    const text = segments.join("");
+    return { text, chunks: cut(text, points) };
+  });
+
 // Hundreds of cases per property: milliseconds alone, but CI's agent shares the
 // owner's PC, and a busy moment there made them 20 to 100 times slower (a 74 ms
 // property took 5.8 s), past vitest's 5 s default.
@@ -292,6 +353,18 @@ describe("properties", { timeout: 30_000 }, () => {
   const instructionWords = [...SYSTEM_PROMPT.matchAll(/\S+/g)].filter((m) =>
     /[\p{L}\p{N}]/u.test(m[0]),
   );
+
+  it("fence: any chunking gives the same answer, no fence tag survives, nothing else goes", async () => {
+    await fc.assert(
+      fc.asyncProperty(fencedText, async ({ text, chunks }) => {
+        const whole = await throughFence([text]);
+        expect(await throughFence(chunks)).toBe(whole);
+        expect(whole).not.toMatch(FENCE_TAG);
+        expect(whole).toBe(withoutFence(text));
+      }),
+      runs(300),
+    );
+  });
 
   it("leak guard: ordinary text passes unchanged under any chunking", () => {
     fc.assert(
