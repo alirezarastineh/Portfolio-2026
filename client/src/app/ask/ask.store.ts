@@ -46,7 +46,8 @@ import { feedbackBody, withDownReason } from "./down-reasons";
 import { confirmHandoff } from "./handoff-confirm";
 import { handoffSummary } from "./handoff-offer";
 import { fetchInspect, inspectLines, linesText } from "./inspect";
-import { failoverLine } from "./receipt";
+import { clearDeviceKeys, forgetBody, forgetConversation, MAX_EARLIER } from "./forget";
+import { counted, failoverLine } from "./receipt";
 import { fetchScorecard, scorecardLines } from "./scorecard";
 import {
   helpLines,
@@ -97,6 +98,13 @@ interface AskState {
    * (visitor plan V12): shown until its first words, never kept.
    */
   failover: { entryId: string; position: number; of: number } | null;
+  /**
+   * The tab's sessions before its `reset`s (visitor plan V14): its conversation still, which
+   * `forget` deletes with this one. Kept with the conversation, in this tab only.
+   */
+  earlierSessions: string[];
+  /** `forget` asked, waiting for the visitor's yes or no (visitor plan V14). */
+  forgetPending: boolean;
   /** The polite live region's text: finished answers and command output, once. */
   announcement: string;
 }
@@ -122,6 +130,7 @@ interface Stored {
   feedback: Record<string, 1 | -1>;
   /** Absent from what an older terminal stored. */
   downReasons?: Record<string, DownReason>;
+  earlierSessions?: string[];
   messages: AskMessage[];
 }
 
@@ -240,6 +249,8 @@ export const AskStore = signalStore(
       downReasons: stored?.downReasons ?? {},
       level: readLevel(),
       failover: null,
+      earlierSessions: stored?.earlierSessions ?? [],
+      forgetPending: false,
       announcement: "",
     };
   }),
@@ -435,6 +446,7 @@ export const AskStore = signalStore(
           stats: store.stats(),
           feedback: store.feedback(),
           downReasons: store.downReasons(),
+          earlierSessions: store.earlierSessions(),
           messages: forStorage(chat.messages),
         };
         sessionStorage.setItem(ASK_STORAGE_KEY, JSON.stringify(stored));
@@ -504,6 +516,7 @@ export const AskStore = signalStore(
           { id: entryId, kind: "ask" as const, input, userId, deep, ...(about ? { about } : {}) },
         ].slice(-MAX_ENTRIES),
         handoff: null,
+        forgetPending: false,
         announcement: "",
       });
       // From here the visitor waits (a Turnstile check included): the first word's time counts it.
@@ -536,13 +549,21 @@ export const AskStore = signalStore(
       store._persist();
     }
 
-    function resetSession(): void {
+    /**
+     * A new session. The old one is still this tab's conversation in the log, so `forget`
+     * keeps its id (visitor plan V14); after `forget` itself, nothing of it is left to keep.
+     */
+    function resetSession(options: { forgotten?: boolean } = {}): void {
       void store.chat.stop();
       store.chat.messages = [];
       patchState(store, {
         sessionId: newSessionId(),
+        earlierSessions: options.forgotten
+          ? []
+          : [...store.earlierSessions(), store.sessionId()].slice(-MAX_EARLIER),
         entries: [],
         handoff: null,
+        forgetPending: false,
         feedback: {},
         downReasons: {},
         limitedUntil: null,
@@ -612,7 +633,7 @@ export const AskStore = signalStore(
       const copy = store.copy();
       const id =
         messageId ??
-        store.chat.messages.filter((m) => m.role === "assistant" && m.metadata?.sig).at(-1)?.id;
+        store.chat.messages.findLast((m) => m.role === "assistant" && m.metadata?.sig)?.id;
       if (!id) {
         show(input, [{ text: copy.inspect.noAnswer, tone: "dim" }]);
         return;
@@ -751,6 +772,12 @@ export const AskStore = signalStore(
         case "evals":
           void handleEvals(input);
           break;
+        case "forget":
+          // Irreversible: it waits for the visitor's yes (visitor plan V14).
+          patchState(store, { forgetPending: true, handoff: null });
+          show(input, []);
+          patchState(store, { announcement: `${copy.forget.ask} ${copy.forget.what}` });
+          break;
         case "history":
           handleHistory(input);
           break;
@@ -780,7 +807,11 @@ export const AskStore = signalStore(
           patchState(store, { history: [...store.history(), input].slice(-MAX_HISTORY) });
         }
 
-        // A pending hand-off takes y/n first.
+        // A pending hand-off, or forget (visitor plan V14), takes y/n first.
+        if (store.forgetPending() && /^(y|yes|j|ja|n|no|nein)$/i.test(input)) {
+          await this.answerForget(/^(y|yes|j|ja)$/i.test(input));
+          return;
+        }
         if (store.handoff() && /^(y|yes|j|ja|n|no|nein)$/i.test(input)) {
           this.answerHandoff(/^(y|yes|j|ja)$/i.test(input));
           return;
@@ -869,6 +900,43 @@ export const AskStore = signalStore(
       },
 
       /** The visitor's answer to "hand this conversation to the contact form?". */
+      /**
+       * The visitor's answer to "delete this conversation from the log?" (visitor plan V14). On
+       * a yes, the log's rows go (this session's and the tab's earlier ones), then what this
+       * browser kept, then the session: a new one begins. A failure deletes nothing here
+       * either, and keeps the session, so the visitor can try again.
+       */
+      async answerForget(yes: boolean): Promise<void> {
+        if (!store.forgetPending()) return;
+        const copy = store.copy();
+        patchState(store, { forgetPending: false });
+        if (!yes) {
+          show(copy.forget.no, [{ text: copy.forget.declined, tone: "dim" }]);
+          return;
+        }
+        const result = await forgetConversation(() =>
+          fetch(`${apiBaseUrl()}/v1/ask/forget`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(forgetBody(store.sessionId(), store.earlierSessions())),
+          }),
+        );
+        if (!result.ok) {
+          const text =
+            result.retryAfter === null
+              ? copy.forget.failed
+              : fmt(copy.errors.rateLimited, { s: result.retryAfter });
+          show(copy.forget.yes, [{ text, tone: "error" }]);
+          return;
+        }
+        clearDeviceKeys();
+        patchState(store, { level: "standard" });
+        resetSession({ forgotten: true });
+        show(copy.forget.yes, [
+          { text: counted(result.deleted, copy.forget.done), tone: "accent" },
+        ]);
+      },
+
       answerHandoff(yes: boolean): void {
         const pending = store.handoff();
         if (!pending) return;

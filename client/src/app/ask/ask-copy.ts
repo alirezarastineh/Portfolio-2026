@@ -158,6 +158,19 @@ export interface AskCopy {
     systemCard: string;
     systemCardQuestion: string;
   };
+  /**
+   * `forget` (visitor plan V14): the question, what it deletes and keeps, the
+   * outcome by how many answers the log deleted.
+   */
+  forget: {
+    ask: string;
+    what: string;
+    yes: string;
+    no: string;
+    done: Counted;
+    declined: string;
+    failed: string;
+  };
   handoff: { ask: string; yes: string; no: string; done: string; declined: string };
   opening: string;
   tool: {
@@ -217,6 +230,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         ["deep <question>", "ask the slower, more thorough model"],
         ["stats", "show model, latency and cache under answers"],
         ["inspect", "how the last answer was made: its steps and checks"],
+        ["forget", "delete this conversation from the log"],
         ["history · clear · reset", "as in any shell"],
       ],
       evals: ["evals", "how well the assistant does: its tests and live checks"],
@@ -360,6 +374,19 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       systemCard: "how this assistant works ›",
       systemCardQuestion: "How does this assistant work?",
     },
+    forget: {
+      ask: "Delete this conversation from the log?",
+      what: "Your questions, the answers and how they were made, your ratings and what your browser reported, from every session in this tab. A message you sent through the contact form keeps its copy, and a test case made from an answer stays. This cannot be undone.",
+      yes: "yes",
+      no: "no",
+      done: {
+        none: "The log kept nothing of this conversation. This browser's settings for the assistant are cleared, and a new session begins.",
+        one: "Deleted 1 answer from the log. This browser's settings for the assistant are cleared too, and a new session begins.",
+        many: "Deleted {n} answers from the log. This browser's settings for the assistant are cleared too, and a new session begins.",
+      },
+      declined: "OK, nothing was deleted.",
+      failed: "Nothing was deleted: the log could not be reached. Try again in a moment.",
+    },
     handoff: {
       ask: "Hand this conversation to the contact form?",
       yes: "yes",
@@ -392,7 +419,8 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       levelUsage: "usage: level plain|standard|expert (now: {level})",
       statsOn: "stats on: model, latency and cache under each answer.",
       statsOff: "stats off.",
-      reset: "New session. The assistant has forgotten this conversation.",
+      reset:
+        "New session: the assistant no longer sees the earlier conversation. The log keeps it up to 90 days; `forget` deletes it.",
       historyEmpty: "No history yet.",
       deepUsage: "usage: deep <question>",
       openUsage: "usage: open <project|post|section>",
@@ -425,6 +453,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         ["deep <frage>", "das langsamere, gründlichere Modell fragen"],
         ["stats", "Modell, Latenz und Cache unter Antworten zeigen"],
         ["inspect", "wie die letzte Antwort entstand: Schritte und Prüfungen"],
+        ["forget", "dieses Gespräch aus dem Protokoll löschen"],
         ["history · clear · reset", "wie in jeder Shell"],
       ],
       evals: ["evals", "wie gut der Assistent ist: Tests und laufende Prüfungen"],
@@ -571,6 +600,20 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       systemCard: "wie dieser Assistent funktioniert ›",
       systemCardQuestion: "Wie funktioniert dieser Assistent?",
     },
+    forget: {
+      ask: "Dieses Gespräch aus dem Protokoll löschen?",
+      what: "Deine Fragen, die Antworten und wie sie entstanden, deine Bewertungen und was dein Browser gemeldet hat, aus jeder Sitzung in diesem Tab. Eine Nachricht, die du über das Kontaktformular geschickt hast, behält ihre Kopie, und ein daraus entstandener Testfall bleibt. Das lässt sich nicht rückgängig machen.",
+      yes: "ja",
+      no: "nein",
+      done: {
+        none: "Das Protokoll hatte nichts von diesem Gespräch. Die Einstellungen dieses Browsers für den Assistenten sind gelöscht, und eine neue Sitzung beginnt.",
+        one: "1 Antwort aus dem Protokoll gelöscht. Auch die Einstellungen dieses Browsers für den Assistenten sind gelöscht, und eine neue Sitzung beginnt.",
+        many: "{n} Antworten aus dem Protokoll gelöscht. Auch die Einstellungen dieses Browsers für den Assistenten sind gelöscht, und eine neue Sitzung beginnt.",
+      },
+      declined: "Okay, nichts wurde gelöscht.",
+      failed:
+        "Nichts wurde gelöscht: Das Protokoll war nicht erreichbar. Versuch es gleich noch einmal.",
+    },
     handoff: {
       ask: "Dieses Gespräch an das Kontaktformular übergeben?",
       yes: "ja",
@@ -604,7 +647,8 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       levelUsage: "Verwendung: level plain|standard|expert (jetzt: {level})",
       statsOn: "stats an: Modell, Latenz und Cache unter jeder Antwort.",
       statsOff: "stats aus.",
-      reset: "Neue Sitzung. Der Assistent hat dieses Gespräch vergessen.",
+      reset:
+        "Neue Sitzung: Der Assistent sieht das frühere Gespräch nicht mehr. Das Protokoll behält es bis zu 90 Tage; `forget` löscht es.",
       historyEmpty: "Noch kein Verlauf.",
       deepUsage: "Verwendung: deep <frage>",
       openUsage: "Verwendung: open <projekt|artikel|bereich>",

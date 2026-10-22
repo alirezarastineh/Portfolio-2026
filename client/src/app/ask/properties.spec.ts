@@ -277,6 +277,7 @@ describe("the shell", () => {
       "stats",
       "inspect",
       "evals",
+      "forget",
       "history",
       "clear",
       "reset",

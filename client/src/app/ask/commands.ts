@@ -26,6 +26,7 @@ export type LocalCommand =
   | "stats"
   | "inspect"
   | "evals"
+  | "forget"
   | "history"
   | "clear"
   | "reset"
@@ -54,6 +55,7 @@ export const COMMANDS = [
   "stats",
   "inspect",
   "evals",
+  "forget",
   "history",
   "clear",
   "reset",
@@ -73,6 +75,7 @@ const EXACT: Record<string, LocalCommand> = {
   stats: "stats",
   inspect: "inspect",
   evals: "evals",
+  forget: "forget",
   history: "history",
   clear: "clear",
   reset: "reset",
@@ -159,7 +162,7 @@ export function helpLines(
   options: { scorecard?: boolean } = {},
 ): OutLine[] {
   const rows = [...copy.help.rows];
-  if (options.scorecard) rows.splice(rows.length - 1, 0, copy.help.evals);
+  if (options.scorecard) rows.splice(-1, 0, copy.help.evals);
   return [
     { text: copy.help.title, tone: "dim" },
     ...rows.map(([label, text]) => ({ label, text })),

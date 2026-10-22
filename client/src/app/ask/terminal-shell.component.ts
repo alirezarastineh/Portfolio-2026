@@ -132,6 +132,36 @@ const MAX_INPUT_LINES = 6;
             </button>
           </div>
         }
+        <!-- forget (visitor plan V14): irreversible, so it names what goes and waits for a yes. -->
+        @if (store.forgetPending()) {
+          <div
+            class="flex flex-col gap-1 pb-3"
+            role="group"
+            [attr.aria-label]="copy().forget.ask"
+            [attr.aria-describedby]="forgetId"
+          >
+            <span class="text-accent-orange">{{ copy().forget.ask }}</span>
+            <span [id]="forgetId" class="text-xs text-muted-foreground">{{
+              copy().forget.what
+            }}</span>
+            <span class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
+                (click)="store.answerForget(true)"
+              >
+                {{ copy().forget.yes }}
+              </button>
+              <button
+                type="button"
+                class="press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
+                (click)="store.answerForget(false)"
+              >
+                {{ copy().forget.no }}
+              </button>
+            </span>
+          </div>
+        }
       </div>
 
       <form
@@ -234,6 +264,7 @@ export class TerminalShellComponent {
   protected readonly copy = this.store.copy;
   protected readonly inputId = `ask-input-${++instances}`;
   protected readonly hintId = `ask-hint-${instances}`;
+  protected readonly forgetId = `ask-forget-${instances}`;
 
   private readonly inputRef = viewChild.required<ElementRef<HTMLTextAreaElement>>("input");
   private readonly logRef = viewChild.required<ElementRef<HTMLElement>>("log");
@@ -304,6 +335,7 @@ export class TerminalShellComponent {
     afterRenderEffect(() => {
       this.store.entries();
       this.store.handoff();
+      this.store.forgetPending();
       const log = this.logRef().nativeElement;
       if (this.store.chat.messages && this.stick) log.scrollTop = log.scrollHeight;
     });

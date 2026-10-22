@@ -1141,6 +1141,63 @@ test.describe("assistant terminal", () => {
     expect(asked).toBe(0);
   });
 
+  test("forget deletes this tab's conversation from the log on a yes, clears this browser's level and starts afresh (visitor plan V14)", async ({
+    page,
+  }) => {
+    await mockAsk(page, (route, n) =>
+      sse(route, answer({ id: `m_e2e0000000${n}`, text: "He lives in Berlin." })),
+    );
+    const forgotten: Record<string, unknown>[] = [];
+    await page.route("**/v1/ask/forget", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: cors });
+        return;
+      }
+      forgotten.push(route.request().postDataJSON() as Record<string, unknown>);
+      await route.fulfill({ headers: cors, json: { ok: true, deleted: 2 } });
+    });
+    const session = () =>
+      page.evaluate(
+        () => JSON.parse(sessionStorage.getItem("ask:v1") ?? "{}") as Record<string, unknown>,
+      );
+    const prompt = await openPrompt(page);
+    const log = page.locator("#about [role=log]");
+
+    await run(prompt, "level plain");
+    await run(prompt, "Where does he live?");
+    await expect(log).toContainText("He lives in Berlin.");
+    const first = (await session())["sessionId"];
+    // A reset begins a new session; the log keeps the earlier one, which forget still reaches.
+    await run(prompt, "reset");
+    await expect(log).toContainText("The log keeps it up to 90 days; `forget` deletes it.");
+    await run(prompt, "Is he available?");
+    await expect(log).toContainText("He lives in Berlin.");
+    const second = (await session())["sessionId"];
+    expect(second).not.toBe(first);
+
+    // It names what goes and what stays, and a no sends nothing.
+    await run(prompt, "forget");
+    const confirm = page.getByRole("group", { name: "Delete this conversation from the log?" });
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toHaveAccessibleDescription(/contact form keeps its copy/);
+    expect(await axeViolations(page)).toEqual([]);
+    await confirm.getByRole("button", { name: "no", exact: true }).click();
+    await expect(log).toContainText("OK, nothing was deleted.");
+    await expect(confirm).toHaveCount(0);
+    expect(forgotten).toHaveLength(0);
+
+    // A typed yes: both sessions' answers go, then this browser's level, then the session.
+    await run(prompt, "forget");
+    await run(prompt, "y");
+    await expect(log).toContainText("Deleted 2 answers from the log.");
+    expect(forgotten).toEqual([{ sessionId: second, earlier: [first] }]);
+    expect(await page.evaluate(() => localStorage.getItem("ask:level"))).toBeNull();
+    const after = await session();
+    expect(after["sessionId"]).not.toBe(second);
+    expect(after["earlierSessions"]).toEqual([]);
+    await expect(log).not.toContainText("Where does he live?");
+  });
+
   test("the reader pages' server HTML has none of the ask buttons: the browser adds them", async ({
     request,
   }) => {
