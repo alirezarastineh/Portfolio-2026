@@ -9,6 +9,7 @@ import {
   documentRows,
   layoutRows,
   localeMixLine,
+  pagesLine,
   percent,
   rereadVerdict,
   searchLine,
@@ -117,6 +118,9 @@ import {
           <p class="m-0 text-xs text-muted-foreground">Searches: {{ line }}.</p>
         }
         @if (windowLine(v); as line) {
+          <p class="m-0 text-xs text-muted-foreground">{{ line }}.</p>
+        }
+        @if (pagesLine(v); as line) {
           <p class="m-0 text-xs text-muted-foreground">{{ line }}.</p>
         }
 
@@ -331,6 +335,7 @@ export class AssistantPerceptionComponent implements OnInit {
   protected readonly searchLine = searchLine;
   protected readonly tools = toolRows;
   protected readonly windowLine = windowLine;
+  protected readonly pagesLine = pagesLine;
   protected readonly tierLabel: Record<Tier, string> = {
     promoted: "Promoted",
     demoted: "Clipped harder",

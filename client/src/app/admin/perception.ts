@@ -72,6 +72,53 @@ export interface PerceptionView extends PerceptionSlice {
     afterTrim: { answers: number; rephrased: number };
     otherwise: { answers: number; rephrased: number };
   };
+  /**
+   * Answers asked on a case study or a post against the rest (visitor plan V8);
+   * among them, those about a section, a code block or a selection (V9).
+   */
+  pages?: {
+    pageAware: AnswerGroup & { promoted: number };
+    /** Absent from an API before V9. */
+    focused?: AnswerGroup & { verified: number };
+    rest: AnswerGroup;
+  };
+}
+
+/** A group of answers: the rounds they took, how soon they started, how many helped. */
+export interface AnswerGroup {
+  answers: number;
+  /** Model calls per answer. */
+  rounds: number | null;
+  /** The server's time to the first token, p50. */
+  ttftP50Ms: number | null;
+  /** The helpful share. */
+  helpful: number | null;
+}
+
+/** "3 answers · 1.4 rounds · first token 1.1 s · 67 % helpful", a note after the count. */
+function groupLine(group: AnswerGroup, note = ""): string {
+  const rounds = group.rounds === null ? "–" : group.rounds.toFixed(1);
+  const first = group.ttftP50Ms === null ? "–" : `${(group.ttftP50Ms / 1000).toFixed(1)} s`;
+  const answers = `${group.answers} ${group.answers === 1 ? "answer" : "answers"}${note}`;
+  return `${answers} · ${rounds} rounds · first token ${first} · ${percent(group.helpful)} helpful`;
+}
+
+/**
+ * "Asked on a case study or post: 3 answers (1 with its text) · 1.5 rounds · …;
+ * about a section, code or selection: 1 answer (1 on the page) · …; elsewhere:
+ * 40 answers · …", or null before any page-aware answer.
+ */
+export function pagesLine(view: PerceptionView): string | null {
+  const p = view.pages;
+  if (!p?.pageAware.answers) return null;
+  const promoted = ` (${p.pageAware.promoted} with its text)`;
+  const parts = [`Asked on a case study or post: ${groupLine(p.pageAware, promoted)}`];
+  if (p.focused?.answers) {
+    const held = ` (${p.focused.verified} on the page)`;
+    parts.push(`about a section, code or selection: ${groupLine(p.focused, held)}`);
+  }
+  parts.push(`elsewhere: ${groupLine(p.rest)}`);
+  return parts.join("; ");
 }
 
 /**

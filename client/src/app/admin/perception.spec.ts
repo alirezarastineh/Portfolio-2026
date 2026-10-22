@@ -5,6 +5,7 @@ import {
   documentRows,
   layoutRows,
   localeMixLine,
+  pagesLine,
   percent,
   rereadVerdict,
   searchLine,
@@ -237,5 +238,24 @@ describe("perception in the admin", () => {
       ),
     ).toBe("Conversation window: 0 of 40 sessions trimmed (0 %)");
     expect(windowLine(view())).toBeNull();
+  });
+
+  it("sets the answers asked on a case study or a post against the rest (visitor plan V8)", () => {
+    const pages = {
+      pageAware: { answers: 3, rounds: 1.4, ttftP50Ms: 1_050, helpful: 2 / 3, promoted: 1 },
+      rest: { answers: 1, rounds: null, ttftP50Ms: null, helpful: 0 },
+    };
+    expect(pagesLine(view({ pages }))).toBe(
+      "Asked on a case study or post: 3 answers (1 with its text) · 1.4 rounds · first token 1.1 s · 67 % helpful; elsewhere: 1 answer · – rounds · first token – · 0 % helpful",
+    );
+    // None asked on a page yet, or an older API.
+    const none = { ...pages, pageAware: { ...pages.pageAware, answers: 0 } };
+    expect(pagesLine(view({ pages: none }))).toBeNull();
+    expect(pagesLine(view())).toBeNull();
+    // About a section, a code block or a selection (V9).
+    const focused = { answers: 2, rounds: 1, ttftP50Ms: 800, helpful: 0.5, verified: 1 };
+    expect(pagesLine(view({ pages: { ...pages, focused } }))).toBe(
+      "Asked on a case study or post: 3 answers (1 with its text) · 1.4 rounds · first token 1.1 s · 67 % helpful; about a section, code or selection: 2 answers (1 on the page) · 1.0 rounds · first token 0.8 s · 50 % helpful; elsewhere: 1 answer · – rounds · first token – · 0 % helpful",
+    );
   });
 });
