@@ -48,7 +48,7 @@ import {
   type LocalCommand,
   type OutLine,
 } from "./commands";
-import { forRequest } from "./sent-messages";
+import { requestBody } from "./request-body";
 import { plainText } from "./terminal-markdown";
 import { track } from "./track";
 
@@ -277,13 +277,14 @@ export const AskStore = signalStore(
       transport: new DefaultChatTransport<AskMessage>({
         api: `${apiBaseUrl()}/v1/ask`,
         prepareSendMessagesRequest: ({ messages }) => ({
-          body: {
+          body: requestBody({
             sessionId: store.sessionId(),
             locale: locale(),
-            ...(store._next.deep ? { deep: true } : {}),
-            ...(store._next.turnstileToken ? { turnstileToken: store._next.turnstileToken } : {}),
-            messages: forRequest(messages),
-          },
+            deep: store._next.deep,
+            turnstileToken: store._next.turnstileToken,
+            url: store._router.url,
+            messages,
+          }),
         }),
       }),
       onError: (error) => {

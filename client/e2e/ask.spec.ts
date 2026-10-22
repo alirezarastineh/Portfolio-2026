@@ -77,7 +77,12 @@ const SEARCH_STEP: Chunk[] = [
 ];
 
 interface AskMock {
-  bodies: { sessionId: string; locale: string; messages: { role: string }[] }[];
+  bodies: {
+    sessionId: string;
+    locale: string;
+    page?: string;
+    messages: { role: string }[];
+  }[];
 }
 
 async function mockAsk(
@@ -758,6 +763,8 @@ test.describe("assistant terminal", () => {
     await expect(sheet).toContainText("What did he build in TODO: Project One, and how?");
     await expect(sheet).toContainText("A retrieval platform, built in TypeScript.");
     expect(mock.bodies).toHaveLength(1);
+    // The page goes with the question (visitor plan V8): the server maps it to the case study.
+    expect(mock.bodies[0]!.page).toBe("/en/work/project-one");
   });
 });
 
