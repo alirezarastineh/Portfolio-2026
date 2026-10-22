@@ -1,6 +1,7 @@
 import type { Locale } from "../content/schema.js";
 import type { RepairReason } from "./checks.js";
 import type { CoreLayout } from "./corpus/render.js";
+import type { LeakKind } from "./leak-guard.js";
 import { redact } from "./log.js";
 import type { Attempt, AttemptOutcome, Trace } from "./models/fallback.js";
 import { tokenCounts, type TokenCounts } from "./models/prices.js";
@@ -97,6 +98,12 @@ export interface AnswerTrace {
   focus?: { kind: "section" | "code" | "selection"; verified: boolean };
   /** The level the visitor chose (visitor plan V10); absent for standard, and from before. */
   level?: "plain" | "expert";
+  /**
+   * What the output guard removed before the visitor saw it (plan phase 15),
+   * each kind with how often, never the text (visitor plan V12, for
+   * `inspect`). Absent when it removed nothing, and from before.
+   */
+  guard?: Partial<Record<LeakKind, number>>;
 }
 
 function inputText(input: unknown): string {
@@ -127,7 +134,15 @@ export function buildAnswerTrace(
   core?: AnswerTrace["core"],
   route?: Pick<
     AnswerTrace,
-    "routing" | "escalation" | "window" | "repair" | "handoff" | "page" | "focus" | "level"
+    | "routing"
+    | "escalation"
+    | "window"
+    | "repair"
+    | "handoff"
+    | "page"
+    | "focus"
+    | "level"
+    | "guard"
   >,
 ): AnswerTrace {
   const segments: Attempt[][] = [[]];
@@ -177,5 +192,6 @@ export function buildAnswerTrace(
     ...(route?.page ? { page: route.page } : {}),
     ...(route?.focus ? { focus: route.focus } : {}),
     ...(route?.level ? { level: route.level } : {}),
+    ...(route?.guard && Object.keys(route.guard).length ? { guard: route.guard } : {}),
   };
 }

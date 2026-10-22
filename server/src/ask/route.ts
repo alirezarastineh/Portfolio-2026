@@ -17,6 +17,7 @@ import { availability, checkRate, ConcurrencyGate, hashWithSalt, recordRequest }
 import { focusOf, focusSchema } from "./focus.js";
 import { countGuardEvent } from "./guard-events.js";
 import { ASK_MESSAGE_ID, buildHistory, historyLimits } from "./history.js";
+import { inspectView } from "./inspect.js";
 import { shortName } from "./models/registry.js";
 import { PAGE_CHARS, pageDocument } from "./page.js";
 import { routeQuestion } from "./router.js";
@@ -32,6 +33,7 @@ import { DEEP_ROUTE, withoutDemoted } from "./trust.js";
  *   POST /v1/ask/feedback  +1 / -1 on an answer from this session, a -1 with its reason
  *   POST /v1/ask/signal    what this session's browser saw of an answer (visitor plan V2)
  *   POST /v1/ask/handoff   the visitor's yes to that answer's hand-off offer
+ *   POST /v1/ask/inspect   what the log keeps of one of this session's answers (visitor plan V12)
  *   GET  /v1/ask/stream-check  three ticks, so a deploy can prove nothing buffers
  *
  * No cookies and no credentials: the browser holds a random session id per
@@ -89,6 +91,8 @@ const handoffBody = z.object({
   sessionId: z.string().regex(SESSION_ID),
   messageId: z.string().regex(ASK_MESSAGE_ID),
 });
+
+const inspectBody = handoffBody;
 
 const gate = new ConcurrencyGate(() => askConfig().maxConcurrent);
 const inFlight = new Set<AbortController>();
@@ -392,6 +396,41 @@ export function createAskRouter(): Hono {
       .returning({ id: aiMessages.id });
     if (!confirmed) return c.json({ error: "not_found" }, 404);
     return c.json({ ok: true });
+  });
+
+  router.post("/inspect", async (c) => {
+    const parsed = inspectBody.safeParse(await readJson(c));
+    if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
+    const { sessionId, messageId } = parsed.data;
+
+    // Only the session that got the answer, only a visitor's: the projection is the visitor's view.
+    const [row] = await getDb()
+      .select({
+        id: aiMessages.id,
+        createdAt: aiMessages.createdAt,
+        promptVersion: aiMessages.promptVersion,
+        route: aiMessages.route,
+        model: aiMessages.model,
+        ttftMs: aiMessages.ttftMs,
+        totalMs: aiMessages.totalMs,
+        citedIds: aiMessages.citedIds,
+        droppedCitations: aiMessages.droppedCitations,
+        checks: aiMessages.checks,
+        trace: aiMessages.trace,
+      })
+      .from(aiMessages)
+      .where(
+        and(
+          eq(aiMessages.id, messageId),
+          eq(aiMessages.sessionHash, hashWithSalt("session", sessionId)),
+          eq(aiMessages.source, "terminal"),
+        ),
+      )
+      .limit(1);
+    c.header("Cache-Control", "no-store");
+    // The answer is logged once its stream ends: the browser tries again a moment later.
+    if (!row) return c.json({ error: "not_found" }, 404);
+    return c.json(inspectView(row));
   });
 
   router.get("/stream-check", () => {

@@ -122,6 +122,12 @@ export interface FallbackOptions {
   /** Called immediately before each physical provider request, including retries. */
   beforeAttempt?: (entry: ModelEntry, signal?: AbortSignal) => Promise<void>;
   /**
+   * Called when a model failed before its first chunk and the chain moves on
+   * (visitor plan V12): the next model's place among the chain's callable
+   * ones. A skip moves on without a wait and is not reported.
+   */
+  onFailover?: (next: { position: number; of: number }) => void;
+  /**
    * Rebuilds a request for a model without tools (compact corpus, no tools,
    * shorter history). Without it, such models are skipped when tools are needed.
    */
@@ -430,6 +436,8 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
     ) => Promise<T>,
   ): Promise<T> {
     const attempts: Attempt[] = [];
+    const callable = options.entries.filter((entry) => entry.available);
+    let failed = false;
     for (const entry of options.entries) {
       const prepared = qualifyEntry(entry, call);
       if (typeof prepared === "string") {
@@ -439,8 +447,12 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
         continue;
       }
 
+      if (failed) {
+        options.onFailover?.({ position: callable.indexOf(entry) + 1, of: callable.length });
+      }
       const outcome = await tryEntryWithRetries(entry, prepared, call, attempt);
       if (outcome.ok) return outcome.result;
+      failed = true;
       attempts.push(outcome.attempt);
     }
     throw new AllModelsFailedError(attempts);

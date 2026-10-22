@@ -25,6 +25,35 @@ import type { StreamTextTransform, TextStreamPart, ToolSet } from "ai";
 
 export type LeakKind = "canary" | "instructions" | "secret";
 
+/** Where the guard notes each removal: a set of the kinds, or a `LeakTally`. */
+export interface LeakHits {
+  add(kind: LeakKind): unknown;
+}
+
+/**
+ * What the guard removed from one answer, each kind with how often (visitor
+ * plan V12): the trace keeps the counts, which `inspect` shows the visitor,
+ * never the text. A copied passage is one removal however long it runs.
+ */
+export class LeakTally implements LeakHits {
+  private readonly counts = new Map<LeakKind, number>();
+
+  add(kind: LeakKind): this {
+    this.counts.set(kind, (this.counts.get(kind) ?? 0) + 1);
+    return this;
+  }
+
+  /** The kinds removed, for the alert and the checks. */
+  kinds(): Set<LeakKind> {
+    return new Set(this.counts.keys());
+  }
+
+  /** Each kind removed and how often; empty when nothing was. */
+  record(): Partial<Record<LeakKind, number>> {
+    return Object.fromEntries(this.counts);
+  }
+}
+
 /** Copied words that count as the instructions, and how much ordinary text may be held. */
 export const SHINGLE_WORDS = 12;
 export const HOLD_BACK = 96;
@@ -358,7 +387,7 @@ function cutAt(
 
 /**
  * The next piece of a text part: what may be shown now, with anything found
- * removed, each kind removed added to `hits` (copied instructions and key
+ * removed, each removal's kind added to `hits` (copied instructions and key
  * shapes the visitor wrote themselves excepted). `final` (the part ended)
  * shows the rest.
  */
@@ -367,7 +396,7 @@ export function scanChunk(
   state: ScanState,
   text: string,
   final: boolean,
-  hits: Set<LeakKind>,
+  hits: LeakHits,
   echo: Echo = NO_ECHO,
 ): string {
   const raw = state.pending + text;
@@ -397,7 +426,7 @@ export function scanChunk(
 /** The guard over a stream's text parts: after the citations are checked, before the words are paced. */
 export function leakGuardTransform<TOOLS extends ToolSet>(
   guard: LeakGuard,
-  hits: Set<LeakKind>,
+  hits: LeakHits,
   echo: Echo = NO_ECHO,
 ): StreamTextTransform<TOOLS> {
   return () => {

@@ -305,6 +305,9 @@ else
 fi
 check "assistant rejects a malformed question without calling a model" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' '${API}/v1/ask')\" = 400 ]"
+# The glass box (visitor plan V12): inspect refuses what no terminal sends.
+check "inspect refuses a malformed request" \
+  bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' '${API}/v1/ask/inspect')\" = 400 ]"
 check "assistant admin is locked without a session" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${API}/admin/assistant/settings')\" = 401 ]"
 if [[ "$(db_value "select count(*) from information_schema.tables where table_name in ('ai_settings', 'ai_faq', 'ai_usage', 'ai_messages', 'ai_feedback', 'ai_rate_events')")" == "6" ]]; then

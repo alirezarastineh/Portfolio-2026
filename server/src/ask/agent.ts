@@ -61,6 +61,7 @@ import {
   deploySecrets,
   echoOf,
   leakGuardTransform,
+  LeakTally,
   type LeakGuard,
   type LeakKind,
 } from "./leak-guard.js";
@@ -93,6 +94,7 @@ import {
   type InstructionExtras,
   type ReaderLevel,
 } from "./prompt.js";
+import { answerReceipt, type AnswerReceipt } from "./receipt.js";
 import { ESCALATED_ROUTE, escalationOf, type Escalation, type RouteDecision } from "./router.js";
 import {
   answerText,
@@ -134,6 +136,23 @@ export interface AnswerMetadata {
    * own words). The terminal shows the offer from it.
    */
   handoff?: { by: HandoffOffer["by"]; summary: string };
+  /**
+   * What the answer did, as counts and codes (visitor plan V12): the
+   * terminal's receipt line and the hero's trace panel read it.
+   */
+  receipt?: AnswerReceipt;
+}
+
+/**
+ * A transient status during the answer (visitor plan V12): the chain moved on
+ * from a model that failed before its first chunk. Sent as a `data-status`
+ * part the browser shows until the first words, never stored or replayed.
+ */
+export interface FailoverStatus {
+  code: "failover";
+  /** The next model's place among the chain's callable ones. */
+  position: number;
+  of: number;
 }
 
 export interface AnswerRequest {
@@ -232,7 +251,15 @@ function safeTrace(
   core: NonNullable<AnswerTrace["core"]>,
   route: Pick<
     AnswerTrace,
-    "routing" | "escalation" | "window" | "repair" | "handoff" | "page" | "focus" | "level"
+    | "routing"
+    | "escalation"
+    | "window"
+    | "repair"
+    | "handoff"
+    | "page"
+    | "focus"
+    | "level"
+    | "guard"
   >,
 ): AnswerTrace | null {
   try {
@@ -485,8 +512,10 @@ export function streamAnswer(request: AnswerRequest): {
   const record = newAnswerRecord(thoughts);
   const cited = new Set<string>();
   const dropped: string[] = [];
-  /** What the output guard removed before the visitor saw it. */
-  const leaks = new Set<LeakKind>();
+  /** What the output guard removed before the visitor saw it, by kind and count. */
+  const leaks = new LeakTally();
+  /** Tells the browser of a failover, once the answer's stream is open (visitor plan V12). */
+  let status: ((data: FailoverStatus) => void) | null = null;
   // The case study or post asked on (visitor plan V8): named in the page block, its text
   // promoted there, cut as a fetch would cut it, when the core does not hold it whole.
   const page = request.page ?? null;
@@ -538,6 +567,7 @@ export function streamAnswer(request: AnswerRequest): {
       rateLimitRetry: request.rateLimitRetry,
       acquireRateLimitRetry: request.acquireRateLimitRetry,
       beforeAttempt: request.beforeModelCall,
+      onFailover: (next) => status?.({ code: "failover", ...next }),
       answerOnly: (options) => answerOnlyOptions(options, corpus, locale, language, extras),
       estimateTokens: (options) =>
         options.prompt.reduce(
@@ -618,6 +648,11 @@ export function streamAnswer(request: AnswerRequest): {
       tokens: { input: tokens.input, cached: tokens.cached, output: tokens.output },
       finishReason: record.finishReason,
       ...(handoff ? { handoff: { by: handoff.by, summary: handoff.summary } } : {}),
+      receipt: answerReceipt(traceDetails(), {
+        toolNames: record.toolCalls.map((c) => c.name),
+        cited: cited.size,
+        dropped,
+      }),
     };
   };
 
@@ -720,6 +755,8 @@ export function streamAnswer(request: AnswerRequest): {
   // finish, whose metadata and signature cover the whole text.
   const ui = createUIMessageStream({
     execute: async ({ writer }) => {
+      // Transient: the browser shows it until the first words; it is never part of the message.
+      status = (data) => writer.write({ type: "data-status", data, transient: true });
       const result = await agent.stream({
         messages,
         abortSignal: request.abortSignal,
@@ -805,6 +842,7 @@ export function streamAnswer(request: AnswerRequest): {
     ...(page ? { page: { id: page.document.id, promoted } } : {}),
     ...(request.focus ? { focus: request.focus.trace } : {}),
     ...(request.level ? { level: request.level } : {}),
+    guard: leaks.record(),
   });
 
   const persistOutcome = async (
@@ -863,7 +901,7 @@ export function streamAnswer(request: AnswerRequest): {
         toolText: details.toolText,
         secrets: details.secrets,
       });
-      await raiseAlert(leakAlert(messageId, leaks, reached)).catch((error: unknown) =>
+      await raiseAlert(leakAlert(messageId, leaks.kinds(), reached)).catch((error: unknown) =>
         console.error("[ask] leak alert not written", error),
       );
     }
@@ -907,7 +945,7 @@ export function streamAnswer(request: AnswerRequest): {
         steps: agentCalls ?? trace.calls.length,
         maxRounds: config.agentMaxRounds,
         degraded: usedFallback(trace, answeringChain()),
-        guarded: [...leaks],
+        guarded: [...leaks.kinds()],
         question: request.question,
         toolText,
         secrets,

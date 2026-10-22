@@ -187,4 +187,11 @@ describe("buildAnswerTrace", () => {
     expect(buildAnswerTrace([], trace, core)).toEqual({ v: 1, steps: [], core });
     expect(buildAnswerTrace([], trace)).not.toHaveProperty("core");
   });
+
+  it("keeps what the output guard removed, by kind and count, and nothing when it removed nothing (visitor plan V12)", () => {
+    const trace: Trace = { startedAt: 0, firstTokenAt: null, attempts: [], calls: [] };
+    const guard = { canary: 1, instructions: 2 };
+    expect(buildAnswerTrace([], trace, undefined, { guard })).toEqual({ v: 1, steps: [], guard });
+    expect(buildAnswerTrace([], trace, undefined, { guard: {} })).not.toHaveProperty("guard");
+  });
 });

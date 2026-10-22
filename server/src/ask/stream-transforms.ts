@@ -8,8 +8,9 @@ import { searchResult, toolOutcome, type ToolOutcome } from "./tools.js";
 /**
  * Citation markers (`[^project:atlas@en]`) are checked against the corpus as
  * the text streams. A known id is normalised to its full form and announced
- * once as a source part (the terminal turns it into a footnote); an unknown id
- * is removed, so an invented reference never reaches the visitor. A marker
+ * once as a source part (the terminal turns it into a footnote), with the
+ * document's kind and date as `providerMetadata.portfolio`; an unknown id is
+ * removed, so an invented reference never reaches the visitor. A marker
  * split across chunks is held back until it closes.
  *
  * Some models write the brackets full-width, `【^profile@en】` or
@@ -66,6 +67,10 @@ export function citationTransform<TOOLS extends ToolSet>(options: {
             id: doc.id,
             url: doc.url,
             title: doc.title,
+            // What it is and when it last changed, for the source's chip (visitor plan V12).
+            providerMetadata: {
+              portfolio: { kind: doc.kind, ...(doc.updated ? { updated: doc.updated } : {}) },
+            },
           });
         }
         return `${match.startsWith(" ") ? " " : ""}[^${doc.id}]`;

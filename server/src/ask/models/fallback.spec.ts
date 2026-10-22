@@ -356,6 +356,36 @@ describe("createFallbackModel", () => {
     ]);
   });
 
+  it("tells of each move past a model that failed, by the next one's place, never of a skip (visitor plan V12)", async () => {
+    const moves: { position: number; of: number }[] = [];
+    const { model } = fallback(
+      [
+        mockEntry("a", failing(apiError(503)).model),
+        mockEntry("missing", scripted([textTurn("unused")]).model, { available: false }),
+        mockEntry("b", failing(apiError(429)).model),
+        mockEntry("c", scripted([textTurn("From c.")]).model),
+      ],
+      { maxRetries: 0, onFailover: (next) => moves.push(next) },
+    );
+    expect(textOf(await drain((await model.doStream(call)).stream))).toBe("From c.");
+    expect(moves).toEqual([
+      { position: 2, of: 3 },
+      { position: 3, of: 3 },
+    ]);
+
+    // A skip moves on at once, and the first model answering leaves nothing to tell.
+    const quiet: { position: number; of: number }[] = [];
+    const { model: skipping } = fallback(
+      [
+        mockEntry("gone", scripted([textTurn("unused")]).model, { available: false }),
+        mockEntry("d", scripted([textTurn("From d.")]).model),
+      ],
+      { onFailover: (next) => quiet.push(next) },
+    );
+    expect(textOf(await drain((await skipping.doStream(call)).stream))).toBe("From d.");
+    expect(quiet).toEqual([]);
+  });
+
   it("stops at once when the visitor leaves, without trying the next model", async () => {
     const controller = new AbortController();
     const a = failing(apiError(500));

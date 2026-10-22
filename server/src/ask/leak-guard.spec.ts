@@ -5,6 +5,7 @@ import {
   deploySecrets,
   echoOf,
   HOLD_BACK,
+  LeakTally,
   newScanState,
   REDACTED,
   scanChunk,
@@ -38,6 +39,20 @@ function shown(pieces: string[]): { text: string; hits: Set<LeakKind> } {
 }
 
 describe("the leak guard (plan phase 15)", () => {
+  it("tallies each removal by kind, a copied passage once however long it runs (visitor plan V12)", () => {
+    const tally = new LeakTally();
+    const state = newScanState();
+    let text = "";
+    for (const piece of [`${CANARY} and ${CANARY}. `, INSTRUCTIONS]) {
+      text += scanChunk(guard, state, piece, false, tally);
+    }
+    text += scanChunk(guard, state, "", true, tally);
+    expect(text.startsWith(`${REDACTED} and ${REDACTED}. ${REDACTED}`)).toBe(true);
+    expect(tally.record()).toEqual({ canary: 2, instructions: 1 });
+    expect(tally.kinds()).toEqual(new Set(["canary", "instructions"]));
+    expect(new LeakTally().record()).toEqual({});
+  });
+
   it("removes the canary in any case, even split across pieces", () => {
     expect(shown(["The marker is rq7M-4C1F-82ab."])).toEqual({
       text: `The marker is ${REDACTED}.`,

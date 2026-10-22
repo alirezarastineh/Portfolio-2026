@@ -113,6 +113,49 @@ describe("citations", () => {
     expect(sources).toEqual(["project:atlas@en"]);
   });
 
+  it("announces each source with its document's kind and, where it has one, its date (visitor plan V12)", async () => {
+    const dated = new Map(byId);
+    dated.set("project:atlas@en", { ...byId.get("project:atlas@en")!, updated: "2026-09-12" });
+    const input = new ReadableStream<TextStreamPart<ToolSet>>({
+      start(c) {
+        c.enqueue({ type: "text-start", id: "t" });
+        c.enqueue({
+          type: "text-delta",
+          id: "t",
+          text: "Atlas [^project:atlas@en], him [^profile].",
+        });
+        c.enqueue({ type: "text-end", id: "t" });
+        c.close();
+      },
+    });
+    const out = await drain(
+      input.pipeThrough(
+        citationTransform({ corpus: { byId: dated }, locale: "en", cited: new Set() })({
+          tools: {},
+          stopStream: () => {},
+        }),
+      ),
+    );
+    expect(out.filter((p) => p.type === "source")).toEqual([
+      {
+        type: "source",
+        sourceType: "url",
+        id: "project:atlas@en",
+        url: "/en/work/atlas",
+        title: "Atlas",
+        providerMetadata: { portfolio: { kind: "project", updated: "2026-09-12" } },
+      },
+      {
+        type: "source",
+        sourceType: "url",
+        id: "profile@en",
+        url: "/en",
+        title: "Alireza Rastineh",
+        providerMetadata: { portfolio: { kind: "profile" } },
+      },
+    ]);
+  });
+
   it("puts a marker split across chunks back together", async () => {
     const { text, sources } = await throughCitations(["Atlas [", "^project:at", "las@en] ships."]);
     expect(text).toBe("Atlas [^project:atlas@en] ships.");
