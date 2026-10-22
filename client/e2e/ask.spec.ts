@@ -81,6 +81,7 @@ interface AskMock {
     sessionId: string;
     locale: string;
     page?: string;
+    level?: string;
     messages: { role: string }[];
   }[];
 }
@@ -845,6 +846,42 @@ test.describe("assistant terminal", () => {
       focus: { kind: "selection", text: "A demo has one user and no traffic." },
     });
     await expect(asks).toBeHidden();
+  });
+
+  test("level sets how technical answers are, kept in this browser and sent with each question (visitor plan V10)", async ({
+    page,
+  }) => {
+    const mock = await mockAsk(page, (route) =>
+      sse(route, answer({ text: "Atlas helps agents." })),
+    );
+    let prompt = await openPrompt(page);
+    const about = page.locator("#about");
+    await run(prompt, "level");
+    await expect(about).toContainText("usage: level plain|standard|expert (now: standard)");
+    await run(prompt, "level plain");
+    await expect(about).toContainText("level plain: answers without jargon");
+    // Scanned while the log still fits: a log that overflows with text alone is a known finding.
+    expect(await axeViolations(page)).toEqual([]);
+    await run(prompt, "help");
+    await expect(about).toContainText("level plain|standard|expert");
+    await expect(about).toContainText("how technical answers are");
+    await run(prompt, "What is Atlas?");
+    await expect.poll(() => mock.bodies.length).toBe(1);
+    expect(mock.bodies[0]!.level).toBe("plain");
+
+    // Still plain after a reload: the browser keeps it.
+    await page.reload();
+    prompt = await openPrompt(page);
+    await run(prompt, "And Borealis?");
+    await expect.poll(() => mock.bodies.length).toBe(2);
+    expect(mock.bodies[1]!.level).toBe("plain");
+
+    // Standard sends nothing; a question about a level is a question.
+    await run(prompt, "level standard");
+    await expect(about).toContainText("level standard: answers as usual.");
+    await run(prompt, "level of his German?");
+    await expect.poll(() => mock.bodies.length).toBe(3);
+    expect(mock.bodies[2]).not.toHaveProperty("level");
   });
 
   test("the reader pages' server HTML has none of the ask buttons: the browser adds them", async ({

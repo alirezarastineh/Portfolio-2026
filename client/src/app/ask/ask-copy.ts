@@ -55,6 +55,10 @@ export interface AskCopy {
     contact: string;
     lang: string;
     langUsage: string;
+    /** What `level <name>` says once it is set (visitor plan V10). */
+    levelSet: { plain: string; standard: string; expert: string };
+    /** `{level}`: the level kept now. */
+    levelUsage: string;
     statsOn: string;
     statsOff: string;
     reset: string;
@@ -88,6 +92,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         ["cv", "download his CV"],
         ["contact", "write to him"],
         ["lang en|de", "switch the language"],
+        ["level plain|standard|expert", "how technical answers are"],
         ["deep <question>", "ask the slower, more thorough model"],
         ["stats", "show model, latency and cache under answers"],
         ["history · clear · reset", "as in any shell"],
@@ -150,6 +155,12 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       contact: "Taking you to the contact form…",
       lang: "Switching to {lang}…",
       langUsage: "usage: lang en|de",
+      levelSet: {
+        plain: "level plain: answers without jargon, each term explained, short.",
+        standard: "level standard: answers as usual.",
+        expert: "level expert: answers with technical depth: trade-offs, design choices, numbers.",
+      },
+      levelUsage: "usage: level plain|standard|expert (now: {level})",
       statsOn: "stats on: model, latency and cache under each answer.",
       statsOff: "stats off.",
       reset: "New session. The assistant has forgotten this conversation.",
@@ -181,6 +192,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         ["cv", "Lebenslauf herunterladen"],
         ["contact", "ihm schreiben"],
         ["lang en|de", "Sprache wechseln"],
+        ["level plain|standard|expert", "wie technisch Antworten sind"],
         ["deep <frage>", "das langsamere, gründlichere Modell fragen"],
         ["stats", "Modell, Latenz und Cache unter Antworten zeigen"],
         ["history · clear · reset", "wie in jeder Shell"],
@@ -243,6 +255,13 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       contact: "Zum Kontaktformular…",
       lang: "Wechsle zu {lang}…",
       langUsage: "Verwendung: lang en|de",
+      levelSet: {
+        plain: "level plain: Antworten ohne Fachjargon, jeder Begriff erklärt, kurz.",
+        standard: "level standard: Antworten wie gewohnt.",
+        expert:
+          "level expert: Antworten mit technischer Tiefe: Abwägungen, Designentscheidungen, Zahlen.",
+      },
+      levelUsage: "Verwendung: level plain|standard|expert (jetzt: {level})",
       statsOn: "stats an: Modell, Latenz und Cache unter jeder Antwort.",
       statsOff: "stats aus.",
       reset: "Neue Sitzung. Der Assistent hat dieses Gespräch vergessen.",

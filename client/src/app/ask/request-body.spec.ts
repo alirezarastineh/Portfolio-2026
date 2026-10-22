@@ -51,6 +51,13 @@ describe("requestBody", () => {
     expect(requestBody(input({ focus: null }))).not.toHaveProperty("focus");
   });
 
+  it("carries the level the visitor chose, and nothing for standard (visitor plan V10)", () => {
+    expect(requestBody(input({ level: "plain" }))).toMatchObject({ level: "plain" });
+    expect(requestBody(input({ level: "expert" }))).toMatchObject({ level: "expert" });
+    expect(requestBody(input({ level: "standard" }))).not.toHaveProperty("level");
+    expect(requestBody(input())).not.toHaveProperty("level");
+  });
+
   it("adds deep and Turnstile's token only when they apply, and no page without a path", () => {
     const body = requestBody(input({ deep: true, turnstileToken: "token", url: "" }));
     expect(body).toMatchObject({ deep: true, turnstileToken: "token" });

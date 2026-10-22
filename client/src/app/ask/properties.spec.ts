@@ -242,7 +242,7 @@ describe("the shell", () => {
       ),
       fc.tuple(fc.constant("cat"), fc.array(prose, { minLength: 2, maxLength: 5 })),
       fc.tuple(fc.constantFrom("open", "cd"), fc.array(prose, { minLength: 4, maxLength: 6 })),
-      fc.tuple(fc.constant("lang"), fc.array(prose, { minLength: 2, maxLength: 5 })),
+      fc.tuple(fc.constantFrom("lang", "level"), fc.array(prose, { minLength: 2, maxLength: 5 })),
     );
     fc.assert(
       fc.property(tooMany, ([command, words]) => {
@@ -271,6 +271,7 @@ describe("the shell", () => {
       "cat atlas",
       "open writing",
       "lang de",
+      "level expert",
     );
     fc.assert(
       fc.property(
@@ -289,7 +290,8 @@ describe("the shell", () => {
   });
 
   it("asks a question that starts with no command word as it was typed", () => {
-    const first = fc.constantFrom("What", "Which", "level", "Is", "Wie", "Where");
+    // Not "level", which is one now (visitor plan V10): the property above has it.
+    const first = fc.constantFrom("What", "Which", "Levels", "Is", "Wie", "Where");
     fc.assert(
       fc.property(first, fc.array(fc.tuple(space, prose), { maxLength: 6 }), (start, more) => {
         const text = start + more.map(([gap, w]) => gap + w).join("");

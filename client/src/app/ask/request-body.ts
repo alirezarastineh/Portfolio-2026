@@ -1,5 +1,6 @@
 import type { Locale } from "../content/locale";
 import type { AskFocus } from "./ask-launcher.service";
+import type { Level } from "./ask-level";
 import type { AskMessage } from "./ask-types";
 import { forRequest } from "./sent-messages";
 
@@ -26,6 +27,8 @@ export interface RequestInput {
   url: string;
   /** What a reader pointed at with the question (visitor plan V9). */
   focus?: AskFocus | null;
+  /** How technical the visitor wants answers (visitor plan V10); standard is not sent. */
+  level?: Level;
   messages: readonly AskMessage[];
 }
 
@@ -39,6 +42,8 @@ export function requestBody(input: RequestInput) {
     ...(input.turnstileToken ? { turnstileToken: input.turnstileToken } : {}),
     ...(page ? { page } : {}),
     ...(input.focus ? { focus: input.focus } : {}),
+    // Standard sends nothing, so the server's instructions stay today's bytes.
+    ...(input.level && input.level !== "standard" ? { level: input.level } : {}),
     messages: forRequest(input.messages),
   };
 }

@@ -31,6 +31,7 @@ import { answerTrace } from "./answer-trace";
 import { answersByQuestion } from "./answers";
 import { ASK_COPY } from "./ask-copy";
 import type { AskAbout, AskFocus } from "./ask-launcher.service";
+import { isLevel, readLevel, storeLevel, type Level } from "./ask-level";
 import { ASK_STORAGE_KEY } from "./ask-storage";
 import { AskTraceService } from "./ask-trace.service";
 import type { AskMessage, DownReason, Entry, Failure, RemoteConfig } from "./ask-types";
@@ -79,6 +80,8 @@ interface AskState {
   feedback: Record<string, 1 | -1>;
   /** Why each 👎, when the visitor said (visitor plan V2). */
   downReasons: Record<string, DownReason>;
+  /** How technical the visitor wants answers (visitor plan V10), kept in this browser. */
+  level: Level;
   /** The polite live region's text: finished answers and command output, once. */
   announcement: string;
 }
@@ -220,6 +223,7 @@ export const AskStore = signalStore(
       handoff: null,
       feedback: stored?.feedback ?? {},
       downReasons: stored?.downReasons ?? {},
+      level: readLevel(),
       announcement: "",
     };
   }),
@@ -287,6 +291,7 @@ export const AskStore = signalStore(
             turnstileToken: store._next.turnstileToken,
             url: store._router.url,
             focus: store._next.focus,
+            level: store.level(),
             messages,
           }),
         }),
@@ -541,6 +546,18 @@ export const AskStore = signalStore(
       void store._router.navigateByUrl(store._lang.alternates()[target]);
     }
 
+    /** `level plain | standard | expert` (visitor plan V10): kept in this browser, sent with each question. */
+    function handleLevel(input: string, arg: string): void {
+      const copy = store.copy();
+      if (!isLevel(arg)) {
+        show(input, [{ text: fmt(copy.cmd.levelUsage, { level: store.level() }), tone: "dim" }]);
+        return;
+      }
+      patchState(store, { level: arg });
+      storeLevel(arg);
+      show(input, [{ text: copy.cmd.levelSet[arg], tone: "dim" }]);
+    }
+
     function handleStats(input: string): void {
       const copy = store.copy();
       const next = !store.stats();
@@ -620,6 +637,9 @@ export const AskStore = signalStore(
           break;
         case "lang":
           handleLang(input, parsed.arg);
+          break;
+        case "level":
+          handleLevel(input, parsed.arg);
           break;
         case "stats":
           handleStats(input);

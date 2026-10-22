@@ -22,6 +22,7 @@ export type LocalCommand =
   | "cv"
   | "contact"
   | "lang"
+  | "level"
   | "stats"
   | "history"
   | "clear"
@@ -46,6 +47,7 @@ export const COMMANDS = [
   "cv",
   "contact",
   "lang ",
+  "level ",
   "deep ",
   "stats",
   "history",
@@ -87,26 +89,30 @@ export function parseInput(raw: string): Parsed {
   if (/^sudo hire( alireza)?\b/.test(normal)) return { kind: "local", name: "sudo", arg: "" };
 
   const [head, ...rest] = text.split(/\s+/);
+  return withArgument(head!.toLowerCase(), rest) ?? { kind: "ask", text, deep: false };
+}
+
+/** A command that takes words after its name, when it has as many as it takes; null otherwise. */
+function withArgument(head: string, rest: readonly string[]): Parsed | null {
   const arg = rest.join(" ");
-  switch (head!.toLowerCase()) {
+  switch (head) {
     case "cat":
-      if (rest.length === 1) return { kind: "local", name: "cat", arg };
-      break;
+      return rest.length === 1 ? { kind: "local", name: "cat", arg } : null;
     case "open":
     case "cd":
-      if (rest.length >= 1 && rest.length <= 3) return { kind: "local", name: "open", arg };
-      break;
+      return rest.length >= 1 && rest.length <= 3 ? { kind: "local", name: "open", arg } : null;
     case "lang":
-      if (rest.length <= 1) return { kind: "local", name: "lang", arg: arg.toLowerCase() };
-      break;
+      return rest.length <= 1 ? { kind: "local", name: "lang", arg: arg.toLowerCase() } : null;
+    // "level expert" sets it (visitor plan V10); "level of his German?" is a question.
+    case "level":
+      return rest.length <= 1 ? { kind: "local", name: "level", arg: arg.toLowerCase() } : null;
     case "ask":
-      if (arg) return { kind: "ask", text: arg, deep: false };
-      break;
+      return arg ? { kind: "ask", text: arg, deep: false } : null;
     case "deep":
-      if (arg) return { kind: "ask", text: arg, deep: true };
-      break;
+      return arg ? { kind: "ask", text: arg, deep: true } : null;
+    default:
+      return null;
   }
-  return { kind: "ask", text, deep: false };
 }
 
 /** Completes a command or a project name; null when nothing (or too much) matches. */
