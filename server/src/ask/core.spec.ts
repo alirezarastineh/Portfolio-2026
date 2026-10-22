@@ -682,6 +682,14 @@ describe("prices", () => {
     expect(priceOf("gemini-embedding-2", new Date("2026-10-05")).input).toBe(0.2);
   });
 
+  it("prices every Gemini model the chains name, so none counts at the dearest price", () => {
+    const tokens = { input: 1_000_000, cached: 0, output: 1_000_000, thoughts: 0 };
+    expect(costUsd("gemini-3.1-flash-lite", tokens, new Date("2026-10-22"))).toBeCloseTo(1.75);
+    for (const model of ["gemini-3.5-flash-lite", "gemini-3.7-flash", "gemini-3.1-flash-lite"]) {
+      expect(priceOf(model, new Date("2026-10-22")).input, model).toBeLessThan(1.5);
+    }
+  });
+
   it("names models briefly for the meta line", () => {
     expect(shortName("nvidia/nemotron-3-super-120b-a12b:free")).toBe("nemotron-3-super");
     expect(shortName("gemini-3.5-flash-lite")).toBe("gemini-3.5-flash-lite");

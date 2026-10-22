@@ -20,6 +20,8 @@ const PRICES: Record<string, Price[]> = {
     { from: "2026-01-01", input: 0.75, cachedInput: 0.075, output: 3.75 },
     { from: "2027-01-01", input: 1.5, cachedInput: 0.15, output: 7.5 },
   ],
+  // The visitors' second fallback (text prices, standard tier). Read 2026-10-22.
+  "gemini-3.1-flash-lite": [{ from: "2026-01-01", input: 0.25, cachedInput: 0.025, output: 1.5 }],
   // Free tier only (see the plan's privacy notes).
   "gemma-4-31b-it": FREE,
   // Search vectors (plan phase 18): input only; free on the free tier. Read 2026-10-05.
