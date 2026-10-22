@@ -29,6 +29,8 @@ export const NOTES = {
   noCv: "No CV is published.",
   /** A repeated call: the model has the result already. */
   alreadyProvided: "Already provided earlier in this answer: use that result.",
+  /** The page the visitor is reading, whose text its block gives (visitor plan V8). */
+  onPage: "Already provided above, as the page the visitor is reading: use that text.",
   /** A fetch once the envelope is used up: no document, or no character, is left. */
   budgetSpent: `This answer's document budget is spent (${DOCUMENT_CALLS} documents or ${thousands(DOCUMENT_CHARS)} characters): answer with what you have.`,
 } as const;
@@ -56,7 +58,7 @@ export const TOOL_DEFS = {
     }),
   },
   get_document: {
-    description: `The full text of one portfolio document by its id, exactly as a document header or a search result gives it (e.g. 'project:atlas@en', 'cv@en', 'post:my-post@de'). Use it for documents shown cut short, and for the other language's versions, which are listed by id only. Returns {id, title, url, text} (text ${CUT}); {error: "not_found", note} for an unknown id; {id, duplicate: true, note} for a document already read in this answer: use that text; ${ENVELOPE}.`,
+    description: `The full text of one portfolio document by its id, exactly as a document header or a search result gives it (e.g. 'project:atlas@en', 'cv@en', 'post:my-post@de'). Use it for documents shown cut short, and for the other language's versions, which are listed by id only. Returns {id, title, url, text} (text ${CUT}); {error: "not_found", note} for an unknown id; {id, duplicate: true, note} for a document already read in this answer, or given above as the visitor's page: use that text; ${ENVELOPE}.`,
     inputSchema: z.object({ id: z.string().min(1).max(160) }),
   },
   list_projects: {

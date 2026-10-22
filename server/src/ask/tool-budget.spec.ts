@@ -81,7 +81,7 @@ function callsTurn(...calls: [id: string, tool: string, input: unknown][]) {
   ] satisfies LanguageModelV4StreamPart[];
 }
 
-async function answerWith(turns: LanguageModelV4StreamPart[][]) {
+async function answerWith(turns: LanguageModelV4StreamPart[][], pageId?: string) {
   const config = fixtureConfig();
   const corpus = assembleCorpus(
     { ...FIXTURE_BASE, key: "budget", documents: [...FIXTURE_BASE.documents, ...EXTRA] },
@@ -91,7 +91,10 @@ async function answerWith(turns: LanguageModelV4StreamPart[][]) {
   );
   const model = scripted(turns);
   const question = "Tell me everything about his work";
+  // The page asked on (visitor plan V8), held cut short, so promoted.
+  const page = pageId ? { document: corpus.byId.get(pageId)!, held: "clipped" as const } : null;
   const run = streamAnswer({
+    page,
     messages: [{ role: "user", content: wrapVisitor(question, "en") }],
     question,
     locale: "en",
@@ -166,6 +169,41 @@ describe("the tools in an answer (scripted model)", () => {
     expect(seen.get("s3")).toEqual({ duplicate: true, note: NOTES.alreadyProvided });
     expect(seen.get("d1")).toMatchObject({ id: "project:atlas@en", title: "Atlas" });
     expect(outcome.citedIds).toEqual(["project:atlas@en"]);
+  });
+
+  it("count a promoted page as read: a fetch of it says where it is, the rest share what is left", async () => {
+    const { model, outcome, outcomes } = await answerWith(
+      [
+        callsTurn(
+          ["p1", "get_document", { id: "project:long-a@en" }],
+          ["l2", "get_document", { id: "project:long-b@en" }],
+          ["l3", "get_document", { id: "project:long-c@en" }],
+          // The page's 12,000 and two more: the fourth document gets the 4,000 left.
+          ["l4", "get_document", { id: "project:long-d@en" }],
+          ["l5", "get_document", { id: "profile@en" }],
+        ),
+        textTurn("Four projects [^project:long-a@en]."),
+      ],
+      "project:long-a@en",
+    );
+
+    expect(outcomes).toEqual([["duplicate", "ok", "ok", "ok", "budget_exhausted"], []]);
+    const seen = resultsSeen(model.calls[1]!);
+    expect(seen.get("p1")).toEqual({
+      id: "project:long-a@en",
+      duplicate: true,
+      note: NOTES.onPage,
+    });
+    expect(seen.get("l4")!["text"] as string).toHaveLength(4_000 + "…".length);
+    expect(seen.get("l5")).toEqual({ error: "budget_exhausted", note: NOTES.budgetSpent });
+    // Its text is in the page block, framed as a document and cut where a fetch cuts it.
+    const system = model.calls[0]!.prompt[0]!;
+    const instructions = system.role === "system" ? system.content : "";
+    const header = "---\nid: project:long-a@en\ntitle: project:long-a@en\nurl: /en\n---";
+    expect(instructions).toContain(
+      `\nIts text, as get_document returns it:\n${header}\n${`A ${LONG}`.slice(0, FETCH_CLIP)}…\n\n# Required response language`,
+    );
+    expect(outcome.steps?.page).toEqual({ id: "project:long-a@en", promoted: true });
   });
 
   it("stop at four documents: the fifth is budget_exhausted, a repeat still 'already provided'", async () => {

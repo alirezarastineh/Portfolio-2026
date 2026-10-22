@@ -252,6 +252,23 @@ describe("routeQuestion", () => {
     );
   });
 
+  it("counts the case study asked on as named (visitor plan V8)", () => {
+    const onAtlas = { ...options, pageProject: "Atlas" };
+    expect(routeQuestion("Is this like Borealis?", onAtlas)).toEqual({
+      route: "deep",
+      reason: "multi-project",
+    });
+    // Without the page, the same question names one project.
+    expect(routeQuestion("Is this like Borealis?", options)).toEqual({
+      route: "lite",
+      reason: "default",
+    });
+    // The page's own project, named or meant, is still one.
+    for (const question of ["What did Atlas achieve here?", "What was the hardest part here?"]) {
+      expect(routeQuestion(question, onAtlas)).toEqual({ route: "lite", reason: "default" });
+    }
+  });
+
   it("never gives the lookup tier to what the deep route would take, open or closed", () => {
     const closed = { ...options, deepAllowed: false };
     for (const question of [

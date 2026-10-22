@@ -3,7 +3,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import type { Locale } from "../../content/schema.js";
-import { streamAnswer, type AnswerOutcome } from "../agent.js";
+import { readingLocale, streamAnswer, type AnswerOutcome } from "../agent.js";
 import type { AskConfig, ProviderName } from "../config.js";
 import { withLayout, type AskCorpus } from "../corpus/index.js";
 import type { CoreLayout } from "../corpus/render.js";
@@ -18,6 +18,7 @@ import {
 } from "../models/fallback.js";
 import { detectLanguage, visitorLanguage } from "../language.js";
 import type { ChainRole, ModelEntry } from "../models/registry.js";
+import { pageDocument } from "../page.js";
 import { wrapVisitor } from "../prompt.js";
 import { routeLabels, routeQuestion, type RouteLabel } from "../router.js";
 import { countTokens } from "../tokens.js";
@@ -52,6 +53,8 @@ export interface CaseResult {
    * (plan phase 20: what the lookup tier's minimal thinking should cut).
    */
   modelTtftMs?: number | null;
+  /** The answer's model calls, a repair's included (visitor plan V8: what promotion should cut). */
+  rounds?: number;
   totalMs: number;
   usd: number;
   judge: { faithfulness: number; helpfulness: number; unsupported: string[] } | null;
@@ -189,6 +192,12 @@ export interface EvalOptions {
    * its time to the first token).
    */
   routing?: { deep?: boolean; lookup?: boolean };
+  /**
+   * Whether a page the core does not hold whole brings its text into the page
+   * block (visitor plan V8; default on). `--no-page-promote` turns it off for
+   * the promotion's A/B.
+   */
+  promotePage?: boolean;
 }
 
 function percentile(values: number[], p: number): number | null {
@@ -208,7 +217,8 @@ function checkCitations(c: EvalCase, cited: string[], failures: string[]): void 
 
 function expectedLanguage(c: EvalCase): string | null {
   if (c.language) return c.language;
-  if (["fact", "multi-hop", "german", "conversation", "production"].includes(c.category)) {
+  const answerable = ["fact", "multi-hop", "german", "conversation", "page", "production"];
+  if (answerable.includes(c.category)) {
     // As the answer's own: the newest question with a clear language decides.
     return visitorLanguage([...(c.turns ?? []).map((t) => t.question), c.question]) ?? c.locale;
   }
@@ -359,6 +369,15 @@ function checkHistory(c: EvalCase, history: HistoryRead, failures: string[]): vo
   }
 }
 
+/** Whether the answer read the page the case expects (visitor plan V8). */
+function checkPage(c: EvalCase, page: { id: string } | null, failures: string[]): void {
+  if (c.expectPage === undefined) return;
+  const read = page?.id ?? null;
+  if (read !== c.expectPage) {
+    failures.push(`read the page as ${read ?? "none"}, not ${c.expectPage ?? "none"}`);
+  }
+}
+
 /** The deterministic checks; the judge adds its own failures. */
 export function grade(
   c: EvalCase,
@@ -372,6 +391,8 @@ export function grade(
     history?: HistoryRead;
     /** The hand-off the answer offered, by the model's tool or the server (visitor plan V6). */
     handoff?: { by: "tool" | "fallback" } | null;
+    /** The page its trace records (visitor plan V8); a grade without it does not check it. */
+    page?: { id: string } | null;
   },
 ): string[] {
   const failures: string[] = [];
@@ -386,6 +407,7 @@ export function grade(
   checkCitations(c, answer.cited, failures);
   checkProse(c, prose, failures);
   if (answer.history) checkHistory(c, answer.history, failures);
+  if (answer.page !== undefined) checkPage(c, answer.page, failures);
   checkTools(c, answer.tools, failures, answer.handoff);
   if (c.expectRoute && answer.route && !answer.route.includes(c.expectRoute)) {
     failures.push(`routed ${answer.route.join("+")}, not ${c.expectRoute}`);
@@ -662,6 +684,8 @@ async function askQuestion(
     messages: readonly AskUIMessage[];
     sessionId: string;
     corpus: AskCorpus;
+    /** The path of the page asked on, as the terminal sends it (visitor plan V8). */
+    page?: string;
   },
   acquireRateLimitRetry?: () => boolean,
   variant?: AnswerVariant,
@@ -676,10 +700,13 @@ async function askQuestion(
   });
   // The cases fit (conversation.spec.ts), and a frozen case's questions were checked at its freeze.
   if (!history.ok) throw new Error(`An eval conversation was refused (${history.error}).`);
+  // As the route maps it: a published case study or post, or nothing.
+  const page = pageDocument(corpus, conversation.page, readingLocale(locale, history.language));
   const decided = routeQuestion(history.question, {
     forceDeep: options.routing?.deep ?? false,
     deepAllowed: true,
     projectNames: corpus.projects.map((p) => p.name),
+    ...(page?.project ? { pageProject: page.project } : {}),
   });
   // `--no-lookup`: the same question without the lookup tier, for its A/B.
   const route =
@@ -718,6 +745,8 @@ async function askQuestion(
     afterCorpus: variant?.afterCorpus,
     droppedAnswers: history.droppedAnswers,
     window: history.window,
+    page,
+    ...(options.promotePage === false ? { promotePage: false } : {}),
     persist: false,
   });
 
@@ -747,6 +776,7 @@ function collectCaseFailures(c: EvalCase, asked: AskedQuestion): string[] {
     route: asked.route,
     history: { droppedAnswers: asked.droppedAnswers, window: outcome.steps?.window },
     handoff: outcome.handoff,
+    page: outcome.steps?.page ?? null,
   });
   if (outcome.droppedCitations.length) {
     failures.push(`invented citations: ${outcome.droppedCitations.join(", ")}`);
@@ -771,7 +801,13 @@ export async function answerCase(
   const ask = (messages: readonly AskUIMessage[]) =>
     askQuestion(
       options,
-      { locale: c.locale, messages, sessionId, corpus },
+      {
+        locale: c.locale,
+        messages,
+        sessionId,
+        corpus,
+        ...(c.page ? { page: c.page } : {}),
+      },
       acquireRateLimitRetry,
       variant,
     );
@@ -878,6 +914,7 @@ async function runCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
     model: outcome.model,
     ttftMs: trace.firstTokenAt === null ? null : trace.firstTokenAt - trace.startedAt,
     modelTtftMs: trace.calls[0]?.ttftMs ?? null,
+    rounds: trace.calls.length,
     totalMs: Date.now() - trace.startedAt,
     usd: answered.usd,
     judge,

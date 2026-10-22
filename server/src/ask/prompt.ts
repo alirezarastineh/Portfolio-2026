@@ -14,11 +14,12 @@ import { toolDefinitionsText } from "./tool-defs.js";
  *
  * Nothing request-specific belongs in SYSTEM_PROMPT: that text and the corpus
  * after it are the same bytes for every visitor, which is what the provider
- * caches. What a request adds comes after the corpus: the careful block for a
- * sensitive question, then a short trusted language instruction.
+ * caches. What a request adds comes after the corpus: the page the visitor is
+ * reading, the careful block for a sensitive question, then a short trusted
+ * language instruction.
  */
 
-export const PROMPT_VERSION = "ask-2026-10-21.1";
+export const PROMPT_VERSION = "ask-2026-10-22.1";
 
 /**
  * A confidential line in the instructions (plan phase 15): no answer has a
@@ -122,12 +123,57 @@ export const CONTACT_LEAD = "This visitor asks to reach Alireza";
  */
 export const CONTACT_BLOCK = `# Contact request\n${CONTACT_LEAD}: to hire, interview or work with him, or for a quote.\n- Answer in one or two sentences, citing what you use.\n- Then call handoff_contact with a short, neutral summary of what they want, in their language.\n- The visitor confirms first: never say that anything was sent.`;
 
+/** A case study or post a question was asked on, as its block names it (visitor plan V8). */
+export interface PageBlock {
+  id: string;
+  title: string;
+  url: string;
+  /**
+   * Its text, cut as `get_document` cuts it, when the core does not hold it
+   * whole: promoted, since a larger context costs less than another round.
+   */
+  text?: string;
+}
+
+/**
+ * The page block (visitor plan V8): the document the visitor is reading, so
+ * "this" and "here" have a subject. It goes after the corpus, as the careful
+ * block does, so the cached prefix stays the same bytes. A promoted page
+ * brings its text, framed as the corpus frames a document: data, never
+ * instructions.
+ */
+export function pageInstruction(page: PageBlock): string {
+  const lines = [
+    "# The visitor's page",
+    `The visitor is reading ${page.title} (${page.id}). "This", "here" or "it" with no other subject most likely means it.`,
+  ];
+  if (page.text !== undefined) {
+    lines.push(
+      "Its text, as get_document returns it:",
+      ["---", `id: ${page.id}`, `title: ${page.title}`, `url: ${page.url}`, "---", page.text].join(
+        "\n",
+      ),
+    );
+  }
+  return lines.join("\n");
+}
+
+/** The page block's fixed words, for the output guard and the prompt's hash. */
+export const PAGE_SAMPLE: Required<PageBlock> = {
+  id: "project:x@en",
+  title: "X",
+  url: "/en/work/x",
+  text: "…",
+};
+
 /** What a request adds to the fixed instructions. */
 export interface InstructionExtras {
   /** A pairwise eval's candidate in place of `SYSTEM_PROMPT`; never a visitor's request. */
   systemPrompt?: string;
   /** A pairwise eval's candidate line after the corpus (`--candidate-reminder`). */
   afterCorpus?: string;
+  /** The case study or post the question was asked on (visitor plan V8): the page block. */
+  page?: PageBlock;
   /** The careful block's topic, for a sensitive question. */
   careful?: Sensitivity;
   /** The visitor wants to reach him (visitor plan V6): the request block. */
@@ -135,12 +181,13 @@ export interface InstructionExtras {
 }
 
 /**
- * The request's own blocks after the corpus: a candidate line, the careful
- * block, the request block, the language.
+ * The request's own blocks after the corpus: a candidate line, the page, the
+ * careful block, the request block, the language.
  */
 function tail(locale: Locale | undefined, language: Locale | null, extras: InstructionExtras) {
   return [
     extras.afterCorpus?.trim(),
+    extras.page && pageInstruction(extras.page),
     extras.careful && carefulInstruction(extras.careful),
     extras.contact && CONTACT_BLOCK,
     locale && responseLanguageInstruction(locale, language),
@@ -169,12 +216,18 @@ export function buildAnswerOnlyInstructions(
   extras: Omit<InstructionExtras, "afterCorpus"> = {},
 ): string {
   // No tools and no headers: the lines about fetching and about related documents go, and the
-  // request block, which asks for a tool (the server offers the hand-off instead).
+  // request block, which asks for a tool (the server offers the hand-off instead). The page is
+  // named without its text: the context is small.
   const prompt = (extras.systemPrompt ?? SYSTEM_PROMPT)
     .replace(/\n# Tools[\s\S]*?(?=\n# Security)/, "\n")
     .replace(/- Documents cut short[^\n]*\n/, "")
     .replace(/- For availability, relocation[^\n]*\n/, "");
-  const blocks = tail(locale, language, { ...extras, contact: false });
+  const page = extras.page && {
+    id: extras.page.id,
+    title: extras.page.title,
+    url: extras.page.url,
+  };
+  const blocks = tail(locale, language, { ...extras, contact: false, ...(page ? { page } : {}) });
   return `${prompt}\n\n# Portfolio documents (summaries)\n\n${compact}${blocks}`;
 }
 
@@ -258,12 +311,15 @@ export function withoutFence(text: string): string {
  * corpus itself is laid out (corpus/render.ts, on a fixed sample), the
  * tools' descriptions, inputs and notes (tool-defs.ts, plan phase 21), the
  * repair's turn and closing line (visitor plan V5), which an answer without
- * words gets, and the request block (V6).
+ * words gets, the request block (V6), and the page block with and without its
+ * text (V8).
  */
 export function hashedPromptText(): string {
   return [
     buildInstructions(""),
     buildAnswerOnlyInstructions(""),
+    pageInstruction(PAGE_SAMPLE),
+    pageInstruction({ id: PAGE_SAMPLE.id, title: PAGE_SAMPLE.title, url: PAGE_SAMPLE.url }),
     ...(["en", "de"] as const).flatMap((locale) =>
       ([null, "en", "de"] as const).map((language) =>
         responseLanguageInstruction(locale, language),

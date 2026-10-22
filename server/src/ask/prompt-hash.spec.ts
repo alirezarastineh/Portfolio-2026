@@ -5,6 +5,8 @@ import {
   closingLine,
   CONTACT_BLOCK,
   hashedPromptText,
+  PAGE_SAMPLE,
+  pageInstruction,
   REPAIR_LINE,
   SYSTEM_PROMPT,
   windowNote,
@@ -39,5 +41,10 @@ describe("the prompt's hash", () => {
     expect(text).toContain(closingLine("de"));
     // The request block for a visitor who wants to reach him (visitor plan V6).
     expect(text).toContain(CONTACT_BLOCK);
+    // The page block with its text and without (visitor plan V8).
+    expect(text).toContain(pageInstruction(PAGE_SAMPLE));
+    expect(text).toContain(
+      `${pageInstruction({ id: PAGE_SAMPLE.id, title: PAGE_SAMPLE.title, url: PAGE_SAMPLE.url })}\n\0`,
+    );
   });
 });

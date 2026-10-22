@@ -56,6 +56,7 @@ import {
   tryAcquire,
 } from "./models/circuit.js";
 import { createFallbackModel, newTrace } from "./models/fallback.js";
+import { pageDocument } from "./page.js";
 import { PROMPT_CANARY, REPAIR_LEAD, SYSTEM_PROMPT, withoutFence, wrapVisitor } from "./prompt.js";
 import { DEFAULT_SETTINGS, type AiSettings } from "./settings.js";
 import { citationTransform, fenceTransform } from "./stream-transforms.js";
@@ -513,6 +514,43 @@ describe("properties", { timeout: 30_000 }, () => {
       fc.property(pathLike, (raw) => {
         const path = allowedPath(site, raw);
         expect(path === null || ALLOWED.has(path), `${raw} → ${path}`).toBe(true);
+      }),
+      runs(2000),
+    );
+  });
+
+  /* ---------------------------------------------------- the page asked on */
+
+  // The site's published case studies and posts, by page, and the document each shows.
+  const DOCUMENT_PAGES = new Map([
+    ["/en/work/atlas", "project:atlas@en"],
+    ["/de/work/atlas", "project:atlas@de"],
+    ["/en/writing/evals", "post:evals@en"],
+  ]);
+  const pageDocs: CorpusDocument[] = [
+    ...DOCS,
+    {
+      id: "project:draft@en",
+      kind: "project",
+      locale: "en",
+      title: "Draft",
+      url: "/en#projects",
+      text: "",
+    },
+  ];
+  const pageSite = {
+    ...site,
+    documents: pageDocs,
+    byId: new Map(pageDocs.map((d) => [d.id, d])),
+    layout: "locale" as const,
+  };
+
+  it("page: any path names that page's published document, or none (visitor plan V8)", () => {
+    fc.assert(
+      fc.property(pathLike, fc.constantFrom<Locale>("en", "de"), (raw, reading) => {
+        const named = pageDocument(pageSite, raw, reading)?.document.id ?? null;
+        const expected = DOCUMENT_PAGES.get(allowedPath(site, raw) ?? "") ?? null;
+        expect(named, `${raw} → ${named}`).toBe(expected);
       }),
       runs(2000),
     );

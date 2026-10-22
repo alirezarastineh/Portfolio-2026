@@ -705,6 +705,51 @@ describe("POST /v1/ask/signal (visitor plan V2)", () => {
   });
 });
 
+describe("the page asked on (visitor plan V8)", () => {
+  const firstSystem = (model: ScriptedModel) => {
+    const first = model.calls[0]!.prompt[0]!;
+    return first.role === "system" ? first.content : "";
+  };
+
+  it("names a published case study in the instructions and the logged trace, and nothing else", async () => {
+    const model = scripted([textTurn("Atlas cut escalations by 38% [^project:atlas@en].")]);
+    only(model);
+    const chunks = await readUiChunks(
+      await ask("What did it achieve?", { extra: { page: "/en/work/atlas" } }),
+    );
+    expect(firstSystem(model)).toContain("The visitor is reading Atlas (project:atlas@en).");
+    const row = await logged(chunks[0]!["messageId"] as string);
+    // The fixture's Atlas is short: the core holds it whole, so none of its text came along.
+    expect(row.trace?.page).toEqual({ id: "project:atlas@en", promoted: false });
+
+    const elsewhere = scripted([textTurn("Atlas cut escalations by 38% [^project:atlas@en].")]);
+    only(elsewhere);
+    const unknown = await readUiChunks(
+      await ask("What did Atlas achieve?", { extra: { page: "/en/work/nebula" } }),
+    );
+    expect(firstSystem(elsewhere)).not.toContain("# The visitor's page");
+    expect((await logged(unknown[0]!["messageId"] as string)).trace).not.toHaveProperty("page");
+  });
+
+  it("counts the page's project as named when the route is chosen", async () => {
+    corpusOverride = twoProjectCorpus;
+    only(scripted([textTurn("Both use Gemini [^project:atlas@en][^project:borealis@en].")]));
+    const chunks = await readUiChunks(
+      await ask("Is this like Borealis?", { extra: { page: "/en/work/atlas" } }),
+    );
+    expect(roles).toEqual(["deep"]);
+    const row = await logged(chunks[0]!["messageId"] as string);
+    expect(row.trace?.routing?.reason).toBe("multi-project");
+  });
+
+  it("refuses a page path longer than any of the site's", async () => {
+    only(scripted([textTurn("unused")]));
+    const res = await ask("What is this?", { extra: { page: `/en/writing/${"a".repeat(160)}` } });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "invalid_input" });
+  });
+});
+
 describe("figures checked against their sources (visitor plan V7)", () => {
   it("flags a figure no cited document holds on the logged row, and not one it does", async () => {
     only(scripted([textTurn("Atlas cut escalations by 45% [^project:atlas@en].")]));

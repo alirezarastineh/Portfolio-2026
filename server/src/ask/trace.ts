@@ -82,6 +82,12 @@ export interface AnswerTrace {
    * accepts a yes to it. Absent when none was offered.
    */
   handoff?: { by: "tool" | "fallback"; replaced?: true };
+  /**
+   * The case study or post the question was asked on (visitor plan V8): its
+   * document, and whether its text was promoted into the page block. Absent
+   * on any other page, and from before.
+   */
+  page?: { id: string; promoted: boolean };
 }
 
 function inputText(input: unknown): string {
@@ -110,7 +116,7 @@ export function buildAnswerTrace(
   recorded: readonly RecordedStep[],
   trace: Trace,
   core?: AnswerTrace["core"],
-  route?: Pick<AnswerTrace, "routing" | "escalation" | "window" | "repair" | "handoff">,
+  route?: Pick<AnswerTrace, "routing" | "escalation" | "window" | "repair" | "handoff" | "page">,
 ): AnswerTrace {
   const segments: Attempt[][] = [[]];
   for (const attempt of trace.attempts) {
@@ -156,5 +162,6 @@ export function buildAnswerTrace(
     ...(route?.window ? { window: route.window } : {}),
     ...(route?.repair ? { repair: route.repair } : {}),
     ...(route?.handoff ? { handoff: route.handoff } : {}),
+    ...(route?.page ? { page: route.page } : {}),
   };
 }

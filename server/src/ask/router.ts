@@ -279,7 +279,13 @@ export function sensitivityOf(text: string): Sensitivity | null {
 
 export function routeQuestion(
   text: string,
-  options: { forceDeep: boolean; deepAllowed: boolean; projectNames: readonly string[] },
+  options: {
+    forceDeep: boolean;
+    deepAllowed: boolean;
+    projectNames: readonly string[];
+    /** The case study the question was asked on (visitor plan V8): named, whatever it says. */
+    pageProject?: string;
+  },
 ): RouteDecision {
   const sensitive = sensitivityOf(text);
   const intent = contactIntentOf(text);
@@ -290,15 +296,25 @@ export function routeQuestion(
     ...(intent ? { intent } : {}),
   });
 
-  const deep = options.forceDeep ? "command" : deepReason(text, options.projectNames);
+  const deep = options.forceDeep
+    ? "command"
+    : deepReason(text, options.projectNames, options.pageProject);
   if (deep && options.deepAllowed) return decide("deep", deep);
   // The deep route is closed: a question it would take is still no lookup.
   if (deep) return decide("lite", deep === "command" ? "deep-off" : `${deep}+deep-off`);
   return withLookup(decide("lite", "default"), text);
 }
 
-/** Why the question wants the deep model, or null: its words, or two projects named. */
-function deepReason(text: string, projectNames: readonly string[]): string | null {
+/**
+ * Why the question wants the deep model, or null: its words, or two projects
+ * named. The page's project counts as named (visitor plan V8), so "Is this
+ * like Borealis?" on Atlas's case study spans two.
+ */
+function deepReason(
+  text: string,
+  projectNames: readonly string[],
+  pageProject?: string,
+): string | null {
   for (const [pattern, reason] of DEEP_PATTERNS) {
     if (pattern.test(text)) return reason;
   }
@@ -306,6 +322,7 @@ function deepReason(text: string, projectNames: readonly string[]): string | nul
   const named = projectNames.filter(
     (name) => name.length > 2 && lower.includes(name.toLowerCase()),
   );
+  if (pageProject) named.push(pageProject);
   return new Set(named.map((n) => n.toLowerCase())).size >= 2 ? "multi-project" : null;
 }
 

@@ -14,6 +14,7 @@ import {
 import { fixtureConfig } from "../../test/ask-fixtures.js";
 import { resetBreakers } from "../models/circuit.js";
 import type { ModelEntry } from "../models/registry.js";
+import { pageDocument } from "../page.js";
 import { EVAL_CASES } from "./cases.js";
 import { fixtureAskCorpus } from "./fixture.js";
 import { grade, runEvals } from "./run.js";
@@ -215,6 +216,34 @@ describe("eval graders", () => {
     }
     expect(EVAL_CASES.length).toBeGreaterThanOrEqual(40);
   });
+
+  it("checks the page the answer read, when its trace says (visitor plan V8)", () => {
+    const answer = { text: "Atlas cut escalations by 38% [^project:atlas@en].", tools: [] };
+    const unknown = byId("page-unknown");
+    const cited = { ...answer, cited: ["project:atlas@en"] };
+    expect(grade(unknown, { ...cited, page: null })).toEqual([]);
+    expect(grade(unknown, { ...cited, page: { id: "project:atlas@en" } })).toEqual([
+      "read the page as project:atlas@en, not none",
+    ]);
+    expect(grade(byId("page-atlas-hardest"), { ...cited, page: null })).toEqual([
+      "read the page as none, not project:atlas@en",
+    ]);
+    // A grade without the trace's page (a frozen production case) does not check it.
+    expect(grade(unknown, cited)).toEqual([]);
+  });
+
+  it("every page case's path names the document it expects, as the route maps it", () => {
+    const corpus = fixtureAskCorpus(fixtureConfig());
+    const pages = EVAL_CASES.filter((c) => c.expectPage !== undefined);
+    expect(pages.map((c) => c.category)).toEqual(pages.map(() => "page"));
+    expect(EVAL_CASES.filter((c) => c.category === "page")).toEqual(pages);
+    for (const c of pages) {
+      const reading = c.language ?? c.locale;
+      expect(pageDocument(corpus, c.page, reading)?.document.id ?? null, c.id).toBe(c.expectPage);
+    }
+    // A promoted page among them: one the core holds cut short.
+    expect(pageDocument(corpus, byId("page-post-rollback").page, "en")?.held).toBe("clipped");
+  });
 });
 
 // Whole eval runs through the real agent: about a second each alone, but CI
@@ -280,6 +309,42 @@ describe("runEvals", { timeout: 30_000 }, () => {
     const plain = await run({ lookup: false });
     expect(roles).toEqual(["lite"]);
     expect(plain.results[0]!.failures).toEqual(["routed lite, not lookup"]);
+  });
+
+  it("asks a page case on its page, its text promoted unless told not to (visitor plan V8)", async () => {
+    const config = fixtureConfig();
+    const corpus = fixtureAskCorpus(config);
+    const run = async (promotePage?: boolean) => {
+      const model = scripted([
+        textTurn("The old version stays deployed for a week [^post:llm-in-production@en]."),
+      ]);
+      const summary = await runEvals({
+        cases: [byId("page-post-rollback")],
+        corpus,
+        config,
+        judge: false,
+        concurrency: 1,
+        chain: () => [mockEntry("gemini-3.5-flash-lite", model.model)],
+        promptVersion: "test",
+        ...(promotePage === undefined ? {} : { promotePage }),
+      });
+      const first = model.calls[0]!.prompt[0]!;
+      return { result: summary.results[0]!, system: first.role === "system" ? first.content : "" };
+    };
+
+    const promoted = await run();
+    expect(promoted.result.failures).toEqual([]);
+    expect(promoted.result.rounds).toBe(1);
+    expect(promoted.system).toContain(
+      "The visitor is reading Shipping language models to real users (post:llm-in-production@en).",
+    );
+    expect(promoted.system).toContain("stays deployed beside the new one for a week.");
+    // `--no-page-promote`: named, its text left to a fetch.
+    const named = await run(false);
+    expect(named.result.failures).toEqual([]);
+    expect(named.system).toContain("(post:llm-in-production@en)");
+    expect(named.system).not.toContain("Its text, as get_document returns it:");
+    expect(named.system).not.toContain("for a week");
   });
 
   it("runs the real agent over scripted models and scores the results", async () => {

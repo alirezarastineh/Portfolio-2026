@@ -70,12 +70,15 @@ import {
   withThoughts,
   type ModelEntry,
 } from "./models/registry.js";
+import type { PageDocument } from "./page.js";
 import {
   buildAnswerOnlyInstructions,
   buildInstructions,
   CAREFUL_BLOCKS,
   closingLine,
   CONTACT_BLOCK,
+  PAGE_SAMPLE,
+  pageInstruction,
   PROMPT_CANARY,
   PROMPT_HASH,
   PROMPT_VERSION,
@@ -95,7 +98,8 @@ import {
   type AnswerRecord,
 } from "./stream-transforms.js";
 import { countTokens } from "./tokens.js";
-import { buildTools, repairToolName, type AskTools } from "./tools.js";
+import { FETCH_CLIP } from "./tool-defs.js";
+import { buildTools, fetchedText, repairToolName, type AskTools } from "./tools.js";
 import { buildAnswerTrace, type AnswerTrace } from "./trace.js";
 import { recordUsage, summarizeCalls } from "./usage.js";
 
@@ -161,6 +165,13 @@ export interface AnswerRequest {
   droppedAnswers?: number;
   /** The visitor's earlier questions the conversation window dropped (plan phase 22). */
   window?: { dropped: number };
+  /** The case study or post the question was asked on (visitor plan V8, `pageDocument`). */
+  page?: PageDocument | null;
+  /**
+   * Whether a page the core does not hold whole brings its text into the page
+   * block (default). Off for the eval CLI's `--no-page-promote`, the A/B.
+   */
+  promotePage?: boolean;
   /**
    * Write the log row and the usage totals (default). Off for evals run from
    * a laptop, whose database is the production one.
@@ -209,7 +220,7 @@ function safeTrace(
   record: AnswerRecord,
   trace: Trace,
   core: NonNullable<AnswerTrace["core"]>,
-  route: Pick<AnswerTrace, "routing" | "escalation" | "window" | "repair" | "handoff">,
+  route: Pick<AnswerTrace, "routing" | "escalation" | "window" | "repair" | "handoff" | "page">,
 ): AnswerTrace | null {
   try {
     return buildAnswerTrace(record.steps, trace, core, route);
@@ -276,13 +287,15 @@ function instructionsFor(
   });
   // A pairwise eval's candidate: built each time, never memoised.
   if (extras.systemPrompt !== undefined || extras.afterCorpus !== undefined) return make();
-  // The key names the reading locale too (it is `language ?? locale`), the careful topic and
-  // the request block.
-  const key = `${corpus.key}:${locale}:${language}:${extras.careful ?? ""}:${extras.contact ? "contact" : ""}`;
+  // The key names the reading locale too (it is `language ?? locale`), the page and whether its
+  // text came along, the careful topic and the request block.
+  const promoted = extras.page?.text === undefined ? "" : "+text";
+  const page = extras.page ? `${extras.page.id}${promoted}` : "";
+  const key = `${corpus.key}:${locale}:${language}:${page}:${extras.careful ?? ""}:${extras.contact ? "contact" : ""}`;
   let memo = instructionsMemo.get(key);
   if (!memo) {
-    // A few page/visitor language pairs and topics per corpus; a new corpus pushes the old out.
-    if (instructionsMemo.size >= 32) instructionsMemo.clear();
+    // A few language pairs, pages and topics per corpus; a new corpus pushes the old out.
+    if (instructionsMemo.size >= 64) instructionsMemo.clear();
     memo = make();
     instructionsMemo.set(key, memo);
   }
@@ -318,13 +331,14 @@ const guardMemo = new Map<string, LeakGuard>();
 function guardFor(corpus: AskCorpus, config: AskConfig, systemPrompt?: string): LeakGuard {
   const build = () =>
     buildLeakGuard({
-      // The careful blocks (plan phase 20), the repair line and the request block (visitor
-      // plan V5, V6) are instructions too: never to be repeated.
+      // The careful blocks (plan phase 20), the repair line, the request block and the page
+      // block's own words (visitor plan V5, V6, V8) are instructions too: never to be repeated.
       instructions: [
         systemPrompt ?? SYSTEM_PROMPT,
         ...CAREFUL_BLOCKS,
         REPAIR_LINE,
         CONTACT_BLOCK,
+        pageInstruction(PAGE_SAMPLE),
       ].join("\n\n"),
       corpusTexts: corpus.documents.map((d) => d.text),
       quotable: [SCOPE],
@@ -437,9 +451,24 @@ export function streamAnswer(request: AnswerRequest): {
   const dropped: string[] = [];
   /** What the output guard removed before the visitor saw it. */
   const leaks = new Set<LeakKind>();
+  // The case study or post asked on (visitor plan V8): named in the page block, its text
+  // promoted there, cut as a fetch would cut it, when the core does not hold it whole.
+  const page = request.page ?? null;
+  const promoted = page !== null && page.held !== "whole" && request.promotePage !== false;
+  const pageText = page && promoted ? fetchedText(page.document.text, FETCH_CLIP) : undefined;
   const extras: InstructionExtras = {
     systemPrompt: request.systemPrompt,
     afterCorpus: request.afterCorpus,
+    ...(page
+      ? {
+          page: {
+            id: page.document.id,
+            title: page.document.title,
+            url: page.document.url,
+            ...(pageText === undefined ? {} : { text: pageText }),
+          },
+        }
+      : {}),
     careful: route.sensitive,
     contact: route.intent === "contact",
   };
@@ -487,12 +516,14 @@ export function streamAnswer(request: AnswerRequest): {
   const agent = new ToolLoopAgent({
     model,
     instructions: instructions.text,
-    // The tools read in the answer's language too: its documents and pages first.
-    tools: buildTools(corpus, reading, {
-      config,
-      record: request.persist !== false,
-      calls: searchCalls,
-    }),
+    // The tools read in the answer's language too: its documents and pages first. A promoted
+    // page is read already.
+    tools: buildTools(
+      corpus,
+      reading,
+      { config, record: request.persist !== false, calls: searchCalls },
+      page && promoted ? { id: page.document.id, length: page.document.text.length } : undefined,
+    ),
     stopWhen: [
       isStepCount(config.agentMaxRounds),
       hasToolCall("handoff_contact"),
@@ -724,6 +755,7 @@ export function streamAnswer(request: AnswerRequest): {
           },
         }
       : {}),
+    ...(page ? { page: { id: page.document.id, promoted } } : {}),
   });
 
   const persistOutcome = async (

@@ -13,6 +13,7 @@ import { askConfig, askCorpus } from "./deps.js";
 import { OUTCOME_COLUMNS } from "./outcome-rows.js";
 import { isHelpful, rephrased } from "./outcomes.js";
 import {
+  measurePages,
   measurePerception,
   REREAD_HEALTHY,
   suggestTiers,
@@ -77,19 +78,18 @@ perceptionRouter.get(
     }
 
     const again = rephrased(rows);
-    const perception = measurePerception(
-      rows.map((r): PerceptionRow => ({
-        id: r.id,
-        locale: r.locale,
-        tokens: { input: r.tokens.input, output: r.tokens.output },
-        usd: r.usd,
-        citedIds: r.citedIds,
-        trace: r.trace,
-        corpusKey: r.corpusKey,
-        helpful: isHelpful(r, again),
-      })),
-      snapshots,
-    );
+    const measured = rows.map((r): PerceptionRow & { ttftMs: number | null } => ({
+      id: r.id,
+      locale: r.locale,
+      tokens: { input: r.tokens.input, output: r.tokens.output },
+      usd: r.usd,
+      citedIds: r.citedIds,
+      trace: r.trace,
+      corpusKey: r.corpusKey,
+      helpful: isHelpful(r, again),
+      ttftMs: r.ttftMs,
+    }));
+    const perception = measurePerception(measured, snapshots);
 
     const { corpusTiers } = await readAiSettings();
     let corpus: AskCorpus | null = null;
@@ -115,6 +115,8 @@ perceptionRouter.get(
       tools: measureTools(rows.map((r) => ({ trace: r.trace, citedIds: r.citedIds }))),
       // Sessions whose history the conversation window trimmed (plan phase 22).
       window: measureWindow(rows, again),
+      // Answers asked on a case study or a post against the rest (visitor plan V8).
+      pages: measurePages(measured),
     });
   },
 );

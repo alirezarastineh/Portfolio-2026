@@ -10,6 +10,7 @@ import {
   type CorpusTiers,
 } from "./corpus/render.js";
 import { capsOf } from "./models/registry.js";
+import { percentile } from "./outcomes.js";
 import type { AnswerTrace } from "./trace.js";
 
 /**
@@ -360,6 +361,59 @@ export function measurePerception(
     localeMix: [...accum.mix.values()].sort((a, b) => b.answers - a.answers),
     documents: documentAccessList(accum.fetchedBy, accum.citedBy),
     search: accum.search,
+  };
+}
+
+/** An answer as the reader's measures read it (visitor plan V8): where it was asked, how it went. */
+export interface ReaderRow {
+  trace: AnswerTrace | null;
+  /** The server's time to the first token. */
+  ttftMs: number | null;
+  /** outcomes.ts's helpful, worked out by the route. */
+  helpful: boolean;
+}
+
+/** A group of answers: the rounds they took, how soon they started, how many helped. */
+export interface AnswerGroup {
+  answers: number;
+  /** Model calls per answer, from the traces that have them; null without any. */
+  rounds: number | null;
+  /** The server's time to the first token, p50; null without any. */
+  ttftP50Ms: number | null;
+  /** The helpful share; null without answers. */
+  helpful: number | null;
+}
+
+function answerGroup(rows: readonly ReaderRow[]): AnswerGroup {
+  const traced = rows.flatMap((row) => (row.trace ? [row.trace] : []));
+  const calls = traced.reduce((sum, t) => sum + t.steps.filter((s) => s.model !== null).length, 0);
+  return {
+    answers: rows.length,
+    rounds: traced.length ? calls / traced.length : null,
+    ttftP50Ms: percentile(
+      rows.flatMap((row) => (row.ttftMs === null ? [] : [row.ttftMs])),
+      0.5,
+    ),
+    helpful: rows.length ? rows.filter((row) => row.helpful).length / rows.length : null,
+  };
+}
+
+/**
+ * Page-aware answers against the rest (visitor plan V8): those asked on a
+ * case study or a post, whose page block named it, and how many of them had
+ * its text promoted there.
+ */
+export function measurePages(rows: readonly ReaderRow[]): {
+  pageAware: AnswerGroup & { promoted: number };
+  rest: AnswerGroup;
+} {
+  const onPage = rows.filter((row) => row.trace?.page);
+  return {
+    pageAware: {
+      ...answerGroup(onPage),
+      promoted: onPage.filter((row) => row.trace!.page!.promoted).length,
+    },
+    rest: answerGroup(rows.filter((row) => !row.trace?.page)),
   };
 }
 

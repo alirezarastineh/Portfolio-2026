@@ -23,6 +23,8 @@ export type EvalCategory =
   | "tool"
   /** A question after earlier turns (visitor plan V3), graded like a fact. */
   | "conversation"
+  /** A question asked on a case study or a post (visitor plan V8), graded like a fact. */
+  | "page"
   /** Frozen from a visitor's answer (production.ts), graded like a fact. */
   | "production";
 
@@ -44,6 +46,10 @@ export interface EvalCase {
   question: string;
   /** The conversation before `question`, oldest first. */
   turns?: EvalTurn[];
+  /** The path of the page every question is asked on, as the terminal sends it (visitor plan V8). */
+  page?: string;
+  /** The document the answer's trace must name as its page; null for none. */
+  expectPage?: string | null;
   fixtureOnly?: boolean;
   /** Every one of these ids must be cited. */
   mustCite?: string[];
@@ -934,5 +940,72 @@ export const EVAL_CASES: EvalCase[] = [
     mustInclude: ["(Gespräch|Angebot|hängt)"],
     mustNotInclude: [String.raw`[€$£]\s?\d`, String.raw`\d+\s?(€|eur|euro)\b`],
     language: "de",
+  },
+
+  // Asked on a case study or a post (visitor plan V8): "this" and "here" mean the page.
+  {
+    id: "page-atlas-hardest",
+    category: "page",
+    locale: "en",
+    fixtureOnly: true,
+    page: "/en/work/atlas",
+    expectPage: "project:atlas@en",
+    question: "What was the hardest part here?",
+    mustCite: ["project:atlas@en"],
+    // Borealis's: the wrong "here".
+    mustNotInclude: ["tesseract", "step functions", "freight"],
+    judge: true,
+  },
+  {
+    // Past the core's clip: the page block brings the post's text, so no fetch is needed.
+    id: "page-post-rollback",
+    category: "page",
+    locale: "en",
+    fixtureOnly: true,
+    page: "/en/writing/llm-in-production",
+    expectPage: "post:llm-in-production@en",
+    question: "According to this post, how long does the old prompt version stay deployed?",
+    mustCite: ["post:llm-in-production@en"],
+    mustInclude: ["week"],
+    judge: true,
+  },
+  {
+    id: "page-de-post",
+    category: "page",
+    locale: "de",
+    fixtureOnly: true,
+    page: "/de/writing/kosten-im-griff",
+    expectPage: "post:kosten-im-griff@de",
+    question: "Worum geht es in diesem Artikel?",
+    mustCite: ["post:kosten-im-griff@de"],
+    mustInclude: ["budget"],
+    language: "de",
+    judge: true,
+  },
+  {
+    // The page is context, not the answer: what the profile holds is still the profile's.
+    id: "page-availability",
+    category: "page",
+    locale: "en",
+    fixtureOnly: true,
+    page: "/en/writing/llm-in-production",
+    expectPage: "post:llm-in-production@en",
+    question: "What's his availability?",
+    mustCite: ["profile@en"],
+    mustInclude: ["(open|available)"],
+    judge: true,
+  },
+  {
+    // A path the site does not publish: ignored, the question answered as anywhere else.
+    id: "page-unknown",
+    category: "page",
+    locale: "en",
+    fixtureOnly: true,
+    page: "/en/work/nebula",
+    expectPage: null,
+    question: "What did Atlas achieve?",
+    mustCite: ["project:atlas@en"],
+    mustInclude: ["38"],
+    judge: true,
   },
 ];

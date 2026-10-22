@@ -9,7 +9,7 @@ import { getDb } from "../db/client.js";
 import { aiFeedback, aiMessages } from "../db/schema.js";
 import { captureError } from "../lib/sentry.js";
 import { turnstileEnabled, verifyTurnstile, VerifiedSessions } from "../lib/turnstile.js";
-import { streamAnswer } from "./agent.js";
+import { readingLocale, streamAnswer } from "./agent.js";
 import { demotedSubjects } from "./audit.js";
 import { askChain, askConfig, askCorpus } from "./deps.js";
 import { backfillEmbeddings } from "./embeddings.js";
@@ -17,6 +17,7 @@ import { availability, checkRate, ConcurrencyGate, hashWithSalt, recordRequest }
 import { countGuardEvent } from "./guard-events.js";
 import { ASK_MESSAGE_ID, buildHistory, historyLimits } from "./history.js";
 import { shortName } from "./models/registry.js";
+import { PAGE_CHARS, pageDocument } from "./page.js";
 import { routeQuestion } from "./router.js";
 import { assistantState } from "./settings.js";
 import { FEEDBACK_REASONS, SignalLimiter, signalsSchema } from "./signals.js";
@@ -42,6 +43,11 @@ const askBody = z.object({
   sessionId: z.string().regex(SESSION_ID),
   locale: z.enum(["en", "de"]),
   deep: z.boolean().optional(),
+  /**
+   * The path of the page asked on (visitor plan V8), without query or hash.
+   * Only a published case study or post means anything (`pageDocument`).
+   */
+  page: z.string().max(PAGE_CHARS).optional(),
   /** Hidden from people; a bot that fills it gets nothing. */
   website: z.string().max(200).optional(),
   /** While Turnstile is on: needed once per session, on its first question. */
@@ -224,10 +230,13 @@ export function createAskRouter(): Hono {
         // What the trust monitor demoted is closed to visitors until the admin reinstates it.
         const demoted = await demotedSubjects();
         const deepOpen = deepAllowed && !demoted.has(DEEP_ROUTE);
+        // The case study or post asked on, if it is one (visitor plan V8).
+        const page = pageDocument(corpus, body.page, readingLocale(body.locale, history.language));
         const route = routeQuestion(history.question, {
           forceDeep: body.deep ?? false,
           deepAllowed: deepOpen,
           projectNames: corpus.projects.map((p) => p.name),
+          ...(page?.project ? { pageProject: page.project } : {}),
         });
         const chain = withoutDemoted(askChain(config, route.route), demoted);
         // Where the deep route is open, an answer routed lite may move up to it (plan phase 20).
@@ -258,6 +267,7 @@ export function createAskRouter(): Hono {
           abortSignal: controller.signal,
           droppedAnswers: history.droppedAnswers,
           window: history.window,
+          page,
           onClose: () => {
             release();
             inFlight.delete(controller);

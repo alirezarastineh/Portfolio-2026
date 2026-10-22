@@ -63,6 +63,9 @@ import {
  *   --no-lookup                   leave the lookup tier out (plan phase 20): run the
  *                                 lookup cases with and without it to compare their
  *                                 time to the first token
+ *   --no-page-promote             name the page without its text (visitor plan V8):
+ *                                 run the page cases with and without it to compare
+ *                                 their rounds and time to the first token
  *   --suite production            the cases frozen from visitor answers, each against
  *                                 its own corpus snapshot (reads the database through
  *                                 the tunnel, writes nothing; report only)
@@ -173,6 +176,12 @@ function resultMark(status: string, passed: boolean): string {
   return passed ? "✓" : "✗";
 }
 
+/** The answer's model calls (visitor plan V8's promotion A/B compares them). */
+function roundsNote(r: Pick<CaseResult, "rounds">): string {
+  if (r.rounds === undefined) return "";
+  return ` · ${r.rounds} ${r.rounds === 1 ? "round" : "rounds"}`;
+}
+
 /** A repair, and which path offered the hand-off (visitor plan V5, V6). */
 function resultNotes(r: Pick<CaseResult, "repair" | "handoff">): string {
   const notes: string[] = [];
@@ -199,11 +208,14 @@ const summary = await runEvals({
   promptVersion: `${PROMPT_VERSION}+${PROMPT_HASH}`,
   // `--no-lookup`: the lookup tier left out, to compare its time to the first token.
   ...(flag("no-lookup") ? { routing: { lookup: false } } : {}),
+  // `--no-page-promote`: the page named without its text, to compare rounds and first tokens.
+  ...(flag("no-page-promote") ? { promotePage: false } : {}),
   onResult: (r) => {
     const mark = resultMark(r.status, r.passed);
-    // The model's own first token, no pacing wait in it: the lookup A/B reads this.
+    // The model's own first token, no pacing wait in it: the lookup and promotion A/Bs read
+    // this, and the promotion's its rounds.
     const first = r.modelTtftMs == null ? "" : ` · first token ${r.modelTtftMs} ms`;
-    const meta = `${r.model ?? "no model"} · ${(r.totalMs / 1000).toFixed(1)} s${first}`;
+    const meta = `${r.model ?? "no model"} · ${(r.totalMs / 1000).toFixed(1)} s${first}${roundsNote(r)}`;
     const failures = r.passed ? "" : `\n    ${r.failures.join("\n    ")}`;
     // A failed case's answer, to read a grader's miss off the run, and its thoughts (plan phase
     // 23): evidence of why, not proof. The first lines of each.

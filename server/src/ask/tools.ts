@@ -131,6 +131,11 @@ export function allowedPath(
   return null;
 }
 
+/** A document's text as a fetch returns it: its first `chars` characters, with "…" where it was cut. */
+export function fetchedText(text: string, chars: number): string {
+  return chars < text.length ? `${text.slice(0, chars)}…` : text;
+}
+
 /**
  * The tools for one answer, reading in `locale` (the answer's language).
  * With `search.config`, the search is hybrid when the deploy and the admin
@@ -140,20 +145,26 @@ export function allowedPath(
  *
  * Built per answer, so its `ToolBudget` is the answer's (plan phase 21): a
  * repeated search or document returns "already provided", and the documents
- * past the envelope `budget_exhausted`, before any work is done.
+ * past the envelope `budget_exhausted`, before any work is done. A `page`
+ * whose text its block gives (visitor plan V8) is read already: it counts
+ * against the envelope as the fetch it replaces, and a fetch of it says where
+ * its text is.
  */
 export function buildTools(
   corpus: AskCorpus,
   locale: Locale,
   search: { config?: AskConfig; record?: boolean; calls?: ModelCall[] } = {},
+  page?: { id: string; length: number },
 ) {
   const budget = new ToolBudget();
+  if (page) budget.take(page.id, page.length);
   /** A document's text through the envelope: read once, cut where the budget says. */
   const readOnce = (id: string, text: string) => {
+    if (id === page?.id) return { id, duplicate: true as const, note: NOTES.onPage };
     if (budget.hasRead(id)) return { id, duplicate: true as const, note: NOTES.alreadyProvided };
     const chars = budget.take(id, text.length);
     if (chars === null) return { error: "budget_exhausted" as const, note: NOTES.budgetSpent };
-    return { text: chars < text.length ? `${text.slice(0, chars)}…` : text };
+    return { text: fetchedText(text, chars) };
   };
 
   return {

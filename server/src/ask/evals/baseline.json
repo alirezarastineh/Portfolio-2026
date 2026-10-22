@@ -71,5 +71,7 @@
   "p95TotalMs": 42989,
   "at": "2026-10-21T22:18:18.533Z",
   "acceptedRegression": null,
-  "waivers": {}
+  "waivers": {
+    "ask-2026-10-22.1+58a3e95f34fb": "Visitor plan Part D (V8 page-aware answers): measured by Part D's recorded eval run, which clears this waiver."
+  }
 }

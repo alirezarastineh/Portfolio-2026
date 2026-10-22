@@ -4,6 +4,7 @@ import type { CorpusDocument } from "./corpus/build.js";
 import { applyTiers, MAX_PROMOTED, NO_TIERS } from "./corpus/render.js";
 import {
   fetchKind,
+  measurePages,
   measurePerception,
   requestedId,
   resolveRequested,
@@ -225,6 +226,45 @@ describe("perception, measured", () => {
     expect(p.usdPerAnswer).toBeCloseTo(0.002);
     // Two answers before, one of them helpful: 2,000 input and 200 output tokens for it.
     expect(both.tokens.perHelpful).toBe(2_200);
+  });
+});
+
+describe("page-aware answers (visitor plan V8)", () => {
+  const lite = (fetched: string[] = []) =>
+    step("gemini-3.5-flash-lite", { input: 1_000, cached: 0 }, fetched);
+  const answered = (
+    steps: TraceStep[],
+    ttftMs: number | null,
+    helpful: boolean,
+    page?: AnswerTrace["page"],
+  ) => ({ trace: { v: 1 as const, steps, ...(page ? { page } : {}) }, ttftMs, helpful });
+
+  it("sets the answers asked on a case study or a post against the rest", () => {
+    const { pageAware, rest } = measurePages([
+      answered([lite()], 900, true, { id: "project:atlas@en", promoted: true }),
+      answered([lite(), lite()], 1_500, false, { id: "post:x@en", promoted: false }),
+      answered([lite(["project:atlas@en"]), lite()], 1_200, true),
+      answered([lite(), lite(), lite()], 2_000, false),
+      // An answer from before the trace held steps: counted, but not in the rounds.
+      { trace: null, ttftMs: null, helpful: true },
+    ]);
+    expect(pageAware).toEqual({
+      answers: 2,
+      rounds: 1.5,
+      ttftP50Ms: 900,
+      helpful: 0.5,
+      promoted: 1,
+    });
+    expect(rest).toEqual({ answers: 3, rounds: 2.5, ttftP50Ms: 1_200, helpful: 2 / 3 });
+  });
+
+  it("counts a step no model answered as no round, and has nothing to divide by without answers", () => {
+    const unanswered: TraceStep = { ...lite(), model: null, tokens: null };
+    const { pageAware, rest } = measurePages([
+      answered([lite(), unanswered], 800, true, { id: "post:x@en", promoted: true }),
+    ]);
+    expect(pageAware.rounds).toBe(1);
+    expect(rest).toEqual({ answers: 0, rounds: null, ttftP50Ms: null, helpful: null });
   });
 });
 

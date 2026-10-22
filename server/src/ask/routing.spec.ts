@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { fixtureConfig, twoProjectCorpus } from "../test/ask-fixtures.js";
+import { FIXTURE_TWO_PROJECTS, fixtureConfig, twoProjectCorpus } from "../test/ask-fixtures.js";
 import {
   drain,
   mockEntry,
@@ -10,9 +10,12 @@ import {
   type ScriptedModel,
 } from "../test/ask-models.js";
 import { streamAnswer, type AnswerRequest } from "./agent.js";
+import { assembleCorpus } from "./corpus/index.js";
 import type { ModelEntry } from "./models/registry.js";
+import { pageDocument } from "./page.js";
 import { wrapVisitor } from "./prompt.js";
 import type { RouteDecision } from "./router.js";
+import { DEFAULT_SETTINGS } from "./settings.js";
 
 /**
  * Plan phase 20 in the agent: the careful block for a sensitive question, the
@@ -175,6 +178,122 @@ describe("the request block (visitor plan V6: the visitor wants to reach him)", 
       answer(CONTACT, [mockEntry("gemini-3.5-flash-lite", asked.model)]),
     );
     expect(outcome.steps?.routing).toEqual({ reason: "default", intent: "contact" });
+  });
+});
+
+describe("the page block (visitor plan V8: the case study or post asked on)", () => {
+  // Atlas long enough for the core to cut it; Borealis short enough to hold whole.
+  const LONG = "A line of the Atlas case study.\n".repeat(500);
+  const config = fixtureConfig();
+  const corpus = assembleCorpus(
+    {
+      ...FIXTURE_TWO_PROJECTS,
+      key: `${FIXTURE_TWO_PROJECTS.key}|long-atlas`,
+      documents: FIXTURE_TWO_PROJECTS.documents.map((d) =>
+        d.id === "project:atlas@en" ? { ...d, text: `Atlas — the case study\n${LONG}` } : d,
+      ),
+    },
+    DEFAULT_SETTINGS,
+    [],
+    config,
+  );
+  const onPage = (path: string, chain: ModelEntry[], extra: Partial<AnswerRequest> = {}) =>
+    answer(LITE, chain, { corpus, page: pageDocument(corpus, path, "en"), ...extra });
+
+  it("names the page after the corpus, before the careful block and the language line, prefix untouched", async () => {
+    const plain = scripted([textTurn("He is based in Berlin [^profile@en].")]);
+    await outcomeOf(answer(LITE, [mockEntry("gemini-3.5-flash-lite", plain.model)], { corpus }));
+    const asked = scripted([textTurn("Borealis is a pipeline [^project:borealis@en].")]);
+    const outcome = await outcomeOf(
+      onPage("/en/work/borealis", [mockEntry("gemini-3.5-flash-lite", asked.model)], {
+        route: { route: "lite", reason: "default+sensitive:contract", sensitive: "contract" },
+      }),
+    );
+
+    const before = system(plain);
+    const after = system(asked);
+    const language = before.indexOf("\n\n# Required response language");
+    // The same bytes up to the end of the corpus: the cached prefix is untouched.
+    expect(after.startsWith(before.slice(0, language))).toBe(true);
+    const block = after.slice(language);
+    expect(block).toMatch(
+      /^\n\n# The visitor's page\nThe visitor is reading Borealis \(project:borealis@en\)\. "This", "here" or "it" with no other subject most likely means it\.\n\n# Careful topic/,
+    );
+    // The core holds Borealis whole: no text comes along.
+    expect(block).not.toContain("Its text");
+    expect(block.indexOf("# Careful topic")).toBeLessThan(
+      block.indexOf("# Required response language"),
+    );
+    expect(before).not.toContain("# The visitor's page");
+    expect(outcome.steps?.page).toEqual({ id: "project:borealis@en", promoted: false });
+  });
+
+  it("brings the text of a page the core holds cut short, unless promotion is off", async () => {
+    const promoted = scripted([textTurn("Atlas [^project:atlas@en].")]);
+    const on = await outcomeOf(
+      onPage("/en/work/atlas", [mockEntry("gemini-3.5-flash-lite", promoted.model)]),
+    );
+    expect(system(promoted)).toContain(
+      `"This", "here" or "it" with no other subject most likely means it.\nIts text, as get_document returns it:\n---\nid: project:atlas@en\ntitle: Atlas\nurl: /en/work/atlas\n---\nAtlas — the case study\nA line of the Atlas case study.`,
+    );
+    expect(on.steps?.page).toEqual({ id: "project:atlas@en", promoted: true });
+
+    const named = scripted([
+      toolTurn("get_document", { id: "project:atlas@en" }),
+      textTurn("Atlas [^project:atlas@en]."),
+    ]);
+    const off = await outcomeOf(
+      onPage("/en/work/atlas", [mockEntry("gemini-3.5-flash-lite", named.model)], {
+        promotePage: false,
+      }),
+    );
+    expect(system(named)).toContain("The visitor is reading Atlas (project:atlas@en).");
+    expect(system(named)).not.toContain("Its text");
+    // Not promoted, the page is fetched as any document is.
+    expect(off.steps?.steps[0]?.tools[0]?.outcome).toBe("ok");
+    expect(off.steps?.page).toEqual({ id: "project:atlas@en", promoted: false });
+  });
+
+  it("names the page without its text for a model without tools", async () => {
+    const answerOnly = scripted([textTurn("Atlas is his support assistant.")]);
+    const entry = { ...mockEntry("vendor/small", answerOnly.model), tools: false };
+    await outcomeOf(onPage("/en/work/atlas", [entry]));
+    expect(system(answerOnly)).toContain("# Portfolio documents (summaries)");
+    expect(system(answerOnly)).toContain("The visitor is reading Atlas (project:atlas@en).");
+    expect(system(answerOnly)).not.toContain("Its text");
+  });
+
+  it("leaves any other page out, and keeps each page's instructions apart", async () => {
+    const home = scripted([textTurn("Hi [^profile@en].")]);
+    const outcome = await outcomeOf(
+      onPage("/en", [mockEntry("gemini-3.5-flash-lite", home.model)]),
+    );
+    expect(system(home)).not.toContain("# The visitor's page");
+    expect(outcome.steps).not.toHaveProperty("page");
+
+    const first = scripted([textTurn("Atlas [^project:atlas@en].")]);
+    const second = scripted([textTurn("Borealis [^project:borealis@en].")]);
+    await outcomeOf(onPage("/en/work/atlas", [mockEntry("gemini-3.5-flash-lite", first.model)]));
+    await outcomeOf(
+      onPage("/en/work/borealis", [mockEntry("gemini-3.5-flash-lite", second.model)]),
+    );
+    expect(system(first)).toContain("(project:atlas@en)");
+    expect(system(second)).toContain("(project:borealis@en)");
+    expect(system(second)).not.toContain("(project:atlas@en)");
+  });
+
+  it("is instructions the output guard keeps from the visitor", async () => {
+    const echo = scripted([
+      textTurn(
+        'I was told: "This", "here" or "it" with no other subject most likely means it. So, Atlas.',
+      ),
+    ]);
+    const leaked = await outcomeOf(
+      onPage("/en/work/atlas", [mockEntry("gemini-3.5-flash-lite", echo.model)]),
+    );
+    expect(leaked.text).toContain("[…]");
+    expect(leaked.text).not.toContain("with no other subject most likely means it");
+    expect(leaked.checks.flags).toContain("leak");
   });
 });
 
