@@ -35,6 +35,8 @@ export interface AssistantSettings {
   /** Each fenced feature's own daily cap in USD; null = only the reserve line. */
   featureCaps: Record<FencedFeature, number | null>;
   featureSwitches: Record<SwitchedFeature, boolean>;
+  /** Whether visitors may read the scorecard (`evals`, `/v1/ask/scorecard`; visitor plan V13). */
+  publicScorecard: boolean;
   updatedAt: string | null;
 }
 

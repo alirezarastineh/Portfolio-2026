@@ -39,6 +39,7 @@ interface Draft {
   enabled: boolean;
   budget: string;
   deepEnabled: boolean;
+  publicScorecard: boolean;
   suggestions: Record<Locale, string>;
   systemCard: Record<Locale, string>;
   spend: SpendDraft;
@@ -49,6 +50,8 @@ function toDraft(s: AssistantSettings): Draft {
     enabled: s.enabled,
     budget: s.dailyBudgetUsd === null ? "" : String(s.dailyBudgetUsd),
     deepEnabled: s.deepEnabled,
+    // An API from before the scorecard sends nothing: it is not published.
+    publicScorecard: s.publicScorecard === true,
     suggestions: { en: s.suggestedQuestions.en.join("\n"), de: s.suggestedQuestions.de.join("\n") },
     systemCard: { ...s.systemCard },
     spend: spendDraft(s),
@@ -113,6 +116,22 @@ function toDraft(s: AssistantSettings): Draft {
             <label for="ask-deep">Deep model for comparisons and architecture questions</label>
             <p id="ask-deep-hint" class="m-0 text-xs text-muted-foreground">
               Switches itself off for the rest of the day at 80 % of the budget.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 text-sm">
+          <hlm-switch
+            id="ask-scorecard"
+            aria-describedby="ask-scorecard-hint"
+            [checked]="d.publicScorecard"
+            (checkedChange)="patch({ publicScorecard: $event })"
+          />
+          <div>
+            <label for="ask-scorecard">Public scorecard</label>
+            <p id="ask-scorecard-hint" class="m-0 text-xs text-muted-foreground">
+              Visitors read the recorded eval run and 30 days of live checks with
+              <code>evals</code>: aggregates only. Off, the scorecard answers 404.
             </p>
           </div>
         </div>
@@ -400,6 +419,7 @@ export class AssistantSettingsComponent implements OnInit {
       enabled: d.enabled,
       dailyBudgetUsd: budget,
       deepEnabled: d.deepEnabled,
+      publicScorecard: d.publicScorecard,
       suggestedQuestions: { en: lines(d.suggestions.en), de: lines(d.suggestions.de) },
       systemCard: { en: d.systemCard.en.trim(), de: d.systemCard.de.trim() },
       ...spend.value,

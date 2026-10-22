@@ -30,6 +30,7 @@ const settings: AssistantSettings = {
     embeddings: false,
     nightlyJudge: false,
   },
+  publicScorecard: false,
   updatedAt: null,
 };
 

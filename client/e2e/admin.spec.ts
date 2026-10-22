@@ -710,6 +710,7 @@ function assistantSettings(change: Record<string, unknown> = {}) {
       embeddings: false,
       nightlyJudge: false,
     },
+    publicScorecard: false,
     updatedAt: HOUR_AGO,
     ...change,
   };
@@ -2359,10 +2360,15 @@ test.describe("admin", () => {
     await expect(named("Automatic insights")).toHaveAccessibleDescription(/nightly check/);
     await expect(named("Nightly judge")).not.toBeChecked();
     await expect(named("Nightly judge")).toHaveAccessibleDescription(/review queue/);
+    // The public scorecard (visitor plan V13): unpublished until switched on.
+    await expect(named("Public scorecard")).not.toBeChecked();
+    await expect(named("Public scorecard")).toHaveAccessibleDescription(/aggregates only/);
+    await named("Public scorecard").click();
     await named("Copilot").click();
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect.poll(() => saved).toHaveLength(1);
     expect(saved[0]).toMatchObject({
+      publicScorecard: true,
       publicReserve: 0.6,
       featureCaps: { eval: 0.5, copilot: null, pairwise: null, agent: 0.05 },
       featureSwitches: {
