@@ -243,6 +243,28 @@ export function withSelection(question: string, selection: string, locale: Local
   return wrapVisitor(`${question}\n\nSelected: "${selection}"`, locale);
 }
 
+/** How technical a visitor asked answers to be (visitor plan V10); `standard` adds nothing. */
+export type ReaderLevel = "plain" | "expert";
+
+/**
+ * The level block (visitor plan V10): the visitor's own choice, kept in their
+ * browser (`level plain | expert`), never a guess. It goes after the corpus,
+ * as the careful block does; grounding and the careful rules are unchanged.
+ */
+const LEVEL_BLOCKS: Record<ReaderLevel, string> = {
+  plain:
+    "# Reader's level\nThe visitor asked for plain answers: no jargon, each technical term explained in a few words, short sentences, about 120 words at most. Grounding, citations and every rule above hold as always.",
+  expert:
+    "# Reader's level\nThe visitor asked for expert answers: technical depth, with the trade-offs, the design choices and the numbers the documents give, up to about 250 words. Grounding, citations and every rule above hold as always.",
+};
+
+export function levelInstruction(level: ReaderLevel): string {
+  return LEVEL_BLOCKS[level];
+}
+
+/** Both level blocks: instructions too, for the output guard and the prompt's hash. */
+export const LEVEL_INSTRUCTIONS: readonly string[] = Object.values(LEVEL_BLOCKS);
+
 /** What a request adds to the fixed instructions. */
 export interface InstructionExtras {
   /** A pairwise eval's candidate in place of `SYSTEM_PROMPT`; never a visitor's request. */
@@ -253,6 +275,8 @@ export interface InstructionExtras {
   page?: PageBlock;
   /** What the visitor points at on it (visitor plan V9): the focus block. */
   focus?: FocusBlock;
+  /** The level the visitor chose, when not standard (visitor plan V10): the level block. */
+  level?: ReaderLevel;
   /** The careful block's topic, for a sensitive question. */
   careful?: Sensitivity;
   /** The visitor wants to reach him (visitor plan V6): the request block. */
@@ -261,13 +285,15 @@ export interface InstructionExtras {
 
 /**
  * The request's own blocks after the corpus: a candidate line, the page, what
- * the visitor points at, the careful block, the request block, the language.
+ * the visitor points at, the level they chose, the careful block, the request
+ * block, the language.
  */
 function tail(locale: Locale | undefined, language: Locale | null, extras: InstructionExtras) {
   return [
     extras.afterCorpus?.trim(),
     extras.page && pageInstruction(extras.page),
     extras.focus && focusInstruction(extras.focus),
+    extras.level && levelInstruction(extras.level),
     extras.careful && carefulInstruction(extras.careful),
     extras.contact && CONTACT_BLOCK,
     locale && responseLanguageInstruction(locale, language),
@@ -392,8 +418,8 @@ export function withoutFence(text: string): string {
  * tools' descriptions, inputs and notes (tool-defs.ts, plan phase 21), the
  * repair's turn and closing line (visitor plan V5), which an answer without
  * words gets, the request block (V6), the page block with and without its
- * text (V8), and the focus block in each of its forms, with the selection a
- * page does not hold (V9).
+ * text (V8), the focus block in each of its forms, with the selection a page
+ * does not hold (V9), and both level blocks (V10).
  */
 export function hashedPromptText(): string {
   return [
@@ -403,6 +429,7 @@ export function hashedPromptText(): string {
     pageInstruction({ id: PAGE_SAMPLE.id, title: PAGE_SAMPLE.title, url: PAGE_SAMPLE.url }),
     ...FOCUS_SAMPLES.map(focusInstruction),
     withSelection("q", "s", "en"),
+    ...LEVEL_INSTRUCTIONS,
     ...(["en", "de"] as const).flatMap((locale) =>
       ([null, "en", "de"] as const).map((language) =>
         responseLanguageInstruction(locale, language),

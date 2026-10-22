@@ -18,7 +18,7 @@ import type { ModelEntry } from "../models/registry.js";
 import { pageDocument } from "../page.js";
 import { EVAL_CASES } from "./cases.js";
 import { fixtureAskCorpus } from "./fixture.js";
-import { grade, runEvals } from "./run.js";
+import { grade, JUDGE_LEVEL, runEvals } from "./run.js";
 
 const byId = (id: string) => EVAL_CASES.find((c) => c.id === id)!;
 
@@ -267,6 +267,32 @@ describe("eval graders", () => {
     }
   });
 
+  it("holds an answer to the level the visitor chose: its length, and plain words for plain (V10)", () => {
+    const plain = byId("level-plain");
+    const cited = ["project:atlas@en"];
+    const short =
+      "Atlas is a support assistant that Alireza built [^project:atlas@en]. It helps support agents find answers fast.";
+    expect(grade(plain, { text: short, cited, tools: [] })).toEqual([]);
+    const dense =
+      "Atlas is a retrieval-augmented support assistant whose hybrid retrieval combines BM25 with pgvector embeddings and a cross-encoder reranker, and whose generation is grounded with mandatory citations for agents [^project:atlas@en].";
+    expect(grade(plain, { text: dense, cited, tools: [] })).toEqual([
+      "not plain: 28.0 words a sentence (at most 20)",
+      "not plain: 46 % long words (at most 35 %)",
+    ]);
+    const long = `${"It helps support agents find answers fast. ".repeat(22)}[^project:atlas@en]`;
+    expect(grade(plain, { text: long, cited, tools: [] })).toEqual([
+      "154 words at the plain level (at most 150)",
+    ]);
+    // Expert: depth, not a line.
+    expect(
+      grade(byId("level-expert"), {
+        text: "Atlas ranks with BM25 [^project:atlas@en].",
+        cited,
+        tools: [],
+      }),
+    ).toEqual(["4 words at the expert level (at least 60)"]);
+  });
+
   it("every page case's path names the document it expects, as the route maps it", () => {
     const corpus = fixtureAskCorpus(fixtureConfig());
     const pages = EVAL_CASES.filter((c) => c.expectPage !== undefined);
@@ -442,6 +468,40 @@ describe("runEvals", { timeout: 30_000 }, () => {
     expect(passed).not.toHaveProperty("reasoning");
     expect(failed).toMatchObject({ status: "failed" });
     expect(failed!.reasoning).toBe(`${long.trim().slice(0, 2_000)}…`);
+  });
+
+  it("answers a level case at its level, and tells the judge which (visitor plan V10)", async () => {
+    const config = fixtureConfig();
+    const corpus = fixtureAskCorpus(config);
+    const judgeSaw: string[] = [];
+    const run = async (id: string) => {
+      const answer = scripted([
+        textTurn("Atlas is a support assistant. It helps agents find answers [^project:atlas@en]."),
+      ]);
+      const judge = generating([
+        JSON.stringify({ faithfulness: 1, helpfulness: 5, unsupported: [] }),
+      ]);
+      await runEvals({
+        cases: [byId(id)],
+        corpus,
+        config,
+        concurrency: 1,
+        chain: (role) => [
+          role === "judge"
+            ? mockEntry("gemini-3.7-flash", judge.model)
+            : mockEntry("gemini-3.5-flash-lite", answer.model),
+        ],
+        promptVersion: "test",
+      });
+      judgeSaw.push(JSON.stringify(judge.calls[0]!.prompt));
+      const first = answer.calls[0]!.prompt[0]!;
+      return first.role === "system" ? first.content : "";
+    };
+
+    expect(await run("level-plain")).toContain("The visitor asked for plain answers");
+    expect(judgeSaw[0]).toContain(JUDGE_LEVEL.plain);
+    expect(await run("fact-atlas-impact")).not.toContain("# Reader's level");
+    expect(judgeSaw[1]).not.toContain("The visitor asked for");
   });
 
   it("paces answer and judge calls through one shared provider gate", async () => {

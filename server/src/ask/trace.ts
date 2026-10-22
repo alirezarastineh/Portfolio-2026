@@ -95,6 +95,8 @@ export interface AnswerTrace {
    * the visitor's message). Absent when they pointed at nothing.
    */
   focus?: { kind: "section" | "code" | "selection"; verified: boolean };
+  /** The level the visitor chose (visitor plan V10); absent for standard, and from before. */
+  level?: "plain" | "expert";
 }
 
 function inputText(input: unknown): string {
@@ -125,7 +127,7 @@ export function buildAnswerTrace(
   core?: AnswerTrace["core"],
   route?: Pick<
     AnswerTrace,
-    "routing" | "escalation" | "window" | "repair" | "handoff" | "page" | "focus"
+    "routing" | "escalation" | "window" | "repair" | "handoff" | "page" | "focus" | "level"
   >,
 ): AnswerTrace {
   const segments: Attempt[][] = [[]];
@@ -174,5 +176,6 @@ export function buildAnswerTrace(
     ...(route?.handoff ? { handoff: route.handoff } : {}),
     ...(route?.page ? { page: route.page } : {}),
     ...(route?.focus ? { focus: route.focus } : {}),
+    ...(route?.level ? { level: route.level } : {}),
   };
 }

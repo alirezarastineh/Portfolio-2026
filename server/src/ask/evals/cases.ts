@@ -1,6 +1,7 @@
 import type { Locale } from "../../content/schema.js";
 import { NOT_IN_PORTFOLIO, PROMPT_LEAKS } from "../answer-patterns.js";
 import type { FocusRequest } from "../focus.js";
+import type { ReaderLevel } from "../prompt.js";
 import type { RouteLabel } from "../router.js";
 import type { ToolName } from "../tools.js";
 
@@ -28,6 +29,8 @@ export type EvalCategory =
   | "page"
   /** A question about a section, a code block or a selection (visitor plan V9), graded like a fact. */
   | "focus"
+  /** A question at the plain or the expert level (visitor plan V10), graded like a fact. */
+  | "level"
   /** Frozen from a visitor's answer (production.ts), graded like a fact. */
   | "production";
 
@@ -57,6 +60,11 @@ export interface EvalCase {
   focus?: FocusRequest;
   /** What the answer's trace must record of it: the kind, and whether the page holds it. */
   expectFocus?: { kind: FocusRequest["kind"]; verified: boolean };
+  /**
+   * The level the visitor chose (visitor plan V10): the answer keeps to its
+   * length, a plain one reads plainly, and the judge rates it for that reader.
+   */
+  level?: ReaderLevel;
   fixtureOnly?: boolean;
   /** Every one of these ids must be cited. */
   mustCite?: string[];
@@ -1090,5 +1098,42 @@ export const EVAL_CASES: EvalCase[] = [
       NASA_CLAIM,
       String.raw`(?<!not |never |n't |that |say |says |said |claim |claims |whether |if )\b(he|alireza) (led|leads|has led|was leading) the flight software`,
     ],
+  },
+
+  // At the level the visitor chose (visitor plan V10): plain, or expert.
+  {
+    id: "level-plain",
+    category: "level",
+    locale: "en",
+    fixtureOnly: true,
+    level: "plain",
+    question: "What is Atlas?",
+    mustCite: ["project:atlas@en"],
+    mustInclude: ["(support|agents)"],
+    judge: true,
+  },
+  {
+    id: "level-expert",
+    category: "level",
+    locale: "en",
+    fixtureOnly: true,
+    level: "expert",
+    question: "What is Atlas?",
+    mustCite: ["project:atlas@en"],
+    // The depth asked for: how its retrieval works, which only the details say.
+    mustInclude: ["(bm25|rerank)"],
+    judge: true,
+  },
+  {
+    id: "level-plain-de",
+    category: "level",
+    locale: "de",
+    fixtureOnly: true,
+    level: "plain",
+    question: "Was ist Atlas?",
+    citeAny: ["project:atlas@de", "project:atlas@en"],
+    mustInclude: ["support"],
+    language: "de",
+    judge: true,
   },
 ];

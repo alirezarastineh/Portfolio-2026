@@ -80,6 +80,7 @@ import {
   CONTACT_BLOCK,
   FOCUS_SAMPLES,
   focusInstruction,
+  LEVEL_INSTRUCTIONS,
   PAGE_SAMPLE,
   pageInstruction,
   PROMPT_CANARY,
@@ -90,6 +91,7 @@ import {
   SYSTEM_PROMPT,
   withSelection,
   type InstructionExtras,
+  type ReaderLevel,
 } from "./prompt.js";
 import { ESCALATED_ROUTE, escalationOf, type Escalation, type RouteDecision } from "./router.js";
 import {
@@ -178,6 +180,8 @@ export interface AnswerRequest {
   promotePage?: boolean;
   /** What the visitor points at on the page (visitor plan V9, `focusOf`). */
   focus?: Focus | null;
+  /** How technical the visitor asked answers to be, when not standard (visitor plan V10). */
+  level?: ReaderLevel;
   /**
    * Write the log row and the usage totals (default). Off for evals run from
    * a laptop, whose database is the production one.
@@ -228,7 +232,7 @@ function safeTrace(
   core: NonNullable<AnswerTrace["core"]>,
   route: Pick<
     AnswerTrace,
-    "routing" | "escalation" | "window" | "repair" | "handoff" | "page" | "focus"
+    "routing" | "escalation" | "window" | "repair" | "handoff" | "page" | "focus" | "level"
   >,
 ): AnswerTrace | null {
   try {
@@ -300,10 +304,10 @@ function instructionsFor(
     return make();
   }
   // The key names the reading locale too (it is `language ?? locale`), the page and whether its
-  // text came along, the careful topic and the request block.
+  // text came along, the level, the careful topic and the request block.
   const promoted = extras.page?.text === undefined ? "" : "+text";
   const page = extras.page ? `${extras.page.id}${promoted}` : "";
-  const key = `${corpus.key}:${locale}:${language}:${page}:${extras.careful ?? ""}:${extras.contact ? "contact" : ""}`;
+  const key = `${corpus.key}:${locale}:${language}:${page}:${extras.level ?? ""}:${extras.careful ?? ""}:${extras.contact ? "contact" : ""}`;
   let memo = instructionsMemo.get(key);
   if (!memo) {
     // A few language pairs, pages and topics per corpus; a new corpus pushes the old out.
@@ -343,9 +347,9 @@ const guardMemo = new Map<string, LeakGuard>();
 function guardFor(corpus: AskCorpus, config: AskConfig, systemPrompt?: string): LeakGuard {
   const build = () =>
     buildLeakGuard({
-      // The careful blocks (plan phase 20), the repair line, the request block and the page and
-      // focus blocks' own words (visitor plan V5, V6, V8, V9) are instructions too: never to be
-      // repeated.
+      // The careful blocks (plan phase 20), the repair line, the request block and the page,
+      // focus and level blocks' own words (visitor plan V5, V6, V8–V10) are instructions too:
+      // never to be repeated.
       instructions: [
         systemPrompt ?? SYSTEM_PROMPT,
         ...CAREFUL_BLOCKS,
@@ -353,6 +357,7 @@ function guardFor(corpus: AskCorpus, config: AskConfig, systemPrompt?: string): 
         CONTACT_BLOCK,
         pageInstruction(PAGE_SAMPLE),
         ...FOCUS_SAMPLES.map(focusInstruction),
+        ...LEVEL_INSTRUCTIONS,
       ].join("\n\n"),
       corpusTexts: corpus.documents.map((d) => d.text),
       quotable: [SCOPE],
@@ -502,6 +507,8 @@ export function streamAnswer(request: AnswerRequest): {
       : {}),
     // What the visitor points at on the page (visitor plan V9): its block, after the page's.
     ...(request.focus?.block ? { focus: request.focus.block } : {}),
+    // The level they chose (visitor plan V10); standard adds nothing.
+    ...(request.level ? { level: request.level } : {}),
     careful: route.sensitive,
     contact: route.intent === "contact",
   };
@@ -797,6 +804,7 @@ export function streamAnswer(request: AnswerRequest): {
       : {}),
     ...(page ? { page: { id: page.document.id, promoted } } : {}),
     ...(request.focus ? { focus: request.focus.trace } : {}),
+    ...(request.level ? { level: request.level } : {}),
   });
 
   const persistOutcome = async (

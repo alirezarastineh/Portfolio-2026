@@ -55,6 +55,11 @@ const askBody = z.object({
    * if the document holds it (`focusOf`).
    */
   focus: focusSchema.optional(),
+  /**
+   * How technical the visitor asked answers to be (visitor plan V10), kept in
+   * their browser. The terminal sends nothing for standard; taken all the same.
+   */
+  level: z.enum(["plain", "standard", "expert"]).optional(),
   /** Hidden from people; a bot that fills it gets nothing. */
   website: z.string().max(200).optional(),
   /** While Turnstile is on: needed once per session, on its first question. */
@@ -276,6 +281,7 @@ export function createAskRouter(): Hono {
           window: history.window,
           page,
           focus: body.focus ? focusOf(body.focus, page) : null,
+          ...(body.level && body.level !== "standard" ? { level: body.level } : {}),
           onClose: () => {
             release();
             inFlight.delete(controller);

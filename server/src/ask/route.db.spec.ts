@@ -778,6 +778,23 @@ describe("the page asked on (visitor plan V8)", () => {
       expect(res.status, JSON.stringify(focus)).toBe(400);
     }
   });
+
+  it("answers at the level the visitor chose, standard adding nothing (visitor plan V10)", async () => {
+    const plain = scripted([textTurn("Atlas helps support agents [^project:atlas@en].")]);
+    only(plain);
+    const chunks = await readUiChunks(await ask("What is Atlas?", { extra: { level: "plain" } }));
+    expect(firstSystem(plain)).toContain("The visitor asked for plain answers");
+    expect((await logged(chunks[0]!["messageId"] as string)).trace?.level).toBe("plain");
+
+    const standard = scripted([textTurn("Atlas helps support agents [^project:atlas@en].")]);
+    only(standard);
+    const asked = await readUiChunks(await ask("What is Atlas?", { extra: { level: "standard" } }));
+    expect(firstSystem(standard)).not.toContain("# Reader's level");
+    expect((await logged(asked[0]!["messageId"] as string)).trace).not.toHaveProperty("level");
+
+    const res = await ask("What is Atlas?", { extra: { level: "simple" } });
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("figures checked against their sources (visitor plan V7)", () => {

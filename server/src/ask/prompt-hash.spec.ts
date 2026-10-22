@@ -7,6 +7,8 @@ import {
   FOCUS_SAMPLES,
   focusInstruction,
   hashedPromptText,
+  LEVEL_INSTRUCTIONS,
+  levelInstruction,
   PAGE_SAMPLE,
   pageInstruction,
   REPAIR_LINE,
@@ -59,5 +61,8 @@ describe("the prompt's hash", () => {
     ]);
     for (const focus of FOCUS_SAMPLES) expect(text).toContain(focusInstruction(focus));
     expect(text).toContain(withSelection("q", "s", "en"));
+    // Both level blocks (V10); standard has none.
+    expect(LEVEL_INSTRUCTIONS).toEqual([levelInstruction("plain"), levelInstruction("expert")]);
+    for (const block of LEVEL_INSTRUCTIONS) expect(text).toContain(block);
   });
 });

@@ -297,6 +297,50 @@ describe("the page block (visitor plan V8: the case study or post asked on)", ()
   });
 });
 
+describe("the level block (visitor plan V10: the level the visitor chose)", () => {
+  const at = async (level?: "plain" | "expert", route: RouteDecision = LITE) => {
+    const model = scripted([textTurn("Atlas helps support agents [^project:atlas@en].")]);
+    const outcome = await outcomeOf(
+      answer(route, [mockEntry("gemini-3.5-flash-lite", model.model)], level ? { level } : {}),
+    );
+    return { system: system(model), outcome };
+  };
+
+  it("follows the corpus, before the careful block and the language line, prefix untouched at every level", async () => {
+    const standard = await at();
+    const careful: RouteDecision = {
+      route: "lite",
+      reason: "default+sensitive:compensation",
+      sensitive: "compensation",
+    };
+    const plain = await at("plain", careful);
+    const expert = await at("expert");
+    const language = standard.system.indexOf("\n\n# Required response language");
+    // Standard adds nothing: today's bytes.
+    expect(standard.system).not.toContain("# Reader's level");
+    for (const { system: text } of [plain, expert]) {
+      expect(text.startsWith(standard.system.slice(0, language))).toBe(true);
+    }
+    const block = plain.system.slice(language);
+    expect(block).toMatch(/^\n\n# Reader's level\nThe visitor asked for plain answers: no jargon/);
+    expect(block.indexOf("# Reader's level")).toBeLessThan(block.indexOf("# Careful topic"));
+    expect(expert.system).toContain("The visitor asked for expert answers: technical depth");
+    // Each level its own instructions (the memo keys on it), and its trace.
+    expect(plain.system).not.toContain("expert answers");
+    expect(plain.outcome.steps?.level).toBe("plain");
+    expect(expert.outcome.steps?.level).toBe("expert");
+    expect(standard.outcome.steps).not.toHaveProperty("level");
+  });
+
+  it("reaches a model without tools too", async () => {
+    const answerOnly = scripted([textTurn("Atlas helps support agents.")]);
+    const entry = { ...mockEntry("vendor/small", answerOnly.model), tools: false };
+    await outcomeOf(answer(LITE, [entry], { level: "plain" }));
+    expect(system(answerOnly)).toContain("# Portfolio documents (summaries)");
+    expect(system(answerOnly)).toContain("The visitor asked for plain answers");
+  });
+});
+
 describe("the lookup tier", () => {
   const thinkingOf = (model: ScriptedModel) =>
     (
