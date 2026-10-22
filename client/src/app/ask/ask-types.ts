@@ -1,5 +1,6 @@
 import type { UIMessage } from "ai";
 
+import type { AskAbout } from "./ask-launcher.service";
 import type { OutLine } from "./commands";
 
 /**
@@ -58,6 +59,8 @@ export type Entry =
       /** The user message this entry sent; its answer is the message after it. */
       userId: string;
       deep: boolean;
+      /** What a reader pointed at with it (visitor plan V9): sent again by a retry. */
+      about?: AskAbout;
       failure?: Failure;
       /** Seconds to wait, for `rateLimited`. */
       retryAfter?: number;

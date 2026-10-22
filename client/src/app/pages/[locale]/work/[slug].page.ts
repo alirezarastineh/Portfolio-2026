@@ -1,5 +1,5 @@
 import { DOCUMENT } from "@angular/common";
-import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, ElementRef, inject } from "@angular/core";
 import { toSignal } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, RouterLink, type ResolveFn } from "@angular/router";
 import type { MetaTag, RouteMeta } from "@analogjs/router";
@@ -8,6 +8,7 @@ import { lucideArrowLeft, lucideArrowRight, lucideExternalLink } from "@ng-icons
 import { map } from "rxjs";
 
 import { AskLauncherService } from "../../../ask/ask-launcher.service";
+import { injectReaderAsk } from "../../../ask/reader-ask";
 import type { BreadcrumbItem } from "../../../components/breadcrumb.component";
 import { BreadcrumbComponent } from "../../../components/breadcrumb.component";
 import { GalleryComponent } from "../../../components/gallery.component";
@@ -392,6 +393,12 @@ interface Section {
 export default class CaseStudyPageComponent {
   protected readonly lang = inject(LanguageService);
   private readonly launcher = inject(AskLauncherService);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  constructor() {
+    // Ask about a section, a code block or a selection of the narrative: in the browser only.
+    injectReaderAsk(() => this.host.nativeElement.querySelector(".case-flow"));
+  }
 
   protected readonly study = toSignal(
     inject(ActivatedRoute).data.pipe(map((data) => (data["study"] as CaseStudy | null) ?? null)),

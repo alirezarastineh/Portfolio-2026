@@ -36,6 +36,18 @@ describe("AskLauncherService", () => {
     expect(launcher.takeSource()).toBe("starter");
   });
 
+  it("hands over what a reader pointed at with the question, once (visitor plan V9)", () => {
+    const launcher = launcherOn("/work/project-one");
+    const about = { focus: { kind: "section" as const, id: "problem" }, label: "Problem" };
+    launcher.ask("Explain this section", "section", about);
+    expect(launcher.takeQuestion()).toBe("Explain this section");
+    expect(launcher.takeAbout()).toEqual(about);
+    expect(launcher.takeAbout()).toBeNull();
+    // A question without one leaves none behind.
+    launcher.ask("Which stack?", "starter");
+    expect(launcher.takeAbout()).toBeNull();
+  });
+
   it("ignores an empty question", () => {
     const launcher = launcherOn("/");
     launcher.ask("   ", "hero");

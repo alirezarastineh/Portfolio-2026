@@ -265,7 +265,10 @@ html:has(app-admin-layout) {
       main aside,
       article > nav,
       article > footer,
-      .code-copy
+      .code-copy,
+      .code-explain,
+      .reader-ask,
+      .reader-ask-selection
     ) {
     display: none;
   }

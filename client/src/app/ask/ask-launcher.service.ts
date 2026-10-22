@@ -10,7 +10,35 @@ export const ASK_BAR_ID = "ask-bar";
 
 /** Where a visitor opened the assistant from, reported once with `ask_open`. */
 export type AskSource =
-  "hero" | "starter" | "palette" | "button" | "shortcut" | "terminal" | "case-study" | "post";
+  | "hero"
+  | "starter"
+  | "palette"
+  | "button"
+  | "shortcut"
+  | "terminal"
+  | "case-study"
+  | "post"
+  /** A reader page's buttons and selection (visitor plan V9, reader-ask.ts). */
+  | "section"
+  | "code"
+  | "selection";
+
+/**
+ * What a reader points at on a case study or a post (visitor plan V9), as the
+ * request sends it: a section by its heading's id, a code block by its place,
+ * or a selection's text. The server takes the first two from the page's
+ * document and trusts a selection only if the document holds it.
+ */
+export type AskFocus =
+  | { kind: "section"; id: string }
+  | { kind: "code"; index: number }
+  | { kind: "selection"; text: string };
+
+/** A question's focus, and how the terminal names it beside the question. */
+export interface AskAbout {
+  focus: AskFocus;
+  label: string;
+}
 
 /**
  * How the rest of the site reaches the assistant without loading it: the
@@ -28,6 +56,8 @@ export class AskLauncherService {
   private readonly _sheet = signal(false);
   private readonly _sheetRequested = signal(false);
   private readonly _question = signal<string | null>(null);
+  /** What the waiting question is about, when a reader pointed at something. */
+  private about: AskAbout | null = null;
   private source: AskSource | null = null;
 
   /** A request to focus the prompt that no terminal has taken yet. */
@@ -66,11 +96,15 @@ export class AskLauncherService {
     this._sheet.set(false);
   }
 
-  /** Puts a question to the assistant: the About terminal on home, the sheet elsewhere. */
-  ask(text: string, source: AskSource): void {
+  /**
+   * Puts a question to the assistant: the About terminal on home, the sheet
+   * elsewhere; with what a reader points at, when they did (visitor plan V9).
+   */
+  ask(text: string, source: AskSource, about?: AskAbout): void {
     const question = text.trim();
     if (!question) return;
     this._question.set(question);
+    this.about = about ?? null;
     if (this.lang.page() === "/") this.focusPrompt(source);
     else this.openSheet(source);
   }
@@ -80,6 +114,13 @@ export class AskLauncherService {
     const question = this._question();
     this._question.set(null);
     return question;
+  }
+
+  /** What the waiting question is about, once; taken with the question. */
+  takeAbout(): AskAbout | null {
+    const about = this.about;
+    this.about = null;
+    return about;
   }
 
   /** Where the latest request came from; a prompt focused directly is "terminal". */

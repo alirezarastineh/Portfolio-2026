@@ -30,6 +30,7 @@ import {
 import { answerTrace } from "./answer-trace";
 import { answersByQuestion } from "./answers";
 import { ASK_COPY } from "./ask-copy";
+import type { AskAbout, AskFocus } from "./ask-launcher.service";
 import { ASK_STORAGE_KEY } from "./ask-storage";
 import { AskTraceService } from "./ask-trace.service";
 import type { AskMessage, DownReason, Entry, Failure, RemoteConfig } from "./ask-types";
@@ -231,6 +232,8 @@ export const AskStore = signalStore(
     /** The request being prepared: set just before `sendMessage`. */
     _next: {
       deep: false,
+      /** What a reader pointed at with the question (visitor plan V9). */
+      focus: null as AskFocus | null,
       entryId: null as string | null,
       /** Turnstile, while on: a single-use token for this session's first question. */
       turnstileToken: "",
@@ -283,6 +286,7 @@ export const AskStore = signalStore(
             deep: store._next.deep,
             turnstileToken: store._next.turnstileToken,
             url: store._router.url,
+            focus: store._next.focus,
             messages,
           }),
         }),
@@ -418,7 +422,12 @@ export const AskStore = signalStore(
       void store._router.navigateByUrl(path);
     }
 
-    async function ask(input: string, text: string, deep: boolean): Promise<void> {
+    async function ask(
+      input: string,
+      text: string,
+      deep: boolean,
+      about: AskAbout | undefined,
+    ): Promise<void> {
       const copy = store.copy();
       if (!store.available()) {
         show(input, [
@@ -449,7 +458,7 @@ export const AskStore = signalStore(
       patchState(store, {
         entries: [
           ...store.entries(),
-          { id: entryId, kind: "ask" as const, input, userId, deep },
+          { id: entryId, kind: "ask" as const, input, userId, deep, ...(about ? { about } : {}) },
         ].slice(-MAX_ENTRIES),
         handoff: null,
         announcement: "",
@@ -458,6 +467,7 @@ export const AskStore = signalStore(
       store._timings.set(entryId, { sentAt: performance.now() });
       track("ask_send");
       store._next.deep = deep;
+      store._next.focus = about?.focus ?? null;
       store._next.entryId = entryId;
       if (!(await readyToAsk(store._next, locale()))) {
         store._updateEntry(entryId, { failure: "error" });
@@ -631,8 +641,11 @@ export const AskStore = signalStore(
     }
 
     return {
-      /** Runs what was typed: a shell command, or a question. */
-      async submit(raw: string): Promise<void> {
+      /**
+       * Runs what was typed: a shell command, or a question; a reader's button
+       * brings what its question is about (visitor plan V9).
+       */
+      async submit(raw: string, about?: AskAbout): Promise<void> {
         const input = raw.trim();
         const parsed = parseInput(input);
         if (parsed.kind === "empty") return;
@@ -647,7 +660,7 @@ export const AskStore = signalStore(
         }
 
         if (parsed.kind === "ask") {
-          await ask(input, parsed.text, parsed.deep);
+          await ask(input, parsed.text, parsed.deep, about);
           return;
         }
 
@@ -672,6 +685,7 @@ export const AskStore = signalStore(
         store._retries.set(entryId, (store._retries.get(entryId) ?? 0) + 1);
         store._timings.set(entryId, { sentAt: performance.now() });
         store._next.deep = entry.deep;
+        store._next.focus = entry.about?.focus ?? null;
         store._next.entryId = entryId;
         if (!(await readyToAsk(store._next, store._lang.lang()))) {
           store._updateEntry(entryId, { failure: "error" });

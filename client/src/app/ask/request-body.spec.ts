@@ -45,6 +45,12 @@ describe("requestBody", () => {
     });
   });
 
+  it("carries what a reader pointed at, when they did (visitor plan V9)", () => {
+    const focus = { kind: "section" as const, id: "architecture" };
+    expect(requestBody(input({ focus }))).toMatchObject({ page: "/en/work/atlas", focus });
+    expect(requestBody(input({ focus: null }))).not.toHaveProperty("focus");
+  });
+
   it("adds deep and Turnstile's token only when they apply, and no page without a path", () => {
     const body = requestBody(input({ deep: true, turnstileToken: "token", url: "" }));
     expect(body).toMatchObject({ deep: true, turnstileToken: "token" });

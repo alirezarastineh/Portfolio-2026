@@ -1,4 +1,5 @@
 import type { Locale } from "../content/locale";
+import type { AskFocus } from "./ask-launcher.service";
 import type { AskMessage } from "./ask-types";
 import { forRequest } from "./sent-messages";
 
@@ -23,6 +24,8 @@ export interface RequestInput {
   turnstileToken: string;
   /** The router's URL as the question goes. */
   url: string;
+  /** What a reader pointed at with the question (visitor plan V9). */
+  focus?: AskFocus | null;
   messages: readonly AskMessage[];
 }
 
@@ -35,6 +38,7 @@ export function requestBody(input: RequestInput) {
     ...(input.deep ? { deep: true } : {}),
     ...(input.turnstileToken ? { turnstileToken: input.turnstileToken } : {}),
     ...(page ? { page } : {}),
+    ...(input.focus ? { focus: input.focus } : {}),
     messages: forRequest(input.messages),
   };
 }

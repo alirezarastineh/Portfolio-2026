@@ -223,8 +223,11 @@ test.describe("case study", () => {
     await expectPaper(page, [
       main.locator("aside"),
       main.getByRole("link", { name: /Next project/ }),
-      main.getByRole("button", { name: /^Ask about/ }),
+      main.getByRole("button", { name: "Ask about TODO: Project One" }),
       main.getByRole("button", { name: "Copy" }),
+      // What the browser adds to ask about a section or a code block (visitor plan V9).
+      main.getByRole("button", { name: "Ask about this section: Problem" }),
+      main.getByRole("button", { name: "Explain code block 1" }),
     ]);
     // Code prints in one colour: its highlighting is made for a screen's background.
     const keyword = main.locator(".code-block .shd-ff7b72").first();

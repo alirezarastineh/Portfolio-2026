@@ -22,7 +22,7 @@ import { LanguageService } from "../services/language.service";
 import { AskAnswerComponent } from "./ask-answer.component";
 import { ASK_ENTRY_COPY } from "./ask-entry-copy";
 import { answersByQuestion } from "./answers";
-import { AskLauncherService, type AskSource } from "./ask-launcher.service";
+import { AskLauncherService, type AskAbout, type AskSource } from "./ask-launcher.service";
 import { AskLinesComponent } from "./ask-lines.component";
 import { AskStore } from "./ask.store";
 import type { Entry } from "./ask-types";
@@ -74,7 +74,7 @@ const MAX_INPUT_LINES = 6;
         @for (entry of store.entries(); track entry.id) {
           <div class="pt-1">
             <!-- prettier-ignore -->
-            <p class="m-0 flex flex-wrap items-baseline gap-x-2"><span class="text-accent-orange" aria-hidden="true">{{ prompt() }}</span><span class="sr-only">{{ copy().you }}:</span><span class="min-w-0 whitespace-pre-wrap wrap-break-word text-foreground">{{ entry.input }}</span></p>
+            <p class="m-0 flex flex-wrap items-baseline gap-x-2"><span class="text-accent-orange" aria-hidden="true">{{ prompt() }}</span><span class="sr-only">{{ copy().you }}:</span><span class="min-w-0 whitespace-pre-wrap wrap-break-word text-foreground">{{ entry.input }}</span>@if (entry.kind === "ask" && entry.about) {<span class="min-w-0 wrap-break-word text-muted-foreground">· {{ entry.about.label }}</span>}</p>
             @if (entry.kind === "local") {
               <app-ask-lines class="pb-3" [lines]="entry.lines" />
             } @else {
@@ -316,12 +316,16 @@ export class TerminalShellComponent {
     el.focus({ preventScroll: false });
   }
 
-  /** Takes a request from elsewhere on the site: the focus, and its question if it brought one. */
+  /**
+   * Takes a request from elsewhere on the site: the focus, and its question if
+   * it brought one, with what a reader pointed at (visitor plan V9).
+   */
   claim(): void {
     this.reportOpen(this.launcher.takeSource());
     this.focusInput();
     const question = this.launcher.takeQuestion();
-    if (question) this.send(question);
+    const about = this.launcher.takeAbout();
+    if (question) this.send(question, about ?? undefined);
   }
 
   /** `ask_open`, once per prompt, with where the visitor came from. */
@@ -331,8 +335,8 @@ export class TerminalShellComponent {
     track("ask_open", { source });
   }
 
-  /** Runs what is in the prompt. */
-  protected submit(): void {
+  /** Runs what is in the prompt; a question a reader's button put there brings what it is about. */
+  protected submit(about?: AskAbout): void {
     const el = this.inputRef().nativeElement;
     const text = el.value;
     if (!text.trim()) return;
@@ -343,13 +347,13 @@ export class TerminalShellComponent {
     this.historyIndex = null;
     this.stick = true;
     this.grow();
-    void this.store.submit(text);
+    void this.store.submit(text, about);
   }
 
-  protected send(text: string): void {
+  protected send(text: string, about?: AskAbout): void {
     const el = this.inputRef().nativeElement;
     el.value = text;
-    this.submit();
+    this.submit(about);
     el.focus();
   }
 

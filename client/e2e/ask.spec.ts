@@ -766,6 +766,101 @@ test.describe("assistant terminal", () => {
     // The page goes with the question (visitor plan V8): the server maps it to the case study.
     expect(mock.bodies[0]!.page).toBe("/en/work/project-one");
   });
+
+  test("a case study's section and code buttons ask about what they point at (visitor plan V9)", async ({
+    page,
+  }) => {
+    const mock = await mockAsk(page, (route) =>
+      sse(route, answer({ text: "Retrieval stays inside the private network." })),
+    );
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
+
+    // Shown on hover; the heading keeps its own name.
+    const heading = page.getByRole("heading", { name: "Architecture decisions", exact: true });
+    const sectionAsk = page.getByRole("button", {
+      name: "Ask about this section: Architecture decisions",
+    });
+    await expect(sectionAsk).toHaveCSS("opacity", "0");
+    await heading.hover();
+    await expect(sectionAsk).toHaveCSS("opacity", "1");
+    await sectionAsk.click();
+    await expect(sheet).toContainText("Explain this section");
+    await expect(sheet).toContainText("· Architecture decisions");
+    await expect(sheet).toContainText("Retrieval stays inside the private network.");
+    expect(mock.bodies[0]).toMatchObject({
+      page: "/en/work/project-one",
+      focus: { kind: "section", id: "architecture-decisions" },
+    });
+
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+    await page.getByRole("button", { name: "Explain code block 1" }).click();
+    await expect(sheet).toContainText("Explain this code");
+    await expect(sheet).toContainText("· const answer = await retrieve");
+    await expect.poll(() => mock.bodies.length).toBe(2);
+    expect(mock.bodies[1]).toMatchObject({ focus: { kind: "code", index: 0 } });
+    // A question typed after them points at nothing.
+    await run(sheet.locator("textarea"), "And the cost?");
+    await expect.poll(() => mock.bodies.length).toBe(3);
+    expect(mock.bodies[2]).not.toHaveProperty("focus");
+  });
+
+  test("the keyboard reaches a section's button after the table of contents, and Enter asks", async ({
+    page,
+  }) => {
+    const mock = await mockAsk(page, (route) => sse(route, answer({ text: "Agents lost hours." })));
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    await page.getByRole("navigation", { name: "On this page" }).getByRole("link").last().focus();
+    await page.keyboard.press("Tab");
+    const problem = page.getByRole("button", { name: "Ask about this section: Problem" });
+    await expect(problem).toBeFocused();
+    // Visible on focus.
+    await expect(problem).toHaveCSS("opacity", "1");
+    await page.keyboard.press("Enter");
+    const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
+    await expect(sheet).toContainText("Agents lost hours.");
+    expect(mock.bodies[0]).toMatchObject({ focus: { kind: "section", id: "problem" } });
+  });
+
+  test("selecting text in a post brings a small button that asks about it", async ({ page }) => {
+    const mock = await mockAsk(page, (route) =>
+      sse(route, answer({ text: "A demo meets no real load." })),
+    );
+    await page.goto("/en/writing/shipping-rag-to-production");
+    await interactive(page);
+    const asks = page.getByRole("button", { name: "Ask about the selected text" });
+    await expect(asks).toHaveCount(0);
+    await page.locator("app-prose-body p").first().selectText();
+    await expect(asks).toBeVisible();
+    await asks.click();
+    const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
+    await expect(sheet).toContainText("What does this mean?");
+    await expect(sheet).toContainText("“A demo has one user and no traffic.”");
+    await expect(sheet).toContainText("A demo meets no real load.");
+    expect(mock.bodies[0]).toMatchObject({
+      page: "/en/writing/shipping-rag-to-production",
+      focus: { kind: "selection", text: "A demo has one user and no traffic." },
+    });
+    await expect(asks).toBeHidden();
+  });
+
+  test("the reader pages' server HTML has none of the ask buttons: the browser adds them", async ({
+    request,
+  }) => {
+    for (const [path, heading] of [
+      ["/en/work/project-one", 'id="architecture-decisions"'],
+      ["/en/writing/shipping-rag-to-production", 'id="caching"'],
+    ] as const) {
+      const html = await (await request.get(path)).text();
+      // The headings and their anchors are there; nothing the browser adds is.
+      expect(html, path).toContain(heading);
+      expect(html, path).not.toMatch(/reader-ask|code-explain|code-frame/);
+      expect(html, path).not.toMatch(/<h2[^>]*aria-label/);
+    }
+  });
 });
 
 async function axeViolations(page: Page) {
@@ -835,6 +930,25 @@ for (const colorScheme of ["dark", "light"] as const) {
       const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
       await run(sheet.locator("textarea"), "Hello");
       await expect(sheet).toContainText("From the sheet.");
+      expect(await axeViolations(page)).toEqual([]);
+    });
+
+    test("a reader page's ask buttons as they show, and the question they asked (visitor plan V9)", async ({
+      page,
+    }) => {
+      await mockAsk(page, (route) => sse(route, answer({ text: "It ranks by meaning." })));
+      await page.goto("/en/work/project-one");
+      await interactive(page);
+      // A section's button on focus, and a selection's.
+      await page.getByRole("button", { name: "Ask about this section: Problem" }).focus();
+      await page.locator("app-prose-body p").first().selectText();
+      const selectionAsk = page.getByRole("button", { name: "Ask about the selected text" });
+      await expect(selectionAsk).toBeVisible();
+      expect(await axeViolations(page)).toEqual([]);
+
+      await selectionAsk.click();
+      const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
+      await expect(sheet).toContainText("It ranks by meaning.");
       expect(await axeViolations(page)).toEqual([]);
     });
   });

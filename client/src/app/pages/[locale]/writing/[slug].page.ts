@@ -1,5 +1,5 @@
 import { DOCUMENT } from "@angular/common";
-import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, ElementRef, inject } from "@angular/core";
 import { toSignal } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, RouterLink, type ResolveFn } from "@angular/router";
 import type { MetaTag, RouteMeta } from "@analogjs/router";
@@ -8,6 +8,7 @@ import { lucideArrowLeft } from "@ng-icons/lucide";
 import { map } from "rxjs";
 
 import { AskLauncherService } from "../../../ask/ask-launcher.service";
+import { injectReaderAsk } from "../../../ask/reader-ask";
 import { BreadcrumbComponent, type BreadcrumbItem } from "../../../components/breadcrumb.component";
 import { NotFoundComponent } from "../../../components/not-found.component";
 import { PictureComponent } from "../../../components/picture.component";
@@ -237,6 +238,12 @@ export const routeMeta: RouteMeta = {
 })
 export default class PostPageComponent {
   protected readonly lang = inject(LanguageService);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  constructor() {
+    // Ask about a section, a code block or a selection of the body: in the browser only.
+    injectReaderAsk(() => this.host.nativeElement.querySelector("app-prose-body"));
+  }
 
   protected readonly post = toSignal(
     inject(ActivatedRoute).data.pipe(map((data) => (data["post"] as PostDoc | null) ?? null)),
