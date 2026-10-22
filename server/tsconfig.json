@@ -4,6 +4,8 @@
     "module": "NodeNext",
     "strict": true,
     "verbatimModuleSyntax": true,
+    // The eval baseline is built into the API (the public scorecard): tsc emits the JSON it imports.
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "types": ["node"],
     "jsx": "react-jsx",

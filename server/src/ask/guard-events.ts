@@ -26,6 +26,9 @@ export const GUARD_EVENT_KINDS = [
 
 export type GuardEventKind = (typeof GUARD_EVENT_KINDS)[number];
 
+/** The kinds that are a request turned away: the public scorecard's refusals (visitor plan V13). */
+export const REFUSAL_KINDS: readonly GuardEventKind[] = GUARD_EVENT_KINDS;
+
 export interface GuardEventRow {
   day: string;
   kind: GuardEventKind;

@@ -211,6 +211,13 @@
       "when": 1792609637493,
       "tag": "0029_eval_case_turns",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792697186010,
+      "tag": "0030_public_scorecard",
+      "breakpoints": true
     }
   ]
 }

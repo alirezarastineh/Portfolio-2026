@@ -692,6 +692,12 @@ export const aiSettings = pgTable(
       .$type<{ promoted: string[]; demoted: string[] }>()
       .notNull()
       .default({ promoted: [], demoted: [] }),
+    /**
+     * Whether visitors may read the assistant's scorecard (`GET /v1/ask/scorecard`, the
+     * terminal's `evals`, visitor plan V13): the recorded eval run and 30 days of live
+     * checks, aggregates only. Off, the route answers 404.
+     */
+    publicScorecard: boolean("public_scorecard").notNull().default(false),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

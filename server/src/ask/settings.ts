@@ -37,6 +37,8 @@ export interface AiSettings {
   featureSwitches: Record<SwitchedFeature, boolean>;
   /** The corpus tiers the admin applied (perception.ts suggests them). */
   corpusTiers: CorpusTiers;
+  /** Whether visitors may read the scorecard (`scorecard.ts`, visitor plan V13). */
+  publicScorecard: boolean;
   updatedAt: string | null;
 }
 
@@ -65,6 +67,7 @@ export const DEFAULT_SETTINGS: AiSettings = {
   featureCaps: capsFrom({}),
   featureSwitches: switchesFrom({}),
   corpusTiers: NO_TIERS,
+  publicScorecard: false,
   updatedAt: null,
 };
 
@@ -130,6 +133,7 @@ export async function readAiSettings(db: DbExecutor = getDb()): Promise<AiSettin
     featureCaps: capsFrom(row.featureCaps),
     featureSwitches: switchesFrom(row.featureSwitches),
     corpusTiers: tiersFrom(row.corpusTiers),
+    publicScorecard: row.publicScorecard,
     updatedAt: row.updatedAt.toISOString(),
   };
 }

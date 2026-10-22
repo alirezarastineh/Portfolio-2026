@@ -133,6 +133,8 @@ const settingsInput = z.object({
     .optional(),
   /** Merged into the stored switches, the same way. */
   featureSwitches: z.partialRecord(z.enum(SWITCHED_FEATURES), z.boolean()).optional(),
+  /** Whether visitors may read the scorecard (visitor plan V13); left out, it stays as stored. */
+  publicScorecard: z.boolean().optional(),
 });
 
 function envSummary(config: AskConfig) {
@@ -178,8 +180,9 @@ const merged = (
 ) => sql`${column} || ${JSON.stringify(patch)}::jsonb`;
 
 /**
- * What changed among the settings that decide what may spend and when, as
- * "key before → after": the audit's reason for a save (plan phase 14).
+ * What changed among the settings that decide what may spend and when, and
+ * what the public may read (the scorecard), as "key before → after": the
+ * audit's reason for a save (plan phase 14).
  */
 export function fenceChanges(before: AiSettings, after: AiSettings): string[] {
   const changes: string[] = [];
@@ -198,6 +201,8 @@ export function fenceChanges(before: AiSettings, after: AiSettings): string[] {
   for (const f of SWITCHED_FEATURES) {
     note(`featureSwitches.${f}`, before.featureSwitches[f], after.featureSwitches[f]);
   }
+  // Not a fence, but what the public may read: audited the same way (visitor plan V13).
+  note("publicScorecard", before.publicScorecard, after.publicScorecard);
   return changes;
 }
 

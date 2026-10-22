@@ -1,0 +1,1 @@
+ALTER TABLE "ai_settings" ADD COLUMN "public_scorecard" boolean DEFAULT false NOT NULL;

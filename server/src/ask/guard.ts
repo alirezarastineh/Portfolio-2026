@@ -233,23 +233,51 @@ export async function recordRequest(ipHash: string, sessionHash: string): Promis
  */
 export const MCP_RATE = { perHour: 120, perDay: 1_000 } as const;
 
-export async function checkMcpRate(
-  ipHash: string,
-  now = Date.now(),
+/**
+ * The public scorecard's limits per IP (visitor plan V13): a read the server
+ * caches, in a bucket of its own like MCP's, so neither uses up the other's
+ * nor the visitors' questions.
+ */
+export const SCORECARD_RATE = { perHour: 60, perDay: 300 } as const;
+
+/** An hourly and a daily limit on one per-address bucket. */
+async function checkBucket(
+  bucket: string,
+  limits: { perHour: number; perDay: number },
+  now: number,
 ): Promise<{ ok: true } | { ok: false; retryAfter: number }> {
-  const bucket = `mcp:${ipHash}`;
   const waits = await Promise.all([
-    overLimit({ bucket, limit: MCP_RATE.perHour, windowMs: HOUR_MS }, now),
-    overLimit({ bucket, limit: MCP_RATE.perDay, windowMs: DAY_MS }, now),
+    overLimit({ bucket, limit: limits.perHour, windowMs: HOUR_MS }, now),
+    overLimit({ bucket, limit: limits.perDay, windowMs: DAY_MS }, now),
   ]);
   const retryAfter = Math.max(0, ...waits.filter((wait): wait is number => wait !== null));
   return retryAfter ? { ok: false, retryAfter } : { ok: true };
+}
+
+export function checkMcpRate(
+  ipHash: string,
+  now = Date.now(),
+): Promise<{ ok: true } | { ok: false; retryAfter: number }> {
+  return checkBucket(`mcp:${ipHash}`, MCP_RATE, now);
 }
 
 export async function recordMcpRequest(ipHash: string): Promise<void> {
   await getDb()
     .insert(aiRateEvents)
     .values({ bucket: `mcp:${ipHash}` });
+}
+
+export function checkScorecardRate(
+  ipHash: string,
+  now = Date.now(),
+): Promise<{ ok: true } | { ok: false; retryAfter: number }> {
+  return checkBucket(`scorecard:${ipHash}`, SCORECARD_RATE, now);
+}
+
+export async function recordScorecardRequest(ipHash: string): Promise<void> {
+  await getDb()
+    .insert(aiRateEvents)
+    .values({ bucket: `scorecard:${ipHash}` });
 }
 
 export async function pruneRateEvents(now = Date.now()): Promise<void> {

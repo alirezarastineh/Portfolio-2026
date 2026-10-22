@@ -305,9 +305,19 @@ else
 fi
 check "assistant rejects a malformed question without calling a model" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' '${API}/v1/ask')\" = 400 ]"
-# The glass box (visitor plan V12): inspect refuses what no terminal sends.
+# The glass box (visitor plan V12, V13): inspect refuses what no terminal sends, and the
+# scorecard answers as itself, published (200) or not (404 "not_published"), never as an
+# unknown route.
 check "inspect refuses a malformed request" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' '${API}/v1/ask/inspect')\" = 400 ]"
+SCORECARD="$(curl -s -w ' %{http_code}' "${API}/v1/ask/scorecard" || true)"
+if [[ "${SCORECARD}" == *'"recorded"'*' 200' ]]; then
+  pass "the scorecard is published"
+elif [[ "${SCORECARD}" == *'not_published'*' 404' ]]; then
+  pass "the scorecard route answers (not published: the admin's switch is off)"
+else
+  fail "the scorecard does not answer as itself (${API}/v1/ask/scorecard)"
+fi
 check "assistant admin is locked without a session" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${API}/admin/assistant/settings')\" = 401 ]"
 if [[ "$(db_value "select count(*) from information_schema.tables where table_name in ('ai_settings', 'ai_faq', 'ai_usage', 'ai_messages', 'ai_feedback', 'ai_rate_events')")" == "6" ]]; then
@@ -421,6 +431,12 @@ if [[ "${TURNS_COLUMN}" == "1" ]]; then
   pass "an eval case keeps the questions before it (migration 0029)"
 else
   fail "ai_eval_cases.turns missing — migration 0029_eval_case_turns not applied?"
+fi
+SCORECARD_COLUMN="$(db_value "select count(*) from information_schema.columns where table_name = 'ai_settings' and column_name = 'public_scorecard'")"
+if [[ "${SCORECARD_COLUMN}" == "1" ]]; then
+  pass "the public scorecard's switch has its column (migration 0030)"
+else
+  fail "ai_settings.public_scorecard missing — migration 0030_public_scorecard not applied?"
 fi
 
 echo "== agent-readable portfolio (plan phase 32) =="

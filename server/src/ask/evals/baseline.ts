@@ -52,9 +52,17 @@ export type Baseline = z.infer<typeof baselineSchema>;
 /** The recorded baseline; a missing file reads as an empty one (no run, no waivers). */
 export function readBaseline(path = BASELINE_PATH): Baseline {
   const raw: unknown = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
+  return baselineOf(raw, path);
+}
+
+/**
+ * A baseline from its JSON, already read: the file at a path, or the copy the
+ * API is built with (the public scorecard's, visitor plan V13).
+ */
+export function baselineOf(raw: unknown, source = "baseline.json"): Baseline {
   const parsed = baselineSchema.safeParse(raw);
   if (!parsed.success) {
-    throw new Error(`${path} is not a valid eval baseline:\n${z.prettifyError(parsed.error)}`);
+    throw new Error(`${source} is not a valid eval baseline:\n${z.prettifyError(parsed.error)}`);
   }
   return parsed.data;
 }

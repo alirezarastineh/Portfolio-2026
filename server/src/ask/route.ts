@@ -13,7 +13,15 @@ import { readingLocale, streamAnswer } from "./agent.js";
 import { demotedSubjects } from "./audit.js";
 import { askChain, askConfig, askCorpus } from "./deps.js";
 import { backfillEmbeddings } from "./embeddings.js";
-import { availability, checkRate, ConcurrencyGate, hashWithSalt, recordRequest } from "./guard.js";
+import {
+  availability,
+  checkRate,
+  checkScorecardRate,
+  ConcurrencyGate,
+  hashWithSalt,
+  recordRequest,
+  recordScorecardRequest,
+} from "./guard.js";
 import { focusOf, focusSchema } from "./focus.js";
 import { countGuardEvent } from "./guard-events.js";
 import { ASK_MESSAGE_ID, buildHistory, historyLimits } from "./history.js";
@@ -21,6 +29,7 @@ import { inspectView } from "./inspect.js";
 import { shortName } from "./models/registry.js";
 import { PAGE_CHARS, pageDocument } from "./page.js";
 import { routeQuestion } from "./router.js";
+import { scorecard } from "./scorecard.js";
 import { assistantState } from "./settings.js";
 import { FEEDBACK_REASONS, SignalLimiter, signalsSchema } from "./signals.js";
 import { OFFERED_HANDOFF } from "./outcome-rows.js";
@@ -34,6 +43,7 @@ import { DEEP_ROUTE, withoutDemoted } from "./trust.js";
  *   POST /v1/ask/signal    what this session's browser saw of an answer (visitor plan V2)
  *   POST /v1/ask/handoff   the visitor's yes to that answer's hand-off offer
  *   POST /v1/ask/inspect   what the log keeps of one of this session's answers (visitor plan V12)
+ *   GET  /v1/ask/scorecard the eval run and 30 days of live checks, while published (V13)
  *   GET  /v1/ask/stream-check  three ticks, so a deploy can prove nothing buffers
  *
  * No cookies and no credentials: the browser holds a random session id per
@@ -321,7 +331,24 @@ export function createAskRouter(): Hono {
       suggestions: settings.suggestedQuestions,
       limits: { maxChars: config.maxMessageChars, historyTurns: config.historyTurns },
       model: shortName(config.gemini.model),
+      // Whether `evals` is offered (visitor plan V13): the scorecard is the admin's to publish.
+      scorecard: settings.publicScorecard,
     });
+  });
+
+  // Public, and working with the assistant off: aggregates only, no model call, cached.
+  router.get("/scorecard", async (c) => {
+    const { settings } = await assistantState();
+    if (!settings.publicScorecard) return c.json({ error: "not_published" }, 404);
+    const ipHash = hashWithSalt("ip", clientIp(c));
+    const rate = await checkScorecardRate(ipHash);
+    if (!rate.ok) {
+      c.header("Retry-After", String(rate.retryAfter));
+      return c.json({ error: "rate_limited", retryAfter: rate.retryAfter }, 429);
+    }
+    await recordScorecardRequest(ipHash);
+    c.header("Cache-Control", "public, max-age=600");
+    return c.json(await scorecard(settings));
   });
 
   router.post("/feedback", async (c) => {
