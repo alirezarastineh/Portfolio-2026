@@ -21,8 +21,11 @@ import { focusOf, type FocusRequest } from "../focus.js";
 import type { ChainRole, ModelEntry } from "../models/registry.js";
 import { pageDocument } from "../page.js";
 import { wrapVisitor, type ReaderLevel } from "../prompt.js";
+import { mapOf } from "../map.js";
 import { routeLabels, routeQuestion, type RouteLabel } from "../router.js";
 import { countTokens } from "../tokens.js";
+import { planTour, type TourOutcome } from "../tour.js";
+import { TOUR_STOPS } from "../tour-prompt.js";
 import { summarizeCalls } from "../usage.js";
 import type { EvalCase, EvalCategory } from "./cases.js";
 import { notPlain, wordsOf } from "./readability.js";
@@ -946,7 +949,92 @@ export async function answerCase(
   };
 }
 
+/**
+ * A tour case's failures (visitor plan V16): the plan or the short tour it
+ * expects; a plan's stops distinct pages of the map in the case's language,
+ * 3 to 5, holding every expected id. The critic checked the plan's lines
+ * before the stops were kept.
+ */
+export function gradeTour(c: EvalCase, outcome: TourOutcome, corpus: AskCorpus): string[] {
+  const want = c.tour?.kind ?? "plan";
+  if (outcome.kind !== want) {
+    if (want === "plan") {
+      const reason = outcome.injection ? "injection" : outcome.reason;
+      return [`expected a tour, got the short tour (${reason})`];
+    }
+    return [`expected the short tour, got ${outcome.stops.length} stops`];
+  }
+  if (outcome.kind === "default") return [];
+  const failures: string[] = [];
+  const pages = new Map(mapOf(corpus, c.language ?? c.locale).map.pages.map((p) => [p.id, p]));
+  const ids = outcome.stops.map((s) => s.id);
+  if (ids.length < TOUR_STOPS.min || ids.length > TOUR_STOPS.max) {
+    failures.push(`${ids.length} stops, not ${TOUR_STOPS.min} to ${TOUR_STOPS.max}`);
+  }
+  const strays = ids.filter((id) => !pages.has(id));
+  if (strays.length) failures.push(`not a page of the tour's language: ${strays.join(", ")}`);
+  const urls = ids.map((id) => pages.get(id)?.url ?? id);
+  if (new Set(ids).size !== ids.length || new Set(urls).size !== urls.length) {
+    failures.push("a stop repeats another");
+  }
+  const missing = (c.tour?.ids ?? []).filter((id) => !ids.includes(id));
+  if (missing.length) failures.push(`missing stops: ${missing.join(", ")}`);
+  return failures;
+}
+
+/** A tour case (visitor plan V16): planned as the route plans it, graded on its stops; no judge. */
+async function runTourCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
+  const chain = options.chain("lite");
+  const trace = newTrace();
+  const abortSignal = createCaseAbortSignal(
+    options.config.streamTimeoutMs,
+    options.timeoutExtraMs ?? timeoutAllowance(options, chain.length),
+    options.abortSignal,
+  );
+  const outcome = await planTour({
+    interest: c.question,
+    language: c.language ?? c.locale,
+    corpus: options.corpus,
+    config: options.config,
+    chain,
+    trace,
+    abortSignal,
+    persist: false,
+    ...(options.beforeModelCall ? { beforeModelCall: options.beforeModelCall } : {}),
+  });
+  options.calls?.push(...trace.calls, ...outcome.searchCalls);
+  const failures = gradeTour(c, outcome, options.corpus);
+  // No model could plan: an outage, as for an answer, unless the short tour was the point.
+  const unavailable = outcome.reason === "unavailable" && c.tour?.kind !== "default";
+  let status: CaseResult["status"] = "passed";
+  if (unavailable) {
+    status = "unavailable";
+  } else if (failures.length) {
+    status = "failed";
+  }
+  return {
+    id: c.id,
+    category: c.category,
+    status,
+    passed: !unavailable && !failures.length,
+    failures,
+    answer: [outcome.intro, ...outcome.stops.map((s) => `${s.title}: ${s.line}`)].join("\n"),
+    cited: outcome.stops.map((s) => s.id),
+    invented: [],
+    tools: [],
+    model: trace.calls.at(-1)?.model ?? null,
+    ttftMs: trace.firstTokenAt === null ? null : trace.firstTokenAt - trace.startedAt,
+    modelTtftMs: trace.calls[0]?.ttftMs ?? null,
+    rounds: trace.calls.length,
+    totalMs: Date.now() - trace.startedAt,
+    usd: summarizeCalls([...trace.calls, ...outcome.searchCalls]).usd,
+    judge: null,
+    attempts: [...trace.attempts],
+  };
+}
+
 async function runCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
+  if (c.category === "tour") return runTourCase(options, c);
   const acquireRateLimitRetry = createRetryAcquirer(options.rateLimitRetry);
   const answered = await answerCase(options, c, acquireRateLimitRetry);
   const { outcome, failures, operationalFailure } = answered;

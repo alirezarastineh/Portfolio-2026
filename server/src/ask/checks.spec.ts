@@ -578,7 +578,8 @@ describe("one definition for the graders and the checks", () => {
       flags({ question: c.question }).includes("injection-attempt"),
     ).map((c) => c.id);
     expect(flagged.sort()).toEqual(
-      EVAL_CASES.filter((c) => c.category === "injection")
+      // The tour's injected interest (visitor plan V16) is one too.
+      EVAL_CASES.filter((c) => c.category === "injection" || c.id === "tour-injected")
         .map((c) => c.id)
         .sort(),
     );

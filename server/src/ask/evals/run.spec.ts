@@ -18,7 +18,8 @@ import type { ModelEntry } from "../models/registry.js";
 import { pageDocument } from "../page.js";
 import { EVAL_CASES } from "./cases.js";
 import { fixtureAskCorpus } from "./fixture.js";
-import { grade, JUDGE_LEVEL, runEvals } from "./run.js";
+import type { TourOutcome } from "../tour.js";
+import { grade, gradeTour, JUDGE_LEVEL, runEvals } from "./run.js";
 
 const byId = (id: string) => EVAL_CASES.find((c) => c.id === id)!;
 
@@ -849,5 +850,115 @@ describe("runEvals", { timeout: 30_000 }, () => {
     // The case whose onStart stopped the run never reached a model.
     expect(budget.calls).toBe(1);
     expect(budget.summary).toMatchObject({ completed: 1, remaining: 2 });
+  });
+});
+
+describe("the tour cases (visitor plan V16)", () => {
+  const corpus = fixtureAskCorpus(fixtureConfig());
+  const stop = (id: string, title: string, url: string) => ({ id, title, url, line: "Why." });
+  const plan = (stops: ReturnType<typeof stop>[]): TourOutcome => ({
+    kind: "plan",
+    intro: "A tour.",
+    stops,
+    repaired: false,
+    failures: [],
+    injection: false,
+    searchCalls: [],
+  });
+  const BOREALIS = stop("project:borealis@en", "Borealis", "/en/work/borealis");
+  const CONTOSO = stop("experience:contoso@en", "Contoso", "/en#experience");
+  const POST = stop("post:llm-in-production@en", "Shipping", "/en/writing/llm-in-production");
+
+  it("grades a plan on its stops and the ids it expects, and the short tour where it is the point", () => {
+    const c = byId("tour-data-platforms");
+    expect(gradeTour(c, plan([BOREALIS, CONTOSO, POST]), corpus)).toEqual([]);
+    expect(
+      gradeTour(c, plan([CONTOSO, POST, stop("skills@en", "Skills", "/en#skills")]), corpus),
+    ).toEqual(["missing stops: project:borealis@en"]);
+    expect(gradeTour(c, plan([BOREALIS, CONTOSO]), corpus)).toEqual(["2 stops, not 3 to 5"]);
+    const northwind = stop("experience:northwind@en", "Northwind", "/en#experience");
+    expect(gradeTour(c, plan([BOREALIS, CONTOSO, northwind]), corpus)).toEqual([
+      "a stop repeats another",
+    ]);
+    const shortTour: TourOutcome = {
+      ...plan([]),
+      kind: "default",
+      reason: "no-match",
+      intro: "No.",
+    };
+    expect(gradeTour(c, shortTour, corpus)).toEqual([
+      "expected a tour, got the short tour (no-match)",
+    ]);
+    expect(gradeTour(byId("tour-cooking"), shortTour, corpus)).toEqual([]);
+    expect(gradeTour(byId("tour-cooking"), plan([BOREALIS, CONTOSO, POST]), corpus)).toEqual([
+      "expected the short tour, got 3 stops",
+    ]);
+    // The German case's stops are German pages.
+    expect(gradeTour(byId("tour-frontend-de"), plan([BOREALIS, CONTOSO, POST]), corpus)).toContain(
+      "not a page of the tour's language: project:borealis@en, experience:contoso@en, post:llm-in-production@en",
+    );
+  });
+
+  it("plans a tour case as the route does, with no judge, and an injected interest with no model", async () => {
+    const plans: string[] = [];
+    const planner = new MockLanguageModelV4({
+      modelId: "gemini-3.5-flash-lite",
+      doGenerate: async (call) => {
+        plans.push(JSON.stringify(call.prompt));
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                intro: "Data stops: Borealis [^project:borealis@en].",
+                stops: [BOREALIS, CONTOSO, POST].map((s) => ({
+                  id: s.id,
+                  line: `Why [^${s.id}].`,
+                })),
+              }),
+            },
+          ],
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: {
+            inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: undefined },
+            outputTokens: { total: 5, text: 5, reasoning: undefined },
+          },
+          warnings: [],
+        };
+      },
+    });
+    const judged: unknown[] = [];
+    const judge = new MockLanguageModelV4({
+      modelId: "judge",
+      doGenerate: async (call) => {
+        judged.push(call);
+        throw apiError(500);
+      },
+    });
+    const summary = await runEvals({
+      cases: [byId("tour-data-platforms"), byId("tour-injected")],
+      corpus,
+      config: fixtureConfig(),
+      concurrency: 1,
+      chain: (role) =>
+        role === "judge"
+          ? [mockEntry("judge", judge)]
+          : [mockEntry("gemini-3.5-flash-lite", planner)],
+      promptVersion: "test",
+    });
+    expect(summary.results.map((r) => [r.id, r.status])).toEqual([
+      ["tour-data-platforms", "passed"],
+      ["tour-injected", "passed"],
+    ]);
+    expect(summary.byCategory["tour"]).toEqual({
+      cases: 2,
+      completed: 2,
+      passed: 2,
+      unavailable: 0,
+    });
+    // One call: the injected interest asked no model, and no judge read either.
+    expect(plans).toHaveLength(1);
+    expect(judged).toHaveLength(0);
+    expect(summary.results[0]!.cited).toEqual([BOREALIS.id, CONTOSO.id, POST.id]);
   });
 });

@@ -204,7 +204,9 @@ export async function runPairwise(input: PairwiseOptions): Promise<PairwiseSumma
     onResult: undefined,
   };
   const results: PairwiseCaseResult[] = [];
-  for (const c of input.cases) {
+  // Two answerers' answers: a tour is planned, not answered (visitor plan V16).
+  const cases = input.cases.filter((c) => c.category !== "tour");
+  for (const c of cases) {
     if (input.abortSignal?.aborted) break;
     await input.onStart?.(c);
     // Stopped between cases (a cancel, a spent budget): the rest stay undone.
@@ -218,7 +220,7 @@ export async function runPairwise(input: PairwiseOptions): Promise<PairwiseSumma
     a: input.a.label,
     b: input.b.label,
     judge: input.judgeChain[0]?.id ?? null,
-    cases: input.cases.length,
+    cases: cases.length,
     results,
   });
 }
