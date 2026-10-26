@@ -17,7 +17,9 @@ export type AskEvent =
   // How an answer was made, asked for (visitor plan V12).
   | "ask_inspect"
   // The public scorecard, read (visitor plan V13).
-  | "ask_evals";
+  | "ask_evals"
+  // The portfolio's map: a read-next page opened or connected (V15).
+  | "map_read_next";
 
 export function track(event: AskEvent, data?: Record<string, string>): void {
   try {

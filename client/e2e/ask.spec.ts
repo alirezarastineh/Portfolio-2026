@@ -138,6 +138,68 @@ const SCORECARD = {
   at: "2026-10-22T20:00:00.000Z",
 };
 
+/** What `GET /v1/ask/map?locale=en` answers for the fixture content (visitor plan V15). */
+const MAP_EN = {
+  v: 1,
+  locale: "en",
+  pages: [
+    { id: "profile@en", kind: "profile", title: "Alireza", url: "/en", related: [] },
+    {
+      id: "experience:senior@en",
+      kind: "experience",
+      title: "Senior AI Engineer — Example GmbH",
+      url: "/en#experience",
+      updated: "2026-10-22",
+      related: ["project:project-one@en"],
+    },
+    {
+      id: "project:project-one@en",
+      kind: "project",
+      title: "TODO: Project One",
+      url: "/en/work/project-one",
+      updated: "2026-10-01",
+      related: ["experience:senior@en", "project:project-two@en"],
+    },
+    {
+      id: "project:project-two@en",
+      kind: "project",
+      title: "TODO: Project Two",
+      url: "/en/work/project-two",
+      updated: "2026-09-01",
+      related: ["project:project-one@en"],
+    },
+    {
+      id: "post:shipping-rag-to-production@en",
+      kind: "post",
+      title: "Shipping RAG to production",
+      url: "/en/writing/shipping-rag-to-production",
+      updated: "2026-09-02",
+      related: ["project:project-one@en"],
+    },
+    {
+      id: "post:notes-on-evals@en",
+      kind: "post",
+      title: "Notes on evals",
+      url: "/en/writing/notes-on-evals",
+      updated: "2026-07-03",
+      related: [],
+    },
+  ],
+};
+
+/** The map, with each request's language kept. */
+async function mockMap(page: Page): Promise<string[]> {
+  const asked: string[] = [];
+  await page.route(
+    (url) => url.pathname.endsWith("/v1/ask/map"),
+    async (route) => {
+      asked.push(new URL(route.request().url()).searchParams.get("locale") ?? "");
+      await route.fulfill({ headers: cors, json: MAP_EN });
+    },
+  );
+  return asked;
+}
+
 const SEARCH_STEP: Chunk[] = [
   { type: "tool-input-start", toolCallId: "s1", toolName: "search_portfolio" },
   {
@@ -1198,6 +1260,48 @@ test.describe("assistant terminal", () => {
     await expect(log).not.toContainText("Where does he live?");
   });
 
+  test("read next ends a case study and a post with the pages related to them, and asks how they connect (visitor plan V15)", async ({
+    page,
+  }) => {
+    const mock = await mockAsk(page, (route) =>
+      sse(route, answer({ text: "Both run on the same retrieval stack." })),
+    );
+    const maps = await mockMap(page);
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    await page.locator("article > footer").scrollIntoViewIfNeeded();
+    const readNext = page.getByRole("navigation", { name: "Read next" });
+    await expect(readNext).toBeVisible();
+    // Its own related pages, strongest first, then the post that names it.
+    await expect(readNext.getByRole("link")).toHaveText([
+      /^Senior AI Engineer — Example GmbH/,
+      /^TODO: Project Two/,
+      /^Shipping RAG to production/,
+    ]);
+    await expect(readNext.getByRole("link").nth(1)).toContainText("case study · updated");
+    // The article's end, before its footer; fetched once.
+    await expect(page.locator("article > nav.read-next + footer")).toHaveCount(1);
+    expect(maps).toEqual(["en"]);
+
+    // How two pages connect is a question asked on this page (V8).
+    await readNext.getByRole("button", { name: "How do they connect?" }).nth(1).click();
+    const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
+    await expect(sheet).toContainText("How do TODO: Project One and TODO: Project Two connect?");
+    await expect(sheet).toContainText("Both run on the same retrieval stack.");
+    expect(mock.bodies[0]).toMatchObject({ page: "/en/work/project-one" });
+    await page.keyboard.press("Escape");
+
+    // A post: the project it names, opened through the router.
+    await page.goto("/en/writing/shipping-rag-to-production");
+    await interactive(page);
+    await page.locator("article > footer").scrollIntoViewIfNeeded();
+    const postNext = page.getByRole("navigation", { name: "Read next" });
+    await expect(postNext.getByRole("link")).toHaveText([/^TODO: Project One/]);
+    await postNext.getByRole("link").click();
+    await expect(page).toHaveURL(/\/en\/work\/project-one$/);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("TODO: Project One");
+  });
+
   test("the reader pages' server HTML has none of the ask buttons: the browser adds them", async ({
     request,
   }) => {
@@ -1206,9 +1310,9 @@ test.describe("assistant terminal", () => {
       ["/en/writing/shipping-rag-to-production", 'id="caching"'],
     ] as const) {
       const html = await (await request.get(path)).text();
-      // The headings and their anchors are there; nothing the browser adds is.
+      // The headings and their anchors are there; nothing the browser adds is (V9, V15).
       expect(html, path).toContain(heading);
-      expect(html, path).not.toMatch(/reader-ask|code-explain|code-frame/);
+      expect(html, path).not.toMatch(/reader-ask|code-explain|code-frame|read-next/);
       expect(html, path).not.toMatch(/<h2[^>]*aria-label/);
     }
   });
@@ -1300,6 +1404,17 @@ for (const colorScheme of ["dark", "light"] as const) {
       await selectionAsk.click();
       const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
       await expect(sheet).toContainText("It ranks by meaning.");
+      expect(await axeViolations(page)).toEqual([]);
+    });
+
+    test("read next at a case study's end (visitor plan V15)", async ({ page }) => {
+      await mockMap(page);
+      await page.goto("/en/work/project-one");
+      await interactive(page);
+      await page.locator("article > footer").scrollIntoViewIfNeeded();
+      const readNext = page.getByRole("navigation", { name: "Read next" });
+      await expect(readNext.getByRole("listitem")).toHaveCount(3);
+      await readNext.getByRole("button", { name: "How do they connect?" }).first().focus();
       expect(await axeViolations(page)).toEqual([]);
     });
   });

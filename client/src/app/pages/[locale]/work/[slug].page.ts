@@ -8,6 +8,7 @@ import { lucideArrowLeft, lucideArrowRight, lucideExternalLink } from "@ng-icons
 import { map } from "rxjs";
 
 import { AskLauncherService } from "../../../ask/ask-launcher.service";
+import { injectReadNext } from "../../../ask/read-next";
 import { injectReaderAsk } from "../../../ask/reader-ask";
 import type { BreadcrumbItem } from "../../../components/breadcrumb.component";
 import { BreadcrumbComponent } from "../../../components/breadcrumb.component";
@@ -398,6 +399,14 @@ export default class CaseStudyPageComponent {
   constructor() {
     // Ask about a section, a code block or a selection of the narrative: in the browser only.
     injectReaderAsk(() => this.host.nativeElement.querySelector(".case-flow"));
+    // What to read next, as the end nears the screen: in the browser only (visitor plan V15).
+    injectReadNext(() => {
+      const s = this.study();
+      const article = this.host.nativeElement.querySelector("article");
+      return s && article
+        ? { article, id: `project:${s.project.slug}@${this.lang.lang()}`, title: s.project.name }
+        : null;
+    });
   }
 
   protected readonly study = toSignal(

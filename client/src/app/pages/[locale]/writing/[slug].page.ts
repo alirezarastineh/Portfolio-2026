@@ -8,6 +8,7 @@ import { lucideArrowLeft } from "@ng-icons/lucide";
 import { map } from "rxjs";
 
 import { AskLauncherService } from "../../../ask/ask-launcher.service";
+import { injectReadNext } from "../../../ask/read-next";
 import { injectReaderAsk } from "../../../ask/reader-ask";
 import { BreadcrumbComponent, type BreadcrumbItem } from "../../../components/breadcrumb.component";
 import { NotFoundComponent } from "../../../components/not-found.component";
@@ -243,6 +244,14 @@ export default class PostPageComponent {
   constructor() {
     // Ask about a section, a code block or a selection of the body: in the browser only.
     injectReaderAsk(() => this.host.nativeElement.querySelector("app-prose-body"));
+    // What to read next, as the end nears the screen: in the browser only (visitor plan V15).
+    injectReadNext(() => {
+      const p = this.post();
+      const article = this.host.nativeElement.querySelector("article");
+      return p && article
+        ? { article, id: `post:${p.slug}@${this.lang.lang()}`, title: p.title }
+        : null;
+    });
   }
 
   protected readonly post = toSignal(

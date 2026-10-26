@@ -21,7 +21,9 @@ export type AskSource =
   /** A reader page's buttons and selection (visitor plan V9, reader-ask.ts). */
   | "section"
   | "code"
-  | "selection";
+  | "selection"
+  /** "How do they connect?" under read next (visitor plan V15, read-next-block.ts). */
+  | "read-next";
 
 /**
  * What a reader points at on a case study or a post (visitor plan V9), as the
