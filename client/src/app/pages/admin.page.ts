@@ -331,6 +331,8 @@ function openTab(href: string): void {
                   <span>{{ pulse.unpublished() ? "Publish" : "All published" }}</span>
                   @if (pulse.unpublished()) {
                     @if (pendingCount(); as n) {
+                      <!-- A kept space: "Publish 3", two words, as the name says it (axe's label-in-name). -->
+                      &ngsp;
                       <span
                         class="ml-auto rounded-full px-1.5 font-mono text-xs"
                         [class]="

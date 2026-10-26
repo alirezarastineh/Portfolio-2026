@@ -87,7 +87,7 @@ let fieldPairs = 0;
               type="button"
               class="h-6 px-2 font-mono text-xs text-muted-foreground"
               (click)="copyToGerman()"
-              [attr.aria-label]="'Copy English ' + label() + ' to German'"
+              [attr.aria-label]="'EN → DE: copy the English ' + label() + ' to German'"
             >
               <ng-icon name="lucideCopy" size="12" aria-hidden="true" />
               <span class="ml-1">EN → DE</span>
@@ -103,7 +103,9 @@ let fieldPairs = 0;
                 class="h-6 px-2 font-mono text-xs text-muted-foreground"
                 [disabled]="!!aiBusy()"
                 (click)="aiTranslate('en')"
-                [attr.aria-label]="'Translate the English ' + label() + ' into German with AI'"
+                [attr.aria-label]="
+                  'Translate → DE: the English ' + label() + ' into German, with AI'
+                "
               >
                 <ng-icon name="lucideSparkles" size="12" aria-hidden="true" />
                 <span class="ml-1">{{ aiBusy() === "de" ? "…" : "translate → DE" }}</span>
@@ -116,7 +118,9 @@ let fieldPairs = 0;
                 class="h-6 px-2 font-mono text-xs text-muted-foreground"
                 [disabled]="!!aiBusy()"
                 (click)="aiTranslate('de')"
-                [attr.aria-label]="'Translate the German ' + label() + ' into English with AI'"
+                [attr.aria-label]="
+                  '→ EN: translate the German ' + label() + ' into English, with AI'
+                "
               >
                 <ng-icon name="lucideSparkles" size="12" aria-hidden="true" />
                 <span class="ml-1">{{ aiBusy() === "en" ? "…" : "→ EN" }}</span>

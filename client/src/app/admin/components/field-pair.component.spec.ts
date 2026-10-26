@@ -156,7 +156,9 @@ describe("FieldPairComponent's drafts", () => {
     const button = Array.from(
       fixture.nativeElement.querySelectorAll("button") as NodeListOf<HTMLButtonElement>,
     ).find(
-      (b) => b.getAttribute("aria-label") === "Translate the English Greeting into German with AI",
+      (b) =>
+        b.getAttribute("aria-label") ===
+        "Translate → DE: the English Greeting into German, with AI",
     )!;
     return { fixture, form, reported, button };
   }

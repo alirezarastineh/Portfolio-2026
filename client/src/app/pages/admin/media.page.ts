@@ -261,9 +261,10 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
                 type="button"
                 class="block w-full overflow-hidden rounded-lg border text-left transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 [class]="picked ? 'border-destructive' : 'border-border'"
-                [attr.aria-label]="'Details of ' + asset.originalName"
                 (click)="open(asset)"
               >
+                <!-- Named by its content, the tile's text included (axe's label-in-name). -->
+                <span class="sr-only">Details of </span>
                 <app-media-tile [asset]="asset" [showUsage]="true" />
               </button>
               @if (isUnused(asset)) {
