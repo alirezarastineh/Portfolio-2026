@@ -4,6 +4,7 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { AdminApiService } from "../admin-api.service";
 import {
   browserTiles,
+  tourLine,
   downReasonLine,
   funnelLine,
   HIGHER_IS_BETTER,
@@ -45,6 +46,12 @@ import {
         <p class="m-0 text-sm">
           <span class="text-muted-foreground">Hand-offs:</span> {{ funnelLine(o.funnel) }}
         </p>
+        <!-- The guided tours (visitor plan V16): not answers, so counted here alone. -->
+        @if (v.tours; as t) {
+          <p class="m-0 text-sm">
+            <span class="text-muted-foreground">Tours:</span> {{ tourLine(t) }}
+          </p>
+        }
 
         <!-- What the visitors' browsers saw (visitor plan V2); an older API sends none. -->
         @if (v.browser; as b) {
@@ -121,6 +128,7 @@ export class AssistantOutcomesComponent implements OnInit {
   protected readonly funnelLine = funnelLine;
   protected readonly browserTiles = browserTiles;
   protected readonly downReasonLine = downReasonLine;
+  protected readonly tourLine = tourLine;
 
   protected readonly view = signal<OutcomesView | null>(null);
   protected readonly saving = signal(false);

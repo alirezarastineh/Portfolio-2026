@@ -6,6 +6,7 @@ import {
   funnelLine,
   seconds,
   share,
+  tourLine,
   usd,
   type BrowserView,
 } from "./outcomes";
@@ -16,6 +17,16 @@ describe("outcomes in the admin", () => {
     expect(share(null)).toBe("–");
     expect(usd(0.00276)).toBe("$0.0028");
     expect(usd(null)).toBe("–");
+  });
+
+  it("counts the guided tours and the share taken to the last stop (visitor plan V16)", () => {
+    expect(tourLine({ started: 3, finished: 1, finishedRate: 1 / 3 })).toBe(
+      "3 tours planned, 1 taken to the last stop (33 %)",
+    );
+    expect(tourLine({ started: 1, finished: 0, finishedRate: 0 })).toBe(
+      "1 tour planned, 0 taken to the last stop (0 %)",
+    );
+    expect(tourLine({ started: 0, finished: 0, finishedRate: null })).toBe("No tour planned yet");
   });
 
   it("reads the hand-off funnel with the share that made each step", () => {

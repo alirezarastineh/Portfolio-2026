@@ -52,6 +52,8 @@ export interface OutcomesView {
   outcomes: Outcomes;
   /** Absent from an API older than the visitor plan's V2. */
   browser?: BrowserView;
+  /** The guided tours (visitor plan V16); absent from an older API. */
+  tours?: TourCounts;
   primary: {
     metric: PrimaryMetric;
     weeks: { week: string; value: number | null }[];
@@ -121,6 +123,21 @@ export function downReasonLine(b: BrowserView): string | null {
     .filter((reason) => b.downReasons[reason] > 0)
     .map((reason) => `${b.downReasons[reason]} ${DOWN_REASON_WORDS[reason]}`);
   return parts.length ? `👎 by reason: ${parts.join(", ")}` : null;
+}
+
+/** The tours planned for an interest, and the share taken to the last stop (`tourCounts`, V16). */
+export interface TourCounts {
+  started: number;
+  finished: number;
+  finishedRate: number | null;
+}
+
+/** "3 tours planned, 1 taken to the last stop (33 %)". */
+export function tourLine(t: TourCounts): string {
+  const planned = t.started === 1 ? "1 tour planned" : `${t.started} tours planned`;
+  return t.started
+    ? `${planned}, ${t.finished} taken to the last stop (${share(t.finishedRate)})`
+    : "No tour planned yet";
 }
 
 /** Offered → confirmed → sent, with the share that made each step. */
