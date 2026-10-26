@@ -27,6 +27,7 @@ export type LocalCommand =
   | "inspect"
   | "evals"
   | "forget"
+  | "news"
   | "history"
   | "clear"
   | "reset"
@@ -56,6 +57,7 @@ export const COMMANDS = [
   "inspect",
   "evals",
   "forget",
+  "news",
   "history",
   "clear",
   "reset",
@@ -115,6 +117,9 @@ function withArgument(head: string, rest: readonly string[]): Parsed | null {
     // "level expert" sets it (visitor plan V10); "level of his German?" is a question.
     case "level":
       return rest.length <= 1 ? { kind: "local", name: "level", arg: arg.toLowerCase() } : null;
+    // "news" and "news off" (visitor plan V15); "news about his RAG work?" is a question.
+    case "news":
+      return rest.length <= 1 ? { kind: "local", name: "news", arg: arg.toLowerCase() } : null;
     case "ask":
       return arg ? { kind: "ask", text: arg, deep: false } : null;
     case "deep":

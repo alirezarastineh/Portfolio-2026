@@ -1,5 +1,5 @@
 import { DOCUMENT } from "@angular/common";
-import { computed, effect, inject } from "@angular/core";
+import { computed, effect, inject, untracked } from "@angular/core";
 import { Router } from "@angular/router";
 import { Chat } from "@ai-sdk/angular";
 import {
@@ -47,6 +47,8 @@ import { confirmHandoff } from "./handoff-confirm";
 import { handoffSummary } from "./handoff-offer";
 import { fetchInspect, inspectLines, linesText } from "./inspect";
 import { clearDeviceKeys, forgetBody, forgetConversation, MAX_EARLIER } from "./forget";
+import { newsLines, turnNewsOff, turnNewsOn, visitNews } from "./news";
+import { fetchMap, updatesSince } from "./portfolio-map";
 import { counted, failoverLine } from "./receipt";
 import { fetchScorecard, scorecardLines } from "./scorecard";
 import {
@@ -105,6 +107,13 @@ interface AskState {
   earlierSessions: string[];
   /** `forget` asked, waiting for the visitor's yes or no (visitor plan V14). */
   forgetPending: boolean;
+  /** `news` offered what's new, waiting for the visitor's yes or no (visitor plan V15). */
+  newsPending: boolean;
+  /**
+   * How many pages changed since the visitor's last visit, for the empty terminal
+   * (visitor plan V15); null while what's new is off.
+   */
+  news: { since: string; count: number } | null;
   /** The polite live region's text: finished answers and command output, once. */
   announcement: string;
 }
@@ -251,6 +260,8 @@ export const AskStore = signalStore(
       failover: null,
       earlierSessions: stored?.earlierSessions ?? [],
       forgetPending: false,
+      newsPending: false,
+      news: null,
       announcement: "",
     };
   }),
@@ -517,6 +528,7 @@ export const AskStore = signalStore(
         ].slice(-MAX_ENTRIES),
         handoff: null,
         forgetPending: false,
+        newsPending: false,
         announcement: "",
       });
       // From here the visitor waits (a Turnstile check included): the first word's time counts it.
@@ -564,6 +576,7 @@ export const AskStore = signalStore(
         entries: [],
         handoff: null,
         forgetPending: false,
+        newsPending: false,
         feedback: {},
         downReasons: {},
         limitedUntil: null,
@@ -656,6 +669,40 @@ export const AskStore = signalStore(
       }
       const lines = inspectLines(result.view, copy, locale());
       show(input, lines, linesText(input, store._lang.t().about.terminalPrompt, lines));
+    }
+
+    /**
+     * `news` (visitor plan V15): what changed since the last visit, with no model call. While
+     * what's new is off it is offered, and nothing is stored before the visitor's yes.
+     */
+    async function handleNews(input: string, arg: string): Promise<void> {
+      const copy = store.copy();
+      if (arg === "off") {
+        turnNewsOff();
+        patchState(store, { news: null });
+        track("map_news", { step: "off" });
+        show(input, [{ text: copy.news.off, tone: "dim" }]);
+        return;
+      }
+      if (arg && arg !== "on") {
+        show(input, [{ text: copy.news.usage, tone: "dim" }]);
+        return;
+      }
+      const since = visitNews();
+      if (!since) {
+        patchState(store, { newsPending: true, forgetPending: false, handoff: null });
+        show(input, []);
+        patchState(store, { announcement: `${copy.news.ask} ${copy.news.what}` });
+        track("map_news", { step: "offer" });
+        return;
+      }
+      const pages = await fetchMap(locale());
+      if (!pages) {
+        show(input, [{ text: copy.news.failed, tone: "error" }]);
+        return;
+      }
+      track("map_news", { step: "list" });
+      show(input, newsLines(updatesSince(pages, since), since, copy, locale()));
     }
 
     /** `evals` (visitor plan V13): the public scorecard, while the admin publishes it. */
@@ -774,9 +821,12 @@ export const AskStore = signalStore(
           break;
         case "forget":
           // Irreversible: it waits for the visitor's yes (visitor plan V14).
-          patchState(store, { forgetPending: true, handoff: null });
+          patchState(store, { forgetPending: true, newsPending: false, handoff: null });
           show(input, []);
           patchState(store, { announcement: `${copy.forget.ask} ${copy.forget.what}` });
+          break;
+        case "news":
+          void handleNews(input, parsed.arg);
           break;
         case "history":
           handleHistory(input);
@@ -807,9 +857,13 @@ export const AskStore = signalStore(
           patchState(store, { history: [...store.history(), input].slice(-MAX_HISTORY) });
         }
 
-        // A pending hand-off, or forget (visitor plan V14), takes y/n first.
+        // A pending hand-off, forget (visitor plan V14) or what's new (V15) takes y/n first.
         if (store.forgetPending() && /^(y|yes|j|ja|n|no|nein)$/i.test(input)) {
           await this.answerForget(/^(y|yes|j|ja)$/i.test(input));
+          return;
+        }
+        if (store.newsPending() && /^(y|yes|j|ja|n|no|nein)$/i.test(input)) {
+          this.answerNews(/^(y|yes|j|ja)$/i.test(input));
           return;
         }
         if (store.handoff() && /^(y|yes|j|ja|n|no|nein)$/i.test(input)) {
@@ -930,11 +984,46 @@ export const AskStore = signalStore(
           return;
         }
         clearDeviceKeys();
-        patchState(store, { level: "standard" });
+        patchState(store, { level: "standard", news: null });
         resetSession({ forgotten: true });
         show(copy.forget.yes, [
           { text: counted(result.deleted, copy.forget.done), tone: "accent" },
         ]);
+      },
+
+      /**
+       * The visitor's answer to "turn on what's new?" (visitor plan V15). Only a yes stores
+       * anything: today's date, in this browser.
+       */
+      answerNews(yes: boolean): void {
+        if (!store.newsPending()) return;
+        const copy = store.copy();
+        patchState(store, { newsPending: false });
+        if (!yes) {
+          show(copy.news.no, [{ text: copy.news.declined, tone: "dim" }]);
+          return;
+        }
+        turnNewsOn();
+        track("map_news", { step: "on" });
+        show(copy.news.yes, [{ text: copy.news.on, tone: "accent" }]);
+      },
+
+      /**
+       * How many pages changed since the last visit, for the empty terminal (visitor plan V15).
+       * Nothing is read or fetched while what's new is off.
+       */
+      async loadNews(): Promise<void> {
+        const since = visitNews();
+        if (!since) {
+          patchState(store, { news: null });
+          return;
+        }
+        const l = locale();
+        const pages = await fetchMap(l);
+        if (locale() !== l) return;
+        patchState(store, {
+          news: pages ? { since, count: updatesSince(pages, since).length } : null,
+        });
       },
 
       answerHandoff(yes: boolean): void {
@@ -991,6 +1080,12 @@ export const AskStore = signalStore(
   withHooks({
     onInit(store) {
       void store.loadConfig();
+
+      // What's new in this language, once the visitor turned it on (visitor plan V15).
+      effect(() => {
+        store._lang.lang();
+        untracked(() => void store.loadNews());
+      });
 
       // The answer's first visible word (visitor plan V2): the moment the question being answered
       // gets text, as the browser shows it.

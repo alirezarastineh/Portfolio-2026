@@ -73,6 +73,13 @@ describe("parseInput", () => {
     expect(complete("forg", content)).toBe("forget");
   });
 
+  it("knows news with one word or none, and a question about news is a question (visitor plan V15)", () => {
+    expect(parseInput("news")).toEqual({ kind: "local", name: "news", arg: "" });
+    expect(parseInput("News OFF")).toEqual({ kind: "local", name: "news", arg: "off" });
+    expect(parseInput("news about his RAG work?")).toMatchObject({ kind: "ask" });
+    expect(complete("new", content)).toBe("news");
+  });
+
   it("knows level with one word or none, and a question about a level is a question (visitor plan V10)", () => {
     expect(parseInput("level expert")).toEqual({ kind: "local", name: "level", arg: "expert" });
     expect(parseInput("LEVEL Plain")).toEqual({ kind: "local", name: "level", arg: "plain" });

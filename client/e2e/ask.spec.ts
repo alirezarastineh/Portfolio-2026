@@ -1302,6 +1302,70 @@ test.describe("assistant terminal", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("TODO: Project One");
   });
 
+  test("news offers what's new, stores nothing before a yes, and lists what changed since the last visit (visitor plan V15)", async ({
+    page,
+  }) => {
+    const mock = await mockAsk(page, (route) => sse(route, answer({ text: "Two pages changed." })));
+    const maps = await mockMap(page);
+    const kept = () => page.evaluate(() => localStorage.getItem("ask:news"));
+    const prompt = await openPrompt(page);
+    const log = page.locator("#about [role=log]");
+
+    // Off: offered, with what it would keep; a no stores nothing, and nothing is fetched.
+    await run(prompt, "news");
+    const offer = page.getByRole("group", { name: "Turn on what's new?" });
+    await expect(offer).toBeVisible();
+    await expect(offer).toHaveAccessibleDescription(/remember today's date/);
+    expect(await axeViolations(page)).toEqual([]);
+    await offer.getByRole("button", { name: "no", exact: true }).click();
+    await expect(log).toContainText("OK, nothing was stored.");
+    expect(await kept()).toBeNull();
+    expect(maps).toEqual([]);
+
+    // A yes keeps today's date, and only that.
+    await run(prompt, "news");
+    await run(prompt, "y");
+    await expect(log).toContainText("What's new is on.");
+    const today = new Date().toISOString().slice(0, 10);
+    expect(JSON.parse((await kept())!)).toEqual({ since: today, last: today });
+
+    // A later visit, the last one on Sep 1: the empty terminal and the palette count what changed.
+    await page.evaluate(() => {
+      sessionStorage.clear();
+      localStorage.setItem("ask:news", JSON.stringify({ since: "2026-09-01", last: "2026-09-01" }));
+    });
+    const since = new Intl.DateTimeFormat("en", {
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    }).format(new Date("2026-09-01T00:00:00Z"));
+    const again = await openPrompt(page);
+    const updates = page.getByRole("button", { name: `2 updates since ${since}` });
+    await expect(updates).toBeVisible();
+    expect(JSON.parse((await kept())!)).toEqual({ since: "2026-09-01", last: today });
+    await page.keyboard.press("Control+k");
+    await expect(page.getByRole("option", { name: /What's new/ })).toContainText(
+      `2 updates since ${since}`,
+    );
+    await page.keyboard.press("Escape");
+
+    // `news` lists them with no model; one line asks for a summary.
+    await updates.click();
+    await expect(log).toContainText("TODO: Project One · case study");
+    await expect(log).toContainText("Shipping RAG to production · post");
+    await expect(log).not.toContainText("Notes on evals");
+    expect(mock.bodies).toHaveLength(0);
+    await log.getByRole("button", { name: "summarize them ›" }).click();
+    await expect(log).toContainText("Two pages changed.");
+    expect(JSON.stringify(mock.bodies.at(-1)!.messages.at(-1))).toContain(
+      "Summarize what is new on these pages: TODO: Project One, Shipping RAG to production.",
+    );
+
+    await run(again, "news off");
+    await expect(log).toContainText("What's new is off");
+    expect(await kept()).toBeNull();
+  });
+
   test("the reader pages' server HTML has none of the ask buttons: the browser adds them", async ({
     request,
   }) => {

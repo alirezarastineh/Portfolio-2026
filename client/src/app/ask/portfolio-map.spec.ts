@@ -1,9 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { apiBaseUrl } from "../services/api-base";
-import { fetchMap, mapPages, readNext, resetMapCache, type MapPage } from "./portfolio-map";
+import {
+  fetchMap,
+  mapPages,
+  readNext,
+  resetMapCache,
+  updatesSince,
+  type MapPage,
+} from "./portfolio-map";
 
-/** The portfolio's map in the browser (visitor plan V15): read, checked and read next. */
+/** The portfolio's map in the browser (visitor plan V15): read, checked, read next and what's new. */
 
 const page = (id: string, extra: Partial<MapPage> = {}): MapPage => ({
   id,
@@ -82,6 +89,24 @@ describe("readNext", () => {
     ];
     expect(readNext(odd, "project:a@en").map((p) => p.id)).toEqual(["project:b@en"]);
     expect(readNext(odd, "project:none@en")).toEqual([]);
+  });
+});
+
+describe("updatesSince", () => {
+  it("lists projects and posts changed after the day, newest first; nothing a publish dates", () => {
+    const pages = [
+      page("post:old@en", { updated: "2026-09-12" }),
+      page("post:new@en", { updated: "2026-10-20" }),
+      page("project:atlas@en", { updated: "2026-10-02" }),
+      page("project:undated@en"),
+      { ...page("profile@en"), kind: "profile" as const, updated: "2026-10-22" },
+      { ...page("skills@en"), kind: "skills" as const, updated: "2026-10-22" },
+    ];
+    expect(updatesSince(pages, "2026-09-12").map((p) => p.id)).toEqual([
+      "post:new@en",
+      "project:atlas@en",
+    ]);
+    expect(updatesSince(pages, "2026-10-20")).toEqual([]);
   });
 });
 

@@ -27,6 +27,7 @@ import { AskLinesComponent } from "./ask-lines.component";
 import { AskStore } from "./ask.store";
 import type { Entry } from "./ask-types";
 import { complete, parseInput } from "./commands";
+import { newsCount } from "./news";
 import { track } from "./track";
 
 let instances = 0;
@@ -162,6 +163,34 @@ const MAX_INPUT_LINES = 6;
             </span>
           </div>
         }
+        <!-- What's new (visitor plan V15): stores a date in this browser, so only after a yes. -->
+        @if (store.newsPending()) {
+          <div
+            class="flex flex-col gap-1 pb-3"
+            role="group"
+            [attr.aria-label]="copy().news.ask"
+            [attr.aria-describedby]="newsId"
+          >
+            <span class="text-accent-orange">{{ copy().news.ask }}</span>
+            <span [id]="newsId" class="text-xs text-muted-foreground">{{ copy().news.what }}</span>
+            <span class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
+                (click)="store.answerNews(true)"
+              >
+                {{ copy().news.yes }}
+              </button>
+              <button
+                type="button"
+                class="press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
+                (click)="store.answerNews(false)"
+              >
+                {{ copy().news.no }}
+              </button>
+            </span>
+          </div>
+        }
       </div>
 
       <form
@@ -221,6 +250,18 @@ const MAX_INPUT_LINES = 6;
             </button>
           }
         </div>
+        <!-- What changed since the last visit, once the visitor turned what's new on (V15). -->
+        @if (newsLine(); as line) {
+          <p class="m-0 mb-1 text-xs" [class.invisible]="!active()">
+            <button
+              type="button"
+              class="min-h-6 cursor-pointer text-left text-accent-orange underline decoration-border underline-offset-4 hover:decoration-accent-orange"
+              (click)="send('news')"
+            >
+              {{ line }}<span aria-hidden="true"> ›</span>
+            </button>
+          </p>
+        }
       }
       <p [id]="hintId" class="m-0 mt-1 text-xs text-muted-foreground" [class.invisible]="!active()">
         {{ lang.t().ask.hint }} · {{ lang.t().ask.disclosure }}
@@ -265,6 +306,7 @@ export class TerminalShellComponent {
   protected readonly inputId = `ask-input-${++instances}`;
   protected readonly hintId = `ask-hint-${instances}`;
   protected readonly forgetId = `ask-forget-${instances}`;
+  protected readonly newsId = `ask-news-${instances}`;
 
   private readonly inputRef = viewChild.required<ElementRef<HTMLTextAreaElement>>("input");
   private readonly logRef = viewChild.required<ElementRef<HTMLElement>>("log");
@@ -287,6 +329,11 @@ export class TerminalShellComponent {
   protected readonly status = computed(() => this.store.chat.status);
   protected readonly busy = computed(() => ["submitted", "streaming"].includes(this.status()));
   protected readonly showIdleCaret = computed(() => !this.focused() && !this.value());
+  /** "3 updates since Sep 12", while what's new is on and something changed (visitor plan V15). */
+  protected readonly newsLine = computed(() => {
+    const news = this.store.news();
+    return news?.count ? newsCount(news.count, news.since, this.lang.lang()) : null;
+  });
 
   protected readonly answers = computed(() => answersByQuestion(this.store.chat.messages));
 
@@ -336,6 +383,7 @@ export class TerminalShellComponent {
       this.store.entries();
       this.store.handoff();
       this.store.forgetPending();
+      this.store.newsPending();
       const log = this.logRef().nativeElement;
       if (this.store.chat.messages && this.stick) log.scrollTop = log.scrollHeight;
     });

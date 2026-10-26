@@ -12,6 +12,7 @@ import {
 import { Router } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import {
+  lucideBell,
   lucideBriefcase,
   lucideDownload,
   lucideFileText,
@@ -26,6 +27,8 @@ import {
 } from "@ng-icons/lucide";
 
 import { AskLauncherService } from "../ask/ask-launcher.service";
+import { newsCount, visitNews } from "../ask/news";
+import { fetchMap, updatesSince } from "../ask/portfolio-map";
 import { otherLocale } from "../content/locale";
 import { splitCommentMark } from "../i18n/comment-mark";
 import { CHROME } from "../i18n/chrome";
@@ -61,6 +64,7 @@ interface Group {
   imports: [NgIcon],
   viewProviders: [
     provideIcons({
+      lucideBell,
       lucideBriefcase,
       lucideDownload,
       lucideFileText,
@@ -211,6 +215,8 @@ export class CommandPaletteComponent {
   protected readonly labels = computed(() => CHROME[this.lang.lang()].palette);
   protected readonly query = signal("");
   private readonly active = signal(0);
+  /** "3 updates since Sep 12" beside "What's new", once the visitor turned it on (visitor plan V15). */
+  private readonly newsHint = signal<string | null>(null);
 
   private readonly all = computed<Group[]>(() => {
     const l = this.lang.lang();
@@ -280,6 +286,14 @@ export class CommandPaletteComponent {
             this.launcher.openSheet("palette");
           }
         },
+      },
+      {
+        id: "palette-news",
+        label: labels.palette.news,
+        icon: "lucideBell",
+        keywords: "news updates",
+        ...(this.newsHint() ? { hint: this.newsHint()! } : {}),
+        run: () => this.inTerminal("news"),
       },
       {
         id: "palette-language",
@@ -352,6 +366,7 @@ export class CommandPaletteComponent {
         this.active.set(0);
         dialog.showModal();
         this.input().nativeElement.focus();
+        void this.loadNews();
       } else if (!open && dialog.open) {
         dialog.close();
         this.returnFocus?.focus();
@@ -408,6 +423,33 @@ export class CommandPaletteComponent {
   /** A click on the backdrop lands on the dialog itself. */
   protected closeOnBackdrop(event: MouseEvent): void {
     if (event.target === event.currentTarget) this.palette.hide();
+  }
+
+  /**
+   * A command for the terminal (`news`): on home, the About terminal takes it;
+   * elsewhere it opens in the sheet.
+   */
+  private inTerminal(command: string): void {
+    this.launcher.ask(command, "palette");
+    if (this.lang.page() === "/") {
+      void this.router.navigate(["/", this.lang.lang()], { fragment: "about" });
+    }
+  }
+
+  /**
+   * How many pages changed since the last visit (visitor plan V15). While what's
+   * new is off nothing is read or fetched, and nothing stored.
+   */
+  private async loadNews(): Promise<void> {
+    const locale = this.lang.lang();
+    const since = visitNews();
+    if (!since) {
+      this.newsHint.set(null);
+      return;
+    }
+    const pages = await fetchMap(locale);
+    const count = pages ? updatesSince(pages, since).length : 0;
+    this.newsHint.set(count ? newsCount(count, since, locale) : null);
   }
 
   /** A file, not a page: saved through a plain link, never the router. */

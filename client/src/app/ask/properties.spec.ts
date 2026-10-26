@@ -252,7 +252,10 @@ describe("the shell", () => {
       ),
       fc.tuple(fc.constant("cat"), fc.array(prose, { minLength: 2, maxLength: 5 })),
       fc.tuple(fc.constantFrom("open", "cd"), fc.array(prose, { minLength: 4, maxLength: 6 })),
-      fc.tuple(fc.constantFrom("lang", "level"), fc.array(prose, { minLength: 2, maxLength: 5 })),
+      fc.tuple(
+        fc.constantFrom("lang", "level", "news"),
+        fc.array(prose, { minLength: 2, maxLength: 5 }),
+      ),
     );
     fc.assert(
       fc.property(tooMany, ([command, words]) => {
@@ -285,6 +288,8 @@ describe("the shell", () => {
       "open writing",
       "lang de",
       "level expert",
+      "news",
+      "news off",
     );
     fc.assert(
       fc.property(

@@ -41,6 +41,8 @@ export interface ChromeLabels {
     actions: string;
     home: string;
     ask: string;
+    /** What changed since the last visit (visitor plan V15). */
+    news: string;
     close: string;
   };
   breadcrumb: string;
@@ -124,6 +126,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       actions: "Actions",
       home: "Home",
       ask: "Ask AI…",
+      news: "What's new",
       close: "Close",
     },
     breadcrumb: "Breadcrumb",
@@ -198,6 +201,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       actions: "Aktionen",
       home: "Startseite",
       ask: "KI fragen…",
+      news: "Was ist neu",
       close: "Schließen",
     },
     breadcrumb: "Brotkrümelnavigation",

@@ -171,6 +171,27 @@ export interface AskCopy {
     declined: string;
     failed: string;
   };
+  /**
+   * What's new (visitor plan V15): the offer and what it keeps, its answers,
+   * and the list of what changed since the last visit.
+   */
+  news: {
+    ask: string;
+    what: string;
+    yes: string;
+    no: string;
+    on: string;
+    declined: string;
+    off: string;
+    usage: string;
+    /** `{date}`: the last visit's day. */
+    none: string;
+    failed: string;
+    kinds: { "case-study": string; project: string; post: string };
+    summarize: string;
+    /** The question "summarize" asks, `{titles}` the pages'. */
+    question: string;
+  };
   handoff: { ask: string; yes: string; no: string; done: string; declined: string };
   opening: string;
   tool: {
@@ -223,6 +244,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         ["cat <project>", "one project in detail"],
         ["ls skills", "what he works with"],
         ["open <page>", "go to a project, post or section"],
+        ["news", "what changed since your last visit (opt-in)"],
         ["cv", "download his CV"],
         ["contact", "write to him"],
         ["lang en|de", "switch the language"],
@@ -387,6 +409,21 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       declined: "OK, nothing was deleted.",
       failed: "Nothing was deleted: the log could not be reached. Try again in a moment.",
     },
+    news: {
+      ask: "Turn on what's new?",
+      what: "This browser will remember today's date, and on your later visits the terminal and the palette say what changed since. Nothing is sent; `news off` or `forget` clears it.",
+      yes: "yes",
+      no: "no",
+      on: "What's new is on. From your next visit, `news` lists what changed since today.",
+      declined: "OK, nothing was stored.",
+      off: "What's new is off: this browser no longer keeps the date.",
+      usage: "usage: news [off]",
+      none: "Nothing new since {date}.",
+      failed: "Could not load what's new just now.",
+      kinds: { "case-study": "case study", project: "project", post: "post" },
+      summarize: "summarize them ›",
+      question: "Summarize what is new on these pages: {titles}.",
+    },
     handoff: {
       ask: "Hand this conversation to the contact form?",
       yes: "yes",
@@ -446,6 +483,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         ["cat <projekt>", "ein Projekt im Detail"],
         ["ls skills", "womit er arbeitet"],
         ["open <seite>", "zu einem Projekt, Artikel oder Bereich"],
+        ["news", "was sich seit deinem letzten Besuch geändert hat (optional)"],
         ["cv", "Lebenslauf herunterladen"],
         ["contact", "ihm schreiben"],
         ["lang en|de", "Sprache wechseln"],
@@ -613,6 +651,21 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       declined: "Okay, nichts wurde gelöscht.",
       failed:
         "Nichts wurde gelöscht: Das Protokoll war nicht erreichbar. Versuch es gleich noch einmal.",
+    },
+    news: {
+      ask: "„Was ist neu“ einschalten?",
+      what: "Dieser Browser merkt sich das heutige Datum, und bei späteren Besuchen zeigen Terminal und Befehlspalette, was sich seitdem geändert hat. Nichts wird gesendet; `news off` oder `forget` löscht es.",
+      yes: "ja",
+      no: "nein",
+      on: "„Was ist neu“ ist an. Ab deinem nächsten Besuch listet `news` auf, was sich seit heute geändert hat.",
+      declined: "Okay, nichts wurde gespeichert.",
+      off: "„Was ist neu“ ist aus: Dieser Browser merkt sich das Datum nicht mehr.",
+      usage: "Verwendung: news [off]",
+      none: "Nichts Neues seit {date}.",
+      failed: "Was neu ist, ließ sich gerade nicht laden.",
+      kinds: { "case-study": "Fallstudie", project: "Projekt", post: "Artikel" },
+      summarize: "zusammenfassen ›",
+      question: "Fasse zusammen, was auf diesen Seiten neu ist: {titles}.",
     },
     handoff: {
       ask: "Dieses Gespräch an das Kontaktformular übergeben?",

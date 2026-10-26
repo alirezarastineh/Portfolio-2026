@@ -4,7 +4,7 @@ import { apiBaseUrl } from "../services/api-base";
 /**
  * The portfolio's map (visitor plan V15), as `GET /v1/ask/map` serves it: one
  * language's published pages, dated and related (server/src/ask/map.ts). Read
- * next is worked out from it here, with no model.
+ * next and what's new are worked out from it here, with no model.
  */
 
 export type MapKind = "profile" | "experience" | "project" | "post" | "skills";
@@ -22,7 +22,7 @@ export interface MapPage {
   related: string[];
 }
 
-const KINDS: readonly string[] = ["profile", "experience", "project", "post", "skills"];
+const KINDS: ReadonlySet<string> = new Set(["profile", "experience", "project", "post", "skills"]);
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 type Raw = Record<string, unknown>;
@@ -38,7 +38,7 @@ function pageOf(raw: unknown): MapPage | null {
   const title = str(r["title"]);
   const url = str(r["url"]);
   // Only the site's own paths: a link built from this goes nowhere else.
-  if (!id || !KINDS.includes(kind) || !title || !url.startsWith("/") || url.startsWith("//")) {
+  if (!id || !KINDS.has(kind) || !title || !url.startsWith("/") || url.startsWith("//")) {
     return null;
   }
   const updated = str(r["updated"]);
@@ -101,4 +101,14 @@ export function readNext(pages: readonly MapPage[], id: string, n = 3): MapPage[
     .filter((other) => other !== id)
     .flatMap((other) => byId.get(other) ?? [])
     .slice(0, n);
+}
+
+/** What's new reports pages with dates of their own: a publish dates the profile and the rest. */
+const NEWS_KINDS: ReadonlySet<MapKind> = new Set<MapKind>(["project", "post"]);
+
+/** Projects and posts changed after the day `since`, newest first. */
+export function updatesSince(pages: readonly MapPage[], since: string): MapPage[] {
+  return pages
+    .filter((p) => NEWS_KINDS.has(p.kind) && p.updated !== undefined && p.updated > since)
+    .sort((a, b) => b.updated!.localeCompare(a.updated!));
 }

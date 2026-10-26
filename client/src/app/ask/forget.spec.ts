@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { LEVEL_STORAGE_KEY } from "./ask-level";
 import { clearDeviceKeys, DEVICE_KEYS, forgetBody, forgetConversation } from "./forget";
+import { NEWS_STORAGE_KEY } from "./news";
 
 /** `forget` in the browser (visitor plan V14): the device's keys, the request, its outcome. */
 
@@ -15,10 +16,14 @@ function storage(entries: Record<string, string>) {
 
 describe("forget in the browser (visitor plan V14)", () => {
   it("clears what the terminal kept on this device, and nothing else", () => {
-    const kept = storage({ [LEVEL_STORAGE_KEY]: "plain", theme: "dark" });
+    const kept = storage({
+      [LEVEL_STORAGE_KEY]: "plain",
+      [NEWS_STORAGE_KEY]: '{"since":"2026-09-12","last":"2026-10-23"}',
+      theme: "dark",
+    });
     clearDeviceKeys(kept);
     expect([...kept.data.keys()]).toEqual(["theme"]);
-    expect(DEVICE_KEYS).toEqual(["ask:level"]);
+    expect(DEVICE_KEYS).toEqual(["ask:level", "ask:news"]);
     // Blocked storage, or none: nothing to clear, nothing thrown.
     expect(() =>
       clearDeviceKeys({

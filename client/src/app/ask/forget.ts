@@ -1,4 +1,5 @@
 import { LEVEL_STORAGE_KEY } from "./ask-level";
+import { NEWS_STORAGE_KEY } from "./news";
 
 /**
  * `forget` (visitor plan V14): after the visitor's yes, the server deletes
@@ -9,9 +10,10 @@ import { LEVEL_STORAGE_KEY } from "./ask-level";
 
 /**
  * What the terminal keeps in this browser beyond the tab, all of it cleared
- * by `forget`: the reading level (V10). A key added later joins this list.
+ * by `forget`: the reading level (V10) and what's new's day (V15). A key
+ * added later joins this list.
  */
-export const DEVICE_KEYS: readonly string[] = [LEVEL_STORAGE_KEY];
+export const DEVICE_KEYS: readonly string[] = [LEVEL_STORAGE_KEY, NEWS_STORAGE_KEY];
 
 /** The tab's sessions before its resets that `forget` also takes; the server takes ten. */
 export const MAX_EARLIER = 10;
