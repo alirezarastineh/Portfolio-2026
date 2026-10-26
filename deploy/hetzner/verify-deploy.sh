@@ -318,6 +318,20 @@ elif [[ "${SCORECARD}" == *'not_published'*' 404' ]]; then
 else
   fail "the scorecard does not answer as itself (${API}/v1/ask/scorecard)"
 fi
+# The portfolio's map (visitor plan V15): public, no model, its ETag answered with a 304.
+MAP_HEADERS="$(curl -s -D - -o /dev/null "${API}/v1/ask/map?locale=en" || true)"
+MAP_ETAG="$(grep -i '^etag:' <<<"${MAP_HEADERS}" | sed 's/^[^:]*: *//' | tr -d '\r' || true)"
+if [[ "${MAP_HEADERS}" =~ ^HTTP/[0-9.]+\ 200 && "${MAP_ETAG}" == W/\"map-en-* ]]; then
+  pass "the portfolio map is served, with its ETag"
+  MAP_AGAIN="$(curl -s -o /dev/null -w '%{http_code}' -H "If-None-Match: ${MAP_ETAG}" "${API}/v1/ask/map?locale=en" || true)"
+  if [[ "${MAP_AGAIN}" == "304" ]]; then
+    pass "the portfolio map answers its own ETag with 304"
+  else
+    fail "the portfolio map did not revalidate its ETag (got ${MAP_AGAIN})"
+  fi
+else
+  fail "the portfolio map is not served (${API}/v1/ask/map?locale=en)"
+fi
 check "assistant admin is locked without a session" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${API}/admin/assistant/settings')\" = 401 ]"
 if [[ "$(db_value "select count(*) from information_schema.tables where table_name in ('ai_settings', 'ai_faq', 'ai_usage', 'ai_messages', 'ai_feedback', 'ai_rate_events')")" == "6" ]]; then

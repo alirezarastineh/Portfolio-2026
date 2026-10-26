@@ -16,11 +16,13 @@ import { backfillEmbeddings } from "./embeddings.js";
 import {
   availability,
   checkForgetRate,
+  checkMapRate,
   checkRate,
   checkScorecardRate,
   ConcurrencyGate,
   hashWithSalt,
   recordForgetRequest,
+  recordMapRequest,
   recordRequest,
   recordScorecardRequest,
 } from "./guard.js";
@@ -29,6 +31,7 @@ import { forgetSessions } from "./forget.js";
 import { countGuardEvent } from "./guard-events.js";
 import { ASK_MESSAGE_ID, buildHistory, historyLimits } from "./history.js";
 import { inspectView } from "./inspect.js";
+import { etagMatches, mapOf } from "./map.js";
 import { shortName } from "./models/registry.js";
 import { PAGE_CHARS, pageDocument } from "./page.js";
 import { routeQuestion } from "./router.js";
@@ -48,6 +51,7 @@ import { DEEP_ROUTE, withoutDemoted } from "./trust.js";
  *   POST /v1/ask/inspect   what the log keeps of one of this session's answers (visitor plan V12)
  *   GET  /v1/ask/scorecard the eval run and 30 days of live checks, while published (V13)
  *   POST /v1/ask/forget    this session's answers deleted from the log, on the visitor's yes (V14)
+ *   GET  /v1/ask/map       one language's published pages, dated and related (V15)
  *   GET  /v1/ask/stream-check  three ticks, so a deploy can prove nothing buffers
  *
  * No cookies and no credentials: the browser holds a random session id per
@@ -113,6 +117,8 @@ const forgetBody = z.object({
   /** The tab's sessions before its `reset`s, which the terminal keeps for this (V14). */
   earlier: z.array(z.string().regex(SESSION_ID)).max(10).optional(),
 });
+
+const mapQuery = z.object({ locale: z.enum(["en", "de"]) });
 
 const gate = new ConcurrencyGate(() => askConfig().maxConcurrent);
 const inFlight = new Set<AbortController>();
@@ -359,6 +365,25 @@ export function createAskRouter(): Hono {
     await recordScorecardRequest(ipHash);
     c.header("Cache-Control", "public, max-age=600");
     return c.json(await scorecard(settings));
+  });
+
+  // Public, and working with the assistant off: the corpus's pages and links, no model call.
+  router.get("/map", async (c) => {
+    const parsed = mapQuery.safeParse({ locale: c.req.query("locale") });
+    if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
+    const ipHash = hashWithSalt("ip", clientIp(c));
+    const rate = await checkMapRate(ipHash);
+    if (!rate.ok) {
+      c.header("Retry-After", String(rate.retryAfter));
+      return c.json({ error: "rate_limited", retryAfter: rate.retryAfter }, 429);
+    }
+    await recordMapRequest(ipHash);
+    const { map, etag } = mapOf(await askCorpus(askConfig()), parsed.data.locale);
+    // A publish changes the corpus's key, and so the validator: a revalidation is cheap.
+    c.header("ETag", etag);
+    c.header("Cache-Control", "public, max-age=300");
+    if (etagMatches(c.req.header("if-none-match"), etag)) return c.body(null, 304);
+    return c.json(map);
   });
 
   router.post("/feedback", async (c) => {

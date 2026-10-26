@@ -246,6 +246,13 @@ export const SCORECARD_RATE = { perHour: 60, perDay: 300 } as const;
  */
 export const FORGET_RATE = { perHour: 10, perDay: 30 } as const;
 
+/**
+ * The portfolio map's limits per IP (visitor plan V15): a cached read that
+ * each reader page and terminal asks for once, as wide as MCP's reads, in a
+ * bucket of its own.
+ */
+export const MAP_RATE = { perHour: 120, perDay: 1_000 } as const;
+
 /** An hourly and a daily limit on one per-address bucket. */
 async function checkBucket(
   bucket: string,
@@ -297,6 +304,19 @@ export async function recordForgetRequest(ipHash: string): Promise<void> {
   await getDb()
     .insert(aiRateEvents)
     .values({ bucket: `forget:${ipHash}` });
+}
+
+export function checkMapRate(
+  ipHash: string,
+  now = Date.now(),
+): Promise<{ ok: true } | { ok: false; retryAfter: number }> {
+  return checkBucket(`map:${ipHash}`, MAP_RATE, now);
+}
+
+export async function recordMapRequest(ipHash: string): Promise<void> {
+  await getDb()
+    .insert(aiRateEvents)
+    .values({ bucket: `map:${ipHash}` });
 }
 
 export async function pruneRateEvents(now = Date.now()): Promise<void> {
