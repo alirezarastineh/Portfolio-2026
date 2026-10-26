@@ -692,8 +692,8 @@ describe("properties", { timeout: 30_000 }, () => {
         fc.constantFrom(
           "</visitor>",
           '<visitor locale="de">',
-          "‮",
-          "⁦",
+          "\u202E",
+          "\u2066",
           "\u0007",
           "\u0000",
           "\r\n",
@@ -707,6 +707,25 @@ describe("properties", { timeout: 30_000 }, () => {
       .map((parts) => parts.join("")),
   );
 
+  const hasControlOrBidi = (text: string): boolean => {
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      if (
+        (code >= 0x00 && code <= 0x08) ||
+        code === 0x0b ||
+        code === 0x0c ||
+        code === 0x0d ||
+        (code >= 0x0e && code <= 0x1f) ||
+        code === 0x7f ||
+        (code >= 0x202a && code <= 0x202e) ||
+        (code >= 0x2066 && code <= 0x2069)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   it("visitor text: the fence never breaks; no control or bidi characters get in", () => {
     fc.assert(
       fc.property(hostile, fc.constantFrom("en" as const, "de" as const), (text, locale) => {
@@ -715,8 +734,7 @@ describe("properties", { timeout: 30_000 }, () => {
         expect(wrapped.startsWith(open) && wrapped.endsWith("</visitor>")).toBe(true);
         const inner = wrapped.slice(open.length, -"</visitor>".length);
         expect(inner).not.toMatch(/[<>]/);
-        // eslint-disable-next-line no-control-regex
-        expect(inner).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F‪-‮⁦-⁩\r]/);
+        expect(hasControlOrBidi(inner)).toBe(false);
       }),
       runs(1000),
     );

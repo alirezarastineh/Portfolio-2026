@@ -416,7 +416,7 @@ describe("history", () => {
   it("strips control and bidi characters from visitor text", async () => {
     const result = await buildHistory({
       ...base,
-      messages: [{ id: "u", role: "user", parts: [{ type: "text", text: "hi‮there\u0007" }] }],
+      messages: [{ id: "u", role: "user", parts: [{ type: "text", text: "hi\u202Ethere\u0007" }] }],
     });
     expect(result.ok && result.question).toBe("hithere");
   });

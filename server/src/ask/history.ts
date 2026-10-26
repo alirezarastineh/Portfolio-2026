@@ -97,7 +97,7 @@ export function messageText(message: Pick<UIMessage, "parts">): string {
 
 /** Controls, and the bidi overrides that could make logged text read backwards. */
 // eslint-disable-next-line no-control-regex
-const UNSAFE_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F‪-‮⁦-⁩]/g;
+const UNSAFE_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/g;
 
 export function cleanVisitorText(text: string): string {
   return text.replace(UNSAFE_CHARS, "").replace(/\r\n?/g, "\n").trim();
