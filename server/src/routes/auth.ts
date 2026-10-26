@@ -218,9 +218,7 @@ async function consumeRecoveryCode(
   code: string,
 ): Promise<boolean> {
   const normalized = normalizeRecoveryCode(code);
-  const matches = await Promise.all(
-    hashes.map((hash) => verifyPassword(hash, normalized)),
-  );
+  const matches = await Promise.all(hashes.map((hash) => verifyPassword(hash, normalized)));
   const matchIndex = matches.indexOf(true);
 
   if (matchIndex === -1) {
