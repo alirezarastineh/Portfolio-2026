@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app.js";
 import { getDb } from "../db/client.js";
 import { adminSessions, adminUsers } from "../db/schema.js";
-import { IP_EMAIL_LIMIT, TOTP_LIMIT } from "../lib/auth-rate-limit.js";
+import { IP_EMAIL_LIMIT, REAUTH_LIMIT, TOTP_LIMIT } from "../lib/auth-rate-limit.js";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
@@ -198,6 +198,30 @@ describe("TOTP", () => {
   });
 });
 
+describe("password asked again", () => {
+  it("counts a session's wrong guesses on each route that asks, until the right one", async () => {
+    const client = new TestClient(app);
+    await client.login();
+    const wrong = "wrong password!";
+    const change = (currentPassword: string) =>
+      client.post("/auth/password", { currentPassword, newPassword: "a long enough new password" });
+    const guesses = [
+      () => change(wrong),
+      () => client.post("/auth/totp/setup", { password: wrong }),
+      () => client.delete("/auth/totp", { password: wrong, code: "123456" }),
+      () => change(wrong),
+      () => change(wrong),
+    ];
+    expect(guesses).toHaveLength(REAUTH_LIMIT);
+
+    // One short of the limit, then the right password clears the count, as a login does.
+    for (const guess of guesses.slice(1)) expect((await guess()).status).toBe(401);
+    expect((await client.post("/auth/totp/setup", { password: ADMIN_PASSWORD })).status).toBe(200);
+    for (const guess of guesses) expect((await guess()).status).toBe(401);
+    expect((await change(ADMIN_PASSWORD)).status).toBe(429);
+  });
+});
+
 describe("parallel attempts", () => {
   /** How many of `n` copies of a request, sent at once, got past the limits. */
   async function passed(n: number, send: () => Promise<Response>): Promise<number> {
@@ -205,7 +229,7 @@ describe("parallel attempts", () => {
     return responses.filter((res) => res.status !== 429).length;
   }
 
-  it("pass no limit: each login or code runs alone", async () => {
+  it("pass no limit: each login, code or password asked again runs alone", async () => {
     const owner = new TestClient(app);
     await owner.login();
     const { otpauthUri } = await enrolTotp(owner);
@@ -220,6 +244,13 @@ describe("parallel attempts", () => {
     expect(
       await passed(50, () => pending.post("/auth/totp", { code: wrongCode })),
     ).toBeLessThanOrEqual(TOTP_LIMIT);
+
+    const reauth = () =>
+      owner.post("/auth/password", {
+        currentPassword: "wrong password!",
+        newPassword: "x".repeat(12),
+      });
+    expect(await passed(20, reauth)).toBeLessThanOrEqual(REAUTH_LIMIT);
 
     const attacker = new TestClient(app, "198.51.100.67");
     const login = () => attacker.login(ADMIN_EMAIL, "wrong password!");

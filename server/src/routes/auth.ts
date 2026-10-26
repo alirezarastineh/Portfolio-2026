@@ -30,6 +30,8 @@ import {
   ipEmailBucket,
   IP_EMAIL_LIMIT,
   IP_LIMIT,
+  reauthBucket,
+  REAUTH_LIMIT,
   recentFailures,
   recordAttempt,
   tooManyAttempts,
@@ -74,6 +76,20 @@ function oneAtATime(keyOf: (c: Context) => string): MiddlewareHandler {
     }
   };
 }
+
+const reauthKey = (c: Context) => reauthBucket(c.get("session").userId);
+
+/**
+ * The password or code a signed-in session enters again: a stolen session cookie must not buy
+ * unlimited guesses. Every 401 of the routes behind it is a wrong password or code.
+ */
+const reauthLimit: MiddlewareHandler = async (c, next) => {
+  const key = reauthKey(c);
+  if (await tooManyAttempts(key, REAUTH_LIMIT)) return c.json({ error: "rate_limited" }, 429);
+  await next();
+  if (c.res.status === 401) await recordAttempt(key, "fail");
+  else if (c.res.ok) await clearBucket(key);
+};
 
 export const authRouter = new Hono();
 
@@ -202,25 +218,22 @@ async function consumeRecoveryCode(
   code: string,
 ): Promise<boolean> {
   const normalized = normalizeRecoveryCode(code);
-  const remaining: string[] = [];
-  let accepted = false;
+  const matches = await Promise.all(
+    hashes.map((hash) => verifyPassword(hash, normalized)),
+  );
+  const matchIndex = matches.indexOf(true);
 
-  for (const hash of hashes) {
-    if (!accepted && (await verifyPassword(hash, normalized))) {
-      accepted = true;
-      continue; // single use: drop it
-    }
-    remaining.push(hash);
+  if (matchIndex === -1) {
+    return false;
   }
 
-  if (accepted) {
-    await db
-      .update(adminUsers)
-      .set({ recoveryCodeHashes: remaining, updatedAt: new Date() })
-      .where(eq(adminUsers.id, userId));
-  }
+  const remaining = hashes.filter((_, i) => i !== matchIndex);
+  await db
+    .update(adminUsers)
+    .set({ recoveryCodeHashes: remaining, updatedAt: new Date() })
+    .where(eq(adminUsers.id, userId));
 
-  return accepted;
+  return true;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -383,6 +396,8 @@ authRouter.post(
     }),
     (result, c) => (result.success ? undefined : c.json({ error: "invalid_input" }, 400)),
   ),
+  oneAtATime(reauthKey),
+  reauthLimit,
   async (c) => {
     const session = c.get("session");
     const { currentPassword, newPassword } = c.req.valid("json");
@@ -436,6 +451,8 @@ authRouter.post(
     }),
     (result, c) => (result.success ? undefined : c.json({ error: "invalid_input" }, 400)),
   ),
+  oneAtATime(reauthKey),
+  reauthLimit,
   async (c) => {
     const session = c.get("session");
     const { password, code } = c.req.valid("json");
@@ -540,6 +557,8 @@ authRouter.delete(
     z.object({ password: z.string().min(1).max(400), code: z.string().min(6).max(20) }),
     (result, c) => (result.success ? undefined : c.json({ error: "invalid_input" }, 400)),
   ),
+  oneAtATime(reauthKey),
+  reauthLimit,
   async (c) => {
     const session = c.get("session");
     const { password, code } = c.req.valid("json");

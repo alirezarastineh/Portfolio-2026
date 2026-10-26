@@ -18,6 +18,8 @@ export const IP_LIMIT = 20;
 export const IP_EMAIL_LIMIT = 5;
 /** Reaching the TOTP step already requires the password, so a per-user lock is safe here. */
 export const TOTP_LIMIT = 5;
+/** A password or code asked again in a signed-in session: per user, as it needs a full session. */
+export const REAUTH_LIMIT = 5;
 export const WINDOW_MS = 15 * 60 * 1000;
 
 const PRUNE_INTERVAL_MS = 60 * 60 * 1000;
@@ -41,6 +43,10 @@ export function ipEmailBucket(ip: string, email: string): string {
 
 export function totpBucket(userId: string): string {
   return `totp:${userId}`;
+}
+
+export function reauthBucket(userId: string): string {
+  return `reauth:${userId}`;
 }
 
 /** Failures inside the window. Successes do not count against the limit. */
