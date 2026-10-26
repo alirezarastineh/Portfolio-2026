@@ -45,6 +45,11 @@ export interface AskCopy {
   downReason: { ask: string; wrong: string; unanswered: string; length: string };
   copy: string;
   copied: string;
+  /**
+   * A link that carries the question (visitor plan V17): the button, its name,
+   * which says so, and what it says once the link is copied.
+   */
+  share: { label: string; name: string; copied: string };
   /** A source chip's date (visitor plan V12): `{date}`, its month. */
   updated: string;
   /** While a failover keeps the visitor waiting (visitor plan V12): `{position}` of `{of}`. */
@@ -331,6 +336,11 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
     },
     copy: "copy",
     copied: "copied",
+    share: {
+      label: "share",
+      name: "share: copy a link that carries this question",
+      copied: "Link copied",
+    },
     updated: "updated {date}",
     failover: {
       first: "the first model is busy, trying another ({position} of {of})",
@@ -599,6 +609,11 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
     },
     copy: "kopieren",
     copied: "kopiert",
+    share: {
+      label: "teilen",
+      name: "teilen: einen Link kopieren, der diese Frage enthält",
+      copied: "Link kopiert",
+    },
     updated: "aktualisiert {date}",
     failover: {
       first: "das erste Modell ist ausgelastet, ich versuche ein anderes ({position} von {of})",

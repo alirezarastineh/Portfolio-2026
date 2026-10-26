@@ -1,4 +1,4 @@
-import { NgTemplateOutlet } from "@angular/common";
+import { DOCUMENT, NgTemplateOutlet } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
@@ -17,7 +17,9 @@ import { fmt } from "../i18n/interpolate";
 import { LanguageService } from "../services/language.service";
 import { AskStore } from "./ask.store";
 import type { AskMessage, DownReason, Entry } from "./ask-types";
+import { parseInput } from "./commands";
 import { reasonChoices } from "./down-reasons";
+import { shareLink } from "./ask-link";
 import { AskLinesComponent } from "./ask-lines.component";
 import { linkPolicyFor } from "./link-policy";
 import { failoverLine, pageTitle, receiptAlways, receiptClauses, sourceFacts } from "./receipt";
@@ -292,6 +294,21 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
                 {{ copy().copy }}
               }
             </button>
+            <!-- A link that carries the question (visitor plan V17); its name says so. -->
+            @if (sharedQuestion()) {
+              <button
+                type="button"
+                class="feedback press"
+                [attr.aria-label]="shared() ? copy().share.copied : copy().share.name"
+                (click)="shareQuestion()"
+              >
+                @if (shared()) {
+                  {{ copy().share.copied }}<span aria-hidden="true"> ✓</span>
+                } @else {
+                  {{ copy().share.label }}
+                }
+              </button>
+            }
             @if (rating()) {
               <span>{{ copy().thanks }}</span>
             }
@@ -457,9 +474,12 @@ export class AskAnswerComponent {
   protected readonly store = inject(AskStore);
   private readonly lang = inject(LanguageService);
   private readonly router = inject(Router);
+  private readonly doc = inject(DOCUMENT);
 
   protected readonly copy = this.store.copy;
   protected readonly copied = signal(false);
+  /** The question's link was just copied (visitor plan V17). */
+  protected readonly shared = signal(false);
   /**
    * The citation [n] pointed at or focused from the keyboard, whose source chip
    * lights up. Set by its events: a `:has(.cite:hover)` rule did this until
@@ -500,6 +520,17 @@ export class AskAnswerComponent {
         : [],
     );
     return footnotesFor(this.text(), sources);
+  });
+
+  /**
+   * The question a share link carries (visitor plan V17): the visitor's own, as they asked it;
+   * none for a tour.
+   */
+  protected readonly sharedQuestion = computed(() => {
+    const entry = this.entry();
+    if (entry.tour) return null;
+    const parsed = parseInput(entry.input);
+    return parsed.kind === "ask" ? parsed.text : null;
   });
 
   /** A tour's stops (visitor plan V16): the server's checked plan, or the short tour made here. */
@@ -692,6 +723,26 @@ export class AskAnswerComponent {
     if (modified(event)) return;
     event.preventDefault();
     void this.router.navigateByUrl(url);
+  }
+
+  /**
+   * Copies this page's address carrying the question (visitor plan V17): opened, it puts the
+   * question in the prompt, and only the visitor sends it. Said once: "Link copied".
+   */
+  protected async shareQuestion(): Promise<void> {
+    const question = this.sharedQuestion();
+    if (!question) return;
+    try {
+      await navigator.clipboard.writeText(
+        shareLink(this.doc.location.origin, this.router.url, question),
+      );
+      this.shared.set(true);
+      track("ask_share");
+      this.store.announce(this.copy().share.copied);
+      setTimeout(() => this.shared.set(false), 1500);
+    } catch {
+      // Clipboard refused (permissions): nothing to do.
+    }
   }
 
   /** A follow-up question asked: counted for this answer, then asked. */

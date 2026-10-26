@@ -48,6 +48,25 @@ describe("AskLauncherService", () => {
     expect(launcher.takeAbout()).toBeNull();
   });
 
+  it("puts a shared link's question in the prompt, never as one to send (visitor plan V17)", () => {
+    const home = launcherOn("/");
+    home.prefill("  Is he available?  ", "link");
+    expect(home.focusPending()).toBe(true);
+    expect(home.pendingQuestion()).toBeNull();
+    expect(home.takeQuestion()).toBeNull();
+    expect(home.takeDraft()).toBe("Is he available?");
+    expect(home.takeDraft()).toBeNull();
+    expect(home.takeSource()).toBe("link");
+
+    TestBed.resetTestingModule();
+    const elsewhere = launcherOn("/work/project-one");
+    elsewhere.prefill("Which stack?", "link");
+    expect(elsewhere.sheetOpen()).toBe(true);
+    expect(elsewhere.takeDraft()).toBe("Which stack?");
+    elsewhere.prefill("   ", "link");
+    expect(elsewhere.takeDraft()).toBeNull();
+  });
+
   it("ignores an empty question", () => {
     const launcher = launcherOn("/");
     launcher.ask("   ", "hero");

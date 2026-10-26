@@ -24,7 +24,9 @@ export type AskEvent =
   // The guided tour: started (default, interest, replan), a step, the last stop (V16).
   | "tour_start"
   | "tour_step"
-  | "tour_done";
+  | "tour_done"
+  // A link that carries a question, copied (visitor plan V17).
+  | "ask_share";
 
 export function track(event: AskEvent, data?: Record<string, string>): void {
   try {

@@ -1503,6 +1503,69 @@ test.describe("assistant terminal", () => {
     await expect(sheet.getByRole("group", { name: /^tour/ })).toHaveCount(0);
   });
 
+  test("a shared link puts its question in the prompt and sends nothing until Enter; share copies one (visitor plan V17)", async ({
+    page,
+    context,
+    browserName,
+    baseURL,
+  }) => {
+    // Only Chromium lets a test grant clipboard access and read it back.
+    const readable = browserName === "chromium";
+    if (readable) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const mock = await mockAsk(page, (route) =>
+      sse(route, answer({ text: "A retrieval platform, built in TypeScript." })),
+    );
+    const question = "What did he build here?";
+
+    // Off home: the sheet opens with the question in its prompt, focused, and the address
+    // keeps everything but the question.
+    await page.goto(`/en/work/project-one?utm_source=news&ask=${encodeURIComponent(question)}`);
+    await interactive(page);
+    const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
+    const prompt = sheet.locator("textarea");
+    await expect(prompt).toHaveValue(question);
+    await expect(prompt).toBeFocused();
+    expect(new URL(page.url()).search).toBe("?utm_source=news");
+    // A link proposes; only the visitor sends.
+    expect(mock.bodies).toHaveLength(0);
+    // Analytics never sees it: the hook strips it from any address the tracker would send.
+    expect(
+      await page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              umamiBeforeSend: (t: string, p: { url: string }) => { url: string };
+            }
+          ).umamiBeforeSend("event", { url: "/en?ask=x&utm_source=news" }).url,
+      ),
+    ).toBe("/en?utm_source=news");
+    expect(await axeViolations(page)).toEqual([]);
+
+    await prompt.press("Enter");
+    await expect(sheet).toContainText("A retrieval platform, built in TypeScript.");
+    expect(mock.bodies).toHaveLength(1);
+    expect(JSON.stringify(mock.bodies[0]!.messages.at(-1))).toContain(question);
+
+    // share: the link carries the question, said once.
+    await sheet
+      .getByRole("button", { name: "share: copy a link that carries this question" })
+      .click();
+    await expect(sheet.getByRole("button", { name: "Link copied" })).toBeVisible();
+    await expect(sheet.locator("[aria-live=polite]")).toHaveText("Link copied");
+    if (readable) {
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+        `${new URL(baseURL!).origin}/en/work/project-one?ask=${encodeURIComponent(question)}`,
+      );
+    }
+
+    // On home, the About terminal waits with it.
+    await page.goto(`/en?ask=${encodeURIComponent("Is he available?")}`);
+    await interactive(page);
+    await expect(page.locator("#about textarea")).toHaveValue("Is he available?");
+    expect(new URL(page.url()).search).toBe("");
+    expect(mock.bodies).toHaveLength(1);
+  });
+
   test("the reader pages' server HTML has none of the ask buttons: the browser adds them", async ({
     request,
   }) => {

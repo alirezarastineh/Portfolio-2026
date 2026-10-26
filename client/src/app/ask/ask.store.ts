@@ -94,7 +94,12 @@ const MAX_ENTRIES = 60;
 const MAX_HISTORY = 50;
 
 /** A tour request that failed for these can be asked again soon: no short tour stands in. */
-const TOUR_WAITS: readonly Failure[] = ["rateLimited", "busy", "invalid", "tooLong"];
+const TOUR_WAITS: ReadonlySet<Failure> = new Set<Failure>([
+  "rateLimited",
+  "busy",
+  "invalid",
+  "tooLong",
+]);
 
 interface AskState {
   sessionId: string;
@@ -378,7 +383,7 @@ export const AskStore = signalStore(
         const copy = ASK_COPY[locale()];
         const entry = store.entries().find((e) => e.id === entryId);
         // A tour the server could not plan: the short tour stands in, made here (visitor plan V16).
-        const tourFailed = entry?.kind === "ask" && !!entry.tour && !TOUR_WAITS.includes(failure);
+        const tourFailed = entry?.kind === "ask" && !!entry.tour && !TOUR_WAITS.has(failure);
         let offline =
           failure === "unavailable" || failure === "resting" || failure === "off"
             ? offlineLines(entry?.input ?? "", store._lang.content(), locale(), copy)
@@ -464,9 +469,13 @@ export const AskStore = signalStore(
           };
           patchState(store, { tour });
           persist();
-          track("tour_start", {
-            kind: data.kind === "default" ? "default" : data.replanned ? "replan" : "interest",
-          });
+          let startKind: "default" | "replan" | "interest" = "interest";
+          if (data.kind === "default") {
+            startKind = "default";
+          } else if (data.replanned) {
+            startKind = "replan";
+          }
+          track("tour_start", { kind: startKind });
         }
       },
     });
@@ -1159,6 +1168,11 @@ export const AskStore = signalStore(
         } catch {
           // Feedback is best effort.
         }
+      },
+
+      /** Says a line once through the terminal's polite live region ("Link copied", V17). */
+      announce(text: string): void {
+        patchState(store, { announcement: text });
       },
 
       /** A follow-up clicked, a citation followed or the answer copied (visitor plan V2). */

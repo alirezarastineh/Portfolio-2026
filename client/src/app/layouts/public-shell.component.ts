@@ -1,7 +1,15 @@
-import { DOCUMENT } from "@angular/common";
-import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
+import { DOCUMENT, isPlatformBrowser } from "@angular/common";
+import {
+  afterNextRender,
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  PLATFORM_ID,
+} from "@angular/core";
 
 import { ASK_BAR_ID, AskLauncherService } from "../ask/ask-launcher.service";
+import { takeLinkQuestion } from "../ask/ask-link";
 import { AskSheetComponent } from "../ask/ask-sheet.component";
 import { CommandPaletteComponent } from "../components/command-palette.component";
 import { SiteFooterComponent } from "../components/site-footer.component";
@@ -72,6 +80,13 @@ export class PublicShellComponent {
       websiteId: import.meta.env.VITE_UMAMI_WEBSITE_ID,
       hostname: canonicalHostname(this.lang.content().seo.canonical),
     });
+    // A shared link's question (visitor plan V17): in the prompt, focused, never sent for the visitor.
+    if (isPlatformBrowser(inject(PLATFORM_ID))) {
+      afterNextRender(() => {
+        const question = takeLinkQuestion();
+        if (question) this.launcher.prefill(question, "link");
+      });
+    }
   }
 
   /**

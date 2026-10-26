@@ -483,10 +483,14 @@ export class TerminalShellComponent {
 
   /**
    * Takes a request from elsewhere on the site: the focus, and its question if
-   * it brought one, with what a reader pointed at (visitor plan V9).
+   * it brought one, with what a reader pointed at (visitor plan V9); a shared
+   * link's question goes in the prompt unsent (V17).
    */
   claim(): void {
     this.reportOpen(this.launcher.takeSource());
+    // A shared link's question (visitor plan V17): in the prompt, for the visitor to send or not.
+    const draft = this.launcher.takeDraft();
+    if (draft) this.setValue(draft);
     this.focusInput();
     const question = this.launcher.takeQuestion();
     const about = this.launcher.takeAbout();

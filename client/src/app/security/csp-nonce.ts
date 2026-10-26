@@ -23,11 +23,18 @@ export const THEME_SCRIPT_ID = "theme-init";
  */
 export const APP_BOOT_SCRIPT_ID = "app-boot";
 
+/**
+ * index.html's script that lifts a shared link's question (`?ask=`, visitor
+ * plan V17) out of the address before analytics or the app reads it.
+ */
+export const ASK_LINK_SCRIPT_ID = "ask-link";
+
 /** The inline scripts Angular does not nonce itself, by id. */
 export const KNOWN_INLINE_SCRIPT_IDS = [
   EVENT_DISPATCH_SCRIPT_ID,
   THEME_SCRIPT_ID,
   APP_BOOT_SCRIPT_ID,
+  ASK_LINK_SCRIPT_ID,
 ] as const;
 
 /**

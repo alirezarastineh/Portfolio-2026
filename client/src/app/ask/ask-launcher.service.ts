@@ -25,7 +25,9 @@ export type AskSource =
   /** "How do they connect?" under read next (visitor plan V15, read-next-block.ts). */
   | "read-next"
   /** A tour's move to another page, which opens the sheet (visitor plan V16). */
-  | "tour";
+  | "tour"
+  /** A shared link's question, put in the prompt unsent (visitor plan V17, ask-link.ts). */
+  | "link";
 
 /**
  * What a reader points at on a case study or a post (visitor plan V9), as the
@@ -60,6 +62,8 @@ export class AskLauncherService {
   private readonly _sheet = signal(false);
   private readonly _sheetRequested = signal(false);
   private readonly _question = signal<string | null>(null);
+  /** A question for the prompt that only the visitor sends (visitor plan V17). */
+  private draft: string | null = null;
   /** What the waiting question is about, when a reader pointed at something. */
   private about: AskAbout | null = null;
   private source: AskSource | null = null;
@@ -111,6 +115,26 @@ export class AskLauncherService {
     this.about = about ?? null;
     if (this.lang.page() === "/") this.focusPrompt(source);
     else this.openSheet(source);
+  }
+
+  /**
+   * Puts a question in the prompt without sending it (visitor plan V17: a shared
+   * link proposes, only the visitor sends): the About terminal on home, the
+   * sheet elsewhere, focused.
+   */
+  prefill(text: string, source: AskSource): void {
+    const question = text.trim();
+    if (!question) return;
+    this.draft = question;
+    if (this.lang.page() === "/") this.focusPrompt(source);
+    else this.openSheet(source);
+  }
+
+  /** The question to put in the prompt, unsent, once. */
+  takeDraft(): string | null {
+    const draft = this.draft;
+    this.draft = null;
+    return draft;
   }
 
   /** The waiting question, once. */

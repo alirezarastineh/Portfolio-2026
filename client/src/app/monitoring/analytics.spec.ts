@@ -24,6 +24,8 @@ describe("injectUmami", () => {
     expect(script.getAttribute("data-website-id")).toBe(CONFIG.websiteId);
     expect(script.getAttribute("data-domains")).toBe("example.test");
     expect(script.getAttribute("data-do-not-track")).toBe("true");
+    // A shared link's question is stripped before each send (visitor plan V17).
+    expect(script.getAttribute("data-before-send")).toBe("umamiBeforeSend");
   });
 
   /** SSR already rendered it; hydration must not add a second tracker. */

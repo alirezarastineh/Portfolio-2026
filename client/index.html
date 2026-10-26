@@ -37,6 +37,45 @@
         }
       })();
     </script>
+    <!-- A shared link's question (`?ask=`, visitor plan V17), lifted out of the
+         address before analytics or the app can read it: the app takes it from
+         window.__askFromLink and puts it in the prompt, unsent. Umami's
+         before-send hook (data-before-send, monitoring/analytics.ts) strips an
+         `ask` parameter from any address it would send, its referrer too.
+         Nonced per request by id (src/app/security/csp-nonce.ts); keep it tiny. -->
+    <script id="ask-link">
+      (function () {
+        function strip(url) {
+          try {
+            var u = new URL(url, location.href);
+            if (!u.searchParams.has("ask")) return url;
+            u.searchParams.delete("ask");
+            return /^\/(?!\/)/.test(url) ? u.pathname + u.search + u.hash : u.href;
+          } catch (error) {
+            console.warn("[ask-link] Unable to parse URL, using raw string:", error);
+            return url;
+          }
+        }
+        window.umamiBeforeSend = function (type, payload) {
+          if (payload && payload.url) payload.url = strip(payload.url);
+          if (payload && payload.referrer) payload.referrer = strip(payload.referrer);
+          return payload;
+        };
+        try {
+          var question = new URL(location.href).searchParams.get("ask");
+          if (question !== null) {
+            window.__askFromLink = question;
+            history.replaceState(
+              history.state,
+              "",
+              strip(location.pathname + location.search + location.hash),
+            );
+          }
+        } catch (error) {
+          console.warn("[ask-link] Unable to extract link question:", error);
+        }
+      })();
+    </script>
     <!-- Must precede the app's module script, which the build moves into
          <head>: it configures zod before any schema exists (see the file). -->
     <script defer src="/zod-config.js"></script>

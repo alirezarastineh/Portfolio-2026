@@ -5,6 +5,7 @@ import { REQUEST } from "@analogjs/router/tokens";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  ASK_LINK_SCRIPT_ID,
   EVENT_DISPATCH_SCRIPT_ID,
   provideRequestCspNonce,
   stampKnownScripts,
@@ -41,9 +42,11 @@ describe("request nonce", () => {
 });
 
 describe("stampKnownScripts", () => {
-  it("nonces the event-dispatch contract and the theme script, and nothing else", () => {
+  it("nonces the event-dispatch contract, the theme and ask-link scripts, and nothing else", () => {
     const contract = addScript(document, { id: EVENT_DISPATCH_SCRIPT_ID }, "/* contract */");
     const theme = addScript(document, { id: THEME_SCRIPT_ID }, "/* theme */");
+    // A shared link's question, lifted out of the address (visitor plan V17).
+    const askLink = addScript(document, { id: ASK_LINK_SCRIPT_ID }, "/* ask-link */");
     const other = addScript(document, {}, "void 0");
     const data = addScript(document, { type: "application/ld+json" }, "{}");
 
@@ -51,6 +54,7 @@ describe("stampKnownScripts", () => {
 
     expect(contract.getAttribute("nonce")).toBe("n0nce");
     expect(theme.getAttribute("nonce")).toBe("n0nce");
+    expect(askLink.getAttribute("nonce")).toBe("n0nce");
     expect(other.hasAttribute("nonce")).toBe(false);
     expect(data.hasAttribute("nonce")).toBe(false);
   });

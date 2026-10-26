@@ -28,5 +28,11 @@ export function injectUmami(doc: Document, config: UmamiConfig): void {
   script.setAttribute("data-website-id", config.websiteId); // NOSONAR
   script.setAttribute("data-domains", config.hostname); // NOSONAR
   script.setAttribute("data-do-not-track", "true"); // NOSONAR
+  // A shared question (`?ask=`, visitor plan V17) never reaches Umami: index.html's
+  // ask-link script defines the hook, which strips it from every address sent.
+  script.setAttribute("data-before-send", UMAMI_BEFORE_SEND); // NOSONAR
   doc.head.appendChild(script);
 }
+
+/** The global hook index.html's ask-link script defines, which Umami calls before each send. */
+export const UMAMI_BEFORE_SEND = "umamiBeforeSend";
