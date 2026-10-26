@@ -26,6 +26,16 @@ const DANGLING = / ?[[【［]\^[^\]】］\s]*$/;
 
 type TextDeltaPart = { type: "text-delta"; id: string; text: string };
 
+/** The ids a text's markers name, as written (full-width brackets read the same). */
+export function markersIn(text: string): string[] {
+  return [...text.matchAll(MARKER)].map((match) => match[1]!);
+}
+
+/** A text without its markers: what a reader sees of it, and what its words count. */
+export function withoutMarkers(text: string): string {
+  return text.replace(MARKER, "").replace(/\s+/g, " ").trim();
+}
+
 function findPendingCut(text: string): number {
   const open = Math.max(...OPENERS.map((opener) => text.lastIndexOf(opener)));
   if (open !== -1) {
@@ -37,15 +47,59 @@ function findPendingCut(text: string): number {
   return text.endsWith(" ") ? text.length - 1 : text.length;
 }
 
-export function citationTransform<TOOLS extends ToolSet>(options: {
+export interface CitationOptions {
   corpus: Pick<AskCorpus, "byId">;
   locale: Locale;
   cited: Set<string>;
   /** Ids the model invented; they are removed from the text either way. */
   dropped?: string[];
-}): StreamTextTransform<TOOLS> {
-  const { corpus, locale, cited, dropped } = options;
+}
 
+/** A document cited for the first time: what its source part carries. */
+export interface CitedSource {
+  id: string;
+  url: string;
+  title: string;
+  /** What it is and when it last changed, for the source's chip (visitor plan V12). */
+  providerMetadata: { portfolio: { kind: string; updated?: string } };
+}
+
+/**
+ * A text's markers checked as the transform below checks them: a known id
+ * normalised to its full form, and announced through `onSource` the first
+ * time; an unknown one removed. A whole text at once: the transform's ready
+ * pieces, and a tour's intro (visitor plan V16).
+ */
+export function citeText(
+  text: string,
+  options: CitationOptions,
+  onSource: (source: CitedSource) => void,
+): string {
+  const { corpus, locale, cited, dropped } = options;
+  return text.replace(MARKER, (match, raw: string) => {
+    const doc = resolveDocument(corpus, raw, locale);
+    if (!doc) {
+      dropped?.push(raw);
+      return "";
+    }
+    if (!cited.has(doc.id)) {
+      cited.add(doc.id);
+      onSource({
+        id: doc.id,
+        url: doc.url,
+        title: doc.title,
+        providerMetadata: {
+          portfolio: { kind: doc.kind, ...(doc.updated ? { updated: doc.updated } : {}) },
+        },
+      });
+    }
+    return `${match.startsWith(" ") ? " " : ""}[^${doc.id}]`;
+  });
+}
+
+export function citationTransform<TOOLS extends ToolSet>(
+  options: CitationOptions,
+): StreamTextTransform<TOOLS> {
   return () => {
     const pending = new Map<string, string>();
 
@@ -53,28 +107,9 @@ export function citationTransform<TOOLS extends ToolSet>(options: {
       text: string,
       out: TransformStreamDefaultController<TextStreamPart<TOOLS>>,
     ): string {
-      return text.replace(MARKER, (match, raw: string) => {
-        const doc = resolveDocument(corpus, raw, locale);
-        if (!doc) {
-          dropped?.push(raw);
-          return "";
-        }
-        if (!cited.has(doc.id)) {
-          cited.add(doc.id);
-          out.enqueue({
-            type: "source",
-            sourceType: "url",
-            id: doc.id,
-            url: doc.url,
-            title: doc.title,
-            // What it is and when it last changed, for the source's chip (visitor plan V12).
-            providerMetadata: {
-              portfolio: { kind: doc.kind, ...(doc.updated ? { updated: doc.updated } : {}) },
-            },
-          });
-        }
-        return `${match.startsWith(" ") ? " " : ""}[^${doc.id}]`;
-      });
+      return citeText(text, options, (source) =>
+        out.enqueue({ type: "source", sourceType: "url", ...source }),
+      );
     }
 
     function handleTextDelta(

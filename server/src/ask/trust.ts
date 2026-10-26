@@ -105,6 +105,16 @@ export const TRUST_REGISTRY: readonly TrustEntry[] = [
     built: true,
   },
   {
+    action: "tour.plan",
+    actor: "assistant",
+    level: "L2",
+    approver: "none",
+    enforcement:
+      "tour.ts (visitor plan V16): it only proposes stops. Code checks the plan (checkTour: pages of the map in the visitor's language, distinct, each line citing its own stop, nothing that reads as an instruction); one repair, else the browser's short tour; no tools. The browser moves only on the visitor's own next or back, to a path openTarget takes (ask/tour.ts stopTarget)",
+    reversible: true,
+    built: true,
+  },
+  {
     action: "copilot.suggest",
     actor: "copilot",
     level: "L0",

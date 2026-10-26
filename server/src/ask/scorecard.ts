@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, gte, inArray, sql } from "drizzle-orm";
 
 import { getDb } from "../db/client.js";
 import { aiGuardEvents, aiMessages } from "../db/schema.js";
@@ -8,6 +8,7 @@ import { REFUSAL_KINDS } from "./guard-events.js";
 import { utcDay } from "./guard.js";
 import { PROMPT_HASH, PROMPT_VERSION } from "./prompt.js";
 import type { AiSettings } from "./settings.js";
+import { VISITOR_ANSWER } from "./outcome-rows.js";
 
 /**
  * The assistant's public scorecard (visitor plan V13): how well it does, for
@@ -144,7 +145,7 @@ export async function liveChecks(
       >`percentile_disc(0.5) within group (order by ${faithfulness}) filter (where ${sampled})`,
     })
     .from(aiMessages)
-    .where(and(eq(aiMessages.source, "terminal"), gte(aiMessages.createdAt, since)));
+    .where(and(VISITOR_ANSWER, gte(aiMessages.createdAt, since)));
   const counts = row ?? {
     asked: 0,
     failed: 0,

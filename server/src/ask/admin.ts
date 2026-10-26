@@ -22,7 +22,7 @@ import {
 } from "../db/schema.js";
 import { streamAnswer } from "./agent.js";
 import { audit, countOpenAlerts, readDemotions } from "./audit.js";
-import { OUTCOME_COLUMNS, UNKNOWN_ANSWER } from "./outcome-rows.js";
+import { OUTCOME_COLUMNS, TOUR_ROUTE, UNKNOWN_ANSWER, VISITOR_ANSWER } from "./outcome-rows.js";
 import type { AskConfig } from "./config.js";
 import { largestCore } from "./corpus/index.js";
 import { embeddingStatus } from "./embeddings.js";
@@ -53,6 +53,7 @@ import {
   outcomes,
   PRIMARY_METRICS,
   shouldRotate,
+  tourCounts,
   weeklyValues,
   type OutcomeRow,
 } from "./outcomes.js";
@@ -286,7 +287,7 @@ adminAskRouter.get("/assistant/health", async (c) => {
       finishReason: aiMessages.finishReason,
     })
     .from(aiMessages)
-    .where(and(gte(aiMessages.createdAt, since), eq(aiMessages.source, "terminal")));
+    .where(and(gte(aiMessages.createdAt, since), VISITOR_ANSWER));
 
   const firstChoice = askChain(config, "lite")[0]?.id;
   const byModel = new Map<string, number[]>();
@@ -449,12 +450,7 @@ adminAskRouter.get("/assistant/usage", async (c) => {
     })
     .from(aiMessages)
     .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
-    .where(
-      and(
-        gte(aiMessages.createdAt, new Date(`${since}T00:00:00Z`)),
-        eq(aiMessages.source, "terminal"),
-      ),
-    )
+    .where(and(gte(aiMessages.createdAt, new Date(`${since}T00:00:00Z`)), VISITOR_ANSWER))
     .groupBy(sql`1`)
     .orderBy(sql`1`);
 
@@ -489,7 +485,7 @@ adminAskRouter.get("/assistant/usage", async (c) => {
     select f.flag, count(*)::int as count
     from ai_messages m
     cross join lateral jsonb_array_elements_text(coalesce(m.checks -> 'flags', '[]'::jsonb)) as f(flag)
-    where m.created_at >= ${new Date(`${since}T00:00:00Z`)} and m.source = 'terminal'
+    where m.created_at >= ${new Date(`${since}T00:00:00Z`)} and m.source = 'terminal' and m.route <> ${TOUR_ROUTE}
     group by f.flag
     order by count desc, f.flag`);
 
@@ -584,7 +580,7 @@ adminAskRouter.get("/assistant/reviews", async (c) => {
     .leftJoin(aiReviews, eq(aiReviews.messageId, aiMessages.id))
     .where(
       and(
-        eq(aiMessages.source, "terminal"),
+        VISITOR_ANSWER,
         gte(aiMessages.createdAt, bounds.start),
         lt(aiMessages.createdAt, bounds.end),
       ),
@@ -658,7 +654,7 @@ adminAskRouter.put(
     const [message] = await getDb()
       .select({ id: aiMessages.id })
       .from(aiMessages)
-      .where(and(eq(aiMessages.id, messageId), eq(aiMessages.source, "terminal")));
+      .where(and(eq(aiMessages.id, messageId), VISITOR_ANSWER));
     if (!message) return c.json({ error: "not_found" }, 404);
 
     const review = {
@@ -697,11 +693,23 @@ adminAskRouter.get("/assistant/outcomes", async (c) => {
     .select(OUTCOME_COLUMNS)
     .from(aiMessages)
     .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
-    .where(and(eq(aiMessages.source, "terminal"), gte(aiMessages.createdAt, from)));
+    .where(and(VISITOR_ANSWER, gte(aiMessages.createdAt, from)));
   const [sent] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(contactMessages)
     .where(and(eq(contactMessages.origin, "ask"), gte(contactMessages.createdAt, since)));
+
+  // The guided tours (visitor plan V16): planned, and taken to the last stop.
+  const tours = await db
+    .select({ signals: aiMessages.signals })
+    .from(aiMessages)
+    .where(
+      and(
+        eq(aiMessages.source, "terminal"),
+        eq(aiMessages.route, TOUR_ROUTE),
+        gte(aiMessages.createdAt, since),
+      ),
+    );
 
   const { primaryMetric } = await readAiSettings();
   const weekly = weeklyValues(rows, primaryMetric, weeks);
@@ -711,6 +719,7 @@ adminAskRouter.get("/assistant/outcomes", async (c) => {
     outcomes: outcomes(recent, sent?.n ?? 0),
     // What the visitors' browsers saw, and why the 👎s (visitor plan V2).
     browser: browserView(recent),
+    tours: tourCounts(tours),
     primary: {
       metric: primaryMetric,
       weeks: weekly,

@@ -238,6 +238,22 @@ export function browserView(rows: readonly OutcomeRow[]): BrowserView {
   };
 }
 
+/**
+ * The guided tours planned for an interest (visitor plan V16) and the share
+ * the visitor took to the last stop, as their browsers reported it. Tours are
+ * no answers: none of the measures above counts them.
+ */
+export interface TourCounts {
+  started: number;
+  finished: number;
+  finishedRate: number | null;
+}
+
+export function tourCounts(rows: readonly { signals: AnswerSignals | null }[]): TourCounts {
+  const finished = rows.filter((row) => row.signals?.tourDone === true).length;
+  return { started: rows.length, finished, finishedRate: share(finished, rows.length) };
+}
+
 export const PRIMARY_METRICS = [
   "helpfulRate",
   "thumbsUpRate",

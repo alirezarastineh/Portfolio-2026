@@ -14,6 +14,7 @@ import { spendBlocked } from "./runs/budget.js";
 import type { NightlyParams } from "./runs/judge-work.js";
 import { startRun, whileStarting } from "./runs/runner.js";
 import { activeRuns } from "./runs/store.js";
+import { VISITOR_ANSWER } from "./outcome-rows.js";
 
 /**
  * The nightly sampled judge (plan phase 26), the book's Generator-Critic run
@@ -94,7 +95,7 @@ async function candidates(bounds: { start: Date; end: Date }): Promise<NightlyCa
     .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
     .where(
       and(
-        eq(aiMessages.source, "terminal"),
+        VISITOR_ANSWER,
         gte(aiMessages.createdAt, bounds.start),
         lt(aiMessages.createdAt, bounds.end),
         sql`${aiMessages.answerExcerpt} <> ''`,

@@ -6,7 +6,7 @@ import { getDb } from "../db/client.js";
 import { aiFeedback, aiInsightSnapshots, aiMessages } from "../db/schema.js";
 import type { AskConfig } from "./config.js";
 import { oneShot } from "./one-shot.js";
-import { UNKNOWN_ANSWER } from "./outcome-rows.js";
+import { UNKNOWN_ANSWER, VISITOR_ANSWER } from "./outcome-rows.js";
 import { wrapVisitor } from "./prompt.js";
 import { summarizeCalls } from "./usage.js";
 
@@ -65,10 +65,7 @@ export async function insightQuestions() {
     .from(aiMessages)
     .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
     .where(
-      and(
-        gte(aiMessages.createdAt, new Date(Date.now() - WINDOW_DAYS * DAY_MS)),
-        eq(aiMessages.source, "terminal"),
-      ),
+      and(gte(aiMessages.createdAt, new Date(Date.now() - WINDOW_DAYS * DAY_MS)), VISITOR_ANSWER),
     )
     .orderBy(desc(aiMessages.createdAt))
     .limit(MAX_QUESTIONS);

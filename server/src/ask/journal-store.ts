@@ -12,7 +12,7 @@ import {
   type Proposal,
   type ReplayRecord,
 } from "./journal.js";
-import { OUTCOME_COLUMNS } from "./outcome-rows.js";
+import { OUTCOME_COLUMNS, VISITOR_ANSWER } from "./outcome-rows.js";
 import { rephrased, REPHRASE_WINDOW_MS } from "./outcomes.js";
 import { resolveRequested } from "./perception.js";
 
@@ -59,7 +59,7 @@ export async function loadAnswer(messageId: string): Promise<DiagnosisAnswer | n
     })
     .from(aiMessages)
     .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
-    .where(and(eq(aiMessages.id, messageId), eq(aiMessages.source, "terminal")));
+    .where(and(eq(aiMessages.id, messageId), VISITOR_ANSWER));
   if (!row) return null;
 
   // The session's answers in the window after it: did the visitor ask again? Compared in SQL,
@@ -71,7 +71,7 @@ export async function loadAnswer(messageId: string): Promise<DiagnosisAnswer | n
     .where(
       and(
         eq(aiMessages.sessionHash, row.sessionHash),
-        eq(aiMessages.source, "terminal"),
+        VISITOR_ANSWER,
         sql`${aiMessages.createdAt} >= (select created_at from ai_messages where id = ${messageId})`,
         sql`${aiMessages.createdAt} <= (select created_at from ai_messages where id = ${messageId}) + make_interval(secs => ${REPHRASE_WINDOW_MS / 1000})`,
       ),

@@ -19,6 +19,7 @@ import { PROMPT_HASH, PROMPT_VERSION } from "../prompt.js";
 import { paidItems, PROVIDER_DOWN } from "./paid.js";
 import type { WorkFn, WorkOutcome } from "./runner.js";
 import { getRun } from "./store.js";
+import { VISITOR_ANSWER } from "../outcome-rows.js";
 
 /**
  * Diagnose's paid experiment (plan phase 24): a journal entry's question
@@ -60,7 +61,7 @@ export async function planReplay(
     ? await getDb()
         .select({ id: aiMessages.id })
         .from(aiMessages)
-        .where(and(eq(aiMessages.id, messageId), eq(aiMessages.source, "terminal")))
+        .where(and(eq(aiMessages.id, messageId), VISITOR_ANSWER))
     : [];
   if (!message) return { error: "answer_gone", status: 409 };
   const config = askConfig();

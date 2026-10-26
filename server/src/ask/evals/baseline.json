@@ -94,5 +94,7 @@
       "The baseline is for corpus eval-fixture-3|a:c73103cf0dd1, this run used eval-fixture-4|a:c73103cf0dd1: not compared."
     ]
   },
-  "waivers": {}
+  "waivers": {
+    "ask-2026-10-23.1+ddd8eadec886": "Visitor plan V16 adds the guided tour's planner (its instructions, request, repair note, answer shape and fallback lines); the answering prompt is unchanged. Part F's recorded run (the tour category plus the suite) follows, on the user's go-ahead."
+  }
 }

@@ -7,6 +7,7 @@ import { askCorpusFromSnapshot, type CorpusSnapshot } from "../corpus/snapshots.
 import type { ToolName } from "../tools.js";
 import type { EvalCase } from "./cases.js";
 import { runEvals, type CaseResult, type EvalOptions } from "./run.js";
+import { VISITOR_ANSWER } from "../outcome-rows.js";
 
 /**
  * Eval cases frozen from real visitor answers (plan phase 12, the book's
@@ -53,7 +54,7 @@ export async function earlierQuestions(messageId: string): Promise<string[] | nu
   const [message] = await db
     .select({ sessionHash: aiMessages.sessionHash })
     .from(aiMessages)
-    .where(and(eq(aiMessages.id, messageId), eq(aiMessages.source, "terminal")));
+    .where(and(eq(aiMessages.id, messageId), VISITOR_ANSWER));
   if (!message) return null;
   // Compared in SQL: the row's own timestamp keeps microseconds a JS date would lose.
   const asked = db
@@ -66,7 +67,7 @@ export async function earlierQuestions(messageId: string): Promise<string[] | nu
     .where(
       and(
         eq(aiMessages.sessionHash, message.sessionHash),
-        eq(aiMessages.source, "terminal"),
+        VISITOR_ANSWER,
         lt(aiMessages.createdAt, sql`(${asked})`),
       ),
     )
@@ -89,7 +90,7 @@ export async function freezeCase(
       citedIds: aiMessages.citedIds,
     })
     .from(aiMessages)
-    .where(and(eq(aiMessages.id, messageId), eq(aiMessages.source, "terminal")));
+    .where(and(eq(aiMessages.id, messageId), VISITOR_ANSWER));
   if (!message) return { ok: false, error: "not_found" };
   const [snapshot] = message.corpusKey
     ? await db

@@ -15,7 +15,7 @@ import {
   triggerVerdict,
   type TriggerVerdict,
 } from "./lessons.js";
-import { OUTCOME_COLUMNS } from "./outcome-rows.js";
+import { OUTCOME_COLUMNS, VISITOR_ANSWER } from "./outcome-rows.js";
 import { rephrased, type OutcomeRow } from "./outcomes.js";
 
 /**
@@ -66,7 +66,7 @@ async function keptAnswers(): Promise<OutcomeRow[]> {
     .select(OUTCOME_COLUMNS)
     .from(aiMessages)
     .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
-    .where(eq(aiMessages.source, "terminal"))
+    .where(VISITOR_ANSWER)
     .orderBy(desc(aiMessages.createdAt));
 }
 
@@ -77,7 +77,7 @@ async function newSinceInsights(): Promise<number> {
     .from(aiMessages)
     .where(
       and(
-        eq(aiMessages.source, "terminal"),
+        VISITOR_ANSWER,
         sql`${aiMessages.createdAt} > coalesce((select newest_at from ai_insight_snapshots order by created_at desc limit 1), '-infinity'::timestamptz)`,
       ),
     );

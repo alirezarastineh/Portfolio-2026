@@ -25,6 +25,7 @@ interface OutcomesView {
   days: number;
   outcomes: Record<string, unknown>;
   browser: Record<string, unknown>;
+  tours: { started: number; finished: number; finishedRate: number | null };
   primary: { metric: string; weeks: { week: string; value: number | null }[]; rotate: boolean };
   metrics: string[];
 }
@@ -190,6 +191,33 @@ describe("the assistant's outcomes", () => {
       retried: 0,
       downReasons: { wrong: 1, unanswered: 0, length: 0, none: 0 },
     });
+  });
+
+  it("counts the guided tours and the share finished, and never as answers (visitor plan V16)", async () => {
+    await seed();
+    const before = (await view()).outcomes;
+    const tour = {
+      locale: "en" as const,
+      route: "tour",
+      sessionHash: "s9",
+      totalMs: 100,
+      tokens: { input: 1, cached: 0, output: 1, thoughts: 0 },
+      finishReason: "stop",
+      promptVersion: "p",
+      usd: 0.001,
+      questionRedacted: "data platforms",
+      answerExcerpt: "Three stops.",
+    };
+    await getDb()
+      .insert(aiMessages)
+      .values([
+        { ...tour, id: "m_tour_done", signals: { v: 1, tourSteps: 3, tourDone: true } },
+        { ...tour, id: "m_tour_left", signals: { v: 1, tourSteps: 1 } },
+        { ...tour, id: "m_tour_none" },
+      ]);
+    const result = await view();
+    expect(result.tours).toEqual({ started: 3, finished: 1, finishedRate: 1 / 3 });
+    expect(result.outcomes).toEqual(before);
   });
 
   it("switches the primary metric, and refuses one it does not know", async () => {

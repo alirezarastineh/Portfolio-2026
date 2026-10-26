@@ -23,6 +23,10 @@ export interface AnswerSignals {
   copies?: number;
   /** How often the question was asked again after it failed. */
   retries?: number;
+  /** A tour's stops the visitor reached (visitor plan V16). */
+  tourSteps?: number;
+  /** The visitor reached the tour's last stop. */
+  tourDone?: boolean;
 }
 
 /** The most a count may say: more is not one visitor reading one answer. */
@@ -43,6 +47,8 @@ export const signalsSchema = z
     citations: count.optional(),
     copies: count.optional(),
     retries: count.optional(),
+    tourSteps: count.optional(),
+    tourDone: z.boolean().optional(),
   })
   .refine((signals) => Object.keys(signals).length > 0, "no signal");
 

@@ -1,7 +1,20 @@
-import { sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 
 import { aiFeedback, aiMessages } from "../db/schema.js";
 import { NOT_IN_PORTFOLIO } from "./answer-patterns.js";
+
+/** The route a guided tour is logged under (visitor plan V16): a visitor's row, but no answer. */
+export const TOUR_ROUTE = "tour";
+
+/**
+ * A visitor's answers: the terminal's rows less their tours (visitor plan
+ * V16), which every measure of answers leaves out. `forget`, `inspect` and the
+ * browser's signals reach both.
+ */
+export const VISITOR_ANSWER = and(
+  eq(aiMessages.source, "terminal"),
+  ne(aiMessages.route, TOUR_ROUTE),
+)!;
 
 /**
  * Answers that admit the portfolio does not say: the list worth turning into

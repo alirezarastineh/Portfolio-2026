@@ -183,10 +183,14 @@ describe("GET /v1/ask/scorecard (visitor plan V13)", () => {
       firstWordMs: { median: 2_000, n: 21 },
       refusals: { invalid_input: 3, rate_limited: 2 },
     });
-    // The recorded run is the one CI ties to this prompt.
+    // The recorded run is the one CI ties to this prompt; while a waiver stands, there is none.
     const recorded = body.recorded;
-    expect(recorded.measured).toBe(true);
-    if (recorded.measured) {
+    const baseline = readBaseline();
+    const deployed = `${PROMPT_VERSION}+${PROMPT_HASH}`;
+    expect(recorded.measured).toBe(baseline.promptVersion === deployed);
+    if (!recorded.measured) {
+      expect(recorded).toEqual({ measured: false, reason: baseline.waivers[deployed] });
+    } else {
       expect(Object.keys(recorded).sort()).toEqual([
         "at",
         "cases",

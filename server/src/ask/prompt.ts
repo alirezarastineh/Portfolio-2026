@@ -5,6 +5,7 @@ import { relateSample } from "./corpus/related.js";
 import { FORMAT_SAMPLE, renderCompact, renderCore } from "./corpus/render.js";
 import type { Sensitivity } from "./router.js";
 import { toolDefinitionsText } from "./tool-defs.js";
+import { tourPromptText } from "./tour-prompt.js";
 
 /**
  * The assistant's instructions. Frozen and reviewed like code: a change bumps
@@ -19,7 +20,7 @@ import { toolDefinitionsText } from "./tool-defs.js";
  * language instruction.
  */
 
-export const PROMPT_VERSION = "ask-2026-10-22.1";
+export const PROMPT_VERSION = "ask-2026-10-23.1";
 
 /**
  * A confidential line in the instructions (plan phase 15): no answer has a
@@ -419,7 +420,8 @@ export function withoutFence(text: string): string {
  * repair's turn and closing line (visitor plan V5), which an answer without
  * words gets, the request block (V6), the page block with and without its
  * text (V8), the focus block in each of its forms, with the selection a page
- * does not hold (V9), and both level blocks (V10).
+ * does not hold (V9), both level blocks (V10), and the tour's planner: its
+ * instructions, request, repair note, answer's shape and fallback lines (V16).
  */
 export function hashedPromptText(): string {
   return [
@@ -452,6 +454,8 @@ export function hashedPromptText(): string {
     repairTurn([]),
     closingLine("en"),
     closingLine("de"),
+    // The guided tour's planner (visitor plan V16).
+    tourPromptText(wrapVisitor("x", "en")),
   ].join("\n\0\n");
 }
 

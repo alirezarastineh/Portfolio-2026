@@ -106,6 +106,8 @@ export const TRACE_FIELDS = {
   focus: "shown",
   level: "shown",
   guard: "shown",
+  // A tour's plan, how it was checked and repaired (visitor plan V16): the admin's measure.
+  tour: "withheld",
 } as const satisfies Record<keyof AnswerTrace, Listed>;
 
 export const STEP_FIELDS = {

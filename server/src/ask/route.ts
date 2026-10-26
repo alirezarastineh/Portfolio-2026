@@ -7,9 +7,11 @@ import { z } from "zod";
 import { clientIp } from "../auth/middleware.js";
 import { getDb } from "../db/client.js";
 import { aiFeedback, aiMessages } from "../db/schema.js";
+import type { Locale } from "../content/schema.js";
 import { captureError } from "../lib/sentry.js";
 import { turnstileEnabled, verifyTurnstile, VerifiedSessions } from "../lib/turnstile.js";
 import { readingLocale, streamAnswer } from "./agent.js";
+import type { AskCorpus } from "./corpus/index.js";
 import { demotedSubjects } from "./audit.js";
 import { askChain, askConfig, askCorpus } from "./deps.js";
 import { backfillEmbeddings } from "./embeddings.js";
@@ -29,7 +31,13 @@ import {
 import { focusOf, focusSchema } from "./focus.js";
 import { forgetSessions } from "./forget.js";
 import { countGuardEvent } from "./guard-events.js";
-import { ASK_MESSAGE_ID, buildHistory, historyLimits } from "./history.js";
+import {
+  ASK_MESSAGE_ID,
+  buildHistory,
+  cleanVisitorText,
+  historyLimits,
+  verifyTour,
+} from "./history.js";
 import { inspectView } from "./inspect.js";
 import { etagMatches, mapOf } from "./map.js";
 import { shortName } from "./models/registry.js";
@@ -39,11 +47,13 @@ import { scorecard } from "./scorecard.js";
 import { assistantState } from "./settings.js";
 import { FEEDBACK_REASONS, SignalLimiter, signalsSchema } from "./signals.js";
 import { OFFERED_HANDOFF } from "./outcome-rows.js";
+import { streamTour, tourRequestSchema, type TourRequestBody } from "./tour.js";
 import { DEEP_ROUTE, withoutDemoted } from "./trust.js";
 
 /**
  * The public assistant API:
- *   POST /v1/ask           one streamed answer (AI SDK UI message stream)
+ *   POST /v1/ask           one streamed answer (AI SDK UI message stream); with
+ *                          `mode: "tour"`, a guided tour for an interest (V16)
  *   GET  /v1/ask/config    whether it is on, suggested questions, limits
  *   POST /v1/ask/feedback  +1 / -1 on an answer from this session, a -1 with its reason
  *   POST /v1/ask/signal    what this session's browser saw of an answer (visitor plan V2)
@@ -80,6 +90,12 @@ const askBody = z.object({
    * their browser. The terminal sends nothing for standard; taken all the same.
    */
   level: z.enum(["plain", "standard", "expert"]).optional(),
+  /**
+   * `tour`: plan a guided tour for the visitor's interest (visitor plan V16)
+   * instead of answering; `tour` carries the interest, and a replan's plan.
+   */
+  mode: z.enum(["answer", "tour"]).optional(),
+  tour: tourRequestSchema.optional(),
   /** Hidden from people; a bot that fills it gets nothing. */
   website: z.string().max(200).optional(),
   /** While Turnstile is on: needed once per session, on its first question. */
@@ -173,7 +189,10 @@ type AdmitResult = { ok: true; ask: AdmittedAsk } | { ok: false; response: Respo
  * gate. Counted in guard-events; the answers table never sees them.
  */
 async function admitAsk(c: Context): Promise<AdmitResult> {
-  const parsed = askBody.safeParse(await readJson(c));
+  const parsed = askBody
+    // A tour needs its interest (visitor plan V16).
+    .refine((body) => body.mode !== "tour" || body.tour !== undefined)
+    .safeParse(await readJson(c));
   if (!parsed.success || parsed.data.website) {
     countGuardEvent(parsed.success ? "honeypot" : "invalid_input");
     return { ok: false, response: c.json({ error: "invalid_input" }, 400) };
@@ -241,6 +260,80 @@ async function admitAsk(c: Context): Promise<AdmitResult> {
   };
 }
 
+/**
+ * A replan's start (visitor plan V16), or null for a first plan; `invalid`
+ * when its stop is not a page of the tour's language, or its plan is not one
+ * this server signed for the session, or was replanned already.
+ */
+function replanOf(
+  tour: TourRequestBody,
+  sessionId: string,
+  corpus: AskCorpus,
+  reading: Locale,
+): { from: string; seen: string[] } | null | "invalid" {
+  if (tour.from === undefined && tour.plan === undefined) return null;
+  const pages = mapOf(corpus, reading).map.pages;
+  if (!tour.from || !pages.some((page) => page.id === tour.from)) return "invalid";
+  const plan = tour.plan;
+  if (plan && (plan.replanned || !verifyTour(sessionId, plan.messageId, plan, plan.sig))) {
+    return "invalid";
+  }
+  return { from: tour.from, seen: plan?.stops ?? [] };
+}
+
+/** A tour's stream, once admitted: the lite chain, the visitor's language, the replan checked. */
+async function tourResponse(c: Context, ask: AdmittedAsk): Promise<Response> {
+  const { body, history, config, ipHash, sessionHash, release } = ask;
+  const controller = new AbortController();
+  const onClientGone = () => controller.abort(new Error("client disconnected"));
+  try {
+    const interest = cleanVisitorText(body.tour!.interest);
+    const corpus = await askCorpus(config);
+    const replan = replanOf(
+      body.tour!,
+      body.sessionId,
+      corpus,
+      readingLocale(body.locale, history.language),
+    );
+    if (!interest || replan === "invalid") {
+      release();
+      countGuardEvent("invalid_input");
+      return c.json({ error: "invalid_input" }, 400);
+    }
+    await recordRequest(ipHash, sessionHash);
+    const demoted = await demotedSubjects();
+    c.req.raw.signal.addEventListener("abort", onClientGone, { once: true });
+    inFlight.add(controller);
+    const { stream } = streamTour({
+      interest,
+      locale: body.locale,
+      language: history.language,
+      sessionId: body.sessionId,
+      sessionHash,
+      corpus,
+      config,
+      chain: withoutDemoted(askChain(config, "lite"), demoted),
+      abortSignal: controller.signal,
+      ...(replan ? { replan } : {}),
+      droppedAnswers: history.droppedAnswers,
+      onClose: () => {
+        release();
+        inFlight.delete(controller);
+        c.req.raw.signal.removeEventListener("abort", onClientGone);
+      },
+    });
+    return createUIMessageStreamResponse({
+      stream,
+      headers: { "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no" },
+    });
+  } catch (error) {
+    release();
+    inFlight.delete(controller);
+    c.req.raw.signal.removeEventListener("abort", onClientGone);
+    throw error;
+  }
+}
+
 export function createAskRouter(): Hono {
   const router = new Hono();
 
@@ -257,6 +350,8 @@ export function createAskRouter(): Hono {
     async (c) => {
       const admitted = await admitAsk(c);
       if (!admitted.ok) return admitted.response;
+      // A guided tour (visitor plan V16): admitted as a question is, planned instead of answered.
+      if (admitted.ask.body.mode === "tour") return tourResponse(c, admitted.ask);
       const { body, history, config, deepAllowed, ipHash, sessionHash, release } = admitted.ask;
 
       const controller = new AbortController();

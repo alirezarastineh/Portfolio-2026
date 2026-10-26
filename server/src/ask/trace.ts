@@ -6,8 +6,9 @@ import { redact } from "./log.js";
 import type { Attempt, AttemptOutcome, Trace } from "./models/fallback.js";
 import { tokenCounts, type TokenCounts } from "./models/prices.js";
 import type { Escalation, Sensitivity } from "./router.js";
-import type { RecordedStep } from "./stream-transforms.js";
+import type { RecordedStep, RecordedToolCall } from "./stream-transforms.js";
 import type { ToolOutcome } from "./tools.js";
+import type { TourFallback } from "./tour-prompt.js";
 
 /**
  * What one answer did, step by step, for the admin's timeline and the audit:
@@ -104,7 +105,34 @@ export interface AnswerTrace {
    * `inspect`). Absent when it removed nothing, and from before.
    */
   guard?: Partial<Record<LeakKind, number>>;
+  /**
+   * A tour (visitor plan V16): how many stops the plan had, whether its critic
+   * asked for a repair, whether it replaced an earlier tour, why the short tour
+   * stood in (no match, no model, an interest read as an injection), and the
+   * gates its plans failed. Only on a tour's row.
+   */
+  tour?: {
+    stops: number;
+    repaired: boolean;
+    replanned: boolean;
+    fallback?: TourFallback | "injection";
+    failures?: string[];
+  };
 }
+
+export type RouteMetadata = Pick<
+  AnswerTrace,
+  | "routing"
+  | "escalation"
+  | "window"
+  | "repair"
+  | "handoff"
+  | "page"
+  | "focus"
+  | "level"
+  | "guard"
+  | "tour"
+>;
 
 function inputText(input: unknown): string {
   let json: string | undefined;
@@ -122,6 +150,51 @@ function passedOver(attempts: readonly Attempt[]): TraceStep["passedOver"] {
     .map(({ model, outcome, ms }) => ({ model, outcome, ms }));
 }
 
+function segmentAttempts(attempts: readonly Attempt[]): Attempt[][] {
+  const segments: Attempt[][] = [[]];
+  for (const attempt of attempts) {
+    segments.at(-1)!.push(attempt);
+    if (attempt.outcome === "ok") segments.push([]);
+  }
+  return segments;
+}
+
+function mapTool(tool: RecordedToolCall): TraceTool {
+  return {
+    name: tool.name,
+    input: inputText(tool.input),
+    outcome: tool.outcome ?? "cut-off",
+    resultChars: tool.resultChars,
+    ...(tool.search ? { hits: tool.search.hits, semantic: tool.search.semantic } : {}),
+  };
+}
+
+function unansweredStep(unanswered: readonly Attempt[]): TraceStep {
+  return {
+    model: null,
+    answerOnly: false,
+    ttftMs: null,
+    tokens: null,
+    finishReason: null,
+    passedOver: passedOver(unanswered),
+    tools: [],
+  };
+}
+
+function routeFields(route?: RouteMetadata): Partial<RouteMetadata> {
+  if (!route) return {};
+  const out: Partial<RouteMetadata> = {};
+  for (const [key, value] of Object.entries(route) as [
+    keyof RouteMetadata,
+    RouteMetadata[keyof RouteMetadata],
+  ][]) {
+    if (value === undefined) continue;
+    if (key === "guard" && Object.keys(value).length === 0) continue;
+    out[key] = value as never;
+  }
+  return out;
+}
+
 /**
  * The recorder's steps joined with the fallback wrapper's trace. Every step
  * is one successful model call (`trace.calls`, in order), and its attempts end
@@ -132,24 +205,9 @@ export function buildAnswerTrace(
   recorded: readonly RecordedStep[],
   trace: Trace,
   core?: AnswerTrace["core"],
-  route?: Pick<
-    AnswerTrace,
-    | "routing"
-    | "escalation"
-    | "window"
-    | "repair"
-    | "handoff"
-    | "page"
-    | "focus"
-    | "level"
-    | "guard"
-  >,
+  route?: RouteMetadata,
 ): AnswerTrace {
-  const segments: Attempt[][] = [[]];
-  for (const attempt of trace.attempts) {
-    segments.at(-1)!.push(attempt);
-    if (attempt.outcome === "ok") segments.push([]);
-  }
+  const segments = segmentAttempts(trace.attempts);
 
   const steps: TraceStep[] = trace.calls.map((call, i) => ({
     model: call.model,
@@ -158,40 +216,18 @@ export function buildAnswerTrace(
     tokens: call.usage ? tokenCounts(call.usage) : null,
     finishReason: recorded[i]?.finishReason ?? call.finishReason,
     passedOver: passedOver(segments[i] ?? []),
-    tools: (recorded[i]?.tools ?? []).map((tool) => ({
-      name: tool.name,
-      input: inputText(tool.input),
-      outcome: tool.outcome ?? "cut-off",
-      resultChars: tool.resultChars,
-      ...(tool.search ? { hits: tool.search.hits, semantic: tool.search.semantic } : {}),
-    })),
+    tools: (recorded[i]?.tools ?? []).map(mapTool),
   }));
 
   const unanswered = segments[trace.calls.length] ?? [];
   if (unanswered.length) {
-    steps.push({
-      model: null,
-      answerOnly: false,
-      ttftMs: null,
-      tokens: null,
-      finishReason: null,
-      passedOver: passedOver(unanswered),
-      tools: [],
-    });
+    steps.push(unansweredStep(unanswered));
   }
+
   return {
     v: 1,
     steps,
     ...(core ? { core } : {}),
-    ...(route?.routing ? { routing: route.routing } : {}),
-    ...(route?.escalation ? { escalation: route.escalation } : {}),
-    // Zero included: an answer from before plan phase 22 has none, and is not counted untrimmed.
-    ...(route?.window ? { window: route.window } : {}),
-    ...(route?.repair ? { repair: route.repair } : {}),
-    ...(route?.handoff ? { handoff: route.handoff } : {}),
-    ...(route?.page ? { page: route.page } : {}),
-    ...(route?.focus ? { focus: route.focus } : {}),
-    ...(route?.level ? { level: route.level } : {}),
-    ...(route?.guard && Object.keys(route.guard).length ? { guard: route.guard } : {}),
+    ...routeFields(route),
   };
 }

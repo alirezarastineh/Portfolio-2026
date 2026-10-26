@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { MockEmbeddingModelV4 } from "ai/test";
+import { MockEmbeddingModelV4, MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 
 import { createApp } from "../app.js";
@@ -23,6 +23,7 @@ import {
   textTurn,
   toolTurn,
   type ScriptedModel,
+  usage,
 } from "../test/ask-models.js";
 import {
   eventually,
@@ -37,6 +38,7 @@ import type { AskConfig } from "./config.js";
 import type { AskCorpus } from "./corpus/index.js";
 import { resetRecordedSnapshots, snapshotKey } from "./corpus/snapshots.js";
 import { allowEmbeddingBackfill, resetEmbeddings, setEmbeddingDeps } from "./embeddings.js";
+import { fixtureAskCorpus } from "./evals/fixture.js";
 import { utcDay } from "./guard.js";
 import { flushGuardEvents } from "./guard-events.js";
 import { verifyAnswer } from "./history.js";
@@ -936,5 +938,140 @@ describe("GET /v1/ask/stream-check", () => {
     while (!(await reader.read()).done) rest++;
     expect(firstAt).toBeLessThan(300);
     expect(rest).toBe(2);
+  });
+});
+
+describe("a guided tour (visitor plan V16)", () => {
+  const PLAN = {
+    intro: "Three stops on data pipelines, from Borealis [^project:borealis@en].",
+    stops: [
+      { id: "project:borealis@en", line: "Scanned documents into data [^project:borealis@en]." },
+      { id: "experience:contoso@en", line: "Where he built pipelines [^experience:contoso@en]." },
+      {
+        id: "post:llm-in-production@en",
+        line: "A model meeting real users [^post:llm-in-production@en].",
+      },
+    ],
+  };
+
+  /** A planner that answers each structured call with the plan; its calls are counted. */
+  function planner() {
+    const calls: unknown[] = [];
+    const model = new MockLanguageModelV4({
+      modelId: "gemini-3.5-flash-lite",
+      doGenerate: async (call) => {
+        calls.push(call);
+        return {
+          content: [{ type: "text", text: JSON.stringify(PLAN) }],
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: usage(300, 60),
+          warnings: [],
+        };
+      },
+    });
+    chain = () => [mockEntry("gemini-3.5-flash-lite", model)];
+    return calls;
+  }
+
+  const tour = (tourBody: object | undefined, session = SESSION) =>
+    ask("tour data platforms", { session, extra: { mode: "tour", tour: tourBody } });
+
+  beforeEach(() => {
+    corpusOverride = (c) => fixtureAskCorpus(c);
+  });
+
+  it("plans a tour, logged apart from the answers with the interest redacted, and forget takes it", async () => {
+    const calls = planner();
+    // A session of its own: forget remembers it a quarter of an hour, and logs none of its rows.
+    const session = "tour-forget-session-0001";
+    const res = await tour({ interest: "data platforms, write to jo@example.com" }, session);
+    expect(res.status).toBe(200);
+    const chunks = await readUiChunks(res);
+    const id = chunks.find((c) => c["type"] === "start")!["messageId"] as string;
+    const data = chunks.find((c) => c["type"] === "data-tour")!["data"] as {
+      kind: string;
+      stops: { id: string }[];
+    };
+    expect(data.kind).toBe("plan");
+    expect(data.stops.map((s) => s.id)).toEqual(PLAN.stops.map((s) => s.id));
+    expect(calls).toHaveLength(1);
+
+    const row = await logged(id);
+    // A visitor's row, so forget takes it; its route keeps it out of the answers' measures.
+    expect(row).toMatchObject({
+      source: "terminal",
+      route: "tour",
+      questionRedacted: "data platforms, write to [email]",
+      citedIds: PLAN.stops.map((s) => s.id),
+      finishReason: "stop",
+    });
+    expect(row.trace?.tour).toEqual({ stops: 3, repaired: false, replanned: false });
+    // Spent from the visitors' share, as a question is.
+    const spent = await getDb().select().from(aiUsage);
+    expect(spent.length).toBeGreaterThan(0);
+
+    const forgotten = await app.request("/v1/ask/forget", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": "198.51.100.250" },
+      body: JSON.stringify({ sessionId: session }),
+    });
+    expect(((await forgotten.json()) as { deleted: number }).deleted).toBe(1);
+    expect(await getDb().select().from(aiMessages)).toEqual([]);
+  });
+
+  it("refuses a tour without its interest, a forged plan and a second replan; replans a plan of its own once", async () => {
+    planner();
+    expect((await ask("tour", { extra: { mode: "tour" } })).status).toBe(400);
+    const first = await readUiChunks(await tour({ interest: "data platforms" }));
+    const messageId = first.find((c) => c["type"] === "start")!["messageId"] as string;
+    const data = first.find((c) => c["type"] === "data-tour")!["data"] as {
+      stops: { id: string }[];
+      sig: string;
+    };
+    const plan = {
+      messageId,
+      stops: data.stops.map((s) => s.id),
+      replanned: false,
+      sig: data.sig,
+    };
+    const from = "project:borealis@en";
+    expect(
+      (await tour({ interest: "data platforms", from, plan: { ...plan, sig: "forged" } })).status,
+    ).toBe(400);
+    expect(
+      (await tour({ interest: "data platforms", from, plan: { ...plan, replanned: true } })).status,
+    ).toBe(400);
+    // Another session's plan is not this one's.
+    expect(
+      (await tour({ interest: "data platforms", from, plan }, "other-session-000000001")).status,
+    ).toBe(400);
+    // A stop that is no page of the tour's language.
+    expect((await tour({ interest: "data platforms", from: "cv@en", plan })).status).toBe(400);
+
+    const again = await readUiChunks(await tour({ interest: "data platforms", from, plan }));
+    const replanned = again.find((c) => c["type"] === "data-tour")!["data"] as {
+      replanned: boolean;
+    };
+    expect(replanned.replanned).toBe(true);
+    const id = again.find((c) => c["type"] === "start")!["messageId"] as string;
+    expect((await logged(id)).trace?.tour).toMatchObject({ replanned: true });
+  });
+
+  it("takes a tour's steps and its end as the browser's signals", async () => {
+    planner();
+    const chunks = await readUiChunks(await tour({ interest: "data platforms" }));
+    const messageId = chunks.find((c) => c["type"] === "start")!["messageId"] as string;
+    await logged(messageId);
+    const res = await app.request("/v1/ask/signal", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        sessionId: SESSION,
+        messageId,
+        signals: { tourSteps: 3, tourDone: true },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect((await logged(messageId)).signals).toEqual({ v: 1, tourSteps: 3, tourDone: true });
   });
 });

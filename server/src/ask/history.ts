@@ -59,6 +59,33 @@ export function verifyAnswer(
   return expected.length === given.length && timingSafeEqual(expected, given);
 }
 
+/**
+ * A tour's plan (visitor plan V16): the stops this server checked and whether
+ * it was replanned already, signed for the session and the message that
+ * carried it. The browser sends it back only to replan, once.
+ */
+export function signTour(
+  sessionId: string,
+  messageId: string,
+  plan: { stops: readonly string[]; replanned: boolean },
+): string {
+  return createHmac("sha256", signingKey())
+    .update(`tour\n${sessionId}\n${messageId}\n`)
+    .update(JSON.stringify({ stops: plan.stops, replanned: plan.replanned }))
+    .digest("base64url");
+}
+
+export function verifyTour(
+  sessionId: string,
+  messageId: string,
+  plan: { stops: readonly string[]; replanned: boolean },
+  sig: string,
+): boolean {
+  const expected = Buffer.from(signTour(sessionId, messageId, plan));
+  const given = Buffer.from(sig);
+  return expected.length === given.length && timingSafeEqual(expected, given);
+}
+
 /** Text parts in order, empty ones dropped: the same rule the recorder signs. */
 export function messageText(message: Pick<UIMessage, "parts">): string {
   return message.parts

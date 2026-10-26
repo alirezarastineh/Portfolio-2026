@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { getDb } from "../db/client.js";
 import { aiFeedback, aiMessages } from "../db/schema.js";
-import { OUTCOME_COLUMNS } from "./outcome-rows.js";
+import { OUTCOME_COLUMNS, VISITOR_ANSWER } from "./outcome-rows.js";
 import { routerReport, type RouterRow } from "./router-report.js";
 
 /**
@@ -37,12 +37,7 @@ routerReportRouter.get(
       })
       .from(aiMessages)
       .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
-      .where(
-        and(
-          eq(aiMessages.source, "terminal"),
-          gte(aiMessages.createdAt, new Date(Date.now() - days * DAY_MS)),
-        ),
-      );
+      .where(and(VISITOR_ANSWER, gte(aiMessages.createdAt, new Date(Date.now() - days * DAY_MS))));
     const report = routerReport(
       rows.map(({ trace, ...row }): RouterRow => ({
         ...row,

@@ -22,6 +22,7 @@ import {
   TRUST_RULES,
   type Verdict,
 } from "./trust.js";
+import { VISITOR_ANSWER } from "./outcome-rows.js";
 
 /**
  * The trust lifecycle's monitor → demote step (plan phase 14). Nightly, and
@@ -54,7 +55,7 @@ export interface TrustCheck {
 async function judgedScores(db: DbExecutor, model: string, since?: Date): Promise<number[]> {
   const faithfulness = sql<number>`(${aiMessages.judge} ->> 'faithfulness')::float8`;
   const conditions: SQL[] = [
-    eq(aiMessages.source, "terminal"),
+    VISITOR_ANSWER,
     eq(aiMessages.model, model),
     isNotNull(sql`${aiMessages.judge} ->> 'faithfulness'`),
     sql`(${aiMessages.judge} ->> 'source' is null or ${aiMessages.judge} ->> 'pick' = 'sample')`,
@@ -75,7 +76,7 @@ async function judgedScores(db: DbExecutor, model: string, since?: Date): Promis
  */
 async function deepEndings(db: DbExecutor, since?: Date): Promise<string[]> {
   const conditions: SQL[] = [
-    eq(aiMessages.source, "terminal"),
+    VISITOR_ANSWER,
     inArray(aiMessages.route, ["deep", ESCALATED_ROUTE]),
     ne(aiMessages.finishReason, "aborted"),
   ];

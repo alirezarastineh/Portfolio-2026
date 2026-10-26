@@ -10,7 +10,7 @@ import type { CorpusDocument } from "./corpus/build.js";
 import type { AskCorpus } from "./corpus/index.js";
 import { MAX_DEMOTED, MAX_PROMOTED, type CorpusTiers } from "./corpus/render.js";
 import { askConfig, askCorpus } from "./deps.js";
-import { OUTCOME_COLUMNS } from "./outcome-rows.js";
+import { OUTCOME_COLUMNS, VISITOR_ANSWER } from "./outcome-rows.js";
 import { isHelpful, rephrased } from "./outcomes.js";
 import {
   measurePages,
@@ -60,12 +60,7 @@ perceptionRouter.get(
       })
       .from(aiMessages)
       .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
-      .where(
-        and(
-          eq(aiMessages.source, "terminal"),
-          gte(aiMessages.createdAt, new Date(Date.now() - days * DAY_MS)),
-        ),
-      );
+      .where(and(VISITOR_ANSWER, gte(aiMessages.createdAt, new Date(Date.now() - days * DAY_MS))));
 
     const keys = [...new Set(rows.flatMap((r) => (r.corpusKey ? [r.corpusKey] : [])))];
     const snapshots = new Map<string, CorpusDocument[]>();

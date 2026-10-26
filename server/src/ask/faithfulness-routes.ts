@@ -8,6 +8,7 @@ import { aiMessages, aiRuns } from "../db/schema.js";
 import { askConfig, askVisitorJudges } from "./deps.js";
 import type { NightlyPick } from "./evals/calibration.js";
 import { faithfulnessBy } from "./faithfulness.js";
+import { VISITOR_ANSWER } from "./outcome-rows.js";
 
 /**
  * Overview → Faithfulness (plan phase 26), under
@@ -51,7 +52,7 @@ faithfulnessRouter.get(
       .from(aiMessages)
       .where(
         and(
-          eq(aiMessages.source, "terminal"),
+          VISITOR_ANSWER,
           gte(aiMessages.createdAt, new Date(Date.now() - days * DAY_MS)),
           sql`${aiMessages.judge} ->> 'faithfulness' is not null`,
         ),

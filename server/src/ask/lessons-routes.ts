@@ -14,7 +14,7 @@ import {
   type LessonEffect,
   type LessonSource,
 } from "./lessons.js";
-import { OUTCOME_COLUMNS } from "./outcome-rows.js";
+import { OUTCOME_COLUMNS, VISITOR_ANSWER } from "./outcome-rows.js";
 
 /**
  * Lessons (plan phase 25), under /admin/assistant/lessons (the admin router's
@@ -55,7 +55,7 @@ async function withEffects(
         .select(OUTCOME_COLUMNS)
         .from(aiMessages)
         .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
-        .where(eq(aiMessages.source, "terminal"))
+        .where(VISITOR_ANSWER)
     : [];
   const now = new Date();
   return rows.map((row) => ({

@@ -109,9 +109,12 @@ describe("inspect's projection", () => {
       "repair",
       "routing",
       "steps",
+      "tour",
       "v",
       "window",
     ]);
+    // A tour's plan (visitor plan V16) is the admin's measure.
+    expect(TRACE_FIELDS.tour).toBe("withheld");
     expect(
       Object.entries(STEP_FIELDS)
         .filter(([, s]) => s === "shown")
