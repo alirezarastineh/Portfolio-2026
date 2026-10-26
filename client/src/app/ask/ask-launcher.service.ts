@@ -23,7 +23,9 @@ export type AskSource =
   | "code"
   | "selection"
   /** "How do they connect?" under read next (visitor plan V15, read-next-block.ts). */
-  | "read-next";
+  | "read-next"
+  /** A tour's move to another page, which opens the sheet (visitor plan V16). */
+  | "tour";
 
 /**
  * What a reader points at on a case study or a post (visitor plan V9), as the

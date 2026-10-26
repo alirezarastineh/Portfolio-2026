@@ -24,13 +24,14 @@ import {
   bump,
   finishedTotals,
   hasWords,
+  MAX_SIGNAL_COUNT,
   signalRequest,
   type SignalCount,
 } from "./answer-signals";
 import { answerTrace } from "./answer-trace";
 import { answersByQuestion } from "./answers";
 import { ASK_COPY } from "./ask-copy";
-import type { AskAbout, AskFocus } from "./ask-launcher.service";
+import { AskLauncherService, type AskAbout, type AskFocus } from "./ask-launcher.service";
 import { isLevel, readLevel, storeLevel, type Level } from "./ask-level";
 import { ASK_STORAGE_KEY } from "./ask-storage";
 import { AskTraceService } from "./ask-trace.service";
@@ -64,6 +65,17 @@ import {
   type OutLine,
 } from "./commands";
 import { requestBody } from "./request-body";
+import {
+  defaultTour,
+  replannable,
+  stopLines,
+  stopTarget,
+  TOUR_INTEREST_CHARS,
+  tourData,
+  tourLines,
+  type TourRequest,
+  type TourState,
+} from "./tour";
 import { plainText } from "./terminal-markdown";
 import { track } from "./track";
 
@@ -80,6 +92,9 @@ import { track } from "./track";
 const MAX_STORED_MESSAGES = 24;
 const MAX_ENTRIES = 60;
 const MAX_HISTORY = 50;
+
+/** A tour request that failed for these can be asked again soon: no short tour stands in. */
+const TOUR_WAITS: readonly Failure[] = ["rateLimited", "busy", "invalid", "tooLong"];
 
 interface AskState {
   sessionId: string;
@@ -114,6 +129,8 @@ interface AskState {
    * (visitor plan V15); null while what's new is off.
    */
   news: { since: string; count: number } | null;
+  /** The guided tour in this tab (visitor plan V16), kept with the conversation. */
+  tour: TourState | null;
   /** The polite live region's text: finished answers and command output, once. */
   announcement: string;
 }
@@ -140,6 +157,7 @@ interface Stored {
   /** Absent from what an older terminal stored. */
   downReasons?: Record<string, DownReason>;
   earlierSessions?: string[];
+  tour?: TourState | null;
   messages: AskMessage[];
 }
 
@@ -262,6 +280,7 @@ export const AskStore = signalStore(
       forgetPending: false,
       newsPending: false,
       news: null,
+      tour: stored?.tour ?? null,
       announcement: "",
     };
   }),
@@ -271,11 +290,14 @@ export const AskStore = signalStore(
     _contact: inject(ContactService),
     _doc: inject(DOCUMENT),
     _trace: inject(AskTraceService),
+    _launcher: inject(AskLauncherService),
     /** The request being prepared: set just before `sendMessage`. */
     _next: {
       deep: false,
       /** What a reader pointed at with the question (visitor plan V9). */
       focus: null as AskFocus | null,
+      /** A tour asked for instead of an answer (visitor plan V16). */
+      tour: null as TourRequest | null,
       entryId: null as string | null,
       /** Turnstile, while on: a single-use token for this session's first question. */
       turnstileToken: "",
@@ -308,6 +330,15 @@ export const AskStore = signalStore(
           .map((e) => (e.id === id && e.kind === "ask" ? { ...e, ...patch } : e)),
       });
 
+    /** The short tour in this content, before its first stop (visitor plan V16). */
+    const shortTour = (): TourState => ({
+      kind: "default",
+      stops: defaultTour(store._lang.content(), locale()),
+      at: -1,
+      reached: -1,
+      replanned: false,
+    });
+
     function handleToolPart(part: AskMessage["parts"][number]): void {
       if (!isToolUIPart(part) || part.state !== "output-available") return;
       if (part.type === "tool-navigate") {
@@ -330,6 +361,7 @@ export const AskStore = signalStore(
             url: store._router.url,
             focus: store._next.focus,
             level: store.level(),
+            tour: store._next.tour,
             messages,
           }),
         }),
@@ -345,10 +377,20 @@ export const AskStore = signalStore(
         }
         const copy = ASK_COPY[locale()];
         const entry = store.entries().find((e) => e.id === entryId);
-        const offline =
+        // A tour the server could not plan: the short tour stands in, made here (visitor plan V16).
+        const tourFailed = entry?.kind === "ask" && !!entry.tour && !TOUR_WAITS.includes(failure);
+        let offline =
           failure === "unavailable" || failure === "resting" || failure === "off"
             ? offlineLines(entry?.input ?? "", store._lang.content(), locale(), copy)
             : undefined;
+        if (tourFailed) {
+          const tour = shortTour();
+          const note =
+            failure === "resting" || failure === "off" ? copy.tour.resting : copy.tour.failed;
+          offline = [{ text: note, tone: "dim" }, ...tourLines(tour, copy.tour)];
+          patchState(store, { tour });
+          track("tour_start", { kind: "default" });
+        }
         updateEntry(entryId, {
           failure,
           ...(retryAfter ? { retryAfter } : {}),
@@ -408,6 +450,24 @@ export const AskStore = signalStore(
         // The offer comes after the words (visitor plan V6): the model's, or the server's own.
         const summary = handoffSummary(message);
         if (summary) patchState(store, { handoff: { summary, messageId: message.id } });
+        // A tour: its checked stops, or the short tour where none matched (visitor plan V16).
+        const data = tourData(message);
+        if (data) {
+          const tour: TourState = {
+            ...(data.kind === "plan"
+              ? { ...shortTour(), kind: "plan", stops: data.stops }
+              : shortTour()),
+            interest: data.interest,
+            messageId: message.id,
+            sig: data.sig,
+            replanned: data.replanned,
+          };
+          patchState(store, { tour });
+          persist();
+          track("tour_start", {
+            kind: data.kind === "default" ? "default" : data.replanned ? "replan" : "interest",
+          });
+        }
       },
     });
 
@@ -458,6 +518,7 @@ export const AskStore = signalStore(
           feedback: store.feedback(),
           downReasons: store.downReasons(),
           earlierSessions: store.earlierSessions(),
+          tour: store.tour(),
           messages: forStorage(chat.messages),
         };
         sessionStorage.setItem(ASK_STORAGE_KEY, JSON.stringify(stored));
@@ -466,7 +527,13 @@ export const AskStore = signalStore(
       }
     }
 
-    return { chat, _persist: persist, _updateEntry: updateEntry, messageFor };
+    return {
+      chat,
+      _persist: persist,
+      _updateEntry: updateEntry,
+      _shortTour: shortTour,
+      messageFor,
+    };
   }),
   withMethods((store) => {
     const locale = (): Locale => store._lang.lang();
@@ -493,6 +560,7 @@ export const AskStore = signalStore(
       text: string,
       deep: boolean,
       about: AskAbout | undefined,
+      tour?: TourRequest,
     ): Promise<void> {
       const copy = store.copy();
       if (!store.available()) {
@@ -524,7 +592,15 @@ export const AskStore = signalStore(
       patchState(store, {
         entries: [
           ...store.entries(),
-          { id: entryId, kind: "ask" as const, input, userId, deep, ...(about ? { about } : {}) },
+          {
+            id: entryId,
+            kind: "ask" as const,
+            input,
+            userId,
+            deep,
+            ...(about ? { about } : {}),
+            ...(tour ? { tour } : {}),
+          },
         ].slice(-MAX_ENTRIES),
         handoff: null,
         forgetPending: false,
@@ -536,6 +612,7 @@ export const AskStore = signalStore(
       track("ask_send");
       store._next.deep = deep;
       store._next.focus = about?.focus ?? null;
+      store._next.tour = tour ?? null;
       store._next.entryId = entryId;
       if (!(await readyToAsk(store._next, locale()))) {
         store._updateEntry(entryId, { failure: "error" });
@@ -577,6 +654,8 @@ export const AskStore = signalStore(
         handoff: null,
         forgetPending: false,
         newsPending: false,
+        // A tour lives in its session: a new session, as after forget, ends it (visitor plan V16).
+        tour: null,
         feedback: {},
         downReasons: {},
         limitedUntil: null,
@@ -705,6 +784,132 @@ export const AskStore = signalStore(
       show(input, newsLines(updatesSince(pages, since), since, copy, locale()));
     }
 
+    /** The tour in this tab, kept with the conversation (visitor plan V16). */
+    function setTour(tour: TourState | null): void {
+      patchState(store, { tour });
+      store._persist();
+    }
+
+    /** `tour`: the short tour, made here with no model; its list, and how to move through it. */
+    function startShortTour(input: string, note?: string): void {
+      const copy = store.copy().tour;
+      const tour = store._shortTour();
+      setTour(tour);
+      track("tour_start", { kind: "default" });
+      show(input, [
+        ...(note ? [{ text: note, tone: "dim" as const }] : []),
+        ...tourLines(tour, copy),
+      ]);
+    }
+
+    /**
+     * `tour`, `tour <interest>`, `tour stop`, `tour more like this` (visitor plan V16). An
+     * interest is one request to the server, which plans the stops; the short tour needs none.
+     */
+    function handleTour(input: string, arg: string): Promise<void> | void {
+      const copy = store.copy().tour;
+      const words = arg.trim();
+      const lower = words.toLowerCase();
+      if (!words) return startShortTour(input);
+      if (lower === "stop") return endTour(input);
+      if (lower === "more like this") return replanTour(input);
+      if (words.length > TOUR_INTEREST_CHARS) {
+        return show(input, [
+          { text: fmt(copy.tooLong, { n: TOUR_INTEREST_CHARS }), tone: "error" },
+        ]);
+      }
+      if (!store.available()) return startShortTour(input, copy.resting);
+      return ask(input, input, false, undefined, { interest: words });
+    }
+
+    /** `tour more like this`: one replan from the stop the visitor is at, its plan sent back signed. */
+    function replanTour(input: string): Promise<void> | void {
+      const copy = store.copy().tour;
+      const tour = store.tour();
+      if (!tour) return show(input, [{ text: copy.none, tone: "dim" }]);
+      if (tour.replanned) return show(input, [{ text: copy.replanned, tone: "dim" }]);
+      const stop = tour.stops[Math.max(0, tour.at)];
+      if (!stop || !replannable(stop)) return show(input, [{ text: copy.notHere, tone: "dim" }]);
+      if (!store.available()) {
+        return show(input, [{ text: store._lang.t().ask.offline, tone: "dim" }]);
+      }
+      return ask(input, input, false, undefined, {
+        interest: (tour.interest || stop.title).slice(0, TOUR_INTEREST_CHARS),
+        from: stop.id,
+        ...(tour.messageId && tour.sig
+          ? {
+              plan: {
+                messageId: tour.messageId,
+                stops: tour.kind === "plan" ? tour.stops.map((s) => s.id) : [],
+                replanned: tour.replanned,
+                sig: tour.sig,
+              },
+            }
+          : {}),
+      });
+    }
+
+    function endTour(input: string): void {
+      const copy = store.copy().tour;
+      if (!store.tour()) {
+        show(input, [{ text: copy.none, tone: "dim" }]);
+        return;
+      }
+      setTour(null);
+      show(input, [{ text: copy.ended, tone: "dim" }]);
+    }
+
+    /**
+     * `next` and `back`: the visitor's own move, to a path `openTarget` takes, then the stop's
+     * line with a question about it. From home's About terminal to another page, the sheet
+     * opens there, so the tour goes on. The last stop offers contact, through the hand-off (V6).
+     */
+    function moveTour(input: string, step: 1 | -1): void {
+      const copy = store.copy().tour;
+      const tour = store.tour();
+      if (!tour) {
+        show(input, [{ text: copy.none, tone: "dim" }]);
+        return;
+      }
+      const at = tour.at + step;
+      if (at >= tour.stops.length) {
+        show(input, [{ text: copy.last, tone: "dim" }]);
+        return;
+      }
+      if (at < 0) {
+        show(input, [{ text: copy.first, tone: "dim" }]);
+        return;
+      }
+      const stop = tour.stops[at]!;
+      const target = stopTarget(content(), locale(), stop.url);
+      if (!target) {
+        show(input, [{ text: copy.gone, tone: "error" }]);
+        return;
+      }
+      const moved: TourState = { ...tour, at, reached: Math.max(tour.reached, at) };
+      const done = at === tour.stops.length - 1;
+      setTour(moved);
+      track("tour_step", { direction: step === 1 ? "next" : "back" });
+      show(input, stopLines(moved, copy));
+      if (tour.messageId) {
+        store._signals.report(store.sessionId(), tour.messageId, (totals) => ({
+          ...totals,
+          tourSteps: Math.min(MAX_SIGNAL_COUNT, moved.reached + 1),
+          ...(done ? { tourDone: true } : {}),
+        }));
+      }
+      if (done) {
+        track("tour_done");
+        patchState(store, { handoff: { summary: copy.contact, messageId: "" } });
+      }
+      const fromHome = store._lang.page() === "/";
+      void store._router.navigateByUrl(target).then(() => {
+        if (fromHome && store._lang.page() !== "/" && !store._launcher.sheetOpen()) {
+          store._launcher.openSheet("tour");
+        }
+      });
+    }
+
     /** `evals` (visitor plan V13): the public scorecard, while the admin publishes it. */
     async function handleEvals(input: string): Promise<void> {
       const copy = store.copy();
@@ -828,6 +1033,15 @@ export const AskStore = signalStore(
         case "news":
           void handleNews(input, parsed.arg);
           break;
+        case "tour":
+          void handleTour(input, parsed.arg);
+          break;
+        case "next":
+          moveTour(input, 1);
+          break;
+        case "back":
+          moveTour(input, -1);
+          break;
         case "history":
           handleHistory(input);
           break;
@@ -898,6 +1112,7 @@ export const AskStore = signalStore(
         store._timings.set(entryId, { sentAt: performance.now() });
         store._next.deep = entry.deep;
         store._next.focus = entry.about?.focus ?? null;
+        store._next.tour = entry.tour ?? null;
         store._next.entryId = entryId;
         if (!(await readyToAsk(store._next, store._lang.lang()))) {
           store._updateEntry(entryId, { failure: "error" });

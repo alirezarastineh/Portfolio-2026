@@ -22,6 +22,7 @@ import { AskLinesComponent } from "./ask-lines.component";
 import { linkPolicyFor } from "./link-policy";
 import { failoverLine, pageTitle, receiptAlways, receiptClauses, sourceFacts } from "./receipt";
 import { footnotesFor, plainText, renderMarkdown, type Block } from "./terminal-markdown";
+import { defaultTour, tourData } from "./tour";
 import { track } from "./track";
 
 type AskEntry = Extract<Entry, { kind: "ask" }>;
@@ -150,6 +151,26 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
             }
           }
         }
+      }
+
+      <!-- A tour (visitor plan V16): its checked stops, or the short tour where none matched. -->
+      @if (tourStops().length) {
+        <ol class="m-0 list-none p-0" [attr.aria-label]="copy().tour.stops">
+          @for (stop of tourStops(); track stop.id; let i = $index) {
+            <li class="grid grid-cols-[3ch_1fr] gap-x-1">
+              <span class="text-accent-orange" aria-hidden="true">{{ i + 1 }}.</span>
+              <span class="wrap-break-word"
+                ><a
+                  class="underline decoration-border underline-offset-4 hover:decoration-accent-orange"
+                  [href]="stop.url"
+                  (click)="followStop($event, stop.url)"
+                  >{{ stop.title }}</a
+                >
+                — {{ stop.line }}</span
+              >
+            </li>
+          }
+        </ol>
       }
 
       <!-- Said once. The seconds tick ten times a second: hidden from screen
@@ -481,6 +502,13 @@ export class AskAnswerComponent {
     return footnotesFor(this.text(), sources);
   });
 
+  /** A tour's stops (visitor plan V16): the server's checked plan, or the short tour made here. */
+  protected readonly tourStops = computed(() => {
+    const data = tourData(this.message());
+    if (!data) return [];
+    return data.kind === "plan" ? data.stops : defaultTour(this.lang.content(), this.lang.lang());
+  });
+
   /** The server moved past a busy model, until this answer's first words (visitor plan V12). */
   protected readonly failover = computed(() => {
     const status = this.store.failover();
@@ -655,6 +683,13 @@ export class AskAnswerComponent {
     // Followed, in this tab or another (visitor plan V2): a citation or its chip.
     this.note("citations");
     if (modified(event) || !url.startsWith("/") || url.startsWith("/media/")) return;
+    event.preventDefault();
+    void this.router.navigateByUrl(url);
+  }
+
+  /** A tour's stop opened from its list: the visitor's own step, through the router (V16). */
+  protected followStop(event: MouseEvent, url: string): void {
+    if (modified(event)) return;
     event.preventDefault();
     void this.router.navigateByUrl(url);
   }

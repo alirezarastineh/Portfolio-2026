@@ -22,6 +22,7 @@ import {
   lucideMoon,
   lucideNewspaper,
   lucideSearch,
+  lucideSignpost,
   lucideSparkles,
   lucideSun,
 } from "@ng-icons/lucide";
@@ -74,6 +75,7 @@ interface Group {
       lucideMoon,
       lucideNewspaper,
       lucideSearch,
+      lucideSignpost,
       lucideSparkles,
       lucideSun,
     }),
@@ -296,6 +298,13 @@ export class CommandPaletteComponent {
         run: () => this.inTerminal("news"),
       },
       {
+        id: "palette-tour",
+        label: labels.palette.tour,
+        icon: "lucideSignpost",
+        keywords: "tour guide start",
+        run: () => this.inTerminal("tour"),
+      },
+      {
         id: "palette-language",
         label: labels.header.switchTo,
         icon: "lucideGlobe",
@@ -426,7 +435,7 @@ export class CommandPaletteComponent {
   }
 
   /**
-   * A command for the terminal (`news`): on home, the About terminal takes it;
+   * A command for the terminal (`news`, `tour`): on home, the About terminal takes it;
    * elsewhere it opens in the sheet.
    */
   private inTerminal(command: string): void {

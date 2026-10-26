@@ -1366,6 +1366,143 @@ test.describe("assistant terminal", () => {
     expect(await kept()).toBeNull();
   });
 
+  test("tour runs the short tour from end to end: the About terminal, the sheet elsewhere, a reload, the last stop's offer (visitor plan V16)", async ({
+    page,
+  }) => {
+    const mock = await mockAsk(page, (route) => sse(route, answer({ text: "unused" })));
+    const prompt = await openPrompt(page);
+    const log = page.locator("#about [role=log]");
+
+    // No model: the short tour comes from the page's own content.
+    await run(prompt, "tour");
+    await expect(log).toContainText("The short tour, 5 stops:");
+    await expect(log).toContainText("TODO: Project One");
+    await expect(log).toContainText("Shipping RAG to production");
+    const group = page.getByRole("group", { name: "tour · 5 stops" });
+    await expect(group).toBeVisible();
+    expect(mock.bodies).toHaveLength(0);
+
+    // The first stop is About, on this page; the keyboard reaches the group's next.
+    await group.getByRole("button", { name: "next" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("group", { name: "tour · stop 1 of 5 · about" })).toBeVisible();
+    await expect(log).toContainText("ask about this ›");
+
+    // Typed, as in any shell. To another page: the sheet carries the tour on.
+    await run(prompt, "next");
+    await expect(page).toHaveURL(/\/en\/work\/project-one$/);
+    const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
+    await expect(
+      sheet.getByRole("group", { name: "tour · stop 2 of 5 · TODO: Project One" }),
+    ).toBeVisible();
+
+    // The tab keeps it through a reload.
+    await page.reload();
+    await interactive(page);
+    await page.getByRole("button", { name: "ask my portfolio" }).click();
+    await expect(sheet.getByRole("group", { name: /stop 2 of 5/ })).toBeVisible();
+
+    await sheet.getByRole("button", { name: "next" }).click();
+    await expect(page).toHaveURL(/\/en\/writing\/shipping-rag-to-production$/);
+    await sheet.getByRole("button", { name: "back" }).click();
+    await expect(page).toHaveURL(/\/en\/work\/project-one$/);
+    await run(sheet.locator("textarea"), "next");
+    await run(sheet.locator("textarea"), "next");
+    await expect(page).toHaveURL(/\/en\/work\/project-two$/);
+    await run(sheet.locator("textarea"), "next");
+    await expect(page).toHaveURL(/\/en#contact$/);
+    await expect(sheet).toContainText("That was the last stop.");
+
+    // The last stop offers contact, as the hand-off does.
+    const offer = sheet.getByRole("group", { name: "Hand this conversation to the contact form?" });
+    await expect(offer).toBeVisible();
+    await offer.getByRole("button", { name: "yes" }).click();
+    await expect(page.locator("#contact-message")).toHaveValue(
+      "Hi Alireza, I took the tour of your portfolio and would like to get in touch.",
+    );
+    expect(mock.bodies).toHaveLength(0);
+  });
+
+  test("tour <interest> asks the server once and takes its checked stops; tour stop ends it (visitor plan V16)", async ({
+    page,
+  }) => {
+    const stops = [
+      {
+        id: "project:project-two@en",
+        title: "TODO: Project Two",
+        url: "/en/work/project-two",
+        line: "Where the data pipeline lives.",
+      },
+      {
+        id: "post:shipping-rag-to-production@en",
+        title: "Shipping RAG to production",
+        url: "/en/writing/shipping-rag-to-production",
+        line: "What changed with real users.",
+      },
+      {
+        id: "experience:senior@en",
+        title: "Senior AI Engineer — Example GmbH",
+        url: "/en#experience",
+        line: "Where he runs it today.",
+      },
+    ];
+    const mock = await mockAsk(page, (route) =>
+      sse(route, [
+        { type: "start", messageId: "m_e2etour0001", messageMetadata: { createdAt: Date.now() } },
+        { type: "start-step" },
+        {
+          type: "source-url",
+          sourceId: "project:project-two@en",
+          url: "/en/work/project-two",
+          title: "TODO: Project Two",
+        },
+        { type: "text-start", id: "intro" },
+        {
+          type: "text-delta",
+          id: "intro",
+          delta: "Three stops on data platforms, from Project Two [^project:project-two@en].",
+        },
+        { type: "text-end", id: "intro" },
+        {
+          type: "data-tour",
+          data: {
+            v: 1,
+            kind: "plan",
+            interest: "data platforms",
+            stops,
+            replanned: false,
+            sig: "s",
+          },
+        },
+        { type: "finish-step" },
+        { type: "finish", finishReason: "stop", messageMetadata: { sig: "signed" } },
+      ]),
+    );
+    const prompt = await openPrompt(page);
+    const log = page.locator("#about [role=log]");
+    await run(prompt, "tour data platforms");
+    await expect(log).toContainText("Three stops on data platforms");
+    const list = log.getByRole("list", { name: "Stops" });
+    await expect(list.getByRole("link")).toHaveText([
+      "TODO: Project Two",
+      "Shipping RAG to production",
+      "Senior AI Engineer — Example GmbH",
+    ]);
+    expect(mock.bodies).toHaveLength(1);
+    expect(mock.bodies[0]).toMatchObject({ mode: "tour", tour: { interest: "data platforms" } });
+
+    const group = page.getByRole("group", { name: "tour · 3 stops" });
+    await expect(group).toBeVisible();
+    expect(await axeViolations(page)).toEqual([]);
+    await group.getByRole("button", { name: "next" }).click();
+    await expect(page).toHaveURL(/\/en\/work\/project-two$/);
+    const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
+    await expect(sheet.getByRole("button", { name: "more like this" })).toBeVisible();
+    await run(sheet.locator("textarea"), "tour stop");
+    await expect(sheet).toContainText("Tour ended.");
+    await expect(sheet.getByRole("group", { name: /^tour/ })).toHaveCount(0);
+  });
+
   test("the reader pages' server HTML has none of the ask buttons: the browser adds them", async ({
     request,
   }) => {
@@ -1468,6 +1605,15 @@ for (const colorScheme of ["dark", "light"] as const) {
       await selectionAsk.click();
       const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
       await expect(sheet).toContainText("It ranks by meaning.");
+      expect(await axeViolations(page)).toEqual([]);
+    });
+
+    test("the tour's list and its moves (visitor plan V16)", async ({ page }) => {
+      await mockAsk(page, (route) => sse(route, answer({ text: "unused" })));
+      const prompt = await openPrompt(page);
+      await run(prompt, "tour");
+      await run(prompt, "next");
+      await expect(page.getByRole("group", { name: "tour · stop 1 of 5 · about" })).toBeVisible();
       expect(await axeViolations(page)).toEqual([]);
     });
 

@@ -2,6 +2,7 @@ import type { UIMessage } from "ai";
 
 import type { AskAbout } from "./ask-launcher.service";
 import type { OutLine } from "./commands";
+import type { TourRequest } from "./tour";
 
 /**
  * What the server attaches to an answer (see `server/src/ask/agent.ts`,
@@ -100,6 +101,8 @@ export type Entry =
       deep: boolean;
       /** What a reader pointed at with it (visitor plan V9): sent again by a retry. */
       about?: AskAbout;
+      /** A tour asked for (visitor plan V16): sent again by a retry. */
+      tour?: TourRequest;
       failure?: Failure;
       /** Seconds to wait, for `rateLimited`. */
       retryAfter?: number;

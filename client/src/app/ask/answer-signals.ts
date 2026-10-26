@@ -16,6 +16,9 @@ export interface SignalTotals {
   citations?: number;
   copies?: number;
   retries?: number;
+  /** A logged tour's stops the visitor reached, and whether they reached its last (visitor plan V16). */
+  tourSteps?: number;
+  tourDone?: boolean;
 }
 
 export type SignalCount = "followups" | "citations" | "copies" | "retries";

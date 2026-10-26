@@ -28,6 +28,9 @@ export type LocalCommand =
   | "evals"
   | "forget"
   | "news"
+  | "tour"
+  | "next"
+  | "back"
   | "history"
   | "clear"
   | "reset"
@@ -58,6 +61,9 @@ export const COMMANDS = [
   "evals",
   "forget",
   "news",
+  "tour ",
+  "next",
+  "back",
   "history",
   "clear",
   "reset",
@@ -78,6 +84,9 @@ const EXACT: Record<string, LocalCommand> = {
   inspect: "inspect",
   evals: "evals",
   forget: "forget",
+  // The tour's moves (visitor plan V16).
+  next: "next",
+  back: "back",
   history: "history",
   clear: "clear",
   reset: "reset",
@@ -103,30 +112,32 @@ export function parseInput(raw: string): Parsed {
   return withArgument(head!.toLowerCase(), rest) ?? { kind: "ask", text, deep: false };
 }
 
-/** A command that takes words after its name, when it has as many as it takes; null otherwise. */
-function withArgument(head: string, rest: readonly string[]): Parsed | null {
-  const arg = rest.join(" ");
+function parseLocalCommand(head: string, arg: string, count: number): Parsed | null {
   switch (head) {
     case "cat":
-      return rest.length === 1 ? { kind: "local", name: "cat", arg } : null;
+      return count === 1 ? { kind: "local", name: "cat", arg } : null;
     case "open":
     case "cd":
-      return rest.length >= 1 && rest.length <= 3 ? { kind: "local", name: "open", arg } : null;
+      return count >= 1 && count <= 3 ? { kind: "local", name: "open", arg } : null;
+    // "lang <locale>", "level expert" (V10), "news off" (V15).
     case "lang":
-      return rest.length <= 1 ? { kind: "local", name: "lang", arg: arg.toLowerCase() } : null;
-    // "level expert" sets it (visitor plan V10); "level of his German?" is a question.
     case "level":
-      return rest.length <= 1 ? { kind: "local", name: "level", arg: arg.toLowerCase() } : null;
-    // "news" and "news off" (visitor plan V15); "news about his RAG work?" is a question.
     case "news":
-      return rest.length <= 1 ? { kind: "local", name: "news", arg: arg.toLowerCase() } : null;
-    case "ask":
-      return arg ? { kind: "ask", text: arg, deep: false } : null;
-    case "deep":
-      return arg ? { kind: "ask", text: arg, deep: true } : null;
+      return count <= 1 ? { kind: "local", name: head, arg: arg.toLowerCase() } : null;
+    // "tour", "tour <interest>", "tour stop", "tour more like this" (V16).
+    case "tour":
+      return { kind: "local", name: "tour", arg };
     default:
       return null;
   }
+}
+
+/** A command that takes words after its name, when it has as many as it takes; null otherwise. */
+function withArgument(head: string, rest: readonly string[]): Parsed | null {
+  const arg = rest.join(" ");
+  if (head === "ask") return arg ? { kind: "ask", text: arg, deep: false } : null;
+  if (head === "deep") return arg ? { kind: "ask", text: arg, deep: true } : null;
+  return parseLocalCommand(head, arg, rest.length);
 }
 
 /** Completes a command or a project name; null when nothing (or too much) matches. */

@@ -26,8 +26,10 @@ import { AskLauncherService, type AskAbout, type AskSource } from "./ask-launche
 import { AskLinesComponent } from "./ask-lines.component";
 import { AskStore } from "./ask.store";
 import type { Entry } from "./ask-types";
+import { fmt } from "../i18n/interpolate";
 import { complete, parseInput } from "./commands";
 import { newsCount } from "./news";
+import { replannable } from "./tour";
 import { track } from "./track";
 
 let instances = 0;
@@ -159,6 +161,52 @@ const MAX_INPUT_LINES = 6;
                 (click)="store.answerForget(false)"
               >
                 {{ copy().forget.no }}
+              </button>
+            </span>
+          </div>
+        }
+        <!-- The guided tour (visitor plan V16): where it is, and the visitor's own moves. -->
+        @if (store.tour(); as tour) {
+          <div
+            class="flex flex-wrap items-center gap-2 pb-3"
+            role="group"
+            [attr.aria-label]="tourLabel()"
+          >
+            <span class="text-accent-orange">{{ tourLabel() }}</span>
+            <span class="flex flex-wrap items-center gap-2">
+              @if (tour.at > 0) {
+                <button
+                  type="button"
+                  class="press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
+                  (click)="send('back')"
+                >
+                  {{ copy().tour.back }}
+                </button>
+              }
+              @if (tour.at < tour.stops.length - 1) {
+                <button
+                  type="button"
+                  class="press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
+                  (click)="send('next')"
+                >
+                  {{ copy().tour.next }}
+                </button>
+              }
+              @if (canReplan()) {
+                <button
+                  type="button"
+                  class="press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
+                  (click)="send('tour more like this')"
+                >
+                  {{ copy().tour.more }}
+                </button>
+              }
+              <button
+                type="button"
+                class="press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
+                (click)="send('tour stop')"
+              >
+                {{ copy().tour.end }}
               </button>
             </span>
           </div>
@@ -329,6 +377,21 @@ export class TerminalShellComponent {
   protected readonly status = computed(() => this.store.chat.status);
   protected readonly busy = computed(() => ["submitted", "streaming"].includes(this.status()));
   protected readonly showIdleCaret = computed(() => !this.focused() && !this.value());
+  /** Where the tour is (visitor plan V16): "tour · stop 2 of 5 · Atlas", or its stops before the first. */
+  protected readonly tourLabel = computed(() => {
+    const tour = this.store.tour();
+    if (!tour) return "";
+    const copy = this.copy().tour;
+    const stop = tour.stops[tour.at];
+    return stop
+      ? fmt(copy.group, { k: tour.at + 1, n: tour.stops.length, title: stop.title })
+      : fmt(copy.groupBefore, { n: tour.stops.length });
+  });
+  /** "more like this": once per tour, from a page the server can plan from, while it answers. */
+  protected readonly canReplan = computed(() => {
+    const tour = this.store.tour();
+    return !!tour && !tour.replanned && this.store.available() && replannable(tour.stops[tour.at]);
+  });
   /** "3 updates since Sep 12", while what's new is on and something changed (visitor plan V15). */
   protected readonly newsLine = computed(() => {
     const news = this.store.news();
@@ -384,6 +447,7 @@ export class TerminalShellComponent {
       this.store.handoff();
       this.store.forgetPending();
       this.store.newsPending();
+      this.store.tour();
       const log = this.logRef().nativeElement;
       if (this.store.chat.messages && this.stick) log.scrollTop = log.scrollHeight;
     });

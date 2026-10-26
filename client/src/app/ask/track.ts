@@ -20,7 +20,11 @@ export type AskEvent =
   | "ask_evals"
   // The portfolio's map: a read-next page opened or connected, what's new's steps (V15).
   | "map_read_next"
-  | "map_news";
+  | "map_news"
+  // The guided tour: started (default, interest, replan), a step, the last stop (V16).
+  | "tour_start"
+  | "tour_step"
+  | "tour_done";
 
 export function track(event: AskEvent, data?: Record<string, string>): void {
   try {

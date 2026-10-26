@@ -192,6 +192,45 @@ export interface AskCopy {
     /** The question "summarize" asks, `{titles}` the pages'. */
     question: string;
   };
+  /**
+   * The guided tour (visitor plan V16): its lists and stops, its moves and
+   * buttons, and what it says when it cannot go on.
+   */
+  tour: {
+    /** `{interest}`, `{n}`: a planned tour's head. */
+    planned: string;
+    /** `{n}`: the short tour's head. */
+    short: string;
+    howTo: string;
+    /** `{k}` of `{n}`. */
+    stop: string;
+    askAbout: string;
+    /** `{title}`: what "ask about this" asks, on the stop's page. */
+    question: string;
+    last: string;
+    first: string;
+    none: string;
+    ended: string;
+    gone: string;
+    usage: string;
+    /** `{n}`: the most characters an interest may have. */
+    tooLong: string;
+    replanned: string;
+    notHere: string;
+    /** When the short tour stands in: the assistant rests, or the request failed. */
+    resting: string;
+    failed: string;
+    /** The group's name: `{k}` of `{n}` and `{title}`, or `{n}` stops before the first. */
+    group: string;
+    groupBefore: string;
+    stops: string;
+    next: string;
+    back: string;
+    more: string;
+    end: string;
+    /** What the last stop hands to the contact form, through the hand-off (V6). */
+    contact: string;
+  };
   handoff: { ask: string; yes: string; no: string; done: string; declined: string };
   opening: string;
   tool: {
@@ -245,6 +284,8 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         ["ls skills", "what he works with"],
         ["open <page>", "go to a project, post or section"],
         ["news", "what changed since your last visit (opt-in)"],
+        ["tour [interest]", "a short guided tour, or one for your interest"],
+        ["next · back", "move through the tour; `tour stop` ends it"],
         ["cv", "download his CV"],
         ["contact", "write to him"],
         ["lang en|de", "switch the language"],
@@ -424,6 +465,33 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       summarize: "summarize them ›",
       question: "Summarize what is new on these pages: {titles}.",
     },
+    tour: {
+      planned: "A tour for “{interest}”, {n} stops:",
+      short: "The short tour, {n} stops:",
+      howTo: "`next` goes to the first stop, `back` returns, `tour stop` ends it.",
+      stop: "stop {k} of {n}",
+      askAbout: "ask about this ›",
+      question: "What should I know about {title}?",
+      last: "That was the last stop.",
+      first: "This is the first stop.",
+      none: "No tour is running. Type `tour` for the short one.",
+      ended: "Tour ended.",
+      gone: "That stop is no longer on the site.",
+      usage: "usage: tour [interest] · tour stop · tour more like this",
+      tooLong: "Keep the interest under {n} characters.",
+      replanned: "This tour was replanned once already.",
+      notHere: "More like this works from a case study, a post or a page of the site.",
+      resting: "The assistant is resting; here is the short tour.",
+      failed: "Tours for an interest are not available just now; here is the short tour.",
+      group: "tour · stop {k} of {n} · {title}",
+      groupBefore: "tour · {n} stops",
+      stops: "Stops",
+      next: "next",
+      back: "back",
+      more: "more like this",
+      end: "end tour",
+      contact: "Hi Alireza, I took the tour of your portfolio and would like to get in touch.",
+    },
     handoff: {
       ask: "Hand this conversation to the contact form?",
       yes: "yes",
@@ -484,6 +552,8 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         ["ls skills", "womit er arbeitet"],
         ["open <seite>", "zu einem Projekt, Artikel oder Bereich"],
         ["news", "was sich seit deinem letzten Besuch geändert hat (optional)"],
+        ["tour [interesse]", "eine kurze Führung, oder eine zu deinem Interesse"],
+        ["next · back", "durch die Führung; `tour stop` beendet sie"],
         ["cv", "Lebenslauf herunterladen"],
         ["contact", "ihm schreiben"],
         ["lang en|de", "Sprache wechseln"],
@@ -666,6 +736,35 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       kinds: { "case-study": "Fallstudie", project: "Projekt", post: "Artikel" },
       summarize: "zusammenfassen ›",
       question: "Fasse zusammen, was auf diesen Seiten neu ist: {titles}.",
+    },
+    tour: {
+      planned: "Eine Führung zu „{interest}“, {n} Stationen:",
+      short: "Die kurze Führung, {n} Stationen:",
+      howTo: "`next` geht zur ersten Station, `back` zurück, `tour stop` beendet sie.",
+      stop: "Station {k} von {n}",
+      askAbout: "dazu fragen ›",
+      question: "Was sollte ich über {title} wissen?",
+      last: "Das war die letzte Station.",
+      first: "Das ist die erste Station.",
+      none: "Keine Führung läuft. Tippe `tour` für die kurze.",
+      ended: "Führung beendet.",
+      gone: "Diese Station gibt es auf der Website nicht mehr.",
+      usage: "Verwendung: tour [interesse] · tour stop · tour more like this",
+      tooLong: "Das Interesse bitte unter {n} Zeichen.",
+      replanned: "Diese Führung wurde schon einmal neu geplant.",
+      notHere:
+        "„More like this“ geht von einer Fallstudie, einem Artikel oder einer Seite der Website aus.",
+      resting: "Der Assistent pausiert; hier ist die kurze Führung.",
+      failed: "Führungen zu einem Interesse gibt es gerade nicht; hier ist die kurze Führung.",
+      group: "Führung · Station {k} von {n} · {title}",
+      groupBefore: "Führung · {n} Stationen",
+      stops: "Stationen",
+      next: "weiter",
+      back: "zurück",
+      more: "mehr davon",
+      end: "Führung beenden",
+      contact:
+        "Hallo Alireza, ich habe die Führung durch dein Portfolio gemacht und würde mich gern melden.",
     },
     handoff: {
       ask: "Dieses Gespräch an das Kontaktformular übergeben?",

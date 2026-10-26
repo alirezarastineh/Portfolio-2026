@@ -43,6 +43,8 @@ export interface ChromeLabels {
     ask: string;
     /** What changed since the last visit (visitor plan V15). */
     news: string;
+    /** The guided tour (visitor plan V16). */
+    tour: string;
     close: string;
   };
   breadcrumb: string;
@@ -127,6 +129,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       home: "Home",
       ask: "Ask AI…",
       news: "What's new",
+      tour: "Take the tour",
       close: "Close",
     },
     breadcrumb: "Breadcrumb",
@@ -202,6 +205,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       home: "Startseite",
       ask: "KI fragen…",
       news: "Was ist neu",
+      tour: "Führung starten",
       close: "Schließen",
     },
     breadcrumb: "Brotkrümelnavigation",

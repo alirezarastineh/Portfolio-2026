@@ -2,6 +2,7 @@ import type { Locale } from "../content/locale";
 import type { AskFocus } from "./ask-launcher.service";
 import type { Level } from "./ask-level";
 import type { AskMessage } from "./ask-types";
+import type { TourRequest } from "./tour";
 import { forRequest } from "./sent-messages";
 
 /** The longest page path the server takes (`PAGE_CHARS`, server/src/ask/page.ts). */
@@ -29,6 +30,8 @@ export interface RequestInput {
   focus?: AskFocus | null;
   /** How technical the visitor wants answers (visitor plan V10); standard is not sent. */
   level?: Level;
+  /** A tour for an interest instead of an answer (visitor plan V16). */
+  tour?: TourRequest | null;
   messages: readonly AskMessage[];
 }
 
@@ -44,6 +47,7 @@ export function requestBody(input: RequestInput) {
     ...(input.focus ? { focus: input.focus } : {}),
     // Standard sends nothing, so the server's instructions stay today's bytes.
     ...(input.level && input.level !== "standard" ? { level: input.level } : {}),
+    ...(input.tour ? { mode: "tour", tour: input.tour } : {}),
     messages: forRequest(input.messages),
   };
 }
