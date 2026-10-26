@@ -1,6 +1,6 @@
 import { zValidator } from "@hono/zod-validator";
 import { and, eq, isNull, lt, or } from "drizzle-orm";
-import { Hono } from "hono";
+import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import { clearSessionCookies, setSessionCookies, readSessionToken } from "../auth/cookies.js";
@@ -54,6 +54,27 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Identical for unknown email and wrong password — no account enumeration. */
 const INVALID_CREDENTIALS = { error: "invalid_credentials" } as const;
 
+const inFlight = new Set<string>();
+
+/**
+ * Lets one attempt per key run at a time: run in parallel, every attempt reads the failure
+ * count before any of them records its own, and all of them pass the limit together.
+ * shortcut: per process, which holds while the API runs as one container; with more, reserve
+ * each attempt in the database before counting.
+ */
+function oneAtATime(keyOf: (c: Context) => string): MiddlewareHandler {
+  return async (c, next) => {
+    const key = keyOf(c);
+    if (inFlight.has(key)) return c.json({ error: "rate_limited" }, 429);
+    inFlight.add(key);
+    try {
+      await next();
+    } finally {
+      inFlight.delete(key);
+    }
+  };
+}
+
 export const authRouter = new Hono();
 
 authRouter.use("*", requireTrustedOrigin);
@@ -69,6 +90,7 @@ authRouter.post(
     z.object({ email: z.email().max(200), password: z.string().min(1).max(400) }),
     (result, c) => (result.success ? undefined : c.json({ error: "invalid_input" }, 400)),
   ),
+  oneAtATime((c) => ipBucket(clientIp(c))),
   async (c) => {
     const { email, password } = c.req.valid("json");
     const ip = clientIp(c);
@@ -212,6 +234,7 @@ authRouter.post(
   zValidator("json", z.object({ code: z.string().min(6).max(20) }), (result, c) =>
     result.success ? undefined : c.json({ error: "invalid_input" }, 400),
   ),
+  oneAtATime((c) => totpBucket(c.get("session").userId)),
   async (c) => {
     const session = c.get("session");
     if (!session.pendingTotp) {

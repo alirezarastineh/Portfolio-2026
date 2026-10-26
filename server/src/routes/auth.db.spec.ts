@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app.js";
 import { getDb } from "../db/client.js";
 import { adminSessions, adminUsers } from "../db/schema.js";
+import { IP_EMAIL_LIMIT, TOTP_LIMIT } from "../lib/auth-rate-limit.js";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
@@ -194,6 +195,35 @@ describe("TOTP", () => {
 
     expect((await other.get("/auth/sessions")).status).toBe(401);
     expect((await owner.get("/auth/sessions")).status).toBe(200);
+  });
+});
+
+describe("parallel attempts", () => {
+  /** How many of `n` copies of a request, sent at once, got past the limits. */
+  async function passed(n: number, send: () => Promise<Response>): Promise<number> {
+    const responses = await Promise.all(Array.from({ length: n }, send));
+    return responses.filter((res) => res.status !== 429).length;
+  }
+
+  it("pass no limit: each login or code runs alone", async () => {
+    const owner = new TestClient(app);
+    await owner.login();
+    const { otpauthUri } = await enrolTotp(owner);
+    // Outside the codes valid now, even if a step boundary passes meanwhile.
+    const valid = [-1, 0, 1, 2].map((step) => totpCode(otpauthUri, step));
+    const wrongCode = ["000000", "111111", "222222", "333333", "444444"].find(
+      (code) => !valid.includes(code),
+    );
+
+    const pending = new TestClient(app, "192.0.2.20");
+    await pending.login();
+    expect(
+      await passed(50, () => pending.post("/auth/totp", { code: wrongCode })),
+    ).toBeLessThanOrEqual(TOTP_LIMIT);
+
+    const attacker = new TestClient(app, "198.51.100.67");
+    const login = () => attacker.login(ADMIN_EMAIL, "wrong password!");
+    expect(await passed(30, login)).toBeLessThanOrEqual(IP_EMAIL_LIMIT);
   });
 });
 
