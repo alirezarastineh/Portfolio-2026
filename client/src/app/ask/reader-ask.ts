@@ -38,7 +38,7 @@ export const READER_ASK_COPY: Record<Locale, ReaderAskCopy> = {
     code: { label: "Explain", name: "Explain code block {n}", question: "Explain this code" },
     selection: {
       label: ">_ ask about this",
-      name: "Ask about the selected text",
+      name: "Ask about this selected text",
       question: "What does this mean?",
     },
   },
@@ -51,7 +51,7 @@ export const READER_ASK_COPY: Record<Locale, ReaderAskCopy> = {
     code: { label: "Erklären", name: "Codeblock {n} erklären", question: "Erklär diesen Code" },
     selection: {
       label: ">_ dazu fragen",
-      name: "Zum markierten Text fragen",
+      name: "Dazu fragen: zum markierten Text",
       question: "Was bedeutet das?",
     },
   },

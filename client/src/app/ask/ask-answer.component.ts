@@ -271,7 +271,7 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
               type="button"
               class="feedback press"
               [attr.aria-pressed]="rating() === 1"
-              [attr.aria-label]="copy().helpful"
+              [attr.aria-label]="'+1: ' + copy().helpful"
               [class.text-accent-orange]="rating() === 1"
               (click)="rate(1)"
             >
@@ -281,7 +281,7 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
               type="button"
               class="feedback press"
               [attr.aria-pressed]="rating() === -1"
-              [attr.aria-label]="copy().notHelpful"
+              [attr.aria-label]="'-1: ' + copy().notHelpful"
               [class.text-accent-orange]="rating() === -1"
               (click)="rate(-1)"
             >

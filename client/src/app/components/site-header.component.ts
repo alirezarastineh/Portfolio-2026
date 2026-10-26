@@ -121,14 +121,15 @@ const segment =
 
         <!-- Pinned to the last column: below lg the navigation before it is hidden. -->
         <div class="col-start-3 flex items-center justify-self-end gap-2">
+          <!-- Named by its hidden text, not aria-label: the ⌘K hint is no label (axe's label-in-name). -->
           <button
             type="button"
             [class]="searchClass"
-            [attr.aria-label]="labels().search"
             aria-keyshortcuts="Control+K Meta+K"
             (click)="palette.show()"
           >
             <ng-icon name="lucideSearch" size="15" aria-hidden="true" />
+            <span class="sr-only">{{ labels().search }}</span>
             <kbd class="hidden font-mono text-meta lg:inline" aria-hidden="true">⌘K</kbd>
           </button>
           <!-- The one call to action that is always in view. The CV stays in

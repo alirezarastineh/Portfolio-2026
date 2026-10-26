@@ -967,7 +967,7 @@ test.describe("assistant terminal", () => {
     );
     await page.goto("/en/writing/shipping-rag-to-production");
     await interactive(page);
-    const asks = page.getByRole("button", { name: "Ask about the selected text" });
+    const asks = page.getByRole("button", { name: "Ask about this selected text" });
     await expect(asks).toHaveCount(0);
     await page.locator("app-prose-body p").first().selectText();
     await expect(asks).toBeVisible();
@@ -1661,7 +1661,7 @@ for (const colorScheme of ["dark", "light"] as const) {
       // A section's button on focus, and a selection's.
       await page.getByRole("button", { name: "Ask about this section: Problem" }).focus();
       await page.locator("app-prose-body p").first().selectText();
-      const selectionAsk = page.getByRole("button", { name: "Ask about the selected text" });
+      const selectionAsk = page.getByRole("button", { name: "Ask about this selected text" });
       await expect(selectionAsk).toBeVisible();
       expect(await axeViolations(page)).toEqual([]);
 
