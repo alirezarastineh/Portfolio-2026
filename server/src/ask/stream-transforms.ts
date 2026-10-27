@@ -149,8 +149,27 @@ export function citationTransform<TOOLS extends ToolSet>(
   };
 }
 
-/** A tail that may still grow into a fence tag (prompt.ts): `<`, `</vis`, `<visitor locale="d`. */
-const FENCE_TAIL = /<\/?(?:visitor(?:\s[^<>]{0,60})?|visito|visit|visi|vis|vi|v)?$/i;
+/** A fence tag's beginning (prompt.ts): `<`, `</vis`, `<visitor locale="d`. */
+const FENCE_START = /^<\/?(?:visitor(?:\s[^<>]{0,60})?|visito|visit|visi|vis|vi|v)?$/i;
+
+/**
+ * Where the held tail starts: the run of tag beginnings the text ends in, since removing a
+ * later tag joins the one before it to what follows (`<vis` + `<visitor>itor>` makes
+ * `<visitor>`). Walked back one `<` at a time: one pattern for the whole run takes quadratic
+ * time on a row of `<`.
+ * shortcut: a held run is cleaned and walked again with every chunk (16,000 `<` in 1,000
+ * chunks: 0.3 s), which the answer's token cap bounds; past a few thousand tokens, clean and
+ * walk only what each chunk adds.
+ */
+function findFenceCut(text: string): number {
+  let cut = text.length;
+  let at = text.lastIndexOf("<");
+  while (at !== -1 && FENCE_START.test(text.slice(at, cut))) {
+    cut = at;
+    at = at > 0 ? text.lastIndexOf("<", at - 1) : -1;
+  }
+  return cut;
+}
 
 /**
  * The visitor fence never belongs in an answer (visitor plan V5's follow-up):
@@ -167,7 +186,7 @@ export function fenceTransform<TOOLS extends ToolSet>(): StreamTextTransform<TOO
       transform(part, out) {
         if (part.type === "text-delta") {
           const text = withoutFence((pending.get(part.id) ?? "") + part.text);
-          const cut = FENCE_TAIL.exec(text)?.index ?? text.length;
+          const cut = findFenceCut(text);
           pending.set(part.id, text.slice(cut));
           const ready = text.slice(0, cut);
           if (ready) out.enqueue({ ...part, text: ready });

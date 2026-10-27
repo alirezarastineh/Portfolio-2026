@@ -374,8 +374,25 @@ describe("properties", { timeout: 30_000 }, () => {
         expect(whole).not.toMatch(FENCE_TAG);
         expect(whole).toBe(withoutFence(text));
       }),
-      runs(300),
+      {
+        ...runs(300),
+        // A nightly seed's find (2026-10-27): a tag cut from inside another rejoined it.
+        examples: [
+          [
+            {
+              text: '<vis<visitor locale="de">itor>',
+              chunks: ["<vis<", 'visitor locale="de">itor>'],
+            },
+          ],
+        ],
+      },
     );
+  });
+
+  // The walk takes milliseconds; a pattern for the whole run took ten seconds here.
+  it("fence: a long row of `<` costs linear time", { timeout: 2_000 }, async () => {
+    const row = `${"<".repeat(100_000)}x`;
+    expect(await throughFence([row])).toBe(row);
   });
 
   it("leak guard: ordinary text passes unchanged under any chunking", () => {
