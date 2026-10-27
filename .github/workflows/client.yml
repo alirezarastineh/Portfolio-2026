@@ -275,15 +275,23 @@ jobs:
         id: playwright
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
 
+      # apt's packages too: in three spells in a week, Ubuntu's mirror sent them at
+      # about 46 KB/s, 7 to 11 minutes per Chromium job and over 30 for WebKit.
       - name: Cache the browsers
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cache/ms-playwright
+          path: |
+            ~/.cache/ms-playwright
+            /tmp/apt-archives/*.deb
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
 
-      # The system libraries every time; the browser only when the cache missed.
+      # The system libraries every time, downloaded only where the cache's are out of
+      # date; the browser only when the cache missed.
       - name: Install Chromium
-        run: node_modules/.bin/playwright install --with-deps chromium
+        run: |
+          mkdir -p /tmp/apt-archives/partial
+          echo 'Dir::Cache::Archives "/tmp/apt-archives";' | sudo tee /etc/apt/apt.conf.d/90-ci-archives
+          node_modules/.bin/playwright install --with-deps chromium
 
       # 253 tests, axe included, against the build and a fixture API.
       - name: e2e
@@ -342,15 +350,21 @@ jobs:
         id: playwright
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
 
-      # Restore only: e2e saves the entry, and two jobs saving one key collide.
+      # Restore only: e2e saves the entry, and two jobs saving one key collide. The
+      # paths are e2e's: they are part of the entry's version.
       - name: Restore the browsers
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cache/ms-playwright
+          path: |
+            ~/.cache/ms-playwright
+            /tmp/apt-archives/*.deb
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
 
       - name: Install Chromium
-        run: node_modules/.bin/playwright install --with-deps chromium
+        run: |
+          mkdir -p /tmp/apt-archives/partial
+          echo 'Dir::Cache::Archives "/tmp/apt-archives";' | sudo tee /etc/apt/apt.conf.d/90-ci-archives
+          node_modules/.bin/playwright install --with-deps chromium
 
       # On Playwright's Chromium, the one e2e drives, as on Woodpecker; not the
       # runner's own Chrome.
@@ -415,15 +429,21 @@ jobs:
         id: playwright
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
 
-      # Restore only: e2e saves the entry, and two jobs saving one key collide.
+      # Restore only: e2e saves the entry, and two jobs saving one key collide. The
+      # paths are e2e's: they are part of the entry's version.
       - name: Restore the browsers
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cache/ms-playwright
+          path: |
+            ~/.cache/ms-playwright
+            /tmp/apt-archives/*.deb
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
 
       - name: Install Chromium
-        run: node_modules/.bin/playwright install --with-deps chromium
+        run: |
+          mkdir -p /tmp/apt-archives/partial
+          echo 'Dir::Cache::Archives "/tmp/apt-archives";' | sudo tee /etc/apt/apt.conf.d/90-ci-archives
+          node_modules/.bin/playwright install --with-deps chromium
 
       # The runner's image (ImageOS: ubuntu24) and Playwright's Chromium set the
       # pixels, so they name the set: a new image or Playwright starts a new one.
@@ -526,14 +546,20 @@ jobs:
       - name: Cache the browser
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cache/ms-playwright
+          path: |
+            ~/.cache/ms-playwright
+            /tmp/apt-archives/*.deb
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ matrix.browser }}
 
-      # The system libraries every time; the browser only when the cache missed.
+      # The system libraries every time, downloaded only where the cache's are out of
+      # date (WebKit's are 117 MB); the browser only when the cache missed.
       - name: Install the browser
         env:
           BROWSER: ${{ matrix.browser }}
-        run: node_modules/.bin/playwright install --with-deps "$BROWSER"
+        run: |
+          mkdir -p /tmp/apt-archives/partial
+          echo 'Dir::Cache::Archives "/tmp/apt-archives";' | sudo tee /etc/apt/apt.conf.d/90-ci-archives
+          node_modules/.bin/playwright install --with-deps "$BROWSER"
 
       - name: cross-browser
         id: cross-browser
