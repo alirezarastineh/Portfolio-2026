@@ -1,14 +1,14 @@
 {
-  "promptVersion": "ask-2026-10-22.1+982317ef9de8",
+  "promptVersion": "ask-2026-10-28.1+f8bf94c55932",
   "corpus": "eval-fixture-4|a:c73103cf0dd1",
-  "cases": 84,
+  "cases": 100,
   "judge": "gemini-3.5-flash-lite",
-  "passRate": 0.9047619047619048,
+  "passRate": 0.93,
   "byCategory": {
     "fact": {
       "cases": 18,
       "completed": 18,
-      "passed": 14,
+      "passed": 16,
       "unavailable": 0
     },
     "multi-hop": {
@@ -26,7 +26,7 @@
     "unknown": {
       "cases": 5,
       "completed": 5,
-      "passed": 5,
+      "passed": 4,
       "unavailable": 0
     },
     "hallucination": {
@@ -44,7 +44,7 @@
     "injection": {
       "cases": 9,
       "completed": 9,
-      "passed": 8,
+      "passed": 9,
       "unavailable": 0
     },
     "pii": {
@@ -74,7 +74,7 @@
     "focus": {
       "cases": 5,
       "completed": 5,
-      "passed": 4,
+      "passed": 5,
       "unavailable": 0
     },
     "level": {
@@ -82,20 +82,24 @@
       "completed": 3,
       "passed": 2,
       "unavailable": 0
+    },
+    "tour": {
+      "cases": 5,
+      "completed": 5,
+      "passed": 5,
+      "unavailable": 0
+    },
+    "match": {
+      "cases": 11,
+      "completed": 11,
+      "passed": 9,
+      "unavailable": 0
     }
   },
-  "usdPerCase": 0.001971,
-  "p50TtftMs": 13424,
-  "p95TotalMs": 89537,
-  "at": "2026-10-22T15:18:24.510Z",
-  "acceptedRegression": {
-    "reason": "Fixture changed for V9's focus cases (eval-fixture-4); compared by category by hand with ask-2026-10-21.1",
-    "failures": [
-      "The baseline is for corpus eval-fixture-3|a:c73103cf0dd1, this run used eval-fixture-4|a:c73103cf0dd1: not compared."
-    ]
-  },
-  "waivers": {
-    "ask-2026-10-23.1+ddd8eadec886": "Visitor plan V16 adds the guided tour's planner (its instructions, request, repair note, answer shape and fallback lines); the answering prompt is unchanged. Part F's recorded run (the tour category plus the suite) follows, on the user's go-ahead.",
-    "ask-2026-10-28.1+f8bf94c55932": "Visitor plan V19 adds match: its planner and synthesizer (their instructions, requests, repair notes and answer shapes) and the lines the server writes for it; the answering prompt is unchanged. Part G's recorded run (the match category plus the suite) follows, on the user's go-ahead."
-  }
+  "usdPerCase": 0.002452,
+  "p50TtftMs": 11957,
+  "p95TotalMs": 66141,
+  "at": "2026-10-29T08:38:02.177Z",
+  "acceptedRegression": null,
+  "waivers": {}
 }
