@@ -16,13 +16,15 @@ import { askChain, askConfig } from "./deps.js";
 import { ESCALATED_ROUTE } from "./router.js";
 import {
   DEEP_ROUTE,
+  downgradeVerdict,
   errorRateVerdict,
   faithfulnessVerdict,
+  MATCH_SUBJECT,
   modelSubject,
   TRUST_RULES,
   type Verdict,
 } from "./trust.js";
-import { VISITOR_ANSWER } from "./outcome-rows.js";
+import { MATCH_ROUTE, VISITOR_ANSWER } from "./outcome-rows.js";
 
 /**
  * The trust lifecycle's monitor → demote step (plan phase 14). Nightly, and
@@ -90,6 +92,32 @@ async function deepEndings(db: DbExecutor, since?: Date): Promise<string[]> {
   return rows.map((row) => row.finishReason);
 }
 
+/**
+ * Match's latest runs that wrote rows, newest first (visitor plan V20): how
+ * many rows each showed, and how many its critic made "not published".
+ */
+async function matchRuns(
+  db: DbExecutor,
+  since?: Date,
+): Promise<{ rows: number; downgraded: number }[]> {
+  const conditions: SQL[] = [
+    eq(aiMessages.source, "terminal"),
+    eq(aiMessages.route, MATCH_ROUTE),
+    sql`${aiMessages.trace} -> 'match' ->> 'stop' is null`,
+  ];
+  if (since) conditions.push(gt(aiMessages.createdAt, since));
+  const items = sql`coalesce(${aiMessages.trace} -> 'match' -> 'items', '[]'::jsonb)`;
+  return db
+    .select({
+      rows: sql<number>`(select count(*)::int from jsonb_array_elements(${items}) i where i ->> 'status' is not null)`,
+      downgraded: sql<number>`(select count(*)::int from jsonb_array_elements(${items}) i where (i ->> 'downgraded')::boolean)`,
+    })
+    .from(aiMessages)
+    .where(and(...conditions))
+    .orderBy(desc(aiMessages.createdAt))
+    .limit(TRUST_RULES.matchWindow);
+}
+
 /** How long a refused demotion stays alerted before the same refusal alerts again. */
 const REFUSAL_QUIET_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -149,6 +177,11 @@ export async function runTrustCheck(config: AskConfig = askConfig()): Promise<Tr
     const verdicts: Verdict[] = [...modelVerdicts];
     if (!demoted.has(DEEP_ROUTE)) {
       verdicts.push(errorRateVerdict(DEEP_ROUTE, await deepEndings(tx, since.get(DEEP_ROUTE))));
+    }
+    // Match (visitor plan V20): its critic's downgrades. Demoted, visitors lose it until the
+    // admin reinstates it, whatever its switch says.
+    if (!demoted.has(MATCH_SUBJECT)) {
+      verdicts.push(downgradeVerdict(MATCH_SUBJECT, await matchRuns(tx, since.get(MATCH_SUBJECT))));
     }
 
     const check: TrustCheck = { verdicts, demoted: [], refused: [] };

@@ -1,5 +1,7 @@
 import { QUESTION_FLAGS } from "./checks.js";
 import { FAITHFUL_AT } from "./evals/calibration.js";
+import { MATCH_KINDS, type MatchKind } from "./match/prompt.js";
+import type { AnswerTrace } from "./trace.js";
 import { isoWeek, weekBounds } from "./reviews.js";
 import { FEEDBACK_REASONS, type AnswerSignals, type FeedbackReason } from "./signals.js";
 
@@ -252,6 +254,53 @@ export interface TourCounts {
 export function tourCounts(rows: readonly { signals: AnswerSignals | null }[]): TourCounts {
   const finished = rows.filter((row) => row.signals?.tourDone === true).length;
   return { started: rows.length, finished, finishedRate: share(finished, rows.length) };
+}
+
+/**
+ * Matched briefs (visitor plan V20), no answers either: the runs of each kind
+ * and how many the visitor took to the hand-off; the rows shown and those the
+ * critic made "not published" (the trust check's measure); and the items
+ * nothing published covers, careful ones and downgrades left out: the content
+ * gaps Insights reads.
+ */
+export interface MatchCounts {
+  runs: number;
+  byKind: Record<MatchKind, { runs: number; handoffs: number; handoffRate: number | null }>;
+  rows: number;
+  downgraded: number;
+  downgradedRate: number | null;
+  gaps: number;
+}
+
+export function matchCounts(
+  rows: readonly { match: AnswerTrace["match"] | null; handoffConfirmed: boolean }[],
+): MatchCounts {
+  const tally = new Map(MATCH_KINDS.map((kind) => [kind, { runs: 0, handoffs: 0 }]));
+  let shown = 0;
+  let downgraded = 0;
+  let gaps = 0;
+  for (const { match, handoffConfirmed } of rows) {
+    const kind = match && tally.get(match.kind);
+    if (!kind) continue;
+    kind.runs++;
+    if (handoffConfirmed) kind.handoffs++;
+    for (const item of match.items) {
+      if (item.status !== null) shown++;
+      if (item.downgraded) downgraded++;
+      else if (item.status === "not-published" && !item.careful) gaps++;
+    }
+  }
+  const byKind = Object.fromEntries(
+    [...tally].map(([kind, t]) => [kind, { ...t, handoffRate: share(t.handoffs, t.runs) }]),
+  ) as MatchCounts["byKind"];
+  return {
+    runs: [...tally.values()].reduce((sum, t) => sum + t.runs, 0),
+    byKind,
+    rows: shown,
+    downgraded,
+    downgradedRate: share(downgraded, shown),
+    gaps,
+  };
 }
 
 export const PRIMARY_METRICS = [

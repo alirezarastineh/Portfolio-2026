@@ -2,11 +2,12 @@ import { generateText, Output } from "ai";
 import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import type { Locale } from "../content/schema.js";
 import { getDb } from "../db/client.js";
 import { aiFeedback, aiInsightSnapshots, aiMessages } from "../db/schema.js";
 import type { AskConfig } from "./config.js";
 import { oneShot } from "./one-shot.js";
-import { UNKNOWN_ANSWER, VISITOR_ANSWER } from "./outcome-rows.js";
+import { MATCH_ROUTE, UNKNOWN_ANSWER, VISITOR_ANSWER } from "./outcome-rows.js";
 import { wrapVisitor } from "./prompt.js";
 import { summarizeCalls } from "./usage.js";
 
@@ -52,23 +53,45 @@ const MAX_QUESTIONS = 300;
 /** The answers' 90 days, less the oldest question a run can quote, less the nightly prune's day. */
 const RETENTION_MS = (90 - WINDOW_DAYS - 1) * DAY_MS;
 
-/** The questions an insights run reads, newest first. */
+/**
+ * The questions an insights run reads, newest first: the visitors' questions,
+ * and each item of their briefs that nothing published covers (visitor plan
+ * V20), as a question not answered. A careful item is no gap in the work, and
+ * one the critic downgraded may be covered after all: both are left out.
+ */
 export async function insightQuestions() {
-  return getDb()
-    .select({
-      id: aiMessages.id,
-      locale: aiMessages.locale,
-      question: aiMessages.questionRedacted,
-      unknown: sql<boolean>`${UNKNOWN_ANSWER}`,
-      down: sql<boolean>`coalesce(${aiFeedback.value} = -1, false)`,
-    })
-    .from(aiMessages)
-    .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
-    .where(
-      and(gte(aiMessages.createdAt, new Date(Date.now() - WINDOW_DAYS * DAY_MS)), VISITOR_ANSWER),
-    )
-    .orderBy(desc(aiMessages.createdAt))
-    .limit(MAX_QUESTIONS);
+  const since = new Date(Date.now() - WINDOW_DAYS * DAY_MS);
+  const [asked, { rows: gaps }] = await Promise.all([
+    getDb()
+      .select({
+        id: aiMessages.id,
+        locale: aiMessages.locale,
+        question: aiMessages.questionRedacted,
+        unknown: sql<boolean>`${UNKNOWN_ANSWER}`,
+        down: sql<boolean>`coalesce(${aiFeedback.value} = -1, false)`,
+        at: aiMessages.createdAt,
+      })
+      .from(aiMessages)
+      .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
+      .where(and(gte(aiMessages.createdAt, since), VISITOR_ANSWER))
+      .orderBy(desc(aiMessages.createdAt))
+      .limit(MAX_QUESTIONS),
+    getDb().execute<{ id: string; locale: Locale; question: string; at: Date | string }>(sql`
+      select m.id, m.locale, i ->> 'text' as question, m.created_at as at
+      from ai_messages m
+      cross join lateral jsonb_array_elements(coalesce(m.trace -> 'match' -> 'items', '[]'::jsonb)) as i
+      where m.source = 'terminal' and m.route = ${MATCH_ROUTE} and m.created_at >= ${since}
+        and i ->> 'status' = 'not-published' and i ->> 'careful' is null
+        and i ->> 'downgraded' is null and i ->> 'text' is not null
+      order by m.created_at desc
+      limit ${MAX_QUESTIONS}`),
+  ]);
+  return [
+    ...asked,
+    ...gaps.map((gap) => ({ ...gap, at: new Date(gap.at), unknown: true, down: false })),
+  ]
+    .sort((a, b) => b.at.getTime() - a.at.getTime())
+    .slice(0, MAX_QUESTIONS);
 }
 
 export type InsightRun =

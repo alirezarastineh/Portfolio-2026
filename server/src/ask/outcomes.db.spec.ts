@@ -26,6 +26,7 @@ interface OutcomesView {
   outcomes: Record<string, unknown>;
   browser: Record<string, unknown>;
   tours: { started: number; finished: number; finishedRate: number | null };
+  matches: Record<string, unknown>;
   primary: { metric: string; weeks: { week: string; value: number | null }[]; rotate: boolean };
   metrics: string[];
 }
@@ -220,7 +221,7 @@ describe("the assistant's outcomes", () => {
     expect(result.outcomes).toEqual(before);
   });
 
-  it("never counts a matched brief as an answer (visitor plan V19)", async () => {
+  it("counts matched briefs per kind with their hand-offs and downgrades, never as answers (visitor plan V19, V20)", async () => {
     await seed();
     const before = (await view()).outcomes;
     await getDb()
@@ -238,8 +239,41 @@ describe("the assistant's outcomes", () => {
         questionRedacted: "Senior AI engineer: RAG in production.",
         answerExcerpt: "Published evidence for 1 of 1 requirement.",
         handoffConfirmedAt: new Date(),
+        trace: {
+          v: 1,
+          steps: [],
+          match: {
+            kind: "role",
+            items: [
+              { text: "RAG", priority: "must", status: "evidence", hits: ["project:atlas@en"] },
+              { text: "Rust", priority: "nice", status: "not-published", hits: [] },
+              { text: "Go", priority: "nice", status: "not-published", hits: [], downgraded: true },
+              {
+                text: "Budget",
+                priority: "must",
+                status: "not-published",
+                hits: [],
+                careful: true,
+              },
+            ],
+            repaired: { plan: false, rows: true },
+          },
+        },
       });
-    expect((await view()).outcomes).toEqual(before);
+    const result = await view();
+    expect(result.outcomes).toEqual(before);
+    expect(result.matches).toEqual({
+      runs: 1,
+      byKind: {
+        role: { runs: 1, handoffs: 1, handoffRate: 1 },
+        project: { runs: 0, handoffs: 0, handoffRate: null },
+        problem: { runs: 0, handoffs: 0, handoffRate: null },
+      },
+      rows: 4,
+      downgraded: 1,
+      downgradedRate: 0.25,
+      gaps: 1,
+    });
   });
 
   it("switches the primary metric, and refuses one it does not know", async () => {

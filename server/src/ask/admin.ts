@@ -56,6 +56,7 @@ import { capsOf, configuredModels, excludedModels, type ChainRole } from "./mode
 import {
   browserView,
   completedWeeks,
+  matchCounts,
   outcomes,
   PRIMARY_METRICS,
   shouldRotate,
@@ -101,6 +102,7 @@ import { faqProposalsRouter } from "./agent/faq-routes.js";
 import { proposalsRouter } from "./agent/routes.js";
 import { faqInput, insertFaq } from "./faq.js";
 import { skillsRouter } from "./skills/routes.js";
+import type { AnswerTrace } from "./trace.js";
 import { trustRouter } from "./trust-routes.js";
 import { recordUsage } from "./usage.js";
 
@@ -544,6 +546,8 @@ adminAskRouter.get("/assistant/conversations", async (c) => {
     conditions.push(sql`jsonb_array_length(${aiMessages.droppedCitations}) > 0`);
   }
   if (filter === "flagged") conditions.push(FLAGGED);
+  // Matched briefs (visitor plan V20): their kind and rows are in the trace.
+  if (filter === "match") conditions.push(eq(aiMessages.route, MATCH_ROUTE));
 
   const rows = await getDb()
     .select(CONVERSATION_ROW)
@@ -717,6 +721,20 @@ adminAskRouter.get("/assistant/outcomes", async (c) => {
         gte(aiMessages.createdAt, since),
       ),
     );
+  // Matched briefs (visitor plan V20): each kind's runs and hand-offs, the critic's downgrades.
+  const matches = await db
+    .select({
+      match: sql<AnswerTrace["match"] | null>`${aiMessages.trace} -> 'match'`,
+      handoffConfirmed: sql<boolean>`${aiMessages.handoffConfirmedAt} is not null`,
+    })
+    .from(aiMessages)
+    .where(
+      and(
+        eq(aiMessages.source, "terminal"),
+        eq(aiMessages.route, MATCH_ROUTE),
+        gte(aiMessages.createdAt, since),
+      ),
+    );
 
   const { primaryMetric } = await readAiSettings();
   const weekly = weeklyValues(rows, primaryMetric, weeks);
@@ -727,6 +745,7 @@ adminAskRouter.get("/assistant/outcomes", async (c) => {
     // What the visitors' browsers saw, and why the 👎s (visitor plan V2).
     browser: browserView(recent),
     tours: tourCounts(tours),
+    matches: matchCounts(matches),
     primary: {
       metric: primaryMetric,
       weeks: weekly,

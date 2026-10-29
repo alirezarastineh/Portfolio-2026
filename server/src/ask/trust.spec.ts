@@ -10,6 +10,7 @@ import { MCP_TOOL_NAMES } from "./mcp/tools.js";
 import { buildTools, TOOL_NAMES } from "./tools.js";
 import { nextCheckAt, startTrustMonitor, stopTrustMonitor } from "./trust-monitor.js";
 import {
+  downgradeVerdict,
   errorRateVerdict,
   faithfulnessVerdict,
   modelSubject,
@@ -38,6 +39,26 @@ describe("the trust registry (plan phase 14)", () => {
       "publish",
     ]);
     expect(TRUST_REGISTRY.some((e) => e.level === "L3")).toBe(false);
+  });
+
+  it("demotes match past a fifth of its rows downgraded over 20 runs that wrote rows (visitor plan V20)", () => {
+    const run = (rows: number, downgraded: number) => ({ rows, downgraded });
+    expect(downgradeVerdict("feature:match", Array(19).fill(run(5, 0)))).toMatchObject({
+      verdict: "too-little",
+      n: 19,
+    });
+    // A stopped run (no rows) is no evidence.
+    const atCeiling = [...Array(20).fill(run(5, 1)), run(0, 0)];
+    expect(downgradeVerdict("feature:match", atCeiling)).toMatchObject({
+      verdict: "keep",
+      value: 0.2,
+      n: 20,
+    });
+    const over = [run(5, 2), ...Array(19).fill(run(5, 1))];
+    expect(downgradeVerdict("feature:match", over)).toMatchObject({
+      verdict: "demote",
+      value: 0.21,
+    });
   });
 
   it("lets match only list a brief's items and write cited rows, both checked by code (visitor plan V19)", () => {

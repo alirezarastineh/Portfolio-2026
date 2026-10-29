@@ -672,4 +672,59 @@ describe("admin assistant API", () => {
     const spent = await getDb().select().from(aiUsageFeatures);
     expect(spent.map((r) => r.feature)).toEqual(["insights"]);
   });
+
+  it("reads each brief's item nothing published covers as a question not answered (visitor plan V20)", async () => {
+    await getDb()
+      .insert(aiMessages)
+      .values({
+        id: "m_match00001",
+        sessionHash: "s",
+        locale: "en",
+        route: "match",
+        questionRedacted: "Embedded engineer: C firmware, RAG, a budget.",
+        answerExcerpt: "Published evidence for 1 of 4 requirements.",
+        totalMs: 1,
+        tokens: { input: 1, cached: 0, output: 1, thoughts: 0 },
+        finishReason: "stop",
+        promptVersion: "p",
+        trace: {
+          v: 1,
+          steps: [],
+          match: {
+            kind: "role",
+            items: [
+              { text: "RAG", priority: "must", status: "evidence", hits: ["project:atlas@en"] },
+              { text: "Embedded C firmware", priority: "must", status: "not-published", hits: [] },
+              {
+                text: "Budget: €40,000",
+                priority: "must",
+                status: "not-published",
+                hits: [],
+                careful: true,
+              },
+              {
+                text: "Go services",
+                priority: "nice",
+                status: "not-published",
+                hits: [],
+                downgraded: true,
+              },
+            ],
+            repaired: { plan: false, rows: true },
+          },
+        },
+      });
+    models.insight = generating([JSON.stringify({ topics: [] })]);
+    const res = await admin.post("/admin/assistant/insights");
+    expect(((await res.json()) as { analysed: number }).analysed).toBe(1);
+    const prompt = JSON.stringify(models.insight.calls[0]!.prompt);
+    expect(prompt).toContain(
+      '<visitor locale=\\"en\\">Embedded C firmware</visitor> [not answered]',
+    );
+    // A careful item is no gap in the work, and a downgraded one may be covered after all.
+    expect(prompt).not.toContain("Budget");
+    expect(prompt).not.toContain("Go services");
+    // The brief itself is no question an answer had.
+    expect(prompt).not.toContain("Embedded engineer:");
+  });
 });

@@ -166,6 +166,46 @@ describe("POST /v1/ask/forget (visitor plan V14)", () => {
     expect(kept).toMatchObject({ question: "Is he open to contract work?", fromMessageId: null });
   });
 
+  it("removes the insights runs' quotes of its briefs' items too (visitor plan V20)", async () => {
+    await getDb()
+      .insert(aiMessages)
+      .values(
+        row("m_forget_match01", mine, "Embedded engineer: C firmware.", {
+          route: "match",
+          trace: {
+            v: 1,
+            steps: [],
+            match: {
+              kind: "role",
+              items: [
+                {
+                  text: "Embedded C firmware",
+                  priority: "must",
+                  status: "not-published",
+                  hits: [],
+                },
+              ],
+              repaired: { plan: false, rows: false },
+            },
+          },
+        }),
+      );
+    const topics = [
+      {
+        title: "Firmware",
+        summary: "Embedded work",
+        questions: 2,
+        examples: ["embedded  c FIRMWARE", "Kubernetes on bare metal"],
+        unanswered: true,
+      },
+    ];
+    await getDb().insert(aiInsightSnapshots).values({ trigger: "admin", analysed: 2, topics });
+
+    await forget(MINE);
+    const [snapshot] = await getDb().select().from(aiInsightSnapshots);
+    expect(snapshot!.topics).toEqual([{ ...topics[0], examples: ["Kubernetes on bare metal"] }]);
+  });
+
   it("removes the insights runs' quotes of its questions, in case and spacing as quoted, and no other", async () => {
     await getDb()
       .insert(aiMessages)

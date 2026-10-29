@@ -3,7 +3,7 @@ import { asc, sql } from "drizzle-orm";
 
 import { createApp } from "../app.js";
 import { getDb, getPool } from "../db/client.js";
-import { aiAudit, aiMessages } from "../db/schema.js";
+import { aiAudit, aiMessages, aiSettings } from "../db/schema.js";
 import {
   eventually,
   fixtureConfig,
@@ -20,6 +20,7 @@ import { resetBreakers } from "./models/circuit.js";
 import { PROMPT_CANARY, SYSTEM_PROMPT } from "./prompt.js";
 import type { ChainRole } from "./models/registry.js";
 import { invalidateAssistantCache } from "./settings.js";
+import type { AnswerTrace } from "./trace.js";
 import { TRUST_RULES } from "./trust.js";
 
 /**
@@ -103,6 +104,8 @@ async function seed(
     judged?: number;
     /** Which run judged it, and why it was picked (plan phase 26); absent on older verdicts. */
     judgedAs?: { source: "calibration" | "nightly"; pick?: "sample" | "flagged" };
+    /** A match's trace (visitor plan V20). */
+    trace?: AnswerTrace;
   },
 ) {
   const start = Date.now() - (count + 1) * 60_000;
@@ -123,6 +126,7 @@ async function seed(
           finishReason: r.finishReason ?? "stop",
           promptVersion: "p",
           model: r.model ?? "gemini-3.5-flash-lite",
+          trace: r.trace ?? null,
           judge:
             r.judged === undefined
               ? null
@@ -197,8 +201,9 @@ describe("the trust monitor", () => {
     await seed(TRUST_RULES.judgedMinimum, () => ({ judged: 0.5 }));
 
     const check = await admin.post("/admin/assistant/trust/check", {});
+    // Three models, the deep route and match (visitor plan V20).
     expect(await check.json()).toEqual({
-      checked: 4,
+      checked: 5,
       demoted: ["model:gemini-3.5-flash-lite"],
       refused: [],
     });
@@ -229,7 +234,7 @@ describe("the trust monitor", () => {
 
     // While it is demoted, a check leaves it alone: no second demotion, no second alert.
     expect(await (await admin.post("/admin/assistant/trust/check", {})).json()).toEqual({
-      checked: 3,
+      checked: 4,
       demoted: [],
       refused: [],
     });
@@ -282,6 +287,69 @@ describe("the trust monitor", () => {
       return found;
     });
     expect(row).toMatchObject({ route: "lite", model: "gemini-3.5-flash-lite" });
+  });
+
+  it("closes match after its critic downgraded more than a fifth of its rows, until the admin reinstates it (visitor plan V20)", async () => {
+    await getDb()
+      .insert(aiSettings)
+      .values({ id: 1, featureSwitches: { match: true } });
+    invalidateAssistantCache();
+    const rows = (downgraded: number): NonNullable<AnswerTrace["match"]>["items"] =>
+      Array.from({ length: 5 }, (_, k) =>
+        k < downgraded
+          ? {
+              text: `item ${k}`,
+              priority: "must",
+              status: "not-published",
+              hits: [],
+              downgraded: true,
+            }
+          : { text: `item ${k}`, priority: "must", status: "evidence", hits: [] },
+      );
+    // 21 of the latest 20 runs' 100 rows downgraded (21 %); the newest run stopped and says nothing.
+    await seed(21, (i) => ({
+      route: "match",
+      trace: {
+        v: 1,
+        steps: [],
+        match:
+          i === 20
+            ? {
+                kind: "role",
+                items: [],
+                repaired: { plan: false, rows: false },
+                stop: "unavailable",
+              }
+            : { kind: "role", items: rows(i === 0 ? 2 : 1), repaired: { plan: false, rows: true } },
+      },
+    }));
+    expect(await (await admin.post("/admin/assistant/trust/check", {})).json()).toMatchObject({
+      demoted: ["feature:match"],
+    });
+    const [demotion] = (await auditRows()).filter((r) => r.action === "demote");
+    expect(demotion).toMatchObject({ target: "feature:match", alert: true });
+    expect(demotion!.reason).toContain("downgraded 21 of 100 rows over 20 runs");
+
+    expect(await (await app.request("/v1/ask/config")).json()).toMatchObject({ match: false });
+    const brief = await app.request("/v1/ask", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": "198.51.100.200" },
+      body: JSON.stringify({
+        sessionId: "trust-match-session-0001",
+        locale: "en",
+        mode: "match",
+        match: { kind: "role", brief: "RAG in production" },
+        messages: [{ id: "u_match", role: "user", parts: [{ type: "text", text: "match role" }] }],
+      }),
+    });
+    expect(brief.status).toBe(503);
+    expect(await brief.json()).toEqual({ error: "feature_off" });
+
+    const reinstated = await admin.post("/admin/assistant/trust/reinstate", {
+      subject: "feature:match",
+    });
+    expect(reinstated.status).toBe(200);
+    expect(await (await app.request("/v1/ask/config")).json()).toMatchObject({ match: true });
   });
 
   it("counts the answers that moved up to the deep route mid-way as the deep route's", async () => {

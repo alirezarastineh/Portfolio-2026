@@ -55,7 +55,7 @@ import { assistantState, type AiSettings } from "./settings.js";
 import { FEEDBACK_REASONS, SignalLimiter, signalsSchema } from "./signals.js";
 import { OFFERED_HANDOFF } from "./outcome-rows.js";
 import { streamTour, tourRequestSchema, type TourRequestBody } from "./tour.js";
-import { DEEP_ROUTE, withoutDemoted } from "./trust.js";
+import { DEEP_ROUTE, MATCH_SUBJECT, withoutDemoted } from "./trust.js";
 
 /**
  * The public assistant API:
@@ -201,7 +201,9 @@ type VisitorFeature = "terminal" | "match";
 
 /**
  * Whether a visitor's request may spend now, and if not, what it is counted
- * as and answered with: the feature's availability.
+ * as and answered with: the feature's availability, and for a match its
+ * demotion by the trust check (visitor plan V20), off until the admin
+ * reinstates it.
  */
 async function spendState(
   feature: VisitorFeature,
@@ -214,6 +216,9 @@ async function spendState(
   if (state.state !== "ok") {
     const error = feature === "match" ? refusal(state) : `assistant_${state.state}`;
     return { ok: false, event: state.state, error };
+  }
+  if (feature === "match" && (await demotedSubjects()).has(MATCH_SUBJECT)) {
+    return { ok: false, event: "off", error: "feature_off" };
   }
   return { ok: true, deepAllowed: state.deepAllowed };
 }
@@ -547,17 +552,21 @@ export function createAskRouter(): Hono {
     const config = askConfig();
     const { settings } = await assistantState();
     const state = await availability(config, settings, "terminal");
+    const demoted = await demotedSubjects();
     c.header("Cache-Control", "no-store");
     return c.json({
       state: state.state,
-      deep: state.state === "ok" && state.deepAllowed && !(await demotedSubjects()).has(DEEP_ROUTE),
+      deep: state.state === "ok" && state.deepAllowed && !demoted.has(DEEP_ROUTE),
       suggestions: settings.suggestedQuestions,
       limits: { maxChars: config.maxMessageChars, historyTurns: config.historyTurns },
       model: shortName(config.gemini.model),
       // Whether `evals` is offered (visitor plan V13): the scorecard is the admin's to publish.
       scorecard: settings.publicScorecard,
-      // Whether `match` is offered (visitor plan V19): its switch, its cap, the budget.
-      match: (await availability(config, settings, "match")).state === "ok",
+      // Whether `match` is offered (visitor plan V19): its switch, its cap, the budget, and
+      // not demoted by the trust check (V20).
+      match:
+        !demoted.has(MATCH_SUBJECT) &&
+        (await availability(config, settings, "match")).state === "ok",
     });
   });
 

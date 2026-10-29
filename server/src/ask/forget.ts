@@ -2,13 +2,14 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { getDb } from "../db/client.js";
 import { aiMessages } from "../db/schema.js";
+import { MATCH_ROUTE } from "./outcome-rows.js";
 
 /**
  * `forget` (visitor plan V14): a visitor deletes what the log keeps of their
  * tab's conversation, by the salted hashes of its session ids (the current
  * one, and those before the tab's `reset`s). One transaction:
- * first the insights runs' quotes of the session's questions (a topic keeps
- * up to three verbatim), matched while those questions are still there, then
+ * first the insights runs' quotes of the session's questions and its briefs'
+ * items (a topic keeps up to three verbatim), matched while those questions are still there, then
  * the session's answers, and with them, by cascade, their feedback and its
  * reason and their reviews; the browser's signals are a column of the answer.
  *
@@ -59,11 +60,21 @@ export async function forgetSessions(
   );
   return getDb().transaction(async (tx) => {
     // A quote may differ from the question in case and spacing only: both are compared so.
+    // A match's items join the questions (visitor plan V20): insights read them as questions.
     await tx.execute(sql`
       with gone as (
-        select array_agg(distinct lower(regexp_replace(btrim(question_redacted), '\\s+', ' ', 'g'))) as quotes
-        from ai_messages
-        where session_hash in (${sessions}) and source = 'terminal'
+        select array_agg(distinct lower(regexp_replace(btrim(q), '\\s+', ' ', 'g'))) as quotes
+        from (
+          select question_redacted as q
+          from ai_messages
+          where session_hash in (${sessions}) and source = 'terminal'
+          union all
+          select i ->> 'text'
+          from ai_messages m
+          cross join lateral jsonb_array_elements(coalesce(m.trace -> 'match' -> 'items', '[]'::jsonb)) as i
+          where m.session_hash in (${sessions}) and m.source = 'terminal' and m.route = ${MATCH_ROUTE}
+            and i ->> 'text' is not null
+        ) as asked
       )
       update ai_insight_snapshots s
       set topics = (

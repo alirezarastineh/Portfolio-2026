@@ -323,11 +323,15 @@ export const TRUST_RULES = {
   deepErrorCeiling: 0.2,
   /** …over its latest answers, given this many. */
   deepWindow: 30,
+  /** Match's share of rows its critic made "not published" must stay at or below this… */
+  matchDowngradeCeiling: 0.2,
+  /** …over its latest runs that wrote rows, given this many (visitor plan V20). */
+  matchWindow: 20,
 } as const;
 
 /** What the monitor concluded about one subject, and on what evidence. */
 export interface Verdict {
-  /** `model:<id>` or `route:deep`. */
+  /** `model:<id>`, `route:deep` or `feature:match`. */
   subject: string;
   verdict: "demote" | "keep" | "too-little";
   /** The measure (faithfulness, or the failed share); null without enough evidence. */
@@ -387,8 +391,41 @@ export function errorRateVerdict(subject: string, finishReasons: readonly string
   };
 }
 
+/**
+ * Match's verdict from its latest runs' rows, newest first (visitor plan V20):
+ * the share its critic downgraded, a run that stopped before its rows left out.
+ */
+export function downgradeVerdict(
+  subject: string,
+  runs: readonly { rows: number; downgraded: number }[],
+): Verdict {
+  const counted = runs.filter((run) => run.rows > 0).slice(0, TRUST_RULES.matchWindow);
+  const n = counted.length;
+  if (n < TRUST_RULES.matchWindow) {
+    return {
+      subject,
+      verdict: "too-little",
+      value: null,
+      n,
+      evidence: `${n} runs; ${TRUST_RULES.matchWindow} needed`,
+    };
+  }
+  const rows = counted.reduce((sum, run) => sum + run.rows, 0);
+  const downgraded = counted.reduce((sum, run) => sum + run.downgraded, 0);
+  const rate = downgraded / rows;
+  return {
+    subject,
+    verdict: rate > TRUST_RULES.matchDowngradeCeiling ? "demote" : "keep",
+    value: rate,
+    n,
+    evidence: `the critic downgraded ${downgraded} of ${rows} rows over ${n} runs (${Math.round(rate * 100)} %; ceiling ${TRUST_RULES.matchDowngradeCeiling * 100} %)`,
+  };
+}
+
 export const modelSubject = (id: string) => `model:${id}`;
 export const DEEP_ROUTE = "route:deep";
+/** Match, demoted: closed to visitors until the admin reinstates it, whatever its switch says. */
+export const MATCH_SUBJECT = "feature:match";
 
 /**
  * A chain without its demoted models, but never an empty one: when every
