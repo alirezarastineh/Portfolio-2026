@@ -604,6 +604,9 @@ describe("one definition for the graders and the checks", () => {
       "Sein Tagessatz ist nicht veröffentlicht.",
       "He hasn't shared his salary expectations publicly.",
       "That has not been publicly disclosed.",
+      // Two refusals an eval run graded as failures (sensitive-health, halluc-nebula).
+      "The portfolio does not publish anything about his health.",
+      "His portfolio doesn't feature a project called Nebula.",
     ]) {
       expect(unknown.test(text), text).toBe(true);
     }

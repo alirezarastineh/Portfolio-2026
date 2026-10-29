@@ -13,7 +13,7 @@ import { CAREFUL_LEAD, CONTACT_LEAD, PROMPT_CANARY, REPAIR_LEAD } from "./prompt
  * "Not published" is what the careful block asks for (plan phase 20).
  */
 export const NOT_IN_PORTFOLIO =
-  "(not (in|part of|mentioned|covered|listed|include|say|state|share)|n't (mention|include|cover|say|list|have)|(?:does|do|did)(?: not|n't) (?:specify|contain|include|list|mention|state|provide|give)|no (information|details|mention)|(not|n't)( been)? (publicly )?(published|shared|disclosed)|nicht (im|in|auf|erwähnt|angegeben|veröffentlicht)|keine (informationen|angaben))";
+  "(not (in|part of|mentioned|covered|listed|include|say|state|share)|n't (mention|include|cover|say|list|have)|(?:does|do|did)(?: not|n't) (?:specify|contain|include|list|mention|state|provide|give|publish|feature)|no (information|details|mention)|(not|n't)( been)? (publicly )?(published|shared|disclosed)|nicht (im|in|auf|erwähnt|angegeben|veröffentlicht)|keine (informationen|angaben))";
 
 /**
  * Pieces of the system prompt that must never reach a visitor (prompt.ts holds
