@@ -6,6 +6,7 @@ describe("trust in the admin", () => {
   it("names what was demoted, and each level", () => {
     expect(subjectLabel("model:gemini-3.7-flash")).toBe("the model gemini-3.7-flash");
     expect(subjectLabel("route:deep")).toBe("the deep route");
+    expect(subjectLabel("feature:match")).toBe("match a brief");
     expect(levelLabel("L0")).toBe("suggests; a person approves each one");
     expect(levelLabel("human")).toBe("people only");
   });
@@ -31,6 +32,20 @@ describe("trust in the admin", () => {
       }),
     ).toBe(
       "A model is demoted when its judged faithfulness falls below 0.8 over its last 50 judged answers (given 20); the deep route when more than 20 % of its last 30 answers failed.",
+    );
+    // Match's rule (visitor plan V20), from an API that sends it.
+    expect(
+      rulesLine({
+        faithfulnessFloor: 0.8,
+        judgedWindow: 50,
+        judgedMinimum: 20,
+        deepErrorCeiling: 0.2,
+        deepWindow: 30,
+        matchDowngradeCeiling: 0.2,
+        matchWindow: 20,
+      }),
+    ).toContain(
+      "; match when its critic takes back more than 20 % of the rows of its last 20 runs.",
     );
   });
 

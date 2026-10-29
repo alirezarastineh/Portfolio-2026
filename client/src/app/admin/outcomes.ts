@@ -54,6 +54,8 @@ export interface OutcomesView {
   browser?: BrowserView;
   /** The guided tours (visitor plan V16); absent from an older API. */
   tours?: TourCounts;
+  /** Matched briefs (visitor plan V20); absent from an older API. */
+  matches?: MatchCounts;
   primary: {
     metric: PrimaryMetric;
     weeks: { week: string; value: number | null }[];
@@ -138,6 +140,43 @@ export function tourLine(t: TourCounts): string {
   return t.started
     ? `${planned}, ${t.finished} taken to the last stop (${share(t.finishedRate)})`
     : "No tour planned yet";
+}
+
+/**
+ * Matched briefs (visitor plan V20, `matchCounts`): each kind's runs and how many the
+ * visitor took to the hand-off; the rows shown and those the critic took back (the
+ * trust check's measure); the items nothing published covers, which Insights reads.
+ */
+export interface MatchCounts {
+  runs: number;
+  byKind: Record<
+    "role" | "project" | "problem",
+    { runs: number; handoffs: number; handoffRate: number | null }
+  >;
+  rows: number;
+  downgraded: number;
+  downgradedRate: number | null;
+  gaps: number;
+}
+
+/** "roles 4 → 1 hand-off (25 %), projects 2 → 0 (0 %), problems none"; or that none ran. */
+export function matchLine(m: MatchCounts): string {
+  if (!m.runs) return "No brief matched yet";
+  const kinds = (["role", "project", "problem"] as const).map((kind) => {
+    const k = m.byKind[kind];
+    if (!k.runs) return `${kind}s none`;
+    const handoffs = k.handoffs === 1 ? "1 hand-off" : `${k.handoffs} hand-offs`;
+    return `${kind}s ${k.runs} → ${handoffs} (${share(k.handoffRate)})`;
+  });
+  return kinds.join(", ");
+}
+
+/** "12 rows, 2 taken back by the critic (17 %); 3 items nothing published covers". */
+export function matchRowsLine(m: MatchCounts): string {
+  const rows = m.rows === 1 ? "1 row" : `${m.rows} rows`;
+  const gaps =
+    m.gaps === 1 ? "1 item nothing published covers" : `${m.gaps} items nothing published covers`;
+  return `${rows}, ${m.downgraded} taken back by the critic (${share(m.downgradedRate)}); ${gaps}`;
 }
 
 /** Offered → confirmed → sent, with the share that made each step. */

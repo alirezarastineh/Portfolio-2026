@@ -5,6 +5,7 @@ import type { Locale } from "../content/schema";
 /** What spends model money, as the server records it (`server/src/ask/features.ts`). */
 export type SpendFeature =
   | "terminal"
+  | "match"
   | "playground"
   | "copilot"
   | "insights"
@@ -16,12 +17,12 @@ export type SpendFeature =
   | "embeddings"
   | "nightlyJudge";
 
-/** Everything but the terminal: fenced by the visitors' reserve and its own cap. */
+/** Everything but the terminal: its own cap, and but for match the visitors' reserve. */
 export type FencedFeature = Exclude<SpendFeature, "terminal">;
 
 /** The features the admin can switch off. */
 export type SwitchedFeature =
-  "copilot" | "judge" | "autoInsights" | "agent" | "embeddings" | "nightlyJudge";
+  "match" | "copilot" | "judge" | "autoInsights" | "agent" | "embeddings" | "nightlyJudge";
 
 export interface AssistantSettings {
   enabled: boolean;
@@ -153,6 +154,9 @@ export interface TrustRules {
   judgedMinimum: number;
   deepErrorCeiling: number;
   deepWindow: number;
+  /** Match's rule (visitor plan V20); absent from an older API. */
+  matchDowngradeCeiling?: number;
+  matchWindow?: number;
 }
 
 export interface TrustView {
@@ -299,6 +303,12 @@ export interface TraceStep {
 export interface AnswerTrace {
   v: 1;
   steps: TraceStep[];
+  /** A matched brief (visitor plan V20): its kind, each item's status, why it stopped. */
+  match?: {
+    kind: "role" | "project" | "problem";
+    items: { text: string; status: string | null; careful?: true; downgraded?: true }[];
+    stop?: "empty" | "unavailable";
+  };
 }
 
 export interface ConversationRow {
@@ -329,7 +339,8 @@ export interface ConversationRow {
   feedback: 1 | -1 | null;
 }
 
-export type ConversationFilter = "all" | "down" | "unknown" | "failed" | "dropped" | "flagged";
+export type ConversationFilter =
+  "all" | "down" | "unknown" | "failed" | "dropped" | "flagged" | "match";
 
 export interface FaqEntry {
   id: string;

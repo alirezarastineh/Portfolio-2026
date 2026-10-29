@@ -17,6 +17,7 @@ import type {
 /** A feature's name in the admin. One that is not built yet has none and shows only once it spends. */
 const LABELS: Partial<Record<SpendFeature, string>> = {
   terminal: "Visitors' terminal",
+  match: "Match a brief",
   playground: "Playground",
   copilot: "Copilot",
   insights: "Insights",
@@ -33,6 +34,7 @@ export const featureLabel = (feature: string): string => LABELS[feature as Spend
 
 /** The features the Settings form offers a cap for, in this order. */
 export const CAPPED: FencedFeature[] = [
+  "match",
   "playground",
   "copilot",
   "insights",
@@ -47,6 +49,11 @@ export const CAPPED: FencedFeature[] = [
 
 /** The switches the Settings form offers. */
 export const SWITCHES: { feature: SwitchedFeature; label: string; hint: string }[] = [
+  {
+    feature: "match",
+    label: "Match a brief",
+    hint: "Visitors paste a role, a project or a problem, and the terminal checks it against the published work: two model calls, more only to repair. It spends inside the visitors' reserve up to its cap. The nightly trust check closes it when its critic takes back more than a fifth of its rows; reinstate it on the Trust tab.",
+  },
   {
     feature: "copilot",
     label: "Copilot",

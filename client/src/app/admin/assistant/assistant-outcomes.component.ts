@@ -6,6 +6,8 @@ import {
   browserTiles,
   tourLine,
   downReasonLine,
+  matchLine,
+  matchRowsLine,
   funnelLine,
   HIGHER_IS_BETTER,
   METRIC_LABELS,
@@ -51,6 +53,18 @@ import {
           <p class="m-0 text-sm">
             <span class="text-muted-foreground">Tours:</span> {{ tourLine(t) }}
           </p>
+        }
+        <!-- Matched briefs (visitor plan V20): no answers either; each kind to the hand-off, and
+             the rows the critic took back, which the nightly trust check watches. -->
+        @if (v.matches; as m) {
+          <p class="m-0 text-sm">
+            <span class="text-muted-foreground">Matches:</span> {{ matchLine(m) }}
+          </p>
+          @if (m.runs) {
+            <p class="m-0 text-sm">
+              <span class="text-muted-foreground">Match rows:</span> {{ matchRowsLine(m) }}
+            </p>
+          }
         }
 
         <!-- What the visitors' browsers saw (visitor plan V2); an older API sends none. -->
@@ -129,6 +143,8 @@ export class AssistantOutcomesComponent implements OnInit {
   protected readonly browserTiles = browserTiles;
   protected readonly downReasonLine = downReasonLine;
   protected readonly tourLine = tourLine;
+  protected readonly matchLine = matchLine;
+  protected readonly matchRowsLine = matchRowsLine;
 
   protected readonly view = signal<OutcomesView | null>(null);
   protected readonly saving = signal(false);

@@ -691,6 +691,7 @@ function assistantSettings(change: Record<string, unknown> = {}) {
     systemCard: { en: "", de: "" },
     publicReserve: 0.5,
     featureCaps: {
+      match: 0.1,
       playground: null,
       copilot: null,
       insights: null,
@@ -703,6 +704,7 @@ function assistantSettings(change: Record<string, unknown> = {}) {
       nightlyJudge: null,
     },
     featureSwitches: {
+      match: false,
       copilot: true,
       judge: true,
       autoInsights: false,
@@ -852,6 +854,7 @@ function defaults(): Record<string, Answer> {
         reserveLineUsd: 1,
         features: [
           { feature: "terminal", spentUsd: 0.12, capUsd: null, switchedOn: null, state: "ok" },
+          { feature: "match", spentUsd: 0, capUsd: 0.1, switchedOn: false, state: "off" },
           { feature: "eval", spentUsd: 0.3, capUsd: 0.3, switchedOn: null, state: "cap" },
           { feature: "copilot", spentUsd: 0, capUsd: null, switchedOn: true, state: "ok" },
           { feature: "agent", spentUsd: 0, capUsd: null, switchedOn: false, state: "off" },
@@ -2344,6 +2347,8 @@ test.describe("admin", () => {
       "switched off",
     );
     await expect(spend.getByText("autoInsights", { exact: true })).toHaveCount(0);
+    // Match a brief (visitor plan V20): off until switched on, with its small cap.
+    await expect(spend.getByRole("row", { name: /Match a brief/ })).toContainText("switched off");
 
     await page.getByRole("tab", { name: "Settings" }).click();
     await page.getByLabel("Kept for visitors (% of the budget)", { exact: true }).fill("60");
@@ -2360,6 +2365,12 @@ test.describe("admin", () => {
     await expect(named("Automatic insights")).toHaveAccessibleDescription(/nightly check/);
     await expect(named("Nightly judge")).not.toBeChecked();
     await expect(named("Nightly judge")).toHaveAccessibleDescription(/review queue/);
+    await expect(named("Match a brief")).not.toBeChecked();
+    await expect(named("Match a brief")).toHaveAccessibleDescription(/reserve up to its cap/);
+    await expect(page.getByRole("spinbutton", { name: "Match a brief", exact: true })).toHaveValue(
+      "0.1",
+    );
+    await named("Match a brief").click();
     // The public scorecard (visitor plan V13): unpublished until switched on.
     await expect(named("Public scorecard")).not.toBeChecked();
     await expect(named("Public scorecard")).toHaveAccessibleDescription(/aggregates only/);
@@ -2370,8 +2381,9 @@ test.describe("admin", () => {
     expect(saved[0]).toMatchObject({
       publicScorecard: true,
       publicReserve: 0.6,
-      featureCaps: { eval: 0.5, copilot: null, pairwise: null, agent: 0.05 },
+      featureCaps: { match: 0.1, eval: 0.5, copilot: null, pairwise: null, agent: 0.05 },
       featureSwitches: {
+        match: true,
         copilot: false,
         judge: true,
         agent: false,

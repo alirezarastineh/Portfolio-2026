@@ -26,6 +26,8 @@ const FILTERS: { id: ConversationFilter; label: string }[] = [
   { id: "failed", label: "Failed" },
   { id: "dropped", label: "Invented citations" },
   { id: "flagged", label: "Flagged" },
+  // Matched briefs (visitor plan V20): their kind and rows on each.
+  { id: "match", label: "Matches" },
 ];
 
 const TONE_CLASS: Record<Tone, string> = {
@@ -99,6 +101,9 @@ const TONE_CLASS: Record<Tone, string> = {
               >
                 <span hlmBadge variant="outline">{{ row.model ?? "no model" }}</span>
                 <span hlmBadge variant="outline">{{ row.route }}</span>
+                @if (matchBadge(row); as badge) {
+                  <span hlmBadge variant="outline">{{ badge }}</span>
+                }
                 @if (row.finishReason.startsWith("error") || row.finishReason === "aborted") {
                   <span hlmBadge variant="destructive">{{ row.finishReason }}</span>
                 }
@@ -245,6 +250,22 @@ export class AssistantConversationsComponent implements OnInit {
   protected readonly passedOverLine = passedOverLine;
   protected readonly outcomeLabel = toolOutcomeLabel;
   protected readonly checkLabel = checkLabel;
+
+  /** A match run's kind and rows (visitor plan V20): "role · 5 rows · 1 taken back". */
+  protected matchBadge(row: ConversationRow): string | null {
+    const match = row.route === "match" ? row.trace?.match : undefined;
+    if (!match) return null;
+    const rows = match.items.filter((item) => item.status !== null).length;
+    const back = match.items.filter((item) => item.downgraded).length;
+    return [
+      match.kind,
+      rows === 1 ? "1 row" : `${rows} rows`,
+      back ? `${back} taken back` : "",
+      match.stop ? `stopped: ${match.stop}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
   protected readonly checkTone = checkTone;
 
   protected toneClass(outcome: ToolOutcome): string {

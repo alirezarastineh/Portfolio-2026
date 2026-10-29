@@ -11,6 +11,7 @@ const settings: AssistantSettings = {
   systemCard: { en: "", de: "" },
   publicReserve: 0.5,
   featureCaps: {
+    match: 0.1,
     playground: null,
     copilot: 0.2,
     insights: null,
@@ -23,6 +24,7 @@ const settings: AssistantSettings = {
     nightlyJudge: null,
   },
   featureSwitches: {
+    match: false,
     copilot: false,
     judge: true,
     autoInsights: false,
@@ -40,6 +42,7 @@ describe("the spending fences in the admin", () => {
     expect(draft.reserve).toBe("50");
     expect(draft.caps).toMatchObject({ copilot: "0.2", eval: "" });
     expect(draft.switches).toEqual({
+      match: false,
       copilot: false,
       judge: true,
       nightlyJudge: false,
@@ -54,6 +57,7 @@ describe("the spending fences in the admin", () => {
       value: {
         publicReserve: 0.4,
         featureCaps: {
+          match: 0.1,
           playground: null,
           copilot: 0.2,
           insights: null,
@@ -66,6 +70,7 @@ describe("the spending fences in the admin", () => {
           agent: null,
         },
         featureSwitches: {
+          match: false,
           copilot: false,
           judge: true,
           nightlyJudge: false,
@@ -142,7 +147,8 @@ describe("the spending fences in the admin", () => {
     ]);
     // A feature the admin does not know stays out until it spends.
     expect(rows.map((r) => r.feature)).not.toContain("later");
-    expect(rows).toHaveLength(11);
+    // Match a brief (visitor plan V20) is built too: twelve features in all.
+    expect(rows).toHaveLength(12);
     // Automatic insights (plan phase 25) are built: listed by name, switched off.
     expect(rows.find((r) => r.feature === "autoInsights")).toEqual({
       feature: "autoInsights",

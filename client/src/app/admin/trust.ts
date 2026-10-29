@@ -16,9 +16,13 @@ const LEVELS: Record<TrustLevel, string> = {
 
 export const levelLabel = (level: TrustLevel): string => LEVELS[level];
 
-/** "model:gemini-x" → "the model gemini-x", "route:deep" → "the deep route". */
+/**
+ * "model:gemini-x" → "the model gemini-x", "route:deep" → "the deep route",
+ * "feature:match" → "match a brief" (visitor plan V20).
+ */
 export function subjectLabel(subject: string): string {
   if (subject === "route:deep") return "the deep route";
+  if (subject === "feature:match") return "match a brief";
   if (subject.startsWith("model:")) return `the model ${subject.slice(6)}`;
   return subject;
 }
@@ -26,10 +30,14 @@ export function subjectLabel(subject: string): string {
 /** The demotion rules in a sentence. */
 export function rulesLine(rules: TrustRules): string {
   const ceiling = Math.round(rules.deepErrorCeiling * 100);
+  const match =
+    rules.matchDowngradeCeiling === undefined || rules.matchWindow === undefined
+      ? ""
+      : `; match when its critic takes back more than ${Math.round(rules.matchDowngradeCeiling * 100)} % of the rows of its last ${rules.matchWindow} runs`;
   return (
     `A model is demoted when its judged faithfulness falls below ${rules.faithfulnessFloor} ` +
     `over its last ${rules.judgedWindow} judged answers (given ${rules.judgedMinimum}); ` +
-    `the deep route when more than ${ceiling} % of its last ${rules.deepWindow} answers failed.`
+    `the deep route when more than ${ceiling} % of its last ${rules.deepWindow} answers failed${match}.`
   );
 }
 

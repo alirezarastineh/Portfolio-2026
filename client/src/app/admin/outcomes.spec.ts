@@ -4,6 +4,8 @@ import {
   browserTiles,
   downReasonLine,
   funnelLine,
+  matchLine,
+  matchRowsLine,
   seconds,
   share,
   tourLine,
@@ -27,6 +29,29 @@ describe("outcomes in the admin", () => {
       "1 tour planned, 0 taken to the last stop (0 %)",
     );
     expect(tourLine({ started: 0, finished: 0, finishedRate: null })).toBe("No tour planned yet");
+  });
+
+  it("reads each kind of match to its hand-off, and the rows the critic took back (visitor plan V20)", () => {
+    const none = { runs: 0, handoffs: 0, handoffRate: null };
+    const m = {
+      runs: 5,
+      byKind: {
+        role: { runs: 4, handoffs: 1, handoffRate: 0.25 },
+        project: { runs: 1, handoffs: 0, handoffRate: 0 },
+        problem: none,
+      },
+      rows: 12,
+      downgraded: 2,
+      downgradedRate: 2 / 12,
+      gaps: 3,
+    };
+    expect(matchLine(m)).toBe(
+      "roles 4 → 1 hand-off (25 %), projects 1 → 0 hand-offs (0 %), problems none",
+    );
+    expect(matchRowsLine(m)).toBe(
+      "12 rows, 2 taken back by the critic (17 %); 3 items nothing published covers",
+    );
+    expect(matchLine({ ...m, runs: 0 })).toBe("No brief matched yet");
   });
 
   it("reads the hand-off funnel with the share that made each step", () => {
