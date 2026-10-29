@@ -2,6 +2,7 @@ import type { Locale } from "../content/locale";
 import type { AskFocus } from "./ask-launcher.service";
 import type { Level } from "./ask-level";
 import type { AskMessage } from "./ask-types";
+import type { MatchRequest } from "./match";
 import type { TourRequest } from "./tour";
 import { forRequest } from "./sent-messages";
 
@@ -32,6 +33,8 @@ export interface RequestInput {
   level?: Level;
   /** A tour for an interest instead of an answer (visitor plan V16). */
   tour?: TourRequest | null;
+  /** A brief to match instead of an answer (visitor plan V20). */
+  match?: MatchRequest | null;
   messages: readonly AskMessage[];
 }
 
@@ -48,6 +51,7 @@ export function requestBody(input: RequestInput) {
     // Standard sends nothing, so the server's instructions stay today's bytes.
     ...(input.level && input.level !== "standard" ? { level: input.level } : {}),
     ...(input.tour ? { mode: "tour", tour: input.tour } : {}),
+    ...(input.match ? { mode: "match", match: input.match } : {}),
     messages: forRequest(input.messages),
   };
 }

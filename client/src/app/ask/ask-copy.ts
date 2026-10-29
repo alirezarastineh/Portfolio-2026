@@ -15,8 +15,17 @@ export interface Counted {
  */
 export interface AskCopy {
   inputLabel: string;
-  /** `evals`' row is listed only while the scorecard is published (visitor plan V13). */
-  help: { title: string; rows: [string, string][]; evals: [string, string]; footer: string };
+  /**
+   * `evals`' row is listed only while the scorecard is published (visitor plan V13),
+   * `match`'s only while the server offers it (V20).
+   */
+  help: {
+    title: string;
+    rows: [string, string][];
+    evals: [string, string];
+    match: [string, string];
+    footer: string;
+  };
   thinking: string;
   stopHint: string;
   interrupted: string;
@@ -81,6 +90,8 @@ export interface AskCopy {
       stub: string;
       fixed: string;
     };
+    /** A matched brief (visitor plan V20): its rows, and those the check took back. */
+    match: { rows: Counted; downgraded: Counted };
   };
   /** `inspect` (visitor plan V12): what the log keeps of an answer, as a timeline. */
   inspect: {
@@ -236,6 +247,25 @@ export interface AskCopy {
     /** What the last stop hands to the contact form, through the hand-off (V6). */
     contact: string;
   };
+  /**
+   * Match a brief (visitor plan V20): the paste box's label per kind, its note
+   * and counter, the progress line per step, and what it says otherwise.
+   */
+  match: {
+    label: { role: string; project: string; problem: string };
+    /** Said under the box, before anything is sent. */
+    note: string;
+    /** `{n}` of `{max}` characters. */
+    counter: string;
+    send: string;
+    cancel: string;
+    usage: string;
+    off: string;
+    cancelled: string;
+    /** Said once, as the brief goes. */
+    started: string;
+    steps: { plan: string; search: Counted; write: string; check: string; repair: string };
+  };
   handoff: { ask: string; yes: string; no: string; done: string; declined: string };
   opening: string;
   tool: {
@@ -302,6 +332,10 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         ["history · clear · reset", "as in any shell"],
       ],
       evals: ["evals", "how well the assistant does: its tests and live checks"],
+      match: [
+        "match role|project|problem",
+        "check a role, a project or a problem against his work; `fit` is short for a role",
+      ],
       footer: "Anything else is a question for the AI assistant.",
     },
     thinking: "thinking…",
@@ -382,6 +416,14 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         echo: "repaired: the first try only repeated the question",
         stub: "repaired: the first try stopped after a word or two",
         fixed: "closed with a fixed line: no model had words",
+      },
+      match: {
+        rows: { none: "no rows", one: "1 row", many: "{n} rows" },
+        downgraded: {
+          none: "",
+          one: "1 taken back by the check",
+          many: "{n} taken back by the check",
+        },
       },
     },
     inspect: {
@@ -502,6 +544,32 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       end: "end tour",
       contact: "Hi Alireza, I took the tour of your portfolio and would like to get in touch.",
     },
+    match: {
+      label: {
+        role: "Paste the role",
+        project: "Describe your project",
+        problem: "Describe the problem",
+      },
+      note: "Don't paste confidential details: the text goes to the model provider.",
+      counter: "{n} / {max} characters",
+      send: "check it",
+      cancel: "cancel",
+      usage: "usage: match role · match project · match problem (`fit` for a role)",
+      off: "Matching is not offered just now.",
+      cancelled: "Match cancelled.",
+      started: "Checking the brief against his published work…",
+      steps: {
+        plan: "reading the brief…",
+        search: {
+          none: "searching his work…",
+          one: "searching his work for 1 item…",
+          many: "searching his work for {n} items…",
+        },
+        write: "writing the rows…",
+        check: "checking each row against its sources…",
+        repair: "rewriting what the check refused…",
+      },
+    },
     handoff: {
       ask: "Hand this conversation to the contact form?",
       yes: "yes",
@@ -575,6 +643,10 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         ["history · clear · reset", "wie in jeder Shell"],
       ],
       evals: ["evals", "wie gut der Assistent ist: Tests und laufende Prüfungen"],
+      match: [
+        "match role|project|problem",
+        "eine Stelle, ein Projekt oder ein Problem mit seiner Arbeit abgleichen; `fit` ist kurz für eine Stelle",
+      ],
       footer: "Alles andere ist eine Frage an den KI-Assistenten.",
     },
     thinking: "denkt nach…",
@@ -655,6 +727,14 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         echo: "repariert: der erste Versuch wiederholte nur die Frage",
         stub: "repariert: der erste Versuch brach nach ein, zwei Wörtern ab",
         fixed: "mit einer festen Zeile beendet: kein Modell hatte Text",
+      },
+      match: {
+        rows: { none: "keine Zeilen", one: "1 Zeile", many: "{n} Zeilen" },
+        downgraded: {
+          none: "",
+          one: "1 von der Prüfung zurückgenommen",
+          many: "{n} von der Prüfung zurückgenommen",
+        },
       },
     },
     inspect: {
@@ -780,6 +860,32 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       end: "Führung beenden",
       contact:
         "Hallo Alireza, ich habe die Führung durch dein Portfolio gemacht und würde mich gern melden.",
+    },
+    match: {
+      label: {
+        role: "Füge die Stelle ein",
+        project: "Beschreibe dein Projekt",
+        problem: "Beschreibe das Problem",
+      },
+      note: "Füge nichts Vertrauliches ein: Der Text geht an den Modellanbieter.",
+      counter: "{n} / {max} Zeichen",
+      send: "abgleichen",
+      cancel: "abbrechen",
+      usage: "Aufruf: match role · match project · match problem (`fit` für eine Stelle)",
+      off: "Der Abgleich wird gerade nicht angeboten.",
+      cancelled: "Abgleich abgebrochen.",
+      started: "Ich gleiche die Beschreibung mit seiner veröffentlichten Arbeit ab…",
+      steps: {
+        plan: "lese die Beschreibung…",
+        search: {
+          none: "durchsuche seine Arbeit…",
+          one: "durchsuche seine Arbeit nach 1 Punkt…",
+          many: "durchsuche seine Arbeit nach {n} Punkten…",
+        },
+        write: "schreibe die Zeilen…",
+        check: "prüfe jede Zeile an ihren Quellen…",
+        repair: "schreibe neu, was die Prüfung abgelehnt hat…",
+      },
     },
     handoff: {
       ask: "Dieses Gespräch an das Kontaktformular übergeben?",

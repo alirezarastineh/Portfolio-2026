@@ -26,7 +26,10 @@ export type AskEvent =
   | "tour_step"
   | "tour_done"
   // A link that carries a question, copied (visitor plan V17).
-  | "ask_share";
+  | "ask_share"
+  // A brief's paste box opened, and the brief sent, by kind (visitor plan V20).
+  | "match_open"
+  | "match_send";
 
 export function track(event: AskEvent, data?: Record<string, string>): void {
   try {

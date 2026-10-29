@@ -58,6 +58,13 @@ describe("requestBody", () => {
     expect(requestBody(input())).not.toHaveProperty("level");
   });
 
+  it("asks for a match instead of an answer, the brief beside the conversation (visitor plan V20)", () => {
+    const match = { kind: "role" as const, brief: "Senior AI engineer: Python, RAG." };
+    expect(requestBody(input({ match }))).toMatchObject({ mode: "match", match });
+    expect(requestBody(input())).not.toHaveProperty("mode");
+    expect(requestBody(input({ match: null }))).not.toHaveProperty("match");
+  });
+
   it("adds deep and Turnstile's token only when they apply, and no page without a path", () => {
     const body = requestBody(input({ deep: true, turnstileToken: "token", url: "" }));
     expect(body).toMatchObject({ deep: true, turnstileToken: "token" });

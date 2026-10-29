@@ -88,6 +88,35 @@ describe("renderMarkdown", () => {
       { t: "p", c: [{ t: "strong", c: [{ t: "text", v: "Stack" }] }] },
     ]);
   });
+
+  it("renders a match's rows as a list: the mark, the item in bold, the label, the citation (visitor plan V20)", () => {
+    const blocks = renderMarkdown(
+      [
+        "Published evidence for 1 of 2 requirements; 1 not published.",
+        "",
+        "- ✓ **Retrieval-augmented generation** (must) · evidence: Built Atlas. [^project:atlas@en]",
+        "- – **Embedded C** (must) · not published: nothing on his site shows this.",
+      ].join("\n"),
+      options,
+    );
+    expect(blocks.map((b) => b.t)).toEqual(["p", "ul"]);
+    expect(blocks[1]).toEqual({
+      t: "ul",
+      items: [
+        [
+          { t: "text", v: "✓ " },
+          { t: "strong", c: [{ t: "text", v: "Retrieval-augmented generation" }] },
+          { t: "text", v: " (must) · evidence: Built Atlas. " },
+          { t: "cite", id: "project:atlas@en", n: 1 },
+        ],
+        [
+          { t: "text", v: "– " },
+          { t: "strong", c: [{ t: "text", v: "Embedded C" }] },
+          { t: "text", v: " (must) · not published: nothing on his site shows this." },
+        ],
+      ],
+    });
+  });
 });
 
 describe("helpers", () => {

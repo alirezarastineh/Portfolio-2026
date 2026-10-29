@@ -1503,6 +1503,157 @@ test.describe("assistant terminal", () => {
     await expect(sheet.getByRole("group", { name: /^tour/ })).toHaveCount(0);
   });
 
+  test("match role, project and problem: the paste box, the rows with their sources, the hand-off (visitor plan V20)", async ({
+    page,
+  }) => {
+    const kinds = {
+      role: {
+        label: "Paste the role",
+        prefix: "Role",
+        brief: "Senior AI engineer: retrieval in production, embedded C.",
+      },
+      project: {
+        label: "Describe your project",
+        prefix: "Project",
+        brief: "A retrieval platform for our support team.",
+      },
+      problem: {
+        label: "Describe the problem",
+        prefix: "Question",
+        brief: "How do we evaluate retrieval before each release?",
+      },
+    } as const;
+    const order = ["role", "project", "problem"] as const;
+    const mock = await mockAsk(
+      page,
+      (route, n) => {
+        const kind = order[n - 1]!;
+        const { prefix, brief } = kinds[kind];
+        return sse(route, [
+          { type: "data-match-progress", data: { v: 1, step: "plan" }, transient: true },
+          {
+            type: "start",
+            messageId: `m_e2ematch000${n}`,
+            messageMetadata: { createdAt: Date.now() },
+          },
+          { type: "start-step" },
+          {
+            type: "source-url",
+            sourceId: "project:project-two@en",
+            url: "/en/work/project-two",
+            title: "TODO: Project Two",
+          },
+          { type: "text-start", id: "match" },
+          {
+            type: "text-delta",
+            id: "match",
+            delta: [
+              "Published evidence for 1 of 2 requirements; 1 not published.",
+              "",
+              "- ✓ **Retrieval in production** (must) · evidence: Built a retrieval platform. [^project:project-two@en]",
+              "- – **Embedded C** (must) · not published: nothing on his site shows this.",
+            ].join("\n"),
+          },
+          { type: "text-end", id: "match" },
+          { type: "finish-step" },
+          {
+            type: "finish",
+            finishReason: "stop",
+            messageMetadata: {
+              sig: "signed",
+              handoff: { by: "fallback", summary: `${prefix}: ${brief}` },
+              receipt: {
+                lookups: 2,
+                sources: 1,
+                removed: 0,
+                match: { kind, rows: 2, downgraded: 0 },
+              },
+            },
+          },
+        ]);
+      },
+      { match: true },
+    );
+    await page.route("**/v1/ask/handoff", (route) =>
+      route.fulfill(
+        route.request().method() === "OPTIONS"
+          ? { status: 204, headers: cors }
+          : { headers: cors, json: { ok: true } },
+      ),
+    );
+    await openPrompt(page);
+    // With the paste box open, the log holds a second textarea: the prompt is the terminal's own.
+    const prompt = page.locator("#about textarea.terminal-input");
+    const log = page.locator("#about [role=log]");
+    const offer = page.getByRole("group", { name: "Hand this conversation to the contact form?" });
+
+    await run(prompt, "help");
+    await expect(log).toContainText("match role|project|problem");
+    for (const [i, kind] of order.entries()) {
+      const { label, prefix, brief } = kinds[kind];
+      await run(prompt, `match ${kind}`);
+      const box = log.getByLabel(label);
+      await expect(box).toBeFocused();
+      await expect(log).toContainText(
+        "Don't paste confidential details: the text goes to the model provider.",
+      );
+      if (i === 0) {
+        await settled(page);
+        expect(await axeViolations(page)).toEqual([]);
+      }
+      await box.fill(brief);
+      await log.getByRole("button", { name: "check it" }).click();
+      await expect(box).toHaveCount(0);
+      await expect(log.getByText("nothing on his site shows this.")).toHaveCount(i + 1);
+      // The source's chip under each answer (its citation in the text links to it too).
+      await expect(log.locator("a.note", { hasText: "TODO: Project Two" })).toHaveCount(i + 1);
+      expect(mock.bodies[i]).toMatchObject({ mode: "match", match: { kind, brief } });
+      await expect(offer).toBeVisible();
+      if (kind !== "problem") {
+        await offer.getByRole("button", { name: "no" }).click();
+        continue;
+      }
+      expect(await axeViolations(page)).toEqual([]);
+      await offer.getByRole("button", { name: "yes" }).click();
+      await expect(page.locator("#contact-message")).toHaveValue(`${prefix}: ${brief}`);
+    }
+  });
+
+  test("a match shows its step while it runs, said only as it starts and with its rows (visitor plan V20)", async ({
+    page,
+  }) => {
+    const rows =
+      "- ✓ **Retrieval** · evidence: Built a retrieval platform. [^project:project-two@en]";
+    const chunks: Chunk[] = [
+      { type: "data-match-progress", data: { v: 1, step: "plan" }, transient: true },
+      { type: "data-match-progress", data: { v: 1, step: "search", items: 3 }, transient: true },
+      { type: "start", messageId: "m_e2ematchstep", messageMetadata: { createdAt: Date.now() } },
+      { type: "start-step" },
+      { type: "text-start", id: "match" },
+      { type: "text-delta", id: "match", delta: rows },
+      { type: "text-end", id: "match" },
+      { type: "finish-step" },
+      { type: "finish", finishReason: "stop", messageMetadata: { sig: "signed" } },
+    ];
+    // The stream stops for a while after its second step, as the rows' call does.
+    await pausedStream(page, chunks, 1, 3000);
+    await mockAsk(page, () => undefined, { match: true });
+    await openPrompt(page);
+    const prompt = page.locator("#about textarea.terminal-input");
+    const log = page.locator("#about [role=log]");
+    const live = page.locator("#about [aria-live=polite]");
+    await run(prompt, "fit");
+    await log.getByLabel("Paste the role").fill("Senior AI engineer: retrieval in production.");
+    await log.getByRole("button", { name: "check it" }).click();
+    await expect(live).toHaveText("Checking the brief against his published work…");
+    await expect(log.locator("[data-match-progress]")).toHaveText(
+      "searching his work for 3 items…",
+    );
+    await expect(log).toContainText("Built a retrieval platform.");
+    await expect(log.locator("[data-match-progress]")).toHaveCount(0);
+    await expect(live).toContainText("Built a retrieval platform.");
+  });
+
   test("a shared link puts its question in the prompt and sends nothing until Enter; share copies one (visitor plan V17)", async ({
     page,
     context,

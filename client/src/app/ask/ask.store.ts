@@ -48,6 +48,14 @@ import { confirmHandoff } from "./handoff-confirm";
 import { handoffSummary } from "./handoff-offer";
 import { fetchInspect, inspectLines, linesText } from "./inspect";
 import { clearDeviceKeys, forgetBody, forgetConversation, MAX_EARLIER } from "./forget";
+import {
+  isMatchKind,
+  MATCH_BRIEF_CHARS,
+  matchStep,
+  type MatchKind,
+  type MatchRequest,
+  type MatchStep,
+} from "./match";
 import { newsLines, turnNewsOff, turnNewsOn, visitNews } from "./news";
 import { fetchMap, updatesSince } from "./portfolio-map";
 import { counted, failoverLine } from "./receipt";
@@ -136,6 +144,10 @@ interface AskState {
   news: { since: string; count: number } | null;
   /** The guided tour in this tab (visitor plan V16), kept with the conversation. */
   tour: TourState | null;
+  /** The paste box open for a brief of this kind (visitor plan V20); never kept. */
+  match: MatchKind | null;
+  /** The step the server is on for a match being checked (V20): shown, never announced. */
+  matchStep: { entryId: string; step: MatchStep } | null;
   /** The polite live region's text: finished answers and command output, once. */
   announcement: string;
 }
@@ -286,6 +298,8 @@ export const AskStore = signalStore(
       newsPending: false,
       news: null,
       tour: stored?.tour ?? null,
+      match: null,
+      matchStep: null,
       announcement: "",
     };
   }),
@@ -303,6 +317,8 @@ export const AskStore = signalStore(
       focus: null as AskFocus | null,
       /** A tour asked for instead of an answer (visitor plan V16). */
       tour: null as TourRequest | null,
+      /** A brief to match instead of an answer (visitor plan V20). */
+      match: null as MatchRequest | null,
       entryId: null as string | null,
       /** Turnstile, while on: a single-use token for this session's first question. */
       turnstileToken: "",
@@ -367,6 +383,7 @@ export const AskStore = signalStore(
             focus: store._next.focus,
             level: store.level(),
             tour: store._next.tour,
+            match: store._next.match,
             messages,
           }),
         }),
@@ -411,13 +428,20 @@ export const AskStore = signalStore(
         patchState(store, {
           announcement: plainText(messageFor(failure, retryAfter)),
           failover: null,
+          matchStep: null,
         });
       },
       // A transient part: the server moved past a busy model (visitor plan V12). Never part of
       // the message, so never stored or sent back; said once per question, shown until words.
       onData: (part) => {
-        const status = part.type === "data-status" ? (part.data as Partial<FailoverStatus>) : null;
         const entryId = store._next.entryId;
+        // The step a match is on (visitor plan V20): shown under the entry, never announced.
+        if (part.type === "data-match-progress") {
+          const step = matchStep(part.data);
+          if (step && entryId) patchState(store, { matchStep: { entryId, step } });
+          return;
+        }
+        const status = part.type === "data-status" ? (part.data as Partial<FailoverStatus>) : null;
         if (status?.code !== "failover" || !entryId) return;
         const { position, of } = status;
         if (typeof position !== "number" || typeof of !== "number") return;
@@ -430,7 +454,7 @@ export const AskStore = signalStore(
         });
       },
       onFinish: ({ message, isAbort, isError }) => {
-        patchState(store, { failover: null });
+        patchState(store, { failover: null, matchStep: null });
         persist();
         reportFinish(message, isAbort);
         if (isAbort || isError || message.role !== "assistant") return;
@@ -570,6 +594,7 @@ export const AskStore = signalStore(
       deep: boolean,
       about: AskAbout | undefined,
       tour?: TourRequest,
+      match?: MatchRequest,
     ): Promise<void> {
       const copy = store.copy();
       if (!store.available()) {
@@ -609,11 +634,13 @@ export const AskStore = signalStore(
             deep,
             ...(about ? { about } : {}),
             ...(tour ? { tour } : {}),
+            ...(match ? { match } : {}),
           },
         ].slice(-MAX_ENTRIES),
         handoff: null,
         forgetPending: false,
         newsPending: false,
+        match: null,
         announcement: "",
       });
       // From here the visitor waits (a Turnstile check included): the first word's time counts it.
@@ -622,6 +649,7 @@ export const AskStore = signalStore(
       store._next.deep = deep;
       store._next.focus = about?.focus ?? null;
       store._next.tour = tour ?? null;
+      store._next.match = match ?? null;
       store._next.entryId = entryId;
       if (!(await readyToAsk(store._next, locale()))) {
         store._updateEntry(entryId, { failure: "error" });
@@ -665,6 +693,8 @@ export const AskStore = signalStore(
         newsPending: false,
         // A tour lives in its session: a new session, as after forget, ends it (visitor plan V16).
         tour: null,
+        match: null,
+        matchStep: null,
         feedback: {},
         downReasons: {},
         limitedUntil: null,
@@ -831,6 +861,38 @@ export const AskStore = signalStore(
       return ask(input, input, false, undefined, { interest: words });
     }
 
+    /**
+     * `match role|project|problem` (`fit` for a role, visitor plan V20): opens the paste box,
+     * while the server offers it. Nothing goes until the visitor sends the brief.
+     */
+    function handleMatch(input: string, arg: string): void {
+      const copy = store.copy().match;
+      if (store.remote()?.match !== true) return show(input, [{ text: copy.off, tone: "dim" }]);
+      if (!isMatchKind(arg)) return show(input, [{ text: copy.usage, tone: "dim" }]);
+      show(input, []);
+      patchState(store, {
+        match: arg,
+        handoff: null,
+        forgetPending: false,
+        newsPending: false,
+        announcement: copy.label[arg],
+      });
+      track("match_open", { kind: arg });
+    }
+
+    /** The brief, sent: one request, said once as it goes and once with its rows. */
+    async function sendMatch(brief: string): Promise<void> {
+      const kind = store.match();
+      const text = brief.trim();
+      if (!kind || !text || text.length > MATCH_BRIEF_CHARS) return;
+      const input = `match ${kind}`;
+      track("match_send", { kind });
+      const sending = ask(input, input, false, undefined, undefined, { kind, brief: text });
+      // `ask` cleared the live region as the entry went in; this is the start's one line.
+      patchState(store, { announcement: store.copy().match.started });
+      await sending;
+    }
+
     /** `tour more like this`: one replan from the stop the visitor is at, its plan sent back signed. */
     function replanTour(input: string): Promise<void> | void {
       const copy = store.copy().tour;
@@ -987,6 +1049,7 @@ export const AskStore = signalStore(
             input,
             helpLines(copy, store._lang.t().ask.disclosure, {
               scorecard: store.remote()?.scorecard === true,
+              match: store.remote()?.match === true,
             }),
           );
           break;
@@ -1045,6 +1108,9 @@ export const AskStore = signalStore(
         case "tour":
           void handleTour(input, parsed.arg);
           break;
+        case "match":
+          handleMatch(input, parsed.arg);
+          break;
         case "next":
           moveTour(input, 1);
           break;
@@ -1079,6 +1145,8 @@ export const AskStore = signalStore(
         if (store.history().at(-1) !== input) {
           patchState(store, { history: [...store.history(), input].slice(-MAX_HISTORY) });
         }
+        // Anything typed instead of a brief puts the paste box away (visitor plan V20).
+        if (store.match()) patchState(store, { match: null });
 
         // A pending hand-off, forget (visitor plan V14) or what's new (V15) takes y/n first.
         if (store.forgetPending() && /^(y|yes|j|ja|n|no|nein)$/i.test(input)) {
@@ -1107,6 +1175,17 @@ export const AskStore = signalStore(
         void store.chat.stop();
       },
 
+      /** The paste box's brief, sent (visitor plan V20). */
+      sendMatch(brief: string): Promise<void> {
+        return sendMatch(brief);
+      },
+
+      /** The paste box put away, nothing sent. */
+      cancelMatch(): void {
+        if (!store.match()) return;
+        patchState(store, { match: null, announcement: store.copy().match.cancelled });
+      },
+
       /** Asks the failed question again. */
       async retry(entryId: string): Promise<void> {
         const entry = store.entries().find((e) => e.id === entryId);
@@ -1122,6 +1201,7 @@ export const AskStore = signalStore(
         store._next.deep = entry.deep;
         store._next.focus = entry.about?.focus ?? null;
         store._next.tour = entry.tour ?? null;
+        store._next.match = entry.match ?? null;
         store._next.entryId = entryId;
         if (!(await readyToAsk(store._next, store._lang.lang()))) {
           store._updateEntry(entryId, { failure: "error" });

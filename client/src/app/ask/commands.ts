@@ -29,6 +29,7 @@ export type LocalCommand =
   | "forget"
   | "news"
   | "tour"
+  | "match"
   | "next"
   | "back"
   | "history"
@@ -127,6 +128,11 @@ function parseLocalCommand(head: string, arg: string, count: number): Parsed | n
     // "tour", "tour <interest>", "tour stop", "tour more like this" (V16).
     case "tour":
       return { kind: "local", name: "tour", arg };
+    // "match role|project|problem", and "fit" for a role (V20).
+    case "match":
+      return count <= 1 ? { kind: "local", name: "match", arg: arg.toLowerCase() } : null;
+    case "fit":
+      return count === 0 ? { kind: "local", name: "match", arg: "role" } : null;
     default:
       return null;
   }
@@ -171,13 +177,23 @@ export interface OutLine {
   ask?: string;
 }
 
-/** `help`; `evals` is listed only while the scorecard is published (visitor plan V13). */
+/**
+ * `help`; `evals` is listed only while the scorecard is published (visitor plan V13),
+ * `match` only while the server offers it (V20).
+ */
 export function helpLines(
   copy: AskCopy,
   disclosure: string,
-  options: { scorecard?: boolean } = {},
+  options: { scorecard?: boolean; match?: boolean } = {},
 ): OutLine[] {
   const rows = [...copy.help.rows];
+  // After the tour's rows, as the help's order goes: explore, then hand over.
+  if (options.match)
+    rows.splice(
+      rows.findIndex(([label]) => label === "cv"),
+      0,
+      copy.help.match,
+    );
   if (options.scorecard) rows.splice(-1, 0, copy.help.evals);
   return [
     { text: copy.help.title, tone: "dim" },

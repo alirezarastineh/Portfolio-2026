@@ -2,6 +2,7 @@ import type { UIMessage } from "ai";
 
 import type { AskAbout } from "./ask-launcher.service";
 import type { OutLine } from "./commands";
+import type { MatchKind, MatchRequest } from "./match";
 import type { TourRequest } from "./tour";
 
 /**
@@ -47,6 +48,8 @@ export interface AnswerReceipt {
     reason: "no-words" | "handoff-without-words" | "echo" | "stub";
     by: "model" | "fixed-line";
   };
+  /** A matched brief (visitor plan V20): its kind, its rows, and those the check made "not published". */
+  match?: { kind: MatchKind; rows: number; downgraded: number };
 }
 
 export type AskMessage = UIMessage<AnswerMetadata>;
@@ -103,6 +106,8 @@ export type Entry =
       about?: AskAbout;
       /** A tour asked for (visitor plan V16): sent again by a retry. */
       tour?: TourRequest;
+      /** A brief to match (visitor plan V20): sent again by a retry. */
+      match?: MatchRequest;
       failure?: Failure;
       /** Seconds to wait, for `rateLimited`. */
       retryAfter?: number;
@@ -118,4 +123,6 @@ export interface RemoteConfig {
   model: string;
   /** Whether the scorecard is published (visitor plan V13); absent from an older API. */
   scorecard?: boolean;
+  /** Whether `match` is offered (visitor plan V20); absent from an older API. */
+  match?: boolean;
 }

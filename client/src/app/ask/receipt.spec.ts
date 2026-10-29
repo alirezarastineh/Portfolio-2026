@@ -69,6 +69,17 @@ describe("the receipt line (visitor plan V12)", () => {
     expect(receiptAlways(undefined)).toBe(false);
   });
 
+  it("counts a match's rows, and shows by itself when the check took one back (visitor plan V20)", () => {
+    expect(line({ match: { kind: "role", rows: 5, downgraded: 0 } })).toContain("5 rows");
+    expect(line({ match: { kind: "role", rows: 5, downgraded: 2 } })).toContain(
+      "5 rows, 2 taken back by the check",
+    );
+    expect(receiptAlways({ ...PLAIN, match: { kind: "role", rows: 5, downgraded: 0 } })).toBe(
+      false,
+    );
+    expect(receiptAlways({ ...PLAIN, match: { kind: "role", rows: 5, downgraded: 1 } })).toBe(true);
+  });
+
   it("names the page, what was pointed at and the level", () => {
     expect(line({ page: "project:atlas@en" }, {}, { pageTitle: "Atlas" })).toContain("page: Atlas");
     // Without the site's name for it, its id.

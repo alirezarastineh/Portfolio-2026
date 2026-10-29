@@ -7,6 +7,7 @@ import { appContentSchema, type AppContent } from "../content/schema";
 import { ASK_COPY } from "./ask-copy";
 import {
   complete,
+  helpLines,
   offlineLines,
   openTarget,
   parseInput,
@@ -52,6 +53,15 @@ describe("parseInput", () => {
     });
     expect(parseInput("cat atlas")).toEqual({ kind: "local", name: "cat", arg: "atlas" });
     expect(parseInput("cat is a nice animal right")).toMatchObject({ kind: "ask" });
+  });
+
+  it("opens a brief's paste box for a kind, `fit` for a role, and reads more words as a question (visitor plan V20)", () => {
+    expect(parseInput("match role")).toEqual({ kind: "local", name: "match", arg: "role" });
+    expect(parseInput("Match PROJECT")).toEqual({ kind: "local", name: "match", arg: "project" });
+    expect(parseInput("match")).toEqual({ kind: "local", name: "match", arg: "" });
+    expect(parseInput("fit")).toEqual({ kind: "local", name: "match", arg: "role" });
+    expect(parseInput("match my profile against yours")).toMatchObject({ kind: "ask" });
+    expect(parseInput("fit for the role?")).toMatchObject({ kind: "ask" });
   });
 
   it("knows inspect alone, completes it, and reads more words as a question (visitor plan V12)", () => {
@@ -121,6 +131,14 @@ describe("complete", () => {
 });
 
 describe("local answers", () => {
+  it("lists match in help only while the server offers it, after the tour (visitor plan V20)", () => {
+    const labels = (options = {}) => helpLines(ASK_COPY.en, "AI", options).map((l) => l.label);
+    expect(labels()).not.toContain("match role|project|problem");
+    const on = labels({ match: true });
+    expect(on.indexOf("match role|project|problem")).toBe(on.indexOf("cv") - 1);
+    expect(labels({ match: true, scorecard: true })).toContain("evals");
+  });
+
   it("opens sections, case studies and posts, and nothing else", () => {
     expect(openTarget(content, "en", "contact")).toBe("/en#contact");
     expect(openTarget(content, "en", "atlas")).toBe("/en/work/atlas");

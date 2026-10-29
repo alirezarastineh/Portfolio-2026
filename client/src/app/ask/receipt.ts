@@ -27,14 +27,29 @@ export function counted(n: number, forms: Counted): string {
 
 /**
  * Whether the receipt shows without being asked for: on a careful topic,
- * after a removed reference, a repair or a move to the thorough model.
- * Otherwise it waits behind `stats` or "how was this answered?".
+ * after a removed reference, a repair, a move to the thorough model, or a
+ * match row the check took back (visitor plan V20). Otherwise it waits
+ * behind `stats` or "how was this answered?".
  */
 export function receiptAlways(receipt: AnswerReceipt | undefined): boolean {
   return (
     !!receipt &&
-    (!!receipt.careful || receipt.removed > 0 || !!receipt.repair || !!receipt.escalation)
+    (!!receipt.careful ||
+      receipt.removed > 0 ||
+      !!receipt.repair ||
+      !!receipt.escalation ||
+      (receipt.match?.downgraded ?? 0) > 0)
   );
+}
+
+/** A match's clause (visitor plan V20): its rows, and those the check took back. */
+function matchClause(receipt: AnswerReceipt, copy: AskCopy["receipt"]): string {
+  const match = receipt.match;
+  if (!match) return "";
+  const rows = counted(match.rows, copy.match.rows);
+  return match.downgraded > 0
+    ? `${rows}, ${counted(match.downgraded, copy.match.downgraded)}`
+    : rows;
 }
 
 /** The case study's or post's name for a page's document id (`project:atlas@en`), if the site has it. */
@@ -96,6 +111,7 @@ export function receiptClauses(
     focusClause(receipt.focus, copy, context.about?.label),
     level ? fmt(copy.level, { level }) : "",
     repairClause(receipt.repair, copy),
+    matchClause(receipt, copy),
   ].filter(Boolean);
 }
 

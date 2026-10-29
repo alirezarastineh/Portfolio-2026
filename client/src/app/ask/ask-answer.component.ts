@@ -22,6 +22,7 @@ import { reasonChoices } from "./down-reasons";
 import { shareLink } from "./ask-link";
 import { AskLinesComponent } from "./ask-lines.component";
 import { linkPolicyFor } from "./link-policy";
+import { stepLine } from "./match";
 import { failoverLine, pageTitle, receiptAlways, receiptClauses, sourceFacts } from "./receipt";
 import { footnotesFor, plainText, renderMarkdown, type Block } from "./terminal-markdown";
 import { defaultTour, tourData } from "./tour";
@@ -188,6 +189,13 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
            it once; here it may change (2 of 3, 3 of 3), so it is not read again. -->
       @if (failover(); as line) {
         <p class="m-0 text-xs text-muted-foreground" aria-hidden="true" data-failover>
+          {{ line }}
+        </p>
+      }
+      <!-- The step a match is on (visitor plan V20): the live region says only its start and
+           its rows, so the steps between are not read. -->
+      @if (matchProgress(); as line) {
+        <p class="m-0 text-xs text-muted-foreground" aria-hidden="true" data-match-progress>
           {{ line }}
         </p>
       }
@@ -545,6 +553,14 @@ export class AskAnswerComponent {
     const status = this.store.failover();
     if (!status || !this.live() || status.entryId !== this.entry().id || this.text()) return null;
     return failoverLine(status, this.copy().failover);
+  });
+
+  /** The step a match is on (visitor plan V20), until its rows come. */
+  protected readonly matchProgress = computed(() => {
+    const progress = this.store.matchStep();
+    if (!progress || !this.live() || progress.entryId !== this.entry().id || this.text())
+      return null;
+    return stepLine(progress.step, this.copy().match.steps);
   });
 
   /** The receipt's clauses (visitor plan V12): what the answer did, from its metadata only. */

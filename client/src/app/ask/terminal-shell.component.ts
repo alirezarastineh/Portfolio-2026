@@ -24,6 +24,7 @@ import { ASK_ENTRY_COPY } from "./ask-entry-copy";
 import { answersByQuestion } from "./answers";
 import { AskLauncherService, type AskAbout, type AskSource } from "./ask-launcher.service";
 import { AskLinesComponent } from "./ask-lines.component";
+import { MatchBoxComponent } from "./match-box.component";
 import { AskStore } from "./ask.store";
 import type { Entry } from "./ask-types";
 import { fmt } from "../i18n/interpolate";
@@ -47,7 +48,7 @@ const MAX_INPUT_LINES = 6;
 @Component({
   selector: "app-terminal-shell",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AskAnswerComponent, AskLinesComponent, NgIcon],
+  imports: [AskAnswerComponent, AskLinesComponent, MatchBoxComponent, NgIcon],
   viewProviders: [provideIcons({ lucideX })],
   host: { class: "block" },
   template: `
@@ -238,6 +239,12 @@ const MAX_INPUT_LINES = 6;
               </button>
             </span>
           </div>
+        }
+        <!-- Match a brief (visitor plan V20): the paste box, its code loaded with the first match. -->
+        @defer (when store.match()) {
+          @if (store.match(); as kind) {
+            <app-match-box [kind]="kind" (sent)="sendMatch($event)" (dismissed)="dismissMatch()" />
+          }
         }
       </div>
 
@@ -448,6 +455,7 @@ export class TerminalShellComponent {
       this.store.forgetPending();
       this.store.newsPending();
       this.store.tour();
+      this.store.match();
       const log = this.logRef().nativeElement;
       if (this.store.chat.messages && this.stick) log.scrollTop = log.scrollHeight;
     });
@@ -527,6 +535,17 @@ export class TerminalShellComponent {
   }
 
   /** A starter question from the empty terminal. */
+  /** The paste box's brief, sent; the prompt takes the focus back (visitor plan V20). */
+  protected sendMatch(brief: string): void {
+    void this.store.sendMatch(brief);
+    this.focusInput();
+  }
+
+  protected dismissMatch(): void {
+    this.store.cancelMatch();
+    this.focusInput();
+  }
+
   protected start(question: string): void {
     this.reportOpen("starter");
     this.send(question);
