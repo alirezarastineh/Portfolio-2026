@@ -1,4 +1,4 @@
-import { createUIMessageStreamResponse } from "ai";
+import { createUIMessageStreamResponse, type UIMessageChunk } from "ai";
 import { and, eq, sql } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -281,11 +281,39 @@ function replanOf(
   return { from: tour.from, seen: plan?.stops ?? [] };
 }
 
+/**
+ * A planner's stream (a tour), once admitted and checked: the
+ * visitor's going aborts it, and the slot is freed once it is over, or at
+ * once if it never starts.
+ */
+function plannerStream(
+  c: Context,
+  release: () => void,
+  open: (abortSignal: AbortSignal, onClose: () => void) => ReadableStream<UIMessageChunk>,
+): Response {
+  const controller = new AbortController();
+  const onClientGone = () => controller.abort(new Error("client disconnected"));
+  const close = () => {
+    release();
+    inFlight.delete(controller);
+    c.req.raw.signal.removeEventListener("abort", onClientGone);
+  };
+  c.req.raw.signal.addEventListener("abort", onClientGone, { once: true });
+  inFlight.add(controller);
+  try {
+    return createUIMessageStreamResponse({
+      stream: open(controller.signal, close),
+      headers: { "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no" },
+    });
+  } catch (error) {
+    close();
+    throw error;
+  }
+}
+
 /** A tour's stream, once admitted: the lite chain, the visitor's language, the replan checked. */
 async function tourResponse(c: Context, ask: AdmittedAsk): Promise<Response> {
   const { body, history, config, ipHash, sessionHash, release } = ask;
-  const controller = new AbortController();
-  const onClientGone = () => controller.abort(new Error("client disconnected"));
   try {
     const interest = cleanVisitorText(body.tour!.interest);
     const corpus = await askCorpus(config);
@@ -302,34 +330,27 @@ async function tourResponse(c: Context, ask: AdmittedAsk): Promise<Response> {
     }
     await recordRequest(ipHash, sessionHash);
     const demoted = await demotedSubjects();
-    c.req.raw.signal.addEventListener("abort", onClientGone, { once: true });
-    inFlight.add(controller);
-    const { stream } = streamTour({
-      interest,
-      locale: body.locale,
-      language: history.language,
-      sessionId: body.sessionId,
-      sessionHash,
-      corpus,
-      config,
-      chain: withoutDemoted(askChain(config, "lite"), demoted),
-      abortSignal: controller.signal,
-      ...(replan ? { replan } : {}),
-      droppedAnswers: history.droppedAnswers,
-      onClose: () => {
-        release();
-        inFlight.delete(controller);
-        c.req.raw.signal.removeEventListener("abort", onClientGone);
-      },
-    });
-    return createUIMessageStreamResponse({
-      stream,
-      headers: { "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no" },
-    });
+    return plannerStream(
+      c,
+      release,
+      (abortSignal, onClose) =>
+        streamTour({
+          interest,
+          locale: body.locale,
+          language: history.language,
+          sessionId: body.sessionId,
+          sessionHash,
+          corpus,
+          config,
+          chain: withoutDemoted(askChain(config, "lite"), demoted),
+          abortSignal,
+          ...(replan ? { replan } : {}),
+          droppedAnswers: history.droppedAnswers,
+          onClose,
+        }).stream,
+    );
   } catch (error) {
     release();
-    inFlight.delete(controller);
-    c.req.raw.signal.removeEventListener("abort", onClientGone);
     throw error;
   }
 }

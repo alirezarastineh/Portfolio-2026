@@ -1,8 +1,6 @@
 import {
   createUIMessageStream,
-  generateText,
   NoObjectGeneratedError,
-  Output,
   type ModelMessage,
   type UIMessageChunk,
 } from "ai";
@@ -14,35 +12,37 @@ import { newMessageId } from "./agent.js";
 import { looksLikeInjection, type AnswerChecks } from "./checks.js";
 import type { AskConfig } from "./config.js";
 import { resolveDocument, type AskCorpus } from "./corpus/index.js";
-import { recordSnapshot, snapshotKey } from "./corpus/snapshots.js";
+import { snapshotKey } from "./corpus/snapshots.js";
 import { hybridSearch } from "./embeddings.js";
-import { wasForgotten } from "./forget.js";
 import { ASK_MESSAGE_ID, signAnswer, signTour } from "./history.js";
-import { commonWords } from "./language.js";
-import {
-  buildLeakGuard,
-  deploySecrets,
-  echoOf,
-  LeakTally,
-  newScanState,
-  scanChunk,
-  type LeakGuard,
-} from "./leak-guard.js";
-import { logAnswer } from "./log.js";
+import { echoOf, LeakTally, newScanState, scanChunk, type LeakGuard } from "./leak-guard.js";
+import type { AnswerLog } from "./log.js";
 import { MAP_KINDS, mapOf, type MapPage } from "./map.js";
 import { TOUR_ROUTE } from "./outcome-rows.js";
 import {
   AllModelsFailedError,
   answeringModel,
-  createFallbackModel,
   newTrace,
   type ModelCall,
   type Trace,
 } from "./models/fallback.js";
 import { shortName, type ModelEntry } from "./models/registry.js";
-import { PROMPT_CANARY, PROMPT_HASH, PROMPT_VERSION, wrapVisitor } from "./prompt.js";
+import { PROMPT_HASH, PROMPT_VERSION, wrapVisitor } from "./prompt.js";
 import { citeText, markersIn, withoutMarkers } from "./stream-transforms.js";
-import { countTokens } from "./tokens.js";
+import {
+  closingStream,
+  finishReasonOf,
+  guardFor,
+  instructionIn,
+  LANGUAGE_NAME,
+  logRow,
+  otherLanguage,
+  repairOnce,
+  structuredAsk,
+  structuredChain,
+  timings,
+  wordCount,
+} from "./structured.js";
 import { allowedPath } from "./tools.js";
 import {
   TOUR_INTEREST_CHARS,
@@ -60,7 +60,7 @@ import {
   type TourReplan,
 } from "./tour-prompt.js";
 import { buildAnswerTrace, type AnswerTrace } from "./trace.js";
-import { recordUsage, summarizeCalls } from "./usage.js";
+import { summarizeCalls } from "./usage.js";
 
 /**
  * A guided tour for a visitor's interest (visitor plan V16; the book's
@@ -125,31 +125,6 @@ export interface TourCheckContext {
   interest: string;
 }
 
-const LANGUAGE_NAME: Record<Locale, string> = { en: "English", de: "German" };
-const LINK = /https?:\/\/|\bwww\.|\]\(/i;
-const FENCE_TAG = /<\/?\s*visitor\b/i;
-
-const wordCount = (text: string) => withoutMarkers(text).split(" ").filter(Boolean).length;
-
-/** Why a text reads as an instruction, or null: the injection patterns, a link, the fence, the guard. */
-function instructionIn(text: string, ctx: TourCheckContext): string | null {
-  if (looksLikeInjection(text)) return "it reads as an instruction";
-  if (LINK.test(text)) return "it holds a link";
-  if (FENCE_TAG.test(text)) return "it holds a visitor tag";
-  if (ctx.guard) {
-    const hits = new LeakTally();
-    scanChunk(ctx.guard, newScanState(), text, true, hits, echoOf(ctx.interest));
-    if (hits.kinds().size) return "it repeats the instructions";
-  }
-  return null;
-}
-
-/** Whether the text's common words are the other language's. */
-function otherLanguage(text: string, language: Locale): boolean {
-  const words = commonWords(withoutMarkers(text));
-  return words[language === "de" ? "en" : "de"] > words[language];
-}
-
 /** A stop's id as the corpus names it, when it is one of the pages; else as written. */
 function pageId(raw: string, ctx: TourCheckContext): string {
   const doc = resolveDocument(ctx.corpus, raw, ctx.language);
@@ -193,7 +168,7 @@ function checkLine(
       message: `stop ${n}: its line is not in ${LANGUAGE_NAME[ctx.language]}`,
     });
   }
-  const instruction = instructionIn(stop.line, ctx);
+  const instruction = instructionIn(stop.line, ctx.guard, ctx.interest);
   if (instruction) {
     failures.push({ gate: "instruction", message: `stop ${n}: its line ${instruction}` });
   }
@@ -229,7 +204,7 @@ function checkIntro(
       message: `the intro is not in ${LANGUAGE_NAME[ctx.language]}`,
     });
   }
-  const instruction = instructionIn(intro, ctx);
+  const instruction = instructionIn(intro, ctx.guard, ctx.interest);
   if (instruction) failures.push({ gate: "instruction", message: `the intro: ${instruction}` });
   return failures;
 }
@@ -345,24 +320,14 @@ export interface TourOutcome {
 
 const PLAN_CALL = { maxOutputTokens: 800, temperature: 0.2, maxRetries: 0 } as const;
 
-const guardMemo = new Map<string, LeakGuard>();
-
 /** The output guard for a tour's texts: the planner's instructions, never to be repeated. */
-function tourGuard(corpus: AskCorpus, config: AskConfig): LeakGuard {
-  let guard = guardMemo.get(corpus.key);
-  if (!guard) {
-    if (guardMemo.size >= 8) guardMemo.clear();
-    guard = buildLeakGuard({
-      instructions: [tourInstructions("en"), tourInstructions("de")].join("\n\n"),
-      corpusTexts: corpus.documents.map((d) => d.text),
-      quotable: [],
-      canary: PROMPT_CANARY,
-      secrets: deploySecrets(config),
-    });
-    guardMemo.set(corpus.key, guard);
-  }
-  return guard;
-}
+const tourGuard = (corpus: AskCorpus, config: AskConfig): LeakGuard =>
+  guardFor(
+    "tour",
+    () => [tourInstructions("en"), tourInstructions("de")].join("\n\n"),
+    corpus,
+    config,
+  );
 
 function fallback(
   reason: TourFallback,
@@ -428,24 +393,6 @@ function handlePlanError(
   return fallback(reason, input, details);
 }
 
-async function attemptRepair(
-  plan: TourPlan,
-  ctx: TourCheckContext,
-  messages: ModelMessage[],
-  failures: TourFailure[],
-  ask: (messages: ModelMessage[]) => Promise<TourPlan>,
-): Promise<{ plan: TourPlan; failures: TourFailure[] }> {
-  const repairedPlan = await ask([
-    ...messages,
-    { role: "assistant", content: JSON.stringify(plan) },
-    { role: "user", content: tourRepairNote(failures) },
-  ]);
-  const newFailures = repairedPlan.stops.length
-    ? checkTour(repairedPlan, ctx)
-    : [{ gate: "count", message: "" }];
-  return { plan: repairedPlan, failures: newFailures };
-}
-
 /**
  * The plan: no call for an interest that reads as an injection; one structured
  * call, checked; one repair with the exact failures; else the short tour.
@@ -467,7 +414,7 @@ export async function planTour(input: TourInput): Promise<TourOutcome> {
     hits.map((h) => h.id),
     input.replan,
   );
-  const chain = input.chain.filter((entry) => entry.structuredOutputs);
+  const chain = structuredChain(input.chain);
   if (!chain.length || pages.length < TOUR_STOPS.min) {
     return fallback(chain.length ? "no-match" : "unavailable", input, { searchCalls });
   }
@@ -478,29 +425,17 @@ export async function planTour(input: TourInput): Promise<TourOutcome> {
     pages.map((p) => pageLine(p, corpus)).join("\n"),
     replan,
   );
-  const model = createFallbackModel({
-    entries: chain,
+  const ask = structuredAsk<TourPlan>({
+    chain,
+    schema: tourSchema,
+    instructions: tourInstructions(language),
+    call: PLAN_CALL,
     trace: input.trace,
-    firstChunkTimeoutMs: config.firstChunkTimeoutMs,
-    requestTimeoutMs: config.requestTimeoutMs,
-    maxRetries: config.maxRetries,
-    retryBaseDelayMs: config.retryBaseDelayMs,
-    retryMaxDelayMs: config.retryMaxDelayMs,
-    beforeAttempt: input.beforeModelCall,
+    config,
+    abortSignal: input.abortSignal,
     onFailover: input.onFailover,
-    estimateTokens: (options) => countTokens(JSON.stringify(options.prompt)),
+    beforeModelCall: input.beforeModelCall,
   });
-  const ask = async (messages: ModelMessage[]): Promise<TourPlan> =>
-    (
-      await generateText({
-        model,
-        instructions: tourInstructions(language),
-        messages,
-        output: Output.object({ schema: tourSchema }),
-        abortSignal: input.abortSignal,
-        ...PLAN_CALL,
-      })
-    ).output;
 
   const ctx: TourCheckContext = {
     pages: new Map(pages.map((p) => [p.id, p])),
@@ -519,8 +454,11 @@ export async function planTour(input: TourInput): Promise<TourOutcome> {
     if (failures.length) {
       failed.push(...failures.map((f) => f.gate));
       repaired = true;
-      const repair = await attemptRepair(plan, ctx, messages, failures, ask);
-      plan = repair.plan;
+      const repair = await repairOnce(plan, messages, tourRepairNote(failures), ask, (p) =>
+        // A repair with no stops still fails: it gave up on what the first plan found.
+        p.stops.length ? checkTour(p, ctx) : [{ gate: "count", message: "" }],
+      );
+      plan = repair.value;
       failures = repair.failures;
       if (failures.length) {
         failed.push(...failures.map((f) => f.gate));
@@ -636,8 +574,7 @@ export function streamTour(request: TourStreamRequest): {
         messageMetadata: {
           sig: signAnswer(sessionId, messageId, shown),
           model: answering ? shortName(answering.model) : null,
-          ttftMs: trace.firstTokenAt === null ? null : trace.firstTokenAt - trace.startedAt,
-          totalMs: Date.now() - trace.startedAt,
+          ...timings(trace),
         },
       });
     },
@@ -649,19 +586,12 @@ export function streamTour(request: TourStreamRequest): {
 
   let resolveDone!: (outcome: TourOutcome | null) => void;
   const done = new Promise<TourOutcome | null>((resolve) => (resolveDone = resolve));
-  let finished = false;
 
-  const finish = async (ending: "finished" | "aborted") => {
-    if (finished) return;
-    finished = true;
+  const stream = closingStream(ui, async (ending, error) => {
+    if (error !== undefined) failure ??= error;
     request.onClose?.();
     const result = outcome as TourOutcome | null;
-    let finishReason = "stop";
-    if (ending === "aborted" || request.abortSignal.aborted) {
-      finishReason = "aborted";
-    } else if (failure) {
-      finishReason = "error:error";
-    }
+    const finishReason = finishReasonOf(ending, request.abortSignal, failure);
     if (request.persist !== false) {
       await persistTour(request, {
         messageId,
@@ -675,31 +605,6 @@ export function streamTour(request: TourStreamRequest): {
       });
     }
     resolveDone(result);
-  };
-
-  let reader: ReadableStreamDefaultReader<UIMessageChunk> | undefined;
-  const stream = new ReadableStream<UIMessageChunk>({
-    async pull(controller) {
-      try {
-        reader ??= ui.getReader();
-        const { done: ended, value } = await reader.read();
-        if (ended) {
-          controller.close();
-          await finish("finished");
-          return;
-        }
-        controller.enqueue(value);
-      } catch (error) {
-        failure ??= error;
-        controller.enqueue({ type: "error", errorText: "error" });
-        controller.close();
-        await finish("finished");
-      }
-    },
-    async cancel(reason) {
-      await reader?.cancel(reason).catch(() => undefined);
-      await finish("aborted");
-    },
   });
 
   return { messageId, stream, done };
@@ -731,56 +636,60 @@ async function persistTour(
     replanned: boolean;
   },
 ): Promise<void> {
+  const calls = [...details.trace.calls, ...(details.result?.searchCalls ?? [])];
+  // A tour spends the visitors' share, as a question does.
+  await logRow({
+    feature: "terminal",
+    calls,
+    sessionHash: request.sessionHash,
+    corpus: request.corpus,
+    label: "tour",
+    entry: () => tourRow(request, details, calls),
+  });
+}
+
+function tourRow(
+  request: TourStreamRequest,
+  details: Parameters<typeof persistTour>[1],
+  calls: ModelCall[],
+): AnswerLog {
   const { result, trace } = details;
-  const calls = [...trace.calls, ...(result?.searchCalls ?? [])];
-  try {
-    // A tour spends the visitors' share, as a question does.
-    if (calls.length) await recordUsage(calls, "terminal");
-    if (wasForgotten(request.sessionHash)) return;
-    const { tokens, usd } = summarizeCalls(calls);
-    const tour: NonNullable<AnswerTrace["tour"]> = {
-      stops: result?.stops.length ?? 0,
-      repaired: result?.repaired ?? false,
-      replanned: details.replanned,
-      ...(result?.kind === "default"
-        ? { fallback: result.injection ? ("injection" as const) : result.reason! }
-        : {}),
-      ...(result?.failures.length ? { failures: [...new Set(result.failures)] } : {}),
-    };
-    const checks: AnswerChecks = { v: 1, flags: result?.injection ? ["injection-attempt"] : [] };
-    const answering = answeringModel(trace);
-    await logAnswer({
-      id: details.messageId,
-      sessionHash: request.sessionHash,
-      locale: request.locale,
-      language: request.language,
-      // A visitor's row: `forget` takes it. The route keeps it out of the answers' measures.
-      source: "terminal",
-      route: TOUR_ROUTE,
-      routeReason: routeReason(result, details.replanned),
-      question: request.interest,
-      answer: [details.shown, ...(result?.stops ?? []).map((s) => s.line)]
-        .filter(Boolean)
-        .join("\n"),
-      citedIds: result?.kind === "plan" ? result.stops.map((s) => s.id) : details.cited,
-      toolCalls: [],
-      model: answering?.model ?? null,
-      attempts: trace.attempts,
-      ttftMs: trace.firstTokenAt === null ? null : trace.firstTokenAt - trace.startedAt,
-      totalMs: Date.now() - trace.startedAt,
-      tokens,
-      usd,
-      finishReason: details.finishReason,
-      promptVersion: `${PROMPT_VERSION}+${PROMPT_HASH}`,
-      droppedAnswers: request.droppedAnswers ?? 0,
-      trace: buildAnswerTrace([], trace, undefined, { tour }),
-      droppedCitations: details.dropped,
-      corpusKey: snapshotKey(request.corpus),
-      checks,
-    });
-    await recordSnapshot(request.corpus);
-  } catch (error) {
-    console.error("[ask] could not record the tour", error);
-    captureError(error, { phase: "tour-log" });
-  }
+  const { tokens, usd } = summarizeCalls(calls);
+  const tour: NonNullable<AnswerTrace["tour"]> = {
+    stops: result?.stops.length ?? 0,
+    repaired: result?.repaired ?? false,
+    replanned: details.replanned,
+    ...(result?.kind === "default"
+      ? { fallback: result.injection ? ("injection" as const) : result.reason! }
+      : {}),
+    ...(result?.failures.length ? { failures: [...new Set(result.failures)] } : {}),
+  };
+  const checks: AnswerChecks = { v: 1, flags: result?.injection ? ["injection-attempt"] : [] };
+  const answering = answeringModel(trace);
+  return {
+    id: details.messageId,
+    sessionHash: request.sessionHash,
+    locale: request.locale,
+    language: request.language,
+    // A visitor's row: `forget` takes it. The route keeps it out of the answers' measures.
+    source: "terminal",
+    route: TOUR_ROUTE,
+    routeReason: routeReason(result, details.replanned),
+    question: request.interest,
+    answer: [details.shown, ...(result?.stops ?? []).map((s) => s.line)].filter(Boolean).join("\n"),
+    citedIds: result?.kind === "plan" ? result.stops.map((s) => s.id) : details.cited,
+    toolCalls: [],
+    model: answering?.model ?? null,
+    attempts: trace.attempts,
+    ...timings(trace),
+    tokens,
+    usd,
+    finishReason: details.finishReason,
+    promptVersion: `${PROMPT_VERSION}+${PROMPT_HASH}`,
+    droppedAnswers: request.droppedAnswers ?? 0,
+    trace: buildAnswerTrace([], trace, undefined, { tour }),
+    droppedCitations: details.dropped,
+    corpusKey: snapshotKey(request.corpus),
+    checks,
+  };
 }
