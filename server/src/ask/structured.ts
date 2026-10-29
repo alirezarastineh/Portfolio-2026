@@ -225,8 +225,9 @@ export function finishReasonOf(
 /**
  * A planner's row, however its stream ended: the usage first (spent whether or
  * not the row is kept), then the row unless the visitor forgot the session
- * meanwhile, then the corpus snapshot. Never throws: a failure is logged and
- * reported as `<label>-log`.
+ * meanwhile, then the corpus snapshot. `calls` are its model calls: a search's
+ * embedding calls are recorded as the search makes them. Never throws: a
+ * failure is logged and reported as `<label>-log`.
  */
 export async function logRow(options: {
   feature: Feature;

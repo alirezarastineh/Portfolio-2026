@@ -636,25 +636,24 @@ async function persistTour(
     replanned: boolean;
   },
 ): Promise<void> {
-  const calls = [...details.trace.calls, ...(details.result?.searchCalls ?? [])];
-  // A tour spends the visitors' share, as a question does.
+  // A tour spends the visitors' share, as a question does. Its searches' embedding calls
+  // are recorded as the searches make them (embeddings.ts), so here they are only its cost.
   await logRow({
     feature: "terminal",
-    calls,
+    calls: details.trace.calls,
     sessionHash: request.sessionHash,
     corpus: request.corpus,
     label: "tour",
-    entry: () => tourRow(request, details, calls),
+    entry: () => tourRow(request, details),
   });
 }
 
 function tourRow(
   request: TourStreamRequest,
   details: Parameters<typeof persistTour>[1],
-  calls: ModelCall[],
 ): AnswerLog {
   const { result, trace } = details;
-  const { tokens, usd } = summarizeCalls(calls);
+  const { tokens, usd } = summarizeCalls([...trace.calls, ...(result?.searchCalls ?? [])]);
   const tour: NonNullable<AnswerTrace["tour"]> = {
     stops: result?.stops.length ?? 0,
     repaired: result?.repaired ?? false,
