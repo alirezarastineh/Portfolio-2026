@@ -85,6 +85,14 @@ console.log("largest, brotli (raw):");
 for (const f of [...files].sort((a, b) => b.brotli - a.brotli).slice(0, 8)) {
   console.log(`  ${kb(f.brotli).padStart(9)} (${kb(f.raw)})  ${f.name}`);
 }
+// The lazy chunks the plans name, whatever their size (visitor plan V20: match's paste
+// box): each must stay its own chunk, loaded only when its feature is used.
+const WATCHED = ["match-box.component"];
+const watched = `lazy: ${WATCHED.map((name) => {
+  const f = files.find((file) => file.name.startsWith(`${name}-`));
+  return f ? `${name} ${kb(f.brotli)} brotli (${kb(f.raw)})` : `${name} not built apart`;
+}).join("; ")}`;
+console.log(watched);
 // Vite's own chunk-size warning, which this build never prints (plan Phase 3).
 const big = files.filter((f) => f.raw > 500_000);
 if (big.length > 0)
@@ -95,8 +103,8 @@ const env = process.env;
 // change also go to the job's summary and, as a notice, onto the run's page,
 // which shows annotations to readers without a login.
 if (env.GITHUB_STEP_SUMMARY) {
-  appendFileSync(env.GITHUB_STEP_SUMMARY, `- ${sizes}\n- ${change}\n`);
-  const message = `${sizes}\n${change}`
+  appendFileSync(env.GITHUB_STEP_SUMMARY, `- ${sizes}\n- ${change}\n- ${watched}\n`);
+  const message = `${sizes}\n${change}\n${watched}`
     .replaceAll("%", "%25")
     .replaceAll("\r", "%0D")
     .replaceAll("\n", "%0A");
