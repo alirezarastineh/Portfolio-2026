@@ -27,6 +27,8 @@ export interface AnswerReceipt {
   level?: NonNullable<AnswerTrace["level"]>;
   /** Why the verifier repaired an answer without words, and who wrote them. */
   repair?: NonNullable<AnswerTrace["repair"]>;
+  /** A matched brief (visitor plan V19): its kind, its rows, and those the critic made "not published". */
+  match?: { kind: NonNullable<AnswerTrace["match"]>["kind"]; rows: number; downgraded: number };
 }
 
 /** Every field the receipt may carry; a new one is added here and in its test first. */
@@ -40,6 +42,7 @@ export const RECEIPT_FIELDS = [
   "focus",
   "level",
   "repair",
+  "match",
 ] as const satisfies readonly (keyof AnswerReceipt)[];
 
 /** The tools that look something up; the others act (navigate, follow-ups, the hand-off). */
@@ -51,11 +54,21 @@ const LOOKUPS: ReadonlySet<string> = new Set<ToolName>([
 ]);
 
 export function answerReceipt(
-  trace: Pick<AnswerTrace, "routing" | "escalation" | "page" | "focus" | "level" | "repair">,
-  counts: { toolNames: readonly string[]; cited: number; dropped: readonly string[] },
+  trace: Pick<
+    AnswerTrace,
+    "routing" | "escalation" | "page" | "focus" | "level" | "repair" | "match"
+  >,
+  counts: {
+    toolNames: readonly string[];
+    cited: number;
+    dropped: readonly string[];
+    /** Searches code ran itself (a match's, visitor plan V19): lookups too. */
+    searches?: number;
+  },
 ): AnswerReceipt {
+  const match = trace.match;
   return {
-    lookups: counts.toolNames.filter((name) => LOOKUPS.has(name)).length,
+    lookups: counts.toolNames.filter((name) => LOOKUPS.has(name)).length + (counts.searches ?? 0),
     sources: counts.cited,
     // Each invented id once, as the log keeps them.
     removed: new Set(counts.dropped).size,
@@ -65,5 +78,14 @@ export function answerReceipt(
     ...(trace.focus ? { focus: { kind: trace.focus.kind, verified: trace.focus.verified } } : {}),
     ...(trace.level ? { level: trace.level } : {}),
     ...(trace.repair ? { repair: { reason: trace.repair.reason, by: trace.repair.by } } : {}),
+    ...(match
+      ? {
+          match: {
+            kind: match.kind,
+            rows: match.items.filter((item) => item.status !== null).length,
+            downgraded: match.items.filter((item) => item.downgraded).length,
+          },
+        }
+      : {}),
   };
 }

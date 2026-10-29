@@ -4,7 +4,7 @@ import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
 import { getDb } from "../db/client.js";
 import { aiRateEvents, aiUsage, aiUsageFeatures } from "../db/schema.js";
 import type { AskConfig } from "./config.js";
-import { isSwitched, reserveLine, type Feature } from "./features.js";
+import { isSwitched, reserveLine, VISITOR_FEATURES, type Feature } from "./features.js";
 import type { AiSettings } from "./settings.js";
 
 /**
@@ -87,8 +87,8 @@ export async function spendByFeature(
 function offReason(config: AskConfig, settings: AiSettings, feature: Feature): string | null {
   if (!config.enabled) return "disabled";
   if (config.unavailableReason) return "unconfigured";
-  // The admin's switch closes the visitors' terminal, not the admin's own tools.
-  if (feature === "terminal") return settings.enabled ? null : "disabled_by_admin";
+  // The admin's switch closes the visitors' terminal, and match with it, not the admin's own tools.
+  if (VISITOR_FEATURES.has(feature) && !settings.enabled) return "disabled_by_admin";
   if (isSwitched(feature) && !settings.featureSwitches[feature]) return "switched_off";
   return null;
 }
@@ -96,9 +96,10 @@ function offReason(config: AskConfig, settings: AiSettings, feature: Feature): s
 /**
  * The state of `feature` for a given spend today: pure, so it holds for every
  * spend (see the property tests). The terminal rests only once the whole
- * budget is spent. Every other feature stops earlier: once the day's total
- * reaches the line that keeps the visitors' reserve, or once its own spend
- * reaches its cap. Whatever the rest spends, visitors keep that share.
+ * budget is spent, and match (visitor plan V19) there too or at its own cap:
+ * both spend inside the visitors' reserve. Every other feature stops earlier:
+ * once the day's total reaches the line that keeps that reserve, or once its
+ * own spend reaches its cap. Whatever the rest spends, visitors keep that share.
  */
 export function stateFor(
   config: AskConfig,
@@ -118,7 +119,10 @@ export function stateFor(
   });
   if (spentUsd >= budgetUsd) return resting("budget");
   if (feature !== "terminal") {
-    if (spentUsd >= reserveLine(budgetUsd, settings.publicReserve)) return resting("reserve");
+    const inReserve = VISITOR_FEATURES.has(feature);
+    if (!inReserve && spentUsd >= reserveLine(budgetUsd, settings.publicReserve)) {
+      return resting("reserve");
+    }
     const cap = settings.featureCaps[feature];
     if (cap !== null && spend.ownUsd >= cap) return resting("cap");
   }
@@ -204,20 +208,30 @@ async function overLimit({ bucket, limit, windowMs }: Window, now: number): Prom
   return Math.max(1, Math.ceil((freesAt - now) / 1000));
 }
 
-export async function checkRate(
+/** Under every window, or the longest wait until all of them have room. */
+async function underAll(
+  windows: readonly Window[],
+  now: number,
+): Promise<{ ok: true } | { ok: false; retryAfter: number }> {
+  const waits = await Promise.all(windows.map((window) => overLimit(window, now)));
+  const retryAfter = Math.max(0, ...waits.filter((wait): wait is number => wait !== null));
+  return retryAfter ? { ok: false, retryAfter } : { ok: true };
+}
+
+export function checkRate(
   config: AskConfig,
   ipHash: string,
   sessionHash: string,
   now = Date.now(),
 ): Promise<{ ok: true } | { ok: false; retryAfter: number }> {
-  const windows: Window[] = [
-    { bucket: `ip:${ipHash}`, limit: config.ratePerHour, windowMs: HOUR_MS },
-    { bucket: `ip:${ipHash}`, limit: config.ratePerDay, windowMs: DAY_MS },
-    { bucket: `session:${sessionHash}`, limit: config.sessionRatePerHour, windowMs: HOUR_MS },
-  ];
-  const waits = await Promise.all(windows.map((window) => overLimit(window, now)));
-  const retryAfter = Math.max(0, ...waits.filter((wait): wait is number => wait !== null));
-  return retryAfter ? { ok: false, retryAfter } : { ok: true };
+  return underAll(
+    [
+      { bucket: `ip:${ipHash}`, limit: config.ratePerHour, windowMs: HOUR_MS },
+      { bucket: `ip:${ipHash}`, limit: config.ratePerDay, windowMs: DAY_MS },
+      { bucket: `session:${sessionHash}`, limit: config.sessionRatePerHour, windowMs: HOUR_MS },
+    ],
+    now,
+  );
 }
 
 export async function recordRequest(ipHash: string, sessionHash: string): Promise<void> {
@@ -253,18 +267,51 @@ export const FORGET_RATE = { perHour: 10, perDay: 30 } as const;
  */
 export const MAP_RATE = { perHour: 120, perDay: 1_000 } as const;
 
+/**
+ * Match's limits (visitor plan V19): a brief costs two to four calls, so 3 an
+ * hour per session and 6 a day per address, in buckets apart from the
+ * questions': a match neither uses up a visitor's questions nor is let
+ * through by them. Its cap bounds what it costs.
+ */
+export const MATCH_RATE = { sessionPerHour: 3, ipPerDay: 6 } as const;
+
 /** An hourly and a daily limit on one per-address bucket. */
-async function checkBucket(
+function checkBucket(
   bucket: string,
   limits: { perHour: number; perDay: number },
   now: number,
 ): Promise<{ ok: true } | { ok: false; retryAfter: number }> {
-  const waits = await Promise.all([
-    overLimit({ bucket, limit: limits.perHour, windowMs: HOUR_MS }, now),
-    overLimit({ bucket, limit: limits.perDay, windowMs: DAY_MS }, now),
-  ]);
-  const retryAfter = Math.max(0, ...waits.filter((wait): wait is number => wait !== null));
-  return retryAfter ? { ok: false, retryAfter } : { ok: true };
+  return underAll(
+    [
+      { bucket, limit: limits.perHour, windowMs: HOUR_MS },
+      { bucket, limit: limits.perDay, windowMs: DAY_MS },
+    ],
+    now,
+  );
+}
+
+export function checkMatchRate(
+  ipHash: string,
+  sessionHash: string,
+  now = Date.now(),
+): Promise<{ ok: true } | { ok: false; retryAfter: number }> {
+  return underAll(
+    [
+      {
+        bucket: `match-session:${sessionHash}`,
+        limit: MATCH_RATE.sessionPerHour,
+        windowMs: HOUR_MS,
+      },
+      { bucket: `match-ip:${ipHash}`, limit: MATCH_RATE.ipPerDay, windowMs: DAY_MS },
+    ],
+    now,
+  );
+}
+
+export async function recordMatchRequest(ipHash: string, sessionHash: string): Promise<void> {
+  await getDb()
+    .insert(aiRateEvents)
+    .values([{ bucket: `match-ip:${ipHash}` }, { bucket: `match-session:${sessionHash}` }]);
 }
 
 export function checkMcpRate(

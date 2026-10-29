@@ -12,6 +12,7 @@ import {
   aiMessages,
   aiSettings,
   aiUsage,
+  aiUsageFeatures,
   contactMessages,
 } from "../db/schema.js";
 import {
@@ -1073,5 +1074,171 @@ describe("a guided tour (visitor plan V16)", () => {
     });
     expect(res.status).toBe(200);
     expect((await logged(messageId)).signals).toEqual({ v: 1, tourSteps: 3, tourDone: true });
+  });
+});
+
+describe("a matched brief (visitor plan V19)", () => {
+  const PLAN = {
+    items: [{ text: "Retrieval-augmented generation", priority: "must", terms: ["RAG"] }],
+  };
+  const ROWS = {
+    rows: [
+      {
+        item: 1,
+        status: "evidence",
+        summary: "Built Atlas, a retrieval-augmented assistant over 40,000 internal documents.",
+        cites: ["project:atlas@en"],
+      },
+    ],
+    summary: "",
+  };
+
+  /** One model for both calls: the rows when asked to check items, else the plan. */
+  function matcher() {
+    const calls: unknown[] = [];
+    const model = new MockLanguageModelV4({
+      modelId: "gemini-3.5-flash-lite",
+      doGenerate: async (call) => {
+        calls.push(call);
+        const rows = JSON.stringify(call.prompt).includes("to check, numbered:");
+        return {
+          content: [{ type: "text", text: JSON.stringify(rows ? ROWS : PLAN) }],
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: usage(300, 60),
+          warnings: [],
+        };
+      },
+    });
+    chain = () => [mockEntry("gemini-3.5-flash-lite", model)];
+    return calls;
+  }
+
+  const match = (brief: unknown, options: { session?: string; ip?: string; kind?: string } = {}) =>
+    ask("match role", {
+      ...(options.session ? { session: options.session } : {}),
+      ...(options.ip ? { ip: options.ip } : {}),
+      extra: { mode: "match", match: { kind: options.kind ?? "role", brief } },
+    });
+
+  async function switchOn() {
+    await getDb()
+      .insert(aiSettings)
+      .values({ id: 1, featureSwitches: { match: true } });
+    invalidateAssistantCache();
+  }
+
+  beforeEach(() => {
+    corpusOverride = (c) => fixtureAskCorpus(c);
+  });
+
+  it("is off until the admin switches it on: feature_off, no model asked, and the config says so", async () => {
+    const calls = matcher();
+    const off = await match("We need RAG in production.");
+    expect(off.status).toBe(503);
+    expect(await off.json()).toEqual({ error: "feature_off" });
+    expect(calls).toHaveLength(0);
+    expect(await (await app.request("/v1/ask/config")).json()).toMatchObject({ match: false });
+
+    await switchOn();
+    expect(await (await app.request("/v1/ask/config")).json()).toMatchObject({ match: true });
+  });
+
+  it("matches a brief, logged apart from the answers with the brief redacted and cut; the hand-off and forget reach it", async () => {
+    const calls = matcher();
+    await switchOn();
+    const session = "match-forget-session-0001";
+    const brief = `Senior AI engineer. Must: retrieval-augmented generation. Apply to jo@example.com. ${"Benefits. ".repeat(300)}`;
+    const res = await match(brief, { session });
+    expect(res.status).toBe(200);
+    const chunks = await readUiChunks(res);
+    expect(chunks.filter((c) => c["type"] === "data-match-progress").length).toBeGreaterThan(0);
+    const messageId = chunks.find((c) => c["type"] === "start")!["messageId"] as string;
+    const finish = chunks.find((c) => c["type"] === "finish")!;
+    expect(finish["messageMetadata"]).toMatchObject({
+      handoff: { by: "fallback", summary: expect.stringMatching(/^Role: Senior AI engineer/) },
+      receipt: {
+        lookups: 1,
+        sources: 1,
+        removed: 0,
+        match: { kind: "role", rows: 1, downgraded: 0 },
+      },
+    });
+    expect(uiText(chunks)).toContain("- ✓ **Retrieval-augmented generation** (must) · evidence:");
+    expect(calls).toHaveLength(2);
+
+    const row = await logged(messageId);
+    expect(row).toMatchObject({
+      source: "terminal",
+      route: "match",
+      citedIds: ["project:atlas@en"],
+      finishReason: "stop",
+    });
+    expect(row.questionRedacted).toHaveLength(2_000);
+    expect(row.questionRedacted).toContain("Apply to [email].");
+    expect(row.trace?.match).toEqual({
+      kind: "role",
+      items: [
+        {
+          text: "Retrieval-augmented generation",
+          priority: "must",
+          status: "evidence",
+          hits: ["project:atlas@en", "experience:tum@en"],
+        },
+      ],
+      repaired: { plan: false, rows: false },
+    });
+    expect(row.trace?.handoff).toEqual({ by: "fallback" });
+    // Its own feature's spend, inside the visitors' reserve.
+    const own = await getDb()
+      .select()
+      .from(aiUsageFeatures)
+      .where(eq(aiUsageFeatures.feature, "match"));
+    expect(own.length).toBeGreaterThan(0);
+
+    const confirmed = await app.request("/v1/ask/handoff", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sessionId: session, messageId }),
+    });
+    expect(confirmed.status).toBe(200);
+    const forgotten = await app.request("/v1/ask/forget", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": "198.51.100.251" },
+      body: JSON.stringify({ sessionId: session }),
+    });
+    expect(((await forgotten.json()) as { deleted: number }).deleted).toBe(1);
+  });
+
+  it("stops at its cap, and refuses a match without its brief, an empty brief or an unknown kind", async () => {
+    matcher();
+    await switchOn();
+    expect((await ask("match role", { extra: { mode: "match" } })).status).toBe(400);
+    expect((await match("  \u0000 ")).status).toBe(400);
+    expect((await match("RAG", { kind: "essay" })).status).toBe(400);
+    expect((await match("x".repeat(4_001))).status).toBe(400);
+    await getDb()
+      .insert(aiUsageFeatures)
+      .values({ day: utcDay(), feature: "match", model: "x", usd: 0.1 });
+    const capped = await match("We need RAG in production.");
+    expect(capped.status).toBe(503);
+    expect(await capped.json()).toEqual({ error: "cap_reached" });
+  });
+
+  it("limits a session to 3 an hour in buckets of its own, apart from its questions", async () => {
+    matcher();
+    await switchOn();
+    const session = "match-rate-session-00001";
+    for (let i = 0; i < 3; i++) {
+      const res = await match("We need RAG in production.", { session });
+      expect(res.status).toBe(200);
+      // Read to the end: an unread stream keeps its concurrency slot.
+      await res.text();
+    }
+    const limited = await match("We need RAG in production.", { session });
+    expect(limited.status).toBe(429);
+    expect(((await limited.json()) as { error: string }).error).toBe("rate_limited");
+    // The session's questions are not used up by its matches.
+    only(scripted([textTurn("Atlas answers support questions [^project:atlas@en].")]));
+    expect((await ask("What is Atlas?", { session })).status).toBe(200);
   });
 });

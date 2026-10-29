@@ -105,6 +105,7 @@ describe("inspect's projection", () => {
       "guard",
       "handoff",
       "level",
+      "match",
       "page",
       "repair",
       "routing",
@@ -113,8 +114,9 @@ describe("inspect's projection", () => {
       "v",
       "window",
     ]);
-    // A tour's plan (visitor plan V16) is the admin's measure.
+    // A tour's plan (visitor plan V16) and a match's items and verdicts (V19) are the admin's measure.
     expect(TRACE_FIELDS.tour).toBe("withheld");
+    expect(TRACE_FIELDS.match).toBe("withheld");
     expect(
       Object.entries(STEP_FIELDS)
         .filter(([, s]) => s === "shown")

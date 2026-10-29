@@ -220,6 +220,28 @@ describe("the assistant's outcomes", () => {
     expect(result.outcomes).toEqual(before);
   });
 
+  it("never counts a matched brief as an answer (visitor plan V19)", async () => {
+    await seed();
+    const before = (await view()).outcomes;
+    await getDb()
+      .insert(aiMessages)
+      .values({
+        id: "m_match_one",
+        locale: "en",
+        route: "match",
+        sessionHash: "s10",
+        totalMs: 100,
+        tokens: { input: 1, cached: 0, output: 1, thoughts: 0 },
+        finishReason: "stop",
+        promptVersion: "p",
+        usd: 0.004,
+        questionRedacted: "Senior AI engineer: RAG in production.",
+        answerExcerpt: "Published evidence for 1 of 1 requirement.",
+        handoffConfirmedAt: new Date(),
+      });
+    expect((await view()).outcomes).toEqual(before);
+  });
+
   it("switches the primary metric, and refuses one it does not know", async () => {
     await seed();
     expect(

@@ -95,6 +95,7 @@
     ]
   },
   "waivers": {
-    "ask-2026-10-23.1+ddd8eadec886": "Visitor plan V16 adds the guided tour's planner (its instructions, request, repair note, answer shape and fallback lines); the answering prompt is unchanged. Part F's recorded run (the tour category plus the suite) follows, on the user's go-ahead."
+    "ask-2026-10-23.1+ddd8eadec886": "Visitor plan V16 adds the guided tour's planner (its instructions, request, repair note, answer shape and fallback lines); the answering prompt is unchanged. Part F's recorded run (the tour category plus the suite) follows, on the user's go-ahead.",
+    "ask-2026-10-28.1+f8bf94c55932": "Visitor plan V19 adds match: its planner and synthesizer (their instructions, requests, repair notes and answer shapes) and the lines the server writes for it; the answering prompt is unchanged. Part G's recorded run (the match category plus the suite) follows, on the user's go-ahead."
   }
 }

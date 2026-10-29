@@ -8,6 +8,7 @@ import { tokenCounts, type TokenCounts } from "./models/prices.js";
 import type { Escalation, Sensitivity } from "./router.js";
 import type { RecordedStep, RecordedToolCall } from "./stream-transforms.js";
 import type { ToolOutcome } from "./tools.js";
+import type { MatchKind, MatchStatus, MatchStop } from "./match/prompt.js";
 import type { TourFallback } from "./tour-prompt.js";
 
 /**
@@ -118,6 +119,26 @@ export interface AnswerTrace {
     fallback?: TourFallback | "injection";
     failures?: string[];
   };
+  /**
+   * A matched brief (visitor plan V19): its kind; the plan's items (redacted)
+   * with what their searches found and the status each row got, careful or
+   * downgraded by the critic; which call was repaired; the gates that failed;
+   * why it stopped, if it did. Only on a match's row.
+   */
+  match?: {
+    kind: MatchKind;
+    items: {
+      text: string;
+      priority: "must" | "nice";
+      status: MatchStatus | null;
+      hits: string[];
+      careful?: true;
+      downgraded?: true;
+    }[];
+    repaired: { plan: boolean; rows: boolean };
+    failures?: string[];
+    stop?: MatchStop;
+  };
 }
 
 export type RouteMetadata = Pick<
@@ -132,6 +153,7 @@ export type RouteMetadata = Pick<
   | "level"
   | "guard"
   | "tour"
+  | "match"
 >;
 
 function inputText(input: unknown): string {

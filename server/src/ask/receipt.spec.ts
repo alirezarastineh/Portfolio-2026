@@ -68,6 +68,15 @@ describe("the receipt", () => {
         focus: { kind: "section", verified: true },
         level: "plain",
         repair: { reason: "no-words", by: "model" },
+        match: {
+          kind: "role",
+          items: [
+            { text: "Python", priority: "must", status: "evidence", hits: ["skills@en"] },
+            { text: "Rust", priority: "nice", status: "not-published", hits: [], downgraded: true },
+            { text: "Go", priority: "nice", status: null, hits: [] },
+          ],
+          repaired: { plan: false, rows: true },
+        },
       },
       { toolNames: ["search_portfolio"], cited: 1, dropped: [] },
     );
@@ -82,7 +91,13 @@ describe("the receipt", () => {
       focus: { kind: "section", verified: true },
       level: "plain",
       repair: { reason: "no-words", by: "model" },
+      // A match's rows (visitor plan V19): those it showed, and those the critic took back.
+      match: { kind: "role", rows: 2, downgraded: 1 },
     });
+    // A match's own searches count as lookups.
+    expect(answerReceipt({}, { toolNames: [], cited: 0, dropped: [], searches: 3 }).lookups).toBe(
+      3,
+    );
     // Nothing more than the counts for an ordinary answer: no reason string, no step.
     expect(
       answerReceipt(

@@ -1,4 +1,4 @@
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 
 import { aiFeedback, aiMessages } from "../db/schema.js";
 import { NOT_IN_PORTFOLIO } from "./answer-patterns.js";
@@ -6,14 +6,18 @@ import { NOT_IN_PORTFOLIO } from "./answer-patterns.js";
 /** The route a guided tour is logged under (visitor plan V16): a visitor's row, but no answer. */
 export const TOUR_ROUTE = "tour";
 
+/** The route a matched brief is logged under (visitor plan V19): a visitor's row, but no answer. */
+export const MATCH_ROUTE = "match";
+
 /**
  * A visitor's answers: the terminal's rows less their tours (visitor plan
- * V16), which every measure of answers leaves out. `forget`, `inspect` and the
- * browser's signals reach both.
+ * V16) and matched briefs (V19), which every measure of answers leaves out.
+ * `forget`, `inspect`, the browser's signals and the contact form's attached
+ * conversation reach them all.
  */
 export const VISITOR_ANSWER = and(
   eq(aiMessages.source, "terminal"),
-  ne(aiMessages.route, TOUR_ROUTE),
+  notInArray(aiMessages.route, [TOUR_ROUTE, MATCH_ROUTE]),
 )!;
 
 /**

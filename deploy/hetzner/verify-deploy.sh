@@ -303,6 +303,13 @@ if [[ "${ASK_CONFIG}" == *'"state"'* ]]; then
 else
   fail "assistant config is not served (${API}/v1/ask/config)"
 fi
+# Match (visitor plan V19): the config says whether it is offered, whatever its switch says.
+MATCH_FLAG='"match":(true|false)'
+if [[ "${ASK_CONFIG}" =~ ${MATCH_FLAG} ]]; then
+  pass "the config says whether match is offered (${BASH_REMATCH[1]})"
+else
+  fail "the config does not say whether match is offered (an API from before visitor plan V19?)"
+fi
 check "assistant rejects a malformed question without calling a model" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' '${API}/v1/ask')\" = 400 ]"
 # The glass box (visitor plan V12, V13): inspect refuses what no terminal sends, and the

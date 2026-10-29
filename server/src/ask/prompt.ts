@@ -5,6 +5,7 @@ import { relateSample } from "./corpus/related.js";
 import { FORMAT_SAMPLE, renderCompact, renderCore } from "./corpus/render.js";
 import type { Sensitivity } from "./router.js";
 import { toolDefinitionsText } from "./tool-defs.js";
+import { matchPromptText } from "./match/prompt.js";
 import { tourPromptText } from "./tour-prompt.js";
 
 /**
@@ -20,7 +21,7 @@ import { tourPromptText } from "./tour-prompt.js";
  * language instruction.
  */
 
-export const PROMPT_VERSION = "ask-2026-10-23.1";
+export const PROMPT_VERSION = "ask-2026-10-28.1";
 
 /**
  * A confidential line in the instructions (plan phase 15): no answer has a
@@ -456,6 +457,8 @@ export function hashedPromptText(): string {
     closingLine("de"),
     // The guided tour's planner (visitor plan V16).
     tourPromptText(wrapVisitor("x", "en")),
+    // Match's planner and synthesizer, and the lines the server writes for it (visitor plan V19).
+    matchPromptText(wrapVisitor("x", "en")),
   ].join("\n\0\n");
 }
 

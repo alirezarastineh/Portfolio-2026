@@ -5,6 +5,7 @@ import { LOCALES, type Locale } from "../content/schema.js";
 import { getDb } from "../db/client.js";
 import { aiFaq, aiFaqTranslations, aiSettings } from "../db/schema.js";
 import {
+  CAP_DEFAULTS,
   DEFAULT_PUBLIC_RESERVE,
   FENCED_FEATURES,
   SWITCH_DEFAULTS,
@@ -78,10 +79,14 @@ export function invalidateAssistantCache(): void {
   cache = undefined;
 }
 
-/** The stored caps, each a positive number or null; a key no feature has is ignored. */
+/**
+ * The stored caps, each a positive number or null; a key no feature has is
+ * ignored, and a feature with no key has its default cap (a stored null has none).
+ */
 function capsFrom(stored: Partial<Record<string, unknown>>): Record<FencedFeature, number | null> {
   return Object.fromEntries(
     FENCED_FEATURES.map((f) => {
+      if (!Object.hasOwn(stored, f)) return [f, CAP_DEFAULTS[f] ?? null];
       const cap = stored[f];
       return [f, typeof cap === "number" && cap > 0 ? cap : null];
     }),

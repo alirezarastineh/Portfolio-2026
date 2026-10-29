@@ -22,7 +22,13 @@ import {
 } from "../db/schema.js";
 import { streamAnswer } from "./agent.js";
 import { audit, countOpenAlerts, readDemotions } from "./audit.js";
-import { OUTCOME_COLUMNS, TOUR_ROUTE, UNKNOWN_ANSWER, VISITOR_ANSWER } from "./outcome-rows.js";
+import {
+  MATCH_ROUTE,
+  OUTCOME_COLUMNS,
+  TOUR_ROUTE,
+  UNKNOWN_ANSWER,
+  VISITOR_ANSWER,
+} from "./outcome-rows.js";
 import type { AskConfig } from "./config.js";
 import { largestCore } from "./corpus/index.js";
 import { embeddingStatus } from "./embeddings.js";
@@ -480,12 +486,13 @@ adminAskRouter.get("/assistant/usage", async (c) => {
     .groupBy(aiUsageFeatures.day, aiUsageFeatures.feature)
     .orderBy(asc(aiUsageFeatures.day), asc(aiUsageFeatures.feature));
 
-  // Each flag the checks raised, over the period: a set-returning function per row.
+  // Each flag the checks raised on answers, over the period (as VISITOR_ANSWER, which the
+  // alias keeps out of this query): a set-returning function per row.
   const { rows: checks } = await getDb().execute<{ flag: string; count: number }>(sql`
     select f.flag, count(*)::int as count
     from ai_messages m
     cross join lateral jsonb_array_elements_text(coalesce(m.checks -> 'flags', '[]'::jsonb)) as f(flag)
-    where m.created_at >= ${new Date(`${since}T00:00:00Z`)} and m.source = 'terminal' and m.route <> ${TOUR_ROUTE}
+    where m.created_at >= ${new Date(`${since}T00:00:00Z`)} and m.source = 'terminal' and m.route not in (${TOUR_ROUTE}, ${MATCH_ROUTE})
     group by f.flag
     order by count desc, f.flag`);
 

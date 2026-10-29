@@ -5,11 +5,15 @@
  * reaches the line that keeps a share of the budget for visitors, once its
  * own cap is reached, or when the admin switches it off. With any reserve
  * above zero, an eval run, the copilot or insights can no longer put visitors
- * into "resting"; at zero they may spend the whole budget, as before.
+ * into "resting"; at zero they may spend the whole budget, as before. Match
+ * (visitor plan V19) is the visitors' too: it spends inside their reserve, up
+ * to its own cap, while its switch is on.
  */
 
 export const FEATURES = [
   "terminal",
+  // A visitor's brief checked against the published work (visitor plan V19).
+  "match",
   "playground",
   "copilot",
   "insights",
@@ -34,6 +38,7 @@ export const FENCED_FEATURES = FEATURES.filter((f): f is FencedFeature => f !== 
  * do. Work that would spend on its own, or is not built yet, starts off.
  */
 export const SWITCH_DEFAULTS = {
+  match: false,
   copilot: true,
   judge: true,
   autoInsights: false,
@@ -47,6 +52,12 @@ export const SWITCHED_FEATURES = Object.keys(SWITCH_DEFAULTS) as SwitchedFeature
 export function isSwitched(feature: Feature): feature is SwitchedFeature {
   return Object.hasOwn(SWITCH_DEFAULTS, feature);
 }
+
+/** A cap in USD a day for a feature the admin has not capped: switching match on is a small step. */
+export const CAP_DEFAULTS: Partial<Record<FencedFeature, number>> = { match: 0.1 };
+
+/** The visitors' features: the admin's terminal switch closes both, and neither stops at the reserve line. */
+export const VISITOR_FEATURES: ReadonlySet<Feature> = new Set(["terminal", "match"]);
 
 /** The share of the daily budget kept for visitors unless the admin sets another. */
 export const DEFAULT_PUBLIC_RESERVE = 0.5;

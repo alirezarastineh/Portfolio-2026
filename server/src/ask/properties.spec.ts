@@ -27,7 +27,13 @@ import type { CorpusDocument, CorpusKind } from "./corpus/build.js";
 import { resolveDocument, type AskCorpus } from "./corpus/index.js";
 import { coreView, renderCore } from "./corpus/render.js";
 import { askCorpusFromSnapshot } from "./corpus/snapshots.js";
-import { FEATURES, FENCED_FEATURES, MAX_PUBLIC_RESERVE, SWITCHED_FEATURES } from "./features.js";
+import {
+  FEATURES,
+  FENCED_FEATURES,
+  MAX_PUBLIC_RESERVE,
+  SWITCHED_FEATURES,
+  VISITOR_FEATURES,
+} from "./features.js";
 import { stateFor, type Availability } from "./guard.js";
 import {
   buildLeakGuard,
@@ -1052,7 +1058,7 @@ describe("properties", { timeout: 30_000 }, () => {
     );
   });
 
-  it("availability: only the terminal spends into the visitors' reserve, and no feature past its cap", () => {
+  it("availability: only the visitors' features spend into their reserve, and no feature past its cap", () => {
     const config = fixtureConfig();
     fc.assert(
       fc.property(
@@ -1064,13 +1070,44 @@ describe("properties", { timeout: 30_000 }, () => {
           const settings = settingsFrom(s);
           const budget = settings.dailyBudgetUsd ?? config.dailyBudgetUsd;
           const state = stateFor(config, settings, feature, { totalUsd, ownUsd });
+          // Match (visitor plan V19) is the visitors' own: it spends inside their reserve.
+          const visitors = VISITOR_FEATURES.has(feature);
           if (state.state === "ok") {
-            expect(totalUsd).toBeLessThan(budget * (1 - settings.publicReserve));
+            expect(totalUsd).toBeLessThan(
+              visitors ? budget : budget * (1 - settings.publicReserve),
+            );
             if (s.cap !== null) expect(ownUsd).toBeLessThan(s.cap);
           }
+          if (visitors && state.state === "resting") expect(state.line).not.toBe("reserve");
           // Whatever the others spent, the terminal answers until the whole budget is gone.
           const terminal = stateFor(config, settings, "terminal", { totalUsd, ownUsd: 0 });
           expect(terminal.state === "ok").toBe(totalUsd < budget);
+          // And a match is never open where the terminal is not.
+          if (visitors && state.state === "ok") expect(terminal.state).toBe("ok");
+        },
+      ),
+      runs(1000),
+    );
+  });
+
+  it("availability: match, switched on, is open exactly below the whole budget and its cap (visitor plan V19)", () => {
+    const config = fixtureConfig();
+    fc.assert(
+      fc.property(
+        fenceSettings,
+        fc.double({ min: 0, max: 1.2, noNaN: true }),
+        usd,
+        (s, share, ownUsd) => {
+          const settings = settingsFrom({ ...s, switchedOn: true });
+          const budget = settings.dailyBudgetUsd ?? config.dailyBudgetUsd;
+          // Spend drawn as a share of the budget, so the reserve's band is hit on purpose.
+          const totalUsd = share * budget;
+          const state = stateFor(config, settings, "match", { totalUsd, ownUsd });
+          const capped = s.cap !== null && ownUsd >= s.cap;
+          expect(state.state === "ok").toBe(totalUsd < budget && !capped);
+          if (state.state === "resting") {
+            expect(state.line).toBe(totalUsd >= budget ? "budget" : "cap");
+          }
         },
       ),
       runs(1000),

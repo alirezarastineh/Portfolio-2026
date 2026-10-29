@@ -115,6 +115,26 @@ export const TRUST_REGISTRY: readonly TrustEntry[] = [
     built: true,
   },
   {
+    action: "match.plan",
+    actor: "assistant",
+    level: "L2",
+    approver: "none",
+    enforcement:
+      "match/match.ts (visitor plan V19): it only lists a brief's items to check. Code gates them (checkPlan: at most 8, each at most 160 characters, distinct, a must for a role, the brief's language, nothing that reads as an instruction); one repair, else a polite stop; no tools. The searches are code's, not the model's (retrieve)",
+    reversible: true,
+    built: true,
+  },
+  {
+    action: "match.synthesize",
+    actor: "assistant",
+    level: "L2",
+    approver: "none",
+    enforcement:
+      "match/match.ts (visitor plan V19): it writes rows only from each item's passages and the core. Code verifies each (checkRows: a citation its passages or the core hold, no invented id, grounded figures, the language, the plan's items); one repair, then a failing row becomes the server's not-published line (settleRows); no tools. The hand-off waits for the visitor's yes (V6)",
+    reversible: true,
+    built: true,
+  },
+  {
     action: "copilot.suggest",
     actor: "copilot",
     level: "L0",

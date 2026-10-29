@@ -59,6 +59,20 @@ describe("the spending fences (plan phase 13)", () => {
     expect(check("judge", 0, 0)).toBe("ok");
   });
 
+  it("lets match spend inside the visitors' reserve up to its cap, while its switch is on (visitor plan V19)", () => {
+    const on = { featureSwitches: { ...DEFAULT_SETTINGS.featureSwitches, match: true } };
+    expect(check("match", 0, 0)).toBe("feature_off");
+    // Past the reserve line ($1), inside the budget: the visitors' own.
+    expect(check("match", 1.5, 0, on)).toBe("ok");
+    // Its default cap, $0.10 a day; a stored null has none.
+    expect(check("match", 1.5, 0.1, on)).toBe("cap_reached");
+    const uncapped = { ...on, featureCaps: { ...DEFAULT_SETTINGS.featureCaps, match: null } };
+    expect(check("match", 1.5, 0.5, uncapped)).toBe("ok");
+    expect(check("match", 2, 0, on)).toBe("assistant_resting");
+    // The admin's terminal switch closes it with the terminal.
+    expect(check("match", 0, 0, { ...on, enabled: false })).toBe("assistant_off");
+  });
+
   it("is off for every feature when the deploy switches the assistant off", () => {
     const config = fixtureConfig({ enabled: false });
     for (const feature of ["terminal", "eval", "copilot"] as const) {

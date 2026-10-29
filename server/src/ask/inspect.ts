@@ -108,6 +108,8 @@ export const TRACE_FIELDS = {
   guard: "shown",
   // A tour's plan, how it was checked and repaired (visitor plan V16): the admin's measure.
   tour: "withheld",
+  // A match's items, hits and the critic's verdicts (visitor plan V19): the admin's measure.
+  match: "withheld",
 } as const satisfies Record<keyof AnswerTrace, Listed>;
 
 export const STEP_FIELDS = {

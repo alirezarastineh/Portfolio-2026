@@ -40,6 +40,20 @@ describe("the trust registry (plan phase 14)", () => {
     expect(TRUST_REGISTRY.some((e) => e.level === "L3")).toBe(false);
   });
 
+  it("lets match only list a brief's items and write cited rows, both checked by code (visitor plan V19)", () => {
+    for (const action of ["match.plan", "match.synthesize"]) {
+      const entry = TRUST_REGISTRY.find((e) => e.action === action);
+      expect(entry, action).toMatchObject({
+        actor: "assistant",
+        level: "L2",
+        approver: "none",
+        reversible: true,
+        built: true,
+      });
+      expect(entry?.enforcement).toMatch(/match\/match\.ts/);
+    }
+  });
+
   it("lets Diagnose only propose, and its replay only run when the admin starts it (plan phase 24)", () => {
     expect(TRUST_REGISTRY.find((e) => e.action === "journal.diagnose")).toMatchObject({
       actor: "system",

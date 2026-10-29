@@ -155,6 +155,9 @@ describe("migration 0015: usage per feature and the fence settings", () => {
     expect(settings.publicReserve).toBe(0.7);
     expect(settings.featureCaps).toMatchObject({ eval: 0.5, copilot: 0.1, pairwise: null });
     expect(settings.featureSwitches).toMatchObject({ copilot: false, judge: true, agent: false });
+    // Match (visitor plan V19): off, with its default cap, until the admin sets either.
+    expect(settings.featureCaps).toMatchObject({ match: 0.1 });
+    expect(settings.featureSwitches).toMatchObject({ match: false });
 
     // A partial patch merges: one cap removed, the rest kept.
     await admin.put("/admin/assistant/settings", {
@@ -167,6 +170,19 @@ describe("migration 0015: usage per feature and the fence settings", () => {
     });
     const [merged] = await getDb().select().from(aiSettings);
     expect(merged!.featureCaps).toEqual({ eval: 0.5, copilot: null });
+
+    // A stored null clears a default cap too: match then stops only at the whole budget.
+    const cleared = await admin.put("/admin/assistant/settings", {
+      enabled: true,
+      dailyBudgetUsd: 4,
+      deepEnabled: false,
+      suggestedQuestions: { en: [], de: [] },
+      systemCard: { en: "", de: "" },
+      featureCaps: { match: null },
+    });
+    const caps = ((await cleared.json()) as { settings: { featureCaps: Record<string, unknown> } })
+      .settings.featureCaps;
+    expect(caps.match).toBeNull();
 
     const tooMuch = await admin.put("/admin/assistant/settings", {
       enabled: true,

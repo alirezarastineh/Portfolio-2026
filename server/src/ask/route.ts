@@ -11,6 +11,7 @@ import type { Locale } from "../content/schema.js";
 import { captureError } from "../lib/sentry.js";
 import { turnstileEnabled, verifyTurnstile, VerifiedSessions } from "../lib/turnstile.js";
 import { readingLocale, streamAnswer } from "./agent.js";
+import type { AskConfig } from "./config.js";
 import type { AskCorpus } from "./corpus/index.js";
 import { demotedSubjects } from "./audit.js";
 import { askChain, askConfig, askCorpus } from "./deps.js";
@@ -19,18 +20,21 @@ import {
   availability,
   checkForgetRate,
   checkMapRate,
+  checkMatchRate,
   checkRate,
   checkScorecardRate,
   ConcurrencyGate,
   hashWithSalt,
   recordForgetRequest,
   recordMapRequest,
+  recordMatchRequest,
   recordRequest,
   recordScorecardRequest,
+  refusal,
 } from "./guard.js";
 import { focusOf, focusSchema } from "./focus.js";
 import { forgetSessions } from "./forget.js";
-import { countGuardEvent } from "./guard-events.js";
+import { countGuardEvent, type GuardEventKind } from "./guard-events.js";
 import {
   ASK_MESSAGE_ID,
   buildHistory,
@@ -39,12 +43,15 @@ import {
   verifyTour,
 } from "./history.js";
 import { inspectView } from "./inspect.js";
+import { detectLanguage } from "./language.js";
 import { etagMatches, mapOf } from "./map.js";
+import { matchRequestSchema } from "./match/match.js";
+import { streamMatch } from "./match/stream.js";
 import { shortName } from "./models/registry.js";
 import { PAGE_CHARS, pageDocument } from "./page.js";
 import { routeQuestion } from "./router.js";
 import { scorecard } from "./scorecard.js";
-import { assistantState } from "./settings.js";
+import { assistantState, type AiSettings } from "./settings.js";
 import { FEEDBACK_REASONS, SignalLimiter, signalsSchema } from "./signals.js";
 import { OFFERED_HANDOFF } from "./outcome-rows.js";
 import { streamTour, tourRequestSchema, type TourRequestBody } from "./tour.js";
@@ -53,7 +60,8 @@ import { DEEP_ROUTE, withoutDemoted } from "./trust.js";
 /**
  * The public assistant API:
  *   POST /v1/ask           one streamed answer (AI SDK UI message stream); with
- *                          `mode: "tour"`, a guided tour for an interest (V16)
+ *                          `mode: "tour"`, a guided tour for an interest (V16);
+ *                          with `mode: "match"`, a brief matched against the work (V19)
  *   GET  /v1/ask/config    whether it is on, suggested questions, limits
  *   POST /v1/ask/feedback  +1 / -1 on an answer from this session, a -1 with its reason
  *   POST /v1/ask/signal    what this session's browser saw of an answer (visitor plan V2)
@@ -94,8 +102,13 @@ const askBody = z.object({
    * `tour`: plan a guided tour for the visitor's interest (visitor plan V16)
    * instead of answering; `tour` carries the interest, and a replan's plan.
    */
-  mode: z.enum(["answer", "tour"]).optional(),
+  mode: z.enum(["answer", "tour", "match"]).optional(),
   tour: tourRequestSchema.optional(),
+  /**
+   * `match`: the visitor's brief (a role, a project, a problem) checked
+   * against the published work instead of answered (visitor plan V19).
+   */
+  match: matchRequestSchema.optional(),
   /** Hidden from people; a bot that fills it gets nothing. */
   website: z.string().max(200).optional(),
   /** While Turnstile is on: needed once per session, on its first question. */
@@ -183,6 +196,35 @@ type AdmittedAsk = {
 
 type AdmitResult = { ok: true; ask: AdmittedAsk } | { ok: false; response: Response };
 
+/** What a visitor's request spends from: the terminal, or a match (visitor plan V19). */
+type VisitorFeature = "terminal" | "match";
+
+/**
+ * Whether a visitor's request may spend now, and if not, what it is counted
+ * as and answered with: the feature's availability.
+ */
+async function spendState(
+  feature: VisitorFeature,
+  config: AskConfig,
+  settings: AiSettings,
+): Promise<
+  { ok: true; deepAllowed: boolean } | { ok: false; event: GuardEventKind; error: string }
+> {
+  const state = await availability(config, settings, feature);
+  if (state.state !== "ok") {
+    const error = feature === "match" ? refusal(state) : `assistant_${state.state}`;
+    return { ok: false, event: state.state, error };
+  }
+  return { ok: true, deepAllowed: state.deepAllowed };
+}
+
+/** The visitor's limits: a match counts in its own buckets, apart from the questions'. */
+function rateFor(feature: VisitorFeature, config: AskConfig, ipHash: string, sessionHash: string) {
+  return feature === "match"
+    ? checkMatchRate(ipHash, sessionHash)
+    : checkRate(config, ipHash, sessionHash);
+}
+
 /**
  * Every refusal a visitor can hit before a stream starts: invalid input, the
  * honeypot, Turnstile, availability, history, rate limits and the concurrency
@@ -190,8 +232,9 @@ type AdmitResult = { ok: true; ask: AdmittedAsk } | { ok: false; response: Respo
  */
 async function admitAsk(c: Context): Promise<AdmitResult> {
   const parsed = askBody
-    // A tour needs its interest (visitor plan V16).
+    // A tour needs its interest (visitor plan V16), a match its brief (V19).
     .refine((body) => body.mode !== "tour" || body.tour !== undefined)
+    .refine((body) => body.mode !== "match" || body.match !== undefined)
     .safeParse(await readJson(c));
   if (!parsed.success || parsed.data.website) {
     countGuardEvent(parsed.success ? "honeypot" : "invalid_input");
@@ -206,10 +249,12 @@ async function admitAsk(c: Context): Promise<AdmitResult> {
 
   const config = askConfig();
   const { settings } = await assistantState();
-  const state = await availability(config, settings, "terminal");
-  if (state.state !== "ok") {
-    countGuardEvent(state.state);
-    return { ok: false, response: c.json({ error: `assistant_${state.state}` }, 503) };
+  // A match is the visitors' feature of its own (visitor plan V19): its switch, its cap.
+  const feature: VisitorFeature = body.mode === "match" ? "match" : "terminal";
+  const spend = await spendState(feature, config, settings);
+  if (!spend.ok) {
+    countGuardEvent(spend.event);
+    return { ok: false, response: c.json({ error: spend.error }, 503) };
   }
 
   const history = await buildHistory({
@@ -229,7 +274,7 @@ async function admitAsk(c: Context): Promise<AdmitResult> {
 
   const ipHash = hashWithSalt("ip", clientIp(c));
   const sessionHash = hashWithSalt("session", body.sessionId);
-  const rate = await checkRate(config, ipHash, sessionHash);
+  const rate = await rateFor(feature, config, ipHash, sessionHash);
   if (!rate.ok) {
     countGuardEvent("rate_limited");
     c.header("Retry-After", String(rate.retryAfter));
@@ -252,7 +297,7 @@ async function admitAsk(c: Context): Promise<AdmitResult> {
       body,
       history,
       config,
-      deepAllowed: state.deepAllowed,
+      deepAllowed: spend.deepAllowed,
       ipHash,
       sessionHash,
       release,
@@ -282,7 +327,7 @@ function replanOf(
 }
 
 /**
- * A planner's stream (a tour), once admitted and checked: the
+ * A planner's stream (a tour, a match), once admitted and checked: the
  * visitor's going aborts it, and the slot is freed once it is over, or at
  * once if it never starts.
  */
@@ -355,6 +400,50 @@ async function tourResponse(c: Context, ask: AdmittedAsk): Promise<Response> {
   }
 }
 
+/**
+ * A match's stream, once admitted (visitor plan V19): the brief cleaned, the
+ * lite chain for the plan and, while the deep route is open, the deep chain
+ * for the rows; written in the brief's language, else the visitor's.
+ */
+async function matchResponse(c: Context, ask: AdmittedAsk): Promise<Response> {
+  const { body, history, config, deepAllowed, ipHash, sessionHash, release } = ask;
+  try {
+    const brief = cleanVisitorText(body.match!.brief);
+    if (!brief) {
+      release();
+      countGuardEvent("invalid_input");
+      return c.json({ error: "invalid_input" }, 400);
+    }
+    await recordMatchRequest(ipHash, sessionHash);
+    const corpus = await askCorpus(config);
+    const demoted = await demotedSubjects();
+    const deepOpen = deepAllowed && !demoted.has(DEEP_ROUTE);
+    return plannerStream(
+      c,
+      release,
+      (abortSignal, onClose) =>
+        streamMatch({
+          kind: body.match!.kind,
+          brief,
+          locale: body.locale,
+          language: detectLanguage(brief) ?? readingLocale(body.locale, history.language),
+          sessionId: body.sessionId,
+          sessionHash,
+          corpus,
+          config,
+          lite: withoutDemoted(askChain(config, "lite"), demoted),
+          deep: deepOpen ? withoutDemoted(askChain(config, "deep"), demoted) : null,
+          abortSignal,
+          droppedAnswers: history.droppedAnswers,
+          onClose,
+        }).stream,
+    );
+  } catch (error) {
+    release();
+    throw error;
+  }
+}
+
 export function createAskRouter(): Hono {
   const router = new Hono();
 
@@ -373,6 +462,8 @@ export function createAskRouter(): Hono {
       if (!admitted.ok) return admitted.response;
       // A guided tour (visitor plan V16): admitted as a question is, planned instead of answered.
       if (admitted.ask.body.mode === "tour") return tourResponse(c, admitted.ask);
+      // A matched brief (visitor plan V19): on its own feature, its own rate.
+      if (admitted.ask.body.mode === "match") return matchResponse(c, admitted.ask);
       const { body, history, config, deepAllowed, ipHash, sessionHash, release } = admitted.ask;
 
       const controller = new AbortController();
@@ -465,6 +556,8 @@ export function createAskRouter(): Hono {
       model: shortName(config.gemini.model),
       // Whether `evals` is offered (visitor plan V13): the scorecard is the admin's to publish.
       scorecard: settings.publicScorecard,
+      // Whether `match` is offered (visitor plan V19): its switch, its cap, the budget.
+      match: (await availability(config, settings, "match")).state === "ok",
     });
   });
 
