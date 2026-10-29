@@ -22,6 +22,8 @@ import type { ChainRole, ModelEntry } from "../models/registry.js";
 import { pageDocument } from "../page.js";
 import { wrapVisitor, type ReaderLevel } from "../prompt.js";
 import { mapOf } from "../map.js";
+import { runMatch, type MatchOutcome } from "../match/match.js";
+import { matchText } from "../match/stream.js";
 import { routeLabels, routeQuestion, type RouteLabel } from "../router.js";
 import { countTokens } from "../tokens.js";
 import { planTour, type TourOutcome } from "../tour.js";
@@ -1033,8 +1035,204 @@ async function runTourCase(options: EvalOptions, c: EvalCase): Promise<CaseResul
   };
 }
 
+/** Advice in place of his work, in either language: what a row must never give. */
+const ADVICE =
+  /\b(?:you should|we recommend|i recommend|consider (?:using|hiring|adding)|best practices?|it is (?:usually|common|best)|typically|sollten Sie|empfehle|empfehlen|in der Regel|üblicherweise)\b/i;
+
+/** A name after "at", "for", "with" (or German's): an employer, a tool, a client. */
+const NAMED = /\b(?:at|for|with|bei|für|mit)\s+([A-ZÄÖÜ][\w&.-]*(?:\s+[A-ZÄÖÜ][\w&.-]*)*)/g;
+
+/**
+ * A name without the marks that end it: a sentence's full stop is no part of the name
+ * ("at Google."). Walked back one character at a time: linear, where `[.&-]+$` backtracks.
+ */
+function withoutEndMarks(name: string): string {
+  let end = name.length;
+  while (end > 0 && ".&-".includes(name.charAt(end - 1))) end--;
+  return name.slice(0, end);
+}
+
+/** The names a text gives that no document of the corpus holds: an invented employer, say. */
+function namesTheCorpusLacks(text: string, corpus: AskCorpus): string[] {
+  const corpusText = corpus.documents
+    .map((d) => d.text)
+    .join("\n")
+    .toLowerCase();
+  const names = [...new Set([...text.matchAll(NAMED)].map((m) => withoutEndMarks(m[1]!)))];
+  return names.filter((name) => {
+    const lower = name.toLowerCase();
+    return !corpusText.includes(lower) && !corpusText.includes(lower.replace(/s$/, ""));
+  });
+}
+
+/**
+ * A match case's failures (visitor plan V20), deterministic: the stop it
+ * expects, or its rows: written in the case's language, at least the rows it
+ * wants, the evidence it names, nothing claimed that the work lacks, no more
+ * evidence than the brief allows, the careful item, no advice, and no name
+ * the portfolio does not hold. The critic checked each row's citations first.
+ */
+export function gradeMatch(c: EvalCase, outcome: MatchOutcome, corpus: AskCorpus): string[] {
+  const want = c.match ?? { kind: "role" };
+  return (
+    stopFailures(want, outcome) ?? [
+      ...rowFailures(c, want, outcome),
+      ...wordFailures(c, outcome, corpus),
+    ]
+  );
+}
+
+type MatchWant = NonNullable<EvalCase["match"]>;
+
+/** The rows that show evidence, partly or wholly: those the model wrote. */
+const withEvidence = (outcome: MatchOutcome) =>
+  outcome.rows.filter((row) => row.status !== "not-published");
+
+/** A stop's verdict: the stop the case expects, or one it allows; null when it wants rows. */
+function stopFailures(want: MatchWant, outcome: MatchOutcome): string[] | null {
+  if (want.stop) {
+    const got = outcome.stop ?? `${outcome.rows.length} rows`;
+    return outcome.stop === want.stop ? [] : [`expected the ${want.stop} stop, got ${got}`];
+  }
+  if (!outcome.stop) return null;
+  return want.allowStop ? [] : [`stopped (${outcome.stop}) with no rows`];
+}
+
+/**
+ * The rows' failures: the case's language, at least the rows it wants, the
+ * evidence it names, nothing claimed that the work lacks, no more evidence
+ * than the brief allows, and the careful item.
+ */
+function rowFailures(c: EvalCase, want: MatchWant, outcome: MatchOutcome): string[] {
+  const failures: string[] = [];
+  const language = c.language ?? c.locale;
+  if (outcome.language !== language) {
+    failures.push(`written in ${outcome.language}, not ${language}`);
+  }
+  const minRows = want.minRows ?? 1;
+  if (outcome.rows.length < minRows) {
+    failures.push(`${outcome.rows.length} rows, at least ${minRows}`);
+  }
+  const items = new Map(outcome.items.map((item) => [item.n, item]));
+  const shown = withEvidence(outcome);
+  const cited = new Set(shown.flatMap((row) => row.cites));
+  if (want.expectAny?.length && !want.expectAny.some((id) => cited.has(id))) {
+    failures.push(`no row with evidence cites ${want.expectAny.join(" or ")}`);
+  }
+  for (const word of want.absent ?? []) {
+    const lower = word.toLowerCase();
+    if (shown.some((row) => items.get(row.n)?.text.toLowerCase().includes(lower))) {
+      failures.push(`claims "${word}", which the portfolio does not show`);
+    }
+  }
+  if (want.maxEvidence !== undefined && shown.length > want.maxEvidence) {
+    failures.push(`${shown.length} rows with evidence, at most ${want.maxEvidence}`);
+  }
+  const careful = want.careful;
+  if (careful && !outcome.items.some((i) => i.careful && i.text.toLowerCase().includes(careful))) {
+    failures.push(`no careful item for "${careful}"`);
+  }
+  return failures;
+}
+
+/**
+ * The model's own words (the rows with evidence and the summary): no general
+ * advice and no name the corpus does not hold; and nothing the case forbids.
+ */
+function wordFailures(c: EvalCase, outcome: MatchOutcome, corpus: AskCorpus): string[] {
+  const failures: string[] = [];
+  const summaries = withEvidence(outcome).map((row) => row.summary);
+  const words = [...summaries, outcome.summary ?? ""].join("\n");
+  const advice = ADVICE.exec(words);
+  if (advice) failures.push(`gives general advice: "${advice[0]}"`);
+  const strangers = namesTheCorpusLacks(words, corpus);
+  if (strangers.length) failures.push(`names what the portfolio does not: ${strangers.join(", ")}`);
+  const text = matchText(outcome);
+  for (const pattern of c.mustNotInclude ?? []) {
+    if (new RegExp(pattern, "i").test(text)) failures.push(`includes "${pattern}"`);
+  }
+  return failures;
+}
+
+/** A match case (visitor plan V20): run as the route runs it, graded on its rows, then the judge. */
+async function runMatchCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
+  const lite = options.chain("lite");
+  const deep = options.chain("deep");
+  const trace = newTrace();
+  // Two calls in a row, each up to the stream's time, and a repair each at most.
+  const abortSignal = createCaseAbortSignal(
+    2 * options.config.streamTimeoutMs,
+    options.timeoutExtraMs ?? timeoutAllowance(options, lite.length + deep.length),
+    options.abortSignal,
+  );
+  const outcome = await runMatch({
+    kind: c.match?.kind ?? "role",
+    brief: c.question,
+    language: detectLanguage(c.question) ?? c.locale,
+    corpus: options.corpus,
+    config: options.config,
+    lite,
+    deep: deep.length ? deep : null,
+    trace,
+    abortSignal,
+    persist: false,
+    ...(options.beforeModelCall ? { beforeModelCall: options.beforeModelCall } : {}),
+  });
+  options.calls?.push(...trace.calls, ...outcome.searchCalls);
+  const text = matchText(outcome);
+  const cited = [...new Set(outcome.rows.flatMap((row) => row.cites))];
+  const failures = gradeMatch(c, outcome, options.corpus);
+  const attempts = [...trace.attempts];
+  let unavailable = outcome.stop === "unavailable" && c.match?.stop !== "unavailable";
+  let judge: CaseResult["judge"] = null;
+  // The judge reads what the deterministic graders passed: a failed match has failed already.
+  if (!unavailable && !failures.length) {
+    const judged = await applyJudge(
+      options,
+      c,
+      text,
+      cited,
+      failures,
+      attempts,
+      createRetryAcquirer(options.rateLimitRetry),
+    );
+    judge = judged.judge;
+    unavailable = judged.unavailable;
+  }
+  let status: CaseResult["status"] = "passed";
+  if (unavailable) {
+    status = "unavailable";
+  } else if (failures.length) {
+    status = "failed";
+  }
+  return {
+    id: c.id,
+    category: c.category,
+    status,
+    passed: !unavailable && !failures.length,
+    failures,
+    answer: text,
+    cited,
+    invented: [],
+    tools: [],
+    model: trace.calls.at(-1)?.model ?? null,
+    ttftMs: trace.firstTokenAt === null ? null : trace.firstTokenAt - trace.startedAt,
+    modelTtftMs: trace.calls[0]?.ttftMs ?? null,
+    rounds: trace.calls.length,
+    totalMs: Date.now() - trace.startedAt,
+    usd: summarizeCalls([...trace.calls, ...outcome.searchCalls]).usd,
+    judge,
+    attempts,
+  };
+}
+
 async function runCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
   if (c.category === "tour") return runTourCase(options, c);
+  if (c.category === "match") return runMatchCase(options, c);
+  return runQuestionCase(options, c);
+}
+
+async function runQuestionCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
   const acquireRateLimitRetry = createRetryAcquirer(options.rateLimitRetry);
   const answered = await answerCase(options, c, acquireRateLimitRetry);
   const { outcome, failures, operationalFailure } = answered;

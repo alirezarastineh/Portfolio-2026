@@ -10,6 +10,7 @@ import {
   textTurn,
   thinkingTurn,
   toolTurn,
+  usage,
 } from "../../test/ask-models.js";
 import { fixtureConfig } from "../../test/ask-fixtures.js";
 import { focusOf } from "../focus.js";
@@ -18,8 +19,9 @@ import type { ModelEntry } from "../models/registry.js";
 import { pageDocument } from "../page.js";
 import { EVAL_CASES } from "./cases.js";
 import { fixtureAskCorpus } from "./fixture.js";
+import type { MatchItem, MatchOutcome, MatchRow } from "../match/match.js";
 import type { TourOutcome } from "../tour.js";
-import { grade, gradeTour, JUDGE_LEVEL, runEvals } from "./run.js";
+import { grade, gradeMatch, gradeTour, JUDGE_LEVEL, runEvals } from "./run.js";
 
 const byId = (id: string) => EVAL_CASES.find((c) => c.id === id)!;
 
@@ -960,5 +962,165 @@ describe("the tour cases (visitor plan V16)", () => {
     expect(plans).toHaveLength(1);
     expect(judged).toHaveLength(0);
     expect(summary.results[0]!.cited).toEqual([BOREALIS.id, CONTOSO.id, POST.id]);
+  });
+});
+
+describe("the match cases (visitor plan V20)", () => {
+  const corpus = fixtureAskCorpus(fixtureConfig());
+  beforeEach(() => resetBreakers());
+
+  const item = (n: number, text: string, extra: Partial<MatchItem> = {}): MatchItem => ({
+    n,
+    text,
+    priority: "must",
+    careful: false,
+    hits: [],
+    ...extra,
+  });
+  const row = (n: number, status: MatchRow["status"], summary = "", cites: string[] = []) => ({
+    n,
+    status,
+    summary,
+    cites,
+    downgraded: false,
+  });
+  const outcome = (rows: MatchRow[], items: MatchItem[], extra: Partial<MatchOutcome> = {}) => ({
+    kind: "role" as const,
+    language: "en" as const,
+    items,
+    rows,
+    summary: null,
+    repaired: { plan: false, rows: false },
+    failures: [],
+    injection: false,
+    searches: rows.length,
+    searchCalls: [],
+    ...extra,
+  });
+
+  it("grades the rows on what the brief expects, and never on generic advice or a stranger's name", () => {
+    const c = byId("match-role-strong");
+    const items = [
+      item(1, "Production Python"),
+      item(2, "Retrieval-augmented generation"),
+      item(3, "Angular"),
+    ];
+    const good = outcome(
+      [
+        row(1, "evidence", "Builds the backend in Python and FastAPI.", ["skills@en"]),
+        row(2, "evidence", "Built Atlas, an assistant with citations.", ["project:atlas@en"]),
+        row(3, "partial", "Lists Angular among his front-end tools.", ["skills@en"]),
+      ],
+      items,
+    );
+    expect(gradeMatch(c, good, corpus)).toEqual([]);
+    const thin = outcome([row(1, "evidence", "Python.", ["skills@en"])], items);
+    expect(gradeMatch(c, thin, corpus)).toEqual([
+      "1 rows, at least 3",
+      "no row with evidence cites project:atlas@en",
+    ]);
+    const advice = outcome(
+      [
+        ...good.rows.slice(0, 2),
+        row(3, "partial", "You should pair him with a front-end lead.", ["skills@en"]),
+      ],
+      items,
+    );
+    expect(gradeMatch(c, advice, corpus)).toEqual(['gives general advice: "You should"']);
+    const stranger = outcome(
+      [...good.rows.slice(0, 2), row(3, "evidence", "Built dashboards at Netflix.", ["skills@en"])],
+      items,
+    );
+    expect(gradeMatch(c, stranger, corpus)).toEqual(["names what the portfolio does not: Netflix"]);
+  });
+
+  it("wants what the work lacks not published, a careful budget, and a stop only where it may", () => {
+    const firmware = byId("match-role-firmware");
+    const items = [item(1, "ARM Cortex-M"), item(2, "FreeRTOS"), item(3, "Hardware debugging")];
+    const claims = outcome(
+      [
+        row(1, "evidence", "Lists Kubernetes.", ["skills@en"]),
+        row(2, "not-published"),
+        row(3, "evidence", "Debugs pipelines.", ["project:borealis@en"]),
+      ],
+      items,
+    );
+    expect(gradeMatch(firmware, claims, corpus)).toEqual([
+      'claims "Cortex", which the portfolio does not show',
+      "2 rows with evidence, at most 1",
+    ]);
+    const budget = byId("match-project-budget");
+    const noCareful = outcome(
+      [row(1, "evidence", "Built Atlas.", ["project:atlas@en"]), row(2, "not-published")],
+      [item(1, "A wiki assistant with citations"), item(2, "Budget: €40,000")],
+      { kind: "project" },
+    );
+    expect(gradeMatch(budget, noCareful, corpus)).toEqual(['no careful item for "budget"']);
+    const stopped = outcome([], [], { stop: "empty" });
+    expect(gradeMatch(byId("match-problem-unrelated"), stopped, corpus)).toEqual([]);
+    expect(gradeMatch(byId("match-role-strong"), stopped, corpus)).toEqual([
+      "stopped (empty) with no rows",
+    ]);
+  });
+
+  it("runs a case as the route does: the plan on lite, the rows on deep, then the judge", async () => {
+    const reply = (value: object) => ({
+      content: [{ type: "text" as const, text: JSON.stringify(value) }],
+      finishReason: { unified: "stop" as const, raw: "stop" },
+      usage: usage(100, 20),
+      warnings: [],
+    });
+    const lite = new MockLanguageModelV4({
+      modelId: "gemini-3.5-flash-lite",
+      doGenerate: async () =>
+        reply({
+          items: [
+            { text: "OCR for scanned PDFs", priority: "must", terms: ["OCR"] },
+            { text: "An LLM that fills a JSON schema", priority: "must", terms: ["JSON schema"] },
+            { text: "A human review queue", priority: "must", terms: ["review queue"] },
+          ],
+        }),
+    });
+    const deep = new MockLanguageModelV4({
+      modelId: "gemini-3.7-flash",
+      doGenerate: async () =>
+        reply({
+          rows: [1, 2, 3].map((n) => ({
+            item: n,
+            status: "evidence",
+            summary: "Built Borealis, which turns scanned freight documents into structured data.",
+            cites: ["project:borealis@en"],
+          })),
+          summary: "Borealis [^project:borealis@en] is the same pipeline.",
+        }),
+    });
+    const judged: unknown[] = [];
+    const judge = new MockLanguageModelV4({
+      modelId: "judge",
+      doGenerate: async (call) => {
+        judged.push(call);
+        return reply({ faithfulness: 1, helpfulness: 4, unsupported: [] });
+      },
+    });
+    const summary = await runEvals({
+      cases: [byId("match-project-data")],
+      corpus,
+      config: fixtureConfig(),
+      concurrency: 1,
+      chain: (role) => {
+        if (role === "judge") return [mockEntry("judge", judge)];
+        return role === "deep"
+          ? [mockEntry("gemini-3.7-flash", deep)]
+          : [mockEntry("gemini-3.5-flash-lite", lite)];
+      },
+      promptVersion: "test",
+    });
+    expect(summary.results.map((r) => [r.id, r.status, r.failures])).toEqual([
+      ["match-project-data", "passed", []],
+    ]);
+    expect(summary.byCategory["match"]).toMatchObject({ cases: 1, passed: 1 });
+    expect(summary.results[0]!.cited).toEqual(["project:borealis@en"]);
+    expect(summary.results[0]!.answer).toContain("- ✓ **OCR for scanned PDFs** · relevant:");
+    expect(judged).toHaveLength(1);
   });
 });

@@ -204,8 +204,8 @@ export async function runPairwise(input: PairwiseOptions): Promise<PairwiseSumma
     onResult: undefined,
   };
   const results: PairwiseCaseResult[] = [];
-  // Two answerers' answers: a tour is planned, not answered (visitor plan V16).
-  const cases = input.cases.filter((c) => c.category !== "tour");
+  // Two answerers' answers: a tour is planned and a brief matched, not answered (V16, V20).
+  const cases = input.cases.filter((c) => c.category !== "tour" && c.category !== "match");
   for (const c of cases) {
     if (input.abortSignal?.aborted) break;
     await input.onStart?.(c);
