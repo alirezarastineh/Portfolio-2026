@@ -7,6 +7,7 @@ import { aiRateEvents, aiSettings } from "../db/schema.js";
 import { fixtureConfig } from "../test/ask-fixtures.js";
 import { resetDb } from "../test/helpers.js";
 import type { AskConfig } from "./config.js";
+import { SYSTEM_CARD_UPDATED } from "./corpus/assistant-docs.js";
 import type { AskCorpus } from "./corpus/index.js";
 import { fixtureAskCorpus } from "./evals/fixture.js";
 import { hashWithSalt, MAP_RATE } from "./guard.js";
@@ -104,6 +105,28 @@ describe("GET /v1/ask/map (visitor plan V15)", () => {
       // Nothing but the listed fields.
       expect(Object.keys(p).filter((k) => !fields.has(k))).toEqual([]);
     }
+  });
+
+  it("lists the assistant's own documents apart, dated, for llms.txt (V21)", async () => {
+    const faq = (id: string, title: string) => ({ id, kind: "faq", title, updated: "2026-09-01" });
+    const card = (locale: string, title: string) => ({
+      id: `system-card@${locale}`,
+      kind: "system-card",
+      title,
+      updated: SYSTEM_CARD_UPDATED,
+    });
+    expect((await map("en")).body.assistant).toEqual([
+      faq("faq:a1c2e3f4@en", "What is his notice period?"),
+      faq("faq:b5d6e7f8@en", "Would he relocate?"),
+      faq("faq:c9d0e1f2@en", "What are his rates?"),
+      card("en", "How this assistant works"),
+    ]);
+    // A language's own words only: the second entry has no German ones.
+    expect((await map("de")).body.assistant).toEqual([
+      faq("faq:a1c2e3f4@de", "Wie lang ist seine Kündigungsfrist?"),
+      faq("faq:c9d0e1f2@de", "Wie hoch sind seine Sätze?"),
+      card("de", "Wie dieser Assistent funktioniert"),
+    ]);
   });
 
   it("keeps each language to its own pages", async () => {

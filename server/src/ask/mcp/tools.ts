@@ -85,11 +85,11 @@ const DESCRIPTIONS: Record<McpToolName, { title: string; description: string }> 
   search_portfolio: {
     title: "Search the portfolio",
     description:
-      "Searches the published portfolio (profile, experience, projects and their case studies, writing, skills, the CV, the FAQ) by words. Returns up to 6 hits, the best passage of each document: its id, title, absolute url and a snippet, with the ids of related documents. Read a whole document with get_document. Words only, no meaning: when nothing comes back, try other words or list_projects.",
+      "Searches the published portfolio (profile, experience, projects and their case studies, writing, skills, the CV, the FAQ) by words. Returns up to 6 hits, the best passage of each document: its id, title, absolute url, the day it last changed and a snippet, with the ids of related documents. Read a whole document with get_document. Words only, no meaning: when nothing comes back, try other words or list_projects.",
   },
   get_document: {
     title: "Read a document",
-    description: `Reads one document of the portfolio whole: a project's case study, a post, the profile, experience, skills, the CV, an FAQ entry. Takes an id from search_portfolio or list_projects. Returns its id, title, absolute url, language and text; a text past ${DOCUMENT_CHARS.toLocaleString("en")} characters is cut and marked so.`,
+    description: `Reads one document of the portfolio whole: a project's case study, a post, the profile, experience, skills, the CV, an FAQ entry. Takes an id from search_portfolio or list_projects. Returns its id, title, absolute url, language, the day it last changed, the ids of related documents (an exception often sits in one) and text; a text past ${DOCUMENT_CHARS.toLocaleString("en")} characters is cut and marked so.`,
   },
   list_projects: {
     title: "List the projects",
@@ -148,13 +148,17 @@ function searchPortfolio(corpus: AskCorpus, args: unknown): ToolResult {
     locale: input.locale ?? "en",
     ...(input.kinds ? { kinds: [...input.kinds] } : {}),
   });
-  const results = hits.map((hit) => ({
-    id: hit.id,
-    title: hit.title,
-    url: absolute(corpus, hit.url),
-    snippet: hit.snippet,
-    ...(hit.related?.length ? { related: hit.related } : {}),
-  }));
+  const results = hits.map((hit) => {
+    const updated = corpus.byId.get(hit.id)?.updated;
+    return {
+      id: hit.id,
+      title: hit.title,
+      url: absolute(corpus, hit.url),
+      ...(updated ? { updated } : {}),
+      snippet: hit.snippet,
+      ...(hit.related?.length ? { related: hit.related } : {}),
+    };
+  });
   return result(
     results.length
       ? { results }
@@ -176,6 +180,9 @@ function getDocument(corpus: AskCorpus, args: unknown): ToolResult {
     title: doc.title,
     url: absolute(corpus, doc.url),
     locale: doc.locale,
+    ...(doc.updated ? { updated: doc.updated } : {}),
+    // Before the text, so a client that reads a long one still meets them.
+    ...(doc.related?.length ? { related: doc.related } : {}),
     text: cut ? `${doc.text.slice(0, DOCUMENT_CHARS)}…` : doc.text,
     ...(cut ? { truncated: true } : {}),
   });

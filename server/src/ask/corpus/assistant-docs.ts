@@ -15,6 +15,12 @@ export function faqDocId(id: string, locale: Locale): string {
   return `faq:${id.replaceAll("-", "").slice(0, 8)}@${locale}`;
 }
 
+/**
+ * The day the default card's words last changed (visitor plan V21): what it is
+ * true as of. `assistant-docs.spec.ts` pins its text, so new words need a new day.
+ */
+export const SYSTEM_CARD_UPDATED = "2026-10-22";
+
 export function defaultSystemCard(locale: Locale, config: AskConfig): string {
   const primary = config.gemini.model;
   const deep = config.gemini.deepModel;
@@ -86,13 +92,16 @@ export function assistantDocuments(
           : {}),
       });
     }
+    const own = settings.systemCard[locale].trim();
     documents.push({
       id: `system-card@${locale}`,
       kind: "system-card",
       locale,
       title: locale === "de" ? "Wie dieser Assistent funktioniert" : "How this assistant works",
       url: `/${locale}#about`,
-      text: settings.systemCard[locale].trim() || defaultSystemCard(locale, config),
+      text: own || defaultSystemCard(locale, config),
+      // The admin's card is as of the save that holds it, as a publish dates the profile.
+      updated: own && settings.updatedAt ? settings.updatedAt.slice(0, 10) : SYSTEM_CARD_UPDATED,
     });
   }
   return documents;

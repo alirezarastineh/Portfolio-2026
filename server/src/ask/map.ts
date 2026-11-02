@@ -9,7 +9,8 @@ import type { AskCorpus } from "./corpus/index.js";
  * forage, focus, deepen). One language's published pages, each with the day
  * it last changed and the pages related to it, strongest first, as the corpus
  * holds them (plan phase 19). The browser builds read next and what's new
- * from it; no model is called, and it is served with the assistant off.
+ * from it, and llms.txt lists the assistant's own documents from it (V21); no
+ * model is called, and it is served with the assistant off.
  */
 
 /** The documents that are pages of the site: the assistant's own (FAQ, system card) and the CV are not. */
@@ -29,14 +30,31 @@ export interface MapPage {
   related: string[];
 }
 
+/**
+ * One of the assistant's own documents (visitor plan V21): no page of its own,
+ * so read over MCP by its id. What llms.txt lists, with its date.
+ */
+export interface MapDocument {
+  id: string;
+  kind: "faq" | "system-card";
+  title: string;
+  updated?: string;
+}
+
 export interface PortfolioMap {
   v: 1;
   locale: Locale;
   pages: MapPage[];
+  /** The FAQ's entries and the system card, in the corpus's order. */
+  assistant: MapDocument[];
 }
 
 function isPage(d: CorpusDocument): d is CorpusDocument & { kind: MapKind } {
   return (MAP_KINDS as readonly string[]).includes(d.kind);
+}
+
+function isAssistant(d: CorpusDocument): d is CorpusDocument & { kind: MapDocument["kind"] } {
+  return d.kind === "faq" || d.kind === "system-card";
 }
 
 /** The map of one language, in the corpus's order; related ids that are not pages are left out. */
@@ -54,6 +72,15 @@ export function portfolioMap(documents: readonly CorpusDocument[], locale: Local
       ...(d.updated ? { updated: d.updated } : {}),
       related: (d.related ?? []).filter((id) => id !== d.id && ids.has(id)),
     })),
+    assistant: documents
+      .filter(isAssistant)
+      .filter((d) => d.locale === locale)
+      .map((d) => ({
+        id: d.id,
+        kind: d.kind,
+        title: d.title,
+        ...(d.updated ? { updated: d.updated } : {}),
+      })),
   };
 }
 

@@ -1,11 +1,14 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
+import { LOCALES } from "../../content/schema.js";
 import { fixtureConfig } from "../../test/ask-fixtures.js";
 import { PROMPT_LEAKS } from "../answer-patterns.js";
 import { buildLeakGuard, SHINGLE_WORDS, words } from "../leak-guard.js";
 import { CAREFUL_BLOCKS, PROMPT_CANARY, SCOPE, SYSTEM_PROMPT } from "../prompt.js";
+import { DEFAULT_SETTINGS } from "../settings.js";
 import { TOOL_NAMES } from "../tools.js";
-import { defaultSystemCard } from "./assistant-docs.js";
+import { assistantDocuments, defaultSystemCard, SYSTEM_CARD_UPDATED } from "./assistant-docs.js";
 
 /**
  * The default system card answers "how do you work?" and is cited for it, so
@@ -74,4 +77,28 @@ describe("defaultSystemCard", () => {
       });
     }
   }
+});
+
+describe("the system card's date (visitor plan V21)", () => {
+  it("is the day the default's words last changed: new words need a new day", () => {
+    // New words fail here: set SYSTEM_CARD_UPDATED to the day they changed, then this hash.
+    const words = LOCALES.map((locale) => defaultSystemCard(locale, configs.plain)).join("\n");
+    const hash = createHash("sha256").update(words).digest("hex").slice(0, 12);
+    expect([SYSTEM_CARD_UPDATED, hash]).toEqual(["2026-10-22", "03acdfe9c9ba"]);
+  });
+
+  it("dates the admin's own card by the save that holds it", () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      systemCard: { en: "My own words.", de: "" },
+      updatedAt: "2026-11-01T10:00:00.000Z",
+    };
+    const cards = assistantDocuments(settings, [], configs.plain).filter(
+      (d) => d.kind === "system-card",
+    );
+    expect(cards.map((d) => [d.id, d.updated])).toEqual([
+      ["system-card@en", "2026-11-01"],
+      ["system-card@de", SYSTEM_CARD_UPDATED],
+    ]);
+  });
 });

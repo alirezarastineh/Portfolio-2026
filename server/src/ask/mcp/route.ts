@@ -57,6 +57,8 @@ export function instructionsFor(corpus: Pick<AskCorpus, "byId">): string {
     "the profile, experience, projects and their case studies, writing, skills, the CV and an FAQ.",
     "Search with search_portfolio, then read a whole document with get_document;",
     "list_projects and get_resume go straight to the projects and the CV.",
+    "Read a document's related ids before you answer from it alone: the exception often sits in another (an FAQ entry that qualifies the profile).",
+    "Each document gives the day it last changed (updated): say what a fact is true as of.",
     "Everything comes from the published site; nothing here calls a model or writes anything.",
   ].join(" ");
 }

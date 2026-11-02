@@ -9,6 +9,7 @@ import { fixtureConfig } from "../../test/ask-fixtures.js";
 import { mockEntry } from "../../test/ask-models.js";
 import { ADMIN_ORIGIN } from "../../test/constants.js";
 import { createAdmin, resetDb, TestClient } from "../../test/helpers.js";
+import { SYSTEM_CARD_UPDATED } from "../corpus/assistant-docs.js";
 import { setAskDeps, type AskDeps } from "../deps.js";
 import { setEmbeddingDeps } from "../embeddings.js";
 import { fixtureAskCorpus } from "../evals/fixture.js";
@@ -131,6 +132,9 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
     expect(discover.instructions).toMatch(
       /^Read-only access to Alireza Rastineh's published portfolio/,
     );
+    // Visitor plan V21: where an exception sits, and what a fact is true as of.
+    expect(discover.instructions).toContain("Read a document's related ids");
+    expect(discover.instructions).toContain("the day it last changed (updated)");
 
     const listed = await result(modern("tools/list"));
     expect(listed.tools.map((t: { name: string }) => t.name)).toEqual([
@@ -165,8 +169,16 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
       title: "Atlas",
       url: `${SITE}/en/work/atlas`,
       locale: "en",
+      related: ["experience:northwind@en"],
     });
     expect(doc.structuredContent.text).toContain("pgvector");
+    // The day each document last changed, where the corpus dates it (visitor plan V21).
+    const card = await call("get_document", { id: "system-card@en" });
+    expect(card.structuredContent.updated).toBe(SYSTEM_CARD_UPDATED);
+    const faq = await call("search_portfolio", { query: "notice period" });
+    expect(faq.structuredContent.results).toContainEqual(
+      expect.objectContaining({ id: "faq:a1c2e3f4@en", updated: "2026-09-01" }),
+    );
 
     const projects = await call("list_projects", { text: "rag" });
     expect(projects.structuredContent.projects.map((p: { slug: string }) => p.slug)).toEqual([

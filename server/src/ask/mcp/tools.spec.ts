@@ -49,3 +49,38 @@ describe("get_document", () => {
     expect(url(withProfile("short", "https://example.test"))).toBe(`https://example.test${path}`);
   });
 });
+
+describe("the day a document last changed, and its related documents (visitor plan V21)", () => {
+  const FAQ = "faq:a1c2e3f4@en";
+  const structured = (name: string, args: Record<string, unknown>, corpus = fixture) =>
+    callTool(corpus, name, args)!.structuredContent;
+
+  it("get_document gives both, before the text", () => {
+    const doc = structured("get_document", { id: FAQ });
+    expect(doc).toMatchObject({ id: FAQ, updated: "2026-09-01", related: ["profile@en"] });
+    const keys = Object.keys(doc);
+    expect(keys.indexOf("related")).toBeLessThan(keys.indexOf("text"));
+  });
+
+  it("get_document leaves out what a document does not have", () => {
+    const bare = { ...fixture.byId.get(FAQ)! };
+    delete bare.updated;
+    delete bare.related;
+    const corpus = { ...fixture, byId: new Map(fixture.byId).set(FAQ, bare) };
+    const doc = structured("get_document", { id: FAQ }, corpus);
+    expect(doc).not.toHaveProperty("updated");
+    expect(doc).not.toHaveProperty("related");
+  });
+
+  it("search_portfolio's hits give their document's day, where it has one", () => {
+    const { results } = structured("search_portfolio", { query: "notice period" }) as {
+      results: { id: string; updated?: string }[];
+    };
+    expect(results).toContainEqual(expect.objectContaining({ id: FAQ, updated: "2026-09-01" }));
+    for (const hit of results) {
+      const day = fixture.byId.get(hit.id)!.updated;
+      if (day) expect(hit.updated).toBe(day);
+      else expect(hit).not.toHaveProperty("updated");
+    }
+  });
+});
