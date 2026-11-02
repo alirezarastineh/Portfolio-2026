@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   appContentSchema,
@@ -10,11 +10,13 @@ import {
   type PostSummary,
 } from "../../app/content/schema";
 import { buildAgentCard, MCP_VERSIONS } from "./agent-card";
+import { getAssistantIndex, type AssistantIndex } from "./content-upstream";
 import { buildLlmsTxt, mcpEndpoint, MCP_TOOLS } from "./llms";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ORIGIN = "https://example.test";
-const MCP = "https://api.example.test/v1/mcp";
+const API = "https://api.example.test";
+const MCP = `${API}/v1/mcp`;
 
 function fallback(locale: Locale): AppContent {
   const raw = readFileSync(resolve(here, `../../app/content/fallback.${locale}.json`), "utf8");
@@ -132,6 +134,118 @@ describe("llms.txt (plan phase 32)", () => {
     expect(mcpEndpoint({ VITE_API_BASE_URL: "https://api.example.test/" })).toBe(MCP);
     expect(mcpEndpoint({ VITE_API_BASE_URL: "" })).toBeNull();
     expect(mcpEndpoint({})).toBeNull();
+  });
+});
+
+describe("llms.txt for visiting agents (visitor plan V21)", () => {
+  const faq = (id: string, title: string, updated?: string) => ({
+    id,
+    kind: "faq" as const,
+    title,
+    ...(updated ? { updated } : {}),
+  });
+  const assistant: AssistantIndex = {
+    scorecard: true,
+    documents: [
+      faq("faq:a1c2e3f4@en", "What is his [notice] period?", "2026-09-01"),
+      {
+        id: "system-card@en",
+        kind: "system-card",
+        title: "How this assistant works",
+        updated: "2026-10-22",
+      },
+      faq("faq:b5d6e7f8@en", "Would he relocate?"),
+    ],
+  };
+
+  it("links the map, the scorecard while it is published, and the assistant's dated documents", () => {
+    const text = buildLlmsTxt(published(), ORIGIN, MCP, assistant);
+    expect(text).toContain(`- [Map](${API}/v1/ask/map?locale=en): every page as JSON`);
+    expect(text).toContain(`- [Scorecard](${API}/v1/ask/scorecard): the assistant's recorded`);
+    // No page of their own: each is read over MCP, the system card first.
+    expect(text).toContain(
+      [
+        "## The assistant's documents",
+        "",
+        `- [How this assistant works](${MCP}): updated 2026-10-22; get_document "system-card@en"`,
+        `- [What is his \\[notice\\] period?](${MCP}): FAQ entry, updated 2026-09-01; get_document "faq:a1c2e3f4@en"`,
+        `- [Would he relocate?](${MCP}): FAQ entry; get_document "faq:b5d6e7f8@en"`,
+        "",
+        "## Optional",
+      ].join("\n"),
+    );
+    const unpublished = buildLlmsTxt(published(), ORIGIN, MCP, { ...assistant, scorecard: false });
+    expect(unpublished).not.toContain("[Scorecard]");
+    // Without the API's origin, nothing of the API's.
+    const offline = buildLlmsTxt(published(), ORIGIN, null, assistant);
+    expect(offline).not.toContain("[Map]");
+    expect(offline).not.toContain("[Scorecard]");
+    expect(offline).not.toContain("## The assistant's documents");
+  });
+
+  it("says them in German too", () => {
+    const text = buildLlmsTxt(fallback("de"), ORIGIN, MCP, {
+      scorecard: false,
+      documents: [faq("faq:a1c2e3f4@de", "Wie lang ist seine Kündigungsfrist?", "2026-09-01")],
+    });
+    expect(text).toContain(`- [Map](${API}/v1/ask/map?locale=de): alle Seiten als JSON`);
+    expect(text).toContain(
+      `## Dokumente des Assistenten\n\n- [Wie lang ist seine Kündigungsfrist?](${MCP}): FAQ-Eintrag, geändert 2026-09-01; get_document "faq:a1c2e3f4@de"\n`,
+    );
+  });
+});
+
+describe("the assistant index llms.txt reads (visitor plan V21)", () => {
+  const CARD = {
+    id: "system-card@de",
+    kind: "system-card",
+    title: "Wie dieser Assistent funktioniert",
+  };
+  let up = true;
+  const calls: string[] = [];
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.stubEnv("API_INTERNAL_BASE_URL", "http://api.internal/");
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    up = true;
+    calls.length = 0;
+    vi.stubGlobal("fetch", async (url: string) => {
+      calls.push(url);
+      if (!up) return new Response("down", { status: 503 });
+      return Response.json(
+        url.includes("/v1/ask/map")
+          ? { v: 1, locale: "de", pages: [], assistant: [CARD] }
+          : { state: "ok", scorecard: true },
+      );
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("reads the map's documents and the config's scorecard, for five minutes, and keeps them through an outage", async () => {
+    const first = await getAssistantIndex("de");
+    expect(first).toEqual({ documents: [CARD], scorecard: true });
+    expect(calls).toEqual([
+      "http://api.internal/v1/ask/map?locale=de",
+      "http://api.internal/v1/ask/config",
+    ]);
+    await getAssistantIndex("de");
+    expect(calls).toHaveLength(2);
+    vi.setSystemTime(Date.now() + 300_001);
+    up = false;
+    expect(await getAssistantIndex("de")).toEqual(first);
+    expect(calls).toHaveLength(4);
+  });
+
+  it("lists nothing when the API never said", async () => {
+    up = false;
+    expect(await getAssistantIndex("en")).toEqual({ documents: [], scorecard: false });
   });
 });
 

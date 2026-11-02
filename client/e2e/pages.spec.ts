@@ -388,6 +388,8 @@ test.describe("feeds and files", () => {
       expect(text, path).toMatch(
         /\n- \[MCP\]\(https:\/\/[^)\s]+\/v1\/mcp\): read-only MCP endpoint/,
       );
+      // The map, on the same API (visitor plan V21).
+      expect(text, path).toMatch(/\n- \[Map\]\(https:\/\/[^)\s]+\/v1\/ask\/map\?locale=en\): /);
       expect(text, path).toContain(`- [Agent card](${SITE}/.well-known/agent-card.json)`);
       expect(text, path).toContain(`- [Deutsche Fassung](${SITE}/de/llms.txt)`);
     }

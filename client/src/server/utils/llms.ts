@@ -1,12 +1,15 @@
 import { availabilityLabel } from "../../app/content/availability";
 import type { AppContent, Locale } from "../../app/content/schema";
+import type { AssistantIndex } from "./content-upstream";
 import { originOf } from "./csp";
 
 /**
  * llms.txt (llmstxt.org) for one language (plan phase 32): the published
  * portfolio as a short Markdown index a language model reads first: who it is,
  * the projects and the writing with absolute links, the CV, and for agents the
- * read-only MCP endpoint and the agent card. Built from the published content
+ * read-only MCP endpoint, the agent card, the map, the scorecard while it is
+ * published, and the FAQ and system card with their dates (visitor plan V21),
+ * which only MCP reads. Built from the published content
  * on each request (cached briefly), as the RSS feed is. The "Optional" section
  * keeps its English name in both languages: the format gives it a meaning.
  */
@@ -31,6 +34,11 @@ const COPY: Record<
     agents: string;
     mcpLine: string;
     cardLine: string;
+    mapLine: string;
+    scorecardLine: string;
+    documents: string;
+    faq: string;
+    updated: string;
     rss: string;
     otherLanguage: string;
   }
@@ -44,6 +52,11 @@ const COPY: Record<
     agents: "For agents",
     mcpLine: `read-only MCP endpoint (Streamable HTTP, no sign-in, no model behind it): ${MCP_TOOLS.join(", ")}`,
     cardLine: "what the portfolio's assistant can do, and where its tools are (A2A agent card)",
+    mapLine: "every page as JSON, with the day it last changed and the pages related to it",
+    scorecardLine: "the assistant's recorded evaluation, as JSON: aggregates only",
+    documents: "The assistant's documents",
+    faq: "FAQ entry",
+    updated: "updated",
     rss: "the writing as an RSS feed",
     otherLanguage: "Deutsche Fassung",
   },
@@ -56,10 +69,18 @@ const COPY: Record<
     agents: "Für Agenten",
     mcpLine: `MCP-Endpunkt, nur lesend (Streamable HTTP, ohne Anmeldung, ohne Modell dahinter): ${MCP_TOOLS.join(", ")}`,
     cardLine: "was der Assistent des Portfolios kann und wo seine Werkzeuge sind (A2A-Agent-Card)",
+    mapLine: "alle Seiten als JSON, mit dem Tag ihrer letzten Änderung und den verwandten Seiten",
+    scorecardLine: "die festgehaltene Evaluation des Assistenten als JSON, nur Summen",
+    documents: "Dokumente des Assistenten",
+    faq: "FAQ-Eintrag",
+    updated: "geändert",
     rss: "die Artikel als RSS-Feed",
     otherLanguage: "English version",
   },
 };
+
+/** What the API could not say: no documents, no scorecard. */
+const NO_ASSISTANT: AssistantIndex = { documents: [], scorecard: false };
 
 /** One line of prose, as a list item takes it. */
 const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
@@ -87,6 +108,20 @@ function postLine(post: Post, base: string): string {
   return `- [${linkText(post.title)}](${base}/writing/${post.slug})${desc}`;
 }
 
+/** One of the assistant's documents (visitor plan V21): no page of its own, so read over MCP. */
+function documentLine(
+  doc: AssistantIndex["documents"][number],
+  mcpUrl: string,
+  copy: (typeof COPY)[Locale],
+): string {
+  const about = [
+    doc.kind === "faq" ? copy.faq : "",
+    doc.updated ? `${copy.updated} ${doc.updated}` : "",
+  ].filter(Boolean);
+  const notes = [about.join(", "), `get_document "${doc.id}"`].filter(Boolean).join("; ");
+  return `- [${linkText(doc.title)}](${mcpUrl}): ${notes}`;
+}
+
 function bioLine(content: AppContent, basedIn: string): string {
   const { identity } = content;
   const where = [identity.location.city, identity.location.country].filter(Boolean).join(", ");
@@ -100,7 +135,12 @@ function bioLine(content: AppContent, basedIn: string): string {
     .join(" ");
 }
 
-export function buildLlmsTxt(content: AppContent, origin: string, mcpUrl: string | null): string {
+export function buildLlmsTxt(
+  content: AppContent,
+  origin: string,
+  mcpUrl: string | null,
+  assistant: AssistantIndex = NO_ASSISTANT,
+): string {
   const { locale, identity } = content;
   const copy = COPY[locale];
   const base = `${origin}/${locale}`;
@@ -127,11 +167,31 @@ export function buildLlmsTxt(content: AppContent, origin: string, mcpUrl: string
     lines.push(`## ${copy.cv}`, "", `- [${copy.cvLine}](${base}/resume.pdf)`, "");
   }
 
+  // The map and the scorecard are the API's, as the MCP endpoint is (visitor plan V21).
+  const api = mcpUrl ? new URL(mcpUrl).origin : null;
   lines.push(`## ${copy.agents}`, "");
   if (mcpUrl) lines.push(`- [MCP](${mcpUrl}): ${copy.mcpLine}`);
+  lines.push(`- [Agent card](${origin}/.well-known/agent-card.json): ${copy.cardLine}`);
+  if (api) lines.push(`- [Map](${api}/v1/ask/map?locale=${locale}): ${copy.mapLine}`);
+  if (api && assistant.scorecard) {
+    lines.push(`- [Scorecard](${api}/v1/ask/scorecard): ${copy.scorecardLine}`);
+  }
+  lines.push("");
+
+  // The system card first, then the FAQ in its order.
+  const documents = ["system-card", "faq"].flatMap((kind) =>
+    assistant.documents.filter((d) => d.kind === kind),
+  );
+  if (mcpUrl && documents.length) {
+    lines.push(
+      `## ${copy.documents}`,
+      "",
+      ...documents.map((d) => documentLine(d, mcpUrl, copy)),
+      "",
+    );
+  }
+
   lines.push(
-    `- [Agent card](${origin}/.well-known/agent-card.json): ${copy.cardLine}`,
-    "",
     "## Optional",
     "",
     `- [RSS](${base}/rss.xml): ${copy.rss}`,

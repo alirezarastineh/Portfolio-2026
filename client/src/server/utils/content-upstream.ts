@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import { appContentSchema, docKey, docSchema, type DocKind } from "../../app/content/schema";
 import fallbackDe from "../../app/content/fallback.de.json";
 import fallbackDocsDe from "../../app/content/fallback-docs.de.json";
@@ -6,8 +8,9 @@ import fallbackEn from "../../app/content/fallback.en.json";
 
 /**
  * The one place the SSR server fetches published content from the API. The
- * content BFF, the sitemap and robots.txt all go through here, and this is the
- * only importer of the bundled fallback — which keeps it out of the browser.
+ * content BFF, the sitemap, robots.txt and llms.txt all go through here, and
+ * this is the only importer of the bundled fallback — which keeps it out of
+ * the browser.
  */
 
 export type Locale = "en" | "de";
@@ -194,6 +197,60 @@ export async function getDoc(locale: Locale, kind: DocKind, slug: string): Promi
   if (known) return { ...known, source: "stale" };
   const fallback = FALLBACK_DOCS[locale][docKey(kind, slug)] ?? null;
   return { payload: fallback, etag: null, lastModified: null, source: "fallback" };
+}
+
+const assistantMapSchema = z.object({
+  /** The FAQ's entries and the system card (visitor plan V21); an API before it lists none. */
+  assistant: z
+    .array(
+      z.object({
+        id: z.string().max(200),
+        kind: z.enum(["faq", "system-card"]),
+        title: z.string().max(500),
+        updated: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+      }),
+    )
+    .max(500)
+    .default([]),
+});
+const scorecardSchema = z.object({ scorecard: z.boolean() });
+
+/** What llms.txt lists of the assistant (visitor plan V21), as the API's map and config say. */
+export interface AssistantIndex {
+  documents: z.infer<typeof assistantMapSchema>["assistant"];
+  /** Whether the admin publishes the scorecard. */
+  scorecard: boolean;
+}
+
+/** An admin's save changes them, and agents read llms.txt seldom: the map's own max-age. */
+const ASSISTANT_TTL_MS = 300_000;
+const assistantIndexes = new Map<Locale, { index: AssistantIndex; fetchedAt: number }>();
+
+/** One language's assistant index; what was known before when the API cannot say, else none. */
+export async function getAssistantIndex(locale: Locale): Promise<AssistantIndex> {
+  const cached = assistantIndexes.get(locale);
+  if (cached && Date.now() - cached.fetchedAt < ASSISTANT_TTL_MS) return cached.index;
+  const [map, config] = await Promise.all([
+    fetchUpstream(`/v1/ask/map?locale=${locale}`, undefined, (p) =>
+      assistantMapSchema.safeParse(p),
+    ),
+    fetchUpstream("/v1/ask/config", undefined, (p) => scorecardSchema.safeParse(p)),
+  ]);
+  const index: AssistantIndex = {
+    documents:
+      map.kind === "ok"
+        ? (map.entry.payload as z.infer<typeof assistantMapSchema>).assistant
+        : (cached?.index.documents ?? []),
+    scorecard:
+      config.kind === "ok"
+        ? (config.entry.payload as z.infer<typeof scorecardSchema>).scorecard
+        : (cached?.index.scorecard ?? false),
+  };
+  assistantIndexes.set(locale, { index, fetchedAt: Date.now() });
+  return index;
 }
 
 /** The site's origin, from the identity (or else the canonical URL) the core declares. */
