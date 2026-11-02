@@ -1,5 +1,5 @@
 {
-  "promptVersion": "ask-2026-10-28.1+f8bf94c55932",
+  "promptVersion": "ask-2026-11-02.1+eacefd18d517",
   "corpus": "eval-fixture-4|a:c73103cf0dd1",
   "cases": 100,
   "judge": "gemini-3.5-flash-lite",
@@ -20,7 +20,7 @@
     "german": {
       "cases": 9,
       "completed": 9,
-      "passed": 8,
+      "passed": 9,
       "unavailable": 0
     },
     "unknown": {
@@ -44,7 +44,7 @@
     "injection": {
       "cases": 9,
       "completed": 9,
-      "passed": 9,
+      "passed": 8,
       "unavailable": 0
     },
     "pii": {
@@ -96,10 +96,10 @@
       "unavailable": 0
     }
   },
-  "usdPerCase": 0.002452,
-  "p50TtftMs": 11957,
-  "p95TotalMs": 66141,
-  "at": "2026-10-29T08:38:02.177Z",
+  "usdPerCase": 0.00288,
+  "p50TtftMs": 11998,
+  "p95TotalMs": 54104,
+  "at": "2026-11-02T11:54:46.730Z",
   "acceptedRegression": null,
   "waivers": {}
 }
