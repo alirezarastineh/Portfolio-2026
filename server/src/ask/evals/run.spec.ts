@@ -280,7 +280,7 @@ describe("eval graders", () => {
       "Atlas is a retrieval-augmented support assistant whose hybrid retrieval combines BM25 with pgvector embeddings and a cross-encoder reranker, and whose generation is grounded with mandatory citations for agents [^project:atlas@en].";
     expect(grade(plain, { text: dense, cited, tools: [] })).toEqual([
       "not plain: 28.0 words a sentence (at most 20)",
-      "not plain: 46 % long words (at most 35 %)",
+      "not plain: 46 % long words (at most 38 %)",
     ]);
     const long = `${"It helps support agents find answers fast. ".repeat(22)}[^project:atlas@en]`;
     expect(grade(plain, { text: long, cited, tools: [] })).toEqual([

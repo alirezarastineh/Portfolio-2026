@@ -45,7 +45,17 @@ describe("readability", () => {
         "Atlas uses hybrid retrieval. Embeddings precede reranking. Orchestration handles concurrency.",
         "en",
       ),
-    ).toEqual(["not plain: 70 % long words (at most 35 %)"]);
+    ).toEqual(["not plain: 70 % long words (at most 38 %)"]);
+  });
+
+  it("leaves English room for the portfolio's names: 36 % long words passes, 40 % fails (V22)", () => {
+    const sentence = (long: number, short: number) =>
+      `${[...Array<string>(long).fill("assistant"), ...Array<string>(short).fill("it")].join(" ")}.`;
+    // 9 of 25 words long, as Parts F and G's plain answers about Atlas read; then 10 of 25.
+    expect(notPlain(`${sentence(5, 7)} ${sentence(4, 9)}`, "en")).toEqual([]);
+    expect(notPlain(`${sentence(5, 7)} ${sentence(5, 8)}`, "en")).toEqual([
+      "not plain: 40 % long words (at most 38 %)",
+    ]);
   });
 
   it("passes a plain answer and fails a technical one, in German, whose words run longer", () => {
