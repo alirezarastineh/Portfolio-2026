@@ -339,6 +339,12 @@ if [[ "${MAP_HEADERS}" =~ ^HTTP/[0-9.]+\ 200 && "${MAP_ETAG}" == W/\"map-en-* ]]
 else
   fail "the portfolio map is not served (${API}/v1/ask/map?locale=en)"
 fi
+# What visiting agents read (visitor plan V21): the FAQ and the system card, apart from the pages.
+if [[ "$(curl -fsS "${API}/v1/ask/map?locale=en" 2>/dev/null || true)" == *'"assistant":['* ]]; then
+  pass "the portfolio map lists the assistant's own documents"
+else
+  fail "the portfolio map lists no assistant documents (an API from before visitor plan V21?)"
+fi
 check "assistant admin is locked without a session" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${API}/admin/assistant/settings')\" = 401 ]"
 if [[ "$(db_value "select count(*) from information_schema.tables where table_name in ('ai_settings', 'ai_faq', 'ai_usage', 'ai_messages', 'ai_feedback', 'ai_rate_events')")" == "6" ]]; then
@@ -468,6 +474,8 @@ check "the MCP endpoint answers a discovery" \
 check "the MCP endpoint takes POST only (a GET is 405)" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${API}/v1/mcp')\" = 405 ]"
 check "the client serves llms.txt (en)" bash -c "curl -fsS '${CLIENT}/en/llms.txt' | grep -q '^# '"
+check "llms.txt links the portfolio map (visitor plan V21)" \
+  bash -c "curl -fsS '${CLIENT}/en/llms.txt' | grep -qF '/v1/ask/map?locale=en)'"
 check "the client serves the agent card" \
   bash -c "curl -fsS '${CLIENT}/.well-known/agent-card.json' | grep -q '\"skills\"'"
 check "the assistant's search and tokenizer load in the api container" \
