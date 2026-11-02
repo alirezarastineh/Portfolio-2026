@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The daily smoke test of the live site (plan Phase 13, .woodpecker/prod-smoke.yaml):
 # what a visitor or a crawler gets from outside, through Caddy. Read-only: no
-# session, no model call, nothing written. Like verify-deploy.sh, it reports
+# session, no model call, nothing written but the rate limits' own events (the
+# API prunes them within a day). Like verify-deploy.sh, it reports
 # every failure in one run. GitHub's prod-smoke.yml runs it too (the GitHub
 # Actions plan, Phase 8): there each failed check and the result also go on the
 # run's page, which reads without a login, and in the job's summary.
@@ -67,6 +68,30 @@ MCP_DISCOVER='{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_met
 expect "the MCP endpoint answers a discovery" grep -qF '"supportedVersions"' <<< "$(body -X POST "${API}/v1/mcp" \
   -H 'content-type: application/json' -H 'mcp-protocol-version: 2026-07-28' \
   -H 'mcp-method: server/discover' -d "${MCP_DISCOVER}")"
+
+echo "== the visitors' assistant (visitor plan V22; no model answers any of these)"
+CONFIG="$(body "${API}/v1/ask/config")"
+STATE="$(sed -n 's/.*"state":"\([a-z]*\)".*/\1/p' <<< "${CONFIG}")"
+expect "the assistant's config says its state (${STATE:-none})" grep -qE '^(ok|off|resting)$' <<< "${STATE}"
+expect "the config gives a question's limits" \
+  grep -qE '"limits":\{"maxChars":[0-9]+,"historyTurns":[0-9]+\}' <<< "${CONFIG}"
+expect "the config says whether match is offered" grep -qE '"match":(true|false)' <<< "${CONFIG}"
+expect "the portfolio map lists pages (en)" grep -qF '"pages":[{' <<< "$(body "${API}/v1/ask/map?locale=en")"
+# Three ticks 400 ms apart: streamed through Caddy, the first arrives well before the last.
+STREAM="$(curl -s -N --max-time 20 -w '\n%{time_starttransfer} %{time_total}' \
+  "${API}/v1/ask/stream-check" 2> /dev/null || true)"
+TICKS="$(grep -c '^data: tick' <<< "${STREAM}")"
+TIMES="$(tail -n 1 <<< "${STREAM}")"
+expect "the stream check's three ticks arrive unbuffered within 3 s (${TICKS}; first byte, end: ${TIMES})" \
+  awk -v n="${TICKS}" -v t="${TIMES}" \
+  'BEGIN { split(t, a, " "); exit !(n == 3 && a[2] - a[1] > 0.5 && a[2] < 3) }'
+# The scorecard answers as the admin's switch says: published, or a 404 saying it is not.
+SCORE="$(curl -s --max-time 20 -w ' %{http_code}' "${API}/v1/ask/scorecard" 2> /dev/null || true)"
+if grep -qF '"scorecard":true' <<< "${CONFIG}"; then
+  expect "the scorecard is published" grep -qE '"recorded".* 200$' <<< "${SCORE}"
+else
+  expect "the scorecard says it is not published" grep -qE 'not_published.* 404$' <<< "${SCORE}"
+fi
 
 echo
 if [[ "${FAILURES}" -gt 0 ]]; then
