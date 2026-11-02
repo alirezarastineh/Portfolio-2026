@@ -21,7 +21,7 @@ import { tourPromptText } from "./tour-prompt.js";
  * language instruction.
  */
 
-export const PROMPT_VERSION = "ask-2026-10-28.1";
+export const PROMPT_VERSION = "ask-2026-11-02.1";
 
 /**
  * A confidential line in the instructions (plan phase 15): no answer has a
@@ -104,8 +104,14 @@ const CAREFUL_TOPICS: Record<Sensitivity, string> = {
  * would be bad to see quoted wrongly. It goes after the corpus, so the cached
  * prefix (the prompt and the corpus) stays the same bytes.
  */
+/** A topic's own line (visitor plan V22): one kind of pay published does not answer another. */
+const CAREFUL_EXTRA: Partial<Record<Sensitivity, string>> = {
+  compensation:
+    "\n- A published fact about one kind of pay answers only that kind: freelance rates are not a salary. When the visitor asks about a kind that is not published, say so and offer `contact`, even if another kind is.",
+};
+
 export function carefulInstruction(topic: Sensitivity): string {
-  return `# Careful topic\nThe visitor's latest message touches ${CAREFUL_TOPICS[topic]}. ${CAREFUL_LEAD}:\n- Answer only with facts the profile or the FAQ states, each cited. Do not infer, estimate, give ranges or say what is usual.\n- If neither states it, say it is not published and offer the \`contact\` command.\n- Never share personal details of anyone else.`;
+  return `# Careful topic\nThe visitor's latest message touches ${CAREFUL_TOPICS[topic]}. ${CAREFUL_LEAD}:\n- Answer only with facts the profile or the FAQ states, each cited. Do not infer, estimate, give ranges or say what is usual.\n- If neither states it, say it is not published and offer the \`contact\` command.${CAREFUL_EXTRA[topic] ?? ""}\n- Never share personal details of anyone else.`;
 }
 
 /** Every careful block: instructions too, for the output guard and the prompt's hash. */
