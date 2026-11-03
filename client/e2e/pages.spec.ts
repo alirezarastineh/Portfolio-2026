@@ -234,6 +234,59 @@ test.describe("case study", () => {
     expect(await keyword.evaluate((el) => getComputedStyle(el).color)).toBe("rgb(0, 0, 0)");
   });
 
+  test("a case study's reader aids: in short, in depth folded, its terms, and on paper", async ({
+    page,
+    request,
+  }) => {
+    const plain =
+      "A data platform that gathers records from many places, so teams find what they need.";
+    const expert =
+      "Streaming ingestion with idempotent writes; backfills replay through the same path.";
+    // Server-rendered where they are set, and nowhere else.
+    const html = await (await request.get("/en/work/project-two")).text();
+    expect(html).toContain(plain);
+    expect(html).toContain("<details");
+    expect(html).toContain("Terms used here");
+    const without = await (await request.get("/en/work/project-one")).text();
+    expect(without).not.toContain("case-aids");
+    expect(without).not.toContain("Terms used here");
+
+    await page.goto("/en/work/project-two");
+    await interactive(page);
+    const aids = page.locator("main .case-aids");
+    await expect(aids.getByRole("heading", { name: "In short" })).toBeVisible();
+    await expect(aids.getByText(plain)).toBeVisible();
+    await expect(aids.getByText("Drafted with AI, reviewed by Alireza.")).toBeVisible();
+    const depth = aids.locator("details");
+    expect(await depth.getAttribute("open")).toBeNull();
+    await expect(aids.getByText(expert)).toBeHidden();
+    await depth.getByText("In depth").click();
+    await expect(aids.getByText(expert)).toBeVisible();
+
+    // After the narrative, not in it: no number, no anchor, not in the contents.
+    const terms = page.locator("main section").filter({
+      has: page.getByRole("heading", { name: "Terms used here" }),
+    });
+    await expect(terms.locator("dt")).toHaveText(["Ingestion", "Backfill"]);
+    await expect(terms.locator("dd").first()).toHaveText(
+      "Taking data in from outside sources and storing it for use.",
+    );
+    const heading = terms.getByRole("heading", { name: "Terms used here" });
+    expect(
+      await heading.evaluate(
+        (h) => h.closest(".case-flow") === null && !h.id && !h.classList.contains("case-h"),
+      ),
+    ).toBe(true);
+
+    // On paper: the plain summary and the terms; an "In depth" left closed stays off.
+    await depth.getByText("In depth").click();
+    expect(await depth.getAttribute("open")).toBeNull();
+    await page.emulateMedia({ media: "print" });
+    await expect(aids.getByText(plain)).toBeVisible();
+    await expect(depth).toBeHidden();
+    await expect(heading).toBeVisible();
+  });
+
   test("the home page's card opens its case study client-side", async ({ page }) => {
     await page.goto("/en");
     await interactive(page);

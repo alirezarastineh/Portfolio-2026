@@ -21,7 +21,7 @@ import { TocComponent, type TocItem } from "../../../components/toc.component";
 import { DocStore } from "../../../content/doc.store";
 import { switchTargets } from "../../../content/locale";
 import { formatPeriod } from "../../../content/period";
-import type { Project, ProjectDoc } from "../../../content/schema";
+import type { Locale, Project, ProjectDoc } from "../../../content/schema";
 import { CHROME } from "../../../i18n/chrome";
 import { fmt } from "../../../i18n/interpolate";
 import { sentenceCase } from "../../../i18n/sentence-case";
@@ -134,6 +134,22 @@ interface Section {
   html: string;
 }
 
+/** The reader aids' words (plan 3, W8): here, since `i18n/chrome.ts` ships with every page. */
+const AID_LABELS = {
+  en: {
+    inShort: "In short",
+    inDepth: "In depth",
+    terms: "Terms used here",
+    disclosure: "Drafted with AI, reviewed by Alireza.",
+  },
+  de: {
+    inShort: "Kurz gesagt",
+    inDepth: "Im Detail",
+    terms: "Begriffe auf dieser Seite",
+    disclosure: "Mit KI entworfen, von Alireza geprüft.",
+  },
+} as const satisfies Record<Locale, Record<string, string>>;
+
 /**
  * A case study: a spec-sheet header (name and hook, beside a card of facts,
  * stack and links), the metrics, the cover, then the narrative — numbered
@@ -184,6 +200,30 @@ interface Section {
               }
               @if (marks.count("project:" + s.project.slug); as n) {
                 <app-match-mark [n]="n" />
+              }
+              @if (aids().plain || aids().expert) {
+                <section
+                  class="case-aids flex max-w-[60ch] flex-col gap-2 border-l-2 border-accent-orange pl-4"
+                >
+                  <h2 class="eyebrow m-0 text-muted-foreground">{{ aids().labels.inShort }}</h2>
+                  @if (aids().plain) {
+                    <p class="m-0 text-pretty text-foreground">{{ aids().plain }}</p>
+                  }
+                  @if (aids().expert) {
+                    <!-- Open when it is the only summary. -->
+                    <details [attr.open]="aids().plain ? null : ''">
+                      <summary
+                        class="w-fit cursor-pointer font-mono text-meta text-muted-foreground"
+                      >
+                        {{ aids().labels.inDepth }}
+                      </summary>
+                      <p class="m-0 mt-2 text-pretty text-muted-foreground">{{ aids().expert }}</p>
+                    </details>
+                  }
+                  <p class="m-0 font-mono text-meta text-muted-foreground">
+                    {{ aids().labels.disclosure }}
+                  </p>
+                </section>
               }
             </div>
 
@@ -327,6 +367,22 @@ interface Section {
                 </section>
               }
             </div>
+
+            <!-- After the narrative, not in it: unnumbered, out of the contents, and without
+                 the reader's ask buttons (the assistant's corpus has no such section). -->
+            @if (aids().glossary.length) {
+              <section class="flex flex-col gap-4 lg:col-span-8">
+                <h2 class="m-0 text-h3 text-foreground">{{ aids().labels.terms }}</h2>
+                <dl class="m-0 flex flex-col gap-3">
+                  @for (item of aids().glossary; track $index) {
+                    <div>
+                      <dt class="font-medium text-foreground">{{ item.term }}</dt>
+                      <dd class="m-0 text-pretty text-muted-foreground">{{ item.definition }}</dd>
+                    </div>
+                  }
+                </dl>
+              </section>
+            }
           </div>
 
           @if (neighbours().previous || neighbours().next) {
@@ -481,6 +537,20 @@ export default class CaseStudyPageComponent {
       arch: sentenceCase(c.arch, l),
       infra: sentenceCase(c.infra, l),
       outcomes: sentenceCase(c.outcomes, l),
+    };
+  });
+
+  /**
+   * The case study's summaries and glossary, written offline and published by
+   * the owner: content, no model call. Each shows only when it is set.
+   */
+  protected readonly aids = computed(() => {
+    const doc = this.study()?.doc;
+    return {
+      plain: doc?.summaries?.plain ?? "",
+      expert: doc?.summaries?.expert ?? "",
+      glossary: doc?.glossary ?? [],
+      labels: AID_LABELS[this.lang.lang()],
     };
   });
 

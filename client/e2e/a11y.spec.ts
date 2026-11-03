@@ -7,6 +7,8 @@ const PAGES = [
   "/de",
   "/en/work/project-one",
   "/de/work/project-one",
+  // The case study with reader aids (plan 3, W8).
+  "/en/work/project-two",
   "/en/writing",
   "/de/writing?tag=rag",
   "/en/writing/shipping-rag-to-production",

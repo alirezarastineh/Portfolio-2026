@@ -296,6 +296,8 @@ export function fixtureDocs(locale) {
   };
 
   if (locale === "en") {
+    // The reader aids, as a publish writes them (plan 3, W8): here, so project-one (Lighthouse's
+    // and the visual baselines') stays as it was.
     docs["project:project-two"] = {
       kind: "project",
       slug: "project-two",
@@ -303,6 +305,22 @@ export function fixtureDocs(locale) {
       toc: [],
       gallery: [],
       seo: { title: "", description: "" },
+      summaries: {
+        plain:
+          "A data platform that gathers records from many places, so teams find what they need.",
+        expert:
+          "Streaming ingestion with idempotent writes; backfills replay through the same path.",
+      },
+      glossary: [
+        {
+          term: "Ingestion",
+          definition: "Taking data in from outside sources and storing it for use.",
+        },
+        {
+          term: "Backfill",
+          definition: "Running past data through a pipeline to fill what it missed.",
+        },
+      ],
       alternates: { en: "/en/work/project-two", de: null },
       updatedAt: UPDATED,
     };
