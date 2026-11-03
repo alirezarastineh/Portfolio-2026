@@ -218,6 +218,13 @@
       "when": 1792697186010,
       "tag": "0030_public_scorecard",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793736397406,
+      "tag": "0031_reader_aids",
+      "breakpoints": true
     }
   ]
 }

@@ -466,3 +466,94 @@ describe("0009_contract_cleanup", () => {
     });
   });
 });
+
+describe("a case study's reader aids (plan 3, W8)", () => {
+  type Row = { slug: string; translations: Record<"en" | "de", Record<string, unknown>> };
+  const aids = {
+    summaryPlain: "Atlas finds answers in support documents.",
+    summaryExpert: "Hybrid retrieval over pgvector, reranked.",
+    glossary: [{ term: "pgvector", definition: "A Postgres extension that stores vectors." }],
+  };
+
+  async function editor() {
+    await createAdmin();
+    const client = new TestClient(app);
+    await client.login();
+    const [first] = await getDb().select().from(projects).orderBy(projects.position).limit(1);
+    const path = `/admin/projects/${first!.id}`;
+    const load = async () => ((await (await client.get(path)).json()) as { project: Row }).project;
+    const before = await load();
+    // Both languages get a case study; only English gets aids.
+    const save = (en: Record<string, unknown>) =>
+      client.put(path, {
+        ...before,
+        translations: {
+          en: { ...before.translations.en, body: "<p>A long read.</p>", ...en },
+          de: { ...before.translations.de, body: "<p>Ein langer Text.</p>" },
+        },
+      });
+    return { before, load, save };
+  }
+
+  const served = async (locale: "en" | "de", slug: string) =>
+    (await (await app.request(`/v2/content/${locale}/projects/${slug}`)).json()) as Record<
+      string,
+      unknown
+    >;
+
+  it("keep through a save, the editor's load, a publish and a restore; empty ones stay off the page", async () => {
+    const { before, load, save } = await editor();
+    // Before any, the editor loads the columns' defaults.
+    expect(before.translations.en).toMatchObject({
+      summaryPlain: "",
+      summaryExpert: "",
+      glossary: [],
+    });
+
+    expect((await save(aids)).status).toBe(200);
+    expect((await load()).translations.en).toMatchObject(aids);
+
+    const { publicationId } = await publishAll();
+    expect(await served("en", before.slug)).toMatchObject({
+      summaries: { plain: aids.summaryPlain, expert: aids.summaryExpert },
+      glossary: aids.glossary,
+    });
+    // The German case study has none: the doc is shaped as it was before the aids.
+    const de = await served("de", before.slug);
+    expect(de).toMatchObject({ kind: "project", body: expect.stringContaining("Ein langer Text") });
+    expect(de).not.toHaveProperty("summaries");
+    expect(de).not.toHaveProperty("glossary");
+
+    // One level only: the other is left out.
+    expect((await save({ ...aids, summaryExpert: "" })).status).toBe(200);
+    await publishAll();
+    expect((await served("en", before.slug))["summaries"]).toEqual({ plain: aids.summaryPlain });
+
+    // Emptied in the draft, then brought back from the first publication.
+    expect((await save({ summaryPlain: "", summaryExpert: "", glossary: [] })).status).toBe(200);
+    await restoreDraftFromPublication(publicationId!);
+    expect((await load()).translations.en).toMatchObject(aids);
+  });
+
+  it("are bounded where the admin's input arrives", async () => {
+    const { save } = await editor();
+    const definition = "A general definition.";
+    for (const [field, value] of [
+      ["glossary", Array.from({ length: 9 }, (_, i) => ({ term: `term ${i}`, definition }))],
+      ["glossary", [{ term: "pgvector", definition: "" }]],
+      ["glossary", [{ term: "x".repeat(81), definition }]],
+      ["summaryPlain", "x".repeat(1001)],
+      ["summaryExpert", "x".repeat(1001)],
+    ] as const) {
+      const res = await save({ [field]: value });
+      expect(res.status, field).toBe(400);
+      const { issues } = (await res.json()) as { issues: { path: (string | number)[] }[] };
+      expect(issues[0]!.path.slice(0, 3)).toEqual(["translations", "en", field]);
+    }
+    // Eight terms, and summaries at the limit, pass; the text is trimmed.
+    const eight = Array.from({ length: 8 }, (_, i) => ({ term: `term ${i}`, definition }));
+    expect((await save({ glossary: eight, summaryPlain: ` ${"x".repeat(1000)} ` })).status).toBe(
+      200,
+    );
+  });
+});

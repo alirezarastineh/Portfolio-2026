@@ -120,6 +120,19 @@ export const projectTranslationInput = z.object({
   /** The long-form case study; empty = the project has no case-study page. */
   body: richLongInput.default(""),
   seoDescription: z.string().max(300).default(""),
+  /** The case study's "In short" for any reader, and the one folded for engineers; empty = none. */
+  summaryPlain: z.string().trim().max(1000).default(""),
+  summaryExpert: z.string().trim().max(1000).default(""),
+  /** "Terms used here", after the narrative. */
+  glossary: z
+    .array(
+      z.object({
+        term: z.string().trim().min(1).max(80),
+        definition: z.string().trim().min(1).max(400),
+      }),
+    )
+    .max(8)
+    .default([]),
 });
 
 export const galleryItemInput = z.object({

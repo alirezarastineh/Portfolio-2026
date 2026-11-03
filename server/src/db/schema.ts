@@ -34,6 +34,7 @@ import type { ReviewLabels } from "../ask/reviews.js";
 import type { AnswerSignals } from "../ask/signals.js";
 import type { ToolName } from "../ask/tools.js";
 import type { AnswerTrace } from "../ask/trace.js";
+import type { GlossaryItem } from "../content/schema.js";
 
 /* -------------------------------------------------------------------------- */
 /* Custom column types                                                         */
@@ -470,6 +471,10 @@ export const projectTranslations = pgTable(
     /** The long-form case study, sanitized rich text. Empty = no case-study page. */
     body: text("body").notNull().default(""),
     seoDescription: text("seo_description").notNull().default(""),
+    /** The case study's reader aids (plan 3, W8): "In short" in two levels, and its terms. */
+    summaryPlain: text("summary_plain").notNull().default(""),
+    summaryExpert: text("summary_expert").notNull().default(""),
+    glossary: jsonb("glossary").$type<GlossaryItem[]>().notNull().default([]),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.projectId, t.locale] })],

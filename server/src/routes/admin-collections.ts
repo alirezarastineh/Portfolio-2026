@@ -490,7 +490,8 @@ adminCollectionsRouter.get("/projects/:id", async (c) => {
           'name', t.name, 'descriptor', t.descriptor, 'hook', t.hook, 'problem', t.problem,
           'aiArchitecture', t.ai_architecture, 'fullStackInfra', t.full_stack_infra,
           'outcomes', t.outcomes, 'role', t.role, 'categoryLabel', t.category_label,
-          'metrics', t.metrics, 'body', t.body, 'seoDescription', t.seo_description))
+          'metrics', t.metrics, 'body', t.body, 'seoDescription', t.seo_description,
+          'summaryPlain', t.summary_plain, 'summaryExpert', t.summary_expert, 'glossary', t.glossary))
         from ${projectTranslations} t where t.project_id = ${qualified(projects.id)}), '{}'::json)`,
     })
     .from(projects)

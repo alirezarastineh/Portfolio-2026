@@ -390,6 +390,9 @@ export const tocEntrySchema = z.object({
 
 export const galleryImageSchema = imageSchema.extend({ caption: z.string() });
 
+/** A term of a case study and what it means in general (plan 3, W8). */
+export const glossaryItemSchema = z.object({ term: nonEmpty, definition: nonEmpty });
+
 export const projectDocSchema = z.object({
   kind: z.literal("project"),
   slug: nonEmpty,
@@ -397,6 +400,10 @@ export const projectDocSchema = z.object({
   toc: z.array(tocEntrySchema),
   gallery: z.array(galleryImageSchema),
   seo: pageSeoSchema,
+  /** "In short": the plain summary shown, the expert one folded. Absent, or a level left out, when empty. */
+  summaries: z.object({ plain: nonEmpty.optional(), expert: nonEmpty.optional() }).optional(),
+  /** "Terms used here", after the narrative; absent when empty. */
+  glossary: z.array(glossaryItemSchema).optional(),
   alternates: alternatesSchema,
   updatedAt: isoDateTimeSchema,
 });
@@ -479,6 +486,7 @@ export type Seo = z.infer<typeof seoSchema>;
 export type PageSeo = z.infer<typeof pageSeoSchema>;
 export type TocEntry = z.infer<typeof tocEntrySchema>;
 export type GalleryImage = z.infer<typeof galleryImageSchema>;
+export type GlossaryItem = z.infer<typeof glossaryItemSchema>;
 export type ProjectDoc = z.infer<typeof projectDocSchema>;
 export type PostDoc = z.infer<typeof postDocSchema>;
 export type LegalDocPayload = z.infer<typeof legalDocPayloadSchema>;

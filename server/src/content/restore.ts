@@ -272,6 +272,9 @@ async function restoreProjectTranslations(
       metrics: translated.metrics,
       body: doc ? unrenderBody(doc.body) : "",
       seoDescription: doc?.seo.description ?? "",
+      summaryPlain: doc?.summaries?.plain ?? "",
+      summaryExpert: doc?.summaries?.expert ?? "",
+      glossary: doc?.glossary ?? [],
       updatedAt: now,
     };
     await tx

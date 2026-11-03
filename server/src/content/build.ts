@@ -245,6 +245,11 @@ async function buildProjects(
           .filter((t) => t.projectId === project.id && t.body.trim() !== "")
           .map((t) => t.locale),
       );
+      // Left out when empty, so a case study without aids publishes as it did before them.
+      const summaries = {
+        ...(translation.summaryPlain ? { plain: translation.summaryPlain } : {}),
+        ...(translation.summaryExpert ? { expert: translation.summaryExpert } : {}),
+      };
       docs.push([
         docKey("projects", project.slug),
         {
@@ -259,6 +264,8 @@ async function buildProjects(
               return image ? [{ ...image, caption: g.caption[locale] ?? "" }] : [];
             }),
           seo: { title: "", description: translation.seoDescription },
+          ...(Object.keys(summaries).length ? { summaries } : {}),
+          ...(translation.glossary.length ? { glossary: translation.glossary } : {}),
           alternates: Object.fromEntries(
             LOCALES.map((l) => [l, withBody.has(l) ? `/${l}/work/${project.slug}` : null]),
           ) as Record<Locale, string | null>,

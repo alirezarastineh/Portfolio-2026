@@ -465,6 +465,12 @@ if [[ "${SCORECARD_COLUMN}" == "1" ]]; then
 else
   fail "ai_settings.public_scorecard missing — migration 0030_public_scorecard not applied?"
 fi
+AID_COLUMNS="$(db_value "select count(*) from information_schema.columns where table_name = 'project_translations' and column_name in ('summary_plain', 'summary_expert', 'glossary')")"
+if [[ "${AID_COLUMNS}" == "3" ]]; then
+  pass "a case study's summaries and glossary have columns (migration 0031)"
+else
+  fail "reader-aid columns (${AID_COLUMNS}/3) missing — migration 0031_reader_aids not applied?"
+fi
 
 echo "== agent-readable portfolio (plan phase 32) =="
 # A 2026-07-28 discovery: the version and capabilities in _meta, mirrored into headers.
