@@ -24,6 +24,7 @@ import { ASK_ENTRY_COPY } from "./ask-entry-copy";
 import { answersByQuestion } from "./answers";
 import { AskLauncherService, type AskAbout, type AskSource } from "./ask-launcher.service";
 import { AskLinesComponent } from "./ask-lines.component";
+import type { MatchKind } from "./match";
 import { MatchBoxComponent } from "./match-box.component";
 import { AskStore } from "./ask.store";
 import type { Entry } from "./ask-types";
@@ -243,7 +244,11 @@ const MAX_INPUT_LINES = 6;
         <!-- Match a brief (visitor plan V20): the paste box, its code loaded with the first match. -->
         @defer (when store.match()) {
           @if (store.match(); as kind) {
-            <app-match-box [kind]="kind" (sent)="sendMatch($event)" (dismissed)="dismissMatch()" />
+            <app-match-box
+              [kind]="kind"
+              (sent)="sendMatch(kind, $event)"
+              (dismissed)="dismissMatch()"
+            />
           }
         }
       </div>
@@ -536,8 +541,8 @@ export class TerminalShellComponent {
 
   /** A starter question from the empty terminal. */
   /** The paste box's brief, sent; the prompt takes the focus back (visitor plan V20). */
-  protected sendMatch(brief: string): void {
-    void this.store.sendMatch(brief);
+  protected sendMatch(kind: MatchKind, brief: string): void {
+    void this.store.sendMatch(kind, brief, "terminal");
     this.focusInput();
   }
 

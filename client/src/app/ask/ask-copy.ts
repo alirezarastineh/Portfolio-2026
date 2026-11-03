@@ -265,6 +265,8 @@ export interface AskCopy {
     /** Said once, as the brief goes. */
     started: string;
     steps: { plan: string; search: Counted; write: string; check: string; repair: string };
+    /** Under the newest match's answer: its rows on the match page (plan 3 W3). */
+    page: string;
   };
   handoff: { ask: string; yes: string; no: string; done: string; declined: string };
   opening: string;
@@ -569,6 +571,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         check: "checking each row against its sources…",
         repair: "rewriting what the check refused…",
       },
+      page: "open as a page",
     },
     handoff: {
       ask: "Hand this conversation to the contact form?",
@@ -886,6 +889,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
         check: "prüfe jede Zeile an ihren Quellen…",
         repair: "schreibe neu, was die Prüfung abgelehnt hat…",
       },
+      page: "als Seite öffnen",
     },
     handoff: {
       ask: "Dieses Gespräch an das Kontaktformular übergeben?",

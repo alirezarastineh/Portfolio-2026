@@ -51,13 +51,15 @@ let instances = 0;
         >
           {{ copy().send }}
         </button>
-        <button
-          type="button"
-          class="press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
-          (click)="dismissed.emit()"
-        >
-          {{ copy().cancel }}
-        </button>
+        @if (!page()) {
+          <button
+            type="button"
+            class="press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
+            (click)="dismissed.emit()"
+          >
+            {{ copy().cancel }}
+          </button>
+        }
         <span [id]="countId" class="ml-auto text-xs tabular-nums text-muted-foreground">{{
           counter()
         }}</span>
@@ -67,6 +69,8 @@ let instances = 0;
 })
 export class MatchBoxComponent {
   readonly kind = input.required<MatchKind>();
+  /** On the match page (plan 3 W3): it stays, so it takes no focus and has nothing to cancel. */
+  readonly page = input(false);
   /** The brief, trimmed, once the visitor sends it. */
   readonly sent = output<string>();
   /** Put away, nothing sent. */
@@ -92,7 +96,9 @@ export class MatchBoxComponent {
   });
 
   constructor() {
-    afterNextRender(() => this.box().nativeElement.focus());
+    afterNextRender(() => {
+      if (!this.page()) this.box().nativeElement.focus();
+    });
   }
 
   protected send(): void {
@@ -100,7 +106,7 @@ export class MatchBoxComponent {
   }
 
   protected onKey(event: KeyboardEvent): void {
-    if (event.key === "Escape") {
+    if (event.key === "Escape" && !this.page()) {
       // The box's Esc only: the sheet around the terminal stays open.
       event.preventDefault();
       event.stopPropagation();

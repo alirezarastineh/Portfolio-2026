@@ -19,6 +19,7 @@ import {
   lucideGlobe,
   lucideHash,
   lucideHouse,
+  lucideListChecks,
   lucideMoon,
   lucideNewspaper,
   lucideSearch,
@@ -30,7 +31,7 @@ import {
 import { AskLauncherService } from "../ask/ask-launcher.service";
 import { newsCount, visitNews } from "../ask/news";
 import { fetchMap, updatesSince } from "../ask/portfolio-map";
-import { otherLocale } from "../content/locale";
+import { otherLocale, type Locale } from "../content/locale";
 import { splitCommentMark } from "../i18n/comment-mark";
 import { CHROME } from "../i18n/chrome";
 import { CommandPaletteService } from "../services/command-palette.service";
@@ -52,6 +53,9 @@ interface Group {
   commands: Command[];
 }
 
+/** The match page's entry (plan 3 W3): its words here, so no other chunk joins the palette's. */
+const MATCH_LABEL: Record<Locale, string> = { en: "Check the fit", de: "Prüf, ob es passt" };
+
 /**
  * The public ⌘K palette: jump to a section, a case study or a post, or switch
  * language or theme, ask the assistant, download the CV. A native modal
@@ -72,6 +76,7 @@ interface Group {
       lucideGlobe,
       lucideHash,
       lucideHouse,
+      lucideListChecks,
       lucideMoon,
       lucideNewspaper,
       lucideSearch,
@@ -303,6 +308,13 @@ export class CommandPaletteComponent {
         icon: "lucideSignpost",
         keywords: "tour guide start",
         run: () => this.inTerminal("tour"),
+      },
+      {
+        id: "palette-match",
+        label: MATCH_LABEL[l],
+        icon: "lucideListChecks",
+        keywords: "match fit role project problem hire",
+        run: go(["/", l, "match"]),
       },
       {
         id: "palette-language",

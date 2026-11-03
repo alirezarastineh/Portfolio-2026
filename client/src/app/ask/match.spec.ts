@@ -1,7 +1,62 @@
 import { describe, expect, it } from "vitest";
 
+import type { AppContent } from "../content/schema";
 import { ASK_COPY } from "./ask-copy";
-import { counterLine, isMatchKind, matchStep, stepLine } from "./match";
+import type { AskMessage } from "./ask-types";
+import { linkPolicyFor } from "./link-policy";
+import { counterLine, isMatchKind, matchData, matchStep, stepLine } from "./match";
+
+describe("matchData (plan 3 W2)", () => {
+  const policy = linkPolicyFor({
+    identity: { siteUrl: "https://alirezarastineh.me/", contactEmail: "hello@alirezarastineh.me" },
+    socials: [],
+  } as unknown as Pick<AppContent, "socials" | "identity">);
+  const row = {
+    n: 1,
+    text: "Python in production",
+    priorityLabel: "must",
+    status: "evidence",
+    statusLabel: "evidence",
+    summary: "Builds the backend in Python.",
+    cites: [{ id: "skills@en", title: "Skills", url: "/en#skills" }],
+  };
+  const answer = (data: unknown) =>
+    ({
+      parts: [
+        { type: "text", text: "…" },
+        { type: "data-match", data },
+      ],
+    }) as unknown as Pick<AskMessage, "parts">;
+
+  it("reads the server's rows, in its words", () => {
+    expect(matchData(answer({ v: 1, kind: "role", items: [row] }), policy)).toEqual({
+      kind: "role",
+      items: [row],
+    });
+    expect(matchData({ parts: [] }, policy)).toBeNull();
+    expect(matchData(undefined, policy)).toBeNull();
+  });
+
+  it("drops a cite to another site, a malformed row, an unknown status, and any other version", () => {
+    const bs = "\\";
+    const foreign = ["https://evil.example/x", "//evil.example", `/${bs}evil.example`, ""].map(
+      (url) => ({ id: "x@en", title: "X", url }),
+    );
+    const read = matchData(
+      answer({ v: 1, kind: "role", items: [{ ...row, cites: [...row.cites, ...foreign] }] }),
+      policy,
+    );
+    expect(read?.items[0]?.cites).toEqual(row.cites);
+    for (const bad of [null, "x", { ...row, n: 0 }, { ...row, n: 1.5 }, { ...row, text: 3 }]) {
+      const items = [bad, row];
+      expect(matchData(answer({ v: 1, kind: "role", items }), policy)?.items).toEqual([row]);
+    }
+    const unknown = { v: 1, kind: "role", items: [{ ...row, status: "proven" }] };
+    expect(matchData(answer(unknown), policy)).toBeNull();
+    expect(matchData(answer({ v: 2, kind: "role", items: [row] }), policy)).toBeNull();
+    expect(matchData(answer({ v: 1, kind: "essay", items: [row] }), policy)).toBeNull();
+  });
+});
 
 describe("match's progress (visitor plan V20)", () => {
   it("reads the server's steps field by field, and nothing else", () => {

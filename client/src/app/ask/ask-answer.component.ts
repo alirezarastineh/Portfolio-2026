@@ -19,6 +19,7 @@ import { AskStore } from "./ask.store";
 import type { AskMessage, DownReason, Entry } from "./ask-types";
 import { parseInput } from "./commands";
 import { reasonChoices } from "./down-reasons";
+import { AskLauncherService } from "./ask-launcher.service";
 import { shareLink } from "./ask-link";
 import { AskLinesComponent } from "./ask-lines.component";
 import { linkPolicyFor } from "./link-policy";
@@ -317,6 +318,12 @@ type Piece = { kind: "step"; text: string; pending: boolean } | { kind: "text"; 
                 }
               </button>
             }
+            <!-- The newest match's rows as a table (plan 3 W3), with the sheet put away. -->
+            @if (matchPage(); as href) {
+              <a class="feedback press" [href]="href" (click)="openMatchPage($event, href)">{{
+                copy().match.page
+              }}</a>
+            }
             @if (rating()) {
               <span>{{ copy().thanks }}</span>
             }
@@ -481,6 +488,7 @@ export class AskAnswerComponent {
 
   protected readonly store = inject(AskStore);
   private readonly lang = inject(LanguageService);
+  private readonly launcher = inject(AskLauncherService);
   private readonly router = inject(Router);
   private readonly doc = inject(DOCUMENT);
 
@@ -546,6 +554,13 @@ export class AskAnswerComponent {
     const data = tourData(this.message());
     if (!data) return [];
     return data.kind === "plan" ? data.stops : defaultTour(this.lang.content(), this.lang.lang());
+  });
+
+  /** The match page, under the tab's newest match with rows: the one that page shows. */
+  protected readonly matchPage = computed(() => {
+    const newest = this.store.entries().findLast((e) => e.kind === "ask" && !!e.match);
+    const rows = this.message()?.parts.some((p) => p.type === "data-match");
+    return rows && newest?.id === this.entry().id ? `/${this.lang.lang()}/match` : null;
   });
 
   /** The server moved past a busy model, until this answer's first words (visitor plan V12). */
@@ -732,6 +747,13 @@ export class AskAnswerComponent {
     if (modified(event) || !url.startsWith("/") || url.startsWith("/media/")) return;
     event.preventDefault();
     void this.router.navigateByUrl(url);
+  }
+
+  protected openMatchPage(event: MouseEvent, href: string): void {
+    if (modified(event)) return;
+    event.preventDefault();
+    this.launcher.closeSheet();
+    void this.router.navigateByUrl(href);
   }
 
   /** A tour's stop opened from its list: the visitor's own step, through the router (V16). */

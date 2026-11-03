@@ -16,11 +16,13 @@ import {
   viewChild,
 } from "@angular/core";
 import { FormBuilder, ReactiveFormsModule, Validators } from "@angular/forms";
+import { RouterLink } from "@angular/router";
 import { z } from "zod";
 
 import { MagneticButtonComponent } from "../components/magnetic-button.component";
 import { SectionHeadingComponent } from "../components/section-heading.component";
 import { AVAILABILITY_DOT, availabilityLabel } from "../content/availability";
+import type { Locale } from "../content/locale";
 import { placeName, timeZoneLabel } from "../content/place";
 import { isWebLink, socialHandle } from "../content/social";
 import { CHROME } from "../i18n/chrome";
@@ -41,6 +43,15 @@ type Field = "name" | "email" | "message";
 type SubmitState = "idle" | "submitting" | "success" | "error";
 
 const FIELDS: readonly Field[] = ["name", "email", "message"];
+
+/**
+ * The match page's way in (plan 3 W3). Here, not in `i18n/chrome.ts`: this
+ * section's chunk loads on home only, the main bundle on every page.
+ */
+const MATCH_LINE: Record<Locale, { lead: string; link: string }> = {
+  en: { lead: "Hiring, or have a project?", link: "Check the fit first" },
+  de: { lead: "Du stellst ein oder hast ein Projekt?", link: "Prüf zuerst, ob es passt" },
+};
 
 /** How long the copy button says "Copied". */
 const COPIED_MS = 1500;
@@ -63,7 +74,7 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
 @Component({
   selector: "app-contact-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MagneticButtonComponent, ReactiveFormsModule, SectionHeadingComponent],
+  imports: [MagneticButtonComponent, ReactiveFormsModule, RouterLink, SectionHeadingComponent],
   host: {
     class: "block",
   },
@@ -163,6 +174,15 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                 <p class="m-0">{{ replyTime() }}</p>
               }
             </div>
+
+            <p class="m-0 font-mono text-meta text-muted-foreground">
+              {{ matchLine().lead }}
+              <a
+                class="link-underline text-foreground"
+                [routerLink]="['/', lang.lang(), 'match']"
+                >{{ matchLine().link }}</a
+              >
+            </p>
           </div>
 
           <div class="col-span-12 lg:col-span-7">
@@ -352,6 +372,7 @@ export class ContactSectionComponent {
   protected readonly errorClass = errorClass;
   protected readonly chrome = computed(() => CHROME[this.lang.lang()].contact);
   protected readonly copyLabels = computed(() => CHROME[this.lang.lang()].code);
+  protected readonly matchLine = computed(() => MATCH_LINE[this.lang.lang()]);
 
   readonly contactEmail = computed(() => this.lang.content().identity.contactEmail);
 

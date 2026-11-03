@@ -1,16 +1,79 @@
 import { fmt } from "../i18n/interpolate";
 import type { AskCopy } from "./ask-copy";
+import type { AskMessage } from "./ask-types";
+import type { LinkKind } from "./link-policy";
 import { counted } from "./receipt";
 
 /**
  * Match a brief (visitor plan V20), the terminal's side: what `/v1/ask` takes
  * with `mode: "match"`, and the progress the server sends while it works
  * (transient parts: never part of the message, so never stored or replayed).
- * The rows themselves are the answer's text, rendered as any answer is.
+ * The rows are the answer's text, rendered as any answer is, and again as
+ * data for the match page (`data-match`, plan 3 W2).
  */
 
 export const MATCH_KINDS = ["role", "project", "problem"] as const;
 export type MatchKind = (typeof MATCH_KINDS)[number];
+
+const MATCH_STATUSES = ["evidence", "partial", "not-published"] as const;
+export type MatchStatus = (typeof MATCH_STATUSES)[number];
+
+/** One row of a match, in the server's words (`data-match`, plan 3 W2). */
+export interface MatchRow {
+  n: number;
+  text: string;
+  /** Empty outside a role. */
+  priorityLabel: string;
+  status: MatchStatus;
+  statusLabel: string;
+  summary: string;
+  cites: { id: string; title: string; url: string }[];
+}
+
+/**
+ * A match's rows from its answer's `data-match` part, read field by field;
+ * null when it has none, or a malformed one. A cite's page must be the site's
+ * own where a browser opens it (`linkPolicyFor`): "/\evil.example" is not.
+ */
+export function matchData(
+  message: Pick<AskMessage, "parts"> | undefined,
+  link: (href: string) => LinkKind | null,
+): { kind: MatchKind; items: MatchRow[] } | null {
+  const part = message?.parts.find((p) => p.type === "data-match") as
+    { data?: Record<string, unknown> } | undefined;
+  const data = part?.data;
+  const kind = data?.["kind"];
+  if (data?.["v"] !== 1 || typeof kind !== "string" || !isMatchKind(kind)) return null;
+  const str = (value: unknown) => (typeof value === "string" ? value : "");
+  const objects = (value: unknown) =>
+    (Array.isArray(value) ? value : []).map(
+      (raw: unknown) => (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>,
+    );
+  const items = objects(data["items"]).flatMap((r): MatchRow[] => {
+    const { n, status } = r;
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 1) return [];
+    if (!(MATCH_STATUSES as readonly unknown[]).includes(status)) return [];
+    const text = str(r["text"]);
+    const statusLabel = str(r["statusLabel"]);
+    if (!text || !statusLabel) return [];
+    const cites = objects(r["cites"]).flatMap((c) => {
+      const cite = { id: str(c["id"]), title: str(c["title"]), url: str(c["url"]) };
+      return cite.id && cite.title && link(cite.url) === "internal" ? [cite] : [];
+    });
+    return [
+      {
+        n,
+        text,
+        priorityLabel: str(r["priorityLabel"]),
+        status: status as MatchStatus,
+        statusLabel,
+        summary: str(r["summary"]),
+        cites,
+      },
+    ];
+  });
+  return items.length ? { kind, items } : null;
+}
 
 /** The most a brief may be, as the server takes it (`MATCH_BRIEF_CHARS`, server/src/ask/match/prompt.ts). */
 export const MATCH_BRIEF_CHARS = 4_000;

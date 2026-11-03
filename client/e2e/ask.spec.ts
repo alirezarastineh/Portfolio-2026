@@ -398,6 +398,70 @@ async function offerHandoff(page: Page, by: "tool" | "fallback" = "tool") {
   return { summary, confirm, confirmed, sent };
 }
 
+/** A match's answer as the server streams it: its text, and its rows as data (plan 3 W3). */
+function matchChunks(id: string, kind: string, handoff: string): Chunk[] {
+  const cite = {
+    id: "project:project-two@en",
+    title: "TODO: Project Two",
+    url: "/en/work/project-two",
+  };
+  return [
+    { type: "data-match-progress", data: { v: 1, step: "plan" }, transient: true },
+    { type: "start", messageId: id, messageMetadata: { createdAt: Date.now() } },
+    { type: "start-step" },
+    { type: "source-url", sourceId: cite.id, url: cite.url, title: cite.title },
+    { type: "text-start", id: "match" },
+    {
+      type: "text-delta",
+      id: "match",
+      delta: [
+        "Published evidence for 1 of 2 requirements; 1 not published.",
+        "",
+        "- ✓ **Retrieval in production** (must) · evidence: Built a retrieval platform. [^project:project-two@en]",
+        "- – **Embedded C** (must) · not published: nothing on his site shows this.",
+      ].join("\n"),
+    },
+    { type: "text-end", id: "match" },
+    {
+      type: "data-match",
+      data: {
+        v: 1,
+        kind,
+        items: [
+          {
+            n: 1,
+            text: "Retrieval in production",
+            priorityLabel: "must",
+            status: "evidence",
+            statusLabel: "evidence",
+            summary: "Built a retrieval platform.",
+            cites: [cite],
+          },
+          {
+            n: 2,
+            text: "Embedded C",
+            priorityLabel: "must",
+            status: "not-published",
+            statusLabel: "not published",
+            summary: "nothing on his site shows this.",
+            cites: [],
+          },
+        ],
+      },
+    },
+    { type: "finish-step" },
+    {
+      type: "finish",
+      finishReason: "stop",
+      messageMetadata: {
+        sig: "signed",
+        handoff: { by: "fallback", summary: handoff },
+        receipt: { lookups: 2, sources: 1, removed: 0, match: { kind, rows: 2, downgraded: 0 } },
+      },
+    },
+  ];
+}
+
 test.use({ reducedMotion: "reduce" });
 
 test.describe("assistant terminal", () => {
@@ -1654,6 +1718,159 @@ test.describe("assistant terminal", () => {
     await expect(live).toContainText("Built a retrieval platform.");
   });
 
+  test("the match page: each kind's brief, its rows with their evidence, kept through a reload, and the hand-off (plan 3 W3)", async ({
+    page,
+  }) => {
+    const kinds = {
+      role: { radio: "A role", label: "Paste the role", item: "Requirement", prefix: "Role" },
+      project: {
+        radio: "A project",
+        label: "Describe your project",
+        item: "Need",
+        prefix: "Project",
+      },
+      problem: {
+        radio: "A problem",
+        label: "Describe the problem",
+        item: "Aspect",
+        prefix: "Question",
+      },
+    } as const;
+    const order = ["role", "project", "problem"] as const;
+    const brief = (kind: string) => `A ${kind} about retrieval in production and embedded C.`;
+    const mock = await mockAsk(
+      page,
+      (route, n) => {
+        const kind = order[n - 1]!;
+        const handoff = `${kinds[kind].prefix}: ${brief(kind)}`;
+        return sse(route, matchChunks(`m_e2epage000${n}`, kind, handoff));
+      },
+      { match: true },
+    );
+    const confirmed = await recordPosts(page, "**/v1/ask/handoff");
+    await page.goto("/en/match");
+    await interactive(page);
+    const table = page.getByRole("table", {
+      name: "Each point of the brief, with what his work shows",
+    });
+    for (const [i, kind] of order.entries()) {
+      const { radio, label, item } = kinds[kind];
+      await page.getByRole("radio", { name: radio }).check();
+      // The page's box stays where it is and takes no focus.
+      const box = page.getByLabel(label);
+      await expect(box).not.toBeFocused();
+      await box.fill(brief(kind));
+      await page.getByRole("button", { name: "check it" }).click();
+      await expect(table.getByRole("columnheader", { name: item })).toBeVisible();
+      expect(mock.bodies[i]).toMatchObject({ mode: "match", match: { kind, brief: brief(kind) } });
+    }
+    // The server's words in each row, and the page each rests on.
+    const rows = table.getByRole("row");
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(1)).toContainText("✓ evidence");
+    await expect(rows.nth(1).getByRole("rowheader")).toHaveText("Retrieval in production (must)");
+    await expect(rows.nth(1).getByRole("link", { name: "TODO: Project Two" })).toHaveAttribute(
+      "href",
+      "/en/work/project-two",
+    );
+    await expect(rows.nth(2)).toContainText("nothing on his site shows this.");
+    const lead = "Published evidence for 1 of 2 requirements; 1 not published.";
+    await expect(page.getByText(lead, { exact: true })).toBeVisible();
+    await expect(page.locator("[data-receipt]")).toContainText("2 rows");
+
+    // A reload keeps the match and its offer: the hand-off is read from the answer itself.
+    await page.reload();
+    await interactive(page);
+    await expect(table.getByRole("columnheader", { name: "Aspect" })).toBeVisible();
+    await page.getByRole("button", { name: "Hand this to the contact form" }).click();
+    await expect(page).toHaveURL(/\/en#contact$/);
+    await expect(page.locator("#contact-message")).toHaveValue(`Question: ${brief("problem")}`);
+    await expect.poll(() => confirmed.length).toBe(1);
+    expect(confirmed[0]).toMatchObject({ messageId: "m_e2epage0003" });
+  });
+
+  test("the match page's server HTML says what it does and offers the kinds, with nothing of the store (plan 3 W3)", async ({
+    request,
+  }) => {
+    const html = await (await request.get("/en/match")).text();
+    expect(html).toMatch(/<h1[^>]*>\s*Check the fit\s*<\/h1>/);
+    expect(html.match(/type="radio"/g)).toHaveLength(3);
+    expect(html).toMatch(/hreflang="de" href="[^"]*\/de\/match"/);
+    // The paste box and the table come with the store, after hydration.
+    expect(html).not.toContain("<textarea");
+    expect(html).not.toContain("app-match-panel");
+  });
+
+  test("the match page shows the step while it runs, and says only its start and its rows (plan 3 W3)", async ({
+    page,
+  }) => {
+    const chunks = matchChunks("m_e2epagestep", "role", "Role: Senior AI engineer.");
+    const search = { type: "data-match-progress", data: { v: 1, step: "search", items: 3 } };
+    // The stream stops for a while after its second step, as the rows' call does.
+    chunks.splice(1, 0, { ...search, transient: true });
+    await pausedStream(page, chunks, 1, 3000);
+    await mockAsk(page, () => undefined, { match: true });
+    await page.goto("/en/match");
+    await interactive(page);
+    // The sheet is closed: the page's own live region speaks.
+    const live = page.locator("main [role=status]");
+    await page.getByLabel("Paste the role").fill("Senior AI engineer: retrieval in production.");
+    await page.getByRole("button", { name: "check it" }).click();
+    await expect(live).toHaveText("Checking the brief against his published work…");
+    await expect(page.locator("[data-match-progress]")).toHaveText(
+      "searching his work for 3 items…",
+    );
+    await expect(page.getByRole("table")).toBeVisible();
+    await expect(page.locator("[data-match-progress]")).toHaveCount(0);
+    await expect(live).toContainText("Built a retrieval platform.");
+  });
+
+  test("a match made in the terminal opens as a page: one conversation (plan 3 W3)", async ({
+    page,
+  }) => {
+    await mockAsk(page, (route) => sse(route, matchChunks("m_e2epageterm", "role", "Role: x.")), {
+      match: true,
+    });
+    await openPrompt(page);
+    const log = page.locator("#about [role=log]");
+    await run(page.locator("#about textarea.terminal-input"), "match role");
+    await log.getByLabel("Paste the role").fill("Senior AI engineer: retrieval in production.");
+    await log.getByRole("button", { name: "check it" }).click();
+    await log.getByRole("link", { name: "open as a page" }).click();
+    await expect(page).toHaveURL(/\/en\/match$/);
+    await expect(page.getByRole("rowheader").first()).toHaveText("Retrieval in production (must)");
+  });
+
+  test("with match off, the match page says so and points to contact; home and the palette lead there (plan 3 W3)", async ({
+    page,
+  }) => {
+    await mockAsk(page, () => undefined, { match: false });
+    await page.goto("/en/match");
+    await interactive(page);
+    await expect(page.getByText("Matching is not offered just now.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Write to him instead" })).toHaveAttribute(
+      "href",
+      "/en#contact",
+    );
+    await expect(page.getByRole("button", { name: "check it" })).toHaveCount(0);
+
+    await page.goto("/en");
+    await interactive(page);
+    const contact = page.locator("#contact");
+    await expect(contact).toContainText("Hiring, or have a project?");
+    await contact.getByRole("link", { name: "Check the fit first" }).click();
+    await expect(page).toHaveURL(/\/en\/match$/);
+
+    await page.goto("/en/writing");
+    await interactive(page);
+    await page.keyboard.press("ControlOrMeta+k");
+    const palette = page.getByRole("dialog", { name: "Command palette" });
+    await palette.getByRole("combobox").fill("fit");
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/en\/match$/);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Check the fit");
+  });
+
   test("a shared link puts its question in the prompt and sends nothing until Enter; share copies one (visitor plan V17)", async ({
     page,
     context,
@@ -1839,6 +2056,18 @@ for (const colorScheme of ["dark", "light"] as const) {
       const readNext = page.getByRole("navigation", { name: "Read next" });
       await expect(readNext.getByRole("listitem")).toHaveCount(3);
       await readNext.getByRole("button", { name: "How do they connect?" }).first().focus();
+      expect(await axeViolations(page)).toEqual([]);
+    });
+
+    test("the match page with its rows (plan 3 W3)", async ({ page }) => {
+      await mockAsk(page, (route) => sse(route, matchChunks("m_e2epageaxe0", "role", "Role: x.")), {
+        match: true,
+      });
+      await page.goto("/en/match");
+      await interactive(page);
+      await page.getByLabel("Paste the role").fill("Senior AI engineer: retrieval in production.");
+      await page.getByRole("button", { name: "check it" }).click();
+      await expect(page.getByRole("table")).toBeVisible();
       expect(await axeViolations(page)).toEqual([]);
     });
   });

@@ -880,13 +880,19 @@ export const AskStore = signalStore(
       track("match_open", { kind: arg });
     }
 
-    /** The brief, sent: one request, said once as it goes and once with its rows. */
-    async function sendMatch(brief: string): Promise<void> {
-      const kind = store.match();
+    /**
+     * A brief, sent from the terminal's paste box or the match page (plan 3 W3): one request,
+     * said once as it goes and once with its rows.
+     */
+    async function sendMatch(
+      kind: MatchKind,
+      brief: string,
+      source: "terminal" | "page",
+    ): Promise<void> {
       const text = brief.trim();
-      if (!kind || !text || text.length > MATCH_BRIEF_CHARS) return;
+      if (!text || text.length > MATCH_BRIEF_CHARS) return;
       const input = `match ${kind}`;
-      track("match_send", { kind });
+      track("match_send", { kind, source });
       const sending = ask(input, input, false, undefined, undefined, { kind, brief: text });
       // `ask` cleared the live region as the entry went in; this is the start's one line.
       patchState(store, { announcement: store.copy().match.started });
@@ -1175,9 +1181,9 @@ export const AskStore = signalStore(
         void store.chat.stop();
       },
 
-      /** The paste box's brief, sent (visitor plan V20). */
-      sendMatch(brief: string): Promise<void> {
-        return sendMatch(brief);
+      /** A brief, sent: the terminal's paste box (visitor plan V20) or the match page's. */
+      sendMatch(kind: MatchKind, brief: string, source: "terminal" | "page"): Promise<void> {
+        return sendMatch(kind, brief, source);
       },
 
       /** The paste box put away, nothing sent. */
@@ -1363,6 +1369,17 @@ export const AskStore = signalStore(
         store._contact.prefill.set({ text: pending.summary, ask });
         show(copy.handoff.yes, [{ text: copy.handoff.done, tone: "accent" }]);
         this.toContact();
+      },
+
+      /**
+       * The match page's hand-off (plan 3 W3): the offer read from the answer itself, since a
+       * reload or a later question clears the pending one; then a yes, as in the terminal.
+       */
+      handOff(message: AskMessage): void {
+        const summary = handoffSummary(message);
+        if (!summary) return;
+        patchState(store, { handoff: { summary, messageId: message.id } });
+        this.answerHandoff(true);
       },
 
       toContact(): void {
