@@ -4,7 +4,7 @@ import type { Locale } from "../../content/schema.js";
 import { newMessageId } from "../agent.js";
 import type { AnswerChecks } from "../checks.js";
 import type { AskConfig } from "../config.js";
-import type { AskCorpus } from "../corpus/index.js";
+import { resolveDocument, type AskCorpus } from "../corpus/index.js";
 import { snapshotKey } from "../corpus/snapshots.js";
 import { ownWords } from "../handoff.js";
 import { signAnswer } from "../history.js";
@@ -37,6 +37,7 @@ import {
  * A match as one message (visitor plan V19): progress parts while it runs,
  * then the counts, the summary and a row per item, cited and through the
  * output guard, signed as any answer's text is, so it replays as history; the
+ * rows again as data for the match page (plan 3 W2), never sent back; the
  * finish carries V6's hand-off offer and the receipt. Logged as a visitor's
  * row on a route of its own (`route: "match"`), so `forget`, the signals and
  * the contact form's attached conversation reach it, and the answers'
@@ -67,6 +68,58 @@ export function matchText(outcome: MatchOutcome): string {
   const items = new Map(outcome.items.map((item) => [item.n, item]));
   const rows = outcome.rows.map((row) => rowLine(row, items.get(row.n)!, kind, language));
   return [head, "", ...rows].join("\n");
+}
+
+/** One row as the match page's table shows it (plan 3 W2): the server's words throughout. */
+export interface MatchDataItem {
+  n: number;
+  text: string;
+  /** Must or nice, in the server's words; empty outside a role, whose row line shows none. */
+  priorityLabel: string;
+  status: MatchStatus;
+  statusLabel: string;
+  /** What his work shows; for not-published, the server's own line. */
+  summary: string;
+  /** The documents it rests on, resolved here: the browser builds no link from model text. */
+  cites: { id: string; title: string; url: string }[];
+}
+
+export interface MatchData {
+  v: 1;
+  kind: MatchKind;
+  items: MatchDataItem[];
+}
+
+/**
+ * The rows as data, for the match page's table (plan 3 W2); null for a match
+ * that stopped. It skips `scanChunk`: every item and row passed
+ * `instructionIn` with the same guard already (match.ts), as `data-tour`'s
+ * lines did theirs.
+ */
+export function matchData(outcome: MatchOutcome, corpus: AskCorpus): MatchData | null {
+  if (outcome.stop || !outcome.rows.length) return null;
+  const { kind, language } = outcome;
+  const items = new Map(outcome.items.map((item) => [item.n, item]));
+  return {
+    v: 1,
+    kind,
+    items: outcome.rows.map((row) => {
+      const item = items.get(row.n)!;
+      return {
+        n: row.n,
+        text: shownItem(item.text),
+        priorityLabel: kind === "role" ? priorityLabel(item.priority, language) : "",
+        status: row.status,
+        statusLabel: statusLabel(kind, row.status, language),
+        summary:
+          row.status === "not-published" ? notPublishedLine(item.careful, language) : row.summary,
+        cites: row.cites.flatMap((id) => {
+          const doc = resolveDocument(corpus, id, language);
+          return doc ? [{ id: doc.id, title: doc.title, url: doc.url }] : [];
+        }),
+      };
+    }),
+  };
 }
 
 export interface MatchStreamRequest {
@@ -156,12 +209,14 @@ export function streamMatch(request: MatchStreamRequest): {
         { toolNames: [], cited: cited.size, dropped, searches: outcome.searches },
       );
       const answering = answeringModel(trace);
+      const data = matchData(outcome, corpus);
       writer.write({ type: "start", messageId, messageMetadata: { createdAt: Date.now() } });
       writer.write({ type: "start-step" });
       for (const source of sources) writer.write(source);
       writer.write({ type: "text-start", id: "match" });
       writer.write({ type: "text-delta", id: "match", delta: shown });
       writer.write({ type: "text-end", id: "match" });
+      if (data) writer.write({ type: "data-match", data });
       writer.write({ type: "finish-step" });
       writer.write({
         type: "finish",

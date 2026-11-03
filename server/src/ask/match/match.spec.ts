@@ -1,4 +1,5 @@
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
+import type { UIMessageChunk } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -24,7 +25,7 @@ import {
   type RowsCheckContext,
 } from "./match.js";
 import { planInstructions, type MatchKind, type MatchPlan, type MatchSynthesis } from "./prompt.js";
-import { matchRouteReason, matchText, matchTrace, streamMatch } from "./stream.js";
+import { matchRouteReason, matchText, matchTrace, streamMatch, type MatchData } from "./stream.js";
 
 /**
  * Match a brief (visitor plan V19): the plan's gates and repair, the
@@ -331,6 +332,12 @@ const run = (kind: MatchKind, brief: string, lite: ModelEntry[], extra: Partial<
   });
 
 const sent = (call: LanguageModelV4CallOptions) => JSON.stringify(call.prompt);
+
+/** A stream's `data-match` part (plan 3 W2), when it wrote one. */
+const dataOf = (chunks: readonly UIMessageChunk[]) => {
+  const part = chunks.find((c) => c.type === "data-match");
+  return part && "data" in part ? (part.data as MatchData) : undefined;
+};
 
 describe("runMatch", () => {
   beforeEach(() => resetBreakers());
@@ -672,6 +679,90 @@ describe("streamMatch", () => {
     });
     const outcome = await done;
     expect(outcome?.rows).toHaveLength(3);
+    // The critic's rows again as data, after the text, in the server's words (plan 3 W2).
+    expect(types.indexOf("data-match")).toBe(types.indexOf("text-end") + 1);
+    const data = dataOf(chunks)!;
+    expect(data.items.map((i) => [i.n, i.status, i.summary, i.cites.map((c) => c.id)])).toEqual(
+      outcome!.rows.map((r) => [r.n, r.status, r.summary, r.cites]),
+    );
+    expect(data.items.map((i) => [i.text, i.priorityLabel, i.statusLabel])).toEqual([
+      ["Python in production", "must", "evidence"],
+      ["Retrieval-augmented generation", "must", "evidence"],
+      ["Kubernetes", "nice to have", "partial"],
+    ]);
+    const atlas = corpus.byId.get("project:atlas@en")!;
+    expect(data.items[1]!.cites).toEqual([{ id: atlas.id, title: atlas.title, url: atlas.url }]);
+  });
+
+  const streamed = (kind: MatchKind, brief: string, entry: ModelEntry) =>
+    drain(
+      streamMatch({
+        kind,
+        brief,
+        locale: "en",
+        language: "en",
+        sessionId: "session-match-0002",
+        sessionHash: "hash",
+        corpus,
+        config,
+        lite: [entry],
+        deep: null,
+        abortSignal: new AbortController().signal,
+        persist: false,
+      }).stream,
+    );
+
+  it("gives a row nothing shows the server's line, and a stopped match no rows as data", async () => {
+    const plan: MatchPlan = {
+      items: [
+        { text: "A document extraction pipeline", priority: "must", terms: ["extraction"] },
+        { text: "Budget: €40,000", priority: "must", terms: ["budget"] },
+      ],
+    };
+    const rows: MatchSynthesis = {
+      rows: [
+        {
+          item: 1,
+          status: "evidence",
+          summary: "Built Borealis, which turns scanned freight documents into structured data.",
+          cites: ["project:borealis@en"],
+        },
+      ],
+      summary: "",
+    };
+    const brief = "We need a document pipeline. Budget: €40,000.";
+    const m = model("gemini-3.5-flash-lite", plan, rows);
+    const data = dataOf(await streamed("project", brief, m.entry));
+    // A project's rows show no priority, as its text does.
+    expect(
+      data?.items.map((i) => [i.priorityLabel, i.statusLabel, i.summary, i.cites.length]),
+    ).toEqual([
+      ["", "relevant", rows.rows[0]!.summary, 1],
+      ["", "not published", "ask him directly.", 0],
+    ]);
+
+    resetBreakers();
+    const none = model("gemini-3.5-flash-lite", { items: [] });
+    const stopped = await streamed("project", "Hello there", none.entry);
+    expect(stopped.some((c) => c.type === "text-delta")).toBe(true);
+    expect(dataOf(stopped)).toBeUndefined();
+  });
+
+  it("never puts a row the guard refused into the data: the server's line stands in", async () => {
+    const link: MatchSynthesis = {
+      ...ROWS,
+      rows: ROWS.rows.map((row) =>
+        row.item === 2 ? { ...row, summary: "Built Atlas: see https://evil.example/atlas." } : row,
+      ),
+    };
+    const m = model("gemini-3.5-flash-lite", PLAN, link);
+    const data = dataOf(await streamed("role", BRIEF, m.entry));
+    expect(data?.items[1]).toMatchObject({
+      status: "not-published",
+      summary: "nothing on his site shows this.",
+      cites: [],
+    });
+    expect(JSON.stringify(data)).not.toContain("evil.example");
   });
 
   it("keeps the trace's items redacted, with their hits, statuses and the critic's verdicts", () => {
