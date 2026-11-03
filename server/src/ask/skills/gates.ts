@@ -1,8 +1,9 @@
 import { decodeEntities } from "../../content/sanitize.js";
 import type { Locale } from "../../content/schema.js";
-import { INJECTION_PATTERNS, looksLikeInjection } from "../checks.js";
+import { INJECTION_PATTERNS, looksLikeInjection, ungroundedFigures } from "../checks.js";
 import type { AskCorpus } from "../corpus/index.js";
 import { resolveDocument } from "../corpus/index.js";
+import { notPlain, PLAIN_BOUNDS } from "../evals/readability.js";
 import { numbersOf, type Figure } from "../figures.js";
 import { commonWords } from "../language.js";
 import { LANGUAGE, type Gate } from "./skill.js";
@@ -336,6 +337,143 @@ export function answerShape<P>(max: number): Gate<P> {
         return `${NO_ANSWER} with other text: write either the answer or ${NO_ANSWER} alone`;
       const words = wordsIn(withoutMarkers(t));
       return words > max ? `${words} words; at most ${max}` : null;
+    },
+  };
+}
+
+/** At most `max` words: a case study's "In short" reads at a glance (plan 3, W7). */
+export function withinWords<P>(max: number): Gate<P> {
+  return {
+    id: "words",
+    params: max,
+    check: (text) => {
+      const words = wordsIn(text);
+      return words > max ? `${words} words; at most ${max}` : null;
+    },
+  };
+}
+
+/**
+ * Every figure the draft states is one its source states: `ungroundedFigures`
+ * with the source as its only document, so a bare count up to 12, an ordinal
+ * or a time is not owed, as in a visitor's answer.
+ */
+export function figuresFrom<P>(source: (p: P) => string): Gate<P> {
+  return {
+    id: "figures",
+    check: (text, p) => {
+      const unsupported = ungroundedFigures({ text, citedTexts: [source(p)] });
+      return unsupported.length
+        ? `states ${listed(unsupported)}, which the source text does not state`
+        : null;
+    },
+  };
+}
+
+/** Plain words, as the terminal's plain level reads them (`notPlain`), where `language(p)` asks for them. */
+export function plainWords<P>(language: (p: P) => Locale | null): Gate<P> {
+  return {
+    id: "plain",
+    params: PLAIN_BOUNDS,
+    check: (text, p) => {
+      const locale = language(p);
+      const failures = locale ? notPlain(text, locale) : [];
+      return failures.length ? failures.join("; ") : null;
+    },
+  };
+}
+
+/**
+ * A glossary draft's lines, `term: definition` each, split at the first ": "
+ * (or the first ":"); a line without a colon is a term with no definition. The
+ * editor's field splits its lines the same way (client `admin/glossary-lines.ts`).
+ */
+export function parseGlossary(text: string): { term: string; definition: string }[] {
+  return text.split("\n").flatMap((raw) => {
+    const line = raw.trim();
+    if (!line) return [];
+    const at = line.includes(": ") ? line.indexOf(": ") : line.indexOf(":");
+    if (at < 0) return [{ term: line, definition: "" }];
+    return [{ term: line.slice(0, at).trim(), definition: line.slice(at + 1).trim() }];
+  });
+}
+
+/** Longer than this, a "term" is a phrase: the editor's save refuses it too. */
+const TERM_MAX = 80;
+
+/** One to `max` lines of `term: definition` (`parseGlossary`), each definition at most `words` words. */
+export function glossaryLines<P>(max: number, words: number): Gate<P> {
+  return {
+    id: "glossary",
+    params: [max, words, TERM_MAX],
+    check: (text) => {
+      const items = parseGlossary(text);
+      if (!items.length) return "no terms: write each as term: definition, one a line";
+      if (items.length > max) return `${items.length} terms; at most ${max}`;
+      const problems = items.flatMap(({ term, definition }) => {
+        if (term.length > TERM_MAX) {
+          return [`a term of ${term.length} characters; at most ${TERM_MAX}: the term alone`];
+        }
+        if (!definition) return [`${term} has no definition: write it as term: definition`];
+        const n = wordsIn(definition);
+        return n > words ? [`the definition of ${term} has ${n} words; at most ${words}`] : [];
+      });
+      return problems.length ? problems.join("; ") : null;
+    },
+  };
+}
+
+/** Each term as its source writes it, case aside: a glossary explains the page's own words. */
+export function termsFrom<P>(source: (p: P) => string): Gate<P> {
+  return {
+    id: "verbatim",
+    check: (text, p) => {
+      const page = source(p).toLowerCase();
+      const missing = parseGlossary(text)
+        .map((item) => item.term)
+        .filter((term) => !page.includes(term.toLowerCase().replace(/\s+/g, " ")));
+      return missing.length ? `not in the case study as written: ${listed(missing)}` : null;
+    },
+  };
+}
+
+/** No figure in a definition: it explains the term, not a project's numbers. */
+export function noFigures<P>(): Gate<P> {
+  return {
+    id: "no-figures",
+    params: "values; ordinals and times allowed",
+    check: (text) => {
+      const definitions = parseGlossary(text).map((item) => item.definition);
+      const figures = owed(numbersOf(definitions.join("\n")));
+      return figures.length
+        ? `a definition states ${listed(figures)}: define the term without figures`
+        : null;
+    },
+  };
+}
+
+/** Author's name and personal pronouns. */
+const AUTHOR_PATTERN = /\b(?:alireza|rastineh|he|his|him)\b/i;
+
+/** "this project" or "this case study" in English and German. */
+const PROJECT_PATTERN =
+  /\b(?:this|dies(?:e[mnrs]?)?)\s+(?:project|case study|projekts?|fallstudie)\b/i;
+
+/** About the author or his work: his name, "he", or this project or case study. */
+const ABOUT_THE_WORK = new RegExp(`${AUTHOR_PATTERN.source}|${PROJECT_PATTERN.source}`, "i");
+
+/** A general definition: nothing about Alireza or his work, which the case study itself tells. */
+export function generalDefinitions<P>(): Gate<P> {
+  return {
+    id: "general",
+    params: ABOUT_THE_WORK.source,
+    check: (text) => {
+      const about = parseGlossary(text)
+        .filter((item) => ABOUT_THE_WORK.test(item.definition))
+        .map((item) => item.term);
+      return about.length
+        ? `the definition of ${listed(about)} is about the author or this project: define the term in general`
+        : null;
     },
   };
 }

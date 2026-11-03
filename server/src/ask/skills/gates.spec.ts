@@ -2,27 +2,36 @@ import { describe, expect, it } from "vitest";
 
 import { fixtureCorpus } from "../../test/ask-fixtures.js";
 import { INJECTION_PATTERNS } from "../checks.js";
+import { PLAIN_BOUNDS } from "../evals/readability.js";
 import {
   answerShape,
   atLeast,
   bare,
   cited,
   citedIds,
+  figuresFrom,
+  generalDefinitions,
+  glossaryLines,
   grounded,
   inLanguage,
   lengthRatio,
   NO_ANSWER,
+  noFigures,
   noImageOf,
   notAnInstruction,
   numbersOf,
   oneQuestion,
+  parseGlossary,
+  plainWords,
   sameCode,
   sameLinks,
   sameNumbers,
   sameTags,
   shorter,
+  termsFrom,
   visible,
   withinLength,
+  withinWords,
   withoutMarkers,
 } from "./gates.js";
 
@@ -379,5 +388,107 @@ describe("the FAQ question's gates (plan phase 31)", () => {
     // Its patterns are its parameters: a change to them is a new version.
     expect(gate.params).toEqual(INJECTION_PATTERNS);
     expect(INJECTION_PATTERNS.length).toBeGreaterThan(10);
+  });
+});
+
+describe("the reader aids' gates (plan 3, W7)", () => {
+  it("counts a summary's words against its limit", () => {
+    const gate = withinWords<null>(80);
+    const eighty = Array.from({ length: 80 }, () => "word").join(" ");
+    expect(gate.check(eighty, null)).toBeNull();
+    expect(gate.check(`${eighty} more`, null)).toBe("81 words; at most 80");
+    expect(gate.params).toBe(80);
+  });
+
+  it("wants every figure from the source text, as an answer's are checked", () => {
+    const gate = figuresFrom<string>(source);
+    const from = "It cut wait times by 38 % across 2,000 documents.";
+    expect(gate.check("Waits fell by 38 % over 2.000 documents.", from)).toBeNull();
+    expect(gate.check("Waits fell by 40 %.", from)).toBe(
+      "states 40, which the source text does not state",
+    );
+    // A bare count up to 12 and an ordinal are not owed.
+    expect(gate.check("Three teams, 4 services, the 3rd release.", from)).toBeNull();
+  });
+
+  it("holds a plain summary to plain words, and an expert one to none", () => {
+    const gate = plainWords<"en" | null>((locale) => locale);
+    const long = `${Array.from({ length: 25 }, () => "word").join(" ")}.`;
+    expect(gate.check("Atlas finds answers fast. It reads every page.", "en")).toBeNull();
+    expect(gate.check(long, "en")).toBe("not plain: 25.0 words a sentence (at most 20)");
+    expect(gate.check(long, null)).toBeNull();
+    expect(gate.params).toEqual(PLAIN_BOUNDS);
+  });
+
+  it("reads a glossary as the editor does: one to eight terms, each briefly defined", () => {
+    const gate = glossaryLines<null>(8, 30);
+    expect(
+      gate.check("embeddings: Lists of numbers.\npgvector: A Postgres extension.", null),
+    ).toBeNull();
+    expect(gate.check("  \n", null)).toBe("no terms: write each as term: definition, one a line");
+    const nine = Array.from({ length: 9 }, (_, i) => `term${i}: a definition`).join("\n");
+    expect(gate.check(nine, null)).toBe("9 terms; at most 8");
+    expect(gate.check("embeddings\npgvector: A Postgres extension.", null)).toBe(
+      "embeddings has no definition: write it as term: definition",
+    );
+    const words = Array.from({ length: 31 }, () => "word").join(" ");
+    expect(gate.check(`embeddings: ${words}`, null)).toBe(
+      "the definition of embeddings has 31 words; at most 30",
+    );
+    expect(gate.check(`${"x".repeat(81)}: a definition`, null)).toBe(
+      "a term of 81 characters; at most 80: the term alone",
+    );
+    expect(gate.params).toEqual([8, 30, 80]);
+  });
+
+  it("wants each term as the case study writes it, case aside", () => {
+    const gate = termsFrom<string>(source);
+    const page = "Atlas ranks passages with embeddings in pgvector.";
+    expect(gate.check("Embeddings: x\npgvector: y", page)).toBeNull();
+    expect(gate.check("vector database: x\npgvector: y", page)).toBe(
+      "not in the case study as written: vector database",
+    );
+  });
+
+  it("refuses a figure in a definition, and lets an ordinal or a term's own digits pass", () => {
+    const gate = noFigures<null>();
+    expect(gate.check("p95: The 95th percentile of response times.", null)).toBeNull();
+    expect(gate.check("cache: Keeps 40 % of reads off the database.", null)).toBe(
+      "a definition states 40: define the term without figures",
+    );
+  });
+
+  it("refuses a definition about Alireza or this project, in either language", () => {
+    const gate = generalDefinitions<null>();
+    expect(
+      gate.check("RAG: A model answers from the documents it is given, not from memory.", null),
+    ).toBeNull();
+    expect(gate.check("Reranker: Sorts the results; history matters there.", null)).toBeNull();
+    for (const definition of [
+      "How Alireza grounded the assistant's answers.",
+      "The approach this project uses for answers.",
+      "A model he added to sort the results.",
+      "Der Ansatz, den dieses Projekt für Antworten nutzt.",
+      "Ein Teil dieses Projekts.",
+    ]) {
+      expect(gate.check(`RAG: ${definition}`, null), definition).toBe(
+        "the definition of RAG is about the author or this project: define the term in general",
+      );
+    }
+    expect(gate.params).toEqual(expect.any(String));
+  });
+
+  // The editor's field splits the same cases the same way (client admin/glossary-lines.spec.ts).
+  it("splits each line at its first colon and a space, as the editor does", () => {
+    expect(
+      parseGlossary(
+        "std::vector: a growable array\r\nTerm:definition\nTerm: def: more\n\n  no colon  \n",
+      ),
+    ).toEqual([
+      { term: "std::vector", definition: "a growable array" },
+      { term: "Term", definition: "definition" },
+      { term: "Term", definition: "def: more" },
+      { term: "no colon", definition: "" },
+    ]);
   });
 });

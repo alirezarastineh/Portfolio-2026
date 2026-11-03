@@ -103,6 +103,55 @@ const FIXTURES: {
     text: "Atlas: Retrieval über 2 Mio. Dokumente, mit pgvector gebaut und schnell.",
   },
   {
+    skill: "summary",
+    input: {
+      task: "summary",
+      text: "<h2>Atlas</h2><p>Search over 2 M documents. It cut wait times by 38&nbsp;%.</p>",
+      locale: "en",
+      level: "plain",
+    },
+    output: "Atlas helps people find answers in 2 M documents. Waits fell by 38 %.",
+    // What a reader sees of the page: tags out, entities decoded.
+    told: [
+      "Summarize this case study",
+      "in English, for a reader who is not an engineer",
+      "At most 80 words",
+      "Atlas Search over 2 M documents. It cut wait times by 38 %.",
+    ],
+    text: "Atlas helps people find answers in 2 M documents. Waits fell by 38 %.",
+  },
+  {
+    skill: "summary",
+    input: {
+      task: "summary",
+      text: "<p>Atlas sucht in 2 Mio. Dokumenten mit pgvector.</p>",
+      locale: "de",
+      level: "expert",
+    },
+    // Long words and one long sentence: plain only is held to plain words.
+    output:
+      "Atlas durchsucht 2 Mio. Dokumente mit pgvector und einer hybriden Rangfolge, deren Abwägungen zwischen Antwortzeit und Trefferqualität der Bericht offenlegt.",
+    told: ["in German, for an engineer", "trade-offs"],
+    text: "Atlas durchsucht 2 Mio. Dokumente mit pgvector und einer hybriden Rangfolge, deren Abwägungen zwischen Antwortzeit und Trefferqualität der Bericht offenlegt.",
+  },
+  {
+    skill: "glossary",
+    input: {
+      task: "glossary",
+      text: "<p>Atlas ranks passages with Embeddings in pgvector.</p>",
+      locale: "en",
+    },
+    output:
+      "embeddings: Lists of numbers that capture what a text means, so texts with similar meanings sit close together.\npgvector: An extension that lets the Postgres database store and compare such lists.",
+    told: [
+      "at most 8",
+      "in English in at most 30 words",
+      'One term a line, as "term: definition"',
+      "Atlas ranks passages with Embeddings in pgvector.",
+    ],
+    text: "embeddings: Lists of numbers that capture what a text means, so texts with similar meanings sit close together.\npgvector: An extension that lets the Postgres database store and compare such lists.",
+  },
+  {
     skill: "faq-question",
     input: {
       task: "faq-question",
@@ -154,11 +203,13 @@ const FIXTURES: {
 ];
 
 describe("the skills registry (plan phase 27)", () => {
-  it("registers seven skills, each its input's task, in the admin's order", () => {
+  it("registers nine skills, each its input's task, in the admin's order", () => {
     expect(SKILLS.map((s) => s.id)).toEqual([
       "translate",
       "tighten",
       "seo",
+      "summary",
+      "glossary",
       "faq-question",
       "faq-answer",
       "alt",
@@ -175,6 +226,8 @@ describe("the skills registry (plan phase 27)", () => {
       translate: ["tags", "numbers", "links", "code", "language", "ratio", "length"],
       tighten: ["length", "shorter", "numbers", "bare", "language"],
       seo: ["length", "min-length", "bare", "language"],
+      summary: ["words", "figures", "plain", "bare", "language"],
+      glossary: ["glossary", "verbatim", "no-figures", "general", "bare", "language"],
       "faq-question": ["question", "length", "bare", "language", "instruction"],
       "faq-answer": ["answer", "cited", "grounded", "language"],
       alt: ["length", "no-image-of", "bare", "language"],

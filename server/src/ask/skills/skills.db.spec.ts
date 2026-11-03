@@ -278,6 +278,8 @@ describe("the skills' table", () => {
       "translate",
       "tighten",
       "seo",
+      "summary",
+      "glossary",
       "faq-question",
       "faq-answer",
       "alt",

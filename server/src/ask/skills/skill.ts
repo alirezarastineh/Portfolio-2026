@@ -24,6 +24,8 @@ export const SKILL_IDS = [
   "translate",
   "tighten",
   "seo",
+  "summary",
+  "glossary",
   "faq-question",
   "faq-answer",
   "alt",

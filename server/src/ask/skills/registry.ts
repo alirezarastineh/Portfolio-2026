@@ -4,8 +4,10 @@ import { alt, altInput } from "./alt.js";
 import { describe, describeInput } from "./describe.js";
 import { faqAnswer, faqAnswerInput } from "./faq-answer.js";
 import { faqQuestion, faqQuestionInput } from "./faq-question.js";
+import { glossary, glossaryInput } from "./glossary.js";
 import { seo, seoInput } from "./seo.js";
 import type { Skill, SkillId } from "./skill.js";
+import { summary, summaryInput } from "./summary.js";
 import { tighten, tightenInput } from "./tighten.js";
 import { translate, translateInput } from "./translate.js";
 
@@ -14,6 +16,8 @@ export const SKILLS: readonly Skill[] = [
   translate,
   tighten,
   seo,
+  summary,
+  glossary,
   faqQuestion,
   faqAnswer,
   alt,
@@ -33,6 +37,8 @@ export const copilotInput = z.discriminatedUnion("task", [
   translateInput,
   tightenInput,
   seoInput,
+  summaryInput,
+  glossaryInput,
   faqQuestionInput,
   faqAnswerInput,
   altInput,
