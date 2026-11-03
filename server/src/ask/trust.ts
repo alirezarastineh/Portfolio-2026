@@ -18,8 +18,9 @@ export interface TrustEntry {
   /** What is done: a tool's name, or a feature's action. */
   action: string;
   /**
-   * Who does it: `external` is an agent outside, over MCP (plan phase 32); `visitor`, a
-   * visitor's own call on their own data (visitor plan V14).
+   * Who does it: `external` is an agent outside, over MCP (plan phase 32) or in the visitor's
+   * own browser over WebMCP (plan 3 W5–W6); `visitor`, a visitor's own call on their own data
+   * (visitor plan V14).
    */
   actor:
     | "assistant"
@@ -299,6 +300,47 @@ export const TRUST_REGISTRY: readonly TrustEntry[] = [
       built: true,
     }),
   ),
+  // The visitor's own browser agent, over WebMCP (plan 3 W5–W6): the page's tools, same-origin,
+  // declared by the client (client/src/app/ask/agent-tools.ts) only where the browser offers them.
+  {
+    action: "webmcp.list_pages",
+    actor: "external",
+    level: "L2",
+    approver: "none",
+    enforcement: "agent-tools.ts: reads GET /v1/ask/map, the published pages; no model call",
+    reversible: true,
+    built: true,
+  },
+  {
+    action: "webmcp.open_page",
+    actor: "external",
+    level: "L1",
+    approver: "none",
+    enforcement:
+      "agent-tools.ts: navigates this tab only to a path the map lists, any other is refused; the visitor sees the page and can go back",
+    reversible: true,
+    built: true,
+  },
+  ...(["ask_portfolio", "match_brief"] as const).map((tool): TrustEntry => ({
+    action: `webmcp.${tool}`,
+    actor: "external",
+    level: "L2",
+    approver: "none",
+    enforcement:
+      "agent-tools.ts: one question or brief as the visitor's own, through the store's inner ask (never submit(), so never a command), refused while an answer streams, within maxChars or 4,000 characters; declared only while /v1/ask/config has the feature on; the server's limits, caps and checks as for any visitor question",
+    reversible: true,
+    built: true,
+  })),
+  {
+    action: "webmcp.contact",
+    actor: "external",
+    level: "L0",
+    approver: "visitor",
+    enforcement:
+      "contact.component.ts: a declarative tool that only fills the form, never toolautosubmit; the visitor clicks Send, and Turnstile runs",
+    reversible: false,
+    built: true,
+  },
   {
     action: "publish",
     actor: "admin",

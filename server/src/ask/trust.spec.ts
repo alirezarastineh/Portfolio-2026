@@ -808,10 +808,13 @@ describe("agents outside read over MCP, and write only their counts (plan phase 
         built: true,
       });
     }
-    // The registry names them itself (it loads nothing): the same four, in the same order.
-    expect(TRUST_REGISTRY.filter((e) => e.actor === "external").map((e) => e.action)).toEqual(
-      MCP_TOOL_NAMES.map((tool) => `mcp.${tool}`),
-    );
+    // The registry names them itself (it loads nothing): the same four, in the same order. The
+    // other outside agent is the visitor's own, over WebMCP (`webmcp.`, plan 3 W6).
+    expect(
+      TRUST_REGISTRY.filter((e) => e.actor === "external" && e.action.startsWith("mcp.")).map(
+        (e) => e.action,
+      ),
+    ).toEqual(MCP_TOOL_NAMES.map((tool) => `mcp.${tool}`));
   });
 
   it("serves with no module that could write the content, the FAQ, a lesson, the journal or a proposal", () => {
