@@ -76,6 +76,12 @@ expect "the assistant's config says its state (${STATE:-none})" grep -qE '^(ok|o
 expect "the config gives a question's limits" \
   grep -qE '"limits":\{"maxChars":[0-9]+,"historyTurns":[0-9]+\}' <<< "${CONFIG}"
 expect "the config says whether match is offered" grep -qE '"match":(true|false)' <<< "${CONFIG}"
+# The match page answers either way; llms.txt lists it only while match is on (plan 3 W3). The
+# client's server holds the config 5 minutes, so a run just after the switch can fail once.
+expect "the match page is served" test "$(code "${SITE}/en/match")" = 200
+if grep -qF '"match":true' <<< "${CONFIG}"; then
+  expect "llms.txt lists the match page" grep -qF '/en/match)' <<< "$(body "${SITE}/en/llms.txt")"
+fi
 expect "the portfolio map lists pages (en)" grep -qF '"pages":[{' <<< "$(body "${API}/v1/ask/map?locale=en")"
 # Three ticks 400 ms apart: streamed through Caddy, the first arrives well before the last.
 STREAM="$(curl -s -N --max-time 20 -w '\n%{time_starttransfer} %{time_total}' \

@@ -166,6 +166,8 @@ check "legal pages are served" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${CLIENT}/de/legal/privacy')\" = 200 ]"
 check "the writing index is served" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${CLIENT}/en/writing')\" = 200 ]"
+check "the match page is served" \
+  bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${CLIENT}/en/match')\" = 200 ]"
 check "an unknown case study answers 404" \
   bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' '${CLIENT}/en/work/does-not-exist')\" = 404 ]"
 check "an unknown post answers 404" \
