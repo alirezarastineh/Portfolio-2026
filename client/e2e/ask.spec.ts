@@ -1944,6 +1944,34 @@ test.describe("assistant terminal", () => {
     await expect(page.locator("#contact-website")).not.toHaveAttribute("name");
   });
 
+  test("the visitor's own agent: with document.modelContext the four tools register once the page is idle; without it their code never loads (plan 3 W6)", async ({
+    page,
+  }) => {
+    await mockAsk(page, () => undefined, { match: true });
+    const loaded: string[] = [];
+    page.on("request", (r) => {
+      if (/\/agent-tools-[^/]*\.js$/.test(r.url())) loaded.push(r.url());
+    });
+    await page.goto("/en");
+    await interactive(page);
+    await page.waitForLoadState("networkidle");
+    expect(loaded).toEqual([]);
+
+    await page.addInitScript(() => {
+      const names: string[] = [];
+      Object.assign(window, { __agentTools: names });
+      Object.defineProperty(document, "modelContext", {
+        value: { registerTool: (tool: { name: string }) => void names.push(tool.name) },
+      });
+    });
+    await page.reload();
+    await interactive(page);
+    await expect
+      .poll(() => page.evaluate(() => (window as { __agentTools?: string[] }).__agentTools))
+      .toEqual(["list_pages", "open_page", "ask_portfolio", "match_brief"]);
+    expect(loaded).toHaveLength(1);
+  });
+
   test("a shared link puts its question in the prompt and sends nothing until Enter; share copies one (visitor plan V17)", async ({
     page,
     context,

@@ -31,7 +31,9 @@ export type AskEvent =
   | "match_open"
   | "match_send"
   // A matched page's mark followed back to the match (plan 3 W4).
-  | "match_mark_click";
+  | "match_mark_click"
+  // A WebMCP tool run by the visitor's own agent, by the tool's name only (plan 3 W6).
+  | "agent_tool";
 
 export function track(event: AskEvent, data?: Record<string, string>): void {
   try {

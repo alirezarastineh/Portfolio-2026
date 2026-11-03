@@ -101,6 +101,9 @@ const MAX_STORED_MESSAGES = 24;
 const MAX_ENTRIES = 60;
 const MAX_HISTORY = 50;
 
+/** Where a brief was sent from, for Umami's `match_send`. */
+type MatchSource = "terminal" | "page" | "agent";
+
 /** A tour request that failed for these can be asked again soon: no short tour stands in. */
 const TOUR_WAITS: ReadonlySet<Failure> = new Set<Failure>([
   "rateLimited",
@@ -884,14 +887,10 @@ export const AskStore = signalStore(
     }
 
     /**
-     * A brief, sent from the terminal's paste box or the match page (plan 3 W3): one request,
-     * said once as it goes and once with its rows.
+     * A brief, sent from the terminal's paste box, the match page (plan 3 W3) or the visitor's
+     * own agent (W6): one request, said once as it goes and once with its rows.
      */
-    async function sendMatch(
-      kind: MatchKind,
-      brief: string,
-      source: "terminal" | "page",
-    ): Promise<void> {
+    async function sendMatch(kind: MatchKind, brief: string, source: MatchSource): Promise<void> {
       const text = brief.trim();
       if (!text || text.length > MATCH_BRIEF_CHARS) return;
       const input = `match ${kind}`;
@@ -1184,9 +1183,17 @@ export const AskStore = signalStore(
         void store.chat.stop();
       },
 
-      /** A brief, sent: the terminal's paste box (visitor plan V20) or the match page's. */
-      sendMatch(kind: MatchKind, brief: string, source: "terminal" | "page"): Promise<void> {
+      /** A brief, sent: the terminal's paste box (visitor plan V20), the match page's or an agent's. */
+      sendMatch(kind: MatchKind, brief: string, source: MatchSource): Promise<void> {
         return sendMatch(kind, brief, source);
+      },
+
+      /**
+       * A question from the visitor's own agent (plan 3 W6): the inner `ask`, never `submit()`,
+       * which would run "reset" or a bare "yes" as a command.
+       */
+      askQuestion(text: string): Promise<void> {
+        return ask(text, text, false, undefined);
       },
 
       /** The paste box put away, nothing sent. */
