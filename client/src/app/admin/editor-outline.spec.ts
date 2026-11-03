@@ -18,6 +18,9 @@ function translation(fill: boolean) {
     metrics: fill ? [{ value: "40%", label: "faster" }] : [],
     body: "",
     seoDescription: "",
+    summaryPlain: "",
+    summaryExpert: "",
+    glossary: [],
   };
 }
 

@@ -73,6 +73,9 @@ function projectRow(en: FixtureProject, de: FixtureProject, i: number) {
     metrics: p.metrics,
     body: "",
     seoDescription: "",
+    summaryPlain: "",
+    summaryExpert: "",
+    glossary: [],
   });
   return {
     id: `p${i}`,
@@ -1931,6 +1934,75 @@ test.describe("admin", () => {
       .poll(() => verdicts)
       .toEqual([{ outcomes: [{ id: id(1), outcome: "kept", pick: 1 }] }]);
     await expect(others).toHaveCount(0);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a case study's plain summary and glossary are drafted on request, saved as the lines parse, and judged at the save", async ({
+    page,
+    baseURL,
+  }) => {
+    const sent: Record<string, unknown>[] = [];
+    const saved: { translations: Record<string, Record<string, unknown>> }[] = [];
+    const verdicts: { outcomes: unknown[] }[] = [];
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    const drafts = [
+      "Project one helps support teams find answers fast.",
+      "RAG: Answers drawn from documents a model is given.\npgvector: A Postgres extension for vectors.",
+    ];
+    const unmocked = await fakeApi(page, baseURL, {
+      "PUT /admin/projects/p0": { ok: true },
+      "POST /admin/ai/copilot": (n: number) => ({
+        status: 200,
+        body: { text: drafts[n - 1], model: "gemini-flash", suggestionId: id(n) },
+      }),
+    });
+    page.on("request", (r) => {
+      const url = r.url();
+      if (r.method() === "POST" && url.endsWith("/admin/ai/copilot")) sent.push(r.postDataJSON());
+      if (r.method() === "PUT" && url.endsWith("/admin/projects/p0")) saved.push(r.postDataJSON());
+      if (r.method() === "POST" && url.endsWith("/admin/ai/copilot/outcomes"))
+        verdicts.push(r.postDataJSON());
+    });
+    await openAdmin(page, "/admin/projects/project-one");
+
+    await page.getByRole("button", { name: "Suggest a plain summary in EN with AI" }).click();
+    await expect(page.getByRole("textbox", { name: "Plain summary (en)" })).toHaveValue(drafts[0]!);
+    const glossary = page.getByRole("textbox", { name: "Glossary (en)" });
+    await page.getByRole("button", { name: "Suggest a glossary in EN with AI" }).click();
+    await expect(glossary).toHaveValue(drafts[1]!);
+    expect(sent).toEqual([
+      expect.objectContaining({ task: "summary", level: "plain", locale: "en" }),
+      expect.objectContaining({ task: "glossary", locale: "en" }),
+    ]);
+    expect(sent[1]).not.toHaveProperty("level");
+    expect(sent[1]).not.toHaveProperty("maxLength");
+
+    // One definition shortened, and a line still being typed stays as typed.
+    await glossary.fill(
+      "RAG: Answers drawn from documents a model is given.\npgvector: A Postgres extension.\n",
+    );
+    await expect(glossary).toHaveValue(
+      "RAG: Answers drawn from documents a model is given.\npgvector: A Postgres extension.\n",
+    );
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => saved.length).toBe(1);
+    expect(saved[0]!.translations["en"]).toMatchObject({
+      summaryPlain: drafts[0],
+      glossary: [
+        { term: "RAG", definition: "Answers drawn from documents a model is given." },
+        { term: "pgvector", definition: "A Postgres extension." },
+      ],
+    });
+    expect(saved[0]!.translations["de"]).toMatchObject({ summaryPlain: "", glossary: [] });
+
+    await expect.poll(() => verdicts.length).toBe(1);
+    expect(verdicts[0]!.outcomes).toHaveLength(2);
+    expect(verdicts[0]!.outcomes).toEqual(
+      expect.arrayContaining([
+        { id: id(1), outcome: "kept" },
+        { id: id(2), outcome: "edited", distance: 4 },
+      ]),
+    );
     expect(unmocked).toEqual([]);
   });
 

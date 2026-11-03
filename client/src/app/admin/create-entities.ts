@@ -22,6 +22,9 @@ export async function createBlankProject(api: AdminApiService): Promise<Created>
     metrics: [],
     body: "",
     seoDescription: "",
+    summaryPlain: "",
+    summaryExpert: "",
+    glossary: [],
   };
   const result = await api.createProject({
     slug,

@@ -502,6 +502,10 @@ export type CopilotInput =
     }
   | { task: "tighten"; text: string; locale: Locale; maxLength?: number }
   | { task: "seo"; text: string; locale: Locale; maxLength?: number }
+  /** A case study's "In short", plain for any reader or for an engineer (plan 3, W7). */
+  | { task: "summary"; text: string; locale: Locale; level: "plain" | "expert" }
+  /** Its "Terms used here": `term: definition` lines, as the editor's field holds them. */
+  | { task: "glossary"; text: string; locale: Locale }
   | { task: "faq-answer"; question: string; locale: Locale }
   /** Alt text for an uploaded image, from the picture itself (a model that sees images). */
   | { task: "alt"; mediaId: string; locale: Locale }

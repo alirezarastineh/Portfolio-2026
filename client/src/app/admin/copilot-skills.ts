@@ -80,6 +80,8 @@ const NAMES: Record<string, string> = {
   translate: "Translate",
   tighten: "Tighten",
   seo: "Search description",
+  summary: "Case-study summary",
+  glossary: "Glossary",
   "faq-question": "FAQ question",
   "faq-answer": "FAQ answer",
   alt: "Alt text",
@@ -172,6 +174,13 @@ const GATES: Record<string, string> = {
   grounded: "figures from its documents",
   question: "one question on one line",
   instruction: "no order to the assistant",
+  words: "within the word limit",
+  figures: "figures from its source",
+  plain: "plain words (plain only)",
+  glossary: "up to 8 terms, briefly defined",
+  verbatim: "terms as the case study writes them",
+  "no-figures": "no figures",
+  general: "nothing about him or his work",
 };
 
 /** A skill's checks, in words. */

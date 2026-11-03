@@ -34,6 +34,7 @@ import type { MetricInput } from "../../../admin/admin-schema";
 import { countChangedFields } from "../../../admin/changed-fields";
 import { EditorLayoutComponent } from "../../../admin/components/editor-layout.component";
 import { projectOutline, type OutlineItem } from "../../../admin/editor-outline";
+import { glossaryText, parseGlossary } from "../../../admin/glossary-lines";
 import { withProject, type LiveCompose } from "../../../admin/preview/live-content";
 import { LivePreviewToggleComponent } from "../../../admin/preview/live-preview-toggle.component";
 import {
@@ -49,7 +50,10 @@ import { AdminPageHeaderComponent } from "../../../admin/components/page-header.
 import { FieldIssues, focusFirstInvalid } from "../../../admin/issues";
 import { toastIssues } from "../../../admin/save-feedback";
 import { isLocale } from "../../../content/locale";
-import { CopilotSuggestComponent } from "../../../admin/components/copilot-suggest.component";
+import {
+  CopilotSuggestComponent,
+  type PageDraftRequest,
+} from "../../../admin/components/copilot-suggest.component";
 import { CopilotLedger } from "../../../admin/copilot-ledger";
 import type { LocaleView } from "../../../admin/components/field-pair.component";
 import {
@@ -72,7 +76,11 @@ type TextKey =
   | "seoDescription"
   | "problem"
   | "aiArchitecture"
-  | "fullStackInfra";
+  | "fullStackInfra"
+  | "summaryPlain"
+  | "summaryExpert"
+  /** Edited as `term: definition` lines, saved as the list they parse into. */
+  | "glossary";
 
 interface TextFieldDef {
   key: TextKey;
@@ -83,6 +91,8 @@ interface TextFieldDef {
   rows?: number;
   hint?: string;
   maxLength?: number;
+  /** A Suggest beside it, drafting from the page's text: the copilot's request and its words. */
+  copilot?: { request: PageDraftRequest; name: string };
 }
 
 const CARD_FIELDS: TextFieldDef[] = [
@@ -124,8 +134,43 @@ const SEARCH_FIELDS: TextFieldDef[] = [
     rows: 2,
     hint: "For the case-study page; the hook is used when empty. About 150 characters.",
     maxLength: 300,
+    copilot: { request: { task: "seo", maxLength: 155 }, name: "search description" },
   },
 ];
+
+/** The case study's reader aids (plan 3, W8): its page shows each only when it is set. */
+const AID_FIELDS: TextFieldDef[] = [
+  {
+    key: "summaryPlain",
+    label: "Plain summary",
+    multiline: true,
+    rows: 3,
+    hint: "“In short” at the top of the case study, for any reader: plain words, at most 80.",
+    maxLength: 1000,
+    copilot: { request: { task: "summary", level: "plain" }, name: "plain summary" },
+  },
+  {
+    key: "summaryExpert",
+    label: "Summary for experts",
+    multiline: true,
+    rows: 3,
+    hint: "Folded under “In depth”, for engineers: at most 80 words.",
+    maxLength: 1000,
+    copilot: { request: { task: "summary", level: "expert" }, name: "summary for experts" },
+  },
+  {
+    key: "glossary",
+    label: "Glossary",
+    multiline: true,
+    rows: 5,
+    hint: "“Terms used here”, after the narrative: one a line, as Term: definition. At most 8.",
+    copilot: { request: { task: "glossary" }, name: "glossary" },
+  },
+];
+
+/** The fields with a Suggest: their drafts are judged when the project is saved. */
+const COPILOT_FIELDS = [...SEARCH_FIELDS, ...AID_FIELDS].filter((field) => field.copilot);
+const COPILOT_KEYS = new Set(COPILOT_FIELDS.map((field) => field.key));
 
 type LinkKey = "linkLive" | "linkRepo" | "linkCaseStudy";
 
@@ -379,15 +424,17 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                         [attr.aria-invalid]="textIssue(locale, field.key) ? true : null"
                         [aria-describedby]="describedBy(locale, field.key)"
                       ></textarea>
-                      @if (field.key === "seoDescription") {
+                      @if (field.copilot; as copilot) {
                         <app-copilot-suggest
                           class="self-end"
                           [locale]="locale"
-                          [fieldId]="'seoDescription-' + locale"
-                          [source]="seoSources[locale]"
-                          [target]="seoTarget(locale)"
-                          [current]="seoValues[locale]"
-                          (suggested)="patchText(locale, 'seoDescription', $event)"
+                          [request]="copilot.request"
+                          [name]="copilot.name"
+                          [fieldId]="field.key + '-' + locale"
+                          [source]="pageSources[locale]"
+                          [target]="copilotTarget(field.key, locale)"
+                          [current]="current[field.key]![locale]"
+                          (suggested)="patchText(locale, field.key, $event)"
                         />
                       }
                     } @else {
@@ -508,6 +555,9 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                 />
               </div>
             }
+            @for (field of aidFields; track field.key) {
+              <ng-container *ngTemplateOutlet="textField; context: { $implicit: field }" />
+            }
           </section>
 
           <hlm-separator />
@@ -553,6 +603,7 @@ export default class AdminProjectEditorPage implements OnInit {
   protected readonly cardFields = CARD_FIELDS;
   protected readonly storyFields = STORY_FIELDS;
   protected readonly searchFields = SEARCH_FIELDS;
+  protected readonly aidFields = AID_FIELDS;
   protected readonly linkFields = LINK_FIELDS;
   protected readonly view = signal<LocaleView>("both");
   /** The last save's problems, by the input's path (`translations.de.name`). */
@@ -578,22 +629,27 @@ export default class AdminProjectEditorPage implements OnInit {
       : "/admin/preview/en#projects";
   });
 
-  /** What the copilot describes when asked for a search description. */
-  protected readonly seoSources: Record<Locale, () => string> = {
+  /** What the copilot drafts from, for every Suggest: the page's text in that language. */
+  protected readonly pageSources: Record<Locale, () => string> = {
     en: () => this.pageText("en"),
     de: () => this.pageText("de"),
   };
 
-  /** A search description's name in the copilot's ledger, with its project. */
-  protected seoTarget(locale: Locale, id = this.project()?.id ?? ""): string {
-    return `project:${id}:seo:${locale}`;
+  /** A field's name in the copilot's ledger, with its project. */
+  protected copilotTarget(key: TextKey, locale: Locale, id = this.project()?.id ?? ""): string {
+    return `project:${id}:${key}:${locale}`;
   }
 
-  /** The search description as it reads now: what a draft is judged by when the project is saved. */
-  protected readonly seoValues: Record<Locale, () => string> = {
-    en: () => this.textOf("en", "seoDescription"),
-    de: () => this.textOf("de", "seoDescription"),
-  };
+  /** Each Suggest's field as it reads now: what its draft is judged by when the project is saved. */
+  protected readonly current: Record<string, Record<Locale, () => string>> = Object.fromEntries(
+    COPILOT_FIELDS.map(({ key }) => [
+      key,
+      { en: () => this.textOf("en", key), de: () => this.textOf("de", key) },
+    ]),
+  );
+
+  /** The glossary as typed, one `term: definition` a line: the list it parses into is what is saved. */
+  private readonly typedGlossary = signal<Record<Locale, string>>({ en: "", de: "" });
 
   private pageText(locale: Locale): string {
     const t = this.project()?.translations[locale];
@@ -700,7 +756,15 @@ export default class AdminProjectEditorPage implements OnInit {
     const found = result?.ok ? result.data.project : null;
     this.project.set(found ? structuredClone(found) : null);
     this.pristine = found ? structuredClone(found) : null;
+    this.showGlossary(found);
     this.revision.update((v) => v + 1);
+  }
+
+  private showGlossary(row: ProjectRow | null): void {
+    this.typedGlossary.set({
+      en: glossaryText(row?.translations.en.glossary ?? []),
+      de: glossaryText(row?.translations.de.glossary ?? []),
+    });
   }
 
   protected chooseCover(asset: MediaAsset | null): void {
@@ -719,18 +783,20 @@ export default class AdminProjectEditorPage implements OnInit {
 
   /** A text field's value in one language (the shared field template's `field` is untyped). */
   protected textOf(locale: Locale, key: TextKey): string {
+    if (key === "glossary") return this.typedGlossary()[locale];
     return this.project()?.translations[locale][key] ?? "";
   }
 
+  /** A field's save problem, or one of its items' (a glossary line's). */
   protected textIssue(locale: Locale, key: string): string | null {
-    return this.issues.get(`translations.${locale}.${key}`);
+    return this.issues.under(`translations.${locale}.${key}`);
   }
 
-  /** A text field's description: its save problem, and the search description's draft notes. */
+  /** A text field's description: its save problem, and its Suggest's draft notes. */
   protected describedBy(locale: Locale, key: TextKey): string | null {
     const ids = [
       this.textIssue(locale, key) ? `${key}-${locale}-issue` : null,
-      key === "seoDescription" ? `${key}-${locale}-draft` : null,
+      COPILOT_KEYS.has(key) ? `${key}-${locale}-draft` : null,
     ].filter((id) => id !== null);
     return ids.length ? ids.join(" ") : null;
   }
@@ -742,6 +808,11 @@ export default class AdminProjectEditorPage implements OnInit {
   /** Angular templates cannot express a computed property key, so the field
    * name arrives as its own argument. */
   protected patchText(locale: Locale, key: TextKey | "body", value: string): void {
+    if (key === "glossary") {
+      this.typedGlossary.update((text) => ({ ...text, [locale]: value }));
+      this.patchTranslation(locale, { glossary: parseGlossary(value) });
+      return;
+    }
     this.patchTranslation(locale, { [key]: value } as Partial<ProjectTranslation>);
   }
 
@@ -767,6 +838,7 @@ export default class AdminProjectEditorPage implements OnInit {
 
   protected discard(): void {
     this.project.set(this.pristine ? structuredClone(this.pristine) : null);
+    this.showGlossary(this.pristine);
     this.revision.update((v) => v + 1);
     this.issues.clear();
     // Thrown away with the other unsaved edits: the copilot's drafts were not kept.
@@ -779,10 +851,16 @@ export default class AdminProjectEditorPage implements OnInit {
 
     this.saving.set(true);
     // The copilot's drafts are judged by what this save sends (plan phase 27).
-    const ended = this.ledger.beginSave({
-      [this.seoTarget("en", current.id)]: current.translations.en.seoDescription ?? "",
-      [this.seoTarget("de", current.id)]: current.translations.de.seoDescription ?? "",
-    });
+    const ended = this.ledger.beginSave(
+      Object.fromEntries(
+        COPILOT_FIELDS.flatMap(({ key }) =>
+          (["en", "de"] as const).map((l) => [
+            this.copilotTarget(key, l, current.id),
+            this.textOf(l, key),
+          ]),
+        ),
+      ),
+    );
     const result = await this.api.updateProject(current.id, {
       slug: current.slug,
       coverId: current.coverId,
