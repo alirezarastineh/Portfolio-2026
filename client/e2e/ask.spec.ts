@@ -832,6 +832,8 @@ test.describe("assistant terminal", () => {
     expect(confirmed[0]).toEqual({ sessionId: expect.any(String), messageId: expect.any(String) });
     const attach = page.getByLabel("Attach my conversation with the assistant");
     await expect(attach).not.toBeChecked();
+    // Never part of the form's WebMCP tool (plan 3 W5): no name, so an agent cannot tick it.
+    await expect(attach).not.toHaveAttribute("name");
     await attach.check();
     await page.locator("#contact-name").fill("Ada Lovelace");
     await page.locator("#contact-email").fill("ada@example.com");
@@ -1918,6 +1920,28 @@ test.describe("assistant terminal", () => {
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/en\/match$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Check the fit");
+  });
+
+  test("the contact form is a WebMCP tool only once it works: the server's HTML names nothing, the honeypot never (plan 3 W5)", async ({
+    page,
+    request,
+  }) => {
+    // With no `action`, a submit before hydration is a GET: named fields would put the message in the URL.
+    const html = await (await request.get("/en")).text();
+    const form = /<form[^>]*>[\s\S]*?<\/form>/.exec(html.slice(html.indexOf('id="contact"')))?.[0];
+    expect(form).toContain('id="contact-message"');
+    expect(form).not.toMatch(/\sname=|toolname|tooldescription/);
+
+    await page.goto("/en");
+    await interactive(page);
+    const ready = page.locator("#contact form[data-ready]");
+    await expect(ready).toHaveAttribute("toolname", "contact_alireza");
+    await expect(ready).toHaveAttribute("tooldescription", /^Prepares a message to Alireza/);
+    await expect(ready).not.toHaveAttribute("toolautosubmit");
+    for (const field of ["name", "email", "message"]) {
+      await expect(page.locator(`#contact-${field}`)).toHaveAttribute("name", field);
+    }
+    await expect(page.locator("#contact-website")).not.toHaveAttribute("name");
   });
 
   test("a shared link puts its question in the prompt and sends nothing until Enter; share copies one (visitor plan V17)", async ({

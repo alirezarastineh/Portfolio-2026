@@ -53,6 +53,13 @@ const MATCH_LINE: Record<Locale, { lead: string; link: string }> = {
   de: { lead: "Du stellst ein oder hast ein Projekt?", link: "Prüf zuerst, ob es passt" },
 };
 
+/**
+ * The form as a WebMCP tool for the visitor's own agent (plan 3 W5): English, at most 500
+ * characters. Never `toolautosubmit`: the agent fills, the human sends.
+ */
+const TOOL_DESCRIPTION =
+  "Prepares a message to Alireza Rastineh through his portfolio's contact form: the sender's name, an email address for his reply, and the message (10 to 4,000 characters). The agent only fills the form; the user reviews it and clicks Send, which runs a bot check.";
+
 /** How long the copy button says "Copied". */
 const COPIED_MS = 1500;
 
@@ -213,6 +220,8 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                 class="relative flex flex-col gap-6"
                 [attr.aria-busy]="state() === 'submitting' ? 'true' : null"
                 [attr.data-ready]="ready() ? '' : null"
+                [attr.toolname]="ready() ? 'contact_alireza' : null"
+                [attr.tooldescription]="ready() ? toolDescription : null"
               >
                 <div class="flex flex-col gap-1.5">
                   <label for="contact-name" [class]="labelClass">{{
@@ -227,6 +236,7 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                       required
                       maxlength="120"
                       formControlName="name"
+                      [attr.name]="ready() ? 'name' : null"
                       [placeholder]="lang.t().contact.placeholderName"
                       [class]="fieldClass"
                       [attr.aria-invalid]="showError('name') ? 'true' : null"
@@ -251,6 +261,7 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                       required
                       maxlength="200"
                       formControlName="email"
+                      [attr.name]="ready() ? 'email' : null"
                       [placeholder]="lang.t().contact.placeholderEmail"
                       [class]="fieldClass"
                       [attr.aria-invalid]="showError('email') ? 'true' : null"
@@ -274,6 +285,7 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                       required
                       maxlength="4000"
                       formControlName="message"
+                      [attr.name]="ready() ? 'message' : null"
                       [placeholder]="lang.t().contact.placeholderMessage"
                       [class]="fieldClass + ' min-h-32 resize-y leading-relaxed'"
                       [attr.aria-invalid]="showError('message') ? 'true' : null"
@@ -363,13 +375,16 @@ export class ContactSectionComponent {
    * True once this form's code runs in the browser. The home page hydrates it
    * when the browser is idle, so for a moment the server's markup is on screen
    * without it; `data-ready` on the form marks the difference (tests wait on
-   * it).
+   * it). The fields' names and the form's tool name wait for it too: with no
+   * `action`, a submit before then is a GET, and named fields would put the
+   * message in the URL (Caddy's logs, Umami).
    */
   protected readonly ready = signal(false);
 
   protected readonly fieldClass = fieldClass;
   protected readonly labelClass = labelClass;
   protected readonly errorClass = errorClass;
+  protected readonly toolDescription = TOOL_DESCRIPTION;
   protected readonly chrome = computed(() => CHROME[this.lang.lang()].contact);
   protected readonly copyLabels = computed(() => CHROME[this.lang.lang()].code);
   protected readonly matchLine = computed(() => MATCH_LINE[this.lang.lang()]);
