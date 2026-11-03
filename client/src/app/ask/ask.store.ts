@@ -33,7 +33,7 @@ import { answersByQuestion } from "./answers";
 import { ASK_COPY } from "./ask-copy";
 import { AskLauncherService, type AskAbout, type AskFocus } from "./ask-launcher.service";
 import { isLevel, readLevel, storeLevel, type Level } from "./ask-level";
-import { ASK_STORAGE_KEY } from "./ask-storage";
+import { ASK_STORAGE_KEY, MatchMarks } from "./match-marks";
 import { AskTraceService } from "./ask-trace.service";
 import type {
   AskMessage,
@@ -310,6 +310,8 @@ export const AskStore = signalStore(
     _doc: inject(DOCUMENT),
     _trace: inject(AskTraceService),
     _launcher: inject(AskLauncherService),
+    /** The marks a match puts on the site's pages (plan 3 W4), kept in step with `persist`. */
+    _marks: inject(MatchMarks),
     /** The request being prepared: set just before `sendMessage`. */
     _next: {
       deep: false,
@@ -554,6 +556,7 @@ export const AskStore = signalStore(
           tour: store.tour(),
           messages: forStorage(chat.messages),
         };
+        store._marks.read(stored);
         sessionStorage.setItem(ASK_STORAGE_KEY, JSON.stringify(stored));
       } catch {
         // Storage full or blocked: the conversation lasts as long as the page.
@@ -1380,6 +1383,18 @@ export const AskStore = signalStore(
         if (!summary) return;
         patchState(store, { handoff: { summary, messageId: message.id } });
         this.answerHandoff(true);
+      },
+
+      /**
+       * The match page's "Clear" (plan 3 W4): every match's rows leave the conversation, so no
+       * older one comes back; the answers' text stays. The page's table and the marks go with them.
+       */
+      clearMatch(): void {
+        store.chat.messages = store.chat.messages.map((m) => ({
+          ...m,
+          parts: m.parts.filter((p) => p.type !== "data-match"),
+        }));
+        store._persist();
       },
 
       toContact(): void {

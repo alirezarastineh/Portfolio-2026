@@ -14,6 +14,7 @@ import { RouterLink } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideArrowRight, lucideExternalLink, lucideFileText } from "@ng-icons/lucide";
 
+import { MatchMarkComponent, MatchMarks } from "../ask/match-marks";
 import { brandGithub } from "../icons/brand-icons";
 import { PictureComponent } from "./picture.component";
 import type { CardLayout } from "./project-layout";
@@ -78,7 +79,7 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
 @Component({
   selector: "app-project-card",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgIcon, PictureComponent, RouterLink],
+  imports: [MatchMarkComponent, NgIcon, PictureComponent, RouterLink],
   viewProviders: [
     provideIcons({ lucideArrowRight, lucideExternalLink, lucideFileText, brandGithub }),
   ],
@@ -121,6 +122,9 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
           <p class="m-0 line-clamp-2 text-pretty text-muted-foreground">
             {{ project().hook }}
           </p>
+        }
+        @if (marks.count("project:" + project().slug); as n) {
+          <app-match-mark [n]="n" />
         }
 
         @if (metrics().length) {
@@ -254,6 +258,7 @@ export class ProjectCardComponent {
 
   protected readonly classes = computed(() => LAYOUTS[this.layout()]);
   protected readonly chrome = computed(() => CHROME[this.lang.lang()].projectCard);
+  protected readonly marks = inject(MatchMarks);
 
   readonly caseStudyLink = computed(() => ["/", this.lang.lang(), "work", this.project().slug]);
   /** Shared with the case study's cover and `<h1>`, which these morph into. */

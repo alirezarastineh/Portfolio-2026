@@ -16,7 +16,7 @@ import {
 
 import { ASK_ENTRY_COPY } from "../ask/ask-entry-copy";
 import { AskLauncherService } from "../ask/ask-launcher.service";
-import { hasStoredConversation } from "../ask/ask-storage";
+import { hasStoredConversation } from "../ask/match-marks";
 import { TerminalShellComponent } from "../ask/terminal-shell.component";
 import { PictureComponent } from "../components/picture.component";
 import { SectionHeadingComponent } from "../components/section-heading.component";

@@ -7,6 +7,7 @@ import {
   lucideGraduationCap,
 } from "@ng-icons/lucide";
 
+import { MatchMarkComponent, MatchMarks } from "../ask/match-marks";
 import { PictureComponent } from "../components/picture.component";
 import { SectionHeadingComponent } from "../components/section-heading.component";
 import { formatDuration, formatMonth, formatPeriod } from "../content/period";
@@ -56,7 +57,7 @@ const HIGHLIGHTS = 3;
 @Component({
   selector: "app-experience-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgIcon, PictureComponent, SectionHeadingComponent],
+  imports: [MatchMarkComponent, NgIcon, PictureComponent, SectionHeadingComponent],
   viewProviders: [
     provideIcons({ lucideAward, lucideBriefcase, lucideExternalLink, lucideGraduationCap }),
   ],
@@ -150,6 +151,9 @@ const HIGHLIGHTS = 3;
                               <span> · {{ entry.details }}</span>
                             }
                           </p>
+                          @if (marks.count("experience:" + entry.experience.id); as n) {
+                            <app-match-mark [n]="n" />
+                          }
 
                           @if (entry.experience.summary) {
                             <p
@@ -233,6 +237,7 @@ export class ExperienceSectionComponent {
   readonly index = input("");
 
   protected readonly lang = inject(LanguageService);
+  protected readonly marks = inject(MatchMarks);
 
   /** Durations of ongoing entries count to today — the day this page is rendered. */
   private readonly now = new Date();

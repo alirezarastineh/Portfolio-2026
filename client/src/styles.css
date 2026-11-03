@@ -225,8 +225,9 @@ html:has(app-admin-layout) {
  * whatever theme the screen shows. Off the page goes what only works on
  * screen: the header, footer and ask button, the reading progress, the table
  * of contents, an article's closing links (its ask and share buttons, the
- * next and previous studies), code's Copy and the match page's controls,
- * whose report prints its date and AI disclosure instead. Links to other
+ * next and previous studies), code's Copy, the marks a match puts on the
+ * work, and the match page's controls, whose report prints its date and AI
+ * disclosure instead. Links to other
  * sites print their address. No reveals: they would leave content at opacity
  * 0. Code prints in one colour: its highlighting is made for one screen
  * background.
@@ -271,6 +272,7 @@ html:has(app-admin-layout) {
       .code-explain,
       .reader-ask,
       .reader-ask-selection,
+      .match-mark,
       .match-controls
     ) {
     display: none;

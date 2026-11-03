@@ -29,7 +29,9 @@ export type AskEvent =
   | "ask_share"
   // A brief's paste box opened, and the brief sent, by kind (visitor plan V20).
   | "match_open"
-  | "match_send";
+  | "match_send"
+  // A matched page's mark followed back to the match (plan 3 W4).
+  | "match_mark_click";
 
 export function track(event: AskEvent, data?: Record<string, string>): void {
   try {

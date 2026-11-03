@@ -18,6 +18,10 @@ export interface MatchPageCopy {
   columns: { status: string; item: Record<MatchKind, string>; shows: string; evidence: string };
   handoff: string;
   print: string;
+  /** Takes the rows, and the marks they put on his pages, out of this tab (plan 3 W4). */
+  clear: string;
+  /** Said once cleared: the button goes with the table. */
+  cleared: string;
   /** On paper only, the AI disclosure: `{date}`, the match's day; `{url}`, the page. */
   printed: string;
   /** After match's "off" line, to the contact section. */
@@ -41,6 +45,8 @@ export const MATCH_PAGE_COPY: Record<Locale, MatchPageCopy> = {
     },
     handoff: "Hand this to the contact form",
     print: "Print or save as PDF",
+    clear: "Clear",
+    cleared: "Cleared: the rows and the marks on his pages are gone.",
     printed:
       "Checked on {date} by the AI assistant on Alireza's portfolio; each row cites a published page. {url}",
     contact: "Write to him instead",
@@ -61,6 +67,8 @@ export const MATCH_PAGE_COPY: Record<Locale, MatchPageCopy> = {
     },
     handoff: "An das Kontaktformular übergeben",
     print: "Drucken oder als PDF speichern",
+    clear: "Löschen",
+    cleared: "Gelöscht: Die Zeilen und die Markierungen auf seinen Seiten sind weg.",
     printed:
       "Am {date} geprüft vom KI-Assistenten auf Alirezas Portfolio; jede Zeile nennt eine veröffentlichte Seite. {url}",
     contact: "Schreib ihm stattdessen",

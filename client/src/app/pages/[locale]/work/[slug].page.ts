@@ -8,6 +8,7 @@ import { lucideArrowLeft, lucideArrowRight, lucideExternalLink } from "@ng-icons
 import { map } from "rxjs";
 
 import { AskLauncherService } from "../../../ask/ask-launcher.service";
+import { MatchMarkComponent, MatchMarks } from "../../../ask/match-marks";
 import { injectReadNext } from "../../../ask/read-next";
 import { injectReaderAsk } from "../../../ask/reader-ask";
 import type { BreadcrumbItem } from "../../../components/breadcrumb.component";
@@ -146,6 +147,7 @@ interface Section {
   imports: [
     BreadcrumbComponent,
     GalleryComponent,
+    MatchMarkComponent,
     NgIcon,
     NotFoundComponent,
     PictureComponent,
@@ -179,6 +181,9 @@ interface Section {
                 <p class="m-0 max-w-[46ch] text-pretty text-lead text-muted-foreground">
                   {{ s.project.hook }}
                 </p>
+              }
+              @if (marks.count("project:" + s.project.slug); as n) {
+                <app-match-mark [n]="n" />
               }
             </div>
 
@@ -393,6 +398,7 @@ interface Section {
 })
 export default class CaseStudyPageComponent {
   protected readonly lang = inject(LanguageService);
+  protected readonly marks = inject(MatchMarks);
   private readonly launcher = inject(AskLauncherService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 

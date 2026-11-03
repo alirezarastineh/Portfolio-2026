@@ -405,6 +405,12 @@ function matchChunks(id: string, kind: string, handoff: string): Chunk[] {
     title: "TODO: Project Two",
     url: "/en/work/project-two",
   };
+  // The row rests on a timeline entry too: both get a mark (plan 3 W4).
+  const entry = {
+    id: "experience:11111111-1111-4111-8111-111111111111@en",
+    title: "Senior AI Engineer — Example GmbH",
+    url: "/en#experience",
+  };
   return [
     { type: "data-match-progress", data: { v: 1, step: "plan" }, transient: true },
     { type: "start", messageId: id, messageMetadata: { createdAt: Date.now() } },
@@ -435,7 +441,7 @@ function matchChunks(id: string, kind: string, handoff: string): Chunk[] {
             status: "evidence",
             statusLabel: "evidence",
             summary: "Built a retrieval platform.",
-            cites: [cite],
+            cites: [cite, entry],
           },
           {
             n: 2,
@@ -1841,6 +1847,49 @@ test.describe("assistant terminal", () => {
     await expect(page.getByRole("rowheader").first()).toHaveText("Retrieval in production (must)");
   });
 
+  test("a match marks the work its evidence rests on; Clear takes the rows and the marks away (plan 3 W4)", async ({
+    page,
+  }) => {
+    await mockAsk(page, (route) => sse(route, matchChunks("m_e2emarks001", "role", "Role: x.")), {
+      match: true,
+    });
+    await page.goto("/en/match");
+    await interactive(page);
+    await page.getByLabel("Paste the role").fill("Senior AI engineer: retrieval in production.");
+    await page.getByRole("button", { name: "check it" }).click();
+    const mark = { name: "Evidence for 1 point of your brief" };
+    // Through the router: the store keeps the marks in step, no reload needed.
+    await page.getByRole("table").getByRole("link", { name: "TODO: Project Two" }).click();
+    await expect(page).toHaveURL(/\/en\/work\/project-two$/);
+    await expect(page.locator("article > header").getByRole("link", mark)).toHaveAttribute(
+      "href",
+      "/en/match",
+    );
+
+    // A new load reads the tab's conversation once hydrated: the card, and the timeline's entry.
+    await page.goto("/en");
+    await interactive(page);
+    const card = page.locator("#projects").getByRole("link", mark);
+    await expect(card).toHaveCount(1);
+    await page.locator("#experience").scrollIntoViewIfNeeded();
+    await expect(page.locator("#experience").getByRole("link", mark)).toHaveCount(1);
+
+    await card.click();
+    await expect(page).toHaveURL(/\/en\/match$/);
+    await page.getByRole("button", { name: "Clear" }).click();
+    await expect(page.getByRole("table")).toHaveCount(0);
+    await expect(page.locator("main [role=status]")).toHaveText(
+      "Cleared: the rows and the marks on his pages are gone.",
+    );
+    // The answer's text stays; its rows are gone from the tab.
+    const lead = "Published evidence for 1 of 2 requirements; 1 not published.";
+    await expect(page.getByText(lead, { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => sessionStorage.getItem("ask:v1"))).not.toContain("data-match");
+    await page.goBack();
+    await expect(page.getByRole("heading", { name: "TODO: Project Two" })).toBeVisible();
+    await expect(page.getByRole("link", mark)).toHaveCount(0);
+  });
+
   test("with match off, the match page says so and points to contact; home and the palette lead there (plan 3 W3)", async ({
     page,
   }) => {
@@ -2068,6 +2117,23 @@ for (const colorScheme of ["dark", "light"] as const) {
       await page.getByLabel("Paste the role").fill("Senior AI engineer: retrieval in production.");
       await page.getByRole("button", { name: "check it" }).click();
       await expect(page.getByRole("table")).toBeVisible();
+      expect(await axeViolations(page)).toEqual([]);
+    });
+
+    test("matched work's marks on home (plan 3 W4)", async ({ page }) => {
+      await mockAsk(page, (route) => sse(route, matchChunks("m_e2emarksaxe", "role", "Role: x.")), {
+        match: true,
+      });
+      await page.goto("/en/match");
+      await interactive(page);
+      await page.getByLabel("Paste the role").fill("Senior AI engineer: retrieval in production.");
+      await page.getByRole("button", { name: "check it" }).click();
+      await expect(page.getByRole("table")).toBeVisible();
+      await page.goto("/en");
+      await interactive(page);
+      await page.locator("#experience").scrollIntoViewIfNeeded();
+      const marks = page.getByRole("link", { name: "Evidence for 1 point of your brief" });
+      await expect(marks).toHaveCount(2);
       expect(await axeViolations(page)).toEqual([]);
     });
   });

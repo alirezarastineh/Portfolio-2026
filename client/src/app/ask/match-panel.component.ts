@@ -154,6 +154,13 @@ const MARKS: Record<MatchStatus, { glyph: string; tone: string }> = {
           >
             {{ copy().print }}
           </button>
+          <button
+            type="button"
+            class="press min-h-8 cursor-pointer rounded-md border border-border px-3 hover:border-accent-orange"
+            (click)="clear()"
+          >
+            {{ copy().clear }}
+          </button>
         }
       </div>
     }
@@ -252,5 +259,10 @@ export class MatchPanelComponent {
 
   protected print(): void {
     this.doc.defaultView?.print();
+  }
+
+  protected clear(): void {
+    this.store.clearMatch();
+    this.said.set(this.copy().cleared);
   }
 }
