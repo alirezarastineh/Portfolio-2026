@@ -137,7 +137,14 @@ test.describe("content BFF (v2)", () => {
 test.describe("crawler surface", () => {
   test("sitemap lists every page in both languages with alternates", async ({ request }) => {
     const xml = await (await request.get("/sitemap.xml")).text();
-    for (const path of ["/en", "/de", "/en/legal/imprint", "/de/legal/privacy"]) {
+    for (const path of [
+      "/en",
+      "/de",
+      "/en/match",
+      "/de/match",
+      "/en/legal/imprint",
+      "/de/legal/privacy",
+    ]) {
       expect(xml).toContain(`<loc>${SITE}${path}</loc>`);
     }
     expect(xml).toContain('hreflang="x-default"');

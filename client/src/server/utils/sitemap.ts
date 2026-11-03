@@ -28,16 +28,19 @@ function mark(pages: Map<string, SitemapPage>, path: string, locale: Locale, whe
 }
 
 /**
- * Every public page and the languages it exists in: home, the legal pages,
- * each case study and post (only where written in that language), and the
- * writing index where there are posts. `lastmod` is when that version last
- * changed: the publish for home, the entity's own date otherwise.
+ * Every public page and the languages it exists in: home, the match page, the
+ * legal pages, each case study and post (only where written in that language),
+ * and the writing index where there are posts. `lastmod` is when that version
+ * last changed: the publish for home, the entity's own date otherwise, none
+ * for the match page.
  */
 export function sitemapPages(byLocale: SitemapInput): SitemapPage[] {
   const pages = new Map<string, SitemapPage>();
   for (const locale of LOCALES) {
     const { content, lastModified } = byLocale[locale];
     mark(pages, "", locale, lastModified);
+    // Whatever match's switch says: the page answers either way, and says when it is off.
+    mark(pages, "/match", locale, null);
     for (const legal of content.legal ?? []) {
       mark(pages, `/legal/${legal.doc}`, locale, legal.updatedAt);
     }

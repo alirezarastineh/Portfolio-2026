@@ -8,7 +8,8 @@ import { originOf } from "./csp";
  * portfolio as a short Markdown index a language model reads first: who it is,
  * the projects and the writing with absolute links, the CV, and for agents the
  * read-only MCP endpoint, the agent card, the map, the scorecard while it is
- * published, and the FAQ and system card with their dates (visitor plan V21),
+ * published, the match page while match is offered (plan 3 W3), and the FAQ
+ * and system card with their dates (visitor plan V21),
  * which only MCP reads. Built from the published content
  * on each request (cached briefly), as the RSS feed is. The "Optional" section
  * keeps its English name in both languages: the format gives it a meaning.
@@ -36,6 +37,8 @@ const COPY: Record<
     cardLine: string;
     mapLine: string;
     scorecardLine: string;
+    match: string;
+    matchLine: string;
     documents: string;
     faq: string;
     updated: string;
@@ -54,6 +57,9 @@ const COPY: Record<
     cardLine: "what the portfolio's assistant can do, and where its tools are (A2A agent card)",
     mapLine: "every page as JSON, with the day it last changed and the pages related to it",
     scorecardLine: "the assistant's recorded evaluation, as JSON: aggregates only",
+    match: "Check the fit",
+    matchLine:
+      "a page where a visitor checks a role, a project or a problem against the published work, each row with the pages it rests on; an AI model reads the brief",
     documents: "The assistant's documents",
     faq: "FAQ entry",
     updated: "updated",
@@ -71,6 +77,9 @@ const COPY: Record<
     cardLine: "was der Assistent des Portfolios kann und wo seine Werkzeuge sind (A2A-Agent-Card)",
     mapLine: "alle Seiten als JSON, mit dem Tag ihrer letzten Änderung und den verwandten Seiten",
     scorecardLine: "die festgehaltene Evaluation des Assistenten als JSON, nur Summen",
+    match: "Prüf, ob es passt",
+    matchLine:
+      "eine Seite, auf der man eine Stelle, ein Projekt oder ein Problem mit der veröffentlichten Arbeit abgleicht, jede Zeile mit den Seiten, auf denen sie beruht; ein KI-Modell liest die Beschreibung",
     documents: "Dokumente des Assistenten",
     faq: "FAQ-Eintrag",
     updated: "geändert",
@@ -80,7 +89,7 @@ const COPY: Record<
 };
 
 /** What the API could not say: no documents, no scorecard. */
-const NO_ASSISTANT: AssistantIndex = { documents: [], scorecard: false };
+const NO_ASSISTANT: AssistantIndex = { documents: [], scorecard: false, match: false };
 
 /** One line of prose, as a list item takes it. */
 const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
@@ -170,6 +179,8 @@ export function buildLlmsTxt(
   // The map and the scorecard are the API's, as the MCP endpoint is (visitor plan V21).
   const api = mcpUrl ? new URL(mcpUrl).origin : null;
   lines.push(`## ${copy.agents}`, "");
+  // The match page answers either way; it is listed only while match is offered (plan 3 W3).
+  if (assistant.match) lines.push(`- [${copy.match}](${base}/match): ${copy.matchLine}`);
   if (mcpUrl) lines.push(`- [MCP](${mcpUrl}): ${copy.mcpLine}`);
   lines.push(`- [Agent card](${origin}/.well-known/agent-card.json): ${copy.cardLine}`);
   if (api) lines.push(`- [Map](${api}/v1/ask/map?locale=${locale}): ${copy.mapLine}`);

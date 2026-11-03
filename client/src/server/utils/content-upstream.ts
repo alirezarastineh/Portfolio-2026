@@ -216,13 +216,15 @@ const assistantMapSchema = z.object({
     .max(500)
     .default([]),
 });
-const scorecardSchema = z.object({ scorecard: z.boolean() });
+const configSchema = z.object({ scorecard: z.boolean(), match: z.boolean().optional() });
 
 /** What llms.txt lists of the assistant (visitor plan V21), as the API's map and config say. */
 export interface AssistantIndex {
   documents: z.infer<typeof assistantMapSchema>["assistant"];
   /** Whether the admin publishes the scorecard. */
   scorecard: boolean;
+  /** Whether match is offered, so the match page works (plan 3 W3). */
+  match: boolean;
 }
 
 /** An admin's save changes them, and agents read llms.txt seldom: the map's own max-age. */
@@ -237,17 +239,16 @@ export async function getAssistantIndex(locale: Locale): Promise<AssistantIndex>
     fetchUpstream(`/v1/ask/map?locale=${locale}`, undefined, (p) =>
       assistantMapSchema.safeParse(p),
     ),
-    fetchUpstream("/v1/ask/config", undefined, (p) => scorecardSchema.safeParse(p)),
+    fetchUpstream("/v1/ask/config", undefined, (p) => configSchema.safeParse(p)),
   ]);
+  const said = config.kind === "ok" ? (config.entry.payload as z.infer<typeof configSchema>) : null;
   const index: AssistantIndex = {
     documents:
       map.kind === "ok"
         ? (map.entry.payload as z.infer<typeof assistantMapSchema>).assistant
         : (cached?.index.documents ?? []),
-    scorecard:
-      config.kind === "ok"
-        ? (config.entry.payload as z.infer<typeof scorecardSchema>).scorecard
-        : (cached?.index.scorecard ?? false),
+    scorecard: said ? said.scorecard : (cached?.index.scorecard ?? false),
+    match: said ? said.match === true : (cached?.index.match ?? false),
   };
   assistantIndexes.set(locale, { index, fetchedAt: Date.now() });
   return index;

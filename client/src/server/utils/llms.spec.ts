@@ -146,6 +146,7 @@ describe("llms.txt for visiting agents (visitor plan V21)", () => {
   });
   const assistant: AssistantIndex = {
     scorecard: true,
+    match: true,
     documents: [
       faq("faq:a1c2e3f4@en", "What is his [notice] period?", "2026-09-01"),
       {
@@ -162,6 +163,8 @@ describe("llms.txt for visiting agents (visitor plan V21)", () => {
     const text = buildLlmsTxt(published(), ORIGIN, MCP, assistant);
     expect(text).toContain(`- [Map](${API}/v1/ask/map?locale=en): every page as JSON`);
     expect(text).toContain(`- [Scorecard](${API}/v1/ask/scorecard): the assistant's recorded`);
+    // The match page, while match is offered (plan 3 W3).
+    expect(text).toContain(`- [Check the fit](${ORIGIN}/en/match): a page where a visitor checks`);
     // No page of their own: each is read over MCP, the system card first.
     expect(text).toContain(
       [
@@ -174,8 +177,13 @@ describe("llms.txt for visiting agents (visitor plan V21)", () => {
         "## Optional",
       ].join("\n"),
     );
-    const unpublished = buildLlmsTxt(published(), ORIGIN, MCP, { ...assistant, scorecard: false });
+    const unpublished = buildLlmsTxt(published(), ORIGIN, MCP, {
+      ...assistant,
+      scorecard: false,
+      match: false,
+    });
     expect(unpublished).not.toContain("[Scorecard]");
+    expect(unpublished).not.toContain("/en/match");
     // Without the API's origin, nothing of the API's.
     const offline = buildLlmsTxt(published(), ORIGIN, null, assistant);
     expect(offline).not.toContain("[Map]");
@@ -186,9 +194,11 @@ describe("llms.txt for visiting agents (visitor plan V21)", () => {
   it("says them in German too", () => {
     const text = buildLlmsTxt(fallback("de"), ORIGIN, MCP, {
       scorecard: false,
+      match: true,
       documents: [faq("faq:a1c2e3f4@de", "Wie lang ist seine Kündigungsfrist?", "2026-09-01")],
     });
     expect(text).toContain(`- [Map](${API}/v1/ask/map?locale=de): alle Seiten als JSON`);
+    expect(text).toContain(`- [Prüf, ob es passt](${ORIGIN}/de/match): eine Seite, auf der`);
     expect(text).toContain(
       `## Dokumente des Assistenten\n\n- [Wie lang ist seine Kündigungsfrist?](${MCP}): FAQ-Eintrag, geändert 2026-09-01; get_document "faq:a1c2e3f4@de"\n`,
     );
@@ -216,7 +226,7 @@ describe("the assistant index llms.txt reads (visitor plan V21)", () => {
       return Response.json(
         url.includes("/v1/ask/map")
           ? { v: 1, locale: "de", pages: [], assistant: [CARD] }
-          : { state: "ok", scorecard: true },
+          : { state: "ok", scorecard: true, match: true },
       );
     });
   });
@@ -230,7 +240,7 @@ describe("the assistant index llms.txt reads (visitor plan V21)", () => {
 
   it("reads the map's documents and the config's scorecard, for five minutes, and keeps them through an outage", async () => {
     const first = await getAssistantIndex("de");
-    expect(first).toEqual({ documents: [CARD], scorecard: true });
+    expect(first).toEqual({ documents: [CARD], scorecard: true, match: true });
     expect(calls).toEqual([
       "http://api.internal/v1/ask/map?locale=de",
       "http://api.internal/v1/ask/config",
@@ -245,7 +255,11 @@ describe("the assistant index llms.txt reads (visitor plan V21)", () => {
 
   it("lists nothing when the API never said", async () => {
     up = false;
-    expect(await getAssistantIndex("en")).toEqual({ documents: [], scorecard: false });
+    expect(await getAssistantIndex("en")).toEqual({
+      documents: [],
+      scorecard: false,
+      match: false,
+    });
   });
 });
 
