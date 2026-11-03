@@ -1185,6 +1185,26 @@ test.describe("admin", () => {
     expect(await shook).toBe(true);
   });
 
+  test("the sign-in's code step takes six digits and sends them", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL, {
+      "POST /auth/login": { ok: true, totpRequired: true, user: null },
+      "POST /auth/totp": { ok: true, user: USER },
+    });
+    await page.goto("/admin/login");
+    await interactive(page);
+    await page.getByLabel("Email").fill("admin@example.com");
+    await page.getByLabel("Password").fill("hunter2hunter2");
+    await page.getByRole("button", { name: "Sign in" }).click();
+
+    // The OTP field is the page's own input (spartan's brain 1.9 renders none), focused.
+    await expect(page.getByLabel("Code", { exact: true })).toBeFocused();
+    const sent = page.waitForRequest(
+      (request) => request.method() === "POST" && new URL(request.url()).pathname === "/auth/totp",
+    );
+    await page.keyboard.type("123456");
+    expect((await sent).postDataJSON()).toEqual({ code: "123456" });
+  });
+
   test("the live preview draws the page with the editor's unsaved edits", async ({
     page,
     baseURL,

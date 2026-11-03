@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from "@angular/router";
 import { HlmAlert, HlmAlertDescription } from "@spartan-ng/helm/alert";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
-import { BrnInputOtp } from "@spartan-ng/brain/input-otp";
+import { BrnInputOtp, BrnInputOtpInput } from "@spartan-ng/brain/input-otp";
 import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmInputOtpImports } from "@spartan-ng/helm/input-otp";
 import { HlmSpinner } from "@spartan-ng/helm/spinner";
@@ -35,6 +35,7 @@ const ERROR_COPY: Record<string, string> = {
     HlmField,
     HlmFieldLabel,
     BrnInputOtp,
+    BrnInputOtpInput,
     HlmInput,
     HlmInputOtpImports,
     HlmSpinner,
@@ -147,7 +148,6 @@ const ERROR_COPY: Record<string, string> = {
                         hlmInputOtp
                         inputId="code"
                         [length]="6"
-                        inputMode="numeric"
                         autofocus
                         formControlName="code"
                         (completed)="submitTotp()"
@@ -157,6 +157,9 @@ const ERROR_COPY: Record<string, string> = {
                             <hlm-input-otp-slot [index]="slot" />
                           }
                         </div>
+                        <!-- Brain 1.9 renders no input of its own (numeric, one-time-code by default).
+                             Last, so it lies over the slots and takes the clicks. -->
+                        <input brnInputOtpInput />
                       </brn-input-otp>
                     </div>
                   } @else {
