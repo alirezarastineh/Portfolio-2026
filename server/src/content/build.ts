@@ -204,78 +204,83 @@ async function buildProjects(
   bodyMedia: Map<string, BodyMedia>,
   locale: Locale,
 ): Promise<{ projectsOut: AppContent["projects"]; docs: [string, Doc][] }> {
-  const projectsOut: AppContent["projects"] = [];
-  const docs: [string, Doc][] = [];
-
-  for (const { project, translation } of projectRows) {
-    const hasCaseStudy = translation.body.trim() !== "";
-    const updatedAt = latest(project.updatedAt, translation.updatedAt);
-    projectsOut.push({
-      slug: project.slug,
-      name: translation.name,
-      descriptor: translation.descriptor,
-      hook: translation.hook,
-      problem: translation.problem,
-      aiArchitecture: translation.aiArchitecture,
-      fullStackInfra: translation.fullStackInfra,
-      outcomes: translation.outcomes,
-      stack: project.stack,
-      links: {
-        live: project.linkLive ?? "",
-        repo: project.linkRepo ?? "",
-        caseStudy: project.linkCaseStudy ?? "",
-      },
-      cover: media.image(project.coverId, locale, translation.name),
-      featured: project.featured,
-      period: project.periodStart ? { start: project.periodStart, end: project.periodEnd } : null,
-      role: translation.role,
-      category: project.category
-        ? { key: project.category, label: translation.categoryLabel || project.category }
-        : null,
-      tags: project.tags,
-      metrics: cleanMetrics(translation.metrics),
-      hasCaseStudy,
-      updatedAt,
-    });
-
-    if (hasCaseStudy) {
-      const rendered = await renderBody(translation.body, bodyMedia);
-      const withBody = new Set(
-        caseStudyLocales
-          .filter((t) => t.projectId === project.id && t.body.trim() !== "")
-          .map((t) => t.locale),
-      );
-      // Left out when empty, so a case study without aids publishes as it did before them.
-      const summaries = {
-        ...(translation.summaryPlain ? { plain: translation.summaryPlain } : {}),
-        ...(translation.summaryExpert ? { expert: translation.summaryExpert } : {}),
-      };
-      docs.push([
-        docKey("projects", project.slug),
-        {
-          kind: "project",
-          slug: project.slug,
-          body: rendered.html,
-          toc: rendered.toc,
-          gallery: galleryRows
-            .filter((g) => g.projectId === project.id)
-            .flatMap((g) => {
-              const image = media.image(g.mediaId, locale, translation.name);
-              return image ? [{ ...image, caption: g.caption[locale] ?? "" }] : [];
-            }),
-          seo: { title: "", description: translation.seoDescription },
-          ...(Object.keys(summaries).length ? { summaries } : {}),
-          ...(translation.glossary.length ? { glossary: translation.glossary } : {}),
-          alternates: Object.fromEntries(
-            LOCALES.map((l) => [l, withBody.has(l) ? `/${l}/work/${project.slug}` : null]),
-          ) as Record<Locale, string | null>,
-          updatedAt,
+  const items = await Promise.all(
+    projectRows.map(async ({ project, translation }) => {
+      const hasCaseStudy = translation.body.trim() !== "";
+      const updatedAt = latest(project.updatedAt, translation.updatedAt);
+      const summary = {
+        slug: project.slug,
+        name: translation.name,
+        descriptor: translation.descriptor,
+        hook: translation.hook,
+        problem: translation.problem,
+        aiArchitecture: translation.aiArchitecture,
+        fullStackInfra: translation.fullStackInfra,
+        outcomes: translation.outcomes,
+        stack: project.stack,
+        links: {
+          live: project.linkLive ?? "",
+          repo: project.linkRepo ?? "",
+          caseStudy: project.linkCaseStudy ?? "",
         },
-      ]);
-    }
-  }
+        cover: media.image(project.coverId, locale, translation.name),
+        featured: project.featured,
+        period: project.periodStart ? { start: project.periodStart, end: project.periodEnd } : null,
+        role: translation.role,
+        category: project.category
+          ? { key: project.category, label: translation.categoryLabel || project.category }
+          : null,
+        tags: project.tags,
+        metrics: cleanMetrics(translation.metrics),
+        hasCaseStudy,
+        updatedAt,
+      };
 
-  return { projectsOut, docs };
+      let doc: [string, Doc] | null = null;
+      if (hasCaseStudy) {
+        const rendered = await renderBody(translation.body, bodyMedia);
+        const withBody = new Set(
+          caseStudyLocales
+            .filter((t) => t.projectId === project.id && t.body.trim() !== "")
+            .map((t) => t.locale),
+        );
+        // Left out when empty, so a case study without aids publishes as it did before them.
+        const summaries = {
+          ...(translation.summaryPlain ? { plain: translation.summaryPlain } : {}),
+          ...(translation.summaryExpert ? { expert: translation.summaryExpert } : {}),
+        };
+        doc = [
+          docKey("projects", project.slug),
+          {
+            kind: "project",
+            slug: project.slug,
+            body: rendered.html,
+            toc: rendered.toc,
+            gallery: galleryRows
+              .filter((g) => g.projectId === project.id)
+              .flatMap((g) => {
+                const image = media.image(g.mediaId, locale, translation.name);
+                return image ? [{ ...image, caption: g.caption[locale] ?? "" }] : [];
+              }),
+            seo: { title: "", description: translation.seoDescription },
+            ...(Object.keys(summaries).length ? { summaries } : {}),
+            ...(translation.glossary.length ? { glossary: translation.glossary } : {}),
+            alternates: Object.fromEntries(
+              LOCALES.map((l) => [l, withBody.has(l) ? `/${l}/work/${project.slug}` : null]),
+            ) as Record<Locale, string | null>,
+            updatedAt,
+          },
+        ];
+      }
+
+      return { summary, doc };
+    }),
+  );
+
+  return {
+    projectsOut: items.map((i) => i.summary),
+    docs: items.flatMap((i) => (i.doc ? [i.doc] : [])),
+  };
 }
 
 async function buildPosts(
@@ -286,68 +291,76 @@ async function buildPosts(
   locale: Locale,
   now: Date,
 ): Promise<{ postsOut: AppContent["posts"]; docs: [string, Doc][] }> {
-  const postsOut: AppContent["posts"] = [];
-  const docs: [string, Doc][] = [];
+  const items = await Promise.all(
+    postRows.map(async ({ post, translation }) => {
+      const available = new Set(
+        postLocales.filter((t) => t.postId === post.id).map((t) => t.locale),
+      );
+      const summary = {
+        slug: post.slug,
+        title: translation.title,
+        excerpt: translation.excerpt,
+        // Only an undated draft in the preview has no date: it reads as "now".
+        publishedAt: (post.publishedAt ?? now).toISOString(),
+        updatedAt: latest(post.updatedAt, translation.updatedAt),
+        tags: post.tags,
+        cover: media.image(post.coverId, locale, translation.title),
+        readingMinutes: readingMinutes(translation.body),
+        alternates: Object.fromEntries(
+          LOCALES.map((l) => [l, available.has(l) ? `/${l}/writing/${post.slug}` : null]),
+        ) as Record<Locale, string | null>,
+      };
 
-  for (const { post, translation } of postRows) {
-    const available = new Set(postLocales.filter((t) => t.postId === post.id).map((t) => t.locale));
-    const summary = {
-      slug: post.slug,
-      title: translation.title,
-      excerpt: translation.excerpt,
-      // Only an undated draft in the preview has no date: it reads as "now".
-      publishedAt: (post.publishedAt ?? now).toISOString(),
-      updatedAt: latest(post.updatedAt, translation.updatedAt),
-      tags: post.tags,
-      cover: media.image(post.coverId, locale, translation.title),
-      readingMinutes: readingMinutes(translation.body),
-      alternates: Object.fromEntries(
-        LOCALES.map((l) => [l, available.has(l) ? `/${l}/writing/${post.slug}` : null]),
-      ) as Record<Locale, string | null>,
-    };
-    postsOut.push(summary);
+      const rendered = await renderBody(translation.body, bodyMedia);
+      const doc: [string, Doc] = [
+        docKey("posts", post.slug),
+        {
+          ...summary,
+          kind: "post",
+          body: rendered.html,
+          toc: rendered.toc,
+          seo: { title: translation.seoTitle, description: translation.seoDescription },
+          canonicalUrl: post.canonicalUrl || null,
+        },
+      ];
 
-    const rendered = await renderBody(translation.body, bodyMedia);
-    docs.push([
-      docKey("posts", post.slug),
-      {
-        ...summary,
-        kind: "post",
-        body: rendered.html,
-        toc: rendered.toc,
-        seo: { title: translation.seoTitle, description: translation.seoDescription },
-        canonicalUrl: post.canonicalUrl || null,
-      },
-    ]);
-  }
+      return { summary, doc };
+    }),
+  );
 
-  return { postsOut, docs };
+  return {
+    postsOut: items.map((i) => i.summary),
+    docs: items.map((i) => i.doc),
+  };
 }
 
 async function buildLegal(
   legalRows: LegalRow[],
   bodyMedia: Map<string, BodyMedia>,
 ): Promise<{ legalOut: AppContent["legal"]; docs: [string, Doc][] }> {
-  const legalOut: AppContent["legal"] = [];
-  const docs: [string, Doc][] = [];
+  const items = await Promise.all(
+    legalRows.map(async (legal) => {
+      const updatedAt = legal.updatedAt.toISOString();
+      const rendered = await renderBody(legal.body, bodyMedia);
+      const summary = { doc: legal.doc, title: legal.title, updatedAt };
+      const doc: [string, Doc] = [
+        docKey("legal", legal.doc),
+        {
+          kind: "legal",
+          doc: legal.doc,
+          title: legal.title,
+          body: rendered.html,
+          updatedAt,
+        },
+      ];
+      return { summary, doc };
+    }),
+  );
 
-  for (const legal of legalRows) {
-    const updatedAt = legal.updatedAt.toISOString();
-    legalOut.push({ doc: legal.doc, title: legal.title, updatedAt });
-    const rendered = await renderBody(legal.body, bodyMedia);
-    docs.push([
-      docKey("legal", legal.doc),
-      {
-        kind: "legal",
-        doc: legal.doc,
-        title: legal.title,
-        body: rendered.html,
-        updatedAt,
-      },
-    ]);
-  }
-
-  return { legalOut, docs };
+  return {
+    legalOut: items.map((i) => i.summary),
+    docs: items.map((i) => i.doc),
+  };
 }
 
 /**

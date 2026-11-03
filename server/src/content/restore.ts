@@ -129,40 +129,51 @@ async function restoreIdentityAndDocs(
     })
     .where(eq(siteProfile.id, true));
 
+  const docRows: { section: string; locale: Locale; data: unknown }[] = [];
+  const resumeWrites: Promise<unknown>[] = [];
+
   for (const [locale, content] of byLocale) {
-    const sections: { section: string; data: unknown }[] = [
-      { section: "ui", data: content.ui },
-      { section: "seo", data: content.seo },
-    ];
+    docRows.push(
+      { section: "ui", locale, data: content.ui },
+      { section: "seo", locale, data: content.seo },
+    );
     for (const legal of ["imprint", "privacy"] as const) {
       const doc = docs.get(locale)?.get(docKey("legal", legal));
       if (doc?.kind === "legal") {
-        sections.push({ section: legal, data: { title: doc.title, body: unrenderBody(doc.body) } });
+        docRows.push({
+          section: legal,
+          locale,
+          data: { title: doc.title, body: unrenderBody(doc.body) },
+        });
       }
     }
-    for (const { section, data } of sections) {
-      await tx
+
+    const resumeId = content.identity.resume ? media.get(content.identity.resume.href) : undefined;
+    resumeWrites.push(
+      resumeId
+        ? tx
+            .insert(profileResumes)
+            .values({ locale, mediaId: resumeId, updatedAt: now })
+            .onConflictDoUpdate({
+              target: profileResumes.locale,
+              set: { mediaId: resumeId, updatedAt: now },
+            })
+        : tx.delete(profileResumes).where(eq(profileResumes.locale, locale)),
+    );
+  }
+
+  await Promise.all([
+    ...docRows.map(({ section, locale, data }) =>
+      tx
         .insert(contentDocuments)
         .values({ section, locale, data, updatedAt: now, updatedBy })
         .onConflictDoUpdate({
           target: [contentDocuments.section, contentDocuments.locale],
           set: { data, updatedAt: now, updatedBy },
-        });
-    }
-
-    const resumeId = content.identity.resume ? media.get(content.identity.resume.href) : undefined;
-    if (resumeId) {
-      await tx
-        .insert(profileResumes)
-        .values({ locale, mediaId: resumeId, updatedAt: now })
-        .onConflictDoUpdate({
-          target: profileResumes.locale,
-          set: { mediaId: resumeId, updatedAt: now },
-        });
-    } else {
-      await tx.delete(profileResumes).where(eq(profileResumes.locale, locale));
-    }
-  }
+        }),
+    ),
+    ...resumeWrites,
+  ]);
 }
 
 async function restoreSocials(
@@ -174,31 +185,56 @@ async function restoreSocials(
     .select({ id: socials.id, label: socials.label, href: socials.href })
     .from(socials);
   const keptSocials = new Set<string>();
+  const updates: {
+    id: string;
+    icon: string;
+    position: number;
+    isVisible: boolean;
+    updatedAt: Date;
+  }[] = [];
+  const inserts: {
+    label: string;
+    href: string;
+    icon: string;
+    position: number;
+    isVisible: boolean;
+  }[] = [];
+
   for (const [position, social] of baseSocials.entries()) {
     const match = existingSocials.find(
       (row) => row.label === social.label && row.href === social.href && !keptSocials.has(row.id),
     );
     if (match) {
-      await tx
-        .update(socials)
-        .set({ icon: social.icon, position, isVisible: true, updatedAt: now })
-        .where(eq(socials.id, match.id));
+      updates.push({ id: match.id, icon: social.icon, position, isVisible: true, updatedAt: now });
       keptSocials.add(match.id);
     } else {
-      const [inserted] = await tx
-        .insert(socials)
-        .values({ ...social, position, isVisible: true })
-        .returning({ id: socials.id });
-      if (inserted) keptSocials.add(inserted.id);
+      inserts.push({ ...social, position, isVisible: true });
     }
   }
+
   const hiddenSocials = existingSocials.filter((row) => !keptSocials.has(row.id));
-  for (const [offset, row] of hiddenSocials.entries()) {
-    await tx
-      .update(socials)
-      .set({ isVisible: false, position: baseSocials.length + offset, updatedAt: now })
-      .where(eq(socials.id, row.id));
-  }
+  const hideUpdates = hiddenSocials.map((row, offset) => ({
+    id: row.id,
+    isVisible: false,
+    position: baseSocials.length + offset,
+    updatedAt: now,
+  }));
+
+  await Promise.all([
+    ...updates.map((u) =>
+      tx
+        .update(socials)
+        .set({ icon: u.icon, position: u.position, isVisible: u.isVisible, updatedAt: u.updatedAt })
+        .where(eq(socials.id, u.id)),
+    ),
+    ...hideUpdates.map((u) =>
+      tx
+        .update(socials)
+        .set({ isVisible: u.isVisible, position: u.position, updatedAt: u.updatedAt })
+        .where(eq(socials.id, u.id)),
+    ),
+    ...(inserts.length > 0 ? [tx.insert(socials).values(inserts)] : []),
+  ]);
 }
 
 async function restoreSkills(
@@ -207,43 +243,68 @@ async function restoreSkills(
   now: Date,
 ): Promise<void> {
   const existingSkills = await tx.select({ id: skills.id }).from(skills);
-  for (const [position, skill] of base.skills.entries()) {
-    const shared = {
-      icon: skill.icon,
-      span: skill.span,
-      items: skill.items,
-      position,
-      isVisible: true,
-    };
-    await tx
-      .insert(skills)
-      .values({ id: skill.id, ...shared })
-      .onConflictDoUpdate({ target: skills.id, set: { ...shared, updatedAt: now } });
 
+  const skillRows = base.skills.map((skill, position) => ({
+    id: skill.id,
+    icon: skill.icon,
+    span: skill.span,
+    items: skill.items,
+    position,
+    isVisible: true,
+  }));
+
+  const translationRows: {
+    skillId: string;
+    locale: Locale;
+    title: string;
+    caption: string;
+    narrative: string;
+  }[] = [];
+
+  for (const skill of base.skills) {
     for (const [locale, content] of byLocale) {
       const translated = content.skills.find((s) => s.id === skill.id);
       if (!translated) continue;
-      const text = {
+      translationRows.push({
+        skillId: skill.id,
+        locale,
         title: translated.title,
         caption: translated.caption,
         narrative: translated.narrative,
-      };
-      await tx
-        .insert(skillTranslations)
-        .values({ skillId: skill.id, locale, ...text })
-        .onConflictDoUpdate({
-          target: [skillTranslations.skillId, skillTranslations.locale],
-          set: text,
-        });
+      });
     }
   }
+
   const restoredSkillIds = new Set(base.skills.map((s) => s.id));
   const hiddenSkills = existingSkills.filter((row) => !restoredSkillIds.has(row.id));
-  for (const [offset, row] of hiddenSkills.entries()) {
-    await tx
-      .update(skills)
-      .set({ isVisible: false, position: base.skills.length + offset, updatedAt: now })
-      .where(eq(skills.id, row.id));
+
+  await Promise.all([
+    ...skillRows.map((s) =>
+      tx
+        .insert(skills)
+        .values(s)
+        .onConflictDoUpdate({ target: skills.id, set: { ...s, updatedAt: now } }),
+    ),
+    ...hiddenSkills.map((row, offset) =>
+      tx
+        .update(skills)
+        .set({ isVisible: false, position: base.skills.length + offset, updatedAt: now })
+        .where(eq(skills.id, row.id)),
+    ),
+  ]);
+
+  if (translationRows.length > 0) {
+    await Promise.all(
+      translationRows.map((t) =>
+        tx
+          .insert(skillTranslations)
+          .values(t)
+          .onConflictDoUpdate({
+            target: [skillTranslations.skillId, skillTranslations.locale],
+            set: { title: t.title, caption: t.caption, narrative: t.narrative },
+          }),
+      ),
+    );
   }
 }
 
@@ -255,9 +316,9 @@ async function restoreProjectTranslations(
   projectDoc: (locale: Locale, slug: string) => ProjectDoc | undefined,
   now: Date,
 ): Promise<void> {
-  for (const [locale, content] of byLocale) {
+  const operations = [...byLocale.entries()].flatMap(([locale, content]) => {
     const translated = content.projects.find((p) => p.slug === slug);
-    if (!translated) continue;
+    if (!translated) return [];
     const doc = projectDoc(locale, slug);
     const text = {
       name: translated.name,
@@ -277,14 +338,18 @@ async function restoreProjectTranslations(
       glossary: doc?.glossary ?? [],
       updatedAt: now,
     };
-    await tx
-      .insert(projectTranslations)
-      .values({ projectId, locale, ...text })
-      .onConflictDoUpdate({
-        target: [projectTranslations.projectId, projectTranslations.locale],
-        set: text,
-      });
-  }
+    return [
+      tx
+        .insert(projectTranslations)
+        .values({ projectId, locale, ...text })
+        .onConflictDoUpdate({
+          target: [projectTranslations.projectId, projectTranslations.locale],
+          set: text,
+        }),
+    ];
+  });
+
+  await Promise.all(operations);
 }
 
 async function restoreProjectGallery(
@@ -325,41 +390,47 @@ async function restoreProjects(
   ]);
 
   const existingProjects = await tx.select({ id: projects.id, slug: projects.slug }).from(projects);
-  for (const [position, project] of base.projects.entries()) {
-    const shared = {
-      // A cover without an asset (a pre-v2 `/projects/*.svg` placeholder) has
-      // nowhere to go in the draft; the project comes back without one.
-      coverId: project.cover ? (media.get(project.cover.src) ?? null) : null,
-      stack: project.stack,
-      linkLive: project.links.live,
-      linkRepo: project.links.repo,
-      linkCaseStudy: project.links.caseStudy,
-      featured: project.featured,
-      periodStart: project.period?.start ?? null,
-      periodEnd: project.period?.end ?? null,
-      category: project.category?.key ?? null,
-      tags: project.tags,
-      position,
-      isVisible: true,
-    };
-    const [row] = await tx
-      .insert(projects)
-      .values({ slug: project.slug, ...shared })
-      .onConflictDoUpdate({ target: projects.slug, set: { ...shared, updatedAt: now } })
-      .returning({ id: projects.id });
-    if (!row) throw new Error(`failed to restore project "${project.slug}"`);
+  await Promise.all(
+    base.projects.map(async (project, position) => {
+      const shared = {
+        // A cover without an asset (a pre-v2 `/projects/*.svg` placeholder) has
+        // nowhere to go in the draft; the project comes back without one.
+        coverId: project.cover ? (media.get(project.cover.src) ?? null) : null,
+        stack: project.stack,
+        linkLive: project.links.live,
+        linkRepo: project.links.repo,
+        linkCaseStudy: project.links.caseStudy,
+        featured: project.featured,
+        periodStart: project.period?.start ?? null,
+        periodEnd: project.period?.end ?? null,
+        category: project.category?.key ?? null,
+        tags: project.tags,
+        position,
+        isVisible: true,
+      };
+      const [row] = await tx
+        .insert(projects)
+        .values({ slug: project.slug, ...shared })
+        .onConflictDoUpdate({ target: projects.slug, set: { ...shared, updatedAt: now } })
+        .returning({ id: projects.id });
+      if (!row) throw new Error(`failed to restore project "${project.slug}"`);
 
-    await restoreProjectTranslations(tx, row.id, project.slug, byLocale, projectDoc, now);
-    await restoreProjectGallery(tx, row.id, project.slug, media, projectDoc);
-  }
+      await Promise.all([
+        restoreProjectTranslations(tx, row.id, project.slug, byLocale, projectDoc, now),
+        restoreProjectGallery(tx, row.id, project.slug, media, projectDoc),
+      ]);
+    }),
+  );
   const restoredSlugs = new Set(base.projects.map((p) => p.slug));
   const hiddenProjects = existingProjects.filter((row) => !restoredSlugs.has(row.slug));
-  for (const [offset, row] of hiddenProjects.entries()) {
-    await tx
-      .update(projects)
-      .set({ isVisible: false, position: base.projects.length + offset, updatedAt: now })
-      .where(eq(projects.id, row.id));
-  }
+  await Promise.all(
+    hiddenProjects.map((row, offset) =>
+      tx
+        .update(projects)
+        .set({ isVisible: false, position: base.projects.length + offset, updatedAt: now })
+        .where(eq(projects.id, row.id)),
+    ),
+  );
 }
 
 async function restoreExperiences(
@@ -371,45 +442,69 @@ async function restoreExperiences(
     tx,
     base.experiences.map((e) => e.org.logo?.src),
   );
-  for (const [position, entry] of base.experiences.entries()) {
-    const values = {
-      kind: entry.kind,
-      orgName: entry.org.name,
-      orgUrl: entry.org.url || null,
-      logoId: entry.org.logo ? (media.get(entry.org.logo.src) ?? null) : null,
-      location: entry.location,
-      employmentType: entry.employmentType,
-      startDate: entry.period.start,
-      endDate: entry.period.end,
-      datePrecision: entry.period.precision,
-      credentialId: entry.credential?.id || null,
-      credentialUrl: entry.credential?.url || null,
-      skills: entry.skills,
-      position,
-      isVisible: true,
-    };
-    await tx
-      .insert(experiences)
-      .values({ id: entry.id, ...values })
-      .onConflictDoUpdate({ target: experiences.id, set: { ...values, updatedAt: now } });
+  const experienceRows = base.experiences.map((entry, position) => ({
+    id: entry.id,
+    kind: entry.kind,
+    orgName: entry.org.name,
+    orgUrl: entry.org.url || null,
+    logoId: entry.org.logo ? (media.get(entry.org.logo.src) ?? null) : null,
+    location: entry.location,
+    employmentType: entry.employmentType,
+    startDate: entry.period.start,
+    endDate: entry.period.end,
+    datePrecision: entry.period.precision,
+    credentialId: entry.credential?.id || null,
+    credentialUrl: entry.credential?.url || null,
+    skills: entry.skills,
+    position,
+    isVisible: true,
+  }));
 
+  const translationRows: {
+    experienceId: string;
+    locale: Locale;
+    title: string;
+    summary: string;
+    highlights: string[];
+    updatedAt: Date;
+  }[] = [];
+
+  for (const entry of base.experiences) {
     for (const [locale, content] of byLocale) {
       const translated = content.experiences.find((e) => e.id === entry.id);
       if (!translated) continue;
-      const text = {
+      translationRows.push({
+        experienceId: entry.id,
+        locale,
         title: translated.title,
         summary: translated.summary,
         highlights: translated.highlights,
         updatedAt: now,
-      };
-      await tx
-        .insert(experienceTranslations)
-        .values({ experienceId: entry.id, locale, ...text })
-        .onConflictDoUpdate({
-          target: [experienceTranslations.experienceId, experienceTranslations.locale],
-          set: text,
-        });
+      });
     }
+  }
+
+  await Promise.all(
+    experienceRows.map((values) =>
+      tx
+        .insert(experiences)
+        .values(values)
+        .onConflictDoUpdate({ target: experiences.id, set: { ...values, updatedAt: now } }),
+    ),
+  );
+
+  if (translationRows.length > 0) {
+    await Promise.all(
+      translationRows.map((text) =>
+        tx
+          .insert(experienceTranslations)
+          .values(text)
+          .onConflictDoUpdate({
+            target: [experienceTranslations.experienceId, experienceTranslations.locale],
+            set: text,
+          }),
+      ),
+    );
   }
   const restoredIds = base.experiences.map((e) => e.id);
   await tx
@@ -440,41 +535,45 @@ async function restorePosts(tx: DbExecutor, { byLocale, docs }: Sources, now: Da
     [...shown.values()].flatMap((list) => list.map((p) => p.doc.cover?.src)),
   );
 
-  for (const [slug, versions] of shown) {
-    const first = versions[0]!.doc;
-    const values = {
-      status: "published",
-      publishedAt: new Date(first.publishedAt),
-      coverId: first.cover ? (media.get(first.cover.src) ?? null) : null,
-      tags: first.tags,
-      canonicalUrl: first.canonicalUrl,
-      updatedAt: now,
-    };
-    const [row] = await tx
-      .insert(posts)
-      .values({ slug, ...values })
-      .onConflictDoUpdate({ target: posts.slug, set: values })
-      .returning({ id: posts.id });
-    if (!row) throw new Error(`failed to restore post "${slug}"`);
-
-    for (const { locale, doc } of versions) {
-      const text = {
-        title: doc.title,
-        excerpt: doc.excerpt,
-        body: unrenderBody(doc.body),
-        seoTitle: doc.seo.title,
-        seoDescription: doc.seo.description,
+  await Promise.all(
+    [...shown.entries()].map(async ([slug, versions]) => {
+      const first = versions[0]!.doc;
+      const values = {
+        status: "published" as const,
+        publishedAt: new Date(first.publishedAt),
+        coverId: first.cover ? (media.get(first.cover.src) ?? null) : null,
+        tags: first.tags,
+        canonicalUrl: first.canonicalUrl,
         updatedAt: now,
       };
-      await tx
-        .insert(postTranslations)
-        .values({ postId: row.id, locale, ...text })
-        .onConflictDoUpdate({
-          target: [postTranslations.postId, postTranslations.locale],
-          set: text,
-        });
-    }
-  }
+      const [row] = await tx
+        .insert(posts)
+        .values({ slug, ...values })
+        .onConflictDoUpdate({ target: posts.slug, set: values })
+        .returning({ id: posts.id });
+      if (!row) throw new Error(`failed to restore post "${slug}"`);
+
+      await Promise.all(
+        versions.map(({ locale, doc }) => {
+          const text = {
+            title: doc.title,
+            excerpt: doc.excerpt,
+            body: unrenderBody(doc.body),
+            seoTitle: doc.seo.title,
+            seoDescription: doc.seo.description,
+            updatedAt: now,
+          };
+          return tx
+            .insert(postTranslations)
+            .values({ postId: row.id, locale, ...text })
+            .onConflictDoUpdate({
+              target: [postTranslations.postId, postTranslations.locale],
+              set: text,
+            });
+        }),
+      );
+    }),
+  );
 
   const restoredSlugs = [...shown.keys()];
   await tx

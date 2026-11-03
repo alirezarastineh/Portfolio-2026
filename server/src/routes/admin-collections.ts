@@ -370,11 +370,13 @@ adminCollectionsRouter.post("/skills", async (c) => {
         .where(eq(skills.id, skill.id));
       if (existing) throw new InputError(409, "duplicate_id");
       await tx.insert(skills).values({ ...skill, position: await nextPosition(tx, skills) });
-      for (const locale of LOCALES) {
-        await tx
-          .insert(skillTranslations)
-          .values({ skillId: skill.id, locale, ...translations[locale] });
-      }
+      await tx.insert(skillTranslations).values(
+        LOCALES.map((locale) => ({
+          skillId: skill.id,
+          locale,
+          ...translations[locale],
+        })),
+      );
     });
   } catch (error) {
     return respond(c, error, "duplicate_id");
@@ -406,15 +408,23 @@ adminCollectionsRouter.put("/skills/:id", async (c) => {
       .returning({ id: skills.id });
     if (!row) return false;
 
-    for (const locale of LOCALES) {
-      await tx
-        .insert(skillTranslations)
-        .values({ skillId: id, locale, ...translations[locale] })
-        .onConflictDoUpdate({
-          target: [skillTranslations.skillId, skillTranslations.locale],
-          set: translations[locale],
-        });
-    }
+    await tx
+      .insert(skillTranslations)
+      .values(
+        LOCALES.map((locale) => ({
+          skillId: id,
+          locale,
+          ...translations[locale],
+        })),
+      )
+      .onConflictDoUpdate({
+        target: [skillTranslations.skillId, skillTranslations.locale],
+        set: {
+          title: sql`excluded.title`,
+          caption: sql`excluded.caption`,
+          narrative: sql`excluded.narrative`,
+        },
+      });
     return true;
   });
 
@@ -552,20 +562,22 @@ async function writeProject(tx: Tx, id: string | null, data: ProjectData): Promi
   const storedTexts = id
     ? await tx.select().from(projectTranslations).where(eq(projectTranslations.projectId, id))
     : [];
-  for (const locale of LOCALES) {
-    const stored = storedTexts.find((row) => row.locale === locale);
-    const text = {
-      ...data.translations[locale],
-      updatedAt: editedAt(stored, data.translations[locale], now),
-    };
-    await tx
-      .insert(projectTranslations)
-      .values({ projectId, locale, ...text })
-      .onConflictDoUpdate({
-        target: [projectTranslations.projectId, projectTranslations.locale],
-        set: text,
-      });
-  }
+  await Promise.all(
+    LOCALES.map((locale) => {
+      const stored = storedTexts.find((row) => row.locale === locale);
+      const text = {
+        ...data.translations[locale],
+        updatedAt: editedAt(stored, data.translations[locale], now),
+      };
+      return tx
+        .insert(projectTranslations)
+        .values({ projectId, locale, ...text })
+        .onConflictDoUpdate({
+          target: [projectTranslations.projectId, projectTranslations.locale],
+          set: text,
+        });
+    }),
+  );
 
   await tx.delete(projectGallery).where(eq(projectGallery.projectId, projectId));
   if (data.gallery.length > 0) {
@@ -695,20 +707,22 @@ async function writeExperience(
         .from(experienceTranslations)
         .where(eq(experienceTranslations.experienceId, id))
     : [];
-  for (const locale of LOCALES) {
-    const stored = storedTexts.find((row) => row.locale === locale);
-    const text = {
-      ...translations[locale],
-      updatedAt: editedAt(stored, translations[locale], now),
-    };
-    await tx
-      .insert(experienceTranslations)
-      .values({ experienceId, locale, ...text })
-      .onConflictDoUpdate({
-        target: [experienceTranslations.experienceId, experienceTranslations.locale],
-        set: text,
-      });
-  }
+  await Promise.all(
+    LOCALES.map((locale) => {
+      const stored = storedTexts.find((row) => row.locale === locale);
+      const text = {
+        ...translations[locale],
+        updatedAt: editedAt(stored, translations[locale], now),
+      };
+      return tx
+        .insert(experienceTranslations)
+        .values({ experienceId, locale, ...text })
+        .onConflictDoUpdate({
+          target: [experienceTranslations.experienceId, experienceTranslations.locale],
+          set: text,
+        });
+    }),
+  );
   return experienceId;
 }
 
@@ -840,24 +854,25 @@ async function writePost(tx: Tx, id: string | null, data: PostData): Promise<str
   const storedTexts = id
     ? await tx.select().from(postTranslations).where(eq(postTranslations.postId, id))
     : [];
-  for (const locale of LOCALES) {
-    const translation = data.translations[locale];
-    if (translation) {
-      const stored = storedTexts.find((row) => row.locale === locale);
-      const text = { ...translation, updatedAt: editedAt(stored, translation, now) };
-      await tx
-        .insert(postTranslations)
-        .values({ postId, locale, ...text })
-        .onConflictDoUpdate({
-          target: [postTranslations.postId, postTranslations.locale],
-          set: text,
-        });
-    } else {
-      await tx
+  await Promise.all(
+    LOCALES.map((locale) => {
+      const translation = data.translations[locale];
+      if (translation) {
+        const stored = storedTexts.find((row) => row.locale === locale);
+        const text = { ...translation, updatedAt: editedAt(stored, translation, now) };
+        return tx
+          .insert(postTranslations)
+          .values({ postId, locale, ...text })
+          .onConflictDoUpdate({
+            target: [postTranslations.postId, postTranslations.locale],
+            set: text,
+          });
+      }
+      return tx
         .delete(postTranslations)
         .where(and(eq(postTranslations.postId, postId), eq(postTranslations.locale, locale)));
-    }
-  }
+    }),
+  );
   return postId;
 }
 
