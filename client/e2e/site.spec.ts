@@ -95,7 +95,7 @@ test.describe("home", () => {
     await expect(about.locator("dt")).toHaveText(["Based in", "Shipping since", "Status"]);
     await expect(about.locator("dd")).toHaveText([
       "Remote",
-      "2021",
+      "2018",
       "Open to senior AI / full-stack roles",
     ]);
   });
@@ -124,7 +124,9 @@ test.describe("home", () => {
 
   test("a project without a case study opens its details in place", async ({ page }) => {
     await page.goto("/en");
-    const card = page.locator("#projects li").filter({ hasText: "Project Three" });
+    const card = page
+      .locator("#projects li")
+      .filter({ hasText: "Release gate for prompt changes" });
     await expect(card.getByRole("link", { name: /Read case study/ })).toHaveCount(0);
     const details = card.locator("details");
     await details.locator("summary").click();
@@ -321,8 +323,8 @@ test.describe("command palette", () => {
     const input = dialog.getByRole("combobox");
     await expect(input).toBeFocused();
 
-    await input.fill("project one");
-    await expect(dialog.getByRole("option")).toHaveText(["TODO: Project One"]);
+    await input.fill("atlas");
+    await expect(dialog.getByRole("option")).toHaveText(["Atlas"]);
     await expect(input).toHaveAttribute("aria-activedescendant", "palette-work-project-one");
     await page.keyboard.press("Enter");
 

@@ -107,7 +107,7 @@ test.describe("site navigation", () => {
   }) => {
     await page.goto("/en/legal/imprint");
     const work = page.getByRole("navigation", { name: "Work", exact: true });
-    await expect(work.getByRole("link", { name: "TODO: Project One" })).toHaveAttribute(
+    await expect(work.getByRole("link", { name: "Atlas" })).toHaveAttribute(
       "href",
       "/en/work/project-one",
     );

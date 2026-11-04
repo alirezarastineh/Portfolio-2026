@@ -1,6 +1,8 @@
-// Test content for the e2e suite and Lighthouse: the bundled fallback, plus
-// what the fallback has none of — case studies, experience, posts and a CV —
-// so every public page renders. Deliberately uneven, the way real content is:
+// Test content for the e2e suite and Lighthouse: the bundled fallback, with
+// realistic text for its placeholder projects (real-length names, metrics with
+// context, a long German name), plus what the fallback has none of — case
+// studies, experience, posts and a CV — so every public page renders, and
+// design work sees real lengths. Deliberately uneven, the way real content is:
 // `project-two` has a case study in English only, and `notes-on-evals` is an
 // English-only post, which exercises hreflang and the language switch.
 //
@@ -39,9 +41,72 @@ const COPY = {
     category: "AI platform",
     metrics: [
       { value: "−42%", label: "p95 latency", context: "after response caching" },
-      { value: "3.1×", label: "throughput per node" },
-      { value: "99.95%", label: "uptime over 12 months" },
+      { value: "3.1×", label: "throughput per node", context: "same hardware, with batching" },
+      { value: "99.95%", label: "uptime over 12 months", context: "against a 99.9% target" },
     ],
+    projects: {
+      one: {
+        name: "Atlas",
+        descriptor: "Retrieval platform for support teams",
+        hook: "Answers support agents' questions from 40,000 internal documents, with a source for every claim.",
+        problem:
+          "<p>Agents searched four wikis and a ticket archive by hand. A hard question took 25 minutes, and new hires escalated half of them.</p>",
+        aiArchitecture:
+          "<p>Hybrid retrieval, BM25 for names and embeddings for meaning, then a reranker. The answer model must cite a retrieved passage for every sentence. I rejected fine-tuning: the documents change every week.</p>",
+        fullStackInfra:
+          "<p>A TypeScript API beside Postgres with pgvector, ingestion on a queue with retries, and an Angular client inside the help desk, deployed on Kubernetes.</p>",
+        outcomes: [
+          "p95 latency down from 2.4 s to 1.4 s after response caching",
+          "61% of questions answered without an escalation",
+          "30% more tickets handled by the same team",
+        ],
+        alt: "Atlas answering a question with three cited sources",
+      },
+      two: {
+        name: "Supplier catalogue ingestion",
+        descriptor: "Streaming imports with idempotent writes",
+        hook: "Brings product records from twelve suppliers into one catalogue within minutes instead of overnight.",
+        problem:
+          "<p>Nightly CSV imports from twelve suppliers failed silently, so prices in the shop were up to a day out of date.</p>",
+        aiArchitecture:
+          "<p>A small model maps each supplier's columns to the catalogue's schema. A mapping it is unsure of waits for a person before it applies.</p>",
+        fullStackInfra:
+          "<p>Node.js workers on a Redis stream, idempotent writes into Postgres, and an Angular screen for reviewing mappings.</p>",
+        outcomes: [
+          "Prices current within 5 minutes instead of 24 hours",
+          "Twelve suppliers on one import path",
+          "Backfills replay through the same pipeline",
+        ],
+        metrics: [
+          { value: "5 min", label: "from supplier to shop", context: "down from 24 hours" },
+        ],
+        alt: "The mapping review screen, one column awaiting approval",
+      },
+      three: {
+        name: "Release gate for prompt changes",
+        descriptor: "Evals that block a worse release",
+        hook: "Runs 300 graded questions against every prompt change and blocks a release that scores below the last one.",
+        problem:
+          "<p>Prompt edits shipped on a feeling. Twice in one quarter a change made answers worse, and customers noticed first.</p>",
+        aiArchitecture:
+          "<p>A fixed question set with graded reference answers, an LLM judge calibrated against human labels, and a pairwise comparison with the current release.</p>",
+        fullStackInfra:
+          "<p>Python runners in CI, results in Postgres, and a report linked from every pull request.</p>",
+        outcomes: [
+          "No regression shipped since the gate went live",
+          "300 questions graded in 4 minutes",
+          "The judge agrees with people on 92% of pairs",
+        ],
+        metrics: [
+          {
+            value: "300",
+            label: "graded questions per change",
+            context: "in 4 minutes, on every pull request",
+          },
+        ],
+        alt: "An eval report comparing a prompt change with the current release",
+      },
+    },
     caseStudy: {
       toc: [
         { id: "architecture-decisions", text: "Architecture decisions", level: 2 },
@@ -77,6 +142,20 @@ const COPY = {
         summary: "Shipped the customer portal and its API.",
         highlights: ["Moved deploys from weekly to daily"],
       },
+      aiEngineer: {
+        title: "AI Engineer",
+        summary: "Built the first document classifier for incoming freight papers.",
+        highlights: [
+          "Classified 80% of documents without a manual check",
+          "Moved the model from a notebook to a monitored service",
+          "Cut sorting time per shipment from 6 to 2 minutes",
+        ],
+      },
+      student: {
+        title: "Working student, data engineering",
+        summary: "Kept the research group's data pipelines running.",
+        highlights: ["Automated 14 weekly exports"],
+      },
       degree: {
         title: "M.Sc. Computer Science",
         summary: "Thesis on retrieval evaluation.",
@@ -103,9 +182,73 @@ const COPY = {
     category: "KI-Plattform",
     metrics: [
       { value: "−42 %", label: "p95-Latenz", context: "nach Response-Caching" },
-      { value: "3,1×", label: "Durchsatz pro Node" },
-      { value: "99,95 %", label: "Verfügbarkeit über 12 Monate" },
+      { value: "3,1×", label: "Durchsatz pro Node", context: "gleiche Hardware, mit Batching" },
+      { value: "99,95 %", label: "Verfügbarkeit über 12 Monate", context: "bei 99,9 % Zielwert" },
     ],
+    projects: {
+      one: {
+        name: "Atlas",
+        descriptor: "Retrieval-Plattform für Supportteams",
+        hook: "Beantwortet Fragen des Supports aus 40.000 internen Dokumenten, mit einer Quelle für jede Aussage.",
+        problem:
+          "<p>Der Support durchsuchte vier Wikis und ein Ticketarchiv von Hand. Eine schwierige Frage dauerte 25 Minuten, und neue Kolleginnen und Kollegen eskalierten die Hälfte.</p>",
+        aiArchitecture:
+          "<p>Hybride Suche, BM25 für Namen und Embeddings für Bedeutung, danach ein Reranker. Das Antwortmodell belegt jeden Satz mit einer gefundenen Passage. Fine-Tuning habe ich verworfen: Die Dokumente ändern sich jede Woche.</p>",
+        fullStackInfra:
+          "<p>Eine TypeScript-API neben Postgres mit pgvector, Ingestion über eine Queue mit Wiederholungen und ein Angular-Client im Helpdesk, betrieben auf Kubernetes.</p>",
+        outcomes: [
+          "p95-Latenz nach Response-Caching von 2,4 s auf 1,4 s gesenkt",
+          "61 % der Fragen ohne Eskalation beantwortet",
+          "30 % mehr Tickets mit demselben Team bearbeitet",
+        ],
+        alt: "Atlas beantwortet eine Frage mit drei belegten Quellen",
+      },
+      two: {
+        // The long German name: it must wrap without pushing the page sideways.
+        name: "Lieferanten-Datenintegration für den Produktkatalog",
+        descriptor: "Streaming-Importe mit idempotenten Schreibvorgängen",
+        hook: "Bringt Produktdaten von zwölf Lieferanten in Minuten statt über Nacht in einen gemeinsamen Katalog.",
+        problem:
+          "<p>Nächtliche CSV-Importe von zwölf Lieferanten scheiterten unbemerkt, deshalb waren die Preise im Shop bis zu einen Tag alt.</p>",
+        aiArchitecture:
+          "<p>Ein kleines Modell ordnet die Spalten jedes Lieferanten dem Katalogschema zu. Ist es unsicher, prüft ein Mensch die Zuordnung, bevor sie gilt.</p>",
+        fullStackInfra:
+          "<p>Node.js-Worker auf einem Redis-Stream, idempotente Schreibvorgänge in Postgres und eine Angular-Oberfläche zum Prüfen der Zuordnungen.</p>",
+        outcomes: [
+          "Preise nach 5 Minuten aktuell statt nach 24 Stunden",
+          "Zwölf Lieferanten auf einem Importweg",
+          "Nachträge laufen durch dieselbe Pipeline",
+        ],
+        metrics: [
+          { value: "5 Min.", label: "vom Lieferanten in den Shop", context: "statt 24 Stunden" },
+        ],
+        alt: "Die Prüfansicht der Zuordnungen, eine Spalte wartet auf Freigabe",
+      },
+      three: {
+        name: "Freigabeprüfung für Prompt-Änderungen",
+        descriptor: "Evals, die schlechtere Releases stoppen",
+        hook: "Prüft jede Prompt-Änderung mit 300 bewerteten Fragen und stoppt ein Release, das schlechter abschneidet als das letzte.",
+        problem:
+          "<p>Prompt-Änderungen gingen nach Gefühl live. Zweimal in einem Quartal wurden die Antworten schlechter, und die Kundschaft merkte es zuerst.</p>",
+        aiArchitecture:
+          "<p>Ein fester Fragensatz mit bewerteten Referenzantworten, ein LLM-Judge, kalibriert an menschlichen Bewertungen, und ein paarweiser Vergleich mit dem aktuellen Release.</p>",
+        fullStackInfra:
+          "<p>Python-Runner in der CI, Ergebnisse in Postgres und ein Bericht an jedem Pull Request.</p>",
+        outcomes: [
+          "Seit dem Start der Prüfung keine Regression ausgeliefert",
+          "300 Fragen in 4 Minuten bewertet",
+          "Der Judge stimmt bei 92 % der Paare mit Menschen überein",
+        ],
+        metrics: [
+          {
+            value: "300",
+            label: "bewertete Fragen pro Änderung",
+            context: "in 4 Minuten, bei jedem Pull Request",
+          },
+        ],
+        alt: "Ein Eval-Bericht vergleicht eine Prompt-Änderung mit dem aktuellen Release",
+      },
+    },
     caseStudy: {
       toc: [
         { id: "architekturentscheidungen", text: "Architekturentscheidungen", level: 2 },
@@ -139,6 +282,20 @@ const COPY = {
         title: "Full-Stack-Engineer",
         summary: "Kundenportal und API ausgeliefert.",
         highlights: ["Deploys von wöchentlich auf täglich umgestellt"],
+      },
+      aiEngineer: {
+        title: "AI Engineer",
+        summary: "Baute den ersten Dokumentenklassifikator für eingehende Frachtpapiere.",
+        highlights: [
+          "80 % der Dokumente ohne manuelle Prüfung klassifiziert",
+          "Das Modell vom Notebook in einen überwachten Service überführt",
+          "Sortierzeit pro Sendung von 6 auf 2 Minuten gesenkt",
+        ],
+      },
+      student: {
+        title: "Werkstudent Data Engineering",
+        summary: "Hielt die Datenpipelines der Forschungsgruppe am Laufen.",
+        highlights: ["14 wöchentliche Exporte automatisiert"],
       },
       degree: {
         title: "M.Sc. Informatik",
@@ -219,6 +376,18 @@ function experiences(locale) {
       employmentType: "contract",
       period: { start: "2021-01-01", end: "2024-02-01", precision: "month" },
     }),
+    entry("55555555-5555-4555-8555-555555555555", "work", copy.aiEngineer, {
+      org: { name: "Muster Logistik GmbH", url: "", logo: null },
+      location: "Hamburg",
+      employmentType: "full-time",
+      period: { start: "2020-02-01", end: "2020-12-01", precision: "month" },
+      skills: ["Python", "scikit-learn"],
+    }),
+    entry("66666666-6666-4666-8666-666666666666", "work", copy.student, {
+      org: { name: "Example Research Lab", url: "", logo: null },
+      employmentType: "part-time",
+      period: { start: "2018-04-01", end: "2019-12-01", precision: "month" },
+    }),
     entry("33333333-3333-4333-8333-333333333333", "education", copy.degree, {
       org: { name: "TU Example", url: "", logo: null },
       period: { start: "2018-01-01", end: "2020-01-01", precision: "year" },
@@ -231,18 +400,21 @@ function experiences(locale) {
   ];
 }
 
+/** A fallback project with this language's realistic text in place of its placeholders. */
+const realistic = (base, { alt, ...text }) => ({ ...base, ...text, cover: { ...base.cover, alt } });
+
 /** The core payload `/v2/content/:locale` serves. */
 export function fixtureCore(locale) {
   const base = read(`fallback.${locale}.json`);
   const copy = COPY[locale];
-  const [one, two, ...rest] = base.projects;
+  const [one, two, three, ...rest] = base.projects;
   return {
     ...base,
     ui: { ...base.ui, about: { ...base.ui.about, bio: copy.bio } },
     identity: { ...base.identity, resume: { href: "/media/fixture-cv.pdf", bytes: 48_213 } },
     projects: [
       {
-        ...one,
+        ...realistic(one, copy.projects.one),
         hasCaseStudy: true,
         featured: true,
         period: { start: "2025-02-01", end: null },
@@ -252,7 +424,8 @@ export function fixtureCore(locale) {
         metrics: copy.metrics,
         updatedAt: UPDATED,
       },
-      { ...two, hasCaseStudy: locale === "en", updatedAt: UPDATED },
+      { ...realistic(two, copy.projects.two), hasCaseStudy: locale === "en", updatedAt: UPDATED },
+      realistic(three, copy.projects.three),
       ...rest,
     ],
     experiences: experiences(locale),

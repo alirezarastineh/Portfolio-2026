@@ -223,7 +223,7 @@ test.describe("case study", () => {
     await expectPaper(page, [
       main.locator("aside"),
       main.getByRole("link", { name: /Next project/ }),
-      main.getByRole("button", { name: "Ask about TODO: Project One" }),
+      main.getByRole("button", { name: "Ask about Atlas" }),
       main.getByRole("button", { name: "Copy" }),
       // What the browser adds to ask about a section or a code block (visitor plan V9).
       main.getByRole("button", { name: "Ask about this section: Problem" }),

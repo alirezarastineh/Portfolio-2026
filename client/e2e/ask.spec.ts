@@ -155,7 +155,7 @@ const MAP_EN = {
     {
       id: "project:project-one@en",
       kind: "project",
-      title: "TODO: Project One",
+      title: "Atlas",
       url: "/en/work/project-one",
       updated: "2026-10-01",
       related: ["experience:senior@en", "project:project-two@en"],
@@ -163,7 +163,7 @@ const MAP_EN = {
     {
       id: "project:project-two@en",
       kind: "project",
-      title: "TODO: Project Two",
+      title: "Supplier catalogue ingestion",
       url: "/en/work/project-two",
       updated: "2026-09-01",
       related: ["project:project-one@en"],
@@ -402,7 +402,7 @@ async function offerHandoff(page: Page, by: "tool" | "fallback" = "tool") {
 function matchChunks(id: string, kind: string, handoff: string): Chunk[] {
   const cite = {
     id: "project:project-two@en",
-    title: "TODO: Project Two",
+    title: "Supplier catalogue ingestion",
     url: "/en/work/project-two",
   };
   // The row rests on a timeline entry too: both get a mark (plan 3 W4).
@@ -966,9 +966,9 @@ test.describe("assistant terminal", () => {
     );
     await page.goto("/en/work/project-one");
     await interactive(page);
-    await page.getByRole("button", { name: "Ask about TODO: Project One" }).click();
+    await page.getByRole("button", { name: "Ask about Atlas" }).click();
     const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
-    await expect(sheet).toContainText("What did he build in TODO: Project One, and how?");
+    await expect(sheet).toContainText("What did he build in Atlas, and how?");
     await expect(sheet).toContainText("A retrieval platform, built in TypeScript.");
     expect(mock.bodies).toHaveLength(1);
     // The page goes with the question (visitor plan V8): the server maps it to the case study.
@@ -1347,7 +1347,7 @@ test.describe("assistant terminal", () => {
     // Its own related pages, strongest first, then the post that names it.
     await expect(readNext.getByRole("link")).toHaveText([
       /^Senior AI Engineer — Example GmbH/,
-      /^TODO: Project Two/,
+      /^Supplier catalogue ingestion/,
       /^Shipping RAG to production/,
     ]);
     await expect(readNext.getByRole("link").nth(1)).toContainText("case study · updated");
@@ -1358,7 +1358,7 @@ test.describe("assistant terminal", () => {
     // How two pages connect is a question asked on this page (V8).
     await readNext.getByRole("button", { name: "How do they connect?" }).nth(1).click();
     const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
-    await expect(sheet).toContainText("How do TODO: Project One and TODO: Project Two connect?");
+    await expect(sheet).toContainText("How do Atlas and Supplier catalogue ingestion connect?");
     await expect(sheet).toContainText("Both run on the same retrieval stack.");
     expect(mock.bodies[0]).toMatchObject({ page: "/en/work/project-one" });
     await page.keyboard.press("Escape");
@@ -1368,10 +1368,10 @@ test.describe("assistant terminal", () => {
     await interactive(page);
     await page.locator("article > footer").scrollIntoViewIfNeeded();
     const postNext = page.getByRole("navigation", { name: "Read next" });
-    await expect(postNext.getByRole("link")).toHaveText([/^TODO: Project One/]);
+    await expect(postNext.getByRole("link")).toHaveText([/^Atlas/]);
     await postNext.getByRole("link").click();
     await expect(page).toHaveURL(/\/en\/work\/project-one$/);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("TODO: Project One");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Atlas");
   });
 
   test("news offers what's new, stores nothing before a yes, and lists what changed since the last visit (visitor plan V15)", async ({
@@ -1423,14 +1423,14 @@ test.describe("assistant terminal", () => {
 
     // `news` lists them with no model; one line asks for a summary.
     await updates.click();
-    await expect(log).toContainText("TODO: Project One · case study");
+    await expect(log).toContainText("Atlas · case study");
     await expect(log).toContainText("Shipping RAG to production · post");
     await expect(log).not.toContainText("Notes on evals");
     expect(mock.bodies).toHaveLength(0);
     await log.getByRole("button", { name: "summarize them ›" }).click();
     await expect(log).toContainText("Two pages changed.");
     expect(JSON.stringify(mock.bodies.at(-1)!.messages.at(-1))).toContain(
-      "Summarize what is new on these pages: TODO: Project One, Shipping RAG to production.",
+      "Summarize what is new on these pages: Atlas, Shipping RAG to production.",
     );
 
     await run(again, "news off");
@@ -1448,7 +1448,7 @@ test.describe("assistant terminal", () => {
     // No model: the short tour comes from the page's own content.
     await run(prompt, "tour");
     await expect(log).toContainText("The short tour, 5 stops:");
-    await expect(log).toContainText("TODO: Project One");
+    await expect(log).toContainText("Atlas");
     await expect(log).toContainText("Shipping RAG to production");
     const group = page.getByRole("group", { name: "tour · 5 stops" });
     await expect(group).toBeVisible();
@@ -1464,9 +1464,7 @@ test.describe("assistant terminal", () => {
     await run(prompt, "next");
     await expect(page).toHaveURL(/\/en\/work\/project-one$/);
     const sheet = page.getByRole("dialog", { name: "ask my portfolio" });
-    await expect(
-      sheet.getByRole("group", { name: "tour · stop 2 of 5 · TODO: Project One" }),
-    ).toBeVisible();
+    await expect(sheet.getByRole("group", { name: "tour · stop 2 of 5 · Atlas" })).toBeVisible();
 
     // The tab keeps it through a reload.
     await page.reload();
@@ -1501,7 +1499,7 @@ test.describe("assistant terminal", () => {
     const stops = [
       {
         id: "project:project-two@en",
-        title: "TODO: Project Two",
+        title: "Supplier catalogue ingestion",
         url: "/en/work/project-two",
         line: "Where the data pipeline lives.",
       },
@@ -1526,13 +1524,14 @@ test.describe("assistant terminal", () => {
           type: "source-url",
           sourceId: "project:project-two@en",
           url: "/en/work/project-two",
-          title: "TODO: Project Two",
+          title: "Supplier catalogue ingestion",
         },
         { type: "text-start", id: "intro" },
         {
           type: "text-delta",
           id: "intro",
-          delta: "Three stops on data platforms, from Project Two [^project:project-two@en].",
+          delta:
+            "Three stops on data platforms, from Supplier catalogue ingestion [^project:project-two@en].",
         },
         { type: "text-end", id: "intro" },
         {
@@ -1556,7 +1555,7 @@ test.describe("assistant terminal", () => {
     await expect(log).toContainText("Three stops on data platforms");
     const list = log.getByRole("list", { name: "Stops" });
     await expect(list.getByRole("link")).toHaveText([
-      "TODO: Project Two",
+      "Supplier catalogue ingestion",
       "Shipping RAG to production",
       "Senior AI Engineer — Example GmbH",
     ]);
@@ -1613,7 +1612,7 @@ test.describe("assistant terminal", () => {
             type: "source-url",
             sourceId: "project:project-two@en",
             url: "/en/work/project-two",
-            title: "TODO: Project Two",
+            title: "Supplier catalogue ingestion",
           },
           { type: "text-start", id: "match" },
           {
@@ -1678,7 +1677,9 @@ test.describe("assistant terminal", () => {
       await expect(box).toHaveCount(0);
       await expect(log.getByText("nothing on his site shows this.")).toHaveCount(i + 1);
       // The source's chip under each answer (its citation in the text links to it too).
-      await expect(log.locator("a.note", { hasText: "TODO: Project Two" })).toHaveCount(i + 1);
+      await expect(log.locator("a.note", { hasText: "Supplier catalogue ingestion" })).toHaveCount(
+        i + 1,
+      );
       expect(mock.bodies[i]).toMatchObject({ mode: "match", match: { kind, brief } });
       await expect(offer).toBeVisible();
       if (kind !== "problem") {
@@ -1777,10 +1778,9 @@ test.describe("assistant terminal", () => {
     await expect(rows).toHaveCount(3);
     await expect(rows.nth(1)).toContainText("✓ evidence");
     await expect(rows.nth(1).getByRole("rowheader")).toHaveText("Retrieval in production (must)");
-    await expect(rows.nth(1).getByRole("link", { name: "TODO: Project Two" })).toHaveAttribute(
-      "href",
-      "/en/work/project-two",
-    );
+    await expect(
+      rows.nth(1).getByRole("link", { name: "Supplier catalogue ingestion" }),
+    ).toHaveAttribute("href", "/en/work/project-two");
     await expect(rows.nth(2)).toContainText("nothing on his site shows this.");
     const lead = "Published evidence for 1 of 2 requirements; 1 not published.";
     await expect(page.getByText(lead, { exact: true })).toBeVisible();
@@ -1861,7 +1861,10 @@ test.describe("assistant terminal", () => {
     await page.getByRole("button", { name: "check it" }).click();
     const mark = { name: "Evidence for 1 point of your brief" };
     // Through the router: the store keeps the marks in step, no reload needed.
-    await page.getByRole("table").getByRole("link", { name: "TODO: Project Two" }).click();
+    await page
+      .getByRole("table")
+      .getByRole("link", { name: "Supplier catalogue ingestion" })
+      .click();
     await expect(page).toHaveURL(/\/en\/work\/project-two$/);
     await expect(page.locator("article > header").getByRole("link", mark)).toHaveAttribute(
       "href",
@@ -1888,7 +1891,7 @@ test.describe("assistant terminal", () => {
     await expect(page.getByText(lead, { exact: true })).toBeVisible();
     expect(await page.evaluate(() => sessionStorage.getItem("ask:v1"))).not.toContain("data-match");
     await page.goBack();
-    await expect(page.getByRole("heading", { name: "TODO: Project Two" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Supplier catalogue ingestion" })).toBeVisible();
     await expect(page.getByRole("link", mark)).toHaveCount(0);
   });
 
