@@ -3,7 +3,9 @@
  * all of libs/ui (Spartan). Compiled on its own so none of it reaches a
  * visitor; the admin layout (pages/admin.page.ts) imports it `?inline` and
  * adds it to the page. The public stylesheet (src/styles.css) is loaded on
- * admin pages too and provides the tokens, fonts and base styles.
+ * admin pages too and provides the base styles; the admin keeps its own copy
+ * of the tokens, fonts and the public rules it uses (styles/admin-freeze.css),
+ * so the public redesign leaves it as it is.
  */
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
@@ -11,6 +13,7 @@
 
 @import "./styles/theme.css";
 @import "./styles/primitives.css";
+@import "./styles/admin-freeze.css";
 
 /* `@import "tailwindcss/utilities.css" source(none)`, as a plain at-rule so
    editors' CSS parsers accept it: only the `@source` paths below. */

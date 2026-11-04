@@ -4983,6 +4983,81 @@ test.describe("admin", () => {
   });
 });
 
+/**
+ * A public restyle as the visitor redesign makes one: tokens re-valued on the
+ * public stylesheet's own selectors, and the body text, unlayered. Added last
+ * to the page, so it wins every tie the real stylesheet would lose.
+ */
+const RESTYLE = `
+  :root, :root[data-theme="light"] {
+    --background: rgb(255, 0, 0); --foreground: rgb(0, 0, 255); --card: rgb(0, 128, 0);
+    --muted-foreground: rgb(255, 0, 255); --border: rgb(255, 255, 0); --primary: rgb(0, 255, 255);
+    --accent-orange: rgb(0, 255, 255); --sidebar: rgb(128, 0, 128); --radius: 0px;
+    --font-sans: serif; --font-mono: serif;
+  }
+  body { font-size: 22px; line-height: 1; font-weight: 700; }
+`;
+
+test.describe("the admin's freeze (styles/admin-freeze.css)", () => {
+  test.use({ reducedMotion: "reduce" });
+
+  for (const colorScheme of ["dark", "light"] as const) {
+    test(`a public restyle leaves the admin as it was, in the ${colorScheme} theme`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme });
+      // Relative times ("an hour ago") hold still between the two shots.
+      await page.clock.setFixedTime(new Date());
+      const unmocked = await fakeApi(page, baseURL, { "GET /admin/posts": { posts: [] } });
+
+      for (const path of [
+        "/admin/login",
+        "/admin",
+        "/admin/projects/project-one",
+        "/admin/preview",
+      ]) {
+        if (path === "/admin/login") {
+          await page.goto(path);
+          await interactive(page);
+        } else {
+          await openAdmin(page, path);
+        }
+        await expect(page.locator("[role=status] .sr-only")).toHaveCount(0);
+        await settled(page);
+        const shot = () => page.screenshot({ animations: "disabled", caret: "hide" });
+        const before = await shot();
+        await page.addStyleTag({ content: RESTYLE });
+        expect((await shot()).equals(before), `${path} changed with the public tokens`).toBe(true);
+      }
+      expect(unmocked).toEqual([]);
+    });
+  }
+
+  test("the draft preview tab and the live preview take the restyle", async ({ page, baseURL }) => {
+    await page.addInitScript(() => localStorage.setItem("admin.preview.open", "1"));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await fakeApi(page, baseURL);
+    await page.goto("/admin/hero");
+    const preview = page.frameLocator("iframe[title^='Live preview']");
+    await expect(preview.locator("#hero-heading")).toBeVisible({ timeout: 15_000 });
+    await page.addStyleTag({ content: RESTYLE });
+    await expect(preview.locator("body")).toHaveCSS("background-color", "rgb(255, 0, 0)");
+    await expect(page.locator("body")).not.toHaveCSS("background-color", "rgb(255, 0, 0)");
+
+    await page.goto("/admin/preview/en");
+    await expect(page.locator("#hero-heading")).toBeVisible({ timeout: 15_000 });
+    await page.addStyleTag({ content: RESTYLE });
+    await expect(page.locator("body")).toHaveCSS("background-color", "rgb(255, 0, 0)");
+  });
+
+  test("the server's first paint has it, with no script", async ({ request }) => {
+    const html = await (await request.get("/admin")).text();
+    expect(html).toContain("<app-admin-layout");
+    expect(html).toContain(":root:root:has(app-admin-layout):not(:has(app-admin-preview-frame))");
+  });
+});
+
 test.describe("admin accessibility", () => {
   test.use({ reducedMotion: "reduce" });
 
