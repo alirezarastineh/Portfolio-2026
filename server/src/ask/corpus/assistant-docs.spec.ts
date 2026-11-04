@@ -84,7 +84,7 @@ describe("the system card's date (visitor plan V21)", () => {
     // New words fail here: set SYSTEM_CARD_UPDATED to the day they changed, then this hash.
     const words = LOCALES.map((locale) => defaultSystemCard(locale, configs.plain)).join("\n");
     const hash = createHash("sha256").update(words).digest("hex").slice(0, 12);
-    expect([SYSTEM_CARD_UPDATED, hash]).toEqual(["2026-11-02", "87d39ab0bb1f"]);
+    expect([SYSTEM_CARD_UPDATED, hash]).toEqual(["2026-11-04", "32ccd24cae86"]);
   });
 
   it("dates the admin's own card by the save that holds it", () => {
