@@ -227,25 +227,25 @@
       "en": {
         "profile": {
           "role": "Full Stack AI Engineer",
-          "heroHeadline": "Full Stack Engineering Meets AI Intelligence.",
-          "heroSubheadline": "Bridging reliable cloud infrastructure and cutting-edge machine learning to deliver production-ready applications.",
-          "primaryCta": "View Projects",
+          "heroHeadline": "I turn language models into products that keep working after the demo.",
+          "heroSubheadline": "Reliable cloud infrastructure and defensive AI, built to run in production.",
+          "primaryCta": "See the work",
           "secondaryCta": "Get in Touch",
           "location": "Remote"
         },
         "nav": {
-          "skills": "skills",
-          "projects": "projects",
-          "about": "about",
-          "contact": "contact"
+          "skills": "Skills",
+          "projects": "Work",
+          "about": "About",
+          "contact": "Contact"
         },
         "skills": {
-          "heading": "// skills",
-          "subtitle": "capabilities · stack"
+          "heading": "Skills",
+          "subtitle": "What I work with"
         },
         "about": {
-          "heading": "// about",
-          "subtitle": "philosophy.txt",
+          "heading": "About",
+          "subtitle": "How I work",
           "philosophy": "Building AI applications in a Jupyter notebook is easy; keeping them stable in production is hard. My engineering philosophy centers on defensive AI integration. I treat language models as powerful but unpredictable microservices. By implementing strict semantic routing, output parsing, and automated fallback mechanisms, I actively mitigate hallucinations and enforce reliable data structures. I prioritize the user experience by streaming tokens to the frontend to mask latency, while simultaneously optimizing prompt payloads and leveraging semantic caching to keep API inference costs strictly under control. I don't just write prompts; I engineer resilient, full-stack systems around them.",
           "terminalTitle": "user@portfolio — zsh",
           "terminalPrompt": "user@portfolio:~$",
@@ -254,22 +254,22 @@
           "terminalOutputContact": "Open to senior full-stack and AI engineering roles. Reach out via the contact form below or email directly."
         },
         "projects": {
-          "heading": "// projects",
-          "subtitle": "case · studies"
+          "heading": "Selected work",
+          "subtitle": "Case studies"
         },
         "contact": {
-          "heading": "// contact",
-          "subtitle": "send_message()",
-          "labelName": "name",
-          "labelEmail": "email",
-          "labelMessage": "message",
+          "heading": "Contact",
+          "subtitle": "Let’s talk",
+          "labelName": "Name",
+          "labelEmail": "Email",
+          "labelMessage": "Message",
           "placeholderName": "Jane Doe",
           "placeholderEmail": "jane@example.com",
-          "placeholderMessage": "Tell me about the project, the timeline, and what 'done' looks like.",
-          "submit": "> send_message()",
-          "sending": "sending…",
-          "successLine1": "> message_sent.",
-          "successLine2": "expect_reply within 24h. or email",
+          "placeholderMessage": "What you’re building, the timeline, and what “done” looks like…",
+          "submit": "Send message",
+          "sending": "Sending…",
+          "successLine1": "Message sent",
+          "successLine2": "I’ll reply within 24 hours. Or email me:",
           "errorRequired": "Required.",
           "errorEmail": "Invalid email.",
           "errorMinlength": "At least {n} chars.",
@@ -283,39 +283,39 @@
           "errorNetwork": "Network error. Please try again."
         },
         "projectCard": {
-          "problem": "PROBLEM",
-          "arch": "ARCH",
-          "infra": "INFRA",
-          "outcomes": "OUTCOMES",
-          "caseLabel": "case · {i}",
-          "live": "live",
-          "repo": "repo",
-          "caseStudy": "case_study",
+          "problem": "Problem",
+          "arch": "Architecture",
+          "infra": "Infrastructure",
+          "outcomes": "Outcomes",
+          "caseLabel": "Case {i}",
+          "live": "Live",
+          "repo": "Code",
+          "caseStudy": "Case study",
           "techStackAriaLabel": "Tech stack"
         }
       },
       "de": {
         "profile": {
           "role": "Full Stack AI Engineer",
-          "heroHeadline": "Full-Stack-Engineering trifft künstliche Intelligenz.",
-          "heroSubheadline": "Verbindung von zuverlässiger Cloud-Infrastruktur und modernsten Machine-Learning-Methoden für produktionsreife Anwendungen.",
+          "heroHeadline": "Ich mache aus Sprachmodellen Produkte, die auch nach der Demo funktionieren.",
+          "heroSubheadline": "Zuverlässige Cloud-Infrastruktur und defensive KI, gebaut für den Betrieb.",
           "primaryCta": "Projekte ansehen",
           "secondaryCta": "Kontakt aufnehmen",
           "location": "Remote"
         },
         "nav": {
-          "skills": "fähigkeiten",
-          "projects": "projekte",
-          "about": "über mich",
-          "contact": "kontakt"
+          "skills": "Fähigkeiten",
+          "projects": "Projekte",
+          "about": "Über mich",
+          "contact": "Kontakt"
         },
         "skills": {
-          "heading": "// fähigkeiten",
-          "subtitle": "fähigkeiten · stack"
+          "heading": "Fähigkeiten",
+          "subtitle": "Womit ich arbeite"
         },
         "about": {
-          "heading": "// über mich",
-          "subtitle": "philosophie.txt",
+          "heading": "Über mich",
+          "subtitle": "Wie ich arbeite",
           "philosophy": "KI-Anwendungen in einem Jupyter-Notebook zu bauen ist einfach – sie in der Produktion stabil zu halten ist schwer. Meine Engineering-Philosophie konzentriert sich auf defensive KI-Integration. Ich behandle Sprachmodelle als leistungsstarke, aber unberechenbare Microservices. Durch strikte semantische Routing-Regeln, Output-Parsing und automatisierte Fallback-Mechanismen bekämpfe ich aktiv Halluzinationen und erzwinge zuverlässige Datenstrukturen. Ich priorisiere die Nutzererfahrung, indem ich Token zum Frontend streame, um Latenz zu kaschieren, und optimiere gleichzeitig Prompt-Payloads sowie semantisches Caching, um die API-Inferenzkosten strikt im Griff zu behalten. Ich schreibe keine Prompts – ich entwickle resiliente Fullstack-Systeme um sie herum.",
           "terminalTitle": "user@portfolio — zsh",
           "terminalPrompt": "user@portfolio:~$",
@@ -324,22 +324,22 @@
           "terminalOutputContact": "Offen für Senior-Fullstack- und KI-Engineering-Rollen. Kontaktaufnahme über das Kontaktformular oder direkt per E-Mail."
         },
         "projects": {
-          "heading": "// projekte",
-          "subtitle": "fallstudien"
+          "heading": "Ausgewählte Projekte",
+          "subtitle": "Fallstudien"
         },
         "contact": {
-          "heading": "// kontakt",
-          "subtitle": "nachricht_senden()",
-          "labelName": "name",
-          "labelEmail": "e-mail",
-          "labelMessage": "nachricht",
+          "heading": "Kontakt",
+          "subtitle": "Sprechen wir",
+          "labelName": "Name",
+          "labelEmail": "E-Mail",
+          "labelMessage": "Nachricht",
           "placeholderName": "Max Mustermann",
           "placeholderEmail": "max@beispiel.de",
-          "placeholderMessage": "Erzählen Sie mir vom Projekt, dem Zeitplan und wie 'fertig' aussieht.",
-          "submit": "> nachricht_senden()",
-          "sending": "senden…",
-          "successLine1": "> nachricht_gesendet.",
-          "successLine2": "antwort innerhalb 24h erwartet. oder per E-Mail",
+          "placeholderMessage": "Was Sie bauen, Ihr Zeitplan und was „fertig“ für Sie heißt…",
+          "submit": "Nachricht senden",
+          "sending": "Wird gesendet…",
+          "successLine1": "Nachricht gesendet",
+          "successLine2": "Ich antworte innerhalb von 24 Stunden. Oder per E-Mail:",
           "errorRequired": "Pflichtfeld.",
           "errorEmail": "Ungültige E-Mail-Adresse.",
           "errorMinlength": "Mindestens {n} Zeichen.",
@@ -353,14 +353,14 @@
           "errorNetwork": "Netzwerkfehler. Bitte erneut versuchen."
         },
         "projectCard": {
-          "problem": "PROBLEM",
-          "arch": "ARCHITEKTUR",
-          "infra": "INFRASTRUKTUR",
-          "outcomes": "ERGEBNISSE",
-          "caseLabel": "fall · {i}",
-          "live": "live",
-          "repo": "repo",
-          "caseStudy": "fallstudie",
+          "problem": "Problem",
+          "arch": "Architektur",
+          "infra": "Infrastruktur",
+          "outcomes": "Ergebnisse",
+          "caseLabel": "Fall {i}",
+          "live": "Live",
+          "repo": "Code",
+          "caseStudy": "Fallstudie",
           "techStackAriaLabel": "Tech-Stack"
         }
       }
