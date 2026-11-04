@@ -259,12 +259,17 @@ interface TurnstileState {
 
 /**
  * While Turnstile is on, the server checks a session once, on its first
- * question: fetch a token for it. False when no token could be had.
+ * question: fetch a token for it, a visible check showing in `host` (the open
+ * panel's). False when no token could be had.
  */
-async function readyToAsk(next: TurnstileState, locale: Locale): Promise<boolean> {
+async function readyToAsk(
+  next: TurnstileState,
+  locale: Locale,
+  host: HTMLElement | undefined,
+): Promise<boolean> {
   if (!TURNSTILE_SITE_KEY || next.verified) return true;
   try {
-    next.turnstileToken = await turnstileToken(locale);
+    next.turnstileToken = await turnstileToken(locale, host);
     return true;
   } catch {
     return false;
@@ -657,7 +662,7 @@ export const AskStore = signalStore(
       store._next.tour = tour ?? null;
       store._next.match = match ?? null;
       store._next.entryId = entryId;
-      if (!(await readyToAsk(store._next, locale()))) {
+      if (!(await readyToAsk(store._next, locale(), store._launcher.checkHost()))) {
         store._updateEntry(entryId, { failure: "error" });
         return;
       }
@@ -665,7 +670,9 @@ export const AskStore = signalStore(
       settleCheck(store._next, store.entries(), entryId);
     }
 
+    /** The contact form; on a phone the sheet steps aside first, so the form can take the focus. */
     function toContact(): void {
+      store._launcher.closeIfSheet();
       go(`/${locale()}#contact`);
     }
 
@@ -1219,7 +1226,7 @@ export const AskStore = signalStore(
         store._next.tour = entry.tour ?? null;
         store._next.match = entry.match ?? null;
         store._next.entryId = entryId;
-        if (!(await readyToAsk(store._next, store._lang.lang()))) {
+        if (!(await readyToAsk(store._next, store._lang.lang(), store._launcher.checkHost()))) {
           store._updateEntry(entryId, { failure: "error" });
           return;
         }
@@ -1404,9 +1411,7 @@ export const AskStore = signalStore(
         store._persist();
       },
 
-      toContact(): void {
-        go(`/${locale()}#contact`);
-      },
+      toContact,
 
       download(href: string): void {
         const link = store._doc.createElement("a");

@@ -232,6 +232,14 @@ test.describe("case study", () => {
     // Code prints in one colour: its highlighting is made for a screen's background.
     const keyword = main.locator(".code-block .shd-ff7b72").first();
     expect(await keyword.evaluate((el) => getComputedStyle(el).color)).toBe("rgb(0, 0, 0)");
+
+    // The assistant's panel, left open, stays off the paper too (plan 4 U8).
+    await page.emulateMedia({ media: "screen" });
+    await page.getByRole("button", { name: "Ask about my work" }).click();
+    const panel = page.getByRole("dialog", { name: "Ask about my work" });
+    await expect(panel).toBeVisible();
+    await page.emulateMedia({ media: "print" });
+    await expect(panel).toBeHidden();
   });
 
   test("a case study's reader aids: in short, in depth folded, its terms, and on paper", async ({

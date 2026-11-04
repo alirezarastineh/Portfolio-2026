@@ -304,6 +304,8 @@ export interface AskCopy {
     sudo: string[];
   };
   close: string;
+  /** The panel's toggle between its narrow and wide width (desktop). */
+  wider: string;
   you: string;
   assistant: string;
 }
@@ -618,6 +620,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       sudo: ["[sudo] password for visitor: ********", "Access granted. Opening a line to Alireza…"],
     },
     close: "Close the assistant",
+    wider: "Wider",
     you: "You asked",
     assistant: "The assistant answered",
   },
@@ -937,6 +940,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       sudo: ["[sudo] Passwort für visitor: ********", "Zugriff gewährt. Verbinde mit Alireza…"],
     },
     close: "Assistenten schließen",
+    wider: "Breiter",
     you: "Deine Frage",
     assistant: "Antwort des Assistenten",
   },

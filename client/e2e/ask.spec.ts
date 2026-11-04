@@ -973,6 +973,146 @@ test.describe("assistant terminal", () => {
   });
 
   test(
+    "a citation and the hand-off happen beside the open panel, which holds still; a phone's sheet steps aside for them (plan 4 U8)",
+    PHONE,
+    async ({ page }) => {
+      const phone = page.viewportSize()!.width < 1024;
+      const summary = "Wants to discuss a six-month contract.";
+      await mockAsk(page, (route, n) =>
+        sse(
+          route,
+          n === 1
+            ? answer({
+                text: "It ranks by meaning [^project:project-two@en].",
+                sources: [
+                  {
+                    type: "source-url",
+                    sourceId: "project:project-two@en",
+                    url: "/en/work/project-two",
+                    title: "Supplier catalogue ingestion",
+                  },
+                ],
+              })
+            : [
+                ...answer({ id: "m_e2e00000002", text: "Happy to help you reach him." }).slice(
+                  0,
+                  -2,
+                ),
+                { type: "tool-input-start", toolCallId: "h1", toolName: "handoff_contact" },
+                {
+                  type: "tool-input-available",
+                  toolCallId: "h1",
+                  toolName: "handoff_contact",
+                  input: { summary },
+                },
+                {
+                  type: "tool-output-available",
+                  toolCallId: "h1",
+                  output: { ok: true, awaitingConfirmation: true },
+                },
+                { type: "finish-step" },
+                { type: "finish", finishReason: "tool-calls", messageMetadata: { sig: "s" } },
+              ],
+        ),
+      );
+      await recordPosts(page, "**/v1/ask/handoff");
+      await page.goto("/en/work/project-one");
+      await interactive(page);
+      const fab = page.getByRole("button", { name: "Ask about my work" });
+      await fab.click();
+      const panel = page.getByRole("dialog", { name: "Ask about my work" });
+      // Named for page changes, so it holds still while they happen behind it.
+      await expect(panel).toHaveCSS("view-transition-name", "ask-panel");
+      // A sheet over the whole page on a phone, which is inert behind it; beside it on a desktop.
+      const inert = () => page.locator("main").evaluate((main) => !!main.closest("[inert]"));
+      expect(await inert()).toBe(phone);
+
+      await run(panel.locator("textarea"), "How does Atlas search?");
+      await expect(panel.getByRole("button", { name: "copy", exact: true })).toBeVisible();
+      const at = await panel.boundingBox();
+      await panel.getByRole("link", { name: /sources 1: Supplier catalogue ingestion/ }).click();
+      await expect(page).toHaveURL(/\/en\/work\/project-two$/);
+      if (phone) {
+        await expect(panel).toBeHidden();
+        expect(await inert()).toBe(false);
+        // A tap on the scrim above the window closes the sheet too.
+        await fab.click();
+        await expect(panel).toBeVisible();
+        await page.mouse.click(10, 10);
+        await expect(panel).toBeHidden();
+        await fab.click();
+      } else {
+        expect(await panel.boundingBox()).toEqual(at);
+      }
+
+      await run(panel.locator("textarea"), "I want to hire him");
+      const offer = panel.getByRole("group", {
+        name: "Hand this conversation to the contact form?",
+      });
+      await offer.getByRole("button", { name: "yes" }).click();
+      await expect(page).toHaveURL(/\/en#contact$/);
+      await expect(page.locator("#contact-message")).toHaveValue(summary);
+      await expect(page.locator("#contact-name")).toBeFocused();
+      await (phone ? expect(panel).toBeHidden() : expect(panel).toBeVisible());
+    },
+  );
+
+  test("the panel leaves the page usable: the floating button hides behind it, it widens, and Escape on the page closes it where the focus is (plan 4 U8)", async ({
+    page,
+  }) => {
+    await mockAsk(page, () => undefined);
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    const fab = page.getByRole("button", { name: "Ask about my work" });
+    await fab.click();
+    const panel = page.getByRole("dialog", { name: "Ask about my work" });
+    await expect(panel.locator("textarea")).toBeFocused();
+    await expect(fab).toBeHidden();
+
+    // Wider for code and tables, and back.
+    const narrow = (await panel.boundingBox())!.width;
+    const wider = panel.getByRole("button", { name: "Wider" });
+    await wider.click();
+    await expect(wider).toHaveAttribute("aria-pressed", "true");
+    expect((await panel.boundingBox())!.width).toBeGreaterThan(narrow);
+    await wider.click();
+    expect((await panel.boundingBox())!.width).toBe(narrow);
+
+    // Turned or zoomed across 1024px while open: the same dialog becomes the sheet and back.
+    const behind = () =>
+      page.locator("main").evaluate((main) => ({
+        inert: !!main.closest("[inert]"),
+        locked: document.documentElement.classList.contains("overflow-hidden"),
+      }));
+    for (const width of [800, 320]) {
+      await page.setViewportSize({ width, height: 720 });
+      await expect.poll(behind).toEqual({ inert: true, locked: true });
+      expect(await panel.boundingBox()).toEqual({ x: 0, y: 0, width, height: 720 });
+      expect(await panel.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    }
+    await expect(wider).toBeHidden();
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect.poll(behind).toEqual({ inert: false, locked: false });
+    await expect(panel.locator("textarea")).toBeVisible();
+
+    // The page beside it takes the focus; Escape there closes the panel and leaves the focus,
+    // so nothing stays hidden behind it (WCAG 2.4.11).
+    const link = page.getByRole("navigation", { name: "On this page" }).getByRole("link").first();
+    await link.focus();
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    await expect(link).toBeFocused();
+    await expect(fab).toBeVisible();
+
+    // Escape inside it hands the focus back to the button that opened it.
+    await fab.click();
+    await expect(panel.locator("textarea")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    await expect(fab).toBeFocused();
+  });
+
+  test(
     "a case study's end block asks the assistant about that project",
     PHONE,
     async ({ page }) => {

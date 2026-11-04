@@ -32,17 +32,20 @@ import { LanguageService } from "../services/language.service";
     "(document:keydown)": "onKeydown($event)",
   },
   template: `
-    <app-site-header />
-    <ng-content />
-    <app-site-footer />
+    <!-- The page, inert behind the assistant's sheet on phones (plan 4 U8). -->
+    <div class="contents" [attr.inert]="launcher.sheetOpen() && launcher.narrow() ? '' : null">
+      <app-site-header />
+      <ng-content />
+      <app-site-footer />
+    </div>
     <!-- Its code loads the first time someone opens it. -->
     @defer (when palette.requested()) {
       <app-command-palette />
     }
     <!-- The assistant lives in the About terminal on home; elsewhere this
-         opens it in a sheet (loaded on first use). A 44px circle on phones,
+         opens its panel (loaded on first use). A 44px circle on phones,
          a \`>_ ask\` pill from lg. Its press, and hiding it while the mobile
-         menu is open, are in styles.css. -->
+         menu or the panel is open, are in styles.css. -->
     @if (!onHome()) {
       <button
         type="button"
@@ -92,7 +95,7 @@ export class PublicShellComponent {
   /**
    * ⌘K / Ctrl+K opens the palette from anywhere on the site. `/` goes to the
    * assistant, unless the visitor is typing somewhere: the hero's ask bar on
-   * home, the sheet elsewhere.
+   * home, the panel elsewhere.
    */
   protected onKeydown(event: KeyboardEvent): void {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {

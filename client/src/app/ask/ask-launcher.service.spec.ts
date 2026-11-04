@@ -1,6 +1,6 @@
 import { signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { LanguageService } from "../services/language.service";
 import { AskLauncherService } from "./ask-launcher.service";
@@ -72,5 +72,43 @@ describe("AskLauncherService", () => {
     launcher.ask("   ", "hero");
     expect(launcher.focusPending()).toBe(false);
     expect(launcher.pendingQuestion()).toBeNull();
+  });
+
+  describe("the panel's width (plan 4 U8)", () => {
+    let onChange: (event: { matches: boolean }) => void = () => undefined;
+    beforeEach(() => {
+      // jsdom has no matchMedia: below 1024px, until the window turns.
+      window.matchMedia = ((query: string) => ({
+        matches: query === "(width < 64rem)",
+        addEventListener: (_: string, listener: typeof onChange) => (onChange = listener),
+      })) as unknown as typeof window.matchMedia;
+    });
+    afterEach(() => Reflect.deleteProperty(window, "matchMedia"));
+
+    it("steps aside for the page only where it covers the page, below 1024px", () => {
+      const launcher = launcherOn("/work/project-one");
+      expect(launcher.narrow()).toBe(true);
+      launcher.openSheet("button");
+      launcher.closeIfSheet();
+      expect(launcher.sheetOpen()).toBe(false);
+
+      // Turned to 1024px or wider: beside the page, it stays.
+      onChange({ matches: false });
+      launcher.openSheet("button");
+      launcher.closeIfSheet();
+      expect(launcher.sheetOpen()).toBe(true);
+    });
+
+    it("puts a visible Turnstile check in the panel while it is open, elsewhere nowhere given", () => {
+      const launcher = launcherOn("/work/project-one");
+      const host = document.createElement("div");
+      expect(launcher.checkHost()).toBeUndefined();
+      launcher.turnstileHost = host;
+      expect(launcher.checkHost()).toBeUndefined();
+      launcher.openSheet("button");
+      expect(launcher.checkHost()).toBe(host);
+      launcher.closeSheet();
+      expect(launcher.checkHost()).toBeUndefined();
+    });
   });
 });

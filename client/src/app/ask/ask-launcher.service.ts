@@ -1,3 +1,4 @@
+import { DOCUMENT } from "@angular/common";
 import { inject, Injectable, signal } from "@angular/core";
 
 import { LanguageService } from "../services/language.service";
@@ -7,6 +8,9 @@ import { LanguageService } from "../services/language.service";
  * Here rather than beside the bar, so the shell does not load the bar's code.
  */
 export const ASK_BAR_ID = "ask-bar";
+
+/** Below this the panel is a sheet over the whole page (Tailwind's `lg`; ask-sheet.component.ts). */
+const SHEET_QUERY = "(width < 64rem)";
 
 /** Where a visitor opened the assistant from, reported once with `ask_open`. */
 export type AskSource =
@@ -81,6 +85,18 @@ export class AskLauncherService {
    * then. For the About terminal's title bar, which cannot load that code.
    */
   readonly assistant = signal<"online" | "resting" | null>(null);
+  /** Below 1024px: the panel covers the page, which is inert behind it (plan 4 U8). */
+  readonly narrow = signal(false);
+  /** Where the panel shows a visible Turnstile check; the panel sets it. */
+  turnstileHost: HTMLElement | null = null;
+
+  constructor() {
+    const query = inject(DOCUMENT).defaultView?.matchMedia?.(SHEET_QUERY);
+    if (query) {
+      this.narrow.set(query.matches);
+      query.addEventListener("change", (event) => this.narrow.set(event.matches));
+    }
+  }
 
   focusPrompt(source?: AskSource): void {
     if (source) this.source = source;
@@ -102,6 +118,19 @@ export class AskLauncherService {
 
   closeSheet(): void {
     this._sheet.set(false);
+  }
+
+  /**
+   * Closes the panel where it covers the page, so the page a visitor chose (a citation, the
+   * contact form) is what they see and can focus. Beside the page, from 1024px, it stays.
+   */
+  closeIfSheet(): void {
+    if (this.narrow()) this.closeSheet();
+  }
+
+  /** Where a visible Turnstile check goes: the panel while it is open; else the page's own box. */
+  checkHost(): HTMLElement | undefined {
+    return this._sheet() ? (this.turnstileHost ?? undefined) : undefined;
   }
 
   /**

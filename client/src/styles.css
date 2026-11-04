@@ -182,8 +182,9 @@ a {
 }
 /* eslint-enable css/use-baseline */
 
-/* The mobile menu covers the page, and the ask button would sit on its switches. */
-:root:has(.site-header[data-open]) .ask-fab {
+/* The mobile menu covers the page, and the ask button would sit on its switches;
+   the open panel covers the button. */
+:root:has(.site-header[data-open], .ask-sheet[open]) .ask-fab {
   display: none;
 }
 
@@ -264,6 +265,7 @@ html:has(app-admin-layout) {
       .site-header,
       app-site-footer,
       .ask-fab,
+      .ask-sheet,
       .reading-progress,
       main aside,
       article > nav,

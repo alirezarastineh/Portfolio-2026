@@ -728,6 +728,7 @@ export class AskAnswerComponent {
   protected follow(event: MouseEvent, href: string, internal: boolean): void {
     if (!internal || modified(event)) return;
     event.preventDefault();
+    this.launcher.closeIfSheet();
     void this.router.navigateByUrl(href.replace(/^https?:\/\/[^/]+/, ""));
   }
 
@@ -746,6 +747,7 @@ export class AskAnswerComponent {
     this.note("citations");
     if (modified(event) || !url.startsWith("/") || url.startsWith("/media/")) return;
     event.preventDefault();
+    this.launcher.closeIfSheet();
     void this.router.navigateByUrl(url);
   }
 

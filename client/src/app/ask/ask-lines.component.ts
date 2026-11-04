@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, input, output } from "@angular/core";
 import { Router } from "@angular/router";
 
+import { AskLauncherService } from "./ask-launcher.service";
 import type { OutLine } from "./commands";
 
 /** What a shell command printed: plain lines, two-column rows, links, and lines that ask. */
@@ -21,6 +22,7 @@ export class AskLinesComponent {
   /** A line's question, asked (the system card's line in `evals`, visitor plan V13). */
   readonly ask = output<string>();
   private readonly router = inject(Router);
+  private readonly launcher = inject(AskLauncherService);
 
   protected toneClass(line: OutLine): string {
     switch (line.tone) {
@@ -40,6 +42,7 @@ export class AskLinesComponent {
     if (!line.internal || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0)
       return;
     event.preventDefault();
+    this.launcher.closeIfSheet();
     void this.router.navigateByUrl(line.href!);
   }
 }
