@@ -1,4 +1,4 @@
-import { test as base, type Page } from "@playwright/test";
+import { test as base, type Locator, type Page } from "@playwright/test";
 
 export { expect } from "@playwright/test";
 
@@ -86,6 +86,16 @@ export const test = base.extend<{ problems: PageProblems }>({
 export async function interactive(page: Page): Promise<void> {
   await page.locator("html[data-hydrated]").waitFor({ state: "attached" });
   await page.waitForLoadState("networkidle"); // NOSONAR: a floor after the app's own mark (see above)
+}
+
+/**
+ * The assistant, wherever the page has it: the About terminal on home, the sheet elsewhere.
+ * Specs reach it only through this, so moving the assistant changes this alone (plan 4 U7).
+ */
+export function askPanel(page: Page): Locator {
+  return page
+    .locator("#about")
+    .or(page.getByRole("dialog", { name: /^(Ask about my work|Fragen zu meiner Arbeit)$/ }));
 }
 
 /**

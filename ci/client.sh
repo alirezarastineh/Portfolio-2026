@@ -64,10 +64,13 @@ case "${1:-}" in
   # and a line in the job's summary.
   cross-browser)
     browsers=${2:-firefox and webkit}
-    if [ -n "${2:-}" ]; then
+    # WebKit also runs the assistant's phone cases, as on an iPhone (plan 4 U7).
+    if [ "${2:-}" = webkit ]; then
+      set -- --project=webkit --project=phone-webkit
+    elif [ -n "${2:-}" ]; then
       set -- "--project=$2"
     else
-      set -- --project=firefox --project=webkit
+      set -- --project=firefox --project=webkit --project=phone-webkit
     fi
     status=0
     E2E_CROSS_BROWSER=1 PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/cross-browser \

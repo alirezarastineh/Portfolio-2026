@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Page, Route } from "@playwright/test";
 
-import { expect, interactive, settled, test } from "./fixtures";
+import { askPanel, expect, interactive, settled, test } from "./fixtures";
 
 /**
  * The About terminal as the portfolio assistant. The API is cross-origin in
@@ -324,12 +324,12 @@ async function recordPosts(page: Page, pattern: string): Promise<Record<string, 
   return bodies;
 }
 
-/** The About section's prompt, once its code has loaded. */
+/** The assistant's prompt on home, once its code has loaded. */
 async function openPrompt(page: Page, path = "/en") {
   await page.goto(path);
   await interactive(page);
-  await page.locator("#about").scrollIntoViewIfNeeded();
-  const prompt = page.locator("#about textarea");
+  await askPanel(page).scrollIntoViewIfNeeded();
+  const prompt = askPanel(page).locator("textarea");
   await expect(prompt).toBeVisible();
   return prompt;
 }
@@ -468,6 +468,9 @@ function matchChunks(id: string, kind: string, handoff: string): Chunk[] {
   ];
 }
 
+/** The core cases, which the `phone` project runs on a phone too (plan 4 U7). */
+const PHONE = { tag: "@phone" };
+
 test.use({ reducedMotion: "reduce" });
 
 test.describe("assistant terminal", () => {
@@ -485,7 +488,7 @@ test.describe("assistant terminal", () => {
   });
 
   test("the window's title bar says whether the assistant answers", async ({ page }) => {
-    const bar = page.locator("#about app-terminal-window header").first();
+    const bar = askPanel(page).locator("app-terminal-window header").first();
     await mockAsk(page, () => undefined);
     await openPrompt(page);
     await expect(bar).toContainText("online");
@@ -499,7 +502,7 @@ test.describe("assistant terminal", () => {
   test("shell commands answer locally, with history and Tab completion", async ({ page }) => {
     const mock = await mockAsk(page, () => undefined);
     const prompt = await openPrompt(page);
-    const log = page.locator("#about [role=log]");
+    const log = askPanel(page).locator("[role=log]");
 
     await run(prompt, "help");
     await expect(log).toContainText("ls projects");
@@ -528,64 +531,65 @@ test.describe("assistant terminal", () => {
     expect(mock.bodies).toHaveLength(0);
   });
 
-  test("a question streams an answer with its tool step, footnote, follow-ups and stats", async ({
-    page,
-    problems,
-  }) => {
-    const mock = await mockAsk(page, (route) =>
-      sse(
-        route,
-        answer({
-          text: "He runs **evals** before every prompt change [^project:project-one@en].",
-          tools: SEARCH_STEP,
-          sources: [
-            {
-              type: "source-url",
-              sourceId: "project:project-one@en",
-              url: "/en/work/project-one",
-              title: "Project one",
-            },
-          ],
-          followups: ["Which stack did he use?"],
-        }),
-      ),
-    );
-    const prompt = await openPrompt(page);
-    await run(prompt, "stats");
-    await run(prompt, "How does he test prompts?");
+  test(
+    "a question streams an answer with its tool step, footnote, follow-ups and stats",
+    PHONE,
+    async ({ page, problems }) => {
+      const mock = await mockAsk(page, (route) =>
+        sse(
+          route,
+          answer({
+            text: "He runs **evals** before every prompt change [^project:project-one@en].",
+            tools: SEARCH_STEP,
+            sources: [
+              {
+                type: "source-url",
+                sourceId: "project:project-one@en",
+                url: "/en/work/project-one",
+                title: "Project one",
+              },
+            ],
+            followups: ["Which stack did he use?"],
+          }),
+        ),
+      );
+      const prompt = await openPrompt(page);
+      await run(prompt, "stats");
+      await run(prompt, "How does he test prompts?");
 
-    const log = page.locator("#about [role=log]");
-    await expect(log).toContainText("He runs evals before every prompt change");
-    await expect(log).toContainText('› search "evals" ✓');
-    const cite = log.getByRole("link", { name: /sources 1: Project one/ });
-    await expect(cite).toHaveAttribute("href", "/en/work/project-one");
-    const source = log.getByRole("link", { name: "Project one", exact: true });
-    await expect(source).toBeVisible();
-    // Pointing at the citation lights up its source.
-    const border = () => source.evaluate((el) => getComputedStyle(el).borderColor);
-    const resting = await border();
-    await cite.hover();
-    await expect.poll(border).not.toBe(resting);
-    await page.mouse.move(0, 0);
-    await expect.poll(border).toBe(resting);
-    await expect(log).toContainText("gemini-3.5-flash-lite · 1.3 s · 91% cached");
-    // Announced once, in full, without markup or markers.
-    await expect(page.locator("#about [aria-live=polite]")).toHaveText(
-      "He runs evals before every prompt change.",
-    );
+      const log = askPanel(page).locator("[role=log]");
+      await expect(log).toContainText("He runs evals before every prompt change");
+      await expect(log).toContainText('› search "evals" ✓');
+      const cite = log.getByRole("link", { name: /sources 1: Project one/ });
+      await expect(cite).toHaveAttribute("href", "/en/work/project-one");
+      const source = log.getByRole("link", { name: "Project one", exact: true });
+      await expect(source).toBeVisible();
+      // Pointing at the citation lights up its source.
+      const border = () => source.evaluate((el) => getComputedStyle(el).borderColor);
+      const resting = await border();
+      await cite.hover();
+      await expect.poll(border).not.toBe(resting);
+      await page.mouse.move(0, 0);
+      await expect.poll(border).toBe(resting);
+      await expect(log).toContainText("gemini-3.5-flash-lite · 1.3 s · 91% cached");
+      // Announced once, in full, without markup or markers.
+      await expect(askPanel(page).locator("[aria-live=polite]")).toHaveText(
+        "He runs evals before every prompt change.",
+      );
 
-    const body = mock.bodies[0]!;
-    expect(body.locale).toBe("en");
-    expect(body.sessionId).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
-    expect(body.messages.map((m) => m.role)).toEqual(["user"]);
+      const body = mock.bodies[0]!;
+      expect(body.locale).toBe("en");
+      expect(body.sessionId).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
+      expect(body.messages.map((m) => m.role)).toEqual(["user"]);
 
-    // A follow-up is one click, and carries the signed answer as history.
-    await log.getByRole("button", { name: "Which stack did he use?" }).click();
-    await expect.poll(() => mock.bodies.length).toBe(2);
-    expect(mock.bodies[1]!.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
-    expect(problems.cspViolations).toEqual([]);
-    expect(problems.pageErrors).toEqual([]);
-  });
+      // A follow-up is one click, and carries the signed answer as history.
+      await log.getByRole("button", { name: "Which stack did he use?" }).click();
+      await expect.poll(() => mock.bodies.length).toBe(2);
+      expect(mock.bodies[1]!.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+      expect(problems.cspViolations).toEqual([]);
+      expect(problems.pageErrors).toEqual([]);
+    },
+  );
 
   test("the browser reports what it saw of an answer, and a thumbs-down says why (visitor plan V2)", async ({
     page,
@@ -625,7 +629,7 @@ test.describe("assistant terminal", () => {
 
     const prompt = await openPrompt(page);
     await run(prompt, "How does he test prompts?");
-    const log = page.locator("#about [role=log]");
+    const log = askPanel(page).locator("[role=log]");
     await expect(log).toContainText("He runs evals before every prompt change");
 
     // Once the stream is over: when its first word showed, and when it ended.
@@ -671,7 +675,7 @@ test.describe("assistant terminal", () => {
 
     const prompt = await openPrompt(page);
     await run(prompt, "Tell me everything");
-    await expect(page.locator("#about [role=log]")).toContainText("A long");
+    await expect(askPanel(page).locator("[role=log]")).toContainText("A long");
     await prompt.press("Control+c");
 
     await expect
@@ -693,7 +697,7 @@ test.describe("assistant terminal", () => {
     const prompt = await openPrompt(page);
     await run(prompt, "What is he doing?");
 
-    const log = page.locator("#about [role=log]");
+    const log = askPanel(page).locator("[role=log]");
     await expect(log).toContainText("First words arrive now,", { timeout: 2500 });
     await expect(log).not.toContainText("a little later");
     await expect(log).toContainText("First words arrive now, the rest a little later.");
@@ -707,7 +711,7 @@ test.describe("assistant terminal", () => {
     const prompt = await openPrompt(page);
     await run(prompt, "What does he test?");
 
-    const step = page.locator("#about [role=log] p", { hasText: 'search "evals"' });
+    const step = askPanel(page).locator("[role=log] p", { hasText: 'search "evals"' });
     const spinner = step.locator(".step-spin");
     await expect(spinner).toBeVisible();
     // Reduced motion: a static ellipsis. Otherwise it spins.
@@ -720,28 +724,32 @@ test.describe("assistant terminal", () => {
     await expect(spinner).toHaveCount(0);
   });
 
-  test("an empty terminal suggests starter questions; one asks at once", async ({ page }) => {
-    const mock = await mockAsk(page, (route) =>
-      sse(route, answer({ text: "Evals on every prompt change." })),
-    );
-    await page.goto("/en");
-    await interactive(page);
-    // Before the prompt's code loads, About's placeholder draws the same row.
-    const starters = page.locator("#about").getByRole("group", { name: "Suggested questions" });
-    await starters.getByRole("button", { name: "How does he test AI features?" }).click();
+  test(
+    "an empty terminal suggests starter questions; one asks at once",
+    PHONE,
+    async ({ page }) => {
+      const mock = await mockAsk(page, (route) =>
+        sse(route, answer({ text: "Evals on every prompt change." })),
+      );
+      await page.goto("/en");
+      await interactive(page);
+      // Before the prompt's code loads, About's placeholder draws the same row.
+      const starters = askPanel(page).getByRole("group", { name: "Suggested questions" });
+      await starters.getByRole("button", { name: "How does he test AI features?" }).click();
 
-    const log = page.locator("#about [role=log]");
-    await expect(log).toContainText("How does he test AI features?");
-    await expect(log).toContainText("Evals on every prompt change.");
-    const prompt = page.locator("#about textarea");
-    await expect(prompt).toBeFocused();
-    expect(mock.bodies).toHaveLength(1);
-    await expect(starters).toHaveCount(0);
+      const log = askPanel(page).locator("[role=log]");
+      await expect(log).toContainText("How does he test AI features?");
+      await expect(log).toContainText("Evals on every prompt change.");
+      const prompt = askPanel(page).locator("textarea");
+      await expect(prompt).toBeFocused();
+      expect(mock.bodies).toHaveLength(1);
+      await expect(starters).toHaveCount(0);
 
-    // Cleared, the terminal is empty again, and suggests them again.
-    await prompt.press("Control+l");
-    await expect(starters.getByRole("button")).toHaveCount(3);
-  });
+      // Cleared, the terminal is empty again, and suggests them again.
+      await prompt.press("Control+l");
+      await expect(starters.getByRole("button")).toHaveCount(3);
+    },
+  );
 
   test("German pages ask in German", async ({ page }) => {
     const mock = await mockAsk(page, (route) =>
@@ -749,7 +757,7 @@ test.describe("assistant terminal", () => {
     );
     const prompt = await openPrompt(page, "/de");
     await run(prompt, "Wie testet er?");
-    await expect(page.locator("#about [role=log]")).toContainText("Er testet jede Änderung.");
+    await expect(askPanel(page).locator("[role=log]")).toContainText("Er testet jede Änderung.");
     expect(mock.bodies[0]!.locale).toBe("de");
   });
 
@@ -759,11 +767,11 @@ test.describe("assistant terminal", () => {
     const prompt = await openPrompt(page);
     await run(prompt, "How does retrieval work?");
 
-    const status = page.locator("#about").getByRole("status");
+    const status = askPanel(page).getByRole("status");
     // Seen: the seconds count up. Heard: no number, so nothing to read again.
     await expect(status).toContainText(/thinking… \d+\.\d s/);
     expect(await status.ariaSnapshot()).not.toMatch(/\d+\.\d s/);
-    await expect(page.locator("#about [role=log]")).toContainText("Hybrid search.");
+    await expect(askPanel(page).locator("[role=log]")).toContainText("Hybrid search.");
   });
 
   test("a rate limit shows a countdown, and a failed answer can be retried", async ({ page }) => {
@@ -785,13 +793,13 @@ test.describe("assistant terminal", () => {
     });
     const signals = await recordPosts(page, "**/v1/ask/signal");
     const prompt = await openPrompt(page);
-    const log = page.locator("#about [role=log]");
+    const log = askPanel(page).locator("[role=log]");
 
     await run(prompt, "First question");
     await expect(log).toContainText(/try again in 4[0-2]s/);
     // Heard once, from the terminal's live region; the countdown is for the eye
     // (a live region would read it again every second).
-    await expect(page.locator('#about [aria-live="polite"]')).toContainText(/try again in 42s/);
+    await expect(askPanel(page).locator('[aria-live="polite"]')).toContainText(/try again in 42s/);
     await expect(log.getByRole("status")).toHaveCount(0);
 
     // Past the limit (the mock does not enforce it; the terminal does).
@@ -814,7 +822,7 @@ test.describe("assistant terminal", () => {
     const mock = await mockAsk(page, () => undefined, { state: "resting" });
     const prompt = await openPrompt(page);
     await run(prompt, "Which projects has he built?");
-    const log = page.locator("#about [role=log]");
+    const log = askPanel(page).locator("[role=log]");
     await expect(log).toContainText("The assistant is resting.");
     await expect(log).toContainText("project-one");
     await expect(log).toContainText("type `contact`");
@@ -848,7 +856,9 @@ test.describe("assistant terminal", () => {
     page,
   }) => {
     const { summary, confirm, confirmed } = await offerHandoff(page, "fallback");
-    await expect(page.locator("#about [role=log]")).toContainText("Happy to help you reach him.");
+    await expect(askPanel(page).locator("[role=log]")).toContainText(
+      "Happy to help you reach him.",
+    );
     await confirm.getByRole("button", { name: "yes" }).click();
     await expect(page.locator("#contact-message")).toHaveValue(summary);
     await expect.poll(() => confirmed.length).toBe(1);
@@ -879,10 +889,10 @@ test.describe("assistant terminal", () => {
     await bar.fill("How does he test?");
     await bar.press("Enter");
 
-    const log = page.locator("#about [role=log]");
+    const log = askPanel(page).locator("[role=log]");
     await expect(log).toContainText("How does he test?");
     await expect(log).toContainText("He ships evals first.");
-    await expect(page.locator("#about textarea")).toBeFocused();
+    await expect(askPanel(page).locator("textarea")).toBeFocused();
     expect(mock.bodies).toHaveLength(1);
     // The hero's trace panel replays that answer instead of the example.
     const trace = page.locator("#hero figure");
@@ -908,7 +918,7 @@ test.describe("assistant terminal", () => {
       .getByRole("group", { name: "Suggested questions" })
       .getByRole("button", { name: "What has he shipped with RAG?" })
       .click();
-    await expect(page.locator("#about [role=log]")).toContainText("Hybrid search.");
+    await expect(askPanel(page).locator("[role=log]")).toContainText("Hybrid search.");
   });
 
   test("an empty ask bar still goes to the prompt", async ({ page }) => {
@@ -916,10 +926,10 @@ test.describe("assistant terminal", () => {
     await page.goto("/en");
     await interactive(page);
     await page.getByRole("button", { name: "Ask", exact: true }).click();
-    await expect(page.locator("#about textarea")).toBeFocused();
+    await expect(askPanel(page).locator("textarea")).toBeFocused();
   });
 
-  test("other pages open the same assistant in a sheet", async ({ page }) => {
+  test("other pages open the same assistant in a sheet", PHONE, async ({ page }) => {
     await mockAsk(page, (route) => sse(route, answer({ text: "From the sheet." })));
     await page.goto("/en/work/project-one");
     await interactive(page);
@@ -962,20 +972,24 @@ test.describe("assistant terminal", () => {
     await expect(sheet).toBeHidden();
   });
 
-  test("a case study's end block asks the assistant about that project", async ({ page }) => {
-    const mock = await mockAsk(page, (route) =>
-      sse(route, answer({ text: "A retrieval platform, built in TypeScript." })),
-    );
-    await page.goto("/en/work/project-one");
-    await interactive(page);
-    await page.getByRole("button", { name: "Ask about Atlas" }).click();
-    const sheet = page.getByRole("dialog", { name: "Ask about my work" });
-    await expect(sheet).toContainText("What did he build in Atlas, and how?");
-    await expect(sheet).toContainText("A retrieval platform, built in TypeScript.");
-    expect(mock.bodies).toHaveLength(1);
-    // The page goes with the question (visitor plan V8): the server maps it to the case study.
-    expect(mock.bodies[0]!.page).toBe("/en/work/project-one");
-  });
+  test(
+    "a case study's end block asks the assistant about that project",
+    PHONE,
+    async ({ page }) => {
+      const mock = await mockAsk(page, (route) =>
+        sse(route, answer({ text: "A retrieval platform, built in TypeScript." })),
+      );
+      await page.goto("/en/work/project-one");
+      await interactive(page);
+      await page.getByRole("button", { name: "Ask about Atlas" }).click();
+      const sheet = page.getByRole("dialog", { name: "Ask about my work" });
+      await expect(sheet).toContainText("What did he build in Atlas, and how?");
+      await expect(sheet).toContainText("A retrieval platform, built in TypeScript.");
+      expect(mock.bodies).toHaveLength(1);
+      // The page goes with the question (visitor plan V8): the server maps it to the case study.
+      expect(mock.bodies[0]!.page).toBe("/en/work/project-one");
+    },
+  );
 
   test("a case study's section and code buttons ask about what they point at (visitor plan V9)", async ({
     page,
@@ -1064,7 +1078,7 @@ test.describe("assistant terminal", () => {
       sse(route, answer({ text: "Atlas helps agents." })),
     );
     let prompt = await openPrompt(page);
-    const about = page.locator("#about");
+    const about = askPanel(page);
     await run(prompt, "level");
     await expect(about).toContainText("usage: level plain|standard|expert (now: standard)");
     await run(prompt, "level plain");
@@ -1143,7 +1157,7 @@ test.describe("assistant terminal", () => {
       await route.fulfill({ headers: cors, json: INSPECTED });
     });
     const prompt = await openPrompt(page);
-    const log = page.locator("#about [role=log]");
+    const log = askPanel(page).locator("[role=log]");
 
     await run(prompt, "How does he test prompts?");
     await expect(log).toContainText("He runs evals first");
@@ -1208,12 +1222,12 @@ test.describe("assistant terminal", () => {
     const prompt = await openPrompt(page);
     await run(prompt, "Is he available?");
 
-    const status = page.locator("#about [data-failover]");
+    const status = askPanel(page).locator("[data-failover]");
     await expect(status).toHaveText("the first model is busy, trying another (2 of 3)");
-    await expect(page.locator("#about [aria-live=polite]")).toHaveText(
+    await expect(askPanel(page).locator("[aria-live=polite]")).toHaveText(
       "the first model is busy, trying another (2 of 3)",
     );
-    await expect(page.locator("#about [role=log]")).toContainText("From the second model.");
+    await expect(askPanel(page).locator("[role=log]")).toContainText("From the second model.");
     await expect(status).toHaveCount(0);
     // Not part of the message: the tab keeps the answer, never the status.
     const kept = await page.evaluate(() => sessionStorage.getItem("ask:v1") ?? "");
@@ -1235,9 +1249,11 @@ test.describe("assistant terminal", () => {
       await route.fulfill({ headers: cors, json: SCORECARD });
     });
     const prompt = await openPrompt(page);
-    const log = page.locator("#about [role=log]");
+    const log = askPanel(page).locator("[role=log]");
     // The config has come: it says whether the scorecard is published.
-    await expect(page.locator("#about app-terminal-window header").first()).toContainText("online");
+    await expect(askPanel(page).locator("app-terminal-window header").first()).toContainText(
+      "online",
+    );
 
     await run(prompt, "help");
     await expect(log).toContainText("how well the assistant does: its tests and live checks");
@@ -1267,8 +1283,10 @@ test.describe("assistant terminal", () => {
       await route.fulfill({ status: 404, headers: cors, json: { error: "not_published" } });
     });
     const prompt = await openPrompt(page);
-    const log = page.locator("#about [role=log]");
-    await expect(page.locator("#about app-terminal-window header").first()).toContainText("online");
+    const log = askPanel(page).locator("[role=log]");
+    await expect(askPanel(page).locator("app-terminal-window header").first()).toContainText(
+      "online",
+    );
     await run(prompt, "help");
     await expect(log).toContainText("inspect");
     await expect(log).not.toContainText("how well the assistant does");
@@ -1297,7 +1315,7 @@ test.describe("assistant terminal", () => {
         () => JSON.parse(sessionStorage.getItem("ask:v1") ?? "{}") as Record<string, unknown>,
       );
     const prompt = await openPrompt(page);
-    const log = page.locator("#about [role=log]");
+    const log = askPanel(page).locator("[role=log]");
 
     await run(prompt, "level plain");
     await run(prompt, "Where does he live?");
@@ -1383,7 +1401,7 @@ test.describe("assistant terminal", () => {
     const maps = await mockMap(page);
     const kept = () => page.evaluate(() => localStorage.getItem("ask:news"));
     const prompt = await openPrompt(page);
-    const log = page.locator("#about [role=log]");
+    const log = askPanel(page).locator("[role=log]");
 
     // Off: offered, with what it would keep; a no stores nothing, and nothing is fetched.
     await run(prompt, "news");
@@ -1440,60 +1458,64 @@ test.describe("assistant terminal", () => {
     expect(await kept()).toBeNull();
   });
 
-  test("tour runs the short tour from end to end: the About terminal, the sheet elsewhere, a reload, the last stop's offer (visitor plan V16)", async ({
-    page,
-  }) => {
-    const mock = await mockAsk(page, (route) => sse(route, answer({ text: "unused" })));
-    const prompt = await openPrompt(page);
-    const log = page.locator("#about [role=log]");
+  test(
+    "tour runs the short tour from end to end: the About terminal, the sheet elsewhere, a reload, the last stop's offer (visitor plan V16)",
+    PHONE,
+    async ({ page }) => {
+      const mock = await mockAsk(page, (route) => sse(route, answer({ text: "unused" })));
+      const prompt = await openPrompt(page);
+      const log = askPanel(page).locator("[role=log]");
 
-    // No model: the short tour comes from the page's own content.
-    await run(prompt, "tour");
-    await expect(log).toContainText("The short tour, 5 stops:");
-    await expect(log).toContainText("Atlas");
-    await expect(log).toContainText("Shipping RAG to production");
-    const group = page.getByRole("group", { name: "tour · 5 stops" });
-    await expect(group).toBeVisible();
-    expect(mock.bodies).toHaveLength(0);
+      // No model: the short tour comes from the page's own content.
+      await run(prompt, "tour");
+      await expect(log).toContainText("The short tour, 5 stops:");
+      await expect(log).toContainText("Atlas");
+      await expect(log).toContainText("Shipping RAG to production");
+      const group = page.getByRole("group", { name: "tour · 5 stops" });
+      await expect(group).toBeVisible();
+      expect(mock.bodies).toHaveLength(0);
 
-    // The first stop is About, on this page; the keyboard reaches the group's next.
-    await group.getByRole("button", { name: "next" }).focus();
-    await page.keyboard.press("Enter");
-    await expect(page.getByRole("group", { name: "tour · stop 1 of 5 · about" })).toBeVisible();
-    await expect(log).toContainText("ask about this ›");
+      // The first stop is About, on this page; the keyboard reaches the group's next.
+      await group.getByRole("button", { name: "next" }).focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("group", { name: "tour · stop 1 of 5 · about" })).toBeVisible();
+      await expect(log).toContainText("ask about this ›");
 
-    // Typed, as in any shell. To another page: the sheet carries the tour on.
-    await run(prompt, "next");
-    await expect(page).toHaveURL(/\/en\/work\/project-one$/);
-    const sheet = page.getByRole("dialog", { name: "Ask about my work" });
-    await expect(sheet.getByRole("group", { name: "tour · stop 2 of 5 · Atlas" })).toBeVisible();
+      // Typed, as in any shell. To another page: the sheet carries the tour on.
+      await run(prompt, "next");
+      await expect(page).toHaveURL(/\/en\/work\/project-one$/);
+      const sheet = page.getByRole("dialog", { name: "Ask about my work" });
+      await expect(sheet.getByRole("group", { name: "tour · stop 2 of 5 · Atlas" })).toBeVisible();
 
-    // The tab keeps it through a reload.
-    await page.reload();
-    await interactive(page);
-    await page.getByRole("button", { name: "Ask about my work" }).click();
-    await expect(sheet.getByRole("group", { name: /stop 2 of 5/ })).toBeVisible();
+      // The tab keeps it through a reload.
+      await page.reload();
+      await interactive(page);
+      await page.getByRole("button", { name: "Ask about my work" }).click();
+      await expect(sheet.getByRole("group", { name: /stop 2 of 5/ })).toBeVisible();
 
-    await sheet.getByRole("button", { name: "next" }).click();
-    await expect(page).toHaveURL(/\/en\/writing\/shipping-rag-to-production$/);
-    await sheet.getByRole("button", { name: "back" }).click();
-    await expect(page).toHaveURL(/\/en\/work\/project-one$/);
-    await run(sheet.locator("textarea"), "next");
-    await run(sheet.locator("textarea"), "next");
-    await expect(page).toHaveURL(/\/en\/work\/project-two$/);
-    await run(sheet.locator("textarea"), "next");
-    await expect(page).toHaveURL(/\/en#contact$/);
-    await expect(sheet).toContainText("That was the last stop.");
+      await sheet.getByRole("button", { name: "next" }).click();
+      await expect(page).toHaveURL(/\/en\/writing\/shipping-rag-to-production$/);
+      await sheet.getByRole("button", { name: "back" }).click();
+      await expect(page).toHaveURL(/\/en\/work\/project-one$/);
+      await run(sheet.locator("textarea"), "next");
+      await run(sheet.locator("textarea"), "next");
+      await expect(page).toHaveURL(/\/en\/work\/project-two$/);
+      await run(sheet.locator("textarea"), "next");
+      await expect(page).toHaveURL(/\/en#contact$/);
+      await expect(sheet).toContainText("That was the last stop.");
 
-    // The last stop offers contact, as the hand-off does.
-    const offer = sheet.getByRole("group", { name: "Hand this conversation to the contact form?" });
-    await expect(offer).toBeVisible();
-    await offer.getByRole("button", { name: "yes" }).click();
-    await expect(page.locator("#contact-message")).toHaveValue(
-      "Hi Alireza, I took the tour of your portfolio and would like to get in touch.",
-    );
-    expect(mock.bodies).toHaveLength(0);
-  });
+      // The last stop offers contact, as the hand-off does.
+      const offer = sheet.getByRole("group", {
+        name: "Hand this conversation to the contact form?",
+      });
+      await expect(offer).toBeVisible();
+      await offer.getByRole("button", { name: "yes" }).click();
+      await expect(page.locator("#contact-message")).toHaveValue(
+        "Hi Alireza, I took the tour of your portfolio and would like to get in touch.",
+      );
+      expect(mock.bodies).toHaveLength(0);
+    },
+  );
 
   test("tour <interest> asks the server once and takes its checked stops; tour stop ends it (visitor plan V16)", async ({
     page,
@@ -1552,7 +1574,7 @@ test.describe("assistant terminal", () => {
       ]),
     );
     const prompt = await openPrompt(page);
-    const log = page.locator("#about [role=log]");
+    const log = askPanel(page).locator("[role=log]");
     await run(prompt, "tour data platforms");
     await expect(log).toContainText("Three stops on data platforms");
     const list = log.getByRole("list", { name: "Stops" });
@@ -1656,8 +1678,8 @@ test.describe("assistant terminal", () => {
     );
     await openPrompt(page);
     // With the paste box open, the log holds a second textarea: the prompt is the terminal's own.
-    const prompt = page.locator("#about textarea.terminal-input");
-    const log = page.locator("#about [role=log]");
+    const prompt = askPanel(page).locator("textarea.terminal-input");
+    const log = askPanel(page).locator("[role=log]");
     const offer = page.getByRole("group", { name: "Hand this conversation to the contact form?" });
 
     await run(prompt, "help");
@@ -1714,9 +1736,9 @@ test.describe("assistant terminal", () => {
     await pausedStream(page, chunks, 1, 3000);
     await mockAsk(page, () => undefined, { match: true });
     await openPrompt(page);
-    const prompt = page.locator("#about textarea.terminal-input");
-    const log = page.locator("#about [role=log]");
-    const live = page.locator("#about [aria-live=polite]");
+    const prompt = askPanel(page).locator("textarea.terminal-input");
+    const log = askPanel(page).locator("[role=log]");
+    const live = askPanel(page).locator("[aria-live=polite]");
     await run(prompt, "fit");
     await log.getByLabel("Paste the role").fill("Senior AI engineer: retrieval in production.");
     await log.getByRole("button", { name: "check it" }).click();
@@ -1842,8 +1864,8 @@ test.describe("assistant terminal", () => {
       match: true,
     });
     await openPrompt(page);
-    const log = page.locator("#about [role=log]");
-    await run(page.locator("#about textarea.terminal-input"), "match role");
+    const log = askPanel(page).locator("[role=log]");
+    await run(askPanel(page).locator("textarea.terminal-input"), "match role");
     await log.getByLabel("Paste the role").fill("Senior AI engineer: retrieval in production.");
     await log.getByRole("button", { name: "check it" }).click();
     await log.getByRole("link", { name: "open as a page" }).click();
@@ -1977,68 +1999,67 @@ test.describe("assistant terminal", () => {
     expect(loaded).toHaveLength(1);
   });
 
-  test("a shared link puts its question in the prompt and sends nothing until Enter; share copies one (visitor plan V17)", async ({
-    page,
-    context,
-    browserName,
-    baseURL,
-  }) => {
-    // Only Chromium lets a test grant clipboard access and read it back.
-    const readable = browserName === "chromium";
-    if (readable) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-    const mock = await mockAsk(page, (route) =>
-      sse(route, answer({ text: "A retrieval platform, built in TypeScript." })),
-    );
-    const question = "What did he build here?";
-
-    // Off home: the sheet opens with the question in its prompt, focused, and the address
-    // keeps everything but the question.
-    await page.goto(`/en/work/project-one?utm_source=news&ask=${encodeURIComponent(question)}`);
-    await interactive(page);
-    const sheet = page.getByRole("dialog", { name: "Ask about my work" });
-    const prompt = sheet.locator("textarea");
-    await expect(prompt).toHaveValue(question);
-    await expect(prompt).toBeFocused();
-    expect(new URL(page.url()).search).toBe("?utm_source=news");
-    // A link proposes; only the visitor sends.
-    expect(mock.bodies).toHaveLength(0);
-    // Analytics never sees it: the hook strips it from any address the tracker would send.
-    expect(
-      await page.evaluate(
-        () =>
-          (
-            window as unknown as {
-              umamiBeforeSend: (t: string, p: { url: string }) => { url: string };
-            }
-          ).umamiBeforeSend("event", { url: "/en?ask=x&utm_source=news" }).url,
-      ),
-    ).toBe("/en?utm_source=news");
-    expect(await axeViolations(page)).toEqual([]);
-
-    await prompt.press("Enter");
-    await expect(sheet).toContainText("A retrieval platform, built in TypeScript.");
-    expect(mock.bodies).toHaveLength(1);
-    expect(JSON.stringify(mock.bodies[0]!.messages.at(-1))).toContain(question);
-
-    // share: the link carries the question, said once.
-    await sheet
-      .getByRole("button", { name: "share: copy a link that carries this question" })
-      .click();
-    await expect(sheet.getByRole("button", { name: "Link copied" })).toBeVisible();
-    await expect(sheet.locator("[aria-live=polite]")).toHaveText("Link copied");
-    if (readable) {
-      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-        `${new URL(baseURL!).origin}/en/work/project-one?ask=${encodeURIComponent(question)}`,
+  test(
+    "a shared link puts its question in the prompt and sends nothing until Enter; share copies one (visitor plan V17)",
+    PHONE,
+    async ({ page, context, browserName, baseURL }) => {
+      // Only Chromium lets a test grant clipboard access and read it back.
+      const readable = browserName === "chromium";
+      if (readable) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+      const mock = await mockAsk(page, (route) =>
+        sse(route, answer({ text: "A retrieval platform, built in TypeScript." })),
       );
-    }
+      const question = "What did he build here?";
 
-    // On home, the About terminal waits with it.
-    await page.goto(`/en?ask=${encodeURIComponent("Is he available?")}`);
-    await interactive(page);
-    await expect(page.locator("#about textarea")).toHaveValue("Is he available?");
-    expect(new URL(page.url()).search).toBe("");
-    expect(mock.bodies).toHaveLength(1);
-  });
+      // Off home: the sheet opens with the question in its prompt, focused, and the address
+      // keeps everything but the question.
+      await page.goto(`/en/work/project-one?utm_source=news&ask=${encodeURIComponent(question)}`);
+      await interactive(page);
+      const sheet = page.getByRole("dialog", { name: "Ask about my work" });
+      const prompt = sheet.locator("textarea");
+      await expect(prompt).toHaveValue(question);
+      await expect(prompt).toBeFocused();
+      expect(new URL(page.url()).search).toBe("?utm_source=news");
+      // A link proposes; only the visitor sends.
+      expect(mock.bodies).toHaveLength(0);
+      // Analytics never sees it: the hook strips it from any address the tracker would send.
+      expect(
+        await page.evaluate(
+          () =>
+            (
+              window as unknown as {
+                umamiBeforeSend: (t: string, p: { url: string }) => { url: string };
+              }
+            ).umamiBeforeSend("event", { url: "/en?ask=x&utm_source=news" }).url,
+        ),
+      ).toBe("/en?utm_source=news");
+      expect(await axeViolations(page)).toEqual([]);
+
+      await prompt.press("Enter");
+      await expect(sheet).toContainText("A retrieval platform, built in TypeScript.");
+      expect(mock.bodies).toHaveLength(1);
+      expect(JSON.stringify(mock.bodies[0]!.messages.at(-1))).toContain(question);
+
+      // share: the link carries the question, said once.
+      await sheet
+        .getByRole("button", { name: "share: copy a link that carries this question" })
+        .click();
+      await expect(sheet.getByRole("button", { name: "Link copied" })).toBeVisible();
+      await expect(sheet.locator("[aria-live=polite]")).toHaveText("Link copied");
+      if (readable) {
+        expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+          `${new URL(baseURL!).origin}/en/work/project-one?ask=${encodeURIComponent(question)}`,
+        );
+      }
+
+      // On home, the About terminal waits with it.
+      await page.goto(`/en?ask=${encodeURIComponent("Is he available?")}`);
+      await interactive(page);
+      await expect(askPanel(page).locator("textarea")).toHaveValue("Is he available?");
+      expect(new URL(page.url()).search).toBe("");
+      expect(mock.bodies).toHaveLength(1);
+    },
+  );
 
   test("the reader pages' server HTML has none of the ask buttons: the browser adds them", async ({
     request,
@@ -2203,7 +2224,7 @@ test.describe("assistant on a phone", () => {
     await mockAsk(page, () => undefined);
     const prompt = await openPrompt(page);
     await prompt.focus();
-    const frame = page.locator("#about .ask-expanded");
+    const frame = askPanel(page).locator(".ask-expanded");
     await expect(frame).toBeVisible();
     const box = await frame.boundingBox();
     expect(box?.width).toBeGreaterThanOrEqual(389);
@@ -2227,7 +2248,7 @@ test.describe("assistant on a phone", () => {
     await mockAsk(page, () => undefined);
     const prompt = await openPrompt(page);
     await prompt.focus();
-    const frame = page.locator("#about .ask-expanded");
+    const frame = askPanel(page).locator(".ask-expanded");
     await expect(frame).toBeVisible();
 
     // Through its own controls, then on to the page.

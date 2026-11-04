@@ -13,9 +13,9 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
  */
 const VISUAL = Boolean(process.env["E2E_VISUAL"]);
 /**
- * The desktop suite in Firefox and WebKit, projects that also exist only when
- * asked for: CI's nightly run sets this. They use Playwright's own builds of
- * those browsers (`npx playwright install firefox webkit`).
+ * The desktop suite in Firefox and WebKit, and the phone cases in WebKit, projects
+ * that also exist only when asked for: CI's nightly run sets this. They use
+ * Playwright's own builds of those browsers (`npx playwright install firefox webkit`).
  */
 const CROSS_BROWSER = Boolean(process.env["E2E_CROSS_BROWSER"]);
 /** Locally the installed Chrome drives the Chromium projects; CI installs Playwright's Chromium. */
@@ -47,6 +47,13 @@ export default defineConfig({
       use: { ...devices["Pixel 7"], ...CHROME },
       testMatch: /navigation\.spec\.ts/,
     },
+    // The assistant's core cases on a phone (plan 4 U7): the ones ask.spec.ts tags @phone.
+    {
+      name: "phone",
+      use: { ...devices["Pixel 7"], ...CHROME },
+      testMatch: /ask\.spec\.ts/,
+      grep: /@phone/,
+    },
     ...(VISUAL
       ? [
           {
@@ -66,6 +73,13 @@ export default defineConfig({
             testIgnore: /visual\.spec\.ts/,
           },
           { name: "webkit", use: { ...devices["Desktop Safari"] }, testIgnore: /visual\.spec\.ts/ },
+          // The phone cases as on an iPhone (WebKit). Firefox has no mobile emulation.
+          {
+            name: "phone-webkit",
+            use: { ...devices["iPhone 15"] },
+            testMatch: /ask\.spec\.ts/,
+            grep: /@phone/,
+          },
         ]
       : []),
   ],
