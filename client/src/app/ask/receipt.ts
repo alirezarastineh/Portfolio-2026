@@ -7,7 +7,7 @@ import type { AskAbout } from "./ask-launcher.service";
 import type { AnswerMetadata, AnswerReceipt, FailoverStatus } from "./ask-types";
 
 /**
- * The answer's receipt line, its sources' chips and the failover line (visitor
+ * The answer's receipt, its trace's steps, its sources' rows and the failover line (visitor
  * plan V12), from what the server sends: the receipt's counts and codes, each
  * source's kind and date, the transient status. Only the fields named below
  * are ever read, so whatever a newer server adds stays off the screen until
@@ -59,6 +59,44 @@ export function pageTitle(id: string, content: AppContent): string | null {
   const [, kind, slug] = match;
   if (kind === "project") return content.projects.find((p) => p.slug === slug)?.name ?? null;
   return content.posts.find((p) => p.slug === slug)?.title ?? null;
+}
+
+/** What a lookup read: a page's title, an entry's organisation, else its kind in words. */
+function documentName(id: string, content: AppContent, docs: AskCopy["trace"]["docs"]): string {
+  const page = pageTitle(id, content);
+  if (page) return page;
+  const [, kind = "", key] = /^([a-z-]+)(?::([^@]+))?@/.exec(id) ?? [];
+  const org = kind === "experience" && content.experiences.find((e) => e.id === key)?.org.name;
+  return org || (own(docs, kind) ?? id);
+}
+
+/**
+ * A tool call as a line of the answer's trace (plan 4 U11), in plain words; none for what has its
+ * own place on screen (follow-ups, the hand-off). `inspect` keeps the calls themselves.
+ */
+export function toolStep(
+  name: string,
+  input: Record<string, unknown>,
+  copy: AskCopy["trace"],
+  content: AppContent,
+): string | null {
+  const str = (key: string) => (typeof input[key] === "string" ? input[key] : "");
+  switch (name) {
+    case "search_portfolio":
+      return fmt(copy.search, { q: str("query") });
+    case "get_document":
+      return fmt(copy.read, { title: documentName(str("id"), content, copy.docs) });
+    case "list_projects": {
+      const q = str("text");
+      return q ? fmt(copy.listAbout, { q }) : copy.list;
+    }
+    case "get_resume":
+      return fmt(copy.read, { title: copy.docs.cv });
+    case "navigate":
+      return fmt(copy.open, { to: str("to") });
+    default:
+      return null;
+  }
 }
 
 /** Which model answered: the move to the thorough one and why, or the route it took. */
@@ -126,30 +164,15 @@ export function failoverLine(
   });
 }
 
-/** The glyph each kind of document shows on its chip; a kind not named here shows none. */
-const KIND_GLYPHS: Record<string, string> = {
-  profile: "@",
-  experience: "≡",
-  project: "◆",
-  post: "¶",
-  skills: "*",
-  cv: "§",
-  faq: "?",
-  "system-card": "#",
-};
-
-/** What a source's chip adds to its title: the kind's glyph, and the month it last changed. */
+/** What a source's row adds to its title: the month it last changed. */
 export function sourceFacts(
   providerMetadata: unknown,
   locale: Locale,
   copy: Pick<AskCopy, "updated">,
-): { glyph: string | null; updated: string | null } {
-  const facts = (providerMetadata as { portfolio?: { kind?: unknown; updated?: unknown } } | null)
-    ?.portfolio;
-  const kind = typeof facts?.kind === "string" ? facts.kind : "";
+): { updated: string | null } {
+  const facts = (providerMetadata as { portfolio?: { updated?: unknown } } | null)?.portfolio;
   const date = typeof facts?.updated === "string" ? facts.updated : "";
   return {
-    glyph: own(KIND_GLYPHS, kind) ?? null,
     updated: /^\d{4}-\d{2}-\d{2}$/.test(date)
       ? fmt(copy.updated, { date: formatMonth(date, locale) })
       : null,

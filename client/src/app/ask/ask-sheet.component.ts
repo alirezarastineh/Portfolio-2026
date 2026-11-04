@@ -13,38 +13,34 @@ import {
 } from "@angular/core";
 import { Router, Scroll } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideMaximize2, lucideMinimize2, lucideX } from "@ng-icons/lucide";
+import { lucideEllipsis, lucideMaximize2, lucideMinimize2, lucideX } from "@ng-icons/lucide";
 import { first } from "rxjs";
 
-import {
-  TerminalWindowComponent,
-  type TerminalStatus,
-} from "../components/terminal-window.component";
 import { CHROME } from "../i18n/chrome";
 import { LanguageService } from "../services/language.service";
+import { AskConsoleComponent } from "./ask-console.component";
 import { AskLauncherService } from "./ask-launcher.service";
+import { LEVELS } from "./ask-level";
 import { AskStore } from "./ask.store";
-import { TerminalShellComponent } from "./terminal-shell.component";
 
 /** Marks the history entry an open sheet adds, so a phone's Back can close it. */
 const SHEET_ENTRY = "askSheet";
 
 /**
- * The assistant on every page (plan 4 U8–U10): one non-modal dialog, opened with
+ * The assistant on every page (plan 4 U8–U11): one non-modal dialog, opened with
  * `show()` at every width, so the page stays usable beside it. From 1024px it
- * floats at the bottom right, grows up to the header and widens on request;
- * below, it is a sheet over the whole screen, fitted above the keyboard, with the
- * page inert behind it and its own history entry. Opened by the hero's ask bar,
- * the floating button, the palette, `/` or a reader's buttons; closed by the
- * visitor, and on a phone by a citation or the hand-off, whose page must show. It
- * holds still while pages change behind it, and a visible Turnstile check shows
- * inside it.
+ * floats at the right under the site's header and widens on request; below, it is
+ * a sheet over the whole screen, fitted above the keyboard, with the page inert
+ * behind it and its own history entry. Opened by the hero's ask bar, the floating
+ * button, the palette, `/` or a reader's buttons; closed by the visitor, and on a
+ * phone by a citation or the hand-off, whose page must show. It holds still while
+ * pages change behind it, and a visible Turnstile check shows inside it.
  */
 @Component({
   selector: "app-ask-sheet",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgIcon, TerminalShellComponent, TerminalWindowComponent],
-  viewProviders: [provideIcons({ lucideMaximize2, lucideMinimize2, lucideX })],
+  imports: [AskConsoleComponent, NgIcon],
+  viewProviders: [provideIcons({ lucideEllipsis, lucideMaximize2, lucideMinimize2, lucideX })],
   host: {
     "(document:keydown.escape)": "onEscape($event)",
     "(window:popstate)": "onHistory($event)",
@@ -53,111 +49,260 @@ const SHEET_ENTRY = "askSheet";
     <dialog
       #dialog
       tabindex="-1"
-      class="ask-sheet m-0 bg-transparent p-0"
+      class="ask-sheet"
       [class.ask-sheet-wide]="wide()"
       [attr.aria-label]="lang.t().ask.title"
       (close)="launcher.closeSheet()"
       (focusout)="fit()"
     >
-      <!-- A section, so the window's title bar (a <header>) is no second banner beside the page's. -->
+      <!-- A section, so its <header> is no second banner beside the page's. -->
       <section>
-        <app-terminal-window [title]="lang.t().ask.title" [status]="status()" [compact]="true">
+        <header>
+          <h2>{{ lang.t().ask.title }}</h2>
+          @if (status(); as status) {
+            <span class="status"
+              ><span class="dot" [class.live]="status.live" aria-hidden="true"></span
+              ><span class="word">{{ status.label }}</span></span
+            >
+          }
           <button
-            windowAction
             type="button"
-            class="press -my-1 inline-flex min-h-6 cursor-pointer items-center rounded-md px-1.5 text-muted-foreground hover:text-foreground max-lg:hidden"
+            class="tool wider press"
             [attr.aria-pressed]="wide()"
+            [attr.aria-label]="store.copy().wider"
             (click)="wide.set(!wide())"
           >
             <ng-icon
               [name]="wide() ? 'lucideMinimize2' : 'lucideMaximize2'"
-              size="14"
+              size="16"
               aria-hidden="true"
-            /><span class="sr-only">{{ store.copy().wider }}</span>
+            />
           </button>
           <button
-            windowAction
             type="button"
-            class="ask-close press -my-1 -mr-1.5 inline-flex min-h-6 cursor-pointer items-center rounded-md px-1.5 text-muted-foreground hover:text-foreground"
-            [attr.aria-label]="(launcher.narrow() ? '' : 'esc: ') + store.copy().close"
+            class="tool press"
+            popovertarget="ask-menu"
+            [attr.aria-label]="menu().label"
+          >
+            <ng-icon name="lucideEllipsis" size="16" aria-hidden="true" />
+          </button>
+          <!-- What help lists, without typing: the browser closes it on Escape or a click outside. -->
+          <div #more id="ask-menu" class="menu" popover>
+            <button type="button" (click)="run('clear')">{{ menu().clear }}</button>
+            <button type="button" (click)="run('forget')">{{ menu().forget }}</button>
+            <div class="levels" role="group" [attr.aria-label]="menu().level">
+              <span aria-hidden="true">{{ menu().level }}</span>
+              @for (level of levels; track level) {
+                <button
+                  type="button"
+                  [attr.aria-pressed]="store.level() === level"
+                  (click)="run('level ' + level)"
+                >
+                  {{ menu().levels[level] }}
+                </button>
+              }
+            </div>
+            <button type="button" (click)="run('news')">{{ menu().news }}</button>
+            <button type="button" (click)="run('tour')">{{ menu().tour }}</button>
+          </div>
+          <button
+            type="button"
+            class="tool press"
+            aria-keyshortcuts="Escape"
+            [attr.aria-label]="store.copy().close"
             (click)="dismiss()"
           >
-            @if (launcher.narrow()) {
-              <ng-icon name="lucideX" size="20" aria-hidden="true" />
-            } @else {
-              esc
-            }
+            <ng-icon name="lucideX" size="20" aria-hidden="true" />
           </button>
-          <app-terminal-shell />
-          <!-- Where Cloudflare's check shows when it asks the visitor (store: readyToAsk). -->
-          <div #check></div>
-        </app-terminal-window>
+        </header>
+        <app-ask-console />
+        <!-- Where Cloudflare's check shows when it asks the visitor (store: readyToAsk). -->
+        <div #check></div>
       </section>
     </dialog>
   `,
   styles: `
-    /* From 1024px a panel beside the page: bottom right, growing up to 8px under
-       the 64px header. Below (the launcher's SHEET_QUERY), a sheet over the whole
-       screen, as tall as the visual viewport (fit): one column from the dialog
-       down to the log, the only thing that scrolls unless the screen is too short
-       for the prompt. */
+    /* From 1024px a panel beside the page, under the 64px header. Below (the
+       launcher's SHEET_QUERY), a sheet over the whole screen, as tall as the
+       visual viewport (fit). One column at every width, from the dialog down to
+       the log, the only thing that scrolls unless the screen is too short for
+       the prompt. */
     .ask-sheet {
       position: fixed;
-      inset: auto 1rem 1rem auto;
+      inset: 4.5rem 1rem 1rem auto;
       z-index: 50;
       width: min(28rem, 34vw);
-      max-height: calc(100dvh - 5.5rem);
+      height: auto;
+      max-height: none;
+      margin: 0;
+      padding: 0;
       overflow: auto;
+      background: transparent;
       view-transition-name: ask-panel;
     }
     .ask-sheet-wide {
       width: min(44rem, 60vw);
     }
+    .ask-sheet[open],
+    section {
+      display: flex;
+      flex-direction: column;
+    }
+    section {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      border-radius: 0.5rem;
+      background: var(--card);
+      box-shadow: 0 24px 60px rgb(0 0 0 / 0.35);
+    }
+    app-ask-console {
+      flex: 1;
+    }
+    header {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.25rem 0.25rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h2 {
+      min-width: 0;
+      margin: 0 auto 0 0;
+      color: var(--foreground);
+      font-size: 0.9375rem;
+      font-weight: 600;
+      line-height: 1.3;
+      text-wrap: balance;
+    }
+    .status {
+      display: inline-flex;
+      flex: none;
+      align-items: center;
+      gap: 0.375rem;
+      margin-inline: 0.5rem 0.25rem;
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+    }
+    .dot {
+      width: 0.375rem;
+      height: 0.375rem;
+      border-radius: 50%;
+      background: var(--muted-foreground);
+    }
+    .dot.live {
+      background: var(--available);
+    }
+    .tool {
+      display: inline-flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 0.25rem;
+      color: var(--muted-foreground);
+      cursor: pointer;
+    }
+    .tool:hover {
+      color: var(--foreground);
+    }
+
+    /* In the top layer, under the header's ⋯: the panel's place is fixed, so no anchor is needed. */
+    .menu {
+      position: fixed;
+      inset: 7.75rem 1.5rem auto auto;
+      width: 15rem;
+      margin: 0;
+      padding: 0.25rem;
+      border: 1px solid var(--border-strong);
+      border-radius: 0.5rem;
+      background: var(--card);
+      box-shadow: 0 24px 60px rgb(0 0 0 / 0.35);
+      color: var(--foreground);
+      font-size: 0.875rem;
+    }
+    .menu:popover-open {
+      display: flex;
+      flex-direction: column;
+    }
+    .menu button {
+      min-height: 2.25rem;
+      padding-inline: 0.625rem;
+      border-radius: 0.25rem;
+      text-align: left;
+      cursor: pointer;
+    }
+    .menu button:hover {
+      background: var(--muted);
+    }
+    .levels {
+      display: flex;
+      flex-wrap: wrap;
+      margin-block: 0.25rem;
+      padding-block: 0.375rem 0.25rem;
+      border-block: 1px solid var(--border);
+    }
+    .levels span {
+      flex-basis: 100%;
+      padding-inline: 0.625rem;
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+    }
+    .levels button {
+      flex: 1;
+      padding-inline: 0.25rem;
+      text-align: center;
+    }
+    .levels [aria-pressed="true"] {
+      color: var(--accent-orange);
+      text-decoration: underline;
+      text-underline-offset: 0.25em;
+    }
+
     @media (width < 64rem) {
       .ask-sheet {
         inset: 0;
         width: auto;
-        height: auto;
-        max-height: none;
         padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
           env(safe-area-inset-left);
         background: var(--card);
         overscroll-behavior: contain;
         touch-action: manipulation;
       }
-      .ask-sheet[open],
-      .ask-sheet section,
-      .ask-sheet ::ng-deep app-terminal-window,
-      .ask-sheet ::ng-deep app-terminal-window > div,
-      .ask-sheet ::ng-deep app-terminal-window > div > div,
-      .ask-sheet ::ng-deep app-terminal-shell,
-      .ask-sheet ::ng-deep app-terminal-shell > div {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-height: 0;
-      }
-      .ask-sheet ::ng-deep app-terminal-window > div {
+      section {
         overflow: visible;
         border: 0;
         border-radius: 0;
         box-shadow: none;
       }
-      .ask-sheet ::ng-deep app-terminal-window > div > div {
-        padding: 0.75rem 1rem;
+      .wider {
+        display: none;
       }
-      .ask-sheet ::ng-deep [role="log"] {
-        flex: 1;
-        min-height: 5rem;
-        max-height: none;
-        overscroll-behavior: contain;
+      .menu {
+        inset: calc(env(safe-area-inset-top) + 3.25rem) 0.5rem auto auto;
       }
-      /* The bar keeps its height: the 44px target reaches into its padding. */
-      .ask-close {
-        justify-content: center;
-        min-width: 2.75rem;
+    }
+    /* The status keeps its dot; screen readers keep the word. */
+    @media (width < 40rem) {
+      .word {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+    }
+    @media (pointer: coarse) {
+      .tool {
+        width: 2.75rem;
+        height: 2.75rem;
+      }
+      .menu button {
         min-height: 2.75rem;
-        margin-block: -0.625rem;
       }
     }
 
@@ -198,7 +343,7 @@ export class AskSheetComponent {
   private readonly router = inject(Router);
 
   /** `● online` or `● resting`, once the prompt's code knows. */
-  protected readonly status = computed<TerminalStatus | null>(() => {
+  protected readonly status = computed(() => {
     const state = this.launcher.assistant();
     if (!state) return null;
     const about = CHROME[this.lang.lang()].about;
@@ -206,11 +351,14 @@ export class AskSheetComponent {
       ? { label: about.online, live: true }
       : { label: about.resting, live: false };
   });
+  protected readonly menu = computed(() => this.store.copy().menu);
+  protected readonly levels = LEVELS;
   /** The wide width, for code and tables; not stored, so nothing is kept on the device. */
   protected readonly wide = signal(false);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>("dialog");
-  private readonly shell = viewChild.required(TerminalShellComponent);
+  private readonly askConsole = viewChild.required(AskConsoleComponent);
   private readonly check = viewChild.required<ElementRef<HTMLElement>>("check");
+  private readonly more = viewChild.required<ElementRef<HTMLElement>>("more");
   private returnFocus: HTMLElement | null = null;
   /** Where the page stood when the sheet opened; it cannot scroll behind a phone's sheet. */
   private pageTop = 0;
@@ -250,7 +398,7 @@ export class AskSheetComponent {
         this.returnFocus = null;
       }
       // At opening, and while it is open: a reader's button beside the panel.
-      if (open && this.launcher.takeFocus()) this.shell().claim();
+      if (open && this.launcher.takeFocus()) this.askConsole().claim();
       this.fit();
     });
 
@@ -266,6 +414,12 @@ export class AskSheetComponent {
 
   private get history(): History {
     return this.doc.defaultView!.history;
+  }
+
+  /** A command from the ⋯ menu, run as if typed. */
+  protected run(command: string): void {
+    this.more().nativeElement.hidePopover();
+    this.askConsole().send(command);
   }
 
   /** The visitor's own close, which also takes back the history entry a phone's sheet added. */
@@ -312,13 +466,13 @@ export class AskSheetComponent {
 
   /**
    * Escape closes it, from inside it or from the page, since a non-modal dialog has
-   * no Escape of its own. A modal above it (the palette) takes its own, as does the
-   * match box (it stops the event).
+   * no Escape of its own. A modal above it (the palette) and the ⋯ menu take their own, as
+   * does the match box (it stops the event).
    */
   protected onEscape(event: Event): void {
     const { isComposing, defaultPrevented } = event as KeyboardEvent;
     if (!this.launcher.sheetOpen() || isComposing || defaultPrevented) return;
-    if (this.doc.querySelector("dialog:modal")) return;
+    if (this.doc.querySelector("dialog:modal, #ask-menu:popover-open")) return;
     this.dismiss();
   }
 }

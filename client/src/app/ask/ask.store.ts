@@ -13,7 +13,7 @@ import {
 } from "@ngrx/signals";
 import { DefaultChatTransport, isToolUIPart } from "ai";
 
-import type { Locale } from "../content/locale";
+import { LOCALES, type Locale } from "../content/locale";
 import { fmt } from "../i18n/interpolate";
 import { apiBaseUrl } from "../services/api-base";
 import { ContactService } from "../services/contact.service";
@@ -32,7 +32,7 @@ import { answerTrace } from "./answer-trace";
 import { answersByQuestion } from "./answers";
 import { ASK_COPY } from "./ask-copy";
 import { AskLauncherService, type AskAbout, type AskFocus } from "./ask-launcher.service";
-import { isLevel, readLevel, storeLevel, type Level } from "./ask-level";
+import { isLevel, LEVELS, readLevel, storeLevel, type Level } from "./ask-level";
 import { ASK_STORAGE_KEY, MatchMarks } from "./match-marks";
 import { AskTraceService } from "./ask-trace.service";
 import type {
@@ -50,6 +50,7 @@ import { fetchInspect, inspectLines, linesText } from "./inspect";
 import { clearDeviceKeys, forgetBody, forgetConversation, MAX_EARLIER } from "./forget";
 import {
   isMatchKind,
+  MATCH_KINDS,
   MATCH_BRIEF_CHARS,
   matchStep,
   type MatchKind,
@@ -61,6 +62,7 @@ import { fetchMap, updatesSince } from "./portfolio-map";
 import { counted, failoverLine } from "./receipt";
 import { fetchScorecard, scorecardLines } from "./scorecard";
 import {
+  choiceLines,
   helpLines,
   offlineLines,
   openTarget,
@@ -742,7 +744,7 @@ export const AskStore = signalStore(
       const copy = store.copy();
       const target = arg as Locale;
       if (target !== "en" && target !== "de") {
-        show(input, [{ text: copy.cmd.langUsage, tone: "dim" }]);
+        show(input, [{ text: copy.cmd.langUsage, tone: "dim" }, ...choiceLines("lang", LOCALES)]);
         return;
       }
       show(input, [{ text: fmt(copy.cmd.lang, { lang: target.toUpperCase() }), tone: "dim" }]);
@@ -754,7 +756,10 @@ export const AskStore = signalStore(
     function handleLevel(input: string, arg: string): void {
       const copy = store.copy();
       if (!isLevel(arg)) {
-        show(input, [{ text: fmt(copy.cmd.levelUsage, { level: store.level() }), tone: "dim" }]);
+        show(input, [
+          { text: fmt(copy.cmd.levelUsage, { level: store.level() }), tone: "dim" },
+          ...choiceLines("level", LEVELS),
+        ]);
         return;
       }
       patchState(store, { level: arg });
@@ -799,7 +804,7 @@ export const AskStore = signalStore(
         return;
       }
       const lines = inspectLines(result.view, copy, locale());
-      show(input, lines, linesText(input, store._lang.t().about.terminalPrompt, lines));
+      show(input, lines, linesText(input, ">", lines));
     }
 
     /**
@@ -881,7 +886,12 @@ export const AskStore = signalStore(
     function handleMatch(input: string, arg: string): void {
       const copy = store.copy().match;
       if (store.remote()?.match !== true) return show(input, [{ text: copy.off, tone: "dim" }]);
-      if (!isMatchKind(arg)) return show(input, [{ text: copy.usage, tone: "dim" }]);
+      if (!isMatchKind(arg)) {
+        return show(input, [
+          { text: copy.usage, tone: "dim" },
+          ...choiceLines("match", MATCH_KINDS),
+        ]);
+      }
       show(input, []);
       patchState(store, {
         match: arg,

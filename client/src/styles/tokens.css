@@ -25,6 +25,8 @@
   --font-mono:
     "Geist Mono Variable", "Geist Mono Fallback", "JetBrains Mono", ui-monospace, SFMono-Regular,
     Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  /* Data and the assistant's trace (fonts.css). */
+  --font-data: "B612", Arial, sans-serif;
 
   --radius: 0.625rem;
 

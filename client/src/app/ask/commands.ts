@@ -175,6 +175,28 @@ export interface OutLine {
   internal?: boolean;
   /** A question the line asks when clicked: the terminal's own kind of link. */
   ask?: string;
+  /** Its label names commands, each a button (`help`, plan 4 U11). */
+  run?: boolean;
+}
+
+/** A command a label names: one that stands alone runs; one that needs a word goes in the prompt. */
+export interface LabelCommand {
+  text: string;
+  command: string;
+  run: boolean;
+}
+
+/** `history · clear · reset` is three commands; `cat <project>` and `level a|b` wait for a word. */
+export function labelCommands(label: string): LabelCommand[] {
+  return label.split(" · ").map((text) => {
+    const run = !/[<[|]/.test(text);
+    return { text, run, command: run ? text : `${text.split(" ")[0]} ` };
+  });
+}
+
+/** A usage line's choices, each a line that runs it when clicked (plan 4 U11). */
+export function choiceLines(command: string, choices: readonly string[]): OutLine[] {
+  return choices.map((choice) => ({ text: `${command} ${choice}`, ask: `${command} ${choice}` }));
 }
 
 /**
@@ -197,7 +219,7 @@ export function helpLines(
   if (options.scorecard) rows.splice(-1, 0, copy.help.evals);
   return [
     { text: copy.help.title, tone: "dim" },
-    ...rows.map(([label, text]) => ({ label, text })),
+    ...rows.map(([label, text]) => ({ label, text, run: true })),
     { text: copy.help.footer },
     { text: disclosure, tone: "dim" },
   ];

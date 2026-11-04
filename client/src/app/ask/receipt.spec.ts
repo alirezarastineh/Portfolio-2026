@@ -10,6 +10,7 @@ import {
   receiptAlways,
   receiptClauses,
   sourceFacts,
+  toolStep,
 } from "./receipt";
 
 const en = ASK_COPY.en;
@@ -154,25 +155,56 @@ describe("pageTitle", () => {
   });
 });
 
-describe("a source's chip (visitor plan V12)", () => {
-  it("shows its kind as a glyph and the month it last changed", () => {
+describe("a step of the trace (plan 4 U11)", () => {
+  const content = {
+    projects: [{ slug: "atlas", name: "Atlas" }],
+    posts: [],
+    experiences: [{ id: "acme", org: { name: "Acme" } }],
+  } as unknown as AppContent;
+  const step = (name: string, input = {}, copy = en.trace) => toolStep(name, input, copy, content);
+
+  it("says what each call did, in plain words", () => {
+    expect(step("search_portfolio", { query: "RAG" })).toBe("Searched “RAG”");
+    expect(step("list_projects")).toBe("Listed the projects");
+    expect(step("list_projects", { text: "RAG" })).toBe("Listed the projects about “RAG”");
+    expect(step("get_resume")).toBe("Read the CV");
+    expect(step("navigate", { to: "/en/work/atlas" })).toBe("Opened /en/work/atlas");
+  });
+
+  it("names what it read: a page, an entry's organisation, its kind, or else the id", () => {
+    expect(step("get_document", { id: "project:atlas@en" })).toBe("Read Atlas");
+    expect(step("get_document", { id: "experience:acme@en" })).toBe("Read Acme");
+    expect(step("get_document", { id: "experience:gone@en" })).toBe("Read an experience entry");
+    expect(step("get_document", { id: "system-card@en" })).toBe("Read the system card");
+    expect(step("get_document", { id: "faq:3@en" })).toBe("Read the FAQ");
+    expect(step("get_document", { id: "constructor@en" })).toBe("Read constructor@en");
+  });
+
+  it("has no line for what shows elsewhere", () => {
+    expect(step("suggest_followups")).toBeNull();
+    expect(step("handoff_contact")).toBeNull();
+  });
+
+  it("speaks German on a German page", () => {
+    const de = ASK_COPY.de.trace;
+    expect(step("search_portfolio", { query: "RAG" }, de)).toBe("„RAG“ gesucht");
+    expect(step("get_document", { id: "project:atlas@de" }, de)).toBe("Atlas gelesen");
+    expect(step("get_resume", {}, de)).toBe("Lebenslauf gelesen");
+  });
+});
+
+describe("a source's row (visitor plan V12)", () => {
+  it("shows the month it last changed", () => {
     const facts = { portfolio: { kind: "project", updated: "2026-09-12" } };
-    expect(sourceFacts(facts, "en", en)).toEqual({ glyph: "◆", updated: "updated Sep 2026" });
-    expect(sourceFacts(facts, "de", ASK_COPY.de)).toEqual({
-      glyph: "◆",
-      updated: "aktualisiert Sept. 2026",
-    });
-    expect(sourceFacts({ portfolio: { kind: "post" } }, "en", en)).toEqual({
-      glyph: "¶",
-      updated: null,
-    });
+    expect(sourceFacts(facts, "en", en)).toEqual({ updated: "updated Sep 2026" });
+    expect(sourceFacts(facts, "de", ASK_COPY.de)).toEqual({ updated: "aktualisiert Sept. 2026" });
   });
 
   it("shows nothing it cannot read", () => {
-    expect(sourceFacts(undefined, "en", en)).toEqual({ glyph: null, updated: null });
-    expect(
-      sourceFacts({ portfolio: { kind: "constructor", updated: "last week" } }, "en", en),
-    ).toEqual({ glyph: null, updated: null });
+    expect(sourceFacts(undefined, "en", en)).toEqual({ updated: null });
+    expect(sourceFacts({ portfolio: { updated: "last week" } }, "en", en)).toEqual({
+      updated: null,
+    });
   });
 });
 

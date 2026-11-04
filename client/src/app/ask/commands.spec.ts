@@ -6,8 +6,10 @@ import { describe, expect, it } from "vitest";
 import { appContentSchema, type AppContent } from "../content/schema";
 import { ASK_COPY } from "./ask-copy";
 import {
+  choiceLines,
   complete,
   helpLines,
+  labelCommands,
   offlineLines,
   openTarget,
   parseInput,
@@ -137,6 +139,38 @@ describe("local answers", () => {
     const on = labels({ match: true });
     expect(on.indexOf("match role|project|problem")).toBe(on.indexOf("cv") - 1);
     expect(labels({ match: true, scorecard: true })).toContain("evals");
+  });
+
+  it("runs a help row's command, and leaves one that needs a word in the prompt (plan 4 U11)", () => {
+    expect(labelCommands("ls projects")).toEqual([
+      { text: "ls projects", run: true, command: "ls projects" },
+    ]);
+    expect(labelCommands("history · clear · reset").map((c) => c.command)).toEqual([
+      "history",
+      "clear",
+      "reset",
+    ]);
+    for (const [label, stem] of [
+      ["cat <project>", "cat "],
+      ["tour [interest]", "tour "],
+      ["level plain|standard|expert", "level "],
+    ] as const) {
+      expect(labelCommands(label)).toEqual([{ text: label, run: false, command: stem }]);
+    }
+    const rows = helpLines(ASK_COPY.de, "KI", { match: true, scorecard: true }).filter(
+      (l) => l.run,
+    );
+    for (const row of rows) {
+      for (const { run, command } of labelCommands(row.label!)) {
+        // What a button would type is what the prompt understands.
+        if (run) expect(parseInput(command).kind).toBe("local");
+      }
+    }
+  });
+
+  it("offers a usage line's choices as lines that run them (plan 4 U11)", () => {
+    expect(choiceLines("match", ["role"])).toEqual([{ text: "match role", ask: "match role" }]);
+    expect(parseInput("match role")).toEqual({ kind: "local", name: "match", arg: "role" });
   });
 
   it("opens sections, case studies and posts, and nothing else", () => {

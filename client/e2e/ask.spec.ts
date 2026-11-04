@@ -492,7 +492,7 @@ test.describe("assistant terminal", () => {
   });
 
   test("the window's title bar says whether the assistant answers", async ({ page }) => {
-    const bar = askPanel(page).locator("app-terminal-window header").first();
+    const bar = askPanel(page).locator("header");
     await mockAsk(page, () => undefined);
     await openPrompt(page);
     await expect(bar).toContainText("online");
@@ -501,6 +501,151 @@ test.describe("assistant terminal", () => {
     await mockAsk(page, () => undefined, { state: "resting" });
     await openPrompt(page, "/de");
     await expect(bar).toContainText("pausiert");
+  });
+
+  test("the commands are shown, and run without touching what is being typed (plan 4 U11)", async ({
+    page,
+  }) => {
+    await mockAsk(page, () => undefined, { match: true });
+    const prompt = await openPrompt(page);
+    const panel = askPanel(page);
+    const log = panel.locator("[role=log]");
+    const commands = panel.getByRole("group", { name: "Commands" }).getByRole("button");
+    await expect(commands).toHaveText(["help", "inspect", "evals", "tour", "match"]);
+
+    await prompt.fill("half a question");
+    await commands.getByText("help").click();
+    await expect(log).toContainText("ls projects");
+    await expect(prompt).toHaveValue("half a question");
+    await expect(prompt).toBeFocused();
+
+    // help's rows are buttons: one runs, one that needs a word waits in the prompt.
+    await log.getByRole("button", { name: "ls skills" }).click();
+    await expect(log.getByText("ls skills", { exact: true }).last()).toBeVisible();
+    await log.getByRole("button", { name: "cat <project>" }).first().click();
+    await expect(prompt).toHaveValue("cat ");
+    await expect(prompt).toBeFocused();
+
+    // A usage line offers its choices.
+    await run(prompt, "level");
+    await log.getByRole("button", { name: "level expert" }).click();
+    await expect(log).toContainText("level expert: answers with technical depth");
+    await commands.getByText("match").click();
+    await log.getByRole("button", { name: "match role", exact: true }).click();
+    await expect(panel.getByLabel("Paste the role")).toBeVisible();
+  });
+
+  test("the ⋯ menu offers what help lists; Escape closes it, not the panel (plan 4 U11)", async ({
+    page,
+  }) => {
+    await mockAsk(page, () => undefined);
+    await openPrompt(page);
+    const panel = askPanel(page);
+    const more = panel.getByRole("button", { name: "More" });
+    const menu = panel.locator("#ask-menu");
+
+    await more.click();
+    await expect(menu).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await expect(panel).toBeVisible();
+
+    await more.click();
+    await menu.getByRole("button", { name: "Expert" }).click();
+    await expect(menu).toBeHidden();
+    await expect(panel.locator("[role=log]")).toContainText("level expert:");
+    await more.click();
+    await expect(menu.getByRole("button", { name: "Expert" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await menu.getByRole("button", { name: "Delete my conversation" }).click();
+    await expect(panel.getByRole("button", { name: "yes" })).toBeVisible();
+  });
+
+  test("a new exchange goes to the log's top, which never follows the stream (plan 4 U11)", async ({
+    page,
+  }) => {
+    const long = Array.from({ length: 80 }, (_, i) => `Sentence ${i} of a long answer.`).join(" ");
+    await mockAsk(page, (route, n) =>
+      sse(route, answer({ id: `m_e2e0000000${n}`, text: long, tools: SEARCH_STEP })),
+    );
+    const prompt = await openPrompt(page);
+    const log = askPanel(page).locator("[role=log]");
+    await expect(log).toHaveAttribute("tabindex", "0");
+
+    await run(prompt, "The first question?");
+    await expect(log).toContainText("Answered in 1.3 s");
+    await run(prompt, "The second question?");
+    await expect(log.locator(".latest")).toContainText("Answered in 1.3 s");
+
+    const top = await log.evaluate(
+      (el) =>
+        el.querySelector(".latest")!.getBoundingClientRect().top - el.getBoundingClientRect().top,
+    );
+    // The log's own 1rem of air above it.
+    expect(top).toBeGreaterThanOrEqual(0);
+    expect(top).toBeLessThan(20);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    // It overflows, and a keyboard can scroll it.
+    expect(await axeViolations(page)).toEqual([]);
+  });
+
+  test("only the latest answer keeps its controls; each keeps how it was made (plan 4 U11)", async ({
+    page,
+  }) => {
+    const receipt = { lookups: 1, sources: 0, removed: 0 };
+    await mockAsk(page, (route, n) =>
+      sse(route, withReceipt(answer({ id: `m_e2e0000000${n}`, text: `Answer ${n}.` }), receipt)),
+    );
+    const prompt = await openPrompt(page);
+    const log = askPanel(page).locator("[role=log]");
+    await run(prompt, "One?");
+    await expect(log).toContainText("Answer 1.");
+    await expect(log.getByRole("button", { name: "Helpful", exact: true })).toHaveCount(1);
+    await log.getByRole("button", { name: "Not helpful" }).click();
+    await expect(log.getByRole("group", { name: "What was wrong?" })).toBeVisible();
+
+    await run(prompt, "Two?");
+    await expect(log).toContainText("Answer 2.");
+    await expect(log.getByRole("button", { name: "Helpful", exact: true })).toHaveCount(1);
+    await expect(log.getByRole("button", { name: "copy", exact: true })).toHaveCount(1);
+    await expect(log.getByRole("group", { name: "What was wrong?" })).toHaveCount(0);
+    await expect(log.getByRole("button", { name: "how was this answered?" })).toHaveCount(2);
+  });
+
+  test("the admin's suggested questions come first, three at most (plan 4 U11)", async ({
+    page,
+  }) => {
+    await mockAsk(page, () => undefined, {
+      suggestions: { en: ["One?", "Two?", "Three?", "Four?"], de: [] },
+    });
+    await openPrompt(page);
+    const starters = askPanel(page).getByRole("group", { name: "Suggested questions" });
+    await expect(starters.getByRole("button")).toHaveText(["One?", "Two?", "Three?"]);
+
+    await openPrompt(page, "/de");
+    await expect(askPanel(page).getByRole("group").first().getByRole("button")).toHaveCount(3);
+    await expect(askPanel(page).getByRole("button", { name: "One?" })).toHaveCount(0);
+  });
+
+  test("sending turns into stopping on one button, which keeps the focus (plan 4 U11)", async ({
+    page,
+  }) => {
+    const chunks = answer({ text: "The whole answer.", tools: SEARCH_STEP });
+    const cut = chunks.findIndex((c) => c["type"] === "tool-input-available");
+    await pausedStream(page, chunks, cut, 3000);
+    await mockAsk(page, () => undefined);
+    const prompt = await openPrompt(page);
+    await prompt.fill("What does he test?");
+    const panel = askPanel(page);
+    await panel.getByRole("button", { name: "Ask", exact: true }).click();
+
+    const stop = panel.getByRole("button", { name: "Stop" });
+    await expect(stop).toBeVisible();
+    await stop.click();
+    await expect(panel.getByRole("button", { name: "Ask", exact: true })).toBeVisible();
+    await expect(panel.locator("[role=log]")).toContainText("(answer interrupted)");
   });
 
   test("shell commands answer locally, with history and Tab completion", async ({ page }) => {
@@ -563,18 +708,18 @@ test.describe("assistant terminal", () => {
 
       const log = askPanel(page).locator("[role=log]");
       await expect(log).toContainText("He runs evals before every prompt change");
-      await expect(log).toContainText('› search "evals" ✓');
+      await expect(log).toContainText("Searched “evals”");
       const cite = log.getByRole("link", { name: /sources 1: Project one/ });
       await expect(cite).toHaveAttribute("href", "/en/work/project-one");
       const source = log.getByRole("link", { name: "Project one", exact: true });
       await expect(source).toBeVisible();
       // Pointing at the citation lights up its source.
-      const border = () => source.evaluate((el) => getComputedStyle(el).borderColor);
-      const resting = await border();
+      const fill = () => source.evaluate((el) => getComputedStyle(el).backgroundColor);
+      const resting = await fill();
       await cite.hover();
-      await expect.poll(border).not.toBe(resting);
+      await expect.poll(fill).not.toBe(resting);
       await page.mouse.move(0, 0);
-      await expect.poll(border).toBe(resting);
+      await expect.poll(fill).toBe(resting);
       await expect(log).toContainText("gemini-3.5-flash-lite · 1.3 s · 91% cached");
       // Announced once, in full, without markup or markers.
       await expect(askPanel(page).locator("[aria-live=polite]")).toHaveText(
@@ -642,11 +787,6 @@ test.describe("assistant terminal", () => {
     expect(of(FIRST)["doneMs"]).toBeGreaterThanOrEqual(of(FIRST)["shownMs"] as number);
     expect(signals[0]).toMatchObject({ sessionId: expect.stringMatching(/^[A-Za-z0-9_-]{16,}$/) });
 
-    // A follow-up asked from it: counted for this answer, the totals sent whole.
-    await log.getByRole("button", { name: "Which stack did he use?" }).click();
-    await expect.poll(() => of(FIRST)["followups"]).toBe(1);
-    expect(typeof of(FIRST)["doneMs"]).toBe("number");
-
     // A thumbs-down offers three reasons, codes only; the one chosen stays, pressed.
     await log.getByRole("button", { name: "Not helpful" }).first().click();
     const why = page.getByRole("group", { name: "What was wrong?" });
@@ -661,6 +801,11 @@ test.describe("assistant terminal", () => {
     // A copy.
     await log.getByRole("button", { name: "copy", exact: true }).first().click();
     await expect.poll(() => of(FIRST)["copies"]).toBe(1);
+
+    // A follow-up asked from it: counted for this answer, the totals sent whole.
+    await log.getByRole("button", { name: "Which stack did he use?" }).click();
+    await expect.poll(() => of(FIRST)["followups"]).toBe(1);
+    expect(typeof of(FIRST)["doneMs"]).toBe("number");
 
     // A citation followed counts too, even as it leaves the page.
     await log
@@ -715,7 +860,7 @@ test.describe("assistant terminal", () => {
     const prompt = await openPrompt(page);
     await run(prompt, "What does he test?");
 
-    const step = askPanel(page).locator("[role=log] p", { hasText: 'search "evals"' });
+    const step = askPanel(page).locator("[role=log] li", { hasText: "Searched “evals”" });
     const spinner = step.locator(".step-spin");
     await expect(spinner).toBeVisible();
     // Reduced motion: a static ellipsis. Otherwise it spins.
@@ -724,8 +869,12 @@ test.describe("assistant terminal", () => {
     expect(await spinner.evaluate((el) => getComputedStyle(el, "::after").animationName)).not.toBe(
       "none",
     );
-    await expect(step).toContainText("✓");
+    // The live trace draws its lines, once: an answer that stands no longer does.
+    const drawn = () => step.evaluate((el) => getComputedStyle(el).animationName);
+    expect(await drawn()).not.toBe("none");
+    await expect(step.locator(".step-done")).toBeVisible();
     await expect(spinner).toHaveCount(0);
+    await expect.poll(drawn).toBe("none");
   });
 
   test(
@@ -979,7 +1128,7 @@ test.describe("assistant terminal", () => {
     const sheet = page.getByRole("dialog", { name: "Ask about my work" });
     const prompt = sheet.locator("textarea");
     await expect(prompt).toBeFocused();
-    await expect(sheet.locator("app-terminal-window header")).toContainText("online");
+    await expect(sheet.locator("header")).toContainText("online");
     await sheet
       .getByRole("group", { name: "Suggested questions" })
       .getByRole("button", { name: "What has he shipped with RAG?" })
@@ -1187,7 +1336,7 @@ test.describe("assistant terminal", () => {
     await expect(sectionAsk).toHaveCSS("opacity", "1");
     await sectionAsk.click();
     await expect(sheet).toContainText("Explain this section");
-    await expect(sheet).toContainText("· Architecture decisions");
+    await expect(sheet).toContainText("Architecture decisions");
     await expect(sheet).toContainText("Retrieval stays inside the private network.");
     expect(mock.bodies[0]).toMatchObject({
       page: "/en/work/project-one",
@@ -1198,7 +1347,7 @@ test.describe("assistant terminal", () => {
     await expect(sheet).toBeHidden();
     await page.getByRole("button", { name: "Explain code block 1" }).click();
     await expect(sheet).toContainText("Explain this code");
-    await expect(sheet).toContainText("· const answer = await retrieve");
+    await expect(sheet).toContainText("const answer = await retrieve");
     await expect.poll(() => mock.bodies.length).toBe(2);
     expect(mock.bodies[1]).toMatchObject({ focus: { kind: "code", index: 0 } });
     // A question typed after them points at nothing.
@@ -1346,7 +1495,11 @@ test.describe("assistant terminal", () => {
     await expect(how).toHaveAttribute("aria-expanded", "false");
     await how.click();
     await expect(how).toHaveAttribute("aria-expanded", "true");
-    await expect(receipt).toHaveText(/fast model · 1 lookup · 1 source checked/);
+    await expect(receipt.getByRole("listitem")).toContainText([
+      "fast model",
+      "1 lookup",
+      "1 source checked",
+    ]);
 
     // Its "inspect": that answer's timeline, from the log, for this session.
     await receipt.getByRole("button", { name: "inspect" }).click();
@@ -1360,7 +1513,7 @@ test.describe("assistant terminal", () => {
     await expect(copyButton).toHaveText(/copied/);
     if (browserName === "chromium") {
       const copied = await page.evaluate(() => navigator.clipboard.readText());
-      expect(copied).toContain("user@portfolio:~$ inspect");
+      expect(copied).toContain("> inspect");
       expect(copied).toMatch(/route {11}lite · reason: default/);
     }
     expect(await axeViolations(page)).toEqual([]);
@@ -1368,9 +1521,13 @@ test.describe("assistant terminal", () => {
     // A careful answer, with a reference removed and a move to the deep model: it shows by itself.
     await run(prompt, "What does he earn?");
     await expect(log).toContainText("Only what is published");
-    await expect(receipt.last()).toHaveText(
-      /moved to the thorough model: it read two projects · 2 lookups · 1 source checked · 1 invented reference removed · careful topic: published facts only/,
-    );
+    await expect(receipt.last().getByRole("listitem")).toContainText([
+      "moved to the thorough model: it read two projects",
+      "2 lookups",
+      "1 source checked",
+      "1 invented reference removed",
+      "careful topic: published facts only",
+    ]);
     await expect(log.getByRole("button", { name: "how was this answered?" })).toHaveCount(1);
     // The hero's panel replays that answer's real steps.
     const trace = page.locator("#hero figure");
@@ -1427,9 +1584,7 @@ test.describe("assistant terminal", () => {
     const prompt = await openPrompt(page);
     const log = askPanel(page).locator("[role=log]");
     // The config has come: it says whether the scorecard is published.
-    await expect(askPanel(page).locator("app-terminal-window header").first()).toContainText(
-      "online",
-    );
+    await expect(askPanel(page).locator("header")).toContainText("online");
 
     await run(prompt, "help");
     await expect(log).toContainText("how well the assistant does: its tests and live checks");
@@ -1460,9 +1615,7 @@ test.describe("assistant terminal", () => {
     });
     const prompt = await openPrompt(page);
     const log = askPanel(page).locator("[role=log]");
-    await expect(askPanel(page).locator("app-terminal-window header").first()).toContainText(
-      "online",
-    );
+    await expect(askPanel(page).locator("header")).toContainText("online");
     await run(prompt, "help");
     await expect(log).toContainText("inspect");
     await expect(log).not.toContainText("how well the assistant does");
@@ -1854,7 +2007,7 @@ test.describe("assistant terminal", () => {
     );
     await openPrompt(page);
     // With the paste box open, the log holds a second textarea: the prompt is the terminal's own.
-    const prompt = askPanel(page).locator("textarea.terminal-input");
+    const prompt = askPanel(page).locator("textarea");
     const log = askPanel(page).locator("[role=log]");
     const offer = page.getByRole("group", { name: "Hand this conversation to the contact form?" });
 
@@ -1912,7 +2065,7 @@ test.describe("assistant terminal", () => {
     await pausedStream(page, chunks, 1, 3000);
     await mockAsk(page, () => undefined, { match: true });
     await openPrompt(page);
-    const prompt = askPanel(page).locator("textarea.terminal-input");
+    const prompt = askPanel(page).locator("textarea");
     const log = askPanel(page).locator("[role=log]");
     const live = askPanel(page).locator("[aria-live=polite]");
     await run(prompt, "fit");
@@ -2041,7 +2194,7 @@ test.describe("assistant terminal", () => {
     });
     await openPrompt(page);
     const log = askPanel(page).locator("[role=log]");
-    await run(askPanel(page).locator("textarea.terminal-input"), "match role");
+    await run(askPanel(page).locator("textarea"), "match role");
     await log.getByLabel("Paste the role").fill("Senior AI engineer: retrieval in production.");
     await log.getByRole("button", { name: "check it" }).click();
     await log.getByRole("link", { name: "open as a page" }).click();

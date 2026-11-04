@@ -129,6 +129,6 @@ describe("AboutSectionComponent", () => {
       "Building AI applications in a Jupyter notebook is easy",
     );
     expect(root.textContent).not.toContain("cat philosophy.txt");
-    expect(root.querySelector("app-terminal-window, app-terminal-shell")).toBeNull();
+    expect(root.querySelector("app-terminal-window, app-ask-console")).toBeNull();
   });
 });

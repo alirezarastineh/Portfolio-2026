@@ -27,7 +27,10 @@ export interface AskCopy {
     footer: string;
   };
   thinking: string;
-  stopHint: string;
+  /** The composer's button while an answer is on its way (plan 4 U11). */
+  stop: string;
+  /** The row of commands under the prompt, for screen readers. */
+  commands: string;
   interrupted: string;
   retry: string;
   errors: {
@@ -270,12 +273,37 @@ export interface AskCopy {
   };
   handoff: { ask: string; yes: string; no: string; done: string; declined: string };
   opening: string;
+  /** A tool call as `inspect` prints it, for the curious. */
   tool: {
     search_portfolio: string;
     get_document: string;
     list_projects: string;
     get_resume: string;
     navigate: string;
+  };
+  /**
+   * An answer's trace (plan 4 U11): each step in plain words, `{title}` what it read; the
+   * document's kind names what has no title. `{s}`: seconds, one decimal.
+   */
+  trace: {
+    label: string;
+    search: string;
+    read: string;
+    list: string;
+    listAbout: string;
+    open: string;
+    answered: string;
+    docs: Record<"profile" | "skills" | "cv" | "faq" | "system-card" | "experience", string>;
+  };
+  /** The panel's ⋯ menu (plan 4 U11): what `help` lists, without typing. */
+  menu: {
+    label: string;
+    clear: string;
+    forget: string;
+    level: string;
+    levels: { plain: string; standard: string; expert: string };
+    news: string;
+    tour: string;
   };
   cmd: {
     unknownProject: string;
@@ -343,7 +371,8 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       footer: "Anything else is a question for the AI assistant.",
     },
     thinking: "thinking…",
-    stopHint: "ctrl+c to stop",
+    stop: "Stop",
+    commands: "Commands",
     interrupted: "(answer interrupted)",
     retry: "retry",
     errors: {
@@ -590,6 +619,32 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       get_resume: "cat cv",
       navigate: "open {to}",
     },
+    trace: {
+      label: "Steps",
+      search: "Searched “{q}”",
+      read: "Read {title}",
+      list: "Listed the projects",
+      listAbout: "Listed the projects about “{q}”",
+      open: "Opened {to}",
+      answered: "Answered in {s} s",
+      docs: {
+        profile: "the profile",
+        skills: "the skills",
+        cv: "the CV",
+        faq: "the FAQ",
+        "system-card": "the system card",
+        experience: "an experience entry",
+      },
+    },
+    menu: {
+      label: "More",
+      clear: "Clear the screen",
+      forget: "Delete my conversation",
+      level: "Answer level",
+      levels: { plain: "Plain", standard: "Standard", expert: "Expert" },
+      news: "What's new",
+      tour: "Take the tour",
+    },
     cmd: {
       unknownProject: "No project called “{x}”. Try `ls projects`.",
       noProjects: "No projects are published yet.",
@@ -656,7 +711,8 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       footer: "Alles andere ist eine Frage an den KI-Assistenten.",
     },
     thinking: "denkt nach…",
-    stopHint: "Strg+C zum Abbrechen",
+    stop: "Stopp",
+    commands: "Befehle",
     interrupted: "(Antwort unterbrochen)",
     retry: "erneut versuchen",
     errors: {
@@ -908,6 +964,32 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       list_projects: "ls projects {q}",
       get_resume: "cat cv",
       navigate: "open {to}",
+    },
+    trace: {
+      label: "Schritte",
+      search: "„{q}“ gesucht",
+      read: "{title} gelesen",
+      list: "Projekte aufgelistet",
+      listAbout: "Projekte zu „{q}“ aufgelistet",
+      open: "{to} geöffnet",
+      answered: "In {s} s beantwortet",
+      docs: {
+        profile: "Profil",
+        skills: "Skills",
+        cv: "Lebenslauf",
+        faq: "FAQ",
+        "system-card": "Systemkarte",
+        experience: "Erfahrung",
+      },
+    },
+    menu: {
+      label: "Mehr",
+      clear: "Bildschirm leeren",
+      forget: "Mein Gespräch löschen",
+      level: "Antwortniveau",
+      levels: { plain: "Einfach", standard: "Standard", expert: "Experte" },
+      news: "Was ist neu",
+      tour: "Rundgang starten",
     },
     cmd: {
       unknownProject: "Kein Projekt namens „{x}“. Versuch `ls projects`.",
