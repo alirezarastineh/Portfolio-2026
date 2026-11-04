@@ -66,6 +66,14 @@ let instances = 0;
       </span>
     </form>
   `,
+  styles: `
+    /* iOS zooms into a field under 16px when it takes focus. */
+    @media (width < 64rem) {
+      textarea {
+        font-size: 1rem;
+      }
+    }
+  `,
 })
 export class MatchBoxComponent {
   readonly kind = input.required<MatchKind>();

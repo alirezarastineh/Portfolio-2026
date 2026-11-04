@@ -5,13 +5,16 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   ElementRef,
   inject,
   signal,
   viewChild,
 } from "@angular/core";
+import { Router, Scroll } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideMaximize2, lucideMinimize2 } from "@ng-icons/lucide";
+import { lucideMaximize2, lucideMinimize2, lucideX } from "@ng-icons/lucide";
+import { first } from "rxjs";
 
 import {
   TerminalWindowComponent,
@@ -23,33 +26,40 @@ import { AskLauncherService } from "./ask-launcher.service";
 import { AskStore } from "./ask.store";
 import { TerminalShellComponent } from "./terminal-shell.component";
 
+/** Marks the history entry an open sheet adds, so a phone's Back can close it. */
+const SHEET_ENTRY = "askSheet";
+
 /**
- * The assistant on pages without the About terminal (plan 4 U8): one non-modal
+ * The assistant on pages without the About terminal (plan 4 U8, U9): one non-modal
  * dialog, opened with `show()` at every width, so the page stays usable beside
  * it. From 1024px it floats at the bottom right, grows up to the header and
- * widens on request; below, it covers the screen as a sheet and the shell makes
- * the page inert. Opened by the floating button, the palette, `/` or a reader's
- * buttons; closed by the visitor, and on a phone by a citation or the hand-off,
- * whose page must show. It holds still while pages change behind it, and a
- * visible Turnstile check shows inside it.
+ * widens on request; below, it is a sheet over the whole screen, fitted above the
+ * keyboard, with the page inert behind it and its own history entry. Opened by
+ * the floating button, the palette, `/` or a reader's buttons; closed by the
+ * visitor, and on a phone by a citation or the hand-off, whose page must show. It
+ * holds still while pages change behind it, and a visible Turnstile check shows
+ * inside it.
  */
 @Component({
   selector: "app-ask-sheet",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NgIcon, TerminalShellComponent, TerminalWindowComponent],
-  viewProviders: [provideIcons({ lucideMaximize2, lucideMinimize2 })],
-  host: { "(document:keydown.escape)": "onEscape($event)" },
+  viewProviders: [provideIcons({ lucideMaximize2, lucideMinimize2, lucideX })],
+  host: {
+    "(document:keydown.escape)": "onEscape($event)",
+    "(window:popstate)": "onHistory($event)",
+  },
   template: `
     <dialog
       #dialog
+      tabindex="-1"
       class="ask-sheet m-0 bg-transparent p-0"
       [class.ask-sheet-wide]="wide()"
       [attr.aria-label]="lang.t().ask.title"
       (close)="launcher.closeSheet()"
-      (click)="onScrim($event)"
     >
       <!-- A section, so the window's title bar (a <header>) is no second banner beside the page's. -->
-      <section class="mt-auto">
+      <section>
         <app-terminal-window [title]="lang.t().ask.title" [status]="status()" [compact]="true">
           <button
             windowAction
@@ -67,11 +77,15 @@ import { TerminalShellComponent } from "./terminal-shell.component";
           <button
             windowAction
             type="button"
-            class="press -my-1 -mr-1.5 inline-flex min-h-6 cursor-pointer items-center rounded-md px-1.5 text-muted-foreground hover:text-foreground"
-            [attr.aria-label]="'esc: ' + store.copy().close"
-            (click)="launcher.closeSheet()"
+            class="ask-close press -my-1 -mr-1.5 inline-flex min-h-6 cursor-pointer items-center rounded-md px-1.5 text-muted-foreground hover:text-foreground"
+            [attr.aria-label]="(launcher.narrow() ? '' : 'esc: ') + store.copy().close"
+            (click)="dismiss()"
           >
-            esc
+            @if (launcher.narrow()) {
+              <ng-icon name="lucideX" size="20" aria-hidden="true" />
+            } @else {
+              esc
+            }
           </button>
           <app-terminal-shell [inSheet]="true" />
           <!-- Where Cloudflare's check shows when it asks the visitor (store: readyToAsk). -->
@@ -83,7 +97,9 @@ import { TerminalShellComponent } from "./terminal-shell.component";
   styles: `
     /* From 1024px a panel beside the page: bottom right, growing up to 8px under
        the 64px header. Below (the launcher's SHEET_QUERY), a sheet over the whole
-       screen, the window at its foot over the scrim. */
+       screen, as tall as the visual viewport (fit): one column from the dialog
+       down to the log, the only thing that scrolls unless the screen is too short
+       for the prompt. */
     .ask-sheet {
       position: fixed;
       inset: auto 1rem 1rem auto;
@@ -102,12 +118,45 @@ import { TerminalShellComponent } from "./terminal-shell.component";
         width: auto;
         height: auto;
         max-height: none;
-        background: var(--scrim);
-        backdrop-filter: blur(4px);
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+          env(safe-area-inset-left);
+        background: var(--card);
+        overscroll-behavior: contain;
+        touch-action: manipulation;
       }
-      .ask-sheet[open] {
+      .ask-sheet[open],
+      .ask-sheet section,
+      .ask-sheet ::ng-deep app-terminal-window,
+      .ask-sheet ::ng-deep app-terminal-window > div,
+      .ask-sheet ::ng-deep app-terminal-window > div > div,
+      .ask-sheet ::ng-deep app-terminal-shell,
+      .ask-sheet ::ng-deep app-terminal-shell > div {
         display: flex;
         flex-direction: column;
+        flex: 1;
+        min-height: 0;
+      }
+      .ask-sheet ::ng-deep app-terminal-window > div {
+        overflow: visible;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      .ask-sheet ::ng-deep app-terminal-window > div > div {
+        padding: 0.75rem 1rem;
+      }
+      .ask-sheet ::ng-deep [role="log"] {
+        flex: 1;
+        min-height: 5rem;
+        max-height: none;
+        overscroll-behavior: contain;
+      }
+      /* The bar keeps its height: the 44px target reaches into its padding. */
+      .ask-close {
+        justify-content: center;
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+        margin-block: -0.625rem;
       }
     }
 
@@ -145,6 +194,7 @@ export class AskSheetComponent {
   protected readonly store = inject(AskStore);
   protected readonly lang = inject(LanguageService);
   private readonly doc = inject(DOCUMENT);
+  private readonly router = inject(Router);
 
   /** As on the About window: `● online` or `● resting`, once the prompt's code knows. */
   protected readonly status = computed<TerminalStatus | null>(() => {
@@ -161,20 +211,26 @@ export class AskSheetComponent {
   private readonly shell = viewChild.required(TerminalShellComponent);
   private readonly check = viewChild.required<ElementRef<HTMLElement>>("check");
   private returnFocus: HTMLElement | null = null;
+  /** Where the page stood when the sheet opened; it cannot scroll behind a phone's sheet. */
+  private pageTop = 0;
 
   constructor() {
     afterNextRender(() => (this.launcher.turnstileHost = this.check().nativeElement));
     afterRenderEffect(() => {
       const open = this.launcher.sheetOpen();
+      const sheet = open && this.launcher.narrow();
       const dialog = this.dialog().nativeElement;
       // On a phone the page behind it stands still; the shell makes it inert.
-      this.doc.documentElement.classList.toggle("overflow-hidden", open && this.launcher.narrow());
+      this.doc.documentElement.classList.toggle("overflow-hidden", sheet);
       if (open && !dialog.open) {
         this.returnFocus = this.doc.activeElement as HTMLElement | null;
+        this.pageTop = this.doc.defaultView!.scrollY;
         dialog.show();
-        // The prompt is the point, and a question sent from the page goes in at once.
-        this.launcher.takeFocus();
-        this.shell().claim();
+        // The dialog first: on a phone the prompt's keyboard would cover what it opened to (claim).
+        dialog.focus();
+        if (sheet && !this.history.state?.[SHEET_ENTRY]) {
+          this.history.pushState({ ...this.history.state, [SHEET_ENTRY]: true }, "");
+        }
       } else if (!open && dialog.open) {
         // Focus goes back to the opener, unless the page has it: the hand-off's form, or
         // what the visitor tabbed to before Escape, which closing reveals (WCAG 2.4.11).
@@ -190,12 +246,64 @@ export class AskSheetComponent {
         }
         this.returnFocus = null;
       }
+      // At opening, and while it is open: a reader's button beside the panel.
+      if (open && this.launcher.takeFocus()) this.shell().claim();
+      this.fit();
+    });
+
+    const viewport = this.doc.defaultView?.visualViewport;
+    const fit = () => this.fit();
+    viewport?.addEventListener("resize", fit);
+    viewport?.addEventListener("scroll", fit);
+    inject(DestroyRef).onDestroy(() => {
+      viewport?.removeEventListener("resize", fit);
+      viewport?.removeEventListener("scroll", fit);
     });
   }
 
-  /** On a phone, a tap on the scrim above the window (the dialog itself) closes the sheet. */
-  protected onScrim(event: MouseEvent): void {
-    if (event.target === this.dialog().nativeElement) this.launcher.closeSheet();
+  private get history(): History {
+    return this.doc.defaultView!.history;
+  }
+
+  /** The visitor's own close, which also takes back the history entry a phone's sheet added. */
+  protected dismiss(): void {
+    this.launcher.closeSheet();
+    if (this.history.state?.[SHEET_ENTRY]) this.history.back();
+  }
+
+  /**
+   * The sheet above the keyboard, where it is the visual viewport that shrinks and pans. iOS 26
+   * can leave `offsetTop` set after the keyboard closes, so it counts only while a field has focus.
+   */
+  private fit(): void {
+    const { style } = this.dialog().nativeElement;
+    const vv = this.doc.defaultView?.visualViewport;
+    const sheet = vv && this.launcher.sheetOpen() && this.launcher.narrow();
+    const typing = this.doc.activeElement?.matches("textarea");
+    style.height = sheet ? `${vv.height}px` : "";
+    style.transform = sheet && typing && vv.offsetTop ? `translateY(${vv.offsetTop}px)` : "";
+  }
+
+  /**
+   * On a phone Back leaves the sheet's entry and closes it; coming back to the entry, say from a
+   * citation's page, opens it again. Under the entry lies the same page, so the router skips the
+   * step, and then it (to the URL's #fragment) and WebKit (to a position of its own) scroll all
+   * the same: the page goes back where it stood, in a microtask, since the public event comes
+   * before the router's own scroll.
+   */
+  protected onHistory(event: PopStateEvent): void {
+    const view = this.doc.defaultView!;
+    const { pathname, search, hash } = view.location;
+    if (this.router.url === pathname + search + hash) {
+      const top = this.pageTop;
+      this.router.events
+        .pipe(first((routerEvent) => routerEvent instanceof Scroll))
+        .subscribe(() => queueMicrotask(() => view.scrollTo({ top, behavior: "instant" })));
+    }
+    if (!this.launcher.narrow()) return;
+    const ours = event.state?.[SHEET_ENTRY] === true;
+    if (ours && !this.launcher.sheetOpen()) this.launcher.openSheet();
+    else if (!ours) this.launcher.closeSheet();
   }
 
   /**
@@ -207,6 +315,6 @@ export class AskSheetComponent {
     const { isComposing, defaultPrevented } = event as KeyboardEvent;
     if (!this.launcher.sheetOpen() || isComposing || defaultPrevented) return;
     if (this.doc.querySelector("dialog:modal")) return;
-    this.launcher.closeSheet();
+    this.dismiss();
   }
 }

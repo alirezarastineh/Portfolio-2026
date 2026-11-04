@@ -36,6 +36,8 @@ import { track } from "./track";
 
 let instances = 0;
 const MAX_INPUT_LINES = 6;
+/** Who came here to type: on a phone only they get the prompt, and its keyboard (plan 4 U9). */
+const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
 
 /**
  * The live prompt of the About terminal (and of the sheet on other pages): a
@@ -70,6 +72,7 @@ const MAX_INPUT_LINES = 6;
 
       <div
         #log
+        tabindex="-1"
         role="log"
         aria-live="off"
         [attr.aria-label]="lang.t().ask.title"
@@ -258,7 +261,8 @@ const MAX_INPUT_LINES = 6;
         [class.invisible]="!active()"
         (submit)="$event.preventDefault(); submit()"
       >
-        <label [for]="inputId" class="shrink-0 select-none text-accent-orange"
+        <!-- On a phone the question needs the width: at 16px the label would leave it half. -->
+        <label [for]="inputId" class="shrink-0 select-none text-accent-orange max-sm:sr-only"
           >{{ prompt() }}<span class="sr-only"> {{ copy().inputLabel }}</span></label
         >
         <span class="relative min-w-0 grow">
@@ -278,8 +282,8 @@ const MAX_INPUT_LINES = 6;
             [attr.aria-describedby]="hintId"
             [attr.tabindex]="active() ? null : -1"
             autocomplete="off"
-            autocapitalize="off"
-            spellcheck="false"
+            autocapitalize="sentences"
+            spellcheck="true"
             enterkeyhint="send"
             (keydown)="onKey($event)"
             (input)="onInput()"
@@ -348,6 +352,12 @@ const MAX_INPUT_LINES = 6;
     .terminal-input::placeholder {
       color: var(--muted-foreground);
       opacity: 0.75;
+    }
+    /* iOS zooms into a field under 16px when it takes focus. */
+    @media (width < 64rem) {
+      .terminal-input {
+        font-size: 1rem;
+      }
     }
   `,
 })
@@ -500,14 +510,26 @@ export class TerminalShellComponent {
    * link's question goes in the prompt unsent (V17).
    */
   claim(): void {
-    this.reportOpen(this.launcher.takeSource());
+    const source = this.launcher.takeSource();
+    this.reportOpen(source);
     // A shared link's question (visitor plan V17): in the prompt, for the visitor to send or not.
     const draft = this.launcher.takeDraft();
     if (draft) this.setValue(draft);
-    this.focusInput();
     const question = this.launcher.takeQuestion();
     const about = this.launcher.takeAbout();
     if (question) this.send(question, about ?? undefined);
+    if (!this.onPhone() || TYPING.has(source)) this.focusInput();
+  }
+
+  /** In the sheet, where a focused prompt means an on-screen keyboard over what was asked for. */
+  private onPhone(): boolean {
+    return this.inSheet() && this.launcher.narrow();
+  }
+
+  /** After a button: back to the prompt, or on a phone to the log, keeping the keyboard down. */
+  private refocus(): void {
+    if (this.onPhone()) this.logRef().nativeElement.focus({ preventScroll: true });
+    else this.focusInput();
   }
 
   /** `ask_open`, once per prompt, with where the visitor came from. */
@@ -536,19 +558,19 @@ export class TerminalShellComponent {
     const el = this.inputRef().nativeElement;
     el.value = text;
     this.submit(about);
-    el.focus();
+    this.refocus();
   }
 
   /** A starter question from the empty terminal. */
   /** The paste box's brief, sent; the prompt takes the focus back (visitor plan V20). */
   protected sendMatch(kind: MatchKind, brief: string): void {
     void this.store.sendMatch(kind, brief, "terminal");
-    this.focusInput();
+    this.refocus();
   }
 
   protected dismissMatch(): void {
     this.store.cancelMatch();
-    this.focusInput();
+    this.refocus();
   }
 
   protected start(question: string): void {

@@ -936,7 +936,8 @@ test.describe("assistant terminal", () => {
     await page.getByRole("button", { name: "Ask about my work" }).click();
     const sheet = page.getByRole("dialog", { name: "Ask about my work" });
     const prompt = sheet.locator("textarea");
-    await expect(prompt).toBeFocused();
+    // On a phone the prompt waits for a tap: its keyboard would cover the suggestions.
+    await expect(page.viewportSize()!.width < 1024 ? sheet : prompt).toBeFocused();
     await run(prompt, "Hello");
     await expect(sheet).toContainText("From the sheet.");
     await page.keyboard.press("Escape");
@@ -1035,11 +1036,13 @@ test.describe("assistant terminal", () => {
       if (phone) {
         await expect(panel).toBeHidden();
         expect(await inert()).toBe(false);
-        // A tap on the scrim above the window closes the sheet too.
-        await fab.click();
+        // Back returns to the conversation; Back again closes it, on the same page.
+        await page.goBack();
         await expect(panel).toBeVisible();
-        await page.mouse.click(10, 10);
+        await expect(page).toHaveURL(/\/en\/work\/project-one$/);
+        await page.goBack();
         await expect(panel).toBeHidden();
+        await expect(page).toHaveURL(/\/en\/work\/project-one$/);
         await fab.click();
       } else {
         expect(await panel.boundingBox()).toEqual(at);
@@ -1056,6 +1059,19 @@ test.describe("assistant terminal", () => {
       await (phone ? expect(panel).toBeHidden() : expect(panel).toBeVisible());
     },
   );
+
+  test("the open panel takes a reader's question from the page beside it", async ({ page }) => {
+    await mockAsk(page, (route) => sse(route, answer({ text: "From the page beside it." })));
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    await page.getByRole("button", { name: "Ask about my work" }).click();
+    const panel = page.getByRole("dialog", { name: "Ask about my work" });
+    await expect(panel).toBeVisible();
+    await page.getByRole("button", { name: "Ask about Atlas" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(panel).toContainText("What did he build in Atlas, and how?");
+    await expect(panel).toContainText("From the page beside it.");
+  });
 
   test("the panel leaves the page usable: the floating button hides behind it, it widens, and Escape on the page closes it where the focus is (plan 4 U8)", async ({
     page,
@@ -2359,6 +2375,145 @@ for (const colorScheme of ["dark", "light"] as const) {
 
 test.describe("assistant on a phone", () => {
   test.use({ viewport: { width: 390, height: 780 }, hasTouch: true, isMobile: true });
+
+  /** An open sheet on a page off home; the prompt is not focused, so no keyboard shows. */
+  async function openSheet(page: Page) {
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    await page.getByRole("button", { name: "Ask about my work" }).click();
+    const sheet = page.getByRole("dialog", { name: "Ask about my work" });
+    await expect(sheet).toBeFocused();
+    return sheet;
+  }
+
+  test(
+    "the sheet fills the screen, with no zoom on focus, a sentence keyboard and a 44px close (plan 4 U9)",
+    PHONE,
+    async ({ page }) => {
+      await mockAsk(page, () => undefined);
+      const sheet = await openSheet(page);
+      const { width, height } = page.viewportSize()!;
+      expect(await sheet.boundingBox()).toEqual({ x: 0, y: 0, width, height });
+
+      const prompt = sheet.locator("textarea");
+      await expect(prompt).toHaveCSS("font-size", "16px");
+      await expect(prompt).toHaveAttribute("autocapitalize", "sentences");
+      await expect(prompt).toHaveAttribute("spellcheck", "true");
+      await expect(prompt).toHaveAttribute("enterkeyhint", "send");
+
+      const close = sheet.getByRole("button", { name: "Close the assistant", exact: true });
+      const target = await close.boundingBox();
+      expect(target?.width).toBeGreaterThanOrEqual(44);
+      expect(target?.height).toBeGreaterThanOrEqual(44);
+      await close.click();
+      await expect(sheet).toBeHidden();
+    },
+  );
+
+  test(
+    "a suggestion sends with the keyboard down; the log alone scrolls, with the prompt in view (plan 4 U9)",
+    PHONE,
+    async ({ page, browserName }) => {
+      await mockAsk(page, (route) => sse(route, answer({ text: "A long answer. ".repeat(400) })));
+      const sheet = await openSheet(page);
+      const prompt = sheet.locator("textarea");
+      const log = sheet.locator("[role=log]");
+      await sheet
+        .getByRole("group", { name: "Suggested questions" })
+        .getByRole("button", { name: "What has he shipped with RAG?" })
+        .click();
+      await expect(sheet.getByRole("button", { name: "copy", exact: true })).toBeVisible();
+      await expect(prompt).not.toBeFocused();
+      await expect(log).toBeFocused();
+
+      await expect(prompt).toBeInViewport({ ratio: 1 });
+      // Windows WebKit computes no value for it.
+      if (browserName === "chromium") {
+        await expect(log).toHaveCSS("overscroll-behavior-y", "contain");
+      }
+      const overflow = (selector: string) =>
+        page
+          .locator(selector)
+          .evaluate((box) => box.scrollHeight > Math.ceil(box.getBoundingClientRect().height));
+      expect(await overflow("dialog.ask-sheet [role=log]")).toBe(true);
+      expect(await overflow("dialog.ask-sheet")).toBe(false);
+    },
+  );
+
+  test("“/” brings the prompt, for whoever has a keyboard", PHONE, async ({ page }) => {
+    await mockAsk(page, () => undefined);
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    await page.keyboard.press("/");
+    await expect(askPanel(page).locator("textarea")).toBeFocused();
+  });
+
+  test(
+    "Back closes the sheet and leaves the page as it was; closing it by hand leaves no step behind (plan 4 U9)",
+    PHONE,
+    async ({ page }) => {
+      await mockAsk(page, () => undefined);
+      await page.goto("/en/writing");
+      await page.goto("/en/work/project-one#problem");
+      await interactive(page);
+      await page.evaluate(() => window.scrollBy({ top: 400, behavior: "instant" }));
+      const scrolled = () => page.evaluate(() => Math.round(window.scrollY));
+      await expect.poll(scrolled).toBeGreaterThan(0);
+      const top = await scrolled();
+      const fab = page.getByRole("button", { name: "Ask about my work" });
+      const sheet = page.getByRole("dialog", { name: "Ask about my work" });
+      // Long enough for the router's scroll, which runs a frame after a navigation it skips.
+      const settled = () => page.evaluate(() => new Promise((done) => setTimeout(done, 200)));
+
+      await fab.click();
+      await expect(sheet).toBeVisible();
+      await page.goBack();
+      await expect(sheet).toBeHidden();
+      await expect(page).toHaveURL(/\/en\/work\/project-one#problem$/);
+      await settled();
+      expect(await scrolled()).toBe(top);
+
+      await fab.click();
+      await sheet.getByRole("button", { name: "Close the assistant", exact: true }).click();
+      await expect(sheet).toBeHidden();
+      await settled();
+      expect(await scrolled()).toBe(top);
+
+      await page.goBack();
+      await expect(page).toHaveURL(/\/en\/writing$/);
+    },
+  );
+
+  test(
+    "the sheet sits above the keyboard, and a stale offset after it closes does not move it (plan 4 U9)",
+    PHONE,
+    async ({ page }) => {
+      await mockAsk(page, () => undefined);
+      const sheet = await openSheet(page);
+      const prompt = sheet.locator("textarea");
+      const viewport = (height: number, offsetTop: number) =>
+        page.evaluate(
+          ([h, top]) => {
+            const vv = window.visualViewport!;
+            Object.defineProperty(vv, "height", { configurable: true, get: () => h });
+            Object.defineProperty(vv, "offsetTop", { configurable: true, get: () => top });
+            vv.dispatchEvent(new Event("resize"));
+          },
+          [height, offsetTop],
+        );
+
+      await prompt.focus();
+      await viewport(400, 120);
+      await expect.poll(() => sheet.boundingBox()).toMatchObject({ y: 120, height: 400 });
+      const box = (await prompt.boundingBox())!;
+      expect(box.y + box.height).toBeLessThanOrEqual(520);
+
+      // Keyboard gone, focus gone, and iOS 26 still reporting the offset.
+      await prompt.blur();
+      await viewport(780, 24);
+      await expect.poll(() => sheet.boundingBox()).toMatchObject({ y: 0, height: 780 });
+    },
+  );
 
   test("focusing the prompt opens the terminal full screen; Esc closes it", async ({ page }) => {
     await mockAsk(page, () => undefined);
