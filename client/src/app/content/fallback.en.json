@@ -4,17 +4,17 @@
   "ui": {
     "profile": {
       "role": "Full Stack AI Software Engineer",
-      "heroHeadline": "Full Stack Engineering Meets AI Intelligence.",
-      "heroSubheadline": "Bridging reliable cloud infrastructure and cutting-edge machine learning to deliver production-ready applications.",
-      "primaryCta": "View Projects",
+      "heroHeadline": "I turn language models into products that keep working after the demo.",
+      "heroSubheadline": "Reliable cloud infrastructure and defensive AI, built to run in production.",
+      "primaryCta": "See the work",
       "secondaryCta": "Get in Touch",
       "location": "Remote"
     },
     "nav": {
-      "skills": "skills",
-      "projects": "projects",
-      "about": "about",
-      "contact": "contact",
+      "skills": "Skills",
+      "projects": "Work",
+      "about": "About",
+      "contact": "Contact",
       "work": "Work",
       "experience": "Experience",
       "writing": "Writing"
@@ -24,15 +24,15 @@
       "availabilityLimited": "Limited availability",
       "availabilityClosed": "Not available for new work",
       "downloadCv": "Download CV",
-      "askCta": "ask my portfolio"
+      "askCta": "Ask about my work"
     },
     "skills": {
-      "heading": "// skills",
-      "subtitle": "capabilities · stack"
+      "heading": "Skills",
+      "subtitle": "What I work with"
     },
     "about": {
-      "heading": "// about",
-      "subtitle": "philosophy.txt",
+      "heading": "About",
+      "subtitle": "How I work",
       "philosophy": "Building AI applications in a Jupyter notebook is easy; keeping them stable in production is hard. My engineering philosophy centers on defensive AI integration. I treat language models as powerful but unpredictable microservices. By implementing strict semantic routing, output parsing, and automated fallback mechanisms, I actively mitigate hallucinations and enforce reliable data structures. I prioritize the user experience by streaming tokens to the frontend to mask latency, while simultaneously optimizing prompt payloads and leveraging semantic caching to keep API inference costs strictly under control. I don't just write prompts; I engineer resilient, full-stack systems around them.",
       "terminalTitle": "user@portfolio — zsh",
       "terminalPrompt": "user@portfolio:~$",
@@ -42,12 +42,12 @@
       "bio": ""
     },
     "projects": {
-      "heading": "// projects",
-      "subtitle": "case · studies"
+      "heading": "Selected work",
+      "subtitle": "Case studies"
     },
     "experience": {
       "heading": "Experience",
-      "subtitle": "work · education · certifications",
+      "subtitle": "Work, education, certifications",
       "work": "Work",
       "education": "Education",
       "certifications": "Certifications",
@@ -63,7 +63,7 @@
     },
     "writing": {
       "heading": "Writing",
-      "subtitle": "notes from production",
+      "subtitle": "Notes from production",
       "readingTime": "{n} min read",
       "allPosts": "All posts",
       "empty": "Nothing published yet.",
@@ -88,18 +88,18 @@
       "ctaButton": "Discuss a similar project"
     },
     "contact": {
-      "heading": "// contact",
-      "subtitle": "send_message()",
-      "labelName": "name",
-      "labelEmail": "email",
-      "labelMessage": "message",
+      "heading": "Contact",
+      "subtitle": "Let’s talk",
+      "labelName": "Name",
+      "labelEmail": "Email",
+      "labelMessage": "Message",
       "placeholderName": "Jane Doe",
       "placeholderEmail": "jane@example.com",
-      "placeholderMessage": "Tell me about the project, the timeline, and what 'done' looks like.",
-      "submit": "> send_message()",
-      "sending": "sending…",
-      "successLine1": "> message_sent.",
-      "successLine2": "expect_reply within 24h. or email",
+      "placeholderMessage": "What you’re building, the timeline, and what “done” looks like…",
+      "submit": "Send message",
+      "sending": "Sending…",
+      "successLine1": "Message sent",
+      "successLine2": "I’ll reply within 24 hours. Or email me:",
       "errorRequired": "Required.",
       "errorEmail": "Invalid email.",
       "errorMinlength": "At least {n} chars.",
@@ -114,14 +114,14 @@
       "replyTime": "I reply within 24 hours."
     },
     "projectCard": {
-      "problem": "PROBLEM",
-      "arch": "ARCH",
-      "infra": "INFRA",
-      "outcomes": "OUTCOMES",
-      "caseLabel": "case · {i}",
-      "live": "live",
-      "repo": "repo",
-      "caseStudy": "case_study",
+      "problem": "Problem",
+      "arch": "Architecture",
+      "infra": "Infrastructure",
+      "outcomes": "Outcomes",
+      "caseLabel": "Case {i}",
+      "live": "Live",
+      "repo": "Code",
+      "caseStudy": "Case study",
       "techStackAriaLabel": "Tech stack"
     },
     "legal": {
@@ -131,16 +131,16 @@
       "updated": "Last updated"
     },
     "notFound": {
-      "title": "404: route not found",
-      "body": "This page does not exist, or it moved.",
+      "title": "This page isn’t here.",
+      "body": "It may have moved, or the link is wrong.",
       "home": "Back to the homepage"
     },
     "ask": {
-      "title": "ask my portfolio",
-      "hint": "type a question, or \"help\"",
-      "placeholder": "Ask about my work, projects or availability…",
-      "disclosure": "Answers are generated by an AI from the content of this site.",
-      "offline": "The assistant is resting. Use the contact form instead."
+      "title": "Ask about my work",
+      "hint": "Best for questions about projects, experience, skills and availability.",
+      "placeholder": "Ask a question…",
+      "disclosure": "Answers come from an AI, using this site’s content.",
+      "offline": "The assistant is resting. Please use the contact form."
     }
   },
   "identity": {

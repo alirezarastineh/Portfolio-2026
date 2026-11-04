@@ -79,7 +79,7 @@ describe("the short tour (visitor plan V16)", () => {
       "Open to senior full-stack and AI engineering roles.",
     ]);
     // Headings without their comment marks.
-    expect(stops[0]!.title).toBe("about");
+    expect(stops[0]!.title).toBe("About");
   });
 
   it("leaves out what the content lacks", () => {

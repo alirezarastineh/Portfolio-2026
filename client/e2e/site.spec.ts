@@ -54,7 +54,7 @@ test.describe("home", () => {
     await expect(page.locator("h1")).toContainText("Alireza Rastineh");
     await expect(page.locator("#hero")).toContainText("Open to senior AI / full-stack roles");
     await expect(
-      page.locator("#hero").getByRole("textbox", { name: "ask my portfolio" }),
+      page.locator("#hero").getByRole("textbox", { name: "Ask about my work" }),
     ).toBeVisible();
     // Before the app is interactive, sending still leads to the terminal.
     await expect(page.locator("#hero form")).toHaveAttribute("action", "/en#about");
@@ -72,9 +72,9 @@ test.describe("home", () => {
     await expect(hero.locator("dd")).toHaveText(["−42%", "3.1×", "99.95%"]);
   });
 
-  test("section headings are real text; the comment slashes are decoration", async ({ page }) => {
+  test("section headings are real text, numbered in page order", async ({ page }) => {
     await page.goto("/en");
-    const heading = page.getByRole("heading", { level: 2, name: "projects", exact: true });
+    const heading = page.getByRole("heading", { level: 2, name: "Selected work", exact: true });
     await expect(heading).toBeVisible();
     await expect(page.locator("#projects")).toHaveAttribute("aria-labelledby", "projects-heading");
     // Numbered in page order, counting only the sections that render.
@@ -118,8 +118,8 @@ test.describe("home", () => {
     await interactive(page);
     await page.locator('header a[hreflang="de"]').click();
     await expect(page).toHaveURL(/\/de$/);
-    await expect(page.locator("#projects-heading")).toHaveText("projekte");
-    await expect(page.locator("#skills-heading")).toHaveText("fähigkeiten");
+    await expect(page.locator("#projects-heading")).toHaveText("Ausgewählte Projekte");
+    await expect(page.locator("#skills-heading")).toHaveText("Fähigkeiten");
   });
 
   test("a project without a case study opens its details in place", async ({ page }) => {
@@ -131,7 +131,7 @@ test.describe("home", () => {
     const details = card.locator("details");
     await details.locator("summary").click();
     await expect(details).toHaveAttribute("open", "");
-    await expect(details).toContainText("PROBLEM");
+    await expect(details).toContainText("Problem");
   });
 
   test("a featured project spans the row; the others go two across", async ({ page }) => {
@@ -265,7 +265,7 @@ test.describe("motion", () => {
     test.skip(browserName === "firefox", "Firefox keeps a dragged link :active");
     await page.goto("/en");
     await interactive(page);
-    const talk = page.getByRole("link", { name: "Let's talk" });
+    const talk = page.getByRole("link", { name: "Let’s talk" });
     const scale = () => talk.evaluate((el) => getComputedStyle(el).scale);
     const hold = async () => {
       const box = (await talk.boundingBox())!;
@@ -336,7 +336,7 @@ test.describe("command palette", () => {
   test("arrows move through the results; Escape closes and gives focus back", async ({ page }) => {
     await page.goto("/en/writing");
     await interactive(page);
-    const button = page.getByRole("button", { name: "Search the site" });
+    const button = page.getByRole("button", { name: "Ask or search" });
     await button.click();
 
     const dialog = page.getByRole("dialog", { name: "Command palette" });
@@ -396,7 +396,7 @@ test.describe("contact form", () => {
   test("an empty submit marks each field, describes the error, and focuses the first", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "> send_message()" }).click();
+    await page.getByRole("button", { name: "Send message" }).click();
     const name = page.locator("#contact-name");
     await expect(name).toBeFocused();
     await expect(name).toHaveAttribute("aria-invalid", "true");
@@ -438,9 +438,9 @@ test.describe("contact form", () => {
     await page.locator("#contact-name").fill("Ada");
     await page.locator("#contact-email").fill("ada@example.com");
     await page.locator("#contact-message").fill("Hello there, a question about Atlas.");
-    await page.getByRole("button", { name: "> send_message()" }).click();
+    await page.getByRole("button", { name: "Send message" }).click();
 
-    const confirmation = page.locator("#contact").getByText("> message_sent.");
+    const confirmation = page.locator("#contact").getByText("Message sent");
     await expect(confirmation).toBeVisible();
     await expect(page.locator("#contact [tabindex='-1']")).toBeFocused();
     expect(sent).toMatchObject({ name: "Ada", email: "ada@example.com", locale: "en" });
@@ -460,8 +460,8 @@ test.describe("contact form", () => {
       field.value = "spam";
       field.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    await page.getByRole("button", { name: "> send_message()" }).click();
-    await expect(page.locator("#contact").getByText("> message_sent.")).toBeVisible();
+    await page.getByRole("button", { name: "Send message" }).click();
+    await expect(page.locator("#contact").getByText("Message sent")).toBeVisible();
     expect(requests).toBe(0);
   });
 });

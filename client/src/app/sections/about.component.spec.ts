@@ -85,18 +85,15 @@ describe("AboutSectionComponent", () => {
     expect(german).not.toContain("Building AI applications");
   });
 
-  /**
-   * The CMS heading is `// about`: the slashes are decoration, so the `<h2>`
-   * holds only the name and the section is labelled by it.
-   */
-  it("renders the localized heading without the comment slashes", async () => {
+  /** The `<h2>` holds the CMS heading, and the section is labelled by it. */
+  it("renders the localized heading and is labelled by it", async () => {
     const fixture = TestBed.createComponent(AboutSectionComponent);
     const language = TestBed.inject(LanguageService);
     fixture.detectChanges();
     await fixture.whenStable();
 
     const heading = () => fixture.nativeElement.querySelector("h2") as HTMLElement;
-    expect(heading().textContent?.trim()).toBe("about");
+    expect(heading().textContent?.trim()).toBe("About");
     expect(fixture.nativeElement.querySelector("section").getAttribute("aria-labelledby")).toBe(
       heading().id,
     );
@@ -105,7 +102,7 @@ describe("AboutSectionComponent", () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(heading().textContent?.trim()).toBe("über mich");
+    expect(heading().textContent?.trim()).toBe("Über mich");
   });
 
   it("shows the person beside the terminal, leaving out what the content lacks", async () => {

@@ -4,17 +4,17 @@
   "ui": {
     "profile": {
       "role": "Fullstack-KI-Softwareingenieur",
-      "heroHeadline": "Fullstack-Engineering trifft künstliche Intelligenz.",
-      "heroSubheadline": "Verbindung von zuverlässiger Cloud-Infrastruktur und modernsten Machine-Learning-Methoden für produktionsreife Anwendungen.",
+      "heroHeadline": "Ich mache aus Sprachmodellen Produkte, die auch nach der Demo funktionieren.",
+      "heroSubheadline": "Zuverlässige Cloud-Infrastruktur und defensive KI, gebaut für den Betrieb.",
       "primaryCta": "Projekte ansehen",
       "secondaryCta": "Kontakt aufnehmen",
       "location": "Remote"
     },
     "nav": {
-      "skills": "fähigkeiten",
-      "projects": "projekte",
-      "about": "über mich",
-      "contact": "kontakt",
+      "skills": "Fähigkeiten",
+      "projects": "Projekte",
+      "about": "Über mich",
+      "contact": "Kontakt",
       "work": "Projekte",
       "experience": "Werdegang",
       "writing": "Artikel"
@@ -24,15 +24,15 @@
       "availabilityLimited": "Eingeschränkt verfügbar",
       "availabilityClosed": "Derzeit keine neuen Projekte",
       "downloadCv": "Lebenslauf herunterladen",
-      "askCta": "frag mein Portfolio"
+      "askCta": "Fragen zu meiner Arbeit"
     },
     "skills": {
-      "heading": "// fähigkeiten",
-      "subtitle": "fähigkeiten · stack"
+      "heading": "Fähigkeiten",
+      "subtitle": "Womit ich arbeite"
     },
     "about": {
-      "heading": "// über mich",
-      "subtitle": "philosophie.txt",
+      "heading": "Über mich",
+      "subtitle": "Wie ich arbeite",
       "philosophy": "KI-Anwendungen in einem Jupyter-Notebook zu bauen ist einfach – sie in der Produktion stabil zu halten ist schwer. Meine Engineering-Philosophie konzentriert sich auf defensive KI-Integration. Ich behandle Sprachmodelle als leistungsstarke, aber unberechenbare Microservices. Durch strikte semantische Routing-Regeln, Output-Parsing und automatisierte Fallback-Mechanismen bekämpfe ich aktiv Halluzinationen und erzwinge zuverlässige Datenstrukturen. Ich priorisiere die Nutzererfahrung, indem ich Token zum Frontend streame, um Latenz zu kaschieren, und optimiere gleichzeitig Prompt-Payloads sowie semantisches Caching, um die API-Inferenzkosten strikt im Griff zu behalten. Ich schreibe keine Prompts – ich entwickle resiliente Fullstack-Systeme um sie herum.",
       "terminalTitle": "user@portfolio — zsh",
       "terminalPrompt": "user@portfolio:~$",
@@ -42,12 +42,12 @@
       "bio": ""
     },
     "projects": {
-      "heading": "// projekte",
-      "subtitle": "fallstudien"
+      "heading": "Ausgewählte Projekte",
+      "subtitle": "Fallstudien"
     },
     "experience": {
       "heading": "Werdegang",
-      "subtitle": "Beruf · Ausbildung · Zertifikate",
+      "subtitle": "Beruf, Ausbildung, Zertifikate",
       "work": "Beruf",
       "education": "Ausbildung",
       "certifications": "Zertifikate",
@@ -88,18 +88,18 @@
       "ctaButton": "Ähnliches Projekt besprechen"
     },
     "contact": {
-      "heading": "// kontakt",
-      "subtitle": "nachricht_senden()",
-      "labelName": "name",
-      "labelEmail": "e-mail",
-      "labelMessage": "nachricht",
+      "heading": "Kontakt",
+      "subtitle": "Sprechen wir",
+      "labelName": "Name",
+      "labelEmail": "E-Mail",
+      "labelMessage": "Nachricht",
       "placeholderName": "Max Mustermann",
       "placeholderEmail": "max@beispiel.de",
-      "placeholderMessage": "Erzählen Sie mir vom Projekt, dem Zeitplan und wie 'fertig' aussieht.",
-      "submit": "> nachricht_senden()",
-      "sending": "senden…",
-      "successLine1": "> nachricht_gesendet.",
-      "successLine2": "antwort innerhalb 24h erwartet. oder per E-Mail",
+      "placeholderMessage": "Was Sie bauen, Ihr Zeitplan und was „fertig“ für Sie heißt…",
+      "submit": "Nachricht senden",
+      "sending": "Wird gesendet…",
+      "successLine1": "Nachricht gesendet",
+      "successLine2": "Ich antworte innerhalb von 24 Stunden. Oder per E-Mail:",
       "errorRequired": "Pflichtfeld.",
       "errorEmail": "Ungültige E-Mail-Adresse.",
       "errorMinlength": "Mindestens {n} Zeichen.",
@@ -114,14 +114,14 @@
       "replyTime": "Ich antworte innerhalb von 24 Stunden."
     },
     "projectCard": {
-      "problem": "PROBLEM",
-      "arch": "ARCHITEKTUR",
-      "infra": "INFRASTRUKTUR",
-      "outcomes": "ERGEBNISSE",
-      "caseLabel": "fall · {i}",
-      "live": "live",
-      "repo": "repo",
-      "caseStudy": "fallstudie",
+      "problem": "Problem",
+      "arch": "Architektur",
+      "infra": "Infrastruktur",
+      "outcomes": "Ergebnisse",
+      "caseLabel": "Fall {i}",
+      "live": "Live",
+      "repo": "Code",
+      "caseStudy": "Fallstudie",
       "techStackAriaLabel": "Tech-Stack"
     },
     "legal": {
@@ -131,16 +131,16 @@
       "updated": "Stand"
     },
     "notFound": {
-      "title": "404: Seite nicht gefunden",
-      "body": "Diese Seite gibt es nicht, oder sie ist umgezogen.",
+      "title": "Diese Seite gibt es nicht.",
+      "body": "Vielleicht ist sie umgezogen, oder der Link stimmt nicht.",
       "home": "Zur Startseite"
     },
     "ask": {
-      "title": "frag mein Portfolio",
-      "hint": "Stellen Sie eine Frage, oder \"help\"",
-      "placeholder": "Fragen Sie nach Projekten, Erfahrung oder Verfügbarkeit…",
+      "title": "Fragen zu meiner Arbeit",
+      "hint": "Am besten für Fragen zu Projekten, Erfahrung, Fähigkeiten und Verfügbarkeit.",
+      "placeholder": "Eine Frage stellen…",
       "disclosure": "Die Antworten erzeugt eine KI aus den Inhalten dieser Website.",
-      "offline": "Der Assistent pausiert. Nutzen Sie bitte das Kontaktformular."
+      "offline": "Der Assistent pausiert. Bitte nutzen Sie das Kontaktformular."
     }
   },
   "identity": {

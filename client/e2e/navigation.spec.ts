@@ -88,7 +88,7 @@ test.describe("site navigation", () => {
     await interactive(page);
 
     if (isMobile) await page.getByRole("button", { name: "Toggle navigation" }).click();
-    await page.locator("header nav a:visible", { hasText: "Projects" }).click();
+    await page.locator("header nav a:visible", { hasText: "Work" }).click();
 
     await expect(page).toHaveURL(/\/en#projects$/);
     await expect(page.locator("#projects")).toBeInViewport();
@@ -197,7 +197,7 @@ test.describe("site navigation", () => {
     await page.goto("/en/work/project-one");
     await interactive(page);
     // A circle on phones; it sat on the menu's theme switch.
-    const ask = page.getByRole("button", { name: "ask my portfolio" });
+    const ask = page.getByRole("button", { name: "Ask about my work" });
     await expect(ask).toBeVisible();
     await expect(ask.getByText("ask", { exact: true })).toBeHidden();
 

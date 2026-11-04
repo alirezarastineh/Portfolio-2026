@@ -18,16 +18,16 @@ interface Copy {
 /** The CMS's defaults, for an address outside `/en` and `/de`, where no content has loaded. */
 const COPY: Record<Locale, Copy> = {
   en: {
-    title: "404: route not found",
-    body: "This page does not exist, or it moved.",
+    title: "This page isn’t here.",
+    body: "It may have moved, or the link is wrong.",
     home: "Back to the homepage",
-    ask: "ask my portfolio",
+    ask: "Ask about my work",
   },
   de: {
-    title: "404: Seite nicht gefunden",
-    body: "Diese Seite gibt es nicht, oder sie ist umgezogen.",
+    title: "Diese Seite gibt es nicht.",
+    body: "Vielleicht ist sie umgezogen, oder der Link stimmt nicht.",
     home: "Zur Startseite",
-    ask: "frag mein Portfolio",
+    ask: "Fragen zu meiner Arbeit",
   },
 };
 

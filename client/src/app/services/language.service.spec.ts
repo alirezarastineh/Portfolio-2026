@@ -65,7 +65,7 @@ describe("LanguageService", () => {
 
     expect(service.lang()).toBe("de");
     expect(service.t().about.heading).not.toBe(before);
-    expect(service.t().about.heading).toContain("über mich");
+    expect(service.t().about.heading).toContain("Über mich");
   });
 
   it("exposes structural content for the active locale", () => {

@@ -493,7 +493,7 @@ test.describe("feeds and files", () => {
     await page.goto("/en");
     await expect(page.locator('#hero a[href="/en/resume.pdf"][download]')).toBeVisible();
     await expect(page.locator('header a[href="/en/resume.pdf"]')).toHaveCount(0);
-    await expect(page.locator("header").getByRole("link", { name: "Let's talk" })).toHaveAttribute(
+    await expect(page.locator("header").getByRole("link", { name: "Let’s talk" })).toHaveAttribute(
       "href",
       "/en#contact",
     );
@@ -559,9 +559,9 @@ test.describe("404", () => {
   test("speaks the site's language and offers a way home and to Ask", async ({ page }) => {
     const res = await page.goto("/de/gibt-es-nicht");
     expect(res?.status()).toBe(404);
-    await expect(page.locator("main h1")).toHaveText("> 404: Seite nicht gefunden");
+    await expect(page.locator("main h1")).toHaveText("> Diese Seite gibt es nicht.");
     await expect(page.getByRole("link", { name: /Zur Startseite/ })).toHaveAttribute("href", "/de");
-    await expect(page.getByRole("link", { name: /frag mein Portfolio/ })).toHaveAttribute(
+    await expect(page.getByRole("link", { name: /Fragen zu meiner Arbeit/ })).toHaveAttribute(
       "href",
       "/de#about",
     );
