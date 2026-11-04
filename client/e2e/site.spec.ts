@@ -60,6 +60,22 @@ test.describe("home", () => {
     await expect(page.locator("#hero form")).toHaveAttribute("action", "/en#about");
   });
 
+  test("the hero's headline fits: English keeps its words whole, the action is on a laptop's first screen, German fits a small phone", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/en");
+    await expect(page.locator("h1")).toHaveCSS("hyphens", "manual");
+    await expect(page.getByRole("link", { name: "See the work" })).toBeInViewport({ ratio: 1 });
+
+    // "Sprachmodellen" is too long for the narrowest phones without its hyphens.
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto("/de");
+    await expect(page.locator("h1")).toHaveCSS("hyphens", "auto");
+    const wider = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    expect(wider).toBe(0);
+  });
+
   test("the hero shows proof only when there is some: orgs and a project's numbers", async ({
     page,
   }) => {

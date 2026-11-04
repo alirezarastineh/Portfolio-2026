@@ -115,7 +115,8 @@ const MAX_ORGS = 5;
             <!-- The name stays in the heading for screen readers and search. -->
             <h1
               id="hero-heading"
-              class="m-0 max-w-[14ch] text-balance text-display text-foreground hyphens-auto"
+              class="m-0 text-balance text-h1 text-foreground"
+              [class.hyphens-auto]="lang.lang() === 'de'"
             >
               <span class="sr-only">{{ identity().name }} — </span
               >{{ lang.t().profile.heroHeadline }}
