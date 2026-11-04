@@ -11,7 +11,7 @@ import { HlmSpinner } from "@spartan-ng/helm/spinner";
 
 import { AdminApiService } from "../../admin/admin-api.service";
 import { AdminSessionService } from "../../admin/admin-session.service";
-import { TerminalWindowComponent } from "../../components/terminal-window.component";
+import { TerminalWindowComponent } from "../../admin/components/terminal-window.component";
 
 type Step = "credentials" | "totp";
 
