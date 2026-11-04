@@ -46,7 +46,8 @@ export async function turnstileToken(locale: string, host?: HTMLElement): Promis
 
   const box = document.createElement("div");
   if (!host) {
-    box.style.cssText = "position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);z-index:60";
+    // Above the phone's full-screen terminal (z-70).
+    box.style.cssText = "position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);z-index:80";
   }
   (host ?? document.body).appendChild(box);
 
