@@ -21,7 +21,7 @@ export function buildAgentCard(content: AppContent, origin: string, mcpUrl: stri
     name: `${name}: portfolio assistant`,
     description: [
       `${content.seo.description.trim()}`,
-      `The site's assistant is an AI: it answers visitors' questions about ${name}'s work in the site's terminal, from the published portfolio only, cites its sources, and says when the portfolio does not answer.`,
+      `The site's assistant is an AI: it answers visitors' questions about ${name}'s work on every page of the site, from the published portfolio only, cites its sources, and says when the portfolio does not answer.`,
       "It takes no A2A messages, so this card lists no A2A interface.",
       mcpUrl
         ? "Agents can read the same published content over MCP (read-only, no sign-in, no model behind it): see capabilities.extensions. Each skill is one of its tools."

@@ -284,15 +284,7 @@ export class CommandPaletteComponent {
         label: labels.palette.ask,
         icon: "lucideSparkles",
         keywords: t.hero.askCta,
-        // Home has the terminal in its About section; elsewhere it opens in a sheet.
-        run: () => {
-          if (this.lang.page() === "/") {
-            this.launcher.focusPrompt("palette");
-            void this.router.navigate(["/", l], { fragment: "about" });
-          } else {
-            this.launcher.openSheet("palette");
-          }
-        },
+        run: () => this.launcher.openSheet("palette"),
       },
       {
         id: "palette-news",
@@ -300,14 +292,14 @@ export class CommandPaletteComponent {
         icon: "lucideBell",
         keywords: "news updates",
         ...(this.newsHint() ? { hint: this.newsHint()! } : {}),
-        run: () => this.inTerminal("news"),
+        run: () => this.launcher.ask("news", "palette"),
       },
       {
         id: "palette-tour",
         label: labels.palette.tour,
         icon: "lucideSignpost",
         keywords: "tour guide start",
-        run: () => this.inTerminal("tour"),
+        run: () => this.launcher.ask("tour", "palette"),
       },
       {
         id: "palette-match",
@@ -444,17 +436,6 @@ export class CommandPaletteComponent {
   /** A click on the backdrop lands on the dialog itself. */
   protected closeOnBackdrop(event: MouseEvent): void {
     if (event.target === event.currentTarget) this.palette.hide();
-  }
-
-  /**
-   * A command for the terminal (`news`, `tour`): on home, the About terminal takes it;
-   * elsewhere it opens in the sheet.
-   */
-  private inTerminal(command: string): void {
-    this.launcher.ask(command, "palette");
-    if (this.lang.page() === "/") {
-      void this.router.navigate(["/", this.lang.lang()], { fragment: "about" });
-    }
   }
 
   /**

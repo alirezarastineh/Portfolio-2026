@@ -46,7 +46,8 @@ export async function turnstileToken(locale: string, host?: HTMLElement): Promis
 
   const box = document.createElement("div");
   if (!host) {
-    // Above the phone's full-screen terminal (z-70).
+    // Above all that is fixed on the page, the assistant's panel (z-50) too: the contact form's
+    // check can come while the panel is open beside it.
     box.style.cssText = "position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);z-index:80";
   }
   (host ?? document.body).appendChild(box);

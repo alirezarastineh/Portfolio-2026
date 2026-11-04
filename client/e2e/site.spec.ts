@@ -56,8 +56,9 @@ test.describe("home", () => {
     await expect(
       page.locator("#hero").getByRole("textbox", { name: "Ask about my work" }),
     ).toBeVisible();
-    // Before the app is interactive, sending still leads to the terminal.
-    await expect(page.locator("#hero form")).toHaveAttribute("action", "/en#about");
+    // Before the app is interactive, sending leads to the one thing that works without it.
+    await expect(page.locator("#hero form")).toHaveAttribute("action", "/en#contact");
+    await expect(page.locator("#ask-bar")).not.toHaveAttribute("name");
   });
 
   test("the hero's headline fits: English keeps its words whole, the action is on a laptop's first screen, German fits a small phone", async ({
@@ -98,13 +99,13 @@ test.describe("home", () => {
     await expect(page.locator("#contact header span[aria-hidden]").first()).toHaveText("06");
   });
 
-  test("the server sends the About terminal's whole text", async ({ request }) => {
+  test("the server sends About's whole text, as prose", async ({ request }) => {
     const html = await (await request.get("/en")).text();
-    expect(html).toContain("cat philosophy.txt");
     expect(html).toContain("Building AI applications in a Jupyter notebook is easy");
+    expect(html).not.toContain("cat philosophy.txt");
   });
 
-  test("beside the About terminal, the person: a bio and a few facts", async ({ page }) => {
+  test("beside About's text, the person: a bio and a few facts", async ({ page }) => {
     await page.goto("/en");
     const about = page.locator("#about");
     await expect(about).toContainText("I turn language models into products");

@@ -8,7 +8,7 @@ import {
   PLATFORM_ID,
 } from "@angular/core";
 
-import { ASK_BAR_ID, AskLauncherService } from "../ask/ask-launcher.service";
+import { AskLauncherService } from "../ask/ask-launcher.service";
 import { takeLinkQuestion } from "../ask/ask-link";
 import { AskSheetComponent } from "../ask/ask-sheet.component";
 import { CommandPaletteComponent } from "../components/command-palette.component";
@@ -20,8 +20,7 @@ import { LanguageService } from "../services/language.service";
 
 /**
  * The public portfolio chrome: header, footer, the ⌘K palette, and the
- * assistant's button on pages without the About terminal. The admin renders
- * its own layout instead.
+ * assistant's button and panel. The admin renders its own layout instead.
  */
 @Component({
   selector: "app-public-shell",
@@ -42,23 +41,22 @@ import { LanguageService } from "../services/language.service";
     @defer (when palette.requested()) {
       <app-command-palette />
     }
-    <!-- The assistant lives in the About terminal on home; elsewhere this
-         opens its panel (loaded on first use). A 44px circle on phones,
-         a \`>_ ask\` pill from lg. Its press, and hiding it while the mobile
-         menu or the panel is open, are in styles.css. -->
-    @if (!onHome()) {
-      <button
-        type="button"
-        class="ask-fab press fixed bottom-4 right-4 z-40 inline-flex h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-full border border-border bg-card font-mono text-sm shadow-e3 hover:border-accent-orange lg:px-4"
-        [attr.aria-label]="lang.t().ask.title"
-        [attr.aria-expanded]="launcher.sheetOpen()"
-        aria-keyshortcuts="/"
-        (click)="launcher.openSheet('button')"
-      >
-        <span class="text-accent-orange" aria-hidden="true">&gt;_</span
-        ><span class="max-lg:hidden">{{ fabWord() }}</span>
-      </button>
-    }
+    <!-- Opens the assistant's panel (loaded on first use); on home it waits until
+         the hero's ask bar has left the screen. A 44px circle on phones, a
+         \`>_ ask\` pill from lg. Its press, and hiding it while the mobile menu or
+         the panel is open, are in styles.css. -->
+    <button
+      type="button"
+      class="ask-fab press fixed bottom-4 right-4 z-40 inline-flex h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-full border border-border bg-card font-mono text-sm shadow-e3 hover:border-accent-orange lg:px-4"
+      [attr.aria-label]="lang.t().ask.title"
+      [attr.aria-expanded]="launcher.sheetOpen()"
+      [hidden]="onHome() && launcher.barInView()"
+      aria-keyshortcuts="/"
+      (click)="launcher.openSheet('button')"
+    >
+      <span class="text-accent-orange" aria-hidden="true">&gt;_</span
+      ><span class="max-lg:hidden">{{ fabWord() }}</span>
+    </button>
     @defer (when launcher.sheetRequested()) {
       <app-ask-sheet />
     }
@@ -94,8 +92,7 @@ export class PublicShellComponent {
 
   /**
    * ⌘K / Ctrl+K opens the palette from anywhere on the site. `/` goes to the
-   * assistant, unless the visitor is typing somewhere: the hero's ask bar on
-   * home, the panel elsewhere.
+   * assistant's prompt, unless the visitor is typing somewhere.
    */
   protected onKeydown(event: KeyboardEvent): void {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -104,15 +101,9 @@ export class PublicShellComponent {
       return;
     }
     if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
-    if (event.defaultPrevented || isTyping(event.target)) return;
-    const bar = this.doc.getElementById(ASK_BAR_ID);
-    if (bar) {
-      event.preventDefault();
-      bar.focus();
-    } else if (!this.onHome() && !this.launcher.sheetOpen() && !this.palette.open()) {
-      event.preventDefault();
-      this.launcher.openSheet("shortcut");
-    }
+    if (event.defaultPrevented || isTyping(event.target) || this.palette.open()) return;
+    event.preventDefault();
+    this.launcher.openSheet("shortcut");
   }
 }
 

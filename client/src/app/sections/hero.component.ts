@@ -128,9 +128,7 @@ const MAX_ORGS = 5;
               {{ lang.t().profile.heroSubheadline }}
             </p>
 
-            <app-ask-bar class="hero-rise mt-2 [--i:3]" />
-
-            <div class="hero-rise flex flex-wrap items-center gap-x-6 gap-y-3 [--i:4]">
+            <div class="hero-rise flex flex-wrap items-center gap-x-6 gap-y-3 [--i:3]">
               <app-magnetic-button
                 variant="primary"
                 [href]="lang.homeHref(identity().primaryCtaHref)"
@@ -151,6 +149,9 @@ const MAX_ORGS = 5;
                 </a>
               }
             </div>
+
+            <!-- After the primary action, which stays in a laptop's first screen. -->
+            <app-ask-bar class="hero-rise mt-2 [--i:4]" />
           </div>
 
           <app-trace-panel class="hero-rise col-span-12 [--i:5] lg:col-span-5" />

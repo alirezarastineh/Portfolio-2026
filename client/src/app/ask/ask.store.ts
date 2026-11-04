@@ -947,8 +947,8 @@ export const AskStore = signalStore(
 
     /**
      * `next` and `back`: the visitor's own move, to a path `openTarget` takes, then the stop's
-     * line with a question about it. From home's About terminal to another page, the sheet
-     * opens there, so the tour goes on. The last stop offers contact, through the hand-off (V6).
+     * line with a question about it. The panel stays open across the move, on a phone too, so
+     * the tour goes on there. The last stop offers contact, through the hand-off (V6).
      */
     function moveTour(input: string, step: 1 | -1): void {
       const copy = store.copy().tour;
@@ -988,12 +988,7 @@ export const AskStore = signalStore(
         track("tour_done");
         patchState(store, { handoff: { summary: copy.contact, messageId: "" } });
       }
-      const fromHome = store._lang.page() === "/";
-      void store._router.navigateByUrl(target).then(() => {
-        if (fromHome && store._lang.page() !== "/" && !store._launcher.sheetOpen()) {
-          store._launcher.openSheet("tour");
-        }
-      });
+      void store._router.navigateByUrl(target);
     }
 
     /** `evals` (visitor plan V13): the public scorecard, while the admin publishes it. */

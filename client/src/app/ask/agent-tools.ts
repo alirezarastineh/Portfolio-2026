@@ -81,7 +81,7 @@ function answerText(store: AgentStore, entry: Entry | undefined): string {
   const words = cap(
     text || "No answer came.",
     MAX_OUTPUT - tail.length,
-    " … (cut: the site's terminal shows it whole)",
+    " … (cut: the site shows it whole)",
   );
   return words + tail;
 }
@@ -126,7 +126,7 @@ export function agentTools({ store, locale, navigate, pages }: AgentDeps): Tool[
 
   const askPortfolio: AgentTool = {
     name: "ask_portfolio",
-    description: `Asks the portfolio's assistant one question about Alireza Rastineh's work, as the user could in the site's terminal, and returns the answer with its sources. ${PROVIDER} One question at a time, at most ${maxChars()} characters; the text is always asked, never run as a command.`,
+    description: `Asks the portfolio's assistant one question about Alireza Rastineh's work, as the user could on the site, and returns the answer with its sources. ${PROVIDER} One question at a time, at most ${maxChars()} characters; the text is always asked, never run as a command.`,
     inputSchema: {
       type: "object",
       properties: { question: { type: "string", maxLength: maxChars() } },

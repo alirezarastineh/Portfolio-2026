@@ -1,14 +1,6 @@
 import { DOCUMENT } from "@angular/common";
 import { inject, Injectable, signal } from "@angular/core";
 
-import { LanguageService } from "../services/language.service";
-
-/**
- * The hero's ask bar's input; `/` focuses it (layouts/public-shell.component.ts).
- * Here rather than beside the bar, so the shell does not load the bar's code.
- */
-export const ASK_BAR_ID = "ask-bar";
-
 /** Below this the panel is a sheet over the whole page (Tailwind's `lg`; ask-sheet.component.ts). */
 const SHEET_QUERY = "(width < 64rem)";
 
@@ -28,8 +20,6 @@ export type AskSource =
   | "selection"
   /** "How do they connect?" under read next (visitor plan V15, read-next-block.ts). */
   | "read-next"
-  /** A tour's move to another page, which opens the sheet (visitor plan V16). */
-  | "tour"
   /** A shared link's question, put in the prompt unsent (visitor plan V17, ask-link.ts). */
   | "link";
 
@@ -51,17 +41,13 @@ export interface AskAbout {
 }
 
 /**
- * How the rest of the site reaches the assistant without loading it: the
- * hero's ask bar and the palette's "Ask AI…" ask for the prompt to be focused
- * (on home, the About terminal); on other pages they open the same shell in a
- * sheet. A question can come along, sent once the prompt has it. The
- * terminal's own code loads only when one of these happens or the About
- * section comes into view.
+ * How the rest of the site reaches the assistant without loading it: the hero's
+ * ask bar, the floating button, the palette and a reader's buttons all open the
+ * same panel, on every page. A question can come along, sent once the prompt has
+ * it. The panel's code loads the first time one of these happens.
  */
 @Injectable({ providedIn: "root" })
 export class AskLauncherService {
-  private readonly lang = inject(LanguageService);
-
   private readonly _focusPending = signal(false);
   private readonly _sheet = signal(false);
   private readonly _sheetRequested = signal(false);
@@ -72,23 +58,24 @@ export class AskLauncherService {
   private about: AskAbout | null = null;
   private source: AskSource | null = null;
 
-  /** A request to focus the prompt that no terminal has taken yet. */
-  readonly focusPending = this._focusPending.asReadonly();
   readonly sheetOpen = this._sheet.asReadonly();
   /** True from the first time the sheet is asked for, which loads its code. */
   readonly sheetRequested = this._sheetRequested.asReadonly();
-  /** A question waiting for the prompt that takes the focus request. */
-  readonly pendingQuestion = this._question.asReadonly();
   /**
    * Whether the assistant answers (`online`) or the offline shell does
    * (`resting`), as the terminal's code learns it from the server; null until
-   * then. For the About terminal's title bar, which cannot load that code.
+   * then. For the panel's title bar.
    */
   readonly assistant = signal<"online" | "resting" | null>(null);
   /** Below 1024px: the panel covers the page, which is inert behind it (plan 4 U8). */
   readonly narrow = signal(false);
   /** Where the panel shows a visible Turnstile check; the panel sets it. */
   turnstileHost: HTMLElement | null = null;
+  /**
+   * Whether the hero's ask bar is on screen, where the floating button would only repeat it.
+   * True until the bar says otherwise, so the server prints no button over it on home.
+   */
+  readonly barInView = signal(true);
 
   constructor() {
     const query = inject(DOCUMENT).defaultView?.matchMedia?.(SHEET_QUERY);
@@ -98,12 +85,7 @@ export class AskLauncherService {
     }
   }
 
-  focusPrompt(source?: AskSource): void {
-    if (source) this.source = source;
-    this._focusPending.set(true);
-  }
-
-  /** The terminal that focused its prompt takes the request, so it happens once. */
+  /** The panel takes each request to open or to ask, so it happens once. */
   takeFocus(): boolean {
     if (!this._focusPending()) return false;
     this._focusPending.set(false);
@@ -111,9 +93,10 @@ export class AskLauncherService {
   }
 
   openSheet(source?: AskSource): void {
+    if (source) this.source = source;
     this._sheetRequested.set(true);
     this._sheet.set(true);
-    this.focusPrompt(source);
+    this._focusPending.set(true);
   }
 
   closeSheet(): void {
@@ -133,30 +116,24 @@ export class AskLauncherService {
     return this._sheet() ? (this.turnstileHost ?? undefined) : undefined;
   }
 
-  /**
-   * Puts a question to the assistant: the About terminal on home, the sheet
-   * elsewhere; with what a reader points at, when they did (visitor plan V9).
-   */
+  /** Puts a question to the assistant, with what a reader points at, when they did (visitor plan V9). */
   ask(text: string, source: AskSource, about?: AskAbout): void {
     const question = text.trim();
     if (!question) return;
     this._question.set(question);
     this.about = about ?? null;
-    if (this.lang.page() === "/") this.focusPrompt(source);
-    else this.openSheet(source);
+    this.openSheet(source);
   }
 
   /**
    * Puts a question in the prompt without sending it (visitor plan V17: a shared
-   * link proposes, only the visitor sends): the About terminal on home, the
-   * sheet elsewhere, focused.
+   * link proposes, only the visitor sends), focused.
    */
   prefill(text: string, source: AskSource): void {
     const question = text.trim();
     if (!question) return;
     this.draft = question;
-    if (this.lang.page() === "/") this.focusPrompt(source);
-    else this.openSheet(source);
+    this.openSheet(source);
   }
 
   /** The question to put in the prompt, unsent, once. */
@@ -180,7 +157,7 @@ export class AskLauncherService {
     return about;
   }
 
-  /** Where the latest request came from; a prompt focused directly is "terminal". */
+  /** Where the latest request came from; "terminal" when it did not say. */
   takeSource(): AskSource {
     const source = this.source ?? "terminal";
     this.source = null;

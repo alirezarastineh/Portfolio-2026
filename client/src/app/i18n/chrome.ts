@@ -62,9 +62,7 @@ export interface ChromeLabels {
     attachHint: string;
   };
   about: {
-    skip: string;
-    skipLabel: string;
-    /** The terminal's title bar, once the assistant's state is known. */
+    /** The assistant's title bar, once its state is known. */
     online: string;
     resting: string;
     based: string;
@@ -151,8 +149,6 @@ export const CHROME: Record<Locale, ChromeLabels> = {
         "Your questions and its answers go with your message, with email addresses and phone numbers removed.",
     },
     about: {
-      skip: "skip",
-      skipLabel: "show the whole text",
       online: "online",
       resting: "resting",
       based: "Based in",
@@ -232,8 +228,6 @@ export const CHROME: Record<Locale, ChromeLabels> = {
         "Ihre Fragen und seine Antworten werden mit Ihrer Nachricht gesendet, ohne E-Mail-Adressen und Telefonnummern.",
     },
     about: {
-      skip: "überspringen",
-      skipLabel: "ganzen Text anzeigen",
       online: "online",
       resting: "pausiert",
       based: "Standort",

@@ -569,10 +569,13 @@ test.describe("404", () => {
     expect(res?.status()).toBe(404);
     await expect(page.locator("main h1")).toHaveText("> Diese Seite gibt es nicht.");
     await expect(page.getByRole("link", { name: /Zur Startseite/ })).toHaveAttribute("href", "/de");
-    await expect(page.getByRole("link", { name: /Fragen zu meiner Arbeit/ })).toHaveAttribute(
-      "href",
-      "/de#about",
-    );
+    // "Ask" opens the assistant right here (plan 4 U10).
+    await interactive(page);
+    await page
+      .locator("main")
+      .getByRole("button", { name: /Fragen zu meiner Arbeit/ })
+      .click();
+    await expect(page.getByRole("dialog", { name: "Fragen zu meiner Arbeit" })).toBeVisible();
     // Nothing on the site is near that address, so nothing is suggested.
     await expect(page.locator("main")).not.toContainText("Meinten Sie");
   });

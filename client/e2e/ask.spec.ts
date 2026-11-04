@@ -4,7 +4,7 @@ import type { Page, Route } from "@playwright/test";
 import { askPanel, expect, interactive, settled, test } from "./fixtures";
 
 /**
- * The About terminal as the portfolio assistant. The API is cross-origin in
+ * The portfolio assistant, in its panel on every page. The API is cross-origin in
  * the build (`VITE_API_BASE_URL`), so its answers are mocked here with CORS
  * and a preflight, as an AI SDK UI message stream (server-sent events).
  */
@@ -325,12 +325,13 @@ async function recordPosts(page: Page, pattern: string): Promise<Record<string, 
 }
 
 /** The assistant's prompt on home, once its code has loaded. */
+/** The panel's prompt, through `/`, which brings it on every page. */
 async function openPrompt(page: Page, path = "/en") {
   await page.goto(path);
   await interactive(page);
-  await askPanel(page).scrollIntoViewIfNeeded();
+  await page.keyboard.press("/");
   const prompt = askPanel(page).locator("textarea");
-  await expect(prompt).toBeVisible();
+  await expect(prompt).toBeFocused();
   return prompt;
 }
 
@@ -474,17 +475,20 @@ const PHONE = { tag: "@phone" };
 test.use({ reducedMotion: "reduce" });
 
 test.describe("assistant terminal", () => {
-  test("the intro, prompt and AI disclosure are in the server-rendered page", async ({
+  test("the AI disclosure is in the server-rendered page, under the hero's ask bar (plan 4 U10)", async ({
+    page,
     request,
   }) => {
     const html = await (await request.get("/en")).text();
-    expect(html).toContain("cat philosophy.txt");
-    expect(html).toContain(
-      "Best for questions about projects, experience, skills and availability.",
-    );
     expect(html).toContain("Answers come from an AI, using this site’s content.");
-    // The shell itself (and the AI SDK) loads in the browser only.
+    // The panel itself (and the AI SDK) loads in the browser only, and About has no terminal.
     expect(html).not.toContain('id="ask-input');
+    expect(html).not.toContain("cat philosophy.txt");
+
+    await page.goto("/en");
+    await expect(page.locator("#hero")).toContainText(
+      "Answers come from an AI, using this site’s content.",
+    );
   });
 
   test("the window's title bar says whether the assistant answers", async ({ page }) => {
@@ -731,17 +735,15 @@ test.describe("assistant terminal", () => {
       const mock = await mockAsk(page, (route) =>
         sse(route, answer({ text: "Evals on every prompt change." })),
       );
-      await page.goto("/en");
-      await interactive(page);
-      // Before the prompt's code loads, About's placeholder draws the same row.
+      const prompt = await openPrompt(page);
       const starters = askPanel(page).getByRole("group", { name: "Suggested questions" });
       await starters.getByRole("button", { name: "How does he test AI features?" }).click();
 
       const log = askPanel(page).locator("[role=log]");
       await expect(log).toContainText("How does he test AI features?");
       await expect(log).toContainText("Evals on every prompt change.");
-      const prompt = askPanel(page).locator("textarea");
-      await expect(prompt).toBeFocused();
+      // On a phone the keyboard stays down after a button (plan 4 U9).
+      await expect(page.viewportSize()!.width < 1024 ? log : prompt).toBeFocused();
       expect(mock.bodies).toHaveLength(1);
       await expect(starters).toHaveCount(0);
 
@@ -829,7 +831,7 @@ test.describe("assistant terminal", () => {
     expect(mock.bodies).toHaveLength(0);
   });
 
-  test("the hand-off to the contact form waits for the visitor's yes", async ({ page }) => {
+  test("the hand-off to the contact form waits for the visitor's yes", PHONE, async ({ page }) => {
     const { summary, confirm, confirmed, sent } = await offerHandoff(page);
     await expect(page.locator("#contact-message")).toHaveValue("");
     expect(confirmed).toHaveLength(0);
@@ -877,9 +879,7 @@ test.describe("assistant terminal", () => {
     expect(sent[0]).not.toHaveProperty("ask");
   });
 
-  test("a question asked in the hero is answered in the About terminal, and traced", async ({
-    page,
-  }) => {
+  test("a question asked in the hero is answered in the panel, and traced", async ({ page }) => {
     const mock = await mockAsk(page, (route) =>
       sse(route, answer({ text: "He ships evals first.", tools: SEARCH_STEP })),
     );
@@ -901,17 +901,23 @@ test.describe("assistant terminal", () => {
     await expect(trace).not.toContainText("example trace");
   });
 
-  test("“/” focuses the ask bar, unless typing; a starter question sends at once", async ({
+  test("“/” opens the panel on home too, unless typing; a starter question sends at once", async ({
     page,
   }) => {
     await mockAsk(page, (route) => sse(route, answer({ text: "Hybrid search." })));
     await page.goto("/en");
     await interactive(page);
+    // In the hero's ask bar, "/" is just a character.
     const bar = page.getByRole("textbox", { name: "Ask about my work" });
-    await page.keyboard.press("/");
-    await expect(bar).toBeFocused();
     await bar.pressSequentially("a/b");
     await expect(bar).toHaveValue("a/b");
+    await expect(askPanel(page)).toBeHidden();
+
+    await bar.blur();
+    await page.keyboard.press("/");
+    await expect(askPanel(page).locator("textarea")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(askPanel(page)).toBeHidden();
 
     await page
       .locator("#hero")
@@ -919,6 +925,20 @@ test.describe("assistant terminal", () => {
       .getByRole("button", { name: "What has he shipped with RAG?" })
       .click();
     await expect(askPanel(page).locator("[role=log]")).toContainText("Hybrid search.");
+  });
+
+  test("on home the floating button waits until the hero's ask bar has left the screen (plan 4 U10)", async ({
+    page,
+  }) => {
+    await mockAsk(page, () => undefined);
+    await page.goto("/en");
+    await interactive(page);
+    const fab = page.getByRole("button", { name: "Ask about my work" });
+    await expect(fab).toBeHidden();
+    await page.locator("#about").scrollIntoViewIfNeeded();
+    await expect(fab).toBeVisible();
+    await fab.click();
+    await expect(askPanel(page).locator("textarea")).toBeFocused();
   });
 
   test("an empty ask bar still goes to the prompt", async ({ page }) => {
@@ -1615,7 +1635,7 @@ test.describe("assistant terminal", () => {
   });
 
   test(
-    "tour runs the short tour from end to end: the About terminal, the sheet elsewhere, a reload, the last stop's offer (visitor plan V16)",
+    "tour runs the short tour from end to end: one panel from home on, a reload, the last stop's offer (visitor plan V16)",
     PHONE,
     async ({ page }) => {
       const mock = await mockAsk(page, (route) => sse(route, answer({ text: "unused" })));
@@ -1637,7 +1657,7 @@ test.describe("assistant terminal", () => {
       await expect(page.getByRole("group", { name: "tour · stop 1 of 5 · about" })).toBeVisible();
       await expect(log).toContainText("ask about this ›");
 
-      // Typed, as in any shell. To another page: the sheet carries the tour on.
+      // Typed, as in any shell. To another page: the panel stays open and carries the tour on.
       await run(prompt, "next");
       await expect(page).toHaveURL(/\/en\/work\/project-one$/);
       const sheet = page.getByRole("dialog", { name: "Ask about my work" });
@@ -2208,7 +2228,7 @@ test.describe("assistant terminal", () => {
         );
       }
 
-      // On home, the About terminal waits with it.
+      // On home too, the panel opens with it.
       await page.goto(`/en?ask=${encodeURIComponent("Is he available?")}`);
       await interactive(page);
       await expect(askPanel(page).locator("textarea")).toHaveValue("Is he available?");
@@ -2460,6 +2480,8 @@ test.describe("assistant on a phone", () => {
       const scrolled = () => page.evaluate(() => Math.round(window.scrollY));
       await expect.poll(scrolled).toBeGreaterThan(0);
       const top = await scrolled();
+      // Firefox keeps half pixels and snaps them back: a pixel either way is the same place.
+      const off = async () => Math.abs((await scrolled()) - top);
       const fab = page.getByRole("button", { name: "Ask about my work" });
       const sheet = page.getByRole("dialog", { name: "Ask about my work" });
       // Long enough for the router's scroll, which runs a frame after a navigation it skips.
@@ -2471,16 +2493,18 @@ test.describe("assistant on a phone", () => {
       await expect(sheet).toBeHidden();
       await expect(page).toHaveURL(/\/en\/work\/project-one#problem$/);
       await settled();
-      expect(await scrolled()).toBe(top);
+      await expect.poll(off).toBeLessThanOrEqual(1);
 
       await fab.click();
       await sheet.getByRole("button", { name: "Close the assistant", exact: true }).click();
       await expect(sheet).toBeHidden();
       await settled();
-      expect(await scrolled()).toBe(top);
+      await expect.poll(off).toBeLessThanOrEqual(1);
 
+      // One Back leaves the page: the sheet's step went with it. (Firefox, told it is a phone,
+      // keeps an extra "/" before the case study, so the page before is not always /en/writing.)
       await page.goBack();
-      await expect(page).toHaveURL(/\/en\/writing$/);
+      await expect(page).not.toHaveURL(/project-one/);
     },
   );
 
@@ -2514,41 +2538,4 @@ test.describe("assistant on a phone", () => {
       await expect.poll(() => sheet.boundingBox()).toMatchObject({ y: 0, height: 780 });
     },
   );
-
-  test("focusing the prompt opens the terminal full screen; Esc closes it", async ({ page }) => {
-    await mockAsk(page, () => undefined);
-    const prompt = await openPrompt(page);
-    await prompt.focus();
-    const frame = askPanel(page).locator(".ask-expanded");
-    await expect(frame).toBeVisible();
-    const box = await frame.boundingBox();
-    expect(box?.width).toBeGreaterThanOrEqual(389);
-    await expect(prompt).toBeFocused();
-    await page.keyboard.press("Escape");
-    await expect(frame).toHaveCount(0);
-
-    // Or its close button, a 44px target.
-    await prompt.focus();
-    const close = frame.getByRole("button", { name: "Close the assistant" });
-    const target = await close.boundingBox();
-    expect(target?.width).toBeGreaterThanOrEqual(44);
-    expect(target?.height).toBeGreaterThanOrEqual(44);
-    await close.click();
-    await expect(frame).toHaveCount(0);
-  });
-
-  test("tabbing out of the full-screen terminal closes it, so focus never hides behind it", async ({
-    page,
-  }) => {
-    await mockAsk(page, () => undefined);
-    const prompt = await openPrompt(page);
-    await prompt.focus();
-    const frame = askPanel(page).locator(".ask-expanded");
-    await expect(frame).toBeVisible();
-
-    // Through its own controls, then on to the page.
-    for (let i = 0; i < 12 && (await frame.count()) > 0; i++) await page.keyboard.press("Tab");
-    await expect(frame).toHaveCount(0);
-    await expect(page.locator(":focus")).toBeInViewport();
-  });
 });

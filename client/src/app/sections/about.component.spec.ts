@@ -30,8 +30,8 @@ class StubContentStore {
 
 describe("AboutSectionComponent", () => {
   beforeAll(() => {
-    // jsdom has neither; the component guards matchMedia but constructs an
-    // IntersectionObserver directly once it believes it is in a browser.
+    // jsdom has neither; the heading's scramble guards matchMedia but constructs
+    // an IntersectionObserver directly once it believes it is in a browser.
     globalThis.IntersectionObserver ??= class {
       observe() {}
       unobserve() {}
@@ -46,7 +46,7 @@ describe("AboutSectionComponent", () => {
 
     globalThis.matchMedia ??= ((query: string) =>
       ({
-        matches: true, // report reduced motion so the typewriter resolves instantly
+        matches: true, // report reduced motion, so the scramble shows the heading at once
         media: query,
         addEventListener() {},
         removeEventListener() {},
@@ -61,12 +61,10 @@ describe("AboutSectionComponent", () => {
   });
 
   /**
-   * Regression test. `lines` used to be a field initializer
-   * (`readonly lines = this.buildLines()`), which snapshotted the copy once —
-   * so the terminal kept rendering English after switching to German. It is a
-   * computed now, kept in step by an effect.
+   * Regression test: the text once came from a field initializer, which
+   * snapshotted the copy, so the section kept English after a switch to German.
    */
-  it("re-renders the terminal when the language changes", async () => {
+  it("re-renders the text when the language changes", async () => {
     const fixture = TestBed.createComponent(AboutSectionComponent);
     const language = TestBed.inject(LanguageService);
     fixture.detectChanges();
@@ -105,7 +103,7 @@ describe("AboutSectionComponent", () => {
     expect(heading().textContent?.trim()).toBe("Über mich");
   });
 
-  it("shows the person beside the terminal, leaving out what the content lacks", async () => {
+  it("shows the person beside the text, leaving out what the content lacks", async () => {
     // The seed: no bio, no photo, no experience, no city.
     const fixture = TestBed.createComponent(AboutSectionComponent);
     fixture.detectChanges();
@@ -119,20 +117,18 @@ describe("AboutSectionComponent", () => {
       "Status",
     ]);
     expect(root.querySelector("dd")?.textContent?.trim()).toBe("Remote");
-    // No status in the title bar until the assistant's code says whether it answers.
-    expect(root.querySelector("app-terminal-window header")?.textContent).not.toContain("online");
   });
 
-  it("renders every line in full before any typing, as the server does", async () => {
+  it("says how he works as prose, with no terminal around it (plan 4 U10)", async () => {
     const fixture = TestBed.createComponent(AboutSectionComponent);
     fixture.detectChanges();
     await fixture.whenStable();
+    const root: HTMLElement = fixture.nativeElement;
 
-    const text = fixture.nativeElement.textContent as string;
-    expect(text).toContain("cat contact.txt");
-    expect(text).toContain("Open to senior full-stack and AI engineering roles");
-    // Nothing is held back for the typewriter.
-    const hidden = [...fixture.nativeElement.querySelectorAll(".invisible")] as HTMLElement[];
-    expect(hidden.filter((el) => el.textContent?.trim())).toEqual([]);
+    expect(root.querySelector("#about > div > div > p")?.textContent).toContain(
+      "Building AI applications in a Jupyter notebook is easy",
+    );
+    expect(root.textContent).not.toContain("cat philosophy.txt");
+    expect(root.querySelector("app-terminal-window, app-terminal-shell")).toBeNull();
   });
 });

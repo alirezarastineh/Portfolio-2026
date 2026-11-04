@@ -1,58 +1,21 @@
-import { isPlatformBrowser } from "@angular/common";
-import {
-  afterNextRender,
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  DestroyRef,
-  effect,
-  ElementRef,
-  inject,
-  input,
-  PLATFORM_ID,
-  signal,
-  untracked,
-} from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 
-import { ASK_ENTRY_COPY } from "../ask/ask-entry-copy";
-import { AskLauncherService } from "../ask/ask-launcher.service";
-import { hasStoredConversation } from "../ask/match-marks";
-import { TerminalShellComponent } from "../ask/terminal-shell.component";
 import { PictureComponent } from "../components/picture.component";
 import { SectionHeadingComponent } from "../components/section-heading.component";
-import {
-  TerminalWindowComponent,
-  type TerminalStatus,
-} from "../components/terminal-window.component";
 import { AVAILABILITY_DOT, availabilityLabel } from "../content/availability";
-import { CONTENT_PREVIEW } from "../content/content-source";
 import { placeName } from "../content/place";
 import { CHROME } from "../i18n/chrome";
-import { prefersReducedMotion, runFrames } from "../motion/frames";
 import { LanguageService } from "../services/language.service";
-import { typingAt, type TerminalLine, type TypingState } from "./about-typing";
 
 /**
- * The About section: a terminal session. The server renders every line, so
- * the text is there for readers without JavaScript and for search engines.
- * In the browser, if the section has not been seen yet, it types itself out
- * the first time it scrolls into view. Text not yet typed keeps its place
- * (hidden, not removed), so nothing below it moves; "skip" shows it all.
- * Reduced motion never animates. The last line is the portfolio assistant's
- * prompt (`ask/terminal-shell.component.ts`), loaded lazily; once it knows
- * whether the assistant answers, the title bar says so. Beside the terminal
- * from `lg` (below it on phones), a card with the person: photo, bio and a few
- * facts.
+ * The About section: how he works, as prose, and beside it from `lg` (below it
+ * on phones) a card with the person: photo, bio and a few facts. The assistant
+ * that lived here is the panel every page opens (plan 4 U10).
  */
 @Component({
   selector: "app-about-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    PictureComponent,
-    SectionHeadingComponent,
-    TerminalShellComponent,
-    TerminalWindowComponent,
-  ],
+  imports: [PictureComponent, SectionHeadingComponent],
   host: {
     class: "block",
   },
@@ -67,100 +30,14 @@ import { typingAt, type TerminalLine, type TypingState } from "./about-typing";
         />
 
         <div class="grid grid-cols-12 gap-x-(--col-gap) gap-y-8">
-          <div class="relative col-span-12 lg:col-span-8">
-            <app-terminal-window [title]="lang.t().about.terminalTitle" [status]="status()">
-              @if (typing(); as state) {
-                <!-- Read in full by assistive technology while it types. -->
-                <div class="sr-only">
-                  @for (line of lines(); track $index) {
-                    <p>{{ line.prompt }} {{ line.command }}</p>
-                    <p>{{ line.output }}</p>
-                  }
-                </div>
-              }
-              <div class="flex flex-col" [attr.aria-hidden]="typing() ? 'true' : null">
-                @for (line of lines(); track $index; let i = $index) {
-                  <div class="flex flex-wrap items-baseline gap-x-2">
-                    <span class="text-accent-orange" [class.invisible]="!started(i)">{{
-                      line.prompt
-                    }}</span>
-                    <!-- prettier-ignore -->
-                    <span class="text-foreground"
-                    >{{ shown(line.command, i, "cmd")
-                    }}@if (caretAt(i, "cmd")) {<span class="terminal-caret" aria-hidden="true"></span>}<span
-                      class="invisible"
-                      >{{ hidden(line.command, i, "cmd") }}</span
-                    ></span
-                  >
-                  </div>
-                  <!-- Typed and untyped text must touch: no whitespace in between, or
-                     it would render (pre-wrap) and shift the text as it types. -->
-                  <!-- prettier-ignore -->
-                  <p
-                  class="m-0 mt-1 max-w-[78ch] whitespace-pre-wrap pb-3 leading-relaxed text-foreground/85"
-                >{{ shown(line.output, i, "out")
-                  }}@if (caretAt(i, "out")) {<span class="terminal-caret" aria-hidden="true"></span>}<span
-                    class="invisible"
-                    >{{ hidden(line.output, i, "out") }}</span
-                  ></p>
-                }
-              </div>
-              <!-- The live prompt: the assistant's shell, loaded as the section
-                 nears the screen (or when asked for), and swapped in between
-                 presses (showShell). Until then — and on the server — the same
-                 prompt, caret and hint hold its place. Not \`on viewport\`: that
-                 trigger runs during the server render here. -->
-              @defer (when showShell()) {
-                <app-terminal-shell [active]="finished()" />
-              } @placeholder {
-                <!-- A flex column like the shell's, so the margins add up the same. -->
-                <div class="flex flex-col">
-                  <div class="mt-1 flex items-baseline gap-2" [class.invisible]="!finished()">
-                    <span class="text-accent-orange">{{ lang.t().about.terminalPrompt }}</span>
-                    <span class="terminal-caret" aria-hidden="true"></span>
-                  </div>
-                  <!-- The shell's starter questions; one asks at once, loading the shell. -->
-                  <div
-                    class="mb-1 mt-2 flex flex-wrap items-center gap-2"
-                    role="group"
-                    [attr.aria-label]="starters().suggestions"
-                    [class.invisible]="!finished()"
-                    (pointerdown)="holdPress()"
-                  >
-                    <span class="text-meta text-muted-foreground" aria-hidden="true">{{
-                      starters().try
-                    }}</span>
-                    @for (question of starters().starters; track question) {
-                      <button
-                        type="button"
-                        class="chip press min-h-8 cursor-pointer px-2.5 text-left hover:border-border-strong hover:text-foreground"
-                        (click)="launcher.ask(question, 'starter')"
-                      >
-                        {{ question }}
-                      </button>
-                    }
-                  </div>
-                  <p class="m-0 mt-1 text-xs text-muted-foreground" [class.invisible]="!finished()">
-                    {{ lang.t().ask.hint }} · {{ lang.t().ask.disclosure }}
-                  </p>
-                </div>
-              }
-            </app-terminal-window>
+          <!-- The CMS may break it into paragraphs with new lines. -->
+          <p
+            class="col-span-12 m-0 max-w-[54ch] whitespace-pre-line text-pretty leading-relaxed text-foreground/85 lg:col-span-8"
+          >
+            {{ lang.t().about.philosophy }}
+          </p>
 
-            @if (typing()) {
-              <!-- Its name starts with the visible word, so voice control finds it. -->
-              <button
-                type="button"
-                class="press absolute right-3 top-1.5 cursor-pointer rounded-md px-2 py-1 font-mono text-xs text-muted-foreground hover:text-foreground"
-                (click)="skip()"
-              >
-                {{ chrome().skip }}<span class="sr-only">: {{ chrome().skipLabel }}</span
-                ><span aria-hidden="true"> ▸</span>
-              </button>
-            }
-          </div>
-
-          <!-- The person at the prompt. -->
+          <!-- The person. -->
           <div class="surface-card col-span-12 flex flex-col gap-5 self-start p-6 lg:col-span-4">
             <div class="flex items-center gap-4">
               <div
@@ -216,33 +93,7 @@ export class AboutSectionComponent {
 
   readonly lang = inject(LanguageService);
 
-  readonly lines = computed<TerminalLine[]>(() => {
-    const t = this.lang.t().about;
-    const prompt = t.terminalPrompt;
-    return [
-      { prompt, command: "whoami", output: t.terminalOutputWhoami },
-      { prompt, command: "cat philosophy.txt", output: t.philosophy },
-      { prompt, command: "ls skills/", output: t.terminalOutputLs },
-      { prompt, command: "cat contact.txt", output: t.terminalOutputContact },
-    ];
-  });
-
   protected readonly chrome = computed(() => CHROME[this.lang.lang()].about);
-
-  /** Null when everything is shown: on the server, with reduced motion, and once done. */
-  protected readonly typing = signal<TypingState | null>(null);
-  protected readonly finished = computed(() => this.typing() === null);
-
-  protected readonly launcher = inject(AskLauncherService);
-  protected readonly starters = computed(() => ASK_ENTRY_COPY[this.lang.lang()]);
-
-  /** `● online` once the prompt's code knows; not while the intro types (its skip button sits there). */
-  protected readonly status = computed<TerminalStatus | null>(() => {
-    const state = this.launcher.assistant();
-    if (!state || this.typing()) return null;
-    const online = state === "online";
-    return { label: online ? this.chrome().online : this.chrome().resting, live: online };
-  });
 
   protected readonly identity = computed(() => this.lang.content().identity);
   protected readonly bio = computed(() => this.lang.t().about.bio?.trim() ?? "");
@@ -281,203 +132,4 @@ export class AboutSectionComponent {
       },
     ];
   });
-
-  private readonly host = inject(ElementRef<HTMLElement>);
-  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
-  /** The admin's draft preview: the text in full, no typing, and no live assistant. */
-  private readonly preview = inject(CONTENT_PREVIEW);
-  private observer?: IntersectionObserver;
-  private shellObserver?: IntersectionObserver;
-
-  /** True once the shell's code should load: near the screen, asked for, or a returning tab. */
-  protected readonly loadShell = signal(false);
-  /**
-   * A press on the placeholder's starter questions, until its click has been
-   * handled. Swapped for the shell mid-press, the release lands on the shell's
-   * own button, so neither gets a click and the question is lost: about one
-   * click in four in Firefox, which sends the press and the release further
-   * apart (plan Phase 10's cross-browser run).
-   */
-  private readonly pressing = signal(false);
-  /** The shell's code has arrived, fetched as soon as `loadShell` turns true. */
-  private readonly shellCode = signal(false);
-  /**
-   * The shell replaces the placeholder once its code is here and no press is
-   * under way, so the swap happens in one go. A defer block whose trigger has
-   * fired renders whenever its code arrives, a press or not.
-   */
-  protected readonly showShell = computed(
-    () => this.loadShell() && this.shellCode() && !this.pressing(),
-  );
-  private releasePress?: () => void;
-  private stop?: () => void;
-
-  constructor() {
-    afterNextRender(() => {
-      this.arm();
-      this.watchForShell();
-    });
-
-    // New copy (a language switch) shows in full at once, never retyped.
-    effect(() => {
-      this.lines();
-      untracked(() => this.skip());
-    });
-
-    // The shell's own chunk, the one the defer block loads: once it is here,
-    // the swap waits only for a press to end. A failed fetch leaves the
-    // loading to the defer block.
-    effect(() => {
-      if (!this.loadShell() || this.shellCode()) return;
-      const arrived = () => this.shellCode.set(true);
-      void import("../ask/terminal-shell.component").then(arrived, arrived);
-    });
-
-    // "Ask my portfolio" wants the prompt now, not after the intro.
-    const launcher = this.launcher;
-    effect(() => {
-      if (!launcher.focusPending()) return;
-      untracked(() => {
-        this.skip();
-        if (!this.preview) this.loadShell.set(true);
-      });
-    });
-
-    inject(DestroyRef).onDestroy(() => {
-      this.observer?.disconnect();
-      this.shellObserver?.disconnect();
-      this.releasePress?.();
-      this.stop?.();
-    });
-  }
-
-  /**
-   * Holds the shell back while a press on a starter question plays out: until
-   * its click has run (the question is then the launcher's, which the shell
-   * takes as it renders), a cancelled pointer, 600 ms after a release that
-   * brought no click, or at most 5 s.
-   */
-  protected holdPress(): void {
-    if (this.pressing()) return;
-    this.pressing.set(true);
-    const doc = this.host.nativeElement.ownerDocument;
-    let timer = setTimeout(() => release(), 5_000);
-    const release = () => {
-      clearTimeout(timer);
-      doc.removeEventListener("click", afterClick, true);
-      doc.removeEventListener("pointerup", afterRelease, true);
-      doc.removeEventListener("pointercancel", release, true);
-      this.releasePress = undefined;
-      this.pressing.set(false);
-    };
-    // In a later task, so the click's own handlers run first.
-    const afterClick = () => {
-      clearTimeout(timer);
-      timer = setTimeout(release);
-    };
-    const afterRelease = () => {
-      clearTimeout(timer);
-      timer = setTimeout(release, 600);
-    };
-    doc.addEventListener("click", afterClick, true);
-    doc.addEventListener("pointerup", afterRelease, true);
-    doc.addEventListener("pointercancel", release, true);
-    this.releasePress = release;
-  }
-
-  protected started(i: number): boolean {
-    const state = this.typing();
-    return !state || i <= state.line;
-  }
-
-  protected shown(text: string, i: number, part: "cmd" | "out"): string {
-    const state = this.typing();
-    return state ? text.slice(0, state[part][i]) : text;
-  }
-
-  protected hidden(text: string, i: number, part: "cmd" | "out"): string {
-    const state = this.typing();
-    return state ? text.slice(state[part][i]) : "";
-  }
-
-  protected caretAt(i: number, part: "cmd" | "out"): boolean {
-    const state = this.typing();
-    return !!state && state.line === i && state.part === part;
-  }
-
-  skip(): void {
-    this.observer?.disconnect();
-    this.stop?.();
-    this.stop = undefined;
-    this.typing.set(null);
-  }
-
-  /**
-   * Types only for a reader who has not seen the text yet: if the section is
-   * already on screen when the page becomes interactive (a link to #about),
-   * it stays as it is.
-   */
-  /** Loads the prompt's code a little before the section scrolls into view. */
-  private watchForShell(): void {
-    if (!this.isBrowser || this.preview) return;
-    if (hasStoredConversation()) {
-      this.loadShell.set(true);
-      return;
-    }
-    this.shellObserver = new IntersectionObserver(
-      (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return;
-        this.shellObserver?.disconnect();
-        this.loadShell.set(true);
-      },
-      { rootMargin: "300px 0px" },
-    );
-    this.shellObserver.observe(this.host.nativeElement);
-  }
-
-  private arm(): void {
-    // Render hooks run during the server render here too. A tab that already
-    // talked to the assistant has seen the intro.
-    if (!this.isBrowser || this.preview || prefersReducedMotion() || hasStoredConversation()) {
-      return;
-    }
-    let first = true;
-    this.observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.some((entry) => entry.isIntersecting);
-        if (first) {
-          first = false;
-          if (visible) {
-            this.observer?.disconnect();
-            return;
-          }
-          this.typing.set(typingAt(this.lines(), 0));
-          return;
-        }
-        if (visible) {
-          this.observer?.disconnect();
-          this.run();
-        }
-      },
-      { threshold: 0.3 },
-    );
-    this.observer.observe(this.host.nativeElement);
-  }
-
-  private run(): void {
-    const lines = this.lines();
-    let elapsed = 0;
-    this.stop = runFrames((dt) => {
-      if (!this.typing()) return false;
-      elapsed += dt * 1000;
-      const state = typingAt(lines, elapsed);
-      if (state.part === "done") {
-        this.typing.set(null);
-        this.stop = undefined;
-        return false;
-      }
-      this.typing.set(state);
-      return true;
-    });
-  }
 }

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 
+import { AskLauncherService } from "../ask/ask-launcher.service";
 import { ContentStore } from "../content/content.store";
 import { suggestPages, type PageSuggestion } from "../content/did-you-mean";
 import type { Locale } from "../content/locale";
@@ -54,7 +55,7 @@ function knownPages(locale: Locale, content: AppContent): PageSuggestion[] {
  * way home or to the assistant. With a locale it renders in that language
  * (inside the site chrome), in the CMS's words; without one — an address
  * outside `/en` and `/de` — it offers both, without suggestions (no content
- * has loaded). "Ask" leads to the About terminal.
+ * has loaded). "Ask" opens the assistant's panel, which only the site chrome has.
  */
 @Component({
   selector: "app-not-found",
@@ -96,11 +97,17 @@ function knownPages(locale: Locale, content: AppContent): PageSuggestion[] {
                 >← {{ entry.copy.home }}</a
               >
             </li>
-            <li>
-              <a class="link-underline" [routerLink]="['/', entry.locale]" fragment="about"
-                >&gt;_ {{ entry.copy.ask }}</a
-              >
-            </li>
+            @if (locale()) {
+              <li>
+                <button
+                  type="button"
+                  class="link-underline cursor-pointer"
+                  (click)="launcher.openSheet('button')"
+                >
+                  &gt;_ {{ entry.copy.ask }}
+                </button>
+              </li>
+            }
           </ul>
         </section>
       }
@@ -111,6 +118,7 @@ export class NotFoundComponent {
   /** Null renders both languages. */
   readonly locale = input<Locale | null>(null);
 
+  protected readonly launcher = inject(AskLauncherService);
   private readonly store = inject(ContentStore);
   private readonly router = inject(Router);
   private readonly lang = inject(LanguageService);

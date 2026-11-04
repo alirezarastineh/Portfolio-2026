@@ -89,13 +89,11 @@ export async function interactive(page: Page): Promise<void> {
 }
 
 /**
- * The assistant, wherever the page has it: the About terminal on home, the sheet elsewhere.
- * Specs reach it only through this, so moving the assistant changes this alone (plan 4 U7).
+ * The assistant's panel, the same on every page (plan 4 U10). Specs reach it only through this,
+ * so moving the assistant changes this alone (plan 4 U7).
  */
 export function askPanel(page: Page): Locator {
-  return page
-    .locator("#about")
-    .or(page.getByRole("dialog", { name: /^(Ask about my work|Fragen zu meiner Arbeit)$/ }));
+  return page.getByRole("dialog", { name: /^(Ask about my work|Fragen zu meiner Arbeit)$/ });
 }
 
 /**

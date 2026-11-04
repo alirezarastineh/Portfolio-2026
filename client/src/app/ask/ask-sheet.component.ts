@@ -30,11 +30,11 @@ import { TerminalShellComponent } from "./terminal-shell.component";
 const SHEET_ENTRY = "askSheet";
 
 /**
- * The assistant on pages without the About terminal (plan 4 U8, U9): one non-modal
- * dialog, opened with `show()` at every width, so the page stays usable beside
- * it. From 1024px it floats at the bottom right, grows up to the header and
- * widens on request; below, it is a sheet over the whole screen, fitted above the
- * keyboard, with the page inert behind it and its own history entry. Opened by
+ * The assistant on every page (plan 4 U8–U10): one non-modal dialog, opened with
+ * `show()` at every width, so the page stays usable beside it. From 1024px it
+ * floats at the bottom right, grows up to the header and widens on request;
+ * below, it is a sheet over the whole screen, fitted above the keyboard, with the
+ * page inert behind it and its own history entry. Opened by the hero's ask bar,
  * the floating button, the palette, `/` or a reader's buttons; closed by the
  * visitor, and on a phone by a citation or the hand-off, whose page must show. It
  * holds still while pages change behind it, and a visible Turnstile check shows
@@ -57,6 +57,7 @@ const SHEET_ENTRY = "askSheet";
       [class.ask-sheet-wide]="wide()"
       [attr.aria-label]="lang.t().ask.title"
       (close)="launcher.closeSheet()"
+      (focusout)="fit()"
     >
       <!-- A section, so the window's title bar (a <header>) is no second banner beside the page's. -->
       <section>
@@ -87,7 +88,7 @@ const SHEET_ENTRY = "askSheet";
               esc
             }
           </button>
-          <app-terminal-shell [inSheet]="true" />
+          <app-terminal-shell />
           <!-- Where Cloudflare's check shows when it asks the visitor (store: readyToAsk). -->
           <div #check></div>
         </app-terminal-window>
@@ -196,7 +197,7 @@ export class AskSheetComponent {
   private readonly doc = inject(DOCUMENT);
   private readonly router = inject(Router);
 
-  /** As on the About window: `● online` or `● resting`, once the prompt's code knows. */
+  /** `● online` or `● resting`, once the prompt's code knows. */
   protected readonly status = computed<TerminalStatus | null>(() => {
     const state = this.launcher.assistant();
     if (!state) return null;
@@ -239,8 +240,10 @@ export class AskSheetComponent {
         dialog.close();
         if (ours) {
           this.returnFocus?.focus();
-          // An opener the page took away, or none (Safari doesn't focus a clicked button).
-          if (this.doc.activeElement === this.doc.body) {
+          // An opener the page took away, or none (Safari doesn't focus a clicked button); and
+          // WebKit keeps the closed dialog's control as the focus until its next render.
+          const now = this.doc.activeElement;
+          if (!now || now === this.doc.body || dialog.contains(now)) {
             this.doc.querySelector<HTMLElement>(".ask-fab")?.focus();
           }
         }
@@ -273,9 +276,10 @@ export class AskSheetComponent {
 
   /**
    * The sheet above the keyboard, where it is the visual viewport that shrinks and pans. iOS 26
-   * can leave `offsetTop` set after the keyboard closes, so it counts only while a field has focus.
+   * can leave `offsetTop` set after the keyboard closes, so it counts only while a field has focus
+   * (and is dropped when the focus leaves, whichever event comes first).
    */
-  private fit(): void {
+  protected fit(): void {
     const { style } = this.dialog().nativeElement;
     const vv = this.doc.defaultView?.visualViewport;
     const sheet = vv && this.launcher.sheetOpen() && this.launcher.narrow();

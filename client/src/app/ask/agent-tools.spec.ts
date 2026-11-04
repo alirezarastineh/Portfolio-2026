@@ -135,9 +135,7 @@ describe("agentTools (plan 3 W6)", () => {
     const { run } = setup(ON, [{ type: "text", text: "word ".repeat(1_000) }, source]);
     const out = await run("ask_portfolio", { question: "Tell me everything." });
     expect(out.length).toBeLessThanOrEqual(1_500);
-    expect(out).toContain(
-      "(cut: the site's terminal shows it whole)\nSources:\n- Atlas: /en/work/atlas",
-    );
+    expect(out).toContain("(cut: the site shows it whole)\nSources:\n- Atlas: /en/work/atlas");
   });
 
   it("runs a brief on the match page and returns each point's status; with match off, nothing goes", async () => {

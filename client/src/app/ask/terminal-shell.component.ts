@@ -1,22 +1,14 @@
-import { DOCUMENT } from "@angular/common";
 import {
-  afterNextRender,
   afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   computed,
-  DestroyRef,
   effect,
   ElementRef,
   inject,
-  Injector,
-  input,
   signal,
-  untracked,
   viewChild,
 } from "@angular/core";
-import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideX } from "@ng-icons/lucide";
 
 import { LanguageService } from "../services/language.service";
 import { AskAnswerComponent } from "./ask-answer.component";
@@ -40,43 +32,27 @@ const MAX_INPUT_LINES = 6;
 const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
 
 /**
- * The live prompt of the About terminal (and of the sheet on other pages): a
- * real shell whose main command is the AI assistant. Enter sends, Shift+Enter
- * adds a line, ↑/↓ recall history, Tab completes, Ctrl+C stops an answer,
- * Ctrl+L clears, Esc leaves. The transcript is a log whose finished answers
- * are announced once through a polite live region, never token by token.
- * While it is empty, a few starter questions sit under the prompt. On a
- * phone, focusing the prompt opens the terminal full screen.
+ * The live prompt of the assistant's panel: a real shell whose main command is
+ * the AI assistant. Enter sends, Shift+Enter adds a line, ↑/↓ recall history,
+ * Tab completes, Ctrl+C stops an answer, Ctrl+L clears, Esc closes the panel.
+ * The transcript is a log whose finished answers are announced once through a
+ * polite live region, never token by token. While it is empty, a few starter
+ * questions sit under the prompt.
  */
 @Component({
   selector: "app-terminal-shell",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AskAnswerComponent, AskLinesComponent, MatchBoxComponent, NgIcon],
-  viewProviders: [provideIcons({ lucideX })],
+  imports: [AskAnswerComponent, AskLinesComponent, MatchBoxComponent],
   host: { class: "block" },
   template: `
-    <div #frame [class]="frameClass()" (focusout)="onFocusOut($event)">
-      @if (expanded()) {
-        <div class="flex items-center justify-between border-b border-border">
-          <span class="text-xs text-muted-foreground">{{ lang.t().ask.title }}</span>
-          <button
-            type="button"
-            class="press -mr-3 inline-flex size-11 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
-            [attr.aria-label]="copy().close"
-            (click)="collapse()"
-          >
-            <ng-icon name="lucideX" size="20" aria-hidden="true" />
-          </button>
-        </div>
-      }
-
+    <div class="flex flex-col">
       <div
         #log
         tabindex="-1"
         role="log"
         aria-live="off"
+        class="max-h-128 overflow-y-auto"
         [attr.aria-label]="lang.t().ask.title"
-        [class]="logClass()"
         (scroll)="onScroll()"
       >
         @for (entry of store.entries(); track entry.id) {
@@ -256,11 +232,7 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
         }
       </div>
 
-      <form
-        class="mt-1 flex items-start gap-2"
-        [class.invisible]="!active()"
-        (submit)="$event.preventDefault(); submit()"
-      >
+      <form class="mt-1 flex items-start gap-2" (submit)="$event.preventDefault(); submit()">
         <!-- On a phone the question needs the width: at 16px the label would leave it half. -->
         <label [for]="inputId" class="shrink-0 select-none text-accent-orange max-sm:sr-only"
           >{{ prompt() }}<span class="sr-only"> {{ copy().inputLabel }}</span></label
@@ -280,7 +252,6 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
             [style.padding-left]="showIdleCaret() ? '1.2ch' : null"
             [attr.placeholder]="lang.t().ask.placeholder"
             [attr.aria-describedby]="hintId"
-            [attr.tabindex]="active() ? null : -1"
             autocomplete="off"
             autocapitalize="sentences"
             spellcheck="true"
@@ -292,14 +263,12 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
           ></textarea>
         </span>
       </form>
-      <!-- An empty terminal suggests a first question (the same as the hero's).
-           About's placeholder draws the same row, so nothing moves when this loads. -->
+      <!-- An empty terminal suggests a first question (the same as the hero's). -->
       @if (!store.entries().length) {
         <div
           class="mb-1 mt-2 flex flex-wrap items-center gap-2"
           role="group"
           [attr.aria-label]="starters().suggestions"
-          [class.invisible]="!active()"
         >
           <span class="text-meta text-muted-foreground" aria-hidden="true">{{
             starters().try
@@ -316,7 +285,7 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
         </div>
         <!-- What changed since the last visit, once the visitor turned what's new on (V15). -->
         @if (newsLine(); as line) {
-          <p class="m-0 mb-1 text-xs" [class.invisible]="!active()">
+          <p class="m-0 mb-1 text-xs">
             <button
               type="button"
               class="min-h-6 cursor-pointer text-left text-accent-orange underline decoration-border underline-offset-4 hover:decoration-accent-orange"
@@ -327,7 +296,7 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
           </p>
         }
       }
-      <p [id]="hintId" class="m-0 mt-1 text-xs text-muted-foreground" [class.invisible]="!active()">
+      <p [id]="hintId" class="m-0 mt-1 text-xs text-muted-foreground">
         {{ lang.t().ask.hint }} · {{ lang.t().ask.disclosure }}
       </p>
 
@@ -362,15 +331,9 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
   `,
 })
 export class TerminalShellComponent {
-  /** False while the About intro is still typing: the prompt keeps its place, hidden. */
-  readonly active = input(true);
-  /** In the sheet on other pages, which is full screen on phones already. */
-  readonly inSheet = input(false);
-
   protected readonly store = inject(AskStore);
   protected readonly lang = inject(LanguageService);
   private readonly launcher = inject(AskLauncherService);
-  private readonly doc = inject(DOCUMENT);
 
   protected readonly copy = this.store.copy;
   protected readonly inputId = `ask-input-${++instances}`;
@@ -380,9 +343,7 @@ export class TerminalShellComponent {
 
   private readonly inputRef = viewChild.required<ElementRef<HTMLTextAreaElement>>("input");
   private readonly logRef = viewChild.required<ElementRef<HTMLElement>>("log");
-  private readonly frameRef = viewChild.required<ElementRef<HTMLElement>>("frame");
 
-  protected readonly expanded = signal(false);
   protected readonly focused = signal(false);
   /** The output just copied, for its button's "copied ✓". */
   protected readonly copiedId = signal<string | null>(null);
@@ -431,33 +392,9 @@ export class TerminalShellComponent {
   });
   protected readonly liveId = computed(() => (this.busy() ? this.latestAskId() : null));
 
-  protected readonly frameClass = computed(() =>
-    this.expanded()
-      ? "ask-expanded fixed inset-x-0 top-0 z-[70] flex flex-col bg-card px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-[env(safe-area-inset-top)] font-mono text-sm leading-[1.7]"
-      : "flex flex-col",
-  );
-  protected readonly logClass = computed(() =>
-    this.expanded() ? "min-h-0 grow overflow-y-auto pt-2" : "max-h-[32rem] overflow-y-auto",
-  );
-
   constructor() {
-    // A request from the hero or the palette, once the prompt can take it
-    // (after this render; the sheet claims its own after opening).
-    const injector = inject(Injector);
-    effect(() => {
-      if (!this.launcher.focusPending() || !this.active() || this.inSheet()) return;
-      untracked(() =>
-        afterNextRender(
-          () => {
-            if (this.launcher.takeFocus()) this.claim();
-          },
-          { injector },
-        ),
-      );
-    });
-
-    // What the About window's title bar says: the server's word, once it has
-    // one (a failed answer can put the assistant to rest mid-conversation).
+    // What the panel's title bar says: the server's word, once it has one
+    // (a failed answer can put the assistant to rest mid-conversation).
     effect(() => {
       const state = this.store.remote()?.state;
       if (state) this.launcher.assistant.set(state === "ok" ? "online" : "resting");
@@ -473,29 +410,6 @@ export class TerminalShellComponent {
       this.store.match();
       const log = this.logRef().nativeElement;
       if (this.store.chat.messages && this.stick) log.scrollTop = log.scrollHeight;
-    });
-
-    const destroyRef = inject(DestroyRef);
-    const onViewport = () => this.fitViewport();
-    effect(() => {
-      const vv = this.doc.defaultView?.visualViewport;
-      const root = this.doc.documentElement;
-      if (this.expanded()) {
-        root.classList.add("overflow-hidden");
-        vv?.addEventListener("resize", onViewport);
-        vv?.addEventListener("scroll", onViewport);
-        untracked(() => this.fitViewport());
-      } else {
-        root.classList.remove("overflow-hidden");
-        vv?.removeEventListener("resize", onViewport);
-        vv?.removeEventListener("scroll", onViewport);
-      }
-    });
-    destroyRef.onDestroy(() => {
-      this.doc.documentElement.classList.remove("overflow-hidden");
-      const vv = this.doc.defaultView?.visualViewport;
-      vv?.removeEventListener("resize", onViewport);
-      vv?.removeEventListener("scroll", onViewport);
     });
   }
 
@@ -521,9 +435,9 @@ export class TerminalShellComponent {
     if (!this.onPhone() || TYPING.has(source)) this.focusInput();
   }
 
-  /** In the sheet, where a focused prompt means an on-screen keyboard over what was asked for. */
+  /** Where the panel is a sheet, and a focused prompt an on-screen keyboard over what was asked for. */
   private onPhone(): boolean {
-    return this.inSheet() && this.launcher.narrow();
+    return this.launcher.narrow();
   }
 
   /** After a button: back to the prompt, or on a phone to the log, keeping the keyboard down. */
@@ -632,9 +546,6 @@ export class TerminalShellComponent {
     } else if (event.ctrlKey && key === "l") {
       event.preventDefault();
       this.store.clear();
-    } else if (event.key === "Escape") {
-      if (this.expanded()) this.collapse();
-      else el.blur();
     }
   }
 
@@ -660,33 +571,6 @@ export class TerminalShellComponent {
   protected onFocus(): void {
     this.focused.set(true);
     this.reportOpen("terminal");
-    const narrow = this.doc.defaultView?.matchMedia("(max-width: 639px)").matches;
-    if (narrow && !this.inSheet() && !this.expanded()) {
-      this.expanded.set(true);
-      // The element moved; keep the keyboard on it.
-      queueMicrotask(() => this.inputRef().nativeElement.focus({ preventScroll: true }));
-    }
-  }
-
-  /**
-   * Focus leaving the full-screen terminal for the page (Tab past its last
-   * control, Shift+Tab before its first) takes it down, so the page's next
-   * stop is not hidden behind it. A blur with nowhere to go, as when a phone
-   * puts its keyboard away, keeps it open for reading.
-   */
-  protected onFocusOut(event: FocusEvent): void {
-    const next = event.relatedTarget;
-    if (this.expanded() && next instanceof Node && !this.frameRef().nativeElement.contains(next)) {
-      this.collapse();
-    }
-  }
-
-  protected collapse(): void {
-    this.expanded.set(false);
-    const frame = this.frameRef().nativeElement;
-    frame.style.height = "";
-    frame.style.transform = "";
-    this.inputRef().nativeElement.blur();
   }
 
   protected onScroll(): void {
@@ -732,13 +616,5 @@ export class TerminalShellComponent {
     const max = line * MAX_INPUT_LINES;
     el.style.height = `${Math.min(el.scrollHeight, max)}px`;
     el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
-  }
-
-  /** Full screen above the on-screen keyboard. */
-  private fitViewport(): void {
-    const frame = this.frameRef().nativeElement;
-    const vv = this.doc.defaultView?.visualViewport;
-    frame.style.height = vv ? `${vv.height}px` : "100dvh";
-    frame.style.transform = vv ? `translateY(${vv.offsetTop}px)` : "";
   }
 }
