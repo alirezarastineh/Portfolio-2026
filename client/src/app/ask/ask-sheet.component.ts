@@ -1,6 +1,5 @@
 import { DOCUMENT } from "@angular/common";
 import {
-  afterNextRender,
   afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
@@ -31,10 +30,11 @@ const SHEET_ENTRY = "askSheet";
  * `show()` at every width, so the page stays usable beside it. From 1024px it
  * floats at the right under the site's header and widens on request; below, it is
  * a sheet over the whole screen, fitted above the keyboard, with the page inert
- * behind it and its own history entry. Opened by the hero's ask bar, the floating
- * button, the palette, `/` or a reader's buttons; closed by the visitor, and on a
- * phone by a citation or the hand-off, whose page must show. It holds still while
- * pages change behind it, and a visible Turnstile check shows inside it.
+ * behind it and its own history entry. Opened by the floating button, the palette,
+ * `/` or a reader's buttons (home's stage takes those while it is on screen, and
+ * on a phone is the door here); closed by the visitor, and on a phone by a citation
+ * or the hand-off, whose page must show. It holds still while pages change behind
+ * it, and a visible Turnstile check shows inside it.
  */
 @Component({
   selector: "app-ask-sheet",
@@ -115,9 +115,10 @@ const SHEET_ENTRY = "askSheet";
             <ng-icon name="lucideX" size="20" aria-hidden="true" />
           </button>
         </header>
-        <app-ask-console />
-        <!-- Where Cloudflare's check shows when it asks the visitor (store: readyToAsk). -->
-        <div #check></div>
+        <!-- One console at a time: while home's stage holds it, none here. -->
+        @if (!launcher.stageLive()) {
+          <app-ask-console />
+        }
       </section>
     </dialog>
   `,
@@ -356,15 +357,13 @@ export class AskSheetComponent {
   /** The wide width, for code and tables; not stored, so nothing is kept on the device. */
   protected readonly wide = signal(false);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>("dialog");
-  private readonly askConsole = viewChild.required(AskConsoleComponent);
-  private readonly check = viewChild.required<ElementRef<HTMLElement>>("check");
+  private readonly askConsole = viewChild(AskConsoleComponent);
   private readonly more = viewChild.required<ElementRef<HTMLElement>>("more");
   private returnFocus: HTMLElement | null = null;
   /** Where the page stood when the sheet opened; it cannot scroll behind a phone's sheet. */
   private pageTop = 0;
 
   constructor() {
-    afterNextRender(() => (this.launcher.turnstileHost = this.check().nativeElement));
     afterRenderEffect(() => {
       const open = this.launcher.sheetOpen();
       const sheet = open && this.launcher.narrow();
@@ -398,7 +397,7 @@ export class AskSheetComponent {
         this.returnFocus = null;
       }
       // At opening, and while it is open: a reader's button beside the panel.
-      if (open && this.launcher.takeFocus()) this.askConsole().claim();
+      if (open && this.launcher.takeFocus()) this.askConsole()?.claim();
       this.fit();
     });
 
@@ -419,7 +418,7 @@ export class AskSheetComponent {
   /** A command from the ⋯ menu, run as if typed. */
   protected run(command: string): void {
     this.more().nativeElement.hidePopover();
-    this.askConsole().send(command);
+    this.askConsole()?.send(command);
   }
 
   /** The visitor's own close, which also takes back the history entry a phone's sheet added. */

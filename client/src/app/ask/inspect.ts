@@ -1,9 +1,8 @@
 import type { Locale } from "../content/locale";
 import { fmt } from "../i18n/interpolate";
-import { duration } from "../visuals/trace";
 import type { AskCopy } from "./ask-copy";
 import type { OutLine } from "./commands";
-import { counted } from "./receipt";
+import { counted, duration } from "./receipt";
 
 /**
  * `inspect` (visitor plan V12): what the log keeps of one of the visitor's

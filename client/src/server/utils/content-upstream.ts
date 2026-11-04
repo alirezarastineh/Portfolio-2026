@@ -65,7 +65,7 @@ export function invalidate(locale?: Locale): void {
   freshDocs.clear();
 }
 
-function apiBase(): string {
+export function apiBase(): string {
   let base = process.env["API_INTERNAL_BASE_URL"] ?? "";
   while (base.endsWith("/")) base = base.slice(0, -1);
   return base;

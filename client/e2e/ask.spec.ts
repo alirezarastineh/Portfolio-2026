@@ -494,12 +494,12 @@ test.describe("assistant terminal", () => {
   test("the window's title bar says whether the assistant answers", async ({ page }) => {
     const bar = askPanel(page).locator("header");
     await mockAsk(page, () => undefined);
-    await openPrompt(page);
+    await openPrompt(page, "/en/writing");
     await expect(bar).toContainText("online");
 
     await page.unrouteAll({ behavior: "wait" });
     await mockAsk(page, () => undefined, { state: "resting" });
-    await openPrompt(page, "/de");
+    await openPrompt(page, "/de/writing");
     await expect(bar).toContainText("pausiert");
   });
 
@@ -539,7 +539,7 @@ test.describe("assistant terminal", () => {
     page,
   }) => {
     await mockAsk(page, () => undefined);
-    await openPrompt(page);
+    await openPrompt(page, "/en/writing");
     const panel = askPanel(page);
     const more = panel.getByRole("button", { name: "More" });
     const menu = panel.locator("#ask-menu");
@@ -1028,45 +1028,47 @@ test.describe("assistant terminal", () => {
     expect(sent[0]).not.toHaveProperty("ask");
   });
 
-  test("a question asked in the hero is answered in the panel, and traced", async ({ page }) => {
+  test("a question asked on home runs on its stage, with its trace, and nothing moves (plan 4 U11b)", async ({
+    page,
+  }) => {
     const mock = await mockAsk(page, (route) =>
       sse(route, answer({ text: "He ships evals first.", tools: SEARCH_STEP })),
     );
     await page.goto("/en");
     await interactive(page);
+    const stage = page.locator("app-ask-stage section");
+    const before = await stage.boundingBox();
     const bar = page.getByRole("textbox", { name: "Ask about my work" });
     await bar.fill("How does he test?");
     await bar.press("Enter");
 
-    const log = askPanel(page).locator("[role=log]");
+    const log = stage.locator("[role=log]");
     await expect(log).toContainText("How does he test?");
+    await expect(log).toContainText("Searched “evals”");
     await expect(log).toContainText("He ships evals first.");
-    await expect(askPanel(page).locator("textarea")).toBeFocused();
+    await expect(log).toContainText("Answered in 1.3 s");
+    await expect(stage.locator("textarea")).toBeFocused();
     expect(mock.bodies).toHaveLength(1);
-    // The hero's trace panel replays that answer instead of the example.
-    const trace = page.locator("#hero figure");
-    await expect(trace).toContainText("your last question · 1.3 s");
-    await expect(trace).toContainText("search_portfolio · 1 lookup");
-    await expect(trace).not.toContainText("example trace");
+    expect(await stage.boundingBox()).toEqual(before);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    // One prompt and one live region: the light copy is gone, and no panel holds another.
+    await expect(page.locator("app-ask-console")).toHaveCount(1);
+    await expect(page.locator("#ask-bar")).toHaveCount(0);
+    await expect(page.locator("app-ask-console [aria-live=polite]")).toHaveCount(1);
   });
 
-  test("“/” opens the panel on home too, unless typing; a starter question sends at once", async ({
+  test("“/” goes to the stage on home, unless typing; a suggestion sends at once (plan 4 U11b)", async ({
     page,
   }) => {
     await mockAsk(page, (route) => sse(route, answer({ text: "Hybrid search." })));
     await page.goto("/en");
     await interactive(page);
-    // In the hero's ask bar, "/" is just a character.
+    // In the stage's own field, "/" is just a character.
     const bar = page.getByRole("textbox", { name: "Ask about my work" });
     await bar.pressSequentially("a/b");
     await expect(bar).toHaveValue("a/b");
     await expect(askPanel(page)).toBeHidden();
-
     await bar.blur();
-    await page.keyboard.press("/");
-    await expect(askPanel(page).locator("textarea")).toBeFocused();
-    await page.keyboard.press("Escape");
-    await expect(askPanel(page)).toBeHidden();
 
     await page
       .locator("#hero")
@@ -1074,6 +1076,104 @@ test.describe("assistant terminal", () => {
       .getByRole("button", { name: "What has he shipped with RAG?" })
       .click();
     await expect(askPanel(page).locator("[role=log]")).toContainText("Hybrid search.");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    await page.keyboard.press("Escape");
+    await expect(askPanel(page)).toBeVisible();
+    await askPanel(page).locator("textarea").blur();
+    await page.keyboard.press("/");
+    await expect(askPanel(page).locator("textarea")).toBeFocused();
+  });
+
+  test("below the stage the button opens the panel, the stage steps back, the page stays (plan 4 U11b)", async ({
+    page,
+  }) => {
+    await mockAsk(page, (route) => sse(route, answer({ text: "Kept in one conversation." })));
+    await page.goto("/en");
+    await interactive(page);
+    const bar = page.getByRole("textbox", { name: "Ask about my work" });
+    await bar.fill("One conversation?");
+    await bar.press("Enter");
+    const stage = page.locator("app-ask-stage");
+    await expect(stage).toContainText("Kept in one conversation.");
+
+    await page.locator("#about").scrollIntoViewIfNeeded();
+    const fab = page.getByRole("button", { name: "Ask about my work" });
+    await expect(fab).toBeVisible();
+    const top = await page.evaluate(() => window.scrollY);
+    await fab.click();
+
+    const panel = page.getByRole("dialog", { name: "Ask about my work" });
+    await expect(panel).toContainText("Kept in one conversation.");
+    await expect(panel.locator("textarea")).toBeFocused();
+    await expect(stage).toContainText("Continuing in the panel");
+    await expect(stage.locator("[role=log]")).toHaveCount(0);
+    await expect(page.locator("app-ask-console")).toHaveCount(1);
+    await expect(page.locator("app-ask-console [aria-live=polite]")).toHaveCount(1);
+    expect(await page.evaluate(() => window.scrollY)).toBe(top);
+
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    expect(await page.evaluate(() => window.scrollY)).toBe(top);
+    await expect(stage).toContainText("Kept in one conversation.");
+    await expect(page.locator("app-ask-console")).toHaveCount(1);
+  });
+
+  test("leaving home mid-answer continues in the panel; coming back shows it on the stage (plan 4 U11b)", async ({
+    page,
+  }) => {
+    const chunks = answer({ text: "Finished beside the next page.", tools: SEARCH_STEP });
+    const cut = chunks.findIndex((c) => c["type"] === "tool-input-available");
+    await pausedStream(page, chunks, cut, 1500);
+    await mockAsk(page, () => undefined);
+    await page.goto("/en");
+    await interactive(page);
+    const bar = page.getByRole("textbox", { name: "Ask about my work" });
+    await bar.fill("Still with me?");
+    await bar.press("Enter");
+    const stage = page.locator("app-ask-stage");
+    await expect(stage).toContainText("Searched “evals”");
+
+    await page.locator('a[href="/en/work/project-one"]').first().click();
+    await page.waitForURL("**/en/work/project-one");
+    const panel = page.getByRole("dialog", { name: "Ask about my work" });
+    await expect(panel).toContainText("Still with me?");
+    await expect(panel).toContainText("Finished beside the next page.");
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/en$/);
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    await expect(stage).toContainText("Finished beside the next page.");
+  });
+
+  test("the admin's questions are in the stage's first HTML; the browser asks for nothing (plan 4 U11b)", async ({
+    page,
+    request,
+  }) => {
+    expect(await (await request.get("/de")).text()).toContain("Was hat er zuletzt gebaut?");
+    const asked: string[] = [];
+    page.on("request", (sent) => {
+      if (/\/v1\/ask|ask-questions/.test(sent.url())) asked.push(sent.url());
+    });
+    await page.goto("/de");
+    await interactive(page);
+    const questions = page
+      .locator("#hero")
+      .getByRole("group", { name: "Vorgeschlagene Fragen" })
+      .getByRole("button");
+    await expect(questions).toHaveText([
+      "Was hat er zuletzt gebaut?",
+      "Wie prüft er KI-Antworten?",
+    ]);
+    expect(asked).toEqual([]);
+
+    // English has none: the built-in three.
+    await page.goto("/en");
+    await interactive(page);
+    await expect(
+      page.locator("#hero").getByRole("group", { name: "Suggested questions" }).getByRole("button"),
+    ).toHaveCount(3);
   });
 
   test("on home the floating button waits until the hero's ask bar has left the screen (plan 4 U10)", async ({
@@ -1529,10 +1629,6 @@ test.describe("assistant terminal", () => {
       "careful topic: published facts only",
     ]);
     await expect(log.getByRole("button", { name: "how was this answered?" })).toHaveCount(1);
-    // The hero's panel replays that answer's real steps.
-    const trace = page.locator("#hero figure");
-    await expect(trace).toContainText("lite → deep · two projects read");
-    await expect(trace).toContainText("1 verified · 1 removed");
 
     // Typed, inspect asks about the newest answer.
     await run(prompt, "inspect");
@@ -1581,7 +1677,7 @@ test.describe("assistant terminal", () => {
       served.push(route.request().method());
       await route.fulfill({ headers: cors, json: SCORECARD });
     });
-    const prompt = await openPrompt(page);
+    const prompt = await openPrompt(page, "/en/writing");
     const log = askPanel(page).locator("[role=log]");
     // The config has come: it says whether the scorecard is published.
     await expect(askPanel(page).locator("header")).toContainText("online");
@@ -1613,7 +1709,7 @@ test.describe("assistant terminal", () => {
       asked++;
       await route.fulfill({ status: 404, headers: cors, json: { error: "not_published" } });
     });
-    const prompt = await openPrompt(page);
+    const prompt = await openPrompt(page, "/en/writing");
     const log = askPanel(page).locator("[role=log]");
     await expect(askPanel(page).locator("header")).toContainText("online");
     await run(prompt, "help");
@@ -2423,6 +2519,18 @@ for (const colorScheme of ["dark", "light"] as const) {
   test.describe(`assistant accessibility (${colorScheme})`, () => {
     test.use({ colorScheme });
 
+    test("home's stage, at rest and running (plan 4 U11b)", async ({ page }) => {
+      await mockAsk(page, (route) =>
+        sse(route, answer({ text: "On the stage.", tools: SEARCH_STEP, followups: ["And then?"] })),
+      );
+      await page.goto("/en");
+      await interactive(page);
+      expect(await axeViolations(page)).toEqual([]);
+      await run(page.getByRole("textbox", { name: "Ask about my work" }), "How does he test?");
+      await expect(askPanel(page).locator("[role=log]")).toContainText("On the stage.");
+      expect(await axeViolations(page)).toEqual([]);
+    });
+
     test("an answer, its footnotes, follow-ups, feedback and a hand-off prompt", async ({
       page,
     }) => {
@@ -2548,6 +2656,32 @@ for (const colorScheme of ["dark", "light"] as const) {
 
 test.describe("assistant on a phone", () => {
   test.use({ viewport: { width: 390, height: 780 }, hasTouch: true, isMobile: true });
+
+  test("the stage is the sheet's door, and shows the last question afterwards (plan 4 U11b)", async ({
+    page,
+  }) => {
+    await mockAsk(page, (route) => sse(route, answer({ text: "From the sheet." })));
+    await page.goto("/en");
+    await interactive(page);
+    const sheet = page.getByRole("dialog", { name: "Ask about my work" });
+    const close = sheet.getByRole("button", { name: "Close the assistant" });
+    const stage = page.locator("app-ask-stage");
+
+    // The field opens the sheet: no keyboard over the page.
+    await stage.getByRole("textbox", { name: "Ask about my work" }).tap();
+    await expect(sheet.locator("textarea")).toBeFocused();
+    await close.tap();
+    await expect(sheet).toBeHidden();
+
+    await stage.getByRole("button", { name: "How does he test AI features?" }).tap();
+    await expect(sheet).toContainText("From the sheet.");
+    await expect(stage.locator("app-ask-console")).toHaveCount(0);
+    await close.tap();
+    await expect(sheet).toBeHidden();
+
+    await stage.getByRole("button", { name: /^Continue your conversation/ }).tap();
+    await expect(sheet).toContainText("From the sheet.");
+  });
 
   /** An open sheet on a page off home; the prompt is not focused, so no keyboard shows. */
   async function openSheet(page: Page) {

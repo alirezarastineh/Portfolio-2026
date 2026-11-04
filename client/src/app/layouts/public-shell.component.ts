@@ -42,7 +42,7 @@ import { LanguageService } from "../services/language.service";
       <app-command-palette />
     }
     <!-- Opens the assistant's panel (loaded on first use); on home it waits until
-         the hero's ask bar has left the screen. A 44px circle on phones, a
+         the hero's stage has left the screen. A 44px circle on phones, a
          \`>_ ask\` pill from lg. Its press, and hiding it while the mobile menu or
          the panel is open, are in styles.css. -->
     <button
@@ -50,7 +50,7 @@ import { LanguageService } from "../services/language.service";
       class="ask-fab press fixed bottom-4 right-4 z-40 inline-flex h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-full border border-border bg-card font-mono text-sm shadow-e3 hover:border-accent-orange lg:px-4"
       [attr.aria-label]="lang.t().ask.title"
       [attr.aria-expanded]="launcher.sheetOpen()"
-      [hidden]="onHome() && launcher.barInView()"
+      [hidden]="onHome() && launcher.stageInView()"
       aria-keyshortcuts="/"
       (click)="launcher.openSheet('button')"
     >

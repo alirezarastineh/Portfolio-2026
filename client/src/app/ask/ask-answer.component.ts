@@ -27,6 +27,7 @@ import { AskLinesComponent } from "./ask-lines.component";
 import { linkPolicyFor } from "./link-policy";
 import { stepLine } from "./match";
 import {
+  duration,
   failoverLine,
   pageTitle,
   receiptAlways,
@@ -873,11 +874,7 @@ export class AskAnswerComponent {
   protected readonly answeredIn = computed(() => {
     const ms = this.message()?.metadata?.totalMs;
     if (!this.done() || typeof ms !== "number") return null;
-    const s = (ms / 1000).toLocaleString(this.lang.lang(), {
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    });
-    return fmt(this.copy().trace.answered, { s });
+    return fmt(this.copy().trace.answered, { time: duration(ms, this.lang.lang()) });
   });
 
   protected readonly traced = computed(

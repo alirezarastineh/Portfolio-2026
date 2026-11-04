@@ -19,6 +19,46 @@ describe("AskLauncherService", () => {
     expect(launcher.takeSource()).toBe("terminal");
   });
 
+  it("gives a request to home's stage while it is on screen, else to the panel (plan 4 U11b)", () => {
+    const launcher = TestBed.inject(AskLauncherService);
+    launcher.stageReady.set(true);
+    launcher.ask("On the stage?", "hero");
+    expect(launcher.stageLive()).toBe(true);
+    expect(launcher.sheetRequested()).toBe(false);
+    expect(launcher.takeFocus()).toBe(true);
+
+    // Below the stage the panel takes it, and the stage steps back until it closes.
+    launcher.stageInView.set(false);
+    launcher.openSheet("button");
+    expect(launcher.sheetOpen()).toBe(true);
+    expect(launcher.stageLive()).toBe(false);
+    launcher.closeSheet();
+    expect(launcher.stageLive()).toBe(true);
+  });
+
+  it("shows a conversation on the stage, never below 1024px (plan 4 U11b)", () => {
+    const launcher = TestBed.inject(AskLauncherService);
+    launcher.lastQuestion.set("Asked in the panel");
+    expect(launcher.stageLive()).toBe(false); // No stage on this page.
+    launcher.stageReady.set(true);
+    expect(launcher.stageLive()).toBe(true);
+
+    launcher.narrow.set(true);
+    expect(launcher.stageLive()).toBe(false);
+    launcher.ask("On a phone?", "starter");
+    expect(launcher.sheetOpen()).toBe(true);
+  });
+
+  it("gives a visible check to the console on show, else to the page's box (plan 4 U11b)", () => {
+    const launcher = TestBed.inject(AskLauncherService);
+    const host = document.createElement("div");
+    launcher.turnstileHost = host;
+    expect(launcher.checkHost()).toBeUndefined();
+    launcher.stageReady.set(true);
+    launcher.ask("On the stage?", "hero");
+    expect(launcher.checkHost()).toBe(host);
+  });
+
   it("hands over what a reader pointed at with the question, once (visitor plan V9)", () => {
     const launcher = TestBed.inject(AskLauncherService);
     const about = { focus: { kind: "section" as const, id: "problem" }, label: "Problem" };

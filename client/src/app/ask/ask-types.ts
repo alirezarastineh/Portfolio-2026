@@ -31,7 +31,7 @@ export interface AnswerMetadata {
   receipt?: AnswerReceipt;
 }
 
-/** The server's receipt: the receipt line and the hero's trace panel read it, nothing else. */
+/** The server's receipt: the receipt's lines read it, nothing else. */
 export interface AnswerReceipt {
   lookups: number;
   sources: number;

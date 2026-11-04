@@ -28,13 +28,11 @@ import {
   signalRequest,
   type SignalCount,
 } from "./answer-signals";
-import { answerTrace } from "./answer-trace";
 import { answersByQuestion } from "./answers";
 import { ASK_COPY } from "./ask-copy";
 import { AskLauncherService, type AskAbout, type AskFocus } from "./ask-launcher.service";
 import { isLevel, LEVELS, readLevel, storeLevel, type Level } from "./ask-level";
 import { ASK_STORAGE_KEY, MatchMarks } from "./match-marks";
-import { AskTraceService } from "./ask-trace.service";
 import type {
   AskMessage,
   DownReason,
@@ -318,7 +316,6 @@ export const AskStore = signalStore(
     _lang: inject(LanguageService),
     _contact: inject(ContactService),
     _doc: inject(DOCUMENT),
-    _trace: inject(AskTraceService),
     _launcher: inject(AskLauncherService),
     /** The marks a match puts on the site's pages (plan 3 W4), kept in step with `persist`. */
     _marks: inject(MatchMarks),
@@ -471,14 +468,6 @@ export const AskStore = signalStore(
         reportFinish(message, isAbort);
         if (isAbort || isError || message.role !== "assistant") return;
         track("ask_answer");
-        // For the hero's trace panel: what this answer did, replayed there.
-        const entry = store.entries().find((e) => e.id === store._next.entryId);
-        if (entry?.kind === "ask") {
-          const parsed = parseInput(entry.input);
-          store._trace.record(
-            answerTrace(parsed.kind === "ask" ? parsed.text : entry.input, message),
-          );
-        }
         const text = message.parts
           .filter((p) => p.type === "text")
           .map((p) => p.text)
@@ -985,6 +974,8 @@ export const AskStore = signalStore(
       const moved: TourState = { ...tour, at, reached: Math.max(tour.reached, at) };
       const done = at === tour.stops.length - 1;
       setTour(moved);
+      // A stop moves the page, and a stage with it: the tour's moves stay beside the visitor.
+      store._launcher.openPanel();
       track("tour_step", { direction: step === 1 ? "next" : "back" });
       show(input, stopLines(moved, copy));
       if (tour.messageId) {

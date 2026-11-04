@@ -1,7 +1,7 @@
 import type { Locale } from "../content/locale";
 import { formatDay } from "../content/period";
 import { fmt } from "../i18n/interpolate";
-import { duration } from "../visuals/trace";
+import { duration } from "./receipt";
 import type { AskCopy } from "./ask-copy";
 import type { OutLine } from "./commands";
 

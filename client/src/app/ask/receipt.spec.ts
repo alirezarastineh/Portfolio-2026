@@ -5,6 +5,7 @@ import { ASK_COPY } from "./ask-copy";
 import type { AnswerMetadata, AnswerReceipt } from "./ask-types";
 import {
   counted,
+  duration,
   failoverLine,
   pageTitle,
   receiptAlways,
@@ -138,6 +139,14 @@ describe("the receipt line (visitor plan V12)", () => {
       "2 erfundene Verweise entfernt",
       "heikles Thema: nur veröffentlichte Fakten",
     ]);
+  });
+});
+
+describe("duration", () => {
+  it("prints milliseconds under a second, seconds with one decimal above", () => {
+    expect(duration(12, "en")).toBe("12 ms");
+    expect(duration(1420, "en")).toBe("1.4 s");
+    expect(duration(1420, "de")).toBe("1,4 s");
   });
 });
 

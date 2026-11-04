@@ -29,8 +29,6 @@ export interface AskCopy {
   thinking: string;
   /** The composer's button while an answer is on its way (plan 4 U11). */
   stop: string;
-  /** The row of commands under the prompt, for screen readers. */
-  commands: string;
   interrupted: string;
   retry: string;
   errors: {
@@ -283,7 +281,7 @@ export interface AskCopy {
   };
   /**
    * An answer's trace (plan 4 U11): each step in plain words, `{title}` what it read; the
-   * document's kind names what has no title. `{s}`: seconds, one decimal.
+   * document's kind names what has no title. `{time}`: how long the answer took.
    */
   trace: {
     label: string;
@@ -372,7 +370,6 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
     },
     thinking: "thinking…",
     stop: "Stop",
-    commands: "Commands",
     interrupted: "(answer interrupted)",
     retry: "retry",
     errors: {
@@ -626,7 +623,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       list: "Listed the projects",
       listAbout: "Listed the projects about “{q}”",
       open: "Opened {to}",
-      answered: "Answered in {s} s",
+      answered: "Answered in {time}",
       docs: {
         profile: "the profile",
         skills: "the skills",
@@ -712,7 +709,6 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
     },
     thinking: "denkt nach…",
     stop: "Stopp",
-    commands: "Befehle",
     interrupted: "(Antwort unterbrochen)",
     retry: "erneut versuchen",
     errors: {
@@ -972,7 +968,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
       list: "Projekte aufgelistet",
       listAbout: "Projekte zu „{q}“ aufgelistet",
       open: "{to} geöffnet",
-      answered: "In {s} s beantwortet",
+      answered: "In {time} beantwortet",
       docs: {
         profile: "Profil",
         skills: "Skills",

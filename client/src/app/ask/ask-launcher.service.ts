@@ -1,5 +1,5 @@
 import { DOCUMENT } from "@angular/common";
-import { inject, Injectable, signal } from "@angular/core";
+import { computed, inject, Injectable, signal } from "@angular/core";
 
 /** Below this the panel is a sheet over the whole page (Tailwind's `lg`; ask-sheet.component.ts). */
 const SHEET_QUERY = "(width < 64rem)";
@@ -42,9 +42,10 @@ export interface AskAbout {
 
 /**
  * How the rest of the site reaches the assistant without loading it: the hero's
- * ask bar, the floating button, the palette and a reader's buttons all open the
- * same panel, on every page. A question can come along, sent once the prompt has
- * it. The panel's code loads the first time one of these happens.
+ * stage, the floating button, the palette and a reader's buttons all lead to one
+ * conversation, on home's stage while it is on screen, else in the panel. A
+ * question can come along, sent once the prompt has it. The console's code loads
+ * the first time one of these happens.
  */
 @Injectable({ providedIn: "root" })
 export class AskLauncherService {
@@ -69,13 +70,33 @@ export class AskLauncherService {
   readonly assistant = signal<"online" | "resting" | null>(null);
   /** Below 1024px: the panel covers the page, which is inert behind it (plan 4 U8). */
   readonly narrow = signal(false);
-  /** Where the panel shows a visible Turnstile check; the panel sets it. */
+  /** Where the console shows a visible Turnstile check; the console sets it. */
   turnstileHost: HTMLElement | null = null;
   /**
-   * Whether the hero's ask bar is on screen, where the floating button would only repeat it.
-   * True until the bar says otherwise, so the server prints no button over it on home.
+   * Whether the hero's stage is on screen, where the floating button would only repeat it.
+   * True until the stage says otherwise, so the server prints no button over it on home.
    */
-  readonly barInView = signal(true);
+  readonly stageInView = signal(true);
+  /** Home's stage is on the page, in a browser. */
+  readonly stageReady = signal(false);
+  /** The visitor's latest question, as the console knows it: there is a conversation to show. */
+  readonly lastQuestion = signal<string | null>(null);
+  /** The admin's suggested questions by language, read once a page load; null until they come. */
+  readonly questions = signal<Record<string, string[]> | null>(null);
+  private readonly stageAsked = signal(false);
+  /**
+   * The console runs on the stage: one was asked for there, or a conversation exists. Never below
+   * 1024px, where the stage is the sheet's door, nor while the panel holds the conversation.
+   */
+  readonly stageLive = computed(
+    () =>
+      this.stageReady() &&
+      !this.narrow() &&
+      !this._sheet() &&
+      (this.stageAsked() || this.lastQuestion() !== null),
+  );
+  /** `ask_open` went out: once per page load, wherever the console stands. */
+  opened = false;
 
   constructor() {
     const query = inject(DOCUMENT).defaultView?.matchMedia?.(SHEET_QUERY);
@@ -92,11 +113,21 @@ export class AskLauncherService {
     return true;
   }
 
+  /** Home's stage takes a request while it is on screen; otherwise the panel does (plan 4 U11b). */
   openSheet(source?: AskSource): void {
     if (source) this.source = source;
+    if (this.stageReady() && this.stageInView() && !this.narrow() && !this._sheet()) {
+      this.stageAsked.set(true);
+    } else {
+      this.openPanel();
+    }
+    this._focusPending.set(true);
+  }
+
+  /** The panel, wherever the visitor is: it never scrolls them back to the stage. */
+  openPanel(): void {
     this._sheetRequested.set(true);
     this._sheet.set(true);
-    this._focusPending.set(true);
   }
 
   closeSheet(): void {
@@ -111,9 +142,9 @@ export class AskLauncherService {
     if (this.narrow()) this.closeSheet();
   }
 
-  /** Where a visible Turnstile check goes: the panel while it is open; else the page's own box. */
+  /** Where a visible Turnstile check goes: the console on show; else the page's own box. */
   checkHost(): HTMLElement | undefined {
-    return this._sheet() ? (this.turnstileHost ?? undefined) : undefined;
+    return this._sheet() || this.stageLive() ? (this.turnstileHost ?? undefined) : undefined;
   }
 
   /** Puts a question to the assistant, with what a reader points at, when they did (visitor plan V9). */

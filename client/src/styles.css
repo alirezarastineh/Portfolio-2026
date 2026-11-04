@@ -247,6 +247,7 @@ html:has(app-admin-layout) {
       app-site-footer,
       .ask-fab,
       .ask-sheet,
+      app-ask-stage,
       .reading-progress,
       main aside,
       article > nav,

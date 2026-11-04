@@ -1,12 +1,15 @@
 import { NgTemplateOutlet } from "@angular/common";
 import {
+  afterNextRender,
   afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
+  input,
   signal,
   viewChild,
 } from "@angular/core";
@@ -15,7 +18,7 @@ import { lucideCornerDownLeft, lucideSquare } from "@ng-icons/lucide";
 
 import { LanguageService } from "../services/language.service";
 import { AskAnswerComponent } from "./ask-answer.component";
-import { ASK_ENTRY_COPY } from "./ask-entry-copy";
+import { ASK_ENTRY_COPY, COMMAND_ROW } from "./ask-entry-copy";
 import { answersByQuestion } from "./answers";
 import { AskLauncherService, type AskAbout, type AskSource } from "./ask-launcher.service";
 import { AskLinesComponent } from "./ask-lines.component";
@@ -33,8 +36,6 @@ let instances = 0;
 const MAX_INPUT_LINES = 6;
 /** Who came here to type: on a phone only they get the prompt, and its keyboard (plan 4 U9). */
 const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
-/** Shown under the prompt, each a button that runs it; `help` lists the rest. */
-const COMMAND_ROW = ["help", "inspect", "evals", "tour", "match"];
 
 /**
  * The assistant's console (plan 4 U11): a prompt whose main command is the AI, the commands shown
@@ -228,7 +229,7 @@ const COMMAND_ROW = ["help", "inspect", "evals", "tour", "match"];
         />
       </button>
     </form>
-    <div class="commands" role="group" translate="no" [attr.aria-label]="copy().commands">
+    <div class="commands" role="group" translate="no" [attr.aria-label]="starters().commands">
       @for (command of commands; track command) {
         <button type="button" class="press" (click)="send(command)">{{ command }}</button>
       }
@@ -236,6 +237,8 @@ const COMMAND_ROW = ["help", "inspect", "evals", "tour", "match"];
     <p [id]="hintId" class="disclosure">{{ lang.t().ask.disclosure }}</p>
 
     <div class="sr-only" aria-live="polite" aria-atomic="true">{{ store.announcement() }}</div>
+    <!-- Where Cloudflare's check shows when it asks the visitor (store: readyToAsk). -->
+    <div #check></div>
   `,
   styles: `
     :host {
@@ -478,6 +481,9 @@ const COMMAND_ROW = ["help", "inspect", "evals", "tour", "match"];
   `,
 })
 export class AskConsoleComponent {
+  /** It stands on home's stage, not in the panel (plan 4 U11b). */
+  readonly stage = input(false);
+
   protected readonly store = inject(AskStore);
   protected readonly lang = inject(LanguageService);
   private readonly launcher = inject(AskLauncherService);
@@ -491,13 +497,13 @@ export class AskConsoleComponent {
 
   private readonly inputRef = viewChild.required<ElementRef<HTMLTextAreaElement>>("input");
   private readonly logRef = viewChild.required<ElementRef<HTMLElement>>("log");
+  private readonly check = viewChild.required<ElementRef<HTMLElement>>("check");
 
   /** The output just copied, for its button's "copied ✓". */
   protected readonly copiedId = signal<string | null>(null);
   /** Where ↑/↓ are in the history; null while typing something new. */
   private historyIndex: number | null = null;
   private draft = "";
-  private opened = false;
 
   protected readonly starters = computed(() => ASK_ENTRY_COPY[this.lang.lang()]);
   /** Three of the admin's suggested questions, once the server has said; else the built-in three. */
@@ -547,6 +553,24 @@ export class AskConsoleComponent {
       if (state) this.launcher.assistant.set(state === "ok" ? "online" : "resting");
     });
 
+    // What the stage reads without loading any of this.
+    effect(() => {
+      const asked = this.store.entries().findLast((entry) => entry.kind === "ask");
+      this.launcher.lastQuestion.set(asked?.input ?? null);
+    });
+
+    // On the stage nobody hands it a request: the panel does that for its console.
+    afterRenderEffect(() => {
+      if (this.stage() && this.launcher.takeFocus()) this.claim();
+    });
+
+    afterNextRender(() => (this.launcher.turnstileHost = this.check().nativeElement));
+    inject(DestroyRef).onDestroy(() => {
+      this.launcher.turnstileHost = null;
+      // Leaving home mid-answer or mid-tour, the panel carries on (plan 4 U11b).
+      if (this.stage() && (this.busy() || this.store.tour())) this.launcher.openPanel();
+    });
+
     // A new exchange goes to the top, once; what it writes grows beneath it (NN/g: no autoscroll).
     let newest: string | undefined;
     afterRenderEffect(() => {
@@ -565,8 +589,8 @@ export class AskConsoleComponent {
   }
 
   focusInput(): void {
-    const el = this.inputRef().nativeElement;
-    el.focus({ preventScroll: false });
+    // The stage is on screen, and the page never moves for it.
+    this.inputRef().nativeElement.focus({ preventScroll: this.stage() });
   }
 
   /**
@@ -575,6 +599,8 @@ export class AskConsoleComponent {
    * link's question goes in the prompt unsent (V17).
    */
   claim(): void {
+    // Its first question can come before the first render's callback has run.
+    this.launcher.turnstileHost = this.check().nativeElement;
     const source = this.launcher.takeSource();
     this.reportOpen(source);
     this.toNewest();
@@ -598,10 +624,10 @@ export class AskConsoleComponent {
     else this.focusInput();
   }
 
-  /** `ask_open`, once per prompt, with where the visitor came from. */
+  /** `ask_open`, once per page load, with where the visitor came from. */
   protected reportOpen(source: AskSource): void {
-    if (this.opened) return;
-    this.opened = true;
+    if (this.launcher.opened) return;
+    this.launcher.opened = true;
     track("ask_open", { source });
   }
 

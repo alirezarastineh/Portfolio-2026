@@ -9,7 +9,7 @@ import {
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideArrowDown, lucideDownload } from "@ng-icons/lucide";
 
-import { AskBarComponent } from "../ask/ask-bar.component";
+import { AskStageComponent } from "../ask/ask-stage.component";
 import { MagneticButtonComponent } from "../components/magnetic-button.component";
 import { PictureComponent } from "../components/picture.component";
 import { AVAILABILITY_DOT, availabilityLabel } from "../content/availability";
@@ -18,15 +18,14 @@ import { CHROME } from "../i18n/chrome";
 import { ClockService } from "../services/clock.service";
 import { LanguageService } from "../services/language.service";
 import { GridCanvasComponent } from "../visuals/grid-canvas.component";
-import { TracePanelComponent } from "../visuals/trace-panel.component";
 
 /** Orgs named in the proof strip, at most. */
 const MAX_ORGS = 5;
 
 /**
  * The first screen: who this is and whether they are available, the headline,
- * a way to ask the portfolio anything, and a picture of how that answer is
- * made. Below, what backs it up: where he has worked and one project's numbers.
+ * and the assistant's stage, where a visitor can ask and watch the answer made.
+ * Below, what backs it up: where he has worked and one project's numbers.
  *
  * The headline is the page's largest paint and shows at once; the lines around
  * it rise in one after another (styles/motion.css, `hero-rise`), never it. The
@@ -36,12 +35,11 @@ const MAX_ORGS = 5;
   selector: "app-hero-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    AskBarComponent,
+    AskStageComponent,
     GridCanvasComponent,
     MagneticButtonComponent,
     NgIcon,
     PictureComponent,
-    TracePanelComponent,
   ],
   viewProviders: [provideIcons({ lucideArrowDown, lucideDownload })],
   host: {
@@ -149,12 +147,9 @@ const MAX_ORGS = 5;
                 </a>
               }
             </div>
-
-            <!-- After the primary action, which stays in a laptop's first screen. -->
-            <app-ask-bar class="hero-rise mt-2 [--i:4]" />
           </div>
 
-          <app-trace-panel class="hero-rise col-span-12 [--i:5] lg:col-span-5" />
+          <app-ask-stage class="hero-rise col-span-12 [--i:4] lg:col-span-5" />
         </div>
 
         <!-- Proof: nothing at all when there is none yet. -->

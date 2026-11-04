@@ -1,47 +1,26 @@
 import type { Locale } from "../content/locale";
 
+/** Under the prompt, each a button that runs it; `help` lists the rest (plan 4 U11). */
+export const COMMAND_ROW = ["help", "inspect", "evals", "tour", "match"];
+
 /**
- * The words around the assistant's entry points on the page itself: the
- * hero's ask bar and its starter questions, and the trace panel. Loaded with
- * the page, unlike `ask-copy.ts`, which comes with the terminal and would
- * otherwise put all of the terminal's copy into the first load.
+ * The words the hero's stage prints before the console's code loads. Loaded with the page, unlike
+ * `ask-copy.ts`, which comes with the console and would otherwise put all of its copy into the
+ * first load.
  */
 export interface AskEntryCopy {
-  /** Suggested first questions: typed into the bar's placeholder, and chips below it. */
+  /** Suggested first questions. */
   starters: string[];
-  /** Before the chips. */
-  try: string;
-  /** The chips' group. */
+  /** The suggestions' group. */
   suggestions: string;
-  /** The bar's send button. */
+  /** The prompt's send button. */
   send: string;
-  trace: {
-    title: string;
-    example: string;
-    /** `{s}`: how long the answer took. */
-    last: string;
-    /** The panel for screen readers; `{model}` and `{s}` for a real answer. */
-    summary: string;
-    lastSummary: string;
-    /** The example's values. */
-    model: string;
-    tools: string;
-    sources: string;
-    /** For a real answer. */
-    noTools: string;
-    noSources: string;
-    /** `{n}` sources, `{p}` percent. */
-    sourcesCount: string;
-    cached: string;
-    fallback: string;
-    /** A real answer's lookups and removed references, `{n}` (visitor plan V12). */
-    lookup: string;
-    lookups: string;
-    removed: string;
-    /** A move from lite to deep mid-way: `{why}`, one of `escalation`. */
-    escalated: string;
-    escalation: { "projects-fetched": string; "search-spans-projects": string };
-  };
+  /** The row of commands, for screen readers. */
+  commands: string;
+  /** The stage while the panel holds the conversation. */
+  continuing: string;
+  /** Before the last question, on a phone's stage, for screen readers. */
+  resume: string;
 }
 
 export const ASK_ENTRY_COPY: Record<Locale, AskEntryCopy> = {
@@ -51,33 +30,11 @@ export const ASK_ENTRY_COPY: Record<Locale, AskEntryCopy> = {
       "How does he test AI features?",
       "Which stack does he reach for, and why?",
     ],
-    try: "try",
     suggestions: "Suggested questions",
     send: "Ask",
-    trace: {
-      title: "trace · ask_portfolio",
-      example: "example trace",
-      last: "your last question · {s}",
-      summary:
-        "How the assistant answers: it routes a question to a fast or a thorough model, looks things up in this site's content, writes the answer, and checks that every source it cites exists. The timings shown are an example.",
-      lastSummary: "Your last question was answered by {model} in {s}.",
-      model: "gemini-3.5-flash-lite",
-      tools: "search_portfolio",
-      sources: "2 verified",
-      noTools: "context only",
-      noSources: "none",
-      sourcesCount: "{n} verified",
-      cached: "{p}% cached",
-      fallback: "fallback",
-      lookup: "1 lookup",
-      lookups: "{n} lookups",
-      removed: "{n} removed",
-      escalated: "lite → deep · {why}",
-      escalation: {
-        "projects-fetched": "two projects read",
-        "search-spans-projects": "search spans two projects",
-      },
-    },
+    commands: "Commands",
+    continuing: "Continuing in the panel",
+    resume: "Continue your conversation",
   },
   de: {
     starters: [
@@ -85,32 +42,10 @@ export const ASK_ENTRY_COPY: Record<Locale, AskEntryCopy> = {
       "Wie testet er KI-Funktionen?",
       "Welchen Stack nutzt er – und warum?",
     ],
-    try: "z. B.",
     suggestions: "Vorgeschlagene Fragen",
     send: "Fragen",
-    trace: {
-      title: "trace · ask_portfolio",
-      example: "Beispiel-Trace",
-      last: "deine letzte Frage · {s}",
-      summary:
-        "So antwortet der Assistent: Er leitet eine Frage an ein schnelles oder ein gründliches Modell, schlägt im Inhalt dieser Website nach, schreibt die Antwort und prüft, dass jede zitierte Quelle existiert. Die gezeigten Zeiten sind ein Beispiel.",
-      lastSummary: "Deine letzte Frage hat {model} in {s} beantwortet.",
-      model: "gemini-3.5-flash-lite",
-      tools: "search_portfolio",
-      sources: "2 geprüft",
-      noTools: "nur Kontext",
-      noSources: "keine",
-      sourcesCount: "{n} geprüft",
-      cached: "{p} % gecacht",
-      fallback: "Ausweichmodell",
-      lookup: "1 Abfrage",
-      lookups: "{n} Abfragen",
-      removed: "{n} entfernt",
-      escalated: "lite → deep · {why}",
-      escalation: {
-        "projects-fetched": "zwei Projekte gelesen",
-        "search-spans-projects": "Suche über zwei Projekte",
-      },
-    },
+    commands: "Befehle",
+    continuing: "Weiter im Fenster",
+    resume: "Unterhaltung fortsetzen",
   },
 };

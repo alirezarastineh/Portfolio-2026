@@ -19,6 +19,16 @@ function own<T>(record: Record<string, T>, key: string): T | undefined {
   return Object.hasOwn(record, key) ? record[key] : undefined;
 }
 
+/** Milliseconds under a second, seconds with one decimal above. */
+export function duration(ms: number, locale: Locale): string {
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  const seconds = (ms / 1000).toLocaleString(locale === "de" ? "de-DE" : "en-GB", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  return `${seconds} s`;
+}
+
 /** A count in its words. */
 export function counted(n: number, forms: Counted): string {
   if (n === 0) return forms.none;

@@ -89,11 +89,13 @@ export async function interactive(page: Page): Promise<void> {
 }
 
 /**
- * The assistant's panel, the same on every page (plan 4 U10). Specs reach it only through this,
- * so moving the assistant changes this alone (plan 4 U7).
+ * The assistant's console: in the panel on every page, or on home's stage while it holds it (plan
+ * 4 U11b). Specs reach it only through this, so moving the assistant changes this alone (plan 4 U7).
  */
 export function askPanel(page: Page): Locator {
-  return page.getByRole("dialog", { name: /^(Ask about my work|Fragen zu meiner Arbeit)$/ });
+  return page
+    .getByRole("dialog", { name: /^(Ask about my work|Fragen zu meiner Arbeit)$/ })
+    .or(page.locator("app-ask-stage app-ask-console"));
 }
 
 /**

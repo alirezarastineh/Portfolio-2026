@@ -8,6 +8,11 @@ import { fixtureCore, fixtureDocs } from "./fixture-content.mjs";
 
 const KINDS = { projects: "project", posts: "post", legal: "legal" };
 const PUBLISHED_AT = new Date("2026-09-20T08:00:00Z").toUTCString();
+/** The admin's suggested questions: German has some, so English shows the built-in three. */
+const ADMIN_QUESTIONS = {
+  en: [],
+  de: ["Was hat er zuletzt gebaut?", "Wie prüft er KI-Antworten?"],
+};
 const ROUTE = /^\/v2\/content\/(en|de)(?:\/(projects|posts|legal)\/([a-z0-9-]+))?$/;
 
 /** Starts the fixture API on a free port; resolves with its base URL. */
@@ -16,7 +21,13 @@ export function startFixtureApi() {
   const docs = { en: fixtureDocs("en"), de: fixtureDocs("de") };
 
   const server = createServer((req, res) => {
-    const match = ROUTE.exec(new URL(req.url ?? "/", "https://fixture").pathname);
+    const { pathname } = new URL(req.url ?? "/", "https://fixture");
+    if (pathname === "/v1/ask/config") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ suggestions: ADMIN_QUESTIONS }));
+      return;
+    }
+    const match = ROUTE.exec(pathname);
     if (!match) {
       res.writeHead(404, { "content-type": "application/json" });
       res.end('{"error":"not_found"}');
