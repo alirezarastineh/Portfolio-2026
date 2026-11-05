@@ -1,0 +1,297 @@
+/*
+ * The shared pieces, one definition of each. Public only: styles.css imports this
+ * file, and the admin uses none of these names. `.press` (motion.css) is the sink
+ * on `:active`.
+ *
+ * Not in a layer, ahead of the utilities: a layered rule would lose to the unlayered
+ * `a` reset in styles.css, and a utility still overrides a piece here.
+ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  padding-inline: 1.25rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.25;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+/* The one orange fill: the header's "Let's talk", always in view. */
+.btn-primary {
+  background: var(--signal);
+  color: var(--signal-foreground);
+}
+
+.btn-solid {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.btn-secondary {
+  border-color: var(--input-line);
+  color: var(--foreground);
+}
+
+.btn-quiet {
+  min-height: 2.75rem;
+  padding-inline: 0;
+  color: var(--foreground);
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"],
+.control:disabled {
+  color: var(--faint-foreground);
+  cursor: default;
+}
+
+.btn-primary:disabled,
+.btn-primary[aria-disabled="true"] {
+  background: color-mix(in srgb, var(--signal) 40%, transparent);
+  color: var(--signal-foreground);
+}
+
+.btn-solid:disabled,
+.btn-solid[aria-disabled="true"] {
+  background: var(--surface-2);
+}
+
+.btn[aria-busy="true"]::before {
+  content: "";
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn[aria-busy="true"]::before {
+    animation: btn-busy 800ms linear infinite;
+  }
+}
+
+.control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  padding-inline: 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+.control[aria-pressed="true"] {
+  background: var(--surface-2);
+  color: var(--foreground);
+}
+
+/* Its focus line is on the wrapper: `.field-line`, motion.css. */
+.field {
+  display: block;
+  width: 100%;
+  min-height: 3.5rem;
+  padding: 0.875rem;
+  border: 1px solid var(--input-line);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 1rem;
+  transition: border-color var(--dur-2) var(--ease-out);
+}
+
+.field::placeholder {
+  color: var(--muted-foreground);
+}
+
+.field:focus-visible {
+  outline: none;
+}
+
+.field:disabled {
+  background: var(--surface-2);
+}
+
+.field[aria-invalid="true"] {
+  border-color: var(--destructive);
+}
+
+.disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  color: var(--muted-foreground);
+  font-size: 0.9375rem;
+  list-style: none;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure > summary::before {
+  content: "+" / "";
+  color: var(--accent-orange);
+}
+
+.disclosure[open] > summary::before {
+  rotate: 45deg;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .disclosure > summary::before {
+    transition: rotate var(--dur-3) var(--ease-out);
+  }
+}
+
+/* A line's tick, as in the assistant's trace. */
+.list-trace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  list-style: none;
+}
+
+.list-trace > li {
+  position: relative;
+  padding-inline-start: 1.125rem;
+}
+
+.list-trace > li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.5lh;
+  width: 0.625rem;
+  height: 1px;
+  background: var(--signal);
+}
+
+/* One line box each, not `align-items: baseline`: its row height moves when the fonts swap in. */
+.facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem 1.5rem;
+  line-height: 1.5rem;
+}
+
+.facts > dt {
+  color: var(--faint-foreground);
+  font-family: var(--font-data);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.status-dot {
+  display: inline-block;
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+}
+
+/* `app-metrics`. Each number sizes to its own cell, so none can run out of a narrow slot. */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
+  gap: 2rem 1.5rem;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  container-type: inline-size;
+}
+
+.metric > dt {
+  order: 2;
+  color: var(--muted-foreground);
+  font-family: var(--font-data);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.metric-value {
+  order: 1;
+  color: var(--foreground);
+  font-size: min(var(--metric-max, var(--text-metric)), 24cqi);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--text-metric--font-weight);
+  line-height: var(--text-metric--line-height);
+  letter-spacing: var(--text-metric--letter-spacing);
+  overflow-wrap: anywhere;
+}
+
+.metric-context {
+  order: 3;
+  color: var(--faint-foreground);
+  font-size: 0.8125rem;
+}
+
+@media (hover: hover) {
+  .btn-primary:not(:disabled, [aria-disabled="true"]):hover {
+    background: var(--signal-hover);
+  }
+
+  .btn-solid:not(:disabled, [aria-disabled="true"]):hover {
+    background: var(--muted-foreground);
+  }
+
+  .btn-secondary:not(:disabled, [aria-disabled="true"]):hover {
+    background: var(--surface-2);
+  }
+
+  .btn-quiet:not(:disabled, [aria-disabled="true"]):hover {
+    text-decoration-color: var(--accent-orange);
+  }
+
+  .control:not(:disabled):hover {
+    border-color: var(--border-strong);
+    color: var(--foreground);
+  }
+
+  .field:not(:disabled, [aria-invalid="true"]):hover {
+    border-color: color-mix(in srgb, var(--foreground) 60%, transparent);
+  }
+
+  .disclosure > summary:hover {
+    color: var(--foreground);
+  }
+}
+
+@media (pointer: coarse) {
+  .btn {
+    min-height: 3rem;
+  }
+
+  .control {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+}
+
+@keyframes btn-busy {
+  to {
+    rotate: 360deg;
+  }
+}

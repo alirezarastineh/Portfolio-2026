@@ -127,9 +127,9 @@ describe("ProseBodyComponent", () => {
     expect(button?.textContent).toBe("Copy");
     vi.useFakeTimers();
     button?.click();
-    await vi.waitFor(() => expect(button?.textContent).toBe("Copied ✓"));
+    await vi.waitFor(() => expect(button?.textContent).toBe("Copied"));
     expect(writeText).toHaveBeenCalledWith("const a = 1;\na;");
-    vi.advanceTimersByTime(1500);
+    vi.advanceTimersByTime(1600);
     expect(button?.textContent).toBe("Copy");
   });
 });

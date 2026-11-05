@@ -17,6 +17,7 @@ import { isToolUIPart, type ChatStatus } from "ai";
 
 import { fmt } from "../i18n/interpolate";
 import { LanguageService } from "../services/language.service";
+import { COPIED_MS, copyText, type CopyResult } from "../services/copy-text";
 import { AskStore } from "./ask.store";
 import { ASK_ENTRY_COPY } from "./ask-entry-copy";
 import type { AskMessage, DownReason, Entry } from "./ask-types";
@@ -299,25 +300,29 @@ interface Footnote {
               <ng-icon name="lucideThumbsDown" size="16" aria-hidden="true" />
             </button>
             <button type="button" class="word press" (click)="copyAnswer()">
-              @if (copied()) {
-                {{ copy().copied }}<span aria-hidden="true"> ✓</span>
-              } @else {
-                {{ copy().copy }}
-              }
+              {{ copy()[copied() ?? "copy"] }}
             </button>
             <!-- A link that carries the question (visitor plan V17); its name says so. -->
             @if (sharedQuestion()) {
               <button
                 type="button"
                 class="word press"
-                [attr.aria-label]="shared() ? copy().share.copied : copy().share.name"
+                [attr.aria-label]="
+                  shared() === 'failed'
+                    ? copy().failed
+                    : shared()
+                      ? copy().share.copied
+                      : copy().share.name
+                "
                 (click)="shareQuestion()"
               >
-                @if (shared()) {
-                  {{ copy().share.copied }}<span aria-hidden="true"> ✓</span>
-                } @else {
-                  {{ copy().share.label }}
-                }
+                {{
+                  shared() === "failed"
+                    ? copy().failed
+                    : shared()
+                      ? copy().share.copied
+                      : copy().share.label
+                }}
               </button>
             }
           }
@@ -754,9 +759,9 @@ export class AskAnswerComponent {
   private readonly doc = inject(DOCUMENT);
 
   protected readonly copy = this.store.copy;
-  protected readonly copied = signal(false);
+  protected readonly copied = signal<CopyResult | null>(null);
   /** The question's link was just copied (visitor plan V17). */
-  protected readonly shared = signal(false);
+  protected readonly shared = signal<CopyResult | null>(null);
   /**
    * The citation [n] pointed at or focused from the keyboard, whose source chip
    * lights up. Set by its events: a `:has(.cite:hover)` rule did this until
@@ -1057,17 +1062,11 @@ export class AskAnswerComponent {
   protected async shareQuestion(): Promise<void> {
     const question = this.sharedQuestion();
     if (!question) return;
-    try {
-      await navigator.clipboard.writeText(
-        shareLink(this.doc.location.origin, this.router.url, question),
-      );
-      this.shared.set(true);
-      track("ask_share");
-      this.store.announce(this.copy().share.copied);
-      setTimeout(() => this.shared.set(false), 1500);
-    } catch {
-      // Clipboard refused (permissions): nothing to do.
-    }
+    const result = await copyText(shareLink(this.doc.location.origin, this.router.url, question));
+    this.shared.set(result);
+    if (result === "copied") track("ask_share");
+    this.store.announce(result === "copied" ? this.copy().share.copied : this.copy().failed);
+    setTimeout(() => this.shared.set(null), COPIED_MS);
   }
 
   /** A follow-up question asked: counted for this answer, then asked. */
@@ -1087,14 +1086,10 @@ export class AskAnswerComponent {
   }
 
   protected async copyAnswer(): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(plainText(this.text()));
-      this.copied.set(true);
-      this.note("copies");
-      setTimeout(() => this.copied.set(false), 1500);
-    } catch {
-      // Clipboard refused (permissions): nothing to do.
-    }
+    const result = await copyText(plainText(this.text()));
+    this.copied.set(result);
+    if (result === "copied") this.note("copies");
+    setTimeout(() => this.copied.set(null), COPIED_MS);
   }
 
   /** What the visitor did with this answer, for the browser's signals (visitor plan V2). */

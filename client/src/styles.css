@@ -14,6 +14,7 @@
 @import "./styles/theme.css";
 @import "./styles/public-theme.css";
 @import "./styles/primitives.css";
+@import "./styles/components.css";
 @import "./styles/motion.css";
 
 @import "./styles/prose.css";

@@ -15,10 +15,8 @@ import {
 
 import type { TocEntry } from "../content/schema";
 import { CHROME } from "../i18n/chrome";
+import { COPIED_MS, copyText } from "../services/copy-text";
 import { LanguageService } from "../services/language.service";
-
-/** How long a copy button says "Copied" before it goes back. */
-const COPIED_MS = 1500;
 
 /**
  * Gives the body's headings the ids the build assigned (listed in `toc`).
@@ -110,22 +108,17 @@ export class ProseBodyComponent implements AfterViewChecked {
   constructor() {
     if (!this.isBrowser) return;
     const timers = new Set<ReturnType<typeof setTimeout>>();
-    const onClick = (event: MouseEvent) => {
+    const onClick = async (event: MouseEvent) => {
       const button = (event.target as Element | null)?.closest?.("button.code-copy");
       const code = button?.closest(".code-frame")?.querySelector("code");
       if (!button || !code) return;
-      void navigator.clipboard?.writeText(code.textContent ?? "").then(
-        () => {
-          const labels = CHROME[this.lang.lang()].code;
-          button.textContent = `${labels.copied} ✓`;
-          const timer = setTimeout(() => {
-            timers.delete(timer);
-            button.textContent = labels.copy;
-          }, COPIED_MS);
-          timers.add(timer);
-        },
-        () => undefined,
-      );
+      const labels = CHROME[this.lang.lang()].code;
+      button.textContent = labels[await copyText(code.textContent ?? "")];
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        button.textContent = labels.copy;
+      }, COPIED_MS);
+      timers.add(timer);
     };
     let el: HTMLElement | undefined;
     afterNextRender(() => {

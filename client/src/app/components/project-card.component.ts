@@ -4,6 +4,7 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideArrowRight, lucideExternalLink, lucideFileText } from "@ng-icons/lucide";
 
 import { MatchMarkComponent, MatchMarks } from "../ask/match-marks";
+import { MetricsComponent } from "./metrics.component";
 import { brandGithub } from "../icons/brand-icons";
 import { PictureComponent } from "./picture.component";
 import type { CardLayout } from "./project-layout";
@@ -67,7 +68,7 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
 @Component({
   selector: "app-project-card",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatchMarkComponent, NgIcon, PictureComponent, RouterLink],
+  imports: [MatchMarkComponent, MetricsComponent, NgIcon, PictureComponent, RouterLink],
   viewProviders: [
     provideIcons({ lucideArrowRight, lucideExternalLink, lucideFileText, brandGithub }),
   ],
@@ -116,18 +117,8 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
         }
 
         @if (metrics().length) {
-          <dl class="m-0 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
-            @for (metric of metrics(); track metric.label) {
-              <div class="flex flex-col gap-1 border-t-2 border-signal pt-3">
-                <dt class="order-2 font-mono text-meta text-muted-foreground">
-                  {{ metric.label }}
-                </dt>
-                <dd class="order-1 m-0 text-h3 tabular-nums text-foreground">
-                  {{ metric.value }}
-                </dd>
-              </div>
-            }
-          </dl>
+          <!-- Under the title in size: the card is the project, not the number. -->
+          <app-metrics class="[--metric-max:2.5rem]" [metrics]="metrics()" />
         }
 
         @if (stack().shown.length) {
@@ -149,31 +140,17 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
         }
 
         @if (!project().hasCaseStudy && hasDetails()) {
-          <details class="card-details group/details rounded-lg border border-border">
-            <summary
-              class="flex cursor-pointer list-none items-center gap-2 px-4 py-3 font-mono text-meta text-foreground [&::-webkit-details-marker]:hidden"
-            >
-              <span
-                class="inline-block text-accent-orange motion-safe:transition-transform motion-safe:duration-(--dur-3) group-open/details:rotate-45"
-                aria-hidden="true"
-                >+</span
-              >
-              {{ chrome().details }}
-            </summary>
+          <details class="disclosure rounded-lg border border-border">
+            <summary class="press px-4">{{ chrome().details }}</summary>
             <dl class="m-0 grid gap-4 border-t border-border px-4 py-4">
               @for (block of blocks(); track block.label) {
                 <div class="flex flex-col gap-1.5">
                   <dt class="eyebrow text-accent-orange">{{ block.label }}</dt>
                   @if (block.list) {
                     <dd class="m-0">
-                      <ul class="m-0 flex list-none flex-col gap-1 p-0" role="list">
+                      <ul class="list-trace text-sm text-foreground/90" role="list">
                         @for (item of block.list; track item) {
-                          <li
-                            class="flex items-baseline gap-2 text-sm leading-relaxed text-foreground/90"
-                          >
-                            <span class="text-accent-orange" aria-hidden="true">▸</span>
-                            <span>{{ item }}</span>
-                          </li>
+                          <li>{{ item }}</li>
                         }
                       </ul>
                     </dd>
@@ -219,7 +196,7 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
                 @for (link of links(); track link.href) {
                   <li>
                     <a
-                      class="press relative z-10 inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-2.5 font-mono text-meta text-muted-foreground hover:border-border-strong hover:text-foreground"
+                      class="control press relative z-10"
                       [href]="link.href"
                       target="_blank"
                       rel="noreferrer noopener"

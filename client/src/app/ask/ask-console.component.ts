@@ -17,6 +17,7 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideCornerDownLeft, lucideSquare } from "@ng-icons/lucide";
 
 import { LanguageService } from "../services/language.service";
+import { COPIED_MS, copyText, type CopyResult } from "../services/copy-text";
 import { AskAnswerComponent } from "./ask-answer.component";
 import { ASK_ENTRY_COPY, commandRow } from "./ask-entry-copy";
 import { answersByQuestion } from "./answers";
@@ -156,11 +157,7 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
             <!-- Output worth keeping (inspect's timeline, visitor plan V12) can be copied whole. -->
             @if (entry.copy; as text) {
               <button type="button" class="quiet press" (click)="copyOutput(entry.id, text)">
-                @if (copiedId() === entry.id) {
-                  {{ copy().copied }}<span aria-hidden="true"> ✓</span>
-                } @else {
-                  {{ copy().copy }}
-                }
+                {{ copy()[copiedOutput()?.id === entry.id ? copiedOutput()!.result : "copy"] }}
               </button>
             }
           } @else {
@@ -570,7 +567,7 @@ export class AskConsoleComponent {
   /** A rate limit holds: send waits, and the question stays in the prompt. */
   protected readonly limited = signal(false);
   /** The output just copied, for its button's "copied ✓". */
-  protected readonly copiedId = signal<string | null>(null);
+  protected readonly copiedOutput = signal<{ id: string; result: CopyResult } | null>(null);
   /** Where ↑/↓ are in the history; null while typing something new. */
   private historyIndex: number | null = null;
   private draft = "";
@@ -781,13 +778,8 @@ export class AskConsoleComponent {
   }
 
   protected async copyOutput(id: string, text: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(text);
-      this.copiedId.set(id);
-      setTimeout(() => this.copiedId.set(null), 1500);
-    } catch {
-      // Clipboard refused (permissions): nothing to do.
-    }
+    this.copiedOutput.set({ id, result: await copyText(text) });
+    setTimeout(() => this.copiedOutput.set(null), COPIED_MS);
   }
 
   private handleArrowKey(event: KeyboardEvent, el: HTMLTextAreaElement): boolean {

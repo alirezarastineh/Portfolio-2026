@@ -63,6 +63,7 @@ export interface AskCopy {
   downReason: { ask: string; wrong: string; unanswered: string; length: string };
   copy: string;
   copied: string;
+  failed: string;
   /**
    * A link that carries the question (visitor plan V17): the button, its name,
    * which says so, and what it says once the link is copied.
@@ -423,6 +424,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
     },
     copy: "Copy",
     copied: "Copied",
+    failed: "Couldn’t copy",
     share: {
       label: "Share",
       name: "Share: copy a link that carries this question",
@@ -777,6 +779,7 @@ export const ASK_COPY: Record<Locale, AskCopy> = {
     },
     copy: "Kopieren",
     copied: "Kopiert",
+    failed: "Nicht kopiert",
     share: {
       label: "Teilen",
       name: "Teilen: einen Link kopieren, der diese Frage enthält",

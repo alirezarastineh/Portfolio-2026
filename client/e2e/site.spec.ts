@@ -86,7 +86,7 @@ test.describe("home", () => {
     await expect(hero).toContainText("Example GmbH");
     // Education and certifications are not "shipped at".
     await expect(hero).not.toContainText("TU Example");
-    await expect(hero.locator("dd")).toHaveText(["−42%", "3.1×", "99.95%"]);
+    await expect(hero.locator(".metric-value")).toHaveText(["−42%", "3.1×", "99.95%"]);
   });
 
   test("section headings are real text, numbered in page order", async ({ page }) => {
@@ -440,12 +440,23 @@ test.describe("contact form", () => {
     await expect(contact).toContainText("I reply within 24 hours.");
 
     await contact.getByRole("button", { name: "Copy the email address" }).click();
-    await expect(contact.getByRole("button", { name: /^Copied ✓/ })).toBeVisible();
+    await expect(contact.getByRole("button", { name: /^Copied/ })).toBeVisible();
     if (readable) {
       expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
         "contact@alirezarastineh.me",
       );
     }
+  });
+
+  test("a refused copy says so", async ({ page }) => {
+    await page.addInitScript(() => {
+      navigator.clipboard.writeText = () => Promise.reject(new Error("denied"));
+    });
+    await page.reload();
+    await interactive(page);
+    const contact = page.locator("#contact");
+    await contact.getByRole("button", { name: "Copy the email address" }).click();
+    await expect(contact.getByRole("button", { name: /^Couldn’t copy/ })).toBeVisible();
   });
 
   test("a sent message takes focus to the confirmation, which offers another", async ({ page }) => {

@@ -135,7 +135,7 @@ const segment =
           <!-- The one call to action that is always in view. The CV stays in
                the hero, the palette and the mobile menu. -->
           <a
-            class="press hidden h-9 items-center rounded-md bg-signal px-3 text-meta font-medium text-signal-foreground hover:bg-signal-hover lg:inline-flex"
+            class="btn btn-primary press hidden lg:inline-flex"
             [routerLink]="home()"
             fragment="contact"
           >

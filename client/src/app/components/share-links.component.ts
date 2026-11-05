@@ -3,6 +3,7 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideCheck, lucideLink } from "@ng-icons/lucide";
 
 import type { Locale } from "../content/schema";
+import { COPIED_MS, copyText, type CopyResult } from "../services/copy-text";
 import { CHROME } from "../i18n/chrome";
 import { fmt } from "../i18n/interpolate";
 import { brandLinkedin, brandX } from "../icons/brand-icons";
@@ -23,8 +24,12 @@ import { brandLinkedin, brandX } from "../icons/brand-icons";
         {{ labels().share }}
       </span>
       <button type="button" [class]="control" (click)="copy()">
-        <ng-icon [name]="copied() ? 'lucideCheck' : 'lucideLink'" size="14" aria-hidden="true" />
-        <span>{{ copied() ? labels().copied : labels().copy }}</span>
+        <ng-icon
+          [name]="copied() === 'copied' ? 'lucideCheck' : 'lucideLink'"
+          size="14"
+          aria-hidden="true"
+        />
+        <span>{{ labels()[copied() ?? "copy"] }}</span>
       </button>
       @for (network of networks(); track network.name) {
         <a
@@ -38,7 +43,7 @@ import { brandLinkedin, brandX } from "../icons/brand-icons";
           <span aria-hidden="true">{{ network.name }}</span>
         </a>
       }
-      <span class="sr-only" aria-live="polite">{{ copied() ? labels().copied : "" }}</span>
+      <span class="sr-only" aria-live="polite">{{ labels()[copied() ?? "idle"] }}</span>
     </div>
   `,
 })
@@ -47,11 +52,10 @@ export class ShareLinksComponent {
   readonly title = input.required<string>();
   readonly locale = input.required<Locale>();
 
-  protected readonly copied = signal(false);
+  protected readonly copied = signal<CopyResult | null>(null);
   protected readonly labels = computed(() => CHROME[this.locale()].share);
 
-  protected readonly control =
-    "press inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-transparent px-3 font-mono text-meta text-foreground hover:border-accent-orange/50";
+  protected readonly control = "control press text-foreground";
 
   protected readonly networks = computed(() => {
     const url = encodeURIComponent(this.url());
@@ -74,12 +78,7 @@ export class ShareLinksComponent {
   });
 
   protected async copy(): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(this.url());
-      this.copied.set(true);
-      setTimeout(() => this.copied.set(false), 2500);
-    } catch {
-      // Clipboard access denied (an insecure context, a policy): the URL bar still works.
-    }
+    this.copied.set(await copyText(this.url()));
+    setTimeout(() => this.copied.set(null), COPIED_MS);
   }
 }

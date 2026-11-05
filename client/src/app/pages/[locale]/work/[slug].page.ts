@@ -16,6 +16,7 @@ import { BreadcrumbComponent } from "../../../components/breadcrumb.component";
 import { GalleryComponent } from "../../../components/gallery.component";
 import { NotFoundComponent } from "../../../components/not-found.component";
 import { PictureComponent } from "../../../components/picture.component";
+import { MetricsComponent } from "../../../components/metrics.component";
 import { ProseBodyComponent } from "../../../components/prose-body.component";
 import { TocComponent, type TocItem } from "../../../components/toc.component";
 import { DocStore } from "../../../content/doc.store";
@@ -167,6 +168,7 @@ const AID_LABELS = {
     NgIcon,
     NotFoundComponent,
     PictureComponent,
+    MetricsComponent,
     ProseBodyComponent,
     RouterLink,
     TocComponent,
@@ -211,10 +213,8 @@ const AID_LABELS = {
                   }
                   @if (aids().expert) {
                     <!-- Open when it is the only summary. -->
-                    <details [attr.open]="aids().plain ? null : ''">
-                      <summary
-                        class="w-fit cursor-pointer font-mono text-meta text-muted-foreground"
-                      >
+                    <details class="disclosure" [attr.open]="aids().plain ? null : ''">
+                      <summary class="press w-fit">
                         {{ aids().labels.inDepth }}
                       </summary>
                       <p class="m-0 mt-2 text-pretty text-muted-foreground">{{ aids().expert }}</p>
@@ -232,18 +232,14 @@ const AID_LABELS = {
                 class="surface-card flex flex-col gap-5 p-6 lg:col-span-5 lg:self-end xl:col-span-4 xl:col-start-9"
               >
                 @if (facts().length || s.project.stack.length) {
-                  <dl
-                    class="m-0 grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-6 gap-y-3"
-                  >
+                  <dl class="facts">
                     @for (fact of facts(); track fact.label) {
-                      <dt class="eyebrow text-muted-foreground">{{ fact.label }}</dt>
-                      <dd class="m-0 text-sm text-foreground">{{ fact.value }}</dd>
+                      <dt>{{ fact.label }}</dt>
+                      <dd class="text-small leading-6 text-foreground">{{ fact.value }}</dd>
                     }
                     @if (s.project.stack.length) {
-                      <dt class="eyebrow text-muted-foreground">
-                        {{ lang.t().projectCard.techStackAriaLabel }}
-                      </dt>
-                      <dd class="m-0">
+                      <dt>{{ lang.t().projectCard.techStackAriaLabel }}</dt>
+                      <dd>
                         <ul class="m-0 flex list-none flex-wrap gap-1.5 p-0" role="list">
                           @for (tech of s.project.stack; track tech) {
                             <li class="chip">{{ tech }}</li>
@@ -261,7 +257,7 @@ const AID_LABELS = {
                     @for (link of links(); track link.href) {
                       <li>
                         <a
-                          class="press inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 font-mono text-meta text-foreground hover:border-border-strong"
+                          class="control press text-foreground"
                           [href]="link.href"
                           target="_blank"
                           rel="noreferrer noopener"
@@ -280,23 +276,7 @@ const AID_LABELS = {
           @if (s.project.metrics.length) {
             <section>
               <h2 class="sr-only">{{ lang.t().caseStudy.metrics }}</h2>
-              <dl
-                class="m-0 grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-[repeat(auto-fit,minmax(11rem,1fr))]"
-              >
-                @for (metric of s.project.metrics; track $index) {
-                  <div class="reveal flex flex-col gap-1.5 border-t-2 border-signal pt-4">
-                    <dt class="order-2 text-sm text-muted-foreground">{{ metric.label }}</dt>
-                    <dd class="order-1 m-0 text-metric tabular-nums text-foreground">
-                      {{ metric.value }}
-                    </dd>
-                    @if (metric.context) {
-                      <dd class="order-3 m-0 font-mono text-meta text-muted-foreground">
-                        {{ metric.context }}
-                      </dd>
-                    }
-                  </div>
-                }
-              </dl>
+              <app-metrics [metrics]="s.project.metrics" />
             </section>
           }
 
@@ -341,12 +321,9 @@ const AID_LABELS = {
               @if (s.project.outcomes.length) {
                 <section class="flex flex-col gap-4">
                   <h2 class="case-h" [id]="ids().outcomes">{{ labels().outcomes }}</h2>
-                  <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list">
+                  <ul class="list-trace text-muted-foreground" role="list">
                     @for (outcome of s.project.outcomes; track $index) {
-                      <li class="flex items-baseline gap-3 leading-relaxed text-muted-foreground">
-                        <span class="text-accent-orange" aria-hidden="true">▸</span>
-                        <span>{{ outcome }}</span>
-                      </li>
+                      <li>{{ outcome }}</li>
                     }
                   </ul>
                 </section>
@@ -427,17 +404,13 @@ const AID_LABELS = {
               {{ lang.t().caseStudy.ctaBody }}
             </p>
             <div class="mt-2 flex flex-wrap gap-3">
-              <a
-                class="press inline-flex min-h-11 items-center gap-2 rounded-lg bg-signal px-5 py-2 font-mono text-meta font-medium text-signal-foreground hover:bg-signal-hover"
-                [routerLink]="['/', lang.lang()]"
-                fragment="contact"
-              >
+              <a class="btn btn-solid press" [routerLink]="['/', lang.lang()]" fragment="contact">
                 {{ lang.t().caseStudy.ctaButton }}
                 <ng-icon name="lucideArrowRight" size="16" aria-hidden="true" />
               </a>
               <button
                 type="button"
-                class="press inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-border px-5 py-2 text-left font-mono text-meta text-foreground hover:border-border-strong"
+                class="btn btn-secondary press text-left"
                 (click)="askAbout(s.project.name)"
               >
                 <span class="text-accent-orange" aria-hidden="true">&gt;_</span>

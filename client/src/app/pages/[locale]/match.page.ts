@@ -80,12 +80,7 @@ export const routeMeta: RouteMeta = {
         <legend class="eyebrow mb-3 p-0 text-muted-foreground">{{ copy().legend }}</legend>
         @for (k of kinds; track k) {
           <label class="flex min-h-6 cursor-pointer items-center gap-2">
-            <input
-              type="radio"
-              name="match-kind"
-              [checked]="k === kind()"
-              (change)="kind.set(k)"
-            />
+            <input type="radio" name="match-kind" [checked]="k === kind()" (change)="kind.set(k)" />
             {{ copy().kinds[k] }}
           </label>
         }

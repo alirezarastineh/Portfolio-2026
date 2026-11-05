@@ -7,7 +7,6 @@
   --color-faint-foreground: var(--faint-foreground);
   --color-signal: var(--signal);
   --color-signal-foreground: var(--signal-foreground);
-  --color-signal-hover: var(--signal-hover);
 }
 
 /*

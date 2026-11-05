@@ -32,7 +32,6 @@ interface Entry {
   /** Employment type and location, as one line. */
   details: string;
   /** Still going: a role or a degree without an end (a certification's open end means it does not expire). */
-  live: boolean;
   /** The highlights always shown; the rest fold behind "+N more". */
   highlights: string[];
   more: string[];
@@ -87,12 +86,11 @@ const HIGHLIGHTS = 3;
               <ol class="m-0 flex list-none flex-col border-l border-border p-0" role="list">
                 @for (entry of group.entries; track entry.experience.id) {
                   <li class="reveal relative pb-10 pl-8 last:pb-0">
-                    <!-- Filled while ongoing; a role still held pulses (motion.css). -->
+                    <!-- Filled while ongoing. -->
                     <span
                       class="absolute -left-1.25 top-1.5 size-2.25 rounded-full border border-signal"
                       [class.bg-signal]="!entry.experience.period.end"
                       [class.bg-background]="!!entry.experience.period.end"
-                      [class.pulse-ring]="entry.live"
                       aria-hidden="true"
                     ></span>
 
@@ -163,40 +161,20 @@ const HIGHLIGHTS = 3;
                             </p>
                           }
                           @if (entry.highlights.length) {
-                            <ul class="m-0 flex list-none flex-col gap-1.5 p-0" role="list">
+                            <ul class="list-trace text-sm text-foreground/90" role="list">
                               @for (highlight of entry.highlights; track $index) {
-                                <li
-                                  class="flex items-baseline gap-2 text-sm leading-relaxed text-foreground/90"
-                                >
-                                  <span class="text-accent-orange" aria-hidden="true">▸</span>
-                                  <span>{{ highlight }}</span>
-                                </li>
+                                <li>{{ highlight }}</li>
                               }
                             </ul>
                           }
                           @if (entry.more.length) {
-                            <details class="card-details group/details">
-                              <summary
-                                class="flex w-fit cursor-pointer list-none items-center gap-2 font-mono text-meta text-muted-foreground transition-colors duration-(--dur-2) hover:text-foreground [&::-webkit-details-marker]:hidden"
-                              >
-                                <span
-                                  class="inline-block text-accent-orange motion-safe:transition-transform motion-safe:duration-(--dur-3) group-open/details:rotate-45"
-                                  aria-hidden="true"
-                                  >+</span
-                                >
+                            <details class="disclosure">
+                              <summary class="press w-fit">
                                 {{ moreLabel(entry.more.length) }}
                               </summary>
-                              <ul
-                                class="m-0 flex list-none flex-col gap-1.5 p-0 pt-1.5"
-                                role="list"
-                              >
+                              <ul class="list-trace pt-1.5 text-sm text-foreground/90" role="list">
                                 @for (highlight of entry.more; track $index) {
-                                  <li
-                                    class="flex items-baseline gap-2 text-sm leading-relaxed text-foreground/90"
-                                  >
-                                    <span class="text-accent-orange" aria-hidden="true">▸</span>
-                                    <span>{{ highlight }}</span>
-                                  </li>
+                                  <li>{{ highlight }}</li>
                                 }
                               </ul>
                             </details>
@@ -284,7 +262,6 @@ export class ExperienceSectionComponent {
           : issued,
         duration: "",
         details: experience.location,
-        live: false,
         ...folded,
       };
     }
@@ -296,7 +273,6 @@ export class ExperienceSectionComponent {
       details: [this.employmentLabel(experience.employmentType), experience.location]
         .filter(Boolean)
         .join(" · "),
-      live: period.end === null,
       ...folded,
     };
   }

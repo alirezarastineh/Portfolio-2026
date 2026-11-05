@@ -362,37 +362,14 @@
   border-color: var(--signal);
 }
 
-/*
- * A case study's narrative (.case-flow, pages/[locale]/work/[slug].page.ts).
- * Its fixed sections' headings (.case-h) and the body's top-level ones share
- * one look and one count: `01`, `02`… The number is decoration; `/ ""` keeps it
- * out of the heading's accessible name, and a browser without that syntax
- * shows the heading without it.
- */
-.case-flow {
-  counter-reset: case-h;
-}
-
+/* A case study's fixed sections' headings (.case-h) and its body's top-level ones share one look. */
 .case-h,
 .case-flow app-prose-body > .prose-body > h2 {
-  counter-increment: case-h;
   font-size: var(--text-h3);
   font-weight: var(--text-h3--font-weight);
   line-height: var(--text-h3--line-height);
   letter-spacing: var(--text-h3--letter-spacing);
   color: var(--color-foreground);
-}
-
-.case-h::before,
-.case-flow app-prose-body > .prose-body > h2::before {
-  content: counter(case-h, decimal-leading-zero) / "";
-  display: inline-block;
-  min-width: 2ch;
-  margin-right: 0.75rem;
-  font: 500 var(--text-label) / 1 var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: normal;
-  color: var(--color-accent-orange);
 }
 
 .prose-body pre.code-block .line {

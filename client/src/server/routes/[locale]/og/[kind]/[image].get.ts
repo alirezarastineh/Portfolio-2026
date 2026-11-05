@@ -69,7 +69,7 @@ export default defineEventHandler(async (event) => {
   }
 });
 
-/** Geist, from src/server/assets/og (bundled into the server as Nitro server assets). */
+/** The card's fonts, from src/server/assets/og (bundled into the server as Nitro server assets). */
 function loadFonts(): Promise<OgFonts> {
   fonts ??= (async () => {
     const assets = useStorage("assets:server");

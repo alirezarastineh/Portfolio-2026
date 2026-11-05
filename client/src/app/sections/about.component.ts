@@ -64,21 +64,15 @@ import { LanguageService } from "../services/language.service";
             @if (bio()) {
               <p class="m-0 text-pretty leading-relaxed text-muted-foreground">{{ bio() }}</p>
             }
-            <dl class="m-0 flex flex-col gap-4 border-t border-border pt-5">
+            <dl class="facts border-t border-border pt-5">
               @for (fact of facts(); track fact.label) {
-                <div class="flex flex-col gap-1">
-                  <dt class="eyebrow text-muted-foreground">{{ fact.label }}</dt>
-                  <dd class="m-0 flex items-center gap-2 text-foreground">
-                    @if (fact.dot) {
-                      <span
-                        class="size-2 shrink-0 rounded-full"
-                        [class]="fact.dot"
-                        aria-hidden="true"
-                      ></span>
-                    }
-                    {{ fact.value }}
-                  </dd>
-                </div>
+                <dt>{{ fact.label }}</dt>
+                <dd class="flex items-center gap-2 text-foreground">
+                  @if (fact.dot) {
+                    <span class="status-dot" [class]="fact.dot" aria-hidden="true"></span>
+                  }
+                  {{ fact.value }}
+                </dd>
               }
             </dl>
           </div>

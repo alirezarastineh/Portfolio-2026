@@ -19,7 +19,6 @@ import { FormBuilder, ReactiveFormsModule, Validators } from "@angular/forms";
 import { RouterLink } from "@angular/router";
 import { z } from "zod";
 
-import { MagneticButtonComponent } from "../components/magnetic-button.component";
 import { SectionHeadingComponent } from "../components/section-heading.component";
 import { AVAILABILITY_DOT, availabilityLabel } from "../content/availability";
 import type { Locale } from "../content/locale";
@@ -29,6 +28,7 @@ import { CHROME } from "../i18n/chrome";
 import { fmt } from "../i18n/interpolate";
 import { ClockService } from "../services/clock.service";
 import { LanguageService } from "../services/language.service";
+import { COPIED_MS, copyText, type CopyResult } from "../services/copy-text";
 import { ContactService, type AskConversation } from "../services/contact.service";
 import { TURNSTILE_SITE_KEY, turnstileToken } from "../services/turnstile";
 
@@ -60,16 +60,6 @@ const MATCH_LINE: Record<Locale, { lead: string; link: string }> = {
 const TOOL_DESCRIPTION =
   "Prepares a message to Alireza Rastineh through his portfolio's contact form: the sender's name, an email address for his reply, and the message (10 to 4,000 characters). The agent only fills the form; the user reviews it and clicks Send, which runs a bot check.";
 
-/** How long the copy button says "Copied". */
-const COPIED_MS = 1500;
-
-/**
- * An underlined "IDE" field. The line is its only boundary, so it keeps 3:1
- * against the page (`input-line`, WCAG 1.4.11). Focus draws a 2px orange line
- * over it from the left (`field-line` on the wrapper, motion.css).
- */
-const fieldClass =
-  "block w-full border-0 border-b border-input-line bg-transparent px-0 py-2 text-base text-foreground transition-colors duration-200 placeholder:text-muted-foreground focus-visible:outline-none aria-[invalid=true]:border-destructive";
 const labelClass = "eyebrow text-muted-foreground";
 const errorClass = "m-0 font-mono text-meta text-destructive";
 
@@ -81,7 +71,7 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
 @Component({
   selector: "app-contact-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MagneticButtonComponent, ReactiveFormsModule, RouterLink, SectionHeadingComponent],
+  imports: [ReactiveFormsModule, RouterLink, SectionHeadingComponent],
   host: {
     class: "block",
   },
@@ -115,17 +105,13 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                   >{{ contactEmail() }}</a
                 >
                 <!-- Its name starts with the visible word. -->
-                <button
-                  type="button"
-                  class="kbd press min-h-6 cursor-pointer hover:border-border-strong hover:text-foreground"
-                  (click)="copyEmail()"
-                >
-                  {{ copied() ? copyLabels().copied + " ✓" : copyLabels().copy
+                <button type="button" class="control press" (click)="copyEmail()">
+                  {{ copyLabels()[copied() ?? "copy"]
                   }}<span class="sr-only"> {{ chrome().copyWhat }}</span>
                 </button>
                 <!-- Not a second role=status: that one is the form's. -->
                 <span class="sr-only" aria-live="polite">{{
-                  copied() ? copyLabels().copied : ""
+                  copyLabels()[copied() ?? "idle"]
                 }}</span>
               </div>
             </div>
@@ -161,11 +147,7 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
               class="flex flex-col gap-2 border-t border-border pt-6 font-mono text-meta text-muted-foreground"
             >
               <p class="m-0 flex items-center gap-2">
-                <span
-                  class="size-2 shrink-0 rounded-full"
-                  [class]="dot()"
-                  aria-hidden="true"
-                ></span>
+                <span class="status-dot" [class]="dot()" aria-hidden="true"></span>
                 <span class="text-foreground">{{ availability() }}</span>
               </p>
               <!-- The zone from the server; the time in the browser, in space kept for it. -->
@@ -238,7 +220,7 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                       formControlName="name"
                       [attr.name]="ready() ? 'name' : null"
                       [placeholder]="lang.t().contact.placeholderName"
-                      [class]="fieldClass"
+                      class="field"
                       [attr.aria-invalid]="showError('name') ? 'true' : null"
                       [attr.aria-describedby]="showError('name') ? 'contact-name-error' : null"
                     />
@@ -263,7 +245,7 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                       formControlName="email"
                       [attr.name]="ready() ? 'email' : null"
                       [placeholder]="lang.t().contact.placeholderEmail"
-                      [class]="fieldClass"
+                      class="field"
                       [attr.aria-invalid]="showError('email') ? 'true' : null"
                       [attr.aria-describedby]="showError('email') ? 'contact-email-error' : null"
                     />
@@ -287,7 +269,7 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                       formControlName="message"
                       [attr.name]="ready() ? 'message' : null"
                       [placeholder]="lang.t().contact.placeholderMessage"
-                      [class]="fieldClass + ' min-h-32 resize-y leading-relaxed'"
+                      class="field min-h-32 resize-y leading-relaxed"
                       [attr.aria-invalid]="showError('message') ? 'true' : null"
                       [attr.aria-describedby]="
                         showError('message') ? 'contact-message-error' : null
@@ -341,16 +323,16 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                 }
 
                 <div class="flex items-center gap-3">
-                  <app-magnetic-button
-                    variant="primary"
-                    buttonType="submit"
+                  <button
+                    type="submit"
+                    class="btn btn-solid press"
                     [disabled]="state() === 'submitting'"
-                    [busy]="state() === 'submitting'"
+                    [attr.aria-busy]="state() === 'submitting' ? 'true' : null"
                   >
                     {{
                       state() === "submitting" ? lang.t().contact.sending : lang.t().contact.submit
                     }}
-                  </app-magnetic-button>
+                  </button>
                 </div>
               </form>
             }
@@ -381,7 +363,6 @@ export class ContactSectionComponent {
    */
   protected readonly ready = signal(false);
 
-  protected readonly fieldClass = fieldClass;
   protected readonly labelClass = labelClass;
   protected readonly errorClass = errorClass;
   protected readonly toolDescription = TOOL_DESCRIPTION;
@@ -392,7 +373,7 @@ export class ContactSectionComponent {
   readonly contactEmail = computed(() => this.lang.content().identity.contactEmail);
 
   /** True for a moment after the email address was copied. */
-  protected readonly copied = signal(false);
+  protected readonly copied = signal<CopyResult | null>(null);
   private copiedTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** Profiles by their handles; the email is shown on its own above them. */
@@ -486,15 +467,10 @@ export class ContactSectionComponent {
     return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.value : "";
   }
 
-  protected copyEmail(): void {
-    void navigator.clipboard?.writeText(this.contactEmail()).then(
-      () => {
-        clearTimeout(this.copiedTimer);
-        this.copied.set(true);
-        this.copiedTimer = setTimeout(() => this.copied.set(false), COPIED_MS);
-      },
-      () => undefined,
-    );
+  protected async copyEmail(): Promise<void> {
+    this.copied.set(await copyText(this.contactEmail()));
+    clearTimeout(this.copiedTimer);
+    this.copiedTimer = setTimeout(() => this.copied.set(null), COPIED_MS);
   }
 
   /**

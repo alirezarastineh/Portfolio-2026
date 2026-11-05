@@ -10,7 +10,7 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideArrowDown, lucideDownload } from "@ng-icons/lucide";
 
 import { AskStageComponent } from "../ask/ask-stage.component";
-import { MagneticButtonComponent } from "../components/magnetic-button.component";
+import { MetricsComponent } from "../components/metrics.component";
 import { PictureComponent } from "../components/picture.component";
 import { AVAILABILITY_DOT, availabilityLabel } from "../content/availability";
 import { regionName, timeZoneLabel } from "../content/place";
@@ -34,13 +34,7 @@ const MAX_ORGS = 5;
 @Component({
   selector: "app-hero-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    AskStageComponent,
-    GridCanvasComponent,
-    MagneticButtonComponent,
-    NgIcon,
-    PictureComponent,
-  ],
+  imports: [AskStageComponent, GridCanvasComponent, MetricsComponent, NgIcon, PictureComponent],
   viewProviders: [provideIcons({ lucideArrowDown, lucideDownload })],
   host: {
     class: "block",
@@ -68,12 +62,7 @@ const MAX_ORGS = 5;
             <p
               class="hero-rise m-0 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-meta text-muted-foreground"
             >
-              <span
-                class="relative size-2 shrink-0 rounded-full"
-                [class]="dot()"
-                [class.pulse-ring]="identity().availability === 'open'"
-                aria-hidden="true"
-              ></span>
+              <span class="status-dot" [class]="dot()" aria-hidden="true"></span>
               <span class="text-foreground">{{ availability() }}</span>
               @for (part of whereabouts(); track part) {
                 <span aria-hidden="true">·</span>
@@ -127,21 +116,19 @@ const MAX_ORGS = 5;
             </p>
 
             <div class="hero-rise flex flex-wrap items-center gap-x-6 gap-y-3 [--i:3]">
-              <app-magnetic-button
-                variant="primary"
-                [href]="lang.homeHref(identity().primaryCtaHref)"
+              <a
+                class="btn btn-solid press"
+                [href]="primaryHref()"
+                [attr.target]="primaryExternal() ? '_blank' : null"
+                [attr.rel]="primaryExternal() ? 'noreferrer noopener' : null"
               >
                 {{ lang.t().profile.primaryCta }}
                 <ng-icon name="lucideArrowDown" size="16" aria-hidden="true" />
-              </app-magnetic-button>
+              </a>
               @if (identity().resume) {
                 <!-- /en/resume.pdf redirects to this language's CV, saved as
                      Alireza-Rastineh-CV-en.pdf. Hidden until one is set. -->
-                <a
-                  class="link-underline inline-flex min-h-11 items-center gap-1.5 font-mono text-meta"
-                  [href]="'/' + lang.lang() + '/resume.pdf'"
-                  download
-                >
+                <a class="btn btn-quiet press" [href]="'/' + lang.lang() + '/resume.pdf'" download>
                   {{ lang.t().hero.downloadCv }}
                   <ng-icon name="lucideDownload" size="14" aria-hidden="true" />
                 </a>
@@ -182,20 +169,9 @@ const MAX_ORGS = 5;
               </div>
             }
             @if (proofProject(); as project) {
-              <div class="flex flex-col gap-3">
+              <div class="flex min-w-0 grow flex-col gap-3">
                 <p class="eyebrow m-0 text-muted-foreground">{{ project.name }}</p>
-                <dl class="m-0 grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
-                  @for (metric of metrics(); track metric.label) {
-                    <div class="flex flex-col gap-1">
-                      <dt class="order-2 font-mono text-meta text-muted-foreground">
-                        {{ metric.label }}
-                      </dt>
-                      <dd class="order-1 m-0 text-metric tabular-nums text-foreground">
-                        {{ metric.value }}
-                      </dd>
-                    </div>
-                  }
-                </dl>
+                <app-metrics [metrics]="metrics()" />
               </div>
             }
           </div>
@@ -211,6 +187,11 @@ export class HeroSectionComponent {
   protected readonly grid = viewChild.required(GridCanvasComponent);
 
   protected readonly dot = computed(() => AVAILABILITY_DOT[this.identity().availability]);
+
+  protected readonly primaryHref = computed(() =>
+    this.lang.homeHref(this.identity().primaryCtaHref),
+  );
+  protected readonly primaryExternal = computed(() => /^https?:/i.test(this.primaryHref()));
 
   protected readonly availability = computed(() =>
     availabilityLabel(this.lang.t().hero, this.identity().availability),

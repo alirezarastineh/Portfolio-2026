@@ -29,13 +29,13 @@
   /* Data and the assistant's trace (fonts.css). */
   --font-data: "B612", "B612 Fallback", Arial, sans-serif;
 
-  --radius: 0.625rem;
+  --radius: 0.25rem;
 
   /* One container and one left edge (styles/primitives.css). */
-  --container: 80rem;
+  --container: 90rem;
   --gutter: clamp(1.25rem, 0.75rem + 2.5vw, 3rem);
   --col-gap: clamp(1rem, 0.5rem + 1.5vw, 2rem);
-  --section-y: clamp(5rem, 3.5rem + 6vw, 9rem);
+  --section-y: clamp(4rem, 3rem + 4vw, 7rem);
 
   /* What stacks over what. Modal dialogs use the top layer. */
   --z-sticky: 20;

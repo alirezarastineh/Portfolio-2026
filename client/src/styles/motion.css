@@ -41,17 +41,6 @@
   }
 }
 
-@keyframes pulse-ring {
-  from {
-    opacity: 0.5;
-    scale: 1;
-  }
-  to {
-    opacity: 0;
-    scale: 2.2;
-  }
-}
-
 @keyframes draw {
   from {
     scale: 0 1;
@@ -130,6 +119,7 @@
     color var(--dur-2) var(--ease-out),
     background-color var(--dur-2) var(--ease-out),
     border-color var(--dur-2) var(--ease-out),
+    text-decoration-color var(--dur-3) var(--ease-out),
     scale var(--dur-1) var(--ease-spring);
 }
 
@@ -154,16 +144,6 @@
   .menu-rise {
     animation: rise var(--dur-4) var(--ease-emph) both;
     animation-delay: calc(var(--i, 0) * 40ms);
-  }
-
-  /* A live status dot: a ring that grows from it and fades. */
-  .pulse-ring::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: inherit;
-    animation: pulse-ring 2s var(--ease-out) infinite;
   }
 
   /* The wordmark's `_` blinks three times after load, then rests. */
@@ -287,14 +267,14 @@
     }
   }
 
-  /* A card's details grow open where the browser can animate to `auto`;
+  /* A disclosure grows open where the browser can animate to `auto`;
      elsewhere they open at once. */
   @supports (interpolate-size: allow-keywords) {
-    .card-details {
+    .disclosure {
       interpolate-size: allow-keywords;
     }
 
-    .card-details::details-content {
+    .disclosure::details-content {
       block-size: 0;
       overflow-y: clip;
       transition:
@@ -302,7 +282,7 @@
         content-visibility var(--dur-4) allow-discrete;
     }
 
-    .card-details[open]::details-content {
+    .disclosure[open]::details-content {
       block-size: auto;
     }
   }

@@ -49,7 +49,7 @@ export interface ChromeLabels {
   };
   breadcrumb: string;
   gallery: { open: string; close: string; previous: string; next: string };
-  share: { share: string; copy: string; copied: string; on: string };
+  share: { share: string; copy: string; copied: string; failed: string; idle: ""; on: string };
   contact: {
     sendAnother: string;
     email: string;
@@ -94,7 +94,7 @@ export interface ChromeLabels {
     question: string;
   };
   /** A code block's copy button (components/prose-body.component.ts). */
-  code: { copy: string; copied: string };
+  code: { copy: string; copied: string; failed: string; idle: "" };
 }
 
 export const CHROME: Record<Locale, ChromeLabels> = {
@@ -137,7 +137,14 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       previous: "Previous image",
       next: "Next image",
     },
-    share: { share: "Share", copy: "Copy link", copied: "Link copied", on: "Share on {site}" },
+    share: {
+      share: "Share",
+      copy: "Copy link",
+      copied: "Link copied",
+      failed: "Couldn’t copy",
+      idle: "",
+      on: "Share on {site}",
+    },
     contact: {
       sendAnother: "Send another message",
       email: "Email",
@@ -170,7 +177,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       ask: "Ask the assistant about this post",
       question: "What is the post “{title}” about, in short?",
     },
-    code: { copy: "Copy", copied: "Copied" },
+    code: { copy: "Copy", copied: "Copied", failed: "Couldn’t copy", idle: "" },
   },
   de: {
     header: {
@@ -215,6 +222,8 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       share: "Teilen",
       copy: "Link kopieren",
       copied: "Link kopiert",
+      failed: "Nicht kopiert",
+      idle: "",
       on: "Auf {site} teilen",
     },
     contact: {
@@ -249,6 +258,6 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       ask: "Den Assistenten zu diesem Artikel fragen",
       question: "Worum geht es im Artikel „{title}“, kurz gesagt?",
     },
-    code: { copy: "Kopieren", copied: "Kopiert" },
+    code: { copy: "Kopieren", copied: "Kopiert", failed: "Nicht kopiert", idle: "" },
   },
 };

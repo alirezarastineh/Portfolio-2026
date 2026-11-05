@@ -155,7 +155,7 @@ test.describe("case study", () => {
     const frame = page.locator("main .code-frame");
     await expect(frame.locator(".code-tools")).toContainText("ts");
     await frame.getByRole("button", { name: "Copy" }).click();
-    await expect(frame.getByRole("button", { name: "Copied ✓" })).toBeVisible();
+    await expect(frame.getByRole("button", { name: "Copied" })).toBeVisible();
     if (readable) {
       expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
         'const answer = await retrieve("query");',
