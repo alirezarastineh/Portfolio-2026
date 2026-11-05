@@ -51,9 +51,9 @@ function content(): AppContent {
 function fonts(): OgFonts {
   const font = (file: string) => readFileSync(resolve(here, `../assets/og/${file}`));
   return {
-    regular: font("geist-latin-400-normal.woff"),
-    semibold: font("geist-latin-600-normal.woff"),
-    mono: font("geist-mono-latin-500-normal.woff"),
+    regular: font("instrument-sans-latin-400-normal.woff"),
+    semibold: font("instrument-sans-latin-600-normal.woff"),
+    data: font("b612-latin-400-normal.woff"),
   };
 }
 
@@ -70,10 +70,10 @@ describe("ogCardFor", () => {
     expect(card?.metrics.map((m) => m.value)).toEqual(["−42%", "3.1×", "99.95%"]);
   });
 
-  it("draws a post with its date, reading time and tags", () => {
+  it("draws a post with its date and reading time", () => {
     const card = ogCardFor(content(), "en", "writing", "shipping-rag");
     expect(card?.title).toBe("Shipping RAG to production");
-    expect(card?.meta).toBe("August 12, 2026 · 7 min read · #rag · #evals");
+    expect(card?.meta).toBe("August 12, 2026, 7 min read");
     expect(card?.metrics).toEqual([]);
   });
 

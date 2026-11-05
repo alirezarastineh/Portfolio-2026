@@ -26,25 +26,20 @@ function block(theme: Theme): string {
   return tokens.slice(start, tokens.indexOf("\n}", start));
 }
 
-/** A token as the copies write it: `#rrggbb`, or `rgba(r, g, b, a)` when it has an alpha. */
+/** A token as the copies write it. */
 function token(theme: Theme, name: string): string {
-  const match = new RegExp(
-    String.raw`--${name}:\s*(?:(#[0-9a-f]{6})|rgb\((\d+) (\d+) (\d+) / (\d+)%\));`,
-  ).exec(block(theme));
-  if (!match) throw new Error(`no colour for --${name} in the ${theme} theme`);
-  const [, hex, r, g, b, alpha] = match;
-  return hex ?? `rgba(${r}, ${g}, ${b}, ${Number(alpha) / 100})`;
+  const match = new RegExp(String.raw`--${name}:\s*(#[0-9a-f]{6});`).exec(block(theme));
+  if (!match?.[1]) throw new Error(`no colour for --${name} in the ${theme} theme`);
+  return match[1];
 }
 
 describe("the tokens' copies", () => {
   it("draw the social cards in the dark theme's colours", () => {
-    expect(OG_COLOR).toMatchObject({
+    expect(OG_COLOR).toEqual({
       background: token("dark", "background"),
-      card: token("dark", "card"),
       foreground: token("dark", "foreground"),
       mutedForeground: token("dark", "muted-foreground"),
-      borderStrong: token("dark", "border-strong"),
-      orange: token("dark", "signal"),
+      signal: token("dark", "signal"),
     });
   });
 

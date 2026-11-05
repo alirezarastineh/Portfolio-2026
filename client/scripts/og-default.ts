@@ -24,9 +24,9 @@ const content = appContentSchema.parse(
   JSON.parse(readFileSync(resolve(here, "../src/app/content/fallback.en.json"), "utf8")),
 );
 const png = await renderOgPng(ogSiteCard(content, "en"), {
-  regular: font("geist-latin-400-normal.woff"),
-  semibold: font("geist-latin-600-normal.woff"),
-  mono: font("geist-mono-latin-500-normal.woff"),
+  regular: font("instrument-sans-latin-400-normal.woff"),
+  semibold: font("instrument-sans-latin-600-normal.woff"),
+  data: font("b612-latin-400-normal.woff"),
 });
 
 const out = resolve(here, "../public/og.png");

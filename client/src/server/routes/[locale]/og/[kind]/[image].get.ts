@@ -79,9 +79,9 @@ function loadFonts(): Promise<OgFonts> {
       return Buffer.from(raw);
     };
     return {
-      regular: await read("geist-latin-400-normal.woff"),
-      semibold: await read("geist-latin-600-normal.woff"),
-      mono: await read("geist-mono-latin-500-normal.woff"),
+      regular: await read("instrument-sans-latin-400-normal.woff"),
+      semibold: await read("instrument-sans-latin-600-normal.woff"),
+      data: await read("b612-latin-400-normal.woff"),
     };
   })().catch((error: unknown) => {
     fonts = undefined;

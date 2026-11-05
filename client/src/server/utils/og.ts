@@ -20,7 +20,7 @@ export type OgKind = "work" | "writing";
 
 export interface OgCard {
   locale: Locale;
-  /** `// case study`-style label above the title. */
+  /** What this is, above the title, in sentence case. */
   eyebrow: string;
   title: string;
   summary: string;
@@ -28,7 +28,7 @@ export interface OgCard {
   metrics: { value: string; label: string }[];
   /** Date, reading time, tags (posts). */
   meta: string;
-  /** A terminal prompt instead of the facts (the site's own card): `~$ ask my portfolio`. */
+  /** The assistant's prompt instead of the facts (the site's own card). */
   prompt?: string;
   author: string;
   role: string;
@@ -38,7 +38,7 @@ export interface OgCard {
 export interface OgFonts {
   regular: Buffer;
   semibold: Buffer;
-  mono: Buffer;
+  data: Buffer;
 }
 
 /** The card for a case study or post, or null when there is none in this language. */
@@ -65,7 +65,7 @@ export function ogCardFor(
       title: project.name,
       summary: project.hook,
       metrics: project.metrics.slice(0, 3).map(({ value, label }) => ({ value, label })),
-      meta: project.stack.slice(0, 5).join(" · "),
+      meta: project.stack.slice(0, 5).join(", "),
     };
   }
 
@@ -77,11 +77,7 @@ export function ogCardFor(
     title: post.title,
     summary: post.excerpt,
     metrics: [],
-    meta: [
-      formatDay(post.publishedAt, locale),
-      fmt(t.writing.readingTime, { n: post.readingMinutes }),
-      ...post.tags.slice(0, 3).map((tag) => `#${tag}`),
-    ].join(" · "),
+    meta: `${formatDay(post.publishedAt, locale)}, ${fmt(t.writing.readingTime, { n: post.readingMinutes })}`,
   };
 }
 
@@ -110,7 +106,7 @@ export function ogSiteCard(content: AppContent, locale: Locale): OgCard {
  * (a cached card would otherwise keep the old look). Redraw public/og.png
  * then too: scripts/og-default.ts.
  */
-const OG_DESIGN = "2";
+const OG_DESIGN = "3";
 
 /** A content hash of the card: the cache key and ETag, new whenever the card would change. */
 export function ogCardKey(card: OgCard): string {
@@ -125,9 +121,9 @@ export async function renderOgPng(card: OgCard, fonts: OgFonts): Promise<Buffer>
   const svg = await satori(ogTree(card), {
     ...OG_SIZE,
     fonts: [
-      { name: "Geist", data: fonts.regular, weight: 400, style: "normal" },
-      { name: "Geist", data: fonts.semibold, weight: 600, style: "normal" },
-      { name: "Geist Mono", data: fonts.mono, weight: 500, style: "normal" },
+      { name: "Instrument Sans", data: fonts.regular, weight: 400, style: "normal" },
+      { name: "Instrument Sans", data: fonts.semibold, weight: 600, style: "normal" },
+      { name: "B612", data: fonts.data, weight: 400, style: "normal" },
     ] satisfies Font[],
   });
   return new Resvg(svg, { fitTo: { mode: "width", value: OG_SIZE.width } }).render().asPng();
@@ -139,19 +135,13 @@ export async function renderOgPng(card: OgCard, fonts: OgFonts): Promise<Buffer>
  */
 export const OG_COLOR = {
   background: "#000000",
-  card: "#0e0e10",
   foreground: "#ededee",
   mutedForeground: "#b4b4b9",
-  borderStrong: "rgba(255, 255, 255, 0.22)",
-  orange: "#ff4f00",
-  indigo: "#7472f4",
+  signal: "#ff4f00",
 } as const;
 
 const COLOR = OG_COLOR;
 const PAD = 64;
-
-/** The assistant's pipeline, as the hero's trace panel names its steps (app/visuals/trace.ts). */
-const TRACE_STEPS = ["query", "route", "retrieve", "generate", "cite", "answer"] as const;
 
 interface Node {
   type: string;
@@ -169,106 +159,34 @@ function text(style: Record<string, unknown>, value: string): Node {
   return { type: "div", props: { style: { display: "block", ...style }, children: value } };
 }
 
-function svg(type: string, props: Record<string, unknown>, ...children: Node[]): Node {
-  return { type, props: { ...props, children } };
-}
-
-/** The favicon's `>_` (public/favicon.svg) on a card-coloured tile. */
-function mark(): Node {
-  return el(
-    {
-      width: 56,
-      height: 56,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: 14,
-      border: `1px solid ${COLOR.borderStrong}`,
-      backgroundColor: COLOR.card,
-    },
-    svg(
-      "svg",
-      { width: 36, height: 36, viewBox: "8 8 48 48" },
-      svg("path", {
-        d: "M17 21 29 32 17 43",
-        fill: "none",
-        stroke: COLOR.orange,
-        strokeWidth: 6.5,
-        strokeLinecap: "round",
-        strokeLinejoin: "round",
-      }),
-      svg("path", {
-        d: "M34 44h13",
-        stroke: COLOR.foreground,
-        strokeWidth: 6.5,
-        strokeLinecap: "round",
-      }),
-    ),
-  );
-}
-
-/**
- * The trace motif: the hero's pipeline as one line of steps, each done
- * (indigo) up to the answer (orange). No timings: it is not a real trace.
- */
+/** The dot and the line: the site's one mark, running off the card. */
 function trace(): Node {
-  const last = TRACE_STEPS.length - 1;
   return el(
-    { alignItems: "center", gap: 10, fontFamily: "Geist Mono", fontSize: 16 },
-    ...TRACE_STEPS.flatMap((step, i) => [
-      ...(i > 0 ? [el({ width: 14, height: 1, backgroundColor: COLOR.borderStrong })] : []),
-      el(
-        { alignItems: "center", gap: 8 },
-        el({
-          width: 8,
-          height: 8,
-          borderRadius: 4,
-          backgroundColor: i === last ? COLOR.orange : COLOR.indigo,
-        }),
-        text({ color: i === last ? COLOR.foreground : COLOR.mutedForeground }, step),
-      ),
-    ]),
+    { alignItems: "center", marginRight: -PAD },
+    el({ width: 16, height: 16, backgroundColor: COLOR.signal }),
+    el({ flexGrow: 1, height: 3, backgroundColor: COLOR.signal }),
   );
 }
 
-/**
- * The hero's dot grid, full-bleed and fading out towards the text. The stops
- * are in percent of the tile's gradient: Satori measures pixel stops against
- * the whole card, which shrinks the dots to nothing.
- */
-function dotGrid(): Node {
-  return el({
-    position: "absolute",
-    left: 0,
-    top: 0,
-    ...OG_SIZE,
-    backgroundImage: `radial-gradient(circle at 50% 50%, ${COLOR.indigo} 0%, ${COLOR.indigo} 9%, transparent 11%)`,
-    backgroundSize: "24px 24px",
-    opacity: 0.7,
-    maskImage: "radial-gradient(ellipse 80% 110% at 100% 0%, #000 0%, transparent 100%)",
-  });
-}
-
-/** The hero's ask bar at rest: the prompt, the question, the caret. */
+/** The hero's console at rest: the prompt and the question. */
 function promptLine(question: string): Node {
   return el(
-    { alignItems: "center", gap: 14, fontFamily: "Geist Mono", fontSize: 26 },
-    text({ color: COLOR.orange }, "~$"),
+    { alignItems: "center", gap: 14, fontSize: 26 },
+    text({ color: COLOR.signal }, ">"),
     text({ color: COLOR.foreground }, question),
-    el({ width: 14, height: 28, backgroundColor: COLOR.orange }),
   );
 }
 
 /**
  * What the footer leads with: the prompt (the site's card), the metrics as
- * the case study's band shows them (the number under an orange rule), or the
- * post's date line.
+ * the case study's band shows them, or the post's date line.
  */
 function facts(card: OgCard): Node {
   if (card.prompt) return promptLine(card.prompt);
   if (card.metrics.length === 0) {
     return text(
       {
-        fontFamily: "Geist Mono",
+        fontFamily: "B612",
         fontSize: 21,
         color: COLOR.mutedForeground,
         maxWidth: 700,
@@ -281,16 +199,16 @@ function facts(card: OgCard): Node {
     { gap: 36, flexShrink: 1 },
     ...card.metrics.map((metric) =>
       el(
-        {
-          flexDirection: "column",
-          gap: 6,
-          width: 206,
-          paddingTop: 14,
-          borderTop: `2px solid ${COLOR.orange}`,
-        },
+        { flexDirection: "column", gap: 6, width: 206 },
         text({ fontSize: 46, fontWeight: 600, lineHeight: 1, letterSpacing: -1.4 }, metric.value),
         text(
-          { fontSize: 19, lineHeight: 1.3, color: COLOR.mutedForeground, lineClamp: 2 },
+          {
+            fontFamily: "B612",
+            fontSize: 18,
+            lineHeight: 1.3,
+            color: COLOR.mutedForeground,
+            lineClamp: 2,
+          },
           metric.label,
         ),
       ),
@@ -313,28 +231,15 @@ function titleStyle(title: string): { fontSize: number; lines: number; summaryLi
 export function ogTree(card: OgCard): Node {
   const title = titleStyle(card.title);
 
-  const header = el(
-    { alignItems: "center", justifyContent: "space-between", gap: 32 },
-    el(
-      { alignItems: "center", gap: 18 },
-      mark(),
-      text({ fontFamily: "Geist Mono", fontSize: 22, color: COLOR.mutedForeground }, card.site),
-    ),
-    trace(),
+  const header = text(
+    { fontFamily: "B612", fontSize: 22, color: COLOR.mutedForeground },
+    card.site,
   );
 
   const body = el(
-    { flexDirection: "column", gap: 20, maxWidth: 1040 },
+    { flexDirection: "column", justifyContent: "center", flexGrow: 1, gap: 20, maxWidth: 1040 },
     text(
-      {
-        fontFamily: "Geist Mono",
-        fontSize: 19,
-        fontWeight: 500,
-        letterSpacing: 2.6,
-        textTransform: "uppercase",
-        color: COLOR.mutedForeground,
-        lineClamp: 1,
-      },
+      { fontFamily: "B612", fontSize: 21, color: COLOR.mutedForeground, lineClamp: 1 },
       card.eyebrow,
     ),
     text(
@@ -342,7 +247,7 @@ export function ogTree(card: OgCard): Node {
         fontSize: title.fontSize,
         fontWeight: 600,
         lineHeight: 1.04,
-        letterSpacing: -0.035 * title.fontSize,
+        letterSpacing: -0.03 * title.fontSize,
         color: COLOR.foreground,
         lineClamp: title.lines,
       },
@@ -369,7 +274,7 @@ export function ogTree(card: OgCard): Node {
         el(
           { flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0, maxWidth: 360 },
           text({ fontSize: 26, fontWeight: 600, color: COLOR.foreground }, card.author),
-          text({ fontFamily: "Geist Mono", fontSize: 17, color: COLOR.mutedForeground }, card.role),
+          text({ fontFamily: "B612", fontSize: 17, color: COLOR.mutedForeground }, card.role),
         ),
       ]
     : [];
@@ -383,18 +288,17 @@ export function ogTree(card: OgCard): Node {
   return el(
     {
       ...OG_SIZE,
-      position: "relative",
+      boxSizing: "border-box",
       flexDirection: "column",
-      justifyContent: "space-between",
       gap: 24,
       padding: PAD,
-      fontFamily: "Geist",
+      fontFamily: "Instrument Sans",
       color: COLOR.foreground,
       backgroundColor: COLOR.background,
     },
-    dotGrid(),
     header,
     body,
+    trace(),
     footer,
   );
 }
