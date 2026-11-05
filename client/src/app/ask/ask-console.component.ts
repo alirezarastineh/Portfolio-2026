@@ -212,7 +212,7 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
         #input
         [id]="inputId"
         rows="1"
-        class="field"
+        class="prompt-input"
         [attr.placeholder]="lang.t().ask.placeholder"
         [attr.aria-describedby]="nearLimit() ? hintId + ' ' + countId : hintId"
         autocomplete="off"
@@ -246,7 +246,7 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
         <button type="button" class="press" (click)="send(command)">{{ command }}</button>
       }
     </div>
-    <p [id]="hintId" class="disclosure">{{ lang.t().ask.disclosure }}</p>
+    <p [id]="hintId" class="ai-note">{{ lang.t().ask.disclosure }}</p>
 
     <div class="sr-only" aria-live="polite" aria-atomic="true">{{ store.announcement() }}</div>
     <!-- Where Cloudflare's check shows when it asks the visitor (store: readyToAsk). -->
@@ -420,7 +420,7 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
       padding-block: 0.5rem;
       line-height: 1.5;
     }
-    .field {
+    .prompt-input {
       display: block;
       flex: 1;
       min-width: 0;
@@ -437,7 +437,7 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
       resize: none;
       overflow-y: hidden;
     }
-    .field::placeholder {
+    .prompt-input::placeholder {
       color: var(--muted-foreground);
       opacity: 1;
     }
@@ -503,7 +503,7 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
     .commands button:hover {
       color: var(--foreground);
     }
-    .disclosure {
+    .ai-note {
       flex: none;
       margin: 0.125rem 1rem 0.875rem;
       color: var(--muted-foreground);

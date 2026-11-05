@@ -100,7 +100,7 @@ interface AskEntryState {
           <input
             #field
             type="text"
-            class="field"
+            class="prompt-input"
             [id]="inputId"
             [attr.placeholder]="lang.t().ask.placeholder"
             aria-describedby="ask-bar-disclosure"
@@ -122,7 +122,7 @@ interface AskEntryState {
           }
         </div>
         <!-- Right under the field, so it is read before the first question. -->
-        <p id="ask-bar-disclosure" class="disclosure">{{ lang.t().ask.disclosure }}</p>
+        <p id="ask-bar-disclosure" class="ai-note">{{ lang.t().ask.disclosure }}</p>
       }
     </ng-template>
 
@@ -264,7 +264,7 @@ interface AskEntryState {
       padding-block: 0.5rem;
       line-height: 1.5;
     }
-    .field {
+    .prompt-input {
       display: block;
       flex: 1;
       min-width: 0;
@@ -279,7 +279,7 @@ interface AskEntryState {
       font-size: 1rem;
       line-height: 1.5;
     }
-    .field::placeholder {
+    .prompt-input::placeholder {
       color: var(--muted-foreground);
       opacity: 1;
     }
@@ -316,7 +316,7 @@ interface AskEntryState {
     .commands button:hover {
       color: var(--foreground);
     }
-    .disclosure {
+    .ai-note {
       flex: none;
       margin: 0.125rem 1rem 0.875rem;
       color: var(--muted-foreground);
