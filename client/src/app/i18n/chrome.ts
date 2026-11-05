@@ -72,8 +72,8 @@ export interface ChromeLabels {
   /** A timeline entry's highlights past the third, `{n}` how many. */
   experience: { more: string };
   footer: {
-    /** A shell comment after `exit`. */
-    signOff: string;
+    /** The match page's name, in the footer and the palette. */
+    match: string;
     elsewhere: string;
     /** `{angular}` is the framework's major version. */
     colophon: string;
@@ -164,11 +164,11 @@ export const CHROME: Record<Locale, ChromeLabels> = {
     },
     experience: { more: "{n} more" },
     footer: {
-      signOff: "thanks for reading",
+      match: "Check the fit",
       elsewhere: "Elsewhere",
       colophon:
         "Built with Angular {angular}, Analog and Hono. Server-rendered, fonts self-hosted.",
-      build: "build",
+      build: "Build",
     },
     notFound: { command: "command not found", didYouMean: "Did you mean" },
     projectCard: { details: "Details", links: "Project links" },
@@ -245,7 +245,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
     },
     experience: { more: "{n} weitere" },
     footer: {
-      signOff: "danke fürs Lesen",
+      match: "Passt es?",
       elsewhere: "Im Netz",
       colophon:
         "Gebaut mit Angular {angular}, Analog und Hono. Serverseitig gerendert, Schriften selbst gehostet.",

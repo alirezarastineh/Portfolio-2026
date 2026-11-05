@@ -115,6 +115,10 @@ test.describe("site navigation", () => {
       "href",
       "/en#projects",
     );
+    await expect(work.getByRole("link", { name: "Check the fit" })).toHaveAttribute(
+      "href",
+      "/en/match",
+    );
     const writing = page.getByRole("navigation", { name: "Writing", exact: true });
     await expect(writing.getByRole("link", { name: "RSS feed" })).toHaveAttribute(
       "href",

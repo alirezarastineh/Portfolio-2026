@@ -25,14 +25,16 @@ interface FooterColumn {
   links: FooterLink[];
 }
 
+/** 44px tall on touch, so the rows themselves are the gap there. */
 const linkClass =
-  "text-muted-foreground transition-colors duration-(--dur-2) hover:text-foreground";
+  "inline-flex items-center text-muted-foreground transition-colors duration-(--dur-2) hover:text-foreground pointer-coarse:min-h-11";
 
 /**
- * Every page's end: a sign-off, the site in columns (case studies, writing,
- * the legal pages every site run from Germany must link from every page, and
- * profiles elsewhere), then the colophon and the build it was made from.
- * Text links only: every page's HTML carries the footer.
+ * Every page's end: the name once more, as a closing statement, the site in
+ * columns (case studies and Check the fit, writing, the legal pages every site
+ * run from Germany must link from every page, and profiles elsewhere), then the
+ * colophon and the build it was made from. Text links only: every page's HTML
+ * carries the footer.
  */
 @Component({
   selector: "app-site-footer",
@@ -43,17 +45,19 @@ const linkClass =
   },
   template: `
     <footer class="mt-24 border-t border-border">
+      <p class="container-site m-0 pb-14 pt-16 text-display" translate="no">
+        {{ name() }}<span class="text-signal" aria-hidden="true">.</span>
+      </p>
       <div
-        class="container-site grid grid-cols-2 gap-x-(--col-gap) gap-y-10 py-12 sm:grid-cols-4 lg:grid-cols-12"
+        class="container-site grid grid-cols-2 gap-x-(--col-gap) gap-y-10 pb-12 sm:grid-cols-4 lg:grid-cols-12"
       >
-        <p class="col-span-2 m-0 text-meta sm:col-span-4 lg:col-span-4">
-          <span class="text-accent-orange" aria-hidden="true">~$ </span>exit
-          <span class="block text-muted-foreground"># {{ chrome().signOff }}</span>
-        </p>
         @for (column of columns(); track column.label) {
-          <nav class="flex flex-col gap-3 lg:col-span-2" [attr.aria-label]="column.label">
-            <p class="eyebrow m-0 text-muted-foreground" aria-hidden="true">{{ column.label }}</p>
-            <ul class="m-0 flex list-none flex-col gap-2 p-0 text-meta" role="list">
+          <nav class="flex flex-col gap-3 lg:col-span-3" [attr.aria-label]="column.label">
+            <p class="m-0 text-small font-semibold" aria-hidden="true">{{ column.label }}</p>
+            <ul
+              class="m-0 flex list-none flex-col items-start gap-2 p-0 text-small pointer-coarse:gap-0"
+              role="list"
+            >
               @for (link of column.links; track link.label) {
                 <li>
                   @if (link.href) {
@@ -75,14 +79,16 @@ const linkClass =
           </nav>
         }
       </div>
-      <!-- Clear of the ask button, fixed at the bottom right on every page but home. -->
+      <!-- Clear of the ask button, fixed at the bottom right. -->
       <div
         class="container-site flex flex-wrap justify-between gap-x-6 gap-y-2 pb-20 text-meta text-muted-foreground"
       >
         <p class="m-0">
-          © {{ year() }} {{ name() }}
+          © {{ year() }} <span translate="no">{{ name() }}</span>
+        </p>
+        <p class="m-0">
+          {{ colophon() }}
           @if (build(); as build) {
-            ·
             @if (build.href) {
               <a class="link-underline" [href]="build.href">{{ chrome().build }} {{ build.id }}</a>
             } @else {
@@ -90,7 +96,6 @@ const linkClass =
             }
           }
         </p>
-        <p class="m-0">{{ colophon() }}</p>
       </div>
     </footer>
   `,
@@ -125,6 +130,8 @@ export class SiteFooterComponent {
         .slice(0, FOOTER_ITEMS)
         .map((p) => ({ label: p.name, route: [...home, "work", p.slug] })),
       { label: t.caseStudy.allWork, route: home, fragment: "projects" },
+      // The match page answers even with its switch off, and then points to contact.
+      { label: this.chrome().match, route: [...home, "match"] },
     ];
     const writing: FooterLink[] = [
       ...posts
