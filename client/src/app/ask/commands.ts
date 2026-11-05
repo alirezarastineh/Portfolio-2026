@@ -194,6 +194,20 @@ export function labelCommands(label: string): LabelCommand[] {
   });
 }
 
+/** The empty console's suggestions on a case study or a post (plan 4 U12); else none. */
+export function pageQuestions(
+  page: string,
+  content: AppContent,
+  copy: AskCopy["pageQuestions"],
+): string[] | null {
+  const [, section, slug] = /^\/(work|writing)\/([^/]+)/.exec(page) ?? [];
+  if (section === "work") {
+    const title = content.projects.find((project) => project.slug === slug)?.name;
+    return title ? copy.project.map((question) => fmt(question, { title })) : null;
+  }
+  return content.posts.some((post) => post.slug === slug) ? copy.post : null;
+}
+
 /** A usage line's choices, each a line that runs it when clicked (plan 4 U11). */
 export function choiceLines(command: string, choices: readonly string[]): OutLine[] {
   return choices.map((choice) => ({ text: `${command} ${choice}`, ask: `${command} ${choice}` }));

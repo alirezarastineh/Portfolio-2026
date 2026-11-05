@@ -16,7 +16,7 @@ import { labelCommands, type LabelCommand, type OutLine } from "./commands";
   template: `
     @for (line of lines(); track $index) {
       <!-- prettier-ignore -->
-      <p class="line" [class]="line.tone" [class.row]="!!line.label">@if (line.label) {<span class="label">@if (line.run) {@for (part of commands(line.label); track part.text) {<button type="button" class="action command" translate="no" (click)="use(part)">{{ part.text }}</button>}} @else {<ng-container>{{ line.label }}</ng-container>}</span>}@if (line.ask) {<button type="button" class="action" (click)="ask.emit(line.ask)">{{ line.text }}</button>} @else if (line.href) {<a class="link" [href]="line.href" (click)="follow($event, line)">{{ line.text }}</a>} @else {<ng-container>{{ line.text }}</ng-container>}</p>
+      <p class="line" [class]="line.tone" [class.row]="!!line.label" [class.short]="(line.label?.length ?? 0) < 3">@if (line.label) {<span class="label">@if (line.run) {@for (part of commands(line.label); track part.text) {<button type="button" class="action command" translate="no" (click)="use(part)">{{ part.text }}</button>}} @else {<ng-container>{{ line.label }}</ng-container>}</span>}@if (line.ask) {<button type="button" class="action" (click)="ask.emit(line.ask)">{{ line.text }}</button>} @else if (line.href) {<a class="link" [href]="line.href" (click)="follow($event, line)">{{ line.text }}</a>} @else {<ng-container>{{ line.text }}</ng-container>}</p>
     }
   `,
   styles: `
@@ -75,9 +75,16 @@ import { labelCommands, type LabelCommand, type OutLine } from "./commands";
       text-decoration-color: var(--border-strong);
       text-underline-offset: 0.25em;
     }
+    /* A list's numbers need no column. */
+    .short .label {
+      min-width: 3ch;
+    }
     @media (width < 40rem) {
       .label {
         min-width: 8ch;
+      }
+      .short .label {
+        min-width: 3ch;
       }
     }
     @media (pointer: coarse) {

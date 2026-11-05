@@ -135,7 +135,12 @@ export function stepLine(step: MatchStep, copy: AskCopy["match"]["steps"]): stri
 }
 
 /** The paste box's counter: `{n}` of `{max}` characters, in the reader's numbers. */
-export function counterLine(length: number, copy: AskCopy["match"], locale: string): string {
+export function counterLine(
+  length: number,
+  copy: AskCopy["match"],
+  locale: string,
+  max = MATCH_BRIEF_CHARS,
+): string {
   const number = new Intl.NumberFormat(locale);
-  return fmt(copy.counter, { n: number.format(length), max: number.format(MATCH_BRIEF_CHARS) });
+  return fmt(copy.counter, { n: number.format(length), max: number.format(max) });
 }

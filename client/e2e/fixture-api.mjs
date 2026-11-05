@@ -24,7 +24,7 @@ export function startFixtureApi() {
     const { pathname } = new URL(req.url ?? "/", "https://fixture");
     if (pathname === "/v1/ask/config") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ suggestions: ADMIN_QUESTIONS }));
+      res.end(JSON.stringify({ state: "ok", suggestions: ADMIN_QUESTIONS }));
       return;
     }
     const match = ROUTE.exec(pathname);

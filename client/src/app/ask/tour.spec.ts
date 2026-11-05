@@ -169,7 +169,7 @@ describe("a stop's move", () => {
     });
     expect(stopLines({ ...state, at: 0 }, copy)).toEqual([
       { label: "stop 1 of 3", text: "Borealis — Data.", tone: "accent" },
-      { text: "ask about this ›", ask: "What should I know about Borealis?" },
+      { text: "ask about this", ask: "What should I know about Borealis?" },
     ]);
     expect(stopLines({ ...state, at: 2 }, copy).at(-1)).toEqual({
       text: "That was the last stop.",

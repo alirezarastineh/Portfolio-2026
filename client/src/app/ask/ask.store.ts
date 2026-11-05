@@ -120,6 +120,8 @@ interface AskState {
   remote: RemoteConfig | null;
   /** Until when the rate limit holds (ms since epoch), for the countdown. */
   limitedUntil: number | null;
+  /** An async command or a delete is on its way: "Loading…" in the log (plan 4 U12). */
+  loading: boolean;
   handoff: { summary: string; messageId: string } | null;
   feedback: Record<string, 1 | -1>;
   /** Why each 👎, when the visitor said (visitor plan V2). */
@@ -296,6 +298,7 @@ export const AskStore = signalStore(
       stats: stored?.stats ?? false,
       remote: null,
       limitedUntil: null,
+      loading: false,
       handoff: null,
       feedback: stored?.feedback ?? {},
       downReasons: stored?.downReasons ?? {},
@@ -344,6 +347,7 @@ export const AskStore = signalStore(
   })),
   withComputed((store) => ({
     copy: computed(() => ASK_COPY[store._lang.lang()]),
+    maxChars: computed(() => store.remote()?.limits.maxChars ?? 600),
     /** Answers need the server; off or resting means the offline shell. */
     available: computed(() => {
       const state = store.remote()?.state;
@@ -533,7 +537,7 @@ export const AskStore = signalStore(
         case "rateLimited":
           return fmt(copy.errors.rateLimited, { s: retryAfter ?? 60 });
         case "tooLong":
-          return fmt(copy.errors.tooLong, { n: store.remote()?.limits.maxChars ?? 600 });
+          return fmt(copy.errors.tooLong, { n: store.maxChars() });
         case "resting":
         case "off":
           return store._lang.t().ask.offline;
@@ -606,7 +610,7 @@ export const AskStore = signalStore(
         ]);
         return;
       }
-      const limit = store.remote()?.limits.maxChars ?? 600;
+      const limit = store.maxChars();
       if (text.length > limit) {
         show(input, [{ text: fmt(copy.errors.tooLong, { n: limit }), tone: "error" }]);
         return;
@@ -672,6 +676,12 @@ export const AskStore = signalStore(
       link.href = href;
       link.download = "";
       link.click();
+    }
+
+    /** Marks the wait for a request that shows nothing until it answers; its lines replace the word. */
+    function waiting(work: Promise<void>): Promise<void> {
+      patchState(store, { loading: true, announcement: store.copy().loading });
+      return work.finally(() => patchState(store, { loading: false }));
     }
 
     function clearTerminal(): void {
@@ -1043,7 +1053,7 @@ export const AskStore = signalStore(
         handoff: {
           summary:
             l === "de"
-              ? "Hallo Alireza, ich würde gern mit dir über eine Zusammenarbeit sprechen."
+              ? "Hallo Alireza, ich würde gern über eine Zusammenarbeit sprechen."
               : "Hi Alireza, I'd like to talk to you about working together.",
           messageId: "",
         },
@@ -1102,10 +1112,10 @@ export const AskStore = signalStore(
           handleStats(input);
           break;
         case "inspect":
-          void inspectAnswer(input);
+          void waiting(inspectAnswer(input));
           break;
         case "evals":
-          void handleEvals(input);
+          void waiting(handleEvals(input));
           break;
         case "forget":
           // Irreversible: it waits for the visitor's yes (visitor plan V14).
@@ -1114,7 +1124,7 @@ export const AskStore = signalStore(
           patchState(store, { announcement: `${copy.forget.ask} ${copy.forget.what}` });
           break;
         case "news":
-          void handleNews(input, parsed.arg);
+          void waiting(handleNews(input, parsed.arg));
           break;
         case "tour":
           void handleTour(input, parsed.arg);
@@ -1247,7 +1257,7 @@ export const AskStore = signalStore(
 
       /** How this answer was made (visitor plan V12): its receipt's "inspect". */
       inspect(messageId: string): Promise<void> {
-        return inspectAnswer("inspect", messageId);
+        return waiting(inspectAnswer("inspect", messageId));
       },
 
       /** +1 or -1 on an answer; a -1 may come back with its reason (visitor plan V2). */
@@ -1296,6 +1306,7 @@ export const AskStore = signalStore(
           show(copy.forget.no, [{ text: copy.forget.declined, tone: "dim" }]);
           return;
         }
+        patchState(store, { loading: true, announcement: copy.loading });
         const result = await forgetConversation(() =>
           fetch(`${apiBaseUrl()}/v1/ask/forget`, {
             method: "POST",
@@ -1303,6 +1314,7 @@ export const AskStore = signalStore(
             body: JSON.stringify(forgetBody(store.sessionId(), store.earlierSessions())),
           }),
         );
+        patchState(store, { loading: false });
         if (!result.ok) {
           const text =
             result.retryAfter === null

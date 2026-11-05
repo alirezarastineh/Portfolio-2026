@@ -3,7 +3,7 @@ import type { MatchKind } from "./match";
 
 /**
  * The match page's words (plan 3 W3). They live here, not in `i18n/chrome.ts`,
- * so only the page's chunk carries them. German uses "du", as the terminal does.
+ * so only the page's chunk carries them. German stays neutral, as the console does.
  */
 export interface MatchPageCopy {
   /** The page's heading, and its title. */
@@ -52,11 +52,11 @@ export const MATCH_PAGE_COPY: Record<Locale, MatchPageCopy> = {
     contact: "Write to him instead",
   },
   de: {
-    heading: "Prüf, ob es passt",
+    heading: "Passt es?",
     eyebrow: "Beschreibung abgleichen",
     intro:
-      "Füge eine Stelle ein oder beschreibe ein Projekt oder ein Problem. Der KI-Assistent der Website gleicht jeden Punkt mit Alirezas veröffentlichter Arbeit ab, und jede Zeile zeigt die Seiten, auf denen sie beruht.",
-    legend: "Was möchtest du prüfen?",
+      "Eine Stelle einfügen oder ein Projekt oder Problem beschreiben. Der KI-Assistent der Website gleicht jeden Punkt mit Alirezas veröffentlichter Arbeit ab, und jede Zeile zeigt die Seiten, auf denen sie beruht.",
+    legend: "Was soll geprüft werden?",
     kinds: { role: "Eine Stelle", project: "Ein Projekt", problem: "Ein Problem" },
     caption: "Jeder Punkt der Beschreibung und was seine Arbeit zeigt",
     columns: {
@@ -71,6 +71,6 @@ export const MATCH_PAGE_COPY: Record<Locale, MatchPageCopy> = {
     cleared: "Gelöscht: Die Zeilen und die Markierungen auf seinen Seiten sind weg.",
     printed:
       "Am {date} geprüft vom KI-Assistenten auf Alirezas Portfolio; jede Zeile nennt eine veröffentlichte Seite. {url}",
-    contact: "Schreib ihm stattdessen",
+    contact: "Stattdessen direkt schreiben",
   },
 };

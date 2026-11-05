@@ -61,7 +61,7 @@ describe("evals' lines (visitor plan V13)", () => {
       ["first word", "median 1.8 s in visitors' browsers (30 answers)"],
       ["turned away", "invalid_input 16 · rate_limited 2"],
       ["judge", "median faithfulness 92% in a nightly sample of 25 answers"],
-      ["", "how this assistant works ›", "How does this assistant work?"],
+      ["", "how this assistant works", "How does this assistant work?"],
     ]);
   });
 
@@ -83,7 +83,7 @@ describe("evals' lines (visitor plan V13)", () => {
       ["recorded run", "this version is not measured yet: a new prompt, measured next run"],
       ["last 30 days", "12 answers to visitors"],
       [" ", "not enough answers yet"],
-      ["", "how this assistant works ›", "How does this assistant work?"],
+      ["", "how this assistant works", "How does this assistant work?"],
     ]);
     expect(
       rows(scorecardLines({ recorded: { measured: false, reason: null } }, ASK_COPY.en, "en"))[1],
@@ -115,7 +115,7 @@ describe("evals' lines (visitor plan V13)", () => {
     ]);
     expect(lines.at(-1)).toEqual([
       "",
-      "wie dieser Assistent funktioniert ›",
+      "wie dieser Assistent funktioniert",
       "Wie funktioniert dieser Assistent?",
     ]);
   });

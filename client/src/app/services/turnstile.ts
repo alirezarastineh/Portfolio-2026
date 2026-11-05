@@ -57,12 +57,15 @@ export async function turnstileToken(locale: string, host?: HTMLElement): Promis
     const done = () => {
       if (id) turnstile.remove(id);
       box.remove();
+      host?.removeAttribute("data-asking");
     };
     id = turnstile.render(box, {
       sitekey: TURNSTILE_SITE_KEY,
       language: locale,
       appearance: "interaction-only",
       execution: "execute",
+      // Only now does the visitor see it: the host can name it.
+      "before-interactive-callback": () => host?.setAttribute("data-asking", ""),
       callback: (token: string) => {
         done();
         resolve(token);

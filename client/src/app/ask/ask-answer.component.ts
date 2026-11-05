@@ -18,6 +18,7 @@ import { isToolUIPart, type ChatStatus } from "ai";
 import { fmt } from "../i18n/interpolate";
 import { LanguageService } from "../services/language.service";
 import { AskStore } from "./ask.store";
+import { ASK_ENTRY_COPY } from "./ask-entry-copy";
 import type { AskMessage, DownReason, Entry } from "./ask-types";
 import { parseInput } from "./commands";
 import { reasonChoices } from "./down-reasons";
@@ -241,13 +242,23 @@ interface Footnote {
         @if (entry().offline; as lines) {
           <app-ask-lines [lines]="lines" />
         }
-        @if (retryable()) {
-          <button type="button" class="ghost press" (click)="retry.emit()">
-            {{ copy().retry }}
-          </button>
-        }
       } @else if (interrupted()) {
         <p class="aside">{{ copy().interrupted }}</p>
+      }
+      @if (latest() && (retryable() || entry().failure)) {
+        <div class="followups">
+          @if (retryable()) {
+            <button type="button" class="ghost press" (click)="retry.emit()">
+              {{ copy().retry }}
+            </button>
+          }
+          <!-- A way out of every failure, a person included. -->
+          @if (entry().failure) {
+            <button type="button" class="ghost press" (click)="ask.emit('contact')">
+              {{ contact() }}
+            </button>
+          }
+        </div>
       }
 
       @if (done() && followups().length && latest()) {
@@ -388,6 +399,10 @@ interface Footnote {
       font-family: var(--font-data);
       font-size: 0.8125rem;
       line-height: 1.5;
+    }
+    /* Every line a sentence, whatever its words start with. */
+    .trace li::first-letter {
+      text-transform: uppercase;
     }
     .trace li {
       position: relative;
@@ -903,22 +918,30 @@ export class AskAnswerComponent {
       this.done() && !!this.message() && !this.message()?.metadata?.sig && !this.entry().failure,
   );
 
+  /** Seconds the rate limit still holds; none once a reload has lost the count. */
+  private readonly rateLeft = computed(() => {
+    const until = this.store.limitedUntil();
+    return until ? Math.max(0, Math.ceil((until - this.now()) / 1000)) : 0;
+  });
+
+  /** What can be asked again: a stopped answer, a failure, a rate limit once it is over. */
   protected readonly retryable = computed(() => {
     const failure = this.entry().failure;
-    return (
-      this.latest() && !!failure && !["resting", "off", "invalid", "tooLong"].includes(failure)
-    );
+    if (!this.latest()) return false;
+    if (!failure) return this.interrupted();
+    if (failure === "rateLimited") return this.rateLeft() === 0;
+    return !["resting", "off", "invalid", "tooLong"].includes(failure);
   });
+
+  protected readonly contact = computed(() => ASK_ENTRY_COPY[this.lang.lang()].contact);
 
   protected readonly failureText = computed(() => {
     const entry = this.entry();
     if (!entry.failure) return "";
     if (entry.failure === "rateLimited") {
-      const until = this.store.limitedUntil();
-      const left = until
-        ? Math.max(0, Math.ceil((until - this.now()) / 1000))
-        : (entry.retryAfter ?? 60);
-      return fmt(this.copy().errors.rateLimited, { s: left });
+      const errors = this.copy().errors;
+      const left = this.rateLeft();
+      return left ? fmt(errors.rateLimited, { s: left }) : errors.rateLimitedOver;
     }
     return this.store.messageFor(entry.failure, entry.retryAfter);
   });
@@ -962,7 +985,8 @@ export class AskAnswerComponent {
     // A clock for "thinking… 1.2 s" and the rate-limit countdown, only while needed.
     let timer: ReturnType<typeof setInterval> | undefined;
     effect(() => {
-      const ticking = this.thinking() || this.entry().failure === "rateLimited";
+      const ticking =
+        this.thinking() || (this.entry().failure === "rateLimited" && this.rateLeft() > 0);
       if (ticking && !timer) {
         timer = setInterval(() => this.now.set(Date.now()), 100);
       } else if (!ticking && timer) {

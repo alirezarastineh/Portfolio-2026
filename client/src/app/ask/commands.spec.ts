@@ -12,6 +12,7 @@ import {
   labelCommands,
   offlineLines,
   openTarget,
+  pageQuestions,
   parseInput,
   projectLines,
   whoamiLines,
@@ -166,6 +167,15 @@ describe("local answers", () => {
         if (run) expect(parseInput(command).kind).toBe("local");
       }
     }
+  });
+
+  it("asks about the page on a case study or a post, and only there (plan 4 U12)", () => {
+    const copy = ASK_COPY.en.pageQuestions;
+    expect(pageQuestions("/work/atlas", content, copy)?.[0]).toBe("What problem did Atlas solve?");
+    expect(pageQuestions("/writing/evals-first", content, copy)).toEqual(copy.post);
+    expect(pageQuestions("/work/gone", content, copy)).toBeNull();
+    expect(pageQuestions("/writing", content, copy)).toBeNull();
+    expect(pageQuestions("/", content, copy)).toBeNull();
   });
 
   it("offers a usage line's choices as lines that run them (plan 4 U11)", () => {

@@ -18,16 +18,16 @@ import { lucideCornerDownLeft, lucideSquare } from "@ng-icons/lucide";
 
 import { LanguageService } from "../services/language.service";
 import { AskAnswerComponent } from "./ask-answer.component";
-import { ASK_ENTRY_COPY, COMMAND_ROW } from "./ask-entry-copy";
+import { ASK_ENTRY_COPY, commandRow } from "./ask-entry-copy";
 import { answersByQuestion } from "./answers";
 import { AskLauncherService, type AskAbout, type AskSource } from "./ask-launcher.service";
 import { AskLinesComponent } from "./ask-lines.component";
-import type { MatchKind } from "./match";
+import { counterLine, type MatchKind } from "./match";
 import { MatchBoxComponent } from "./match-box.component";
 import { AskStore } from "./ask.store";
 import type { Entry } from "./ask-types";
 import { fmt } from "../i18n/interpolate";
-import { complete, parseInput } from "./commands";
+import { complete, pageQuestions, parseInput } from "./commands";
 import { newsCount } from "./news";
 import { replannable } from "./tour";
 import { track } from "./track";
@@ -52,9 +52,10 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
   template: `
     <!-- What waits on the visitor, under the newest exchange. -->
     <ng-template #waiting>
-      @if (store.handoff()) {
+      @if (store.handoff(); as handoff) {
         <div class="choice" role="group" [attr.aria-label]="copy().handoff.ask">
           <span class="asks">{{ copy().handoff.ask }}</span>
+          <span class="what">{{ handoff.summary }}</span>
           <button type="button" class="ghost press" (click)="store.answerHandoff(true)">
             {{ copy().handoff.yes }}
           </button>
@@ -123,6 +124,9 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
           </button>
         </div>
       }
+      @if (store.loading()) {
+        <p class="loading">{{ copy().loading }}</p>
+      }
       <!-- Match a brief (visitor plan V20): the paste box, its code loaded with the first match. -->
       @defer (when store.match()) {
         @if (store.match(); as kind) {
@@ -178,17 +182,24 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
       } @empty {
         <!-- What it can do, and a first question to try. -->
         <div class="empty">
-          <p class="hint">{{ lang.t().ask.hint }}</p>
-          <div class="suggestions" role="group" [attr.aria-label]="starters().suggestions">
-            @for (question of suggestions(); track question) {
-              <button type="button" class="suggestion press" (click)="start(question)">
-                {{ question }}
-              </button>
+          @if (store.available()) {
+            <p class="hint">{{ lang.t().ask.hint }}</p>
+            <div class="suggestions" role="group" [attr.aria-label]="starters().suggestions">
+              @for (question of suggestions(); track question) {
+                <button type="button" class="suggestion press" (click)="start(question)">
+                  {{ question }}
+                </button>
+              }
+            </div>
+            <!-- What changed since the last visit, once the visitor turned what's new on (V15). -->
+            @if (newsLine(); as line) {
+              <button type="button" class="news" (click)="send('news')">{{ line }}</button>
             }
-          </div>
-          <!-- What changed since the last visit, once the visitor turned what's new on (V15). -->
-          @if (newsLine(); as line) {
-            <button type="button" class="news" (click)="send('news')">{{ line }}</button>
+          } @else {
+            <p class="hint">{{ lang.t().ask.offline }}</p>
+            <button type="button" class="suggestion press" (click)="send('contact')">
+              {{ starters().contact }}
+            </button>
           }
         </div>
         <ng-container *ngTemplateOutlet="waiting" />
@@ -206,7 +217,7 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
         rows="1"
         class="field"
         [attr.placeholder]="lang.t().ask.placeholder"
-        [attr.aria-describedby]="hintId"
+        [attr.aria-describedby]="nearLimit() ? hintId + ' ' + countId : hintId"
         autocomplete="off"
         autocapitalize="sentences"
         spellcheck="true"
@@ -220,6 +231,7 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
         class="send press"
         [attr.type]="busy() ? 'button' : 'submit'"
         [attr.aria-label]="busy() ? copy().stop : starters().send"
+        [disabled]="limited()"
         (click)="stopIfBusy()"
       >
         <ng-icon
@@ -229,8 +241,11 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
         />
       </button>
     </form>
+    @if (nearLimit()) {
+      <p [id]="countId" class="count" [class.over]="tooLong()">{{ counter() }}</p>
+    }
     <div class="commands" role="group" translate="no" [attr.aria-label]="starters().commands">
-      @for (command of commands; track command) {
+      @for (command of commands(); track command) {
         <button type="button" class="press" (click)="send(command)">{{ command }}</button>
       }
     </div>
@@ -238,7 +253,7 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
 
     <div class="sr-only" aria-live="polite" aria-atomic="true">{{ store.announcement() }}</div>
     <!-- Where Cloudflare's check shows when it asks the visitor (store: readyToAsk). -->
-    <div #check></div>
+    <div #check class="check" [attr.data-label]="copy().quickCheck"></div>
   `,
   styles: `
     :host {
@@ -338,6 +353,19 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
       text-decoration-color: var(--accent-orange);
     }
 
+    /* Near-instant work never flashes it. */
+    .loading {
+      margin: 0.75rem 0 0;
+      color: var(--muted-foreground);
+      font-size: 0.875rem;
+      animation: appear 0s 200ms backwards;
+    }
+    @keyframes appear {
+      from {
+        opacity: 0;
+      }
+    }
+
     .choice {
       display: flex;
       flex-wrap: wrap;
@@ -432,6 +460,34 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
     .send:hover {
       color: var(--foreground);
     }
+    .send:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .count {
+      flex: none;
+      margin: 0.25rem 1rem 0;
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+    }
+    .count.over {
+      color: var(--destructive);
+    }
+    /* Named only once Cloudflare asks the visitor (services/turnstile.ts). */
+    .check {
+      flex: none;
+      padding-inline: 1rem;
+    }
+    .check[data-asking] {
+      padding-block: 0.5rem;
+    }
+    .check[data-asking]::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 0.25rem;
+      color: var(--muted-foreground);
+      font-size: 0.8125rem;
+    }
 
     .commands {
       display: flex;
@@ -488,17 +544,32 @@ export class AskConsoleComponent {
   protected readonly lang = inject(LanguageService);
   private readonly launcher = inject(AskLauncherService);
 
-  protected readonly commands = COMMAND_ROW;
+  protected readonly commands = computed(() => commandRow(this.launcher.scorecard()));
   protected readonly copy = this.store.copy;
   protected readonly inputId = `ask-input-${++instances}`;
   protected readonly hintId = `ask-hint-${instances}`;
   protected readonly forgetId = `ask-forget-${instances}`;
   protected readonly newsId = `ask-news-${instances}`;
+  protected readonly countId = `ask-count-${instances}`;
 
   private readonly inputRef = viewChild.required<ElementRef<HTMLTextAreaElement>>("input");
   private readonly logRef = viewChild.required<ElementRef<HTMLElement>>("log");
   private readonly check = viewChild.required<ElementRef<HTMLElement>>("check");
 
+  /** The prompt's length, for the counter that shows near the limit (plan 4 U12). */
+  private readonly length = signal(0);
+  protected readonly nearLimit = computed(() => this.length() > this.store.maxChars() * 0.8);
+  protected readonly tooLong = computed(() => this.length() > this.store.maxChars());
+  protected readonly counter = computed(() => {
+    const max = this.store.maxChars();
+    const line = counterLine(this.length(), this.copy().match, this.lang.lang(), max);
+    return this.tooLong() ? `${this.tooLongText()} ${line}` : line;
+  });
+  private readonly tooLongText = computed(() =>
+    fmt(this.copy().errors.tooLong, { n: this.store.maxChars() }),
+  );
+  /** A rate limit holds: send waits, and the question stays in the prompt. */
+  protected readonly limited = signal(false);
   /** The output just copied, for its button's "copied ✓". */
   protected readonly copiedId = signal<string | null>(null);
   /** Where ↑/↓ are in the history; null while typing something new. */
@@ -506,8 +577,10 @@ export class AskConsoleComponent {
   private draft = "";
 
   protected readonly starters = computed(() => ASK_ENTRY_COPY[this.lang.lang()]);
-  /** Three of the admin's suggested questions, once the server has said; else the built-in three. */
+  /** About this page on a case study or a post; else three of the admin's, or the built-in three. */
   protected readonly suggestions = computed(() => {
+    const page = pageQuestions(this.lang.page(), this.lang.content(), this.copy().pageQuestions);
+    if (page) return page;
     const own = this.store.remote()?.suggestions[this.lang.lang()];
     return own?.length ? own.slice(0, 3) : this.starters().starters;
   });
@@ -549,8 +622,21 @@ export class AskConsoleComponent {
     // What the panel's title bar says: the server's word, once it has one
     // (a failed answer can put the assistant to rest mid-conversation).
     effect(() => {
-      const state = this.store.remote()?.state;
-      if (state) this.launcher.assistant.set(state === "ok" ? "online" : "resting");
+      const remote = this.store.remote();
+      if (!remote) return;
+      this.launcher.assistant.set(remote.state === "ok" ? "online" : "resting");
+      if (remote.scorecard !== undefined) this.launcher.scorecard.set(remote.scorecard);
+    });
+
+    effect((onCleanup) => {
+      const left = (this.store.limitedUntil() ?? 0) - Date.now();
+      if (left <= 0) return;
+      this.limited.set(true);
+      const timer = setTimeout(() => this.limited.set(false), left);
+      onCleanup(() => {
+        clearTimeout(timer);
+        this.limited.set(false);
+      });
     });
 
     // What the stage reads without loading any of this.
@@ -636,8 +722,14 @@ export class AskConsoleComponent {
     const el = this.inputRef().nativeElement;
     const text = el.value;
     if (!text.trim()) return;
-    // One answer at a time; shell commands still run meanwhile.
-    if (this.busy() && parseInput(text).kind === "ask") return;
+    if (parseInput(text).kind === "ask") {
+      // One answer at a time; shell commands still run meanwhile. The words stay in the prompt.
+      if (this.busy() || this.limited()) return;
+      if (this.tooLong()) {
+        this.store.announce(this.tooLongText());
+        return;
+      }
+    }
     el.value = "";
     this.historyIndex = null;
     this.grow();
@@ -646,10 +738,12 @@ export class AskConsoleComponent {
 
   /**
    * A question or command from a button, the ⋯ menu or a reader, with what it is about: what the
-   * visitor is typing stays. While an answer runs a question waits in the prompt instead.
+   * visitor is typing stays. While an answer runs, or when it is too long, a question waits in the
+   * prompt instead.
    */
   send(text: string, about?: AskAbout): void {
-    if (this.busy() && parseInput(text).kind === "ask") this.setValue(text);
+    const question = parseInput(text).kind === "ask";
+    if (question && (this.busy() || text.length > this.store.maxChars())) this.setValue(text);
     else void this.store.submit(text, about);
     this.refocus();
   }
@@ -788,6 +882,7 @@ export class AskConsoleComponent {
 
   private grow(): void {
     const el = this.inputRef().nativeElement;
+    this.length.set(el.value.length);
     el.style.height = "auto";
     const line = Number.parseFloat(getComputedStyle(el).lineHeight) || 24;
     const max = line * MAX_INPUT_LINES;

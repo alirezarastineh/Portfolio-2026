@@ -164,7 +164,7 @@ describe("what's new, in words", () => {
       },
     ]);
     expect(lines[4]).toEqual({
-      text: "summarize them ›",
+      text: "summarize them",
       ask: "Summarize what is new on these pages: Shipping RAG, Atlas, A tool.",
     });
     expect(newsLines([], "2026-09-12", ASK_COPY.de, "de")).toEqual([

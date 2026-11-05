@@ -59,6 +59,9 @@ import { LanguageService } from "../services/language.service";
     </button>
     @defer (when launcher.sheetRequested()) {
       <app-ask-sheet />
+    } @loading (after 100ms) {
+      <!-- On a slow line the first open answers at once; the panel takes over when it arrives. -->
+      <div class="ask-loading" role="status">{{ lang.t().ask.title }}…</div>
     }
   `,
 })

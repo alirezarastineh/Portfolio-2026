@@ -5,9 +5,14 @@ import { apiBase } from "./content-upstream";
 const TTL_MS = 60_000;
 const UPSTREAM_TIMEOUT_MS = 2_000;
 
-const configSchema = z.object({ suggestions: z.record(z.string(), z.array(z.string())) });
+const configSchema = z.object({
+  state: z.string(),
+  suggestions: z.record(z.string(), z.array(z.string())),
+  scorecard: z.boolean().optional(),
+});
 
-export type AskQuestions = Record<string, string[]>;
+/** Empty when the API has never answered. */
+export type AskQuestions = Partial<z.infer<typeof configSchema>>;
 
 let cached: { questions: AskQuestions; fetchedAt: number } | null = null;
 
@@ -17,8 +22,9 @@ export function resetAskQuestions(): void {
 }
 
 /**
- * The admin's suggested questions, at most a minute old. The stage must not wait on them or fail
- * with them: on any trouble the last good ones stand, or none, and the built-in three show.
+ * The admin's suggested questions and the assistant's state, at most a minute old. The stage must
+ * not wait on them or fail with them: on any trouble the last good ones stand, or none, and the
+ * built-in three show.
  */
 export async function getAskQuestions(): Promise<AskQuestions> {
   if (cached && Date.now() - cached.fetchedAt < TTL_MS) return cached.questions;
@@ -30,7 +36,7 @@ export async function getAskQuestions(): Promise<AskQuestions> {
     });
     const parsed = response.ok ? configSchema.safeParse(await response.json()) : null;
     if (parsed?.success) {
-      cached = { questions: parsed.data.suggestions, fetchedAt: Date.now() };
+      cached = { questions: parsed.data, fetchedAt: Date.now() };
       return cached.questions;
     }
   } catch {

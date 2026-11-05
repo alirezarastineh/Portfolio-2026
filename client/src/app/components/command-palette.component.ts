@@ -54,7 +54,7 @@ interface Group {
 }
 
 /** The match page's entry (plan 3 W3): its words here, so no other chunk joins the palette's. */
-const MATCH_LABEL: Record<Locale, string> = { en: "Check the fit", de: "Prüf, ob es passt" };
+const MATCH_LABEL: Record<Locale, string> = { en: "Check the fit", de: "Passt es?" };
 
 /**
  * The public ⌘K palette: jump to a section, a case study or a post, or switch

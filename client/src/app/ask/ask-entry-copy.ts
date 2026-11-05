@@ -1,7 +1,13 @@
 import type { Locale } from "../content/locale";
 
-/** Under the prompt, each a button that runs it; `help` lists the rest (plan 4 U11). */
-export const COMMAND_ROW = ["help", "inspect", "evals", "tour", "match"];
+/**
+ * Under the prompt, each a button that runs it; `help` lists the rest (plan 4 U11). `evals` shows
+ * while the scorecard is published or unknown, as in `help`: unpublished, it has nothing to show.
+ */
+export function commandRow(scorecard: boolean | null): string[] {
+  const row = ["help", "inspect", "evals", "tour", "match"];
+  return scorecard === false ? row.filter((command) => command !== "evals") : row;
+}
 
 /**
  * The words the hero's stage prints before the console's code loads. Loaded with the page, unlike
@@ -21,6 +27,8 @@ export interface AskEntryCopy {
   continuing: string;
   /** Before the last question, on a phone's stage, for screen readers. */
   resume: string;
+  /** The way out when the assistant cannot help (plan 4 U12). */
+  contact: string;
 }
 
 export const ASK_ENTRY_COPY: Record<Locale, AskEntryCopy> = {
@@ -35,6 +43,7 @@ export const ASK_ENTRY_COPY: Record<Locale, AskEntryCopy> = {
     commands: "Commands",
     continuing: "Continuing in the panel",
     resume: "Continue your conversation",
+    contact: "Write to him",
   },
   de: {
     starters: [
@@ -47,5 +56,6 @@ export const ASK_ENTRY_COPY: Record<Locale, AskEntryCopy> = {
     commands: "Befehle",
     continuing: "Weiter im Fenster",
     resume: "Unterhaltung fortsetzen",
+    contact: "Ihm schreiben",
   },
 };

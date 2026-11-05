@@ -609,7 +609,7 @@ test.describe("assistant terminal", () => {
     await run(prompt, "Two?");
     await expect(log).toContainText("Answer 2.");
     await expect(log.getByRole("button", { name: "Helpful", exact: true })).toHaveCount(1);
-    await expect(log.getByRole("button", { name: "copy", exact: true })).toHaveCount(1);
+    await expect(log.getByRole("button", { name: "Copy", exact: true })).toHaveCount(1);
     await expect(log.getByRole("group", { name: "What was wrong?" })).toHaveCount(0);
     await expect(log.getByRole("button", { name: "how was this answered?" })).toHaveCount(2);
   });
@@ -645,7 +645,76 @@ test.describe("assistant terminal", () => {
     await expect(stop).toBeVisible();
     await stop.click();
     await expect(panel.getByRole("button", { name: "Ask", exact: true })).toBeVisible();
-    await expect(panel.locator("[role=log]")).toContainText("(answer interrupted)");
+    await expect(panel.locator("[role=log]")).toContainText("Stopped.");
+    await expect(panel.getByRole("button", { name: "Retry" })).toBeVisible();
+  });
+
+  test("a question over the limit stays in the field, and the counter says so (plan 4 U12)", async ({
+    page,
+  }) => {
+    const mock = await mockAsk(page, () => undefined, {
+      limits: { maxChars: 20, historyTurns: 8 },
+    });
+    const prompt = await openPrompt(page, "/en/writing");
+    await expect(askPanel(page).locator("header")).toContainText("online");
+
+    await prompt.fill("x".repeat(17));
+    const count = askPanel(page).locator(".count");
+    await expect(count).toHaveText("17 / 20 characters");
+    await expect(count).not.toHaveClass(/over/);
+
+    const long = "x".repeat(21);
+    await run(prompt, long);
+    await expect(prompt).toHaveValue(long);
+    await expect(count).toHaveClass(/over/);
+    await expect(count).toContainText("Keep questions under 20 characters.");
+    await expect(askPanel(page).locator("[aria-live=polite]")).toHaveText(
+      "Keep questions under 20 characters.",
+    );
+    expect(mock.bodies).toHaveLength(0);
+  });
+
+  test("a slow command says it is loading, and a fast one never flashes it (plan 4 U12)", async ({
+    page,
+  }) => {
+    await mockAsk(page, () => undefined, { scorecard: true });
+    await page.route("**/v1/ask/scorecard", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      await route.fulfill({ headers: cors, json: SCORECARD });
+    });
+    const prompt = await openPrompt(page, "/en/writing");
+    await expect(askPanel(page).locator("header")).toContainText("online");
+    await run(prompt, "evals");
+    const log = askPanel(page).locator("[role=log]");
+    await expect(log.locator(".loading")).toHaveText("Loading…");
+    await expect(askPanel(page).locator("[aria-live=polite]")).toHaveText("Loading…");
+    await expect(log).toContainText("how the assistant does");
+    await expect(log.locator(".loading")).toHaveCount(0);
+  });
+
+  test("a case study's console suggests questions about it (plan 4 U12)", async ({ page }) => {
+    await mockAsk(page, () => undefined);
+    await openPrompt(page, "/en/work/project-one");
+    const suggestions = askPanel(page).getByRole("group", { name: "Suggested questions" });
+    await expect(suggestions.getByRole("button").first()).toHaveText(
+      "What problem did Atlas solve?",
+    );
+  });
+
+  test("the first open answers at once, even while the panel's code loads (plan 4 U12)", async ({
+    page,
+  }) => {
+    await mockAsk(page, () => undefined);
+    await page.goto("/en/writing");
+    await interactive(page);
+    await page.route("**/*.js", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await route.continue();
+    });
+    await page.getByRole("button", { name: "Ask about my work" }).click();
+    await expect(page.locator(".ask-loading")).toHaveText("Ask about my work…");
+    await expect(askPanel(page).locator("textarea")).toBeFocused();
+    await expect(page.locator(".ask-loading")).toHaveCount(0);
   });
 
   test("shell commands answer locally, with history and Tab completion", async ({ page }) => {
@@ -709,7 +778,7 @@ test.describe("assistant terminal", () => {
       const log = askPanel(page).locator("[role=log]");
       await expect(log).toContainText("He runs evals before every prompt change");
       await expect(log).toContainText("Searched “evals”");
-      const cite = log.getByRole("link", { name: /sources 1: Project one/ });
+      const cite = log.getByRole("link", { name: /Sources 1: Project one/ });
       await expect(cite).toHaveAttribute("href", "/en/work/project-one");
       const source = log.getByRole("link", { name: "Project one", exact: true });
       await expect(source).toBeVisible();
@@ -799,7 +868,7 @@ test.describe("assistant terminal", () => {
       .toMatchObject({ messageId: FIRST, value: -1, reason: "unanswered" });
 
     // A copy.
-    await log.getByRole("button", { name: "copy", exact: true }).first().click();
+    await log.getByRole("button", { name: "Copy", exact: true }).first().click();
     await expect.poll(() => of(FIRST)["copies"]).toBe(1);
 
     // A follow-up asked from it: counted for this answer, the totals sent whole.
@@ -809,7 +878,7 @@ test.describe("assistant terminal", () => {
 
     // A citation followed counts too, even as it leaves the page.
     await log
-      .getByRole("link", { name: /sources 1: Project one/ })
+      .getByRole("link", { name: /Sources 1: Project one/ })
       .first()
       .click();
     await expect.poll(() => of(FIRST)["citations"]).toBe(1);
@@ -947,11 +1016,17 @@ test.describe("assistant terminal", () => {
     const log = askPanel(page).locator("[role=log]");
 
     await run(prompt, "First question");
-    await expect(log).toContainText(/try again in 4[0-2]s/);
+    await expect(log).toContainText(/Try again in 4[0-2] s/);
     // Heard once, from the terminal's live region; the countdown is for the eye
     // (a live region would read it again every second).
-    await expect(askPanel(page).locator('[aria-live="polite"]')).toContainText(/try again in 42s/);
+    await expect(askPanel(page).locator('[aria-live="polite"]')).toContainText(/Try again in 42 s/);
     await expect(log.getByRole("status")).toHaveCount(0);
+    // It waits: send is off, a question stays in the prompt, and a person is a click away.
+    await expect(askPanel(page).getByRole("button", { name: "Ask", exact: true })).toBeDisabled();
+    await expect(log.getByRole("button", { name: "Retry" })).toHaveCount(0);
+    await expect(log.getByRole("button", { name: "Write to him" })).toBeVisible();
+    await run(prompt, "Too soon");
+    await expect(prompt).toHaveValue("Too soon");
 
     // Past the limit (the mock does not enforce it; the terminal does).
     await page.evaluate(() => sessionStorage.clear());
@@ -959,7 +1034,7 @@ test.describe("assistant terminal", () => {
     const again = await openPrompt(page, page.url());
     await run(again, "Second question");
     await expect(log).toContainText("That took too long to answer.");
-    await log.getByRole("button", { name: /retry/ }).click();
+    await log.getByRole("button", { name: "Retry" }).click();
     await expect(log).toContainText("Second try worked.");
     // The answer that came says its question was asked again (visitor plan V2).
     await expect
@@ -1231,7 +1306,7 @@ test.describe("assistant terminal", () => {
     await expect(sheet.locator("header")).toContainText("online");
     await sheet
       .getByRole("group", { name: "Suggested questions" })
-      .getByRole("button", { name: "What has he shipped with RAG?" })
+      .getByRole("button", { name: "What problem did Atlas solve?" })
       .click();
     await expect(sheet).toContainText("From the sheet.");
     await expect(sheet.getByRole("group", { name: "Suggested questions" })).toHaveCount(0);
@@ -1298,9 +1373,9 @@ test.describe("assistant terminal", () => {
       expect(await inert()).toBe(phone);
 
       await run(panel.locator("textarea"), "How does Atlas search?");
-      await expect(panel.getByRole("button", { name: "copy", exact: true })).toBeVisible();
+      await expect(panel.getByRole("button", { name: "Copy", exact: true })).toBeVisible();
       const at = await panel.boundingBox();
-      await panel.getByRole("link", { name: /sources 1: Supplier catalogue ingestion/ }).click();
+      await panel.getByRole("link", { name: /Sources 1: Supplier catalogue ingestion/ }).click();
       await expect(page).toHaveURL(/\/en\/work\/project-two$/);
       if (phone) {
         await expect(panel).toBeHidden();
@@ -1505,7 +1580,7 @@ test.describe("assistant terminal", () => {
     let prompt = await openPrompt(page);
     const about = askPanel(page);
     await run(prompt, "level");
-    await expect(about).toContainText("usage: level plain|standard|expert (now: standard)");
+    await expect(about).toContainText("Answers are set to standard.");
     await run(prompt, "level plain");
     await expect(about).toContainText("level plain: answers without jargon");
     // Scanned while the log still fits: a log that overflows with text alone is a known finding.
@@ -1608,9 +1683,9 @@ test.describe("assistant terminal", () => {
     await expect(log).toContainText("↳ passed over gemini-3.5-flash-lite: timeout after 6.0 s");
     expect(inspected[0]).toEqual({ sessionId: expect.any(String), messageId: "m_e2e00000001" });
     // Its name turns to "copied ✓": the locator takes either, so it stays on the timeline's button.
-    const copyButton = log.getByRole("button", { name: /^cop(y|ied)/ }).last();
+    const copyButton = log.getByRole("button", { name: /^Cop(y|ied)/ }).last();
     await copyButton.click();
-    await expect(copyButton).toHaveText(/copied/);
+    await expect(copyButton).toHaveText(/Copied/);
     if (browserName === "chromium") {
       const copied = await page.evaluate(() => navigator.clipboard.readText());
       expect(copied).toContain("> inspect");
@@ -1695,12 +1770,12 @@ test.describe("assistant terminal", () => {
     expect(await axeViolations(page)).toEqual([]);
 
     // Its last line asks the assistant, which answers from the system card.
-    await log.getByRole("button", { name: "how this assistant works ›" }).click();
+    await log.getByRole("button", { name: "how this assistant works" }).click();
     await expect(log).toContainText("It answers from this site's content.");
     expect(JSON.stringify(mock.bodies[0]!.messages)).toContain("How does this assistant work?");
   });
 
-  test("unpublished, evals says so without asking, and help leaves it out (visitor plan V13)", async ({
+  test("unpublished, evals says so without asking, and help and the row leave it out (visitor plan V13)", async ({
     page,
   }) => {
     await mockAsk(page, () => undefined, { scorecard: false });
@@ -1712,6 +1787,9 @@ test.describe("assistant terminal", () => {
     const prompt = await openPrompt(page, "/en/writing");
     const log = askPanel(page).locator("[role=log]");
     await expect(askPanel(page).locator("header")).toContainText("online");
+    await expect(
+      askPanel(page).getByRole("group", { name: "Commands" }).getByRole("button"),
+    ).toHaveText(["help", "inspect", "tour", "match"]);
     await run(prompt, "help");
     await expect(log).toContainText("inspect");
     await expect(log).not.toContainText("how well the assistant does");
@@ -1760,7 +1838,7 @@ test.describe("assistant terminal", () => {
     await expect(confirm).toBeVisible();
     await expect(confirm).toHaveAccessibleDescription(/contact form keeps its copy/);
     expect(await axeViolations(page)).toEqual([]);
-    await confirm.getByRole("button", { name: "no", exact: true }).click();
+    await confirm.getByRole("button", { name: "No", exact: true }).click();
     await expect(log).toContainText("OK, nothing was deleted.");
     await expect(confirm).toHaveCount(0);
     expect(forgotten).toHaveLength(0);
@@ -1834,7 +1912,7 @@ test.describe("assistant terminal", () => {
     await expect(offer).toBeVisible();
     await expect(offer).toHaveAccessibleDescription(/remember today's date/);
     expect(await axeViolations(page)).toEqual([]);
-    await offer.getByRole("button", { name: "no", exact: true }).click();
+    await offer.getByRole("button", { name: "No", exact: true }).click();
     await expect(log).toContainText("OK, nothing was stored.");
     expect(await kept()).toBeNull();
     expect(maps).toEqual([]);
@@ -1872,7 +1950,7 @@ test.describe("assistant terminal", () => {
     await expect(log).toContainText("Shipping RAG to production · post");
     await expect(log).not.toContainText("Notes on evals");
     expect(mock.bodies).toHaveLength(0);
-    await log.getByRole("button", { name: "summarize them ›" }).click();
+    await log.getByRole("button", { name: "summarize them" }).click();
     await expect(log).toContainText("Two pages changed.");
     expect(JSON.stringify(mock.bodies.at(-1)!.messages.at(-1))).toContain(
       "Summarize what is new on these pages: Atlas, Shipping RAG to production.",
@@ -1896,27 +1974,27 @@ test.describe("assistant terminal", () => {
       await expect(log).toContainText("The short tour, 5 stops:");
       await expect(log).toContainText("Atlas");
       await expect(log).toContainText("Shipping RAG to production");
-      const group = page.getByRole("group", { name: "tour · 5 stops" });
+      const group = page.getByRole("group", { name: "5 stops" });
       await expect(group).toBeVisible();
       expect(mock.bodies).toHaveLength(0);
 
       // The first stop is About, on this page; the keyboard reaches the group's next.
       await group.getByRole("button", { name: "next" }).focus();
       await page.keyboard.press("Enter");
-      await expect(page.getByRole("group", { name: "tour · stop 1 of 5 · about" })).toBeVisible();
-      await expect(log).toContainText("ask about this ›");
+      await expect(page.getByRole("group", { name: "Stop 1 of 5: about" })).toBeVisible();
+      await expect(log).toContainText("ask about this");
 
       // Typed, as in any shell. To another page: the panel stays open and carries the tour on.
       await run(prompt, "next");
       await expect(page).toHaveURL(/\/en\/work\/project-one$/);
       const sheet = page.getByRole("dialog", { name: "Ask about my work" });
-      await expect(sheet.getByRole("group", { name: "tour · stop 2 of 5 · Atlas" })).toBeVisible();
+      await expect(sheet.getByRole("group", { name: "Stop 2 of 5: Atlas" })).toBeVisible();
 
       // The tab keeps it through a reload.
       await page.reload();
       await interactive(page);
       await page.getByRole("button", { name: "Ask about my work" }).click();
-      await expect(sheet.getByRole("group", { name: /stop 2 of 5/ })).toBeVisible();
+      await expect(sheet.getByRole("group", { name: /Stop 2 of 5/ })).toBeVisible();
 
       await sheet.getByRole("button", { name: "next" }).click();
       await expect(page).toHaveURL(/\/en\/writing\/shipping-rag-to-production$/);
@@ -2011,7 +2089,7 @@ test.describe("assistant terminal", () => {
     expect(mock.bodies).toHaveLength(1);
     expect(mock.bodies[0]).toMatchObject({ mode: "tour", tour: { interest: "data platforms" } });
 
-    const group = page.getByRole("group", { name: "tour · 3 stops" });
+    const group = page.getByRole("group", { name: "3 stops" });
     await expect(group).toBeVisible();
     expect(await axeViolations(page)).toEqual([]);
     await group.getByRole("button", { name: "next" }).click();
@@ -2519,6 +2597,42 @@ for (const colorScheme of ["dark", "light"] as const) {
   test.describe(`assistant accessibility (${colorScheme})`, () => {
     test.use({ colorScheme });
 
+    test("the console's states: failure, too long, loading, its questions (plan 4 U12)", async ({
+      page,
+    }) => {
+      await mockAsk(
+        page,
+        (route) => route.fulfill({ status: 429, headers: cors, json: { retryAfter: 42 } }),
+        { limits: { maxChars: 20, historyTurns: 8 } },
+      );
+      const prompt = await openPrompt(page, "/en/writing");
+      await expect(askPanel(page).locator("header")).toContainText("online");
+      const log = askPanel(page).locator("[role=log]");
+      await run(prompt, "A rate limit?");
+      await expect(log.getByRole("button", { name: "Write to him" })).toBeVisible();
+      await run(prompt, "x".repeat(21));
+      await expect(askPanel(page).locator(".count.over")).toBeVisible();
+      expect(await axeViolations(page)).toEqual([]);
+      await prompt.fill("");
+      await run(prompt, "forget");
+      await expect(log.getByRole("button", { name: "Yes" })).toBeVisible();
+      await run(prompt, "level");
+      await expect(log.getByRole("button", { name: "level expert" })).toBeVisible();
+      expect(await axeViolations(page)).toEqual([]);
+    });
+
+    test("an assistant at rest, with one message and a way to a person (plan 4 U12)", async ({
+      page,
+    }) => {
+      await mockAsk(page, () => undefined, { state: "resting" });
+      await openPrompt(page, "/en/writing");
+      await expect(askPanel(page).getByRole("button", { name: "Write to him" })).toBeVisible();
+      await expect(askPanel(page).getByRole("group", { name: "Suggested questions" })).toHaveCount(
+        0,
+      );
+      expect(await axeViolations(page)).toEqual([]);
+    });
+
     test("home's stage, at rest and running (plan 4 U11b)", async ({ page }) => {
       await mockAsk(page, (route) =>
         sse(route, answer({ text: "On the stage.", tools: SEARCH_STEP, followups: ["And then?"] })),
@@ -2608,7 +2722,7 @@ for (const colorScheme of ["dark", "light"] as const) {
       const prompt = await openPrompt(page);
       await run(prompt, "tour");
       await run(prompt, "next");
-      await expect(page.getByRole("group", { name: "tour · stop 1 of 5 · about" })).toBeVisible();
+      await expect(page.getByRole("group", { name: "Stop 1 of 5: about" })).toBeVisible();
       expect(await axeViolations(page)).toEqual([]);
     });
 
@@ -2727,9 +2841,9 @@ test.describe("assistant on a phone", () => {
       const log = sheet.locator("[role=log]");
       await sheet
         .getByRole("group", { name: "Suggested questions" })
-        .getByRole("button", { name: "What has he shipped with RAG?" })
+        .getByRole("button", { name: "What problem did Atlas solve?" })
         .click();
-      await expect(sheet.getByRole("button", { name: "copy", exact: true })).toBeVisible();
+      await expect(sheet.getByRole("button", { name: "Copy", exact: true })).toBeVisible();
       await expect(prompt).not.toBeFocused();
       await expect(log).toBeFocused();
 

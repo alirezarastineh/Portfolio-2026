@@ -83,6 +83,8 @@ export class AskLauncherService {
   readonly lastQuestion = signal<string | null>(null);
   /** The admin's suggested questions by language, read once a page load; null until they come. */
   readonly questions = signal<Record<string, string[]> | null>(null);
+  /** Whether the scorecard is published; null until the server has said. */
+  readonly scorecard = signal<boolean | null>(null);
   private readonly stageAsked = signal(false);
   /**
    * The console runs on the stage: one was asked for there, or a conversation exists. Never below

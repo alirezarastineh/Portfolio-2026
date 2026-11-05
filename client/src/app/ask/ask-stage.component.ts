@@ -15,8 +15,15 @@ import { lucideCornerDownLeft } from "@ng-icons/lucide";
 
 import { LanguageService } from "../services/language.service";
 import { AskConsoleComponent } from "./ask-console.component";
-import { ASK_ENTRY_COPY, COMMAND_ROW } from "./ask-entry-copy";
+import { ASK_ENTRY_COPY, commandRow } from "./ask-entry-copy";
 import { AskLauncherService } from "./ask-launcher.service";
+
+/** What the site's server says of the assistant; nothing when the API cannot say. */
+interface AskEntryState {
+  state?: string;
+  suggestions?: Record<string, string[]>;
+  scorecard?: boolean;
+}
 
 /**
  * The assistant's stage in the hero (plan 4 U11b): a frame of a set height, so nothing around it
@@ -24,7 +31,8 @@ import { AskLauncherService } from "./ask-launcher.service";
  * the commands and the line that says an AI answers. The console itself, with the store and the AI
  * SDK, loads when the visitor hovers or focuses here, and takes over at the first send, click, `/`
  * or palette request; it shows here while a conversation exists. While the panel is open the stage
- * steps back to one line, so one prompt and one live region exist at a time.
+ * steps back to one line, so one prompt and one live region exist at a time. An assistant at rest
+ * says so from the first paint, with a way to reach a person.
  *
  * Below 1024px the stage is only the door to the sheet: a console docked over a phone's keyboard is
  * what broke before. There it shows the last question, the way back into the conversation.
@@ -49,8 +57,14 @@ import { AskLauncherService } from "./ask-launcher.service";
         <p class="aside">{{ copy().continuing }}</p>
       } @else {
         <div class="body">
-          <!-- On a phone the way back into a conversation; elsewhere the console shows it. -->
-          @if (launcher.lastQuestion(); as question) {
+          <!-- At rest it says so, and offers a person, before anyone tries (plan 4 U12). -->
+          @if (launcher.assistant() === "resting") {
+            <p class="hint">{{ lang.t().ask.offline }}</p>
+            <a class="suggestion press" [href]="'/' + lang.lang() + '#contact'">{{
+              copy().contact
+            }}</a>
+          } @else if (launcher.lastQuestion(); as question) {
+            <!-- On a phone the way back into a conversation; elsewhere the console shows it. -->
             <button type="button" class="resume press" (click)="launcher.openSheet('button')">
               <span class="prompt" aria-hidden="true">&gt;</span>
               <span class="sr-only">{{ copy().resume }}:</span>
@@ -59,17 +73,19 @@ import { AskLauncherService } from "./ask-launcher.service";
           } @else {
             <p class="hint">{{ lang.t().ask.hint }}</p>
           }
-          <div class="suggestions" role="group" [attr.aria-label]="copy().suggestions">
-            @for (question of suggestions(); track question) {
-              <button
-                type="button"
-                class="suggestion press"
-                (click)="launcher.ask(question, 'starter')"
-              >
-                {{ question }}
-              </button>
-            }
-          </div>
+          @if (launcher.assistant() !== "resting") {
+            <div class="suggestions" role="group" [attr.aria-label]="copy().suggestions">
+              @for (question of suggestions(); track question) {
+                <button
+                  type="button"
+                  class="suggestion press"
+                  (click)="launcher.ask(question, 'starter')"
+                >
+                  {{ question }}
+                </button>
+              }
+            </div>
+          }
         </div>
         <form
           method="get"
@@ -99,7 +115,7 @@ import { AskLauncherService } from "./ask-launcher.service";
           </button>
         </form>
         <div class="commands" role="group" translate="no" [attr.aria-label]="copy().commands">
-          @for (command of commands; track command) {
+          @for (command of commands(); track command) {
             <button type="button" class="press" (click)="launcher.ask(command, 'starter')">
               {{ command }}
             </button>
@@ -217,6 +233,9 @@ import { AskLauncherService } from "./ask-launcher.service";
     }
     .suggestion:hover {
       border-color: var(--accent-orange);
+    }
+    a.suggestion {
+      text-decoration: none;
     }
     .composer {
       display: flex;
@@ -343,7 +362,7 @@ export class AskStageComponent {
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   protected readonly inputId = "ask-bar";
-  protected readonly commands = COMMAND_ROW;
+  protected readonly commands = computed(() => commandRow(this.launcher.scorecard()));
   protected readonly copy = computed(() => ASK_ENTRY_COPY[this.lang.lang()]);
   /** Three of the admin's questions, in the server's HTML; else the built-in three. */
   protected readonly suggestions = computed(() => {
@@ -354,8 +373,12 @@ export class AskStageComponent {
   constructor() {
     // Through the site's server, so the transfer cache replays it and the browser asks nothing.
     if (!this.launcher.questions()) {
-      this.http.get<Record<string, string[]>>("/api/v2/ask-questions").subscribe({
-        next: (questions) => this.launcher.questions.set(questions),
+      this.http.get<AskEntryState>("/api/v2/ask-questions").subscribe({
+        next: ({ state, suggestions, scorecard }) => {
+          this.launcher.questions.set(suggestions ?? {});
+          if (scorecard !== undefined) this.launcher.scorecard.set(scorecard);
+          if (state) this.launcher.assistant.set(state === "ok" ? "online" : "resting");
+        },
         error: () => undefined, // The built-in three stand.
       });
     }

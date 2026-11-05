@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getAskQuestions, resetAskQuestions } from "./ask-questions";
 
-const OK = { suggestions: { en: ["One?"], de: [] }, state: "ok" };
+const READ = { suggestions: { en: ["One?"], de: [] }, state: "resting", scorecard: false };
+const OK = { ...READ, model: "not for the page" };
 
 function respond(body: unknown, status = 200) {
   return vi.fn(async () => new Response(JSON.stringify(body), { status }));
@@ -23,7 +24,7 @@ describe("the admin's suggested questions on the server", () => {
   it("reads them once a minute", async () => {
     const fetcher = respond(OK);
     vi.stubGlobal("fetch", fetcher);
-    expect(await getAskQuestions()).toEqual(OK.suggestions);
+    expect(await getAskQuestions()).toEqual(READ);
     await getAskQuestions();
     expect(fetcher).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(60_001);
@@ -41,7 +42,7 @@ describe("the admin's suggested questions on the server", () => {
     ]) {
       vi.advanceTimersByTime(60_001);
       vi.stubGlobal("fetch", failing);
-      expect(await getAskQuestions()).toEqual(OK.suggestions);
+      expect(await getAskQuestions()).toEqual(READ);
     }
   });
 

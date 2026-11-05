@@ -73,6 +73,11 @@ let instances = 0;
         font-size: 1rem;
       }
     }
+    @media (pointer: coarse) {
+      button {
+        min-height: 2.75rem;
+      }
+    }
   `,
 })
 export class MatchBoxComponent {

@@ -80,7 +80,7 @@ describe("the brief's paste box (visitor plan V20)", () => {
 
   it("speaks German on a German page", () => {
     const { el } = mount("de");
-    expect(el.querySelector("label")?.textContent?.trim()).toBe("Beschreibe dein Projekt");
-    expect(el.querySelector('button[type="submit"]')?.textContent?.trim()).toBe("abgleichen");
+    expect(el.querySelector("label")?.textContent?.trim()).toBe("Projekt beschreiben");
+    expect(el.querySelector('button[type="submit"]')?.textContent?.trim()).toBe("Abgleichen");
   });
 });
