@@ -86,7 +86,7 @@ export class MagneticButtonComponent {
     [
       "press relative inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border px-6 font-mono text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60",
       this.variant() === "primary"
-        ? "border-transparent bg-accent-orange text-accent-orange-foreground hover:bg-accent-orange-hover"
+        ? "border-transparent bg-signal text-signal-foreground hover:bg-signal-hover"
         : "border-border bg-transparent text-foreground hover:border-accent-orange/60",
     ].join(" "),
   );

@@ -68,7 +68,7 @@
   bottom: 0.125rem;
   height: 2px;
   border-radius: 9999px;
-  background: var(--accent-orange);
+  background: var(--signal);
   transform-origin: left;
   scale: 0 1;
 }
@@ -81,9 +81,8 @@
  * Project cards (components/project-card.component.ts). A card with a case
  * study (`data-link`) is its "Read case study" link, stretched over the card,
  * and its focus ring follows the card's edge. Hovering the card or focusing a
- * link in it lifts it (utilities in the template), zooms the image a little,
- * nudges the arrow and, under a mouse, lights an indigo spotlight that follows
- * the pointer (`--mx` / `--my`, set in script).
+ * link in it lifts it (utilities in the template), zooms the image a little
+ * and nudges the arrow.
  */
 .card-link::after {
   content: "";
@@ -99,20 +98,6 @@
 .card-link:focus-visible::after {
   outline: 2px solid var(--accent-orange);
   outline-offset: -2px;
-}
-
-.project-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: radial-gradient(
-    240px circle at var(--mx, 50%) var(--my, 50%),
-    var(--accent-indigo-soft),
-    transparent 60%
-  );
-  opacity: 0;
-  pointer-events: none;
 }
 
 /* A contact field's focus: a 2px orange line over its own, drawn from the
@@ -186,10 +171,6 @@
     animation: terminal-caret-blink 1s steps(2, jump-none) 3;
   }
 
-  .project-card::before {
-    transition: opacity var(--dur-2);
-  }
-
   .card-media img {
     transition: scale var(--dur-5) var(--ease-out);
   }
@@ -212,10 +193,6 @@
   }
 
   @media (hover: hover) {
-    .project-card[data-link]:hover::before {
-      opacity: 1;
-    }
-
     .project-card[data-link]:hover .card-media img {
       scale: 1.03;
     }
@@ -296,10 +273,10 @@
       position: fixed;
       inset-inline: 0;
       top: calc(3.5rem + 1px);
-      z-index: 41;
+      z-index: calc(var(--z-header) + 1);
       display: block;
       height: 2px;
-      background: var(--accent-orange);
+      background: var(--signal);
       transform-origin: left;
       animation: draw linear both;
       animation-timeline: scroll(root);

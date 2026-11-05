@@ -7,7 +7,7 @@
     <!-- The browser's own colours (its toolbar, on phones): the page's
          background, dark as the server renders it. theme-init below and
          ThemeService switch it with the theme (THEME_COLOR). -->
-    <meta name="theme-color" content="#101012" />
+    <meta name="theme-color" content="#000000" />
     <meta name="color-scheme" content="dark light" />
     <!-- The saved theme, or else the system's, before anything paints: the
          `data-theme` the tokens follow, Spartan's `dark` class, and the
@@ -33,7 +33,7 @@
         r.dataset.theme = t;
         r.classList.toggle("dark", t === "dark");
         if (t === "light") {
-          document.querySelector('meta[name="theme-color"]').content = "#f9fafb";
+          document.querySelector('meta[name="theme-color"]').content = "#ffffff";
         }
       })();
     </script>

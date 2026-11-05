@@ -1,10 +1,10 @@
 import type { AppTranslations, Availability } from "./schema";
 
-/** The status dot's colour: green while open, orange while limited. */
+/** The status dot's colour: green while open, orange while limited, faint while closed. */
 export const AVAILABILITY_DOT: Record<Availability, string> = {
   open: "bg-available",
-  limited: "bg-accent-orange",
-  closed: "bg-muted-foreground",
+  limited: "bg-signal",
+  closed: "bg-faint-foreground",
 };
 
 /** The CMS's words for an availability: `Open to senior AI / full-stack roles`. */

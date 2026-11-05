@@ -69,7 +69,7 @@ const COPIED_MS = 1500;
  * over it from the left (`field-line` on the wrapper, motion.css).
  */
 const fieldClass =
-  "block w-full border-0 border-b border-input-line bg-transparent px-0 py-2 text-base text-foreground transition-colors duration-200 placeholder:text-muted-foreground selection:bg-accent-indigo/25 focus-visible:outline-none aria-[invalid=true]:border-destructive";
+  "block w-full border-0 border-b border-input-line bg-transparent px-0 py-2 text-base text-foreground transition-colors duration-200 placeholder:text-muted-foreground focus-visible:outline-none aria-[invalid=true]:border-destructive";
 const labelClass = "eyebrow text-muted-foreground";
 const errorClass = "m-0 font-mono text-meta text-destructive";
 

@@ -134,18 +134,16 @@ export async function renderOgPng(card: OgCard, fonts: OgFonts): Promise<Buffer>
 }
 
 /**
- * The dark theme's tokens (src/styles/tokens.css) in sRGB: Satori and resvg
- * take hex and rgba, not oklch. The orange lies outside sRGB and is clipped
- * into it, as an sRGB screen shows it. src/styles/tokens.spec.ts keeps these
- * equal to the tokens.
+ * The dark theme's tokens (src/styles/tokens.css), which Satori cannot read.
+ * src/styles/tokens.spec.ts keeps these equal to the tokens.
  */
 export const OG_COLOR = {
-  background: "#101012",
-  card: "#161719",
-  foreground: "#f5f5f5",
-  mutedForeground: "#bcbec1",
-  borderStrong: "rgba(255, 255, 255, 0.2)",
-  orange: "#ff7115",
+  background: "#000000",
+  card: "#0e0e10",
+  foreground: "#ededee",
+  mutedForeground: "#b4b4b9",
+  borderStrong: "rgba(255, 255, 255, 0.22)",
+  orange: "#ff4f00",
   indigo: "#7472f4",
 } as const;
 

@@ -292,7 +292,7 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
     }
     .prompt {
       flex: none;
-      color: var(--accent-orange);
+      color: var(--signal);
       font-family: var(--font-mono);
       font-weight: 500;
       user-select: none;
@@ -439,7 +439,6 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
       line-height: 1.5;
       resize: none;
       overflow-y: hidden;
-      caret-color: var(--accent-orange);
     }
     .field::placeholder {
       color: var(--muted-foreground);

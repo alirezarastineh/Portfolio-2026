@@ -12,6 +12,7 @@
 @import "./styles/fonts.css";
 @import "./styles/tokens.css";
 @import "./styles/theme.css";
+@import "./styles/public-theme.css";
 @import "./styles/primitives.css";
 @import "./styles/motion.css";
 
@@ -78,6 +79,15 @@ a {
   :focus-visible {
     outline: 2px solid var(--accent-orange);
     outline-offset: 2px;
+  }
+  /* On the public shell, not `:root`: this sheet loads in the admin too. */
+  app-public-shell {
+    caret-color: var(--signal);
+    accent-color: var(--signal);
+  }
+  app-public-shell ::selection {
+    background-color: var(--signal);
+    color: var(--signal-foreground);
   }
 }
 
@@ -192,7 +202,7 @@ a {
 .ask-loading {
   position: fixed;
   inset: 4.5rem 1rem 1rem auto;
-  z-index: 50;
+  z-index: var(--z-panel);
   width: min(28rem, 34vw);
   padding: 0.875rem 1rem;
   border: 1px solid var(--border-strong);
@@ -222,6 +232,10 @@ a {
    <main>, so a rule on any inner element is inherited by nothing that scrolls. */
 html:has(app-admin-layout) {
   scroll-behavior: auto;
+}
+
+html:not(:has(app-admin-layout)) {
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 /*
@@ -254,9 +268,7 @@ html:has(app-admin-layout) {
     --foreground: #000;
     --muted-foreground: #333;
     --border: #bbb;
-    --accent-orange: oklch(0.54 0.18 42);
-    --accent-indigo: oklch(0.5 0.2 280);
-    --shadow-e1: none;
+    --accent-orange: #b83a0a;
     --gutter: 0px;
   }
 

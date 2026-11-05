@@ -33,7 +33,7 @@ import { PictureComponent } from "./picture.component";
         <li>
           <figure class="m-0 flex flex-col gap-2">
             <a
-              class="group block aspect-16/10 overflow-hidden rounded-xl border border-border bg-card transition-colors hover:border-accent-indigo/50"
+              class="group block aspect-16/10 overflow-hidden rounded-xl border border-border bg-card transition-colors hover:border-border-strong"
               [href]="image.src"
               [attr.aria-label]="openLabel(i)"
               (click)="open(i, $event)"

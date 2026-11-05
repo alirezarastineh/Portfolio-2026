@@ -69,7 +69,7 @@ const segment =
          drops in, over the header, when focused (not sr-only: undoing that on
          focus makes it static, under the header). -->
     <a
-      class="fixed left-4 top-3 z-60 -translate-y-16 rounded-md bg-accent-orange px-4 py-2 font-mono text-sm font-medium text-accent-orange-foreground focus:translate-y-0"
+      class="fixed left-4 top-3 z-(--z-skip) -translate-y-16 rounded-md bg-signal px-4 py-2 font-mono text-sm font-medium text-signal-foreground focus:translate-y-0"
       [attr.href]="skipHref()"
       (click)="skipToContent($event)"
       >{{ labels().skip }}</a
@@ -80,7 +80,7 @@ const segment =
          Solid while the menu is open, so the page does not show through it. -->
     <header
       #bar
-      class="site-header fixed inset-x-0 top-0 z-40 border-b border-border backdrop-blur-md"
+      class="site-header fixed inset-x-0 top-0 z-(--z-header) border-b border-border backdrop-blur-md"
       [class]="open() ? 'bg-background' : 'bg-background/80'"
       [attr.data-open]="open() ? '' : null"
       (keydown)="trapFocus($event)"
@@ -135,7 +135,7 @@ const segment =
           <!-- The one call to action that is always in view. The CV stays in
                the hero, the palette and the mobile menu. -->
           <a
-            class="press hidden h-9 items-center rounded-md bg-accent-orange px-3 font-mono text-meta font-medium text-accent-orange-foreground hover:bg-accent-orange-hover lg:inline-flex"
+            class="press hidden h-9 items-center rounded-md bg-signal px-3 font-mono text-meta font-medium text-signal-foreground hover:bg-signal-hover lg:inline-flex"
             [routerLink]="home()"
             fragment="contact"
           >
@@ -206,7 +206,7 @@ const segment =
                 >
                   {{ link.label }}
                   @if (isActive(link)) {
-                    <span class="size-1.5 rounded-full bg-accent-orange" aria-hidden="true"></span>
+                    <span class="size-1.5 rounded-full bg-signal" aria-hidden="true"></span>
                   }
                 </a>
               </li>

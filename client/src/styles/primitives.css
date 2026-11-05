@@ -37,11 +37,11 @@
   @apply rounded-xl border border-border bg-card shadow-e1;
 }
 
-/* A text link in running copy: indigo underline, thicker and orange on hover. */
+/* A text link in running copy: a quiet underline, thicker and orange on hover. */
 @utility link-underline {
   color: var(--foreground);
   text-decoration-line: underline;
-  text-decoration-color: var(--accent-indigo);
+  text-decoration-color: var(--border-strong);
   text-decoration-thickness: 1px;
   text-underline-offset: 4px;
   transition:

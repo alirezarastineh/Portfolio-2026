@@ -131,7 +131,7 @@ const SHEET_ENTRY = "askSheet";
     .ask-sheet {
       position: fixed;
       inset: 4.5rem 1rem 1rem auto;
-      z-index: 50;
+      z-index: var(--z-panel);
       width: min(28rem, 34vw);
       height: auto;
       max-height: none;

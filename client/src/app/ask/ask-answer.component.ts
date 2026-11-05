@@ -415,7 +415,7 @@ interface Footnote {
       content: "";
       position: absolute;
       left: 0.1875rem;
-      background: var(--accent-orange);
+      background: var(--signal);
     }
     .trace li::before {
       top: calc(0.0625rem + 0.75em);
@@ -492,7 +492,7 @@ interface Footnote {
       margin-left: 0.25em;
       margin-right: -0.65em;
       border-radius: 50%;
-      background: var(--accent-orange);
+      background: var(--signal);
     }
     .list {
       max-width: 68ch;

@@ -1,0 +1,11 @@
+/*
+ * The public site's own Tailwind names, on top of styles/theme.css. Only
+ * styles.css imports this file: the admin's sheet compiles theme.css too, and
+ * the names it emits keep their values there.
+ */
+@theme inline {
+  --color-faint-foreground: var(--faint-foreground);
+  --color-signal: var(--signal);
+  --color-signal-foreground: var(--signal-foreground);
+  --color-signal-hover: var(--signal-hover);
+}

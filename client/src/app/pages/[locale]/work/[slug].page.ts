@@ -203,7 +203,7 @@ const AID_LABELS = {
               }
               @if (aids().plain || aids().expert) {
                 <section
-                  class="case-aids flex max-w-[60ch] flex-col gap-2 border-l-2 border-accent-orange pl-4"
+                  class="case-aids flex max-w-[60ch] flex-col gap-2 border-l-2 border-signal pl-4"
                 >
                   <h2 class="eyebrow m-0 text-muted-foreground">{{ aids().labels.inShort }}</h2>
                   @if (aids().plain) {
@@ -284,7 +284,7 @@ const AID_LABELS = {
                 class="m-0 grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-[repeat(auto-fit,minmax(11rem,1fr))]"
               >
                 @for (metric of s.project.metrics; track $index) {
-                  <div class="reveal flex flex-col gap-1.5 border-t-2 border-accent-orange pt-4">
+                  <div class="reveal flex flex-col gap-1.5 border-t-2 border-signal pt-4">
                     <dt class="order-2 text-sm text-muted-foreground">{{ metric.label }}</dt>
                     <dd class="order-1 m-0 text-metric tabular-nums text-foreground">
                       {{ metric.value }}
@@ -428,7 +428,7 @@ const AID_LABELS = {
             </p>
             <div class="mt-2 flex flex-wrap gap-3">
               <a
-                class="press inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent-orange px-5 py-2 font-mono text-meta font-medium text-accent-orange-foreground hover:bg-accent-orange-hover"
+                class="press inline-flex min-h-11 items-center gap-2 rounded-lg bg-signal px-5 py-2 font-mono text-meta font-medium text-signal-foreground hover:bg-signal-hover"
                 [routerLink]="['/', lang.lang()]"
                 fragment="contact"
               >

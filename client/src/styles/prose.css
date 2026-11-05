@@ -52,12 +52,11 @@
   color: var(--color-foreground);
 }
 
-/* Foreground text with an indigo underline: indigo is decoration only (it
-   falls short of the 4.5:1 body text needs on cards in the dark theme). */
+/* Foreground text with a quiet underline, orange on hover. */
 .prose-body a {
   color: var(--color-foreground);
   text-decoration: underline;
-  text-decoration-color: var(--color-accent-indigo);
+  text-decoration-color: var(--border-strong);
   text-underline-offset: 3px;
 }
 
@@ -80,7 +79,7 @@
 
 /* A callout: set apart on a card, not in italics. */
 .prose-body blockquote {
-  border-left: 2px solid var(--color-accent-orange);
+  border-left: 2px solid var(--signal);
   border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
   background: var(--color-card);
   padding: 1rem 1.25rem;
@@ -226,7 +225,7 @@
 /* A selection's button, placed under it in the page. */
 .reader-ask-selection {
   position: absolute;
-  z-index: 40;
+  z-index: var(--z-sticky);
   box-shadow: var(--shadow-md, 0 4px 12px rgb(0 0 0 / 0.15));
 }
 
@@ -352,7 +351,7 @@
 }
 
 .toc-link[aria-current] {
-  border-color: var(--color-accent-orange);
+  border-color: var(--signal);
 }
 
 /*
@@ -432,7 +431,7 @@
 .prose-compact a {
   color: var(--color-foreground);
   text-decoration: underline;
-  text-decoration-color: var(--color-accent-indigo);
+  text-decoration-color: var(--border-strong);
   text-underline-offset: 2px;
 }
 

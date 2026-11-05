@@ -236,11 +236,11 @@ test.describe("theme", () => {
     await page.goto("/en");
     const color = page.locator('meta[name="theme-color"]');
     await expect(color).toHaveCount(1);
-    await expect(color).toHaveAttribute("content", "#f9fafb");
+    await expect(color).toHaveAttribute("content", "#ffffff");
 
     await interactive(page);
     await page.getByRole("button", { name: "Switch to the dark theme" }).click();
-    await expect(color).toHaveAttribute("content", "#101012");
+    await expect(color).toHaveAttribute("content", "#000000");
 
     // No page's tags name a colour, so moving to another page keeps it.
     await page
@@ -249,7 +249,7 @@ test.describe("theme", () => {
       .click();
     await expect(page).toHaveURL(/\/en\/work\/project-one$/);
     await expect(page.locator("main h1")).toBeVisible();
-    await expect(color).toHaveAttribute("content", "#101012");
+    await expect(color).toHaveAttribute("content", "#000000");
   });
 });
 

@@ -83,7 +83,6 @@ export const routeMeta: RouteMeta = {
             <input
               type="radio"
               name="match-kind"
-              class="accent-accent-orange"
               [checked]="k === kind()"
               (change)="kind.set(k)"
             />

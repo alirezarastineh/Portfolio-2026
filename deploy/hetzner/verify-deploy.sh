@@ -136,10 +136,10 @@ check "legal pages render from the CMS" \
 # The redesign's client (2026-09): the browser's colour is the page's own
 # background, set by the theme (the CMS's theme colour is retired), and
 # index.html's developer comments no longer ship with every page.
-if grep -qF '<meta name="theme-color" content="#101012">' <<<"${HOME_EN}"; then
+if grep -qF '<meta name="theme-color" content="#000000">' <<<"${HOME_EN}"; then
   pass "pages give the browser their dark background as its colour (the redesign's client)"
 else
-  fail "the page's theme-color is not #101012 — an older client, or the CMS colour still emitted?"
+  fail "the page's theme-color is not #000000 — an older client, or the CMS colour still emitted?"
 fi
 if grep -qF 'The saved theme, or else' <<<"${HOME_EN}"; then
   fail "index.html's comments are still sent with every page (vite-plugins/strip-html-comments.ts)"

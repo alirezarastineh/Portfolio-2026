@@ -22,7 +22,7 @@ const LIGHT_QUERY = "(prefers-color-scheme: light)";
  * first paint). styles/tokens.spec.ts keeps them equal to the tokens, and to
  * the copies in index.html and site.webmanifest.
  */
-export const THEME_COLOR: Record<Theme, string> = { dark: "#101012", light: "#f9fafb" };
+export const THEME_COLOR: Record<Theme, string> = { dark: "#000000", light: "#ffffff" };
 
 /**
  * Sets the theme on `<html>`: the attribute the tokens use, Spartan's `dark`

@@ -1,15 +1,4 @@
-import { isPlatformBrowser } from "@angular/common";
-import {
-  afterNextRender,
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  DestroyRef,
-  ElementRef,
-  inject,
-  input,
-  PLATFORM_ID,
-} from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideArrowRight, lucideExternalLink, lucideFileText } from "@ng-icons/lucide";
@@ -21,7 +10,6 @@ import type { CardLayout } from "./project-layout";
 import type { Project } from "../content/schema";
 import { CHROME } from "../i18n/chrome";
 import { fmt } from "../i18n/interpolate";
-import { trackPointer } from "../motion/pointer";
 import { projectTitleTransitionName, projectTransitionName } from "../navigation/view-transitions";
 import { LanguageService } from "../services/language.service";
 
@@ -130,7 +118,7 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
         @if (metrics().length) {
           <dl class="m-0 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
             @for (metric of metrics(); track metric.label) {
-              <div class="flex flex-col gap-1 border-t-2 border-accent-orange pt-3">
+              <div class="flex flex-col gap-1 border-t-2 border-signal pt-3">
                 <dt class="order-2 font-mono text-meta text-muted-foreground">
                   {{ metric.label }}
                 </dt>
@@ -311,18 +299,6 @@ export class ProjectCardComponent {
     if (l.caseStudy) out.push({ label: c.caseStudy, href: l.caseStudy, icon: "lucideFileText" });
     return out;
   });
-
-  constructor() {
-    // The indigo spotlight follows a mouse over a card that leads somewhere.
-    // Attached in the browser only, so the server's HTML carries no listener.
-    if (!isPlatformBrowser(inject(PLATFORM_ID))) return;
-    const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
-    const move = (event: PointerEvent) => {
-      if (this.project().hasCaseStudy) trackPointer(host, event);
-    };
-    afterNextRender(() => host.addEventListener("pointermove", move, { passive: true }));
-    inject(DestroyRef).onDestroy(() => host.removeEventListener("pointermove", move));
-  }
 }
 
 /** Rich text with something in it once the tags are gone. */

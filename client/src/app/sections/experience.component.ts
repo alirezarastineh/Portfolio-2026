@@ -89,8 +89,8 @@ const HIGHLIGHTS = 3;
                   <li class="reveal relative pb-10 pl-8 last:pb-0">
                     <!-- Filled while ongoing; a role still held pulses (motion.css). -->
                     <span
-                      class="absolute -left-1.25 top-1.5 size-2.25 rounded-full border border-accent-orange"
-                      [class.bg-accent-orange]="!entry.experience.period.end"
+                      class="absolute -left-1.25 top-1.5 size-2.25 rounded-full border border-signal"
+                      [class.bg-signal]="!entry.experience.period.end"
                       [class.bg-background]="!!entry.experience.period.end"
                       [class.pulse-ring]="entry.live"
                       aria-hidden="true"

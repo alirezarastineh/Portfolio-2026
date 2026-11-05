@@ -254,7 +254,7 @@ interface AskEntryState {
     }
     .prompt {
       flex: none;
-      color: var(--accent-orange);
+      color: var(--signal);
       font-family: var(--font-mono);
       font-weight: 500;
       user-select: none;
@@ -278,7 +278,6 @@ interface AskEntryState {
       /* iOS zooms into a field under 16px when it takes focus. */
       font-size: 1rem;
       line-height: 1.5;
-      caret-color: var(--accent-orange);
     }
     .field::placeholder {
       color: var(--muted-foreground);

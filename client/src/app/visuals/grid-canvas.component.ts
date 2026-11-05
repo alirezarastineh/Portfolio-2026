@@ -38,7 +38,7 @@ const MAX_PIXELS = 4_000_000;
   },
   template: `
     <svg
-      class="absolute inset-0 block size-full text-accent-indigo opacity-60"
+      class="absolute inset-0 block size-full text-faint-foreground opacity-60"
       [class.invisible]="live()"
       preserveAspectRatio="xMidYMid slice"
       xmlns="http://www.w3.org/2000/svg"
@@ -90,7 +90,7 @@ export class GridCanvasComponent {
   constructor() {
     afterNextRender(() => this.init());
 
-    // The dots take the theme's indigo.
+    // The dots take the theme's faint grey.
     effect(() => {
       this.theme.theme();
       if (!this.ctx) return;
@@ -147,8 +147,8 @@ export class GridCanvasComponent {
 
   private readColor(): void {
     this.color =
-      getComputedStyle(document.documentElement).getPropertyValue("--accent-indigo").trim() ||
-      "oklch(0.62 0.19 280)";
+      getComputedStyle(document.documentElement).getPropertyValue("--faint-foreground").trim() ||
+      "#8b8b91";
   }
 
   private invalidate(): void {
