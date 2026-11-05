@@ -114,7 +114,7 @@ const MAX_ORGS = 5;
             <h1
               id="hero-heading"
               class="m-0 text-balance text-h1 text-foreground"
-              [class.hyphens-auto]="lang.lang() === 'de'"
+              [class.hyphens-manual]="lang.lang() !== 'de'"
             >
               <span class="sr-only">{{ identity().name }} — </span
               >{{ lang.t().profile.heroHeadline }}

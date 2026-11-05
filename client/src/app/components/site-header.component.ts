@@ -69,7 +69,7 @@ const segment =
          drops in, over the header, when focused (not sr-only: undoing that on
          focus makes it static, under the header). -->
     <a
-      class="fixed left-4 top-3 z-(--z-skip) -translate-y-16 rounded-md bg-signal px-4 py-2 font-mono text-sm font-medium text-signal-foreground focus:translate-y-0"
+      class="fixed left-4 top-3 z-(--z-skip) -translate-y-16 rounded-md bg-signal px-4 py-2 text-sm font-medium text-signal-foreground focus:translate-y-0"
       [attr.href]="skipHref()"
       (click)="skipToContent($event)"
       >{{ labels().skip }}</a
@@ -90,7 +90,7 @@ const segment =
       >
         <!-- The favicon's mark. Its name starts with the visible word. -->
         <a
-          class="inline-flex h-9 items-center font-mono text-sm font-semibold text-foreground"
+          class="inline-flex h-9 items-center text-sm font-semibold text-foreground"
           [routerLink]="home()"
           fragment="hero"
           (click)="closeMenu()"
@@ -107,7 +107,7 @@ const segment =
         >
           @for (link of links(); track link.key) {
             <a
-              class="nav-link relative inline-flex h-9 items-center font-mono text-meta transition-colors duration-(--dur-2) hover:text-foreground"
+              class="nav-link relative inline-flex h-9 items-center text-meta transition-colors duration-(--dur-2) hover:text-foreground"
               [class.text-foreground]="isActive(link)"
               [class.text-muted-foreground]="!isActive(link)"
               [attr.aria-current]="isActive(link) ? 'true' : null"
@@ -135,7 +135,7 @@ const segment =
           <!-- The one call to action that is always in view. The CV stays in
                the hero, the palette and the mobile menu. -->
           <a
-            class="press hidden h-9 items-center rounded-md bg-signal px-3 font-mono text-meta font-medium text-signal-foreground hover:bg-signal-hover lg:inline-flex"
+            class="press hidden h-9 items-center rounded-md bg-signal px-3 text-meta font-medium text-signal-foreground hover:bg-signal-hover lg:inline-flex"
             [routerLink]="home()"
             fragment="contact"
           >
@@ -162,7 +162,7 @@ const segment =
                without JavaScript, and remembered for the next visit to "/".
                Its name keeps the visible "DE" and adds the language's name. -->
           <a
-            class="press hidden h-9 items-center justify-center rounded-md border border-border px-2.5 font-mono text-meta text-muted-foreground hover:border-accent-orange/50 hover:text-foreground lg:inline-flex"
+            class="press hidden h-9 items-center justify-center rounded-md border border-border px-2.5 text-meta text-muted-foreground hover:border-accent-orange/50 hover:text-foreground lg:inline-flex"
             [routerLink]="lang.alternates()[other()]"
             [attr.hreflang]="other()"
             [attr.lang]="other()"
@@ -214,7 +214,7 @@ const segment =
           </ul>
           @if (resumeHref(); as href) {
             <a
-              class="menu-rise mt-4 inline-flex w-fit items-center gap-2 py-2 font-mono text-meta text-muted-foreground transition-colors duration-(--dur-2) hover:text-foreground"
+              class="menu-rise mt-4 inline-flex w-fit items-center gap-2 py-2 text-meta text-muted-foreground transition-colors duration-(--dur-2) hover:text-foreground"
               [style.--i]="links().length"
               [href]="href"
               download
@@ -226,7 +226,7 @@ const segment =
           }
 
           <div
-            class="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5 font-mono text-meta"
+            class="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5 text-meta"
           >
             <div
               class="inline-flex rounded-lg border border-border p-1"

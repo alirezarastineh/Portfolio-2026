@@ -12,6 +12,14 @@
   max-width: 68ch;
   color: var(--color-muted-foreground);
   line-height: 1.75;
+  /* `font-synthesis: none` on the body would leave `em` upright: no italic file ships. */
+  font-synthesis-style: auto;
+}
+
+@media (width < 40rem) {
+  .prose-body {
+    hyphens: auto;
+  }
 }
 
 .prose-body > * + * {

@@ -46,14 +46,14 @@ const linkClass =
       <div
         class="container-site grid grid-cols-2 gap-x-(--col-gap) gap-y-10 py-12 sm:grid-cols-4 lg:grid-cols-12"
       >
-        <p class="col-span-2 m-0 font-mono text-meta sm:col-span-4 lg:col-span-4">
+        <p class="col-span-2 m-0 text-meta sm:col-span-4 lg:col-span-4">
           <span class="text-accent-orange" aria-hidden="true">~$ </span>exit
           <span class="block text-muted-foreground"># {{ chrome().signOff }}</span>
         </p>
         @for (column of columns(); track column.label) {
           <nav class="flex flex-col gap-3 lg:col-span-2" [attr.aria-label]="column.label">
             <p class="eyebrow m-0 text-muted-foreground" aria-hidden="true">{{ column.label }}</p>
-            <ul class="m-0 flex list-none flex-col gap-2 p-0 font-mono text-meta" role="list">
+            <ul class="m-0 flex list-none flex-col gap-2 p-0 text-meta" role="list">
               @for (link of column.links; track link.label) {
                 <li>
                   @if (link.href) {
@@ -77,7 +77,7 @@ const linkClass =
       </div>
       <!-- Clear of the ask button, fixed at the bottom right on every page but home. -->
       <div
-        class="container-site flex flex-wrap justify-between gap-x-6 gap-y-2 pb-20 font-mono text-meta text-muted-foreground"
+        class="container-site flex flex-wrap justify-between gap-x-6 gap-y-2 pb-20 text-meta text-muted-foreground"
       >
         <p class="m-0">
           © {{ year() }} {{ name() }}

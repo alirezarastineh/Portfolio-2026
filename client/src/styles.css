@@ -51,14 +51,19 @@ html {
 
 body {
   font-family: var(--font-sans);
-  font-size: 16.5px;
+  font-size: 1.0625rem;
   line-height: 1.6;
-  font-weight: 460;
+  font-weight: 400;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
+}
+
+/* Dark type blooms on black, light type thins on white. */
+:root[data-theme="light"] body {
+  font-weight: 430;
 }
 
 a {
@@ -80,7 +85,9 @@ a {
     outline: 2px solid var(--accent-orange);
     outline-offset: 2px;
   }
-  /* On the public shell, not `:root`: this sheet loads in the admin too. */
+  /* On the public shell, not `:root`: this sheet loads in the admin too.
+     Details a browser without them simply skips. */
+  /* eslint-disable css/use-baseline */
   app-public-shell {
     caret-color: var(--signal);
     accent-color: var(--signal);
@@ -89,6 +96,16 @@ a {
     background-color: var(--signal);
     color: var(--signal-foreground);
   }
+  /* `overflow-wrap`: hyphens need a dictionary the browser may not have. */
+  app-public-shell :is(h1, h2, h3, h4) {
+    text-wrap: balance;
+    hyphens: auto;
+    overflow-wrap: break-word;
+  }
+  app-public-shell p {
+    text-wrap: pretty;
+  }
+  /* eslint-enable css/use-baseline */
 }
 
 /*
@@ -235,6 +252,7 @@ html:has(app-admin-layout) {
 }
 
 html:not(:has(app-admin-layout)) {
+  /* eslint-disable-next-line css/use-baseline -- a detail: without it the browser draws its own. */
   scrollbar-color: var(--border-strong) transparent;
 }
 

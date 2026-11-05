@@ -21,14 +21,13 @@
   color-scheme: dark;
 
   --font-sans:
-    "Geist Variable", "Geist Fallback", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Instrument Sans Variable", "Instrument Sans Fallback", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
     "Segoe UI Symbol", "Noto Color Emoji";
-  --font-mono:
-    "Geist Mono Variable", "Geist Mono Fallback", "JetBrains Mono", ui-monospace, SFMono-Regular,
-    Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  /* Code: the reader's own, at no cost. */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* Data and the assistant's trace (fonts.css). */
-  --font-data: "B612", Arial, sans-serif;
+  --font-data: "B612", "B612 Fallback", Arial, sans-serif;
 
   --radius: 0.625rem;
 

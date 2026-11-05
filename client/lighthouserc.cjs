@@ -56,7 +56,7 @@ module.exports = {
         // (sections below the hero hydrate, and load, as they scroll into
         // view; the assistant's terminal loads on demand), ~163-172 KB on
         // subpages; styles ~9.9 KB (admin CSS lives in the admin's chunk);
-        // fonts 51.8 KB on every page (the Latin Geist and Geist Mono files).
+        // fonts 50.1 KB at most (Instrument Sans, and B612 where a page shows it).
         // The font budget is that plus 15%: a new family or subset fails it.
         "resource-summary:script:size": ["error", { maxNumericValue: 240 * KB }],
         "resource-summary:stylesheet:size": ["error", { maxNumericValue: 16 * KB }],
