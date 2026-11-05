@@ -15,6 +15,7 @@ import { AskSheetComponent } from "../ask/ask-sheet.component";
 import { CommandPaletteComponent } from "../components/command-palette.component";
 import { SiteFooterComponent } from "../components/site-footer.component";
 import { SiteHeaderComponent } from "../components/site-header.component";
+import { CHROME } from "../i18n/chrome";
 import { injectUmami } from "../monitoring/analytics";
 import { CommandPaletteService } from "../services/command-palette.service";
 import { LanguageService } from "../services/language.service";
@@ -41,9 +42,11 @@ import { LanguageService } from "../services/language.service";
         <app-site-footer />
       </div>
     </div>
-    <!-- Its code loads the first time someone opens it. -->
+    <!-- Its code loads the first time someone opens it; on a slow line its frame answers at once. -->
     @defer (when palette.requested()) {
       <app-command-palette />
+    } @loading (after 100ms) {
+      <div class="palette-loading" role="status">{{ paletteTitle() }}…</div>
     }
     <!-- Opens the assistant's panel (loaded on first use); on home it waits until
          the hero's stage has left the screen. A 48px pill clear of the phone's
@@ -72,6 +75,7 @@ export class PublicShellComponent {
   protected readonly launcher = inject(AskLauncherService);
   protected readonly lang = inject(LanguageService);
   protected readonly onHome = computed(() => this.lang.page() === "/");
+  protected readonly paletteTitle = computed(() => CHROME[this.lang.lang()].palette.title);
   /** The header, whose open menu makes the page behind it inert. */
   protected readonly header = viewChild(SiteHeaderComponent);
   /**

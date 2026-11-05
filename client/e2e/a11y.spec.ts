@@ -67,5 +67,13 @@ for (const colorScheme of ["dark", "light"] as const) {
       await expect(page.locator("#mobile-nav")).toBeVisible();
       expect(await unexpected(page)).toEqual([]);
     });
+
+    test("the open palette has no new accessibility violations", async ({ page }) => {
+      await page.goto("/en/work/project-one");
+      await interactive(page);
+      await page.keyboard.press("ControlOrMeta+k");
+      await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("rag");
+      expect(await unexpected(page)).toEqual([]);
+    });
   });
 }

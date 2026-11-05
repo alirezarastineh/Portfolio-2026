@@ -34,12 +34,12 @@ export interface ChromeLabels {
   palette: {
     title: string;
     placeholder: string;
-    empty: string;
     hint: string;
     sections: string;
     work: string;
     actions: string;
     home: string;
+    /** Before what was typed, in the first row: "Ask: …". */
     ask: string;
     /** What changed since the last visit (visitor plan V15). */
     news: string;
@@ -118,14 +118,13 @@ export const CHROME: Record<Locale, ChromeLabels> = {
     hero: { localTime: "local time", shippedAt: "Shipped at" },
     palette: {
       title: "Command palette",
-      placeholder: "Search pages, or run a command…",
-      empty: "Nothing matches.",
-      hint: "↑↓ to move · ↵ to open · esc to close",
+      placeholder: "Ask a question or search…",
+      hint: "↑↓ to move, Enter to open, Esc to close",
       sections: "Sections",
       work: "Case studies",
       actions: "Actions",
       home: "Home",
-      ask: "Ask AI…",
+      ask: "Ask",
       news: "What's new",
       tour: "Take the tour",
       close: "Close",
@@ -199,14 +198,13 @@ export const CHROME: Record<Locale, ChromeLabels> = {
     hero: { localTime: "Ortszeit", shippedAt: "Gearbeitet bei" },
     palette: {
       title: "Befehlspalette",
-      placeholder: "Seiten suchen oder Befehl ausführen…",
-      empty: "Keine Treffer.",
-      hint: "↑↓ wählen · ↵ öffnen · esc schließen",
+      placeholder: "Frage stellen oder suchen…",
+      hint: "↑↓ wählen, Enter öffnen, Esc schließen",
       sections: "Bereiche",
       work: "Fallstudien",
       actions: "Aktionen",
       home: "Startseite",
-      ask: "KI fragen…",
+      ask: "Fragen",
       news: "Was ist neu",
       tour: "Führung starten",
       close: "Schließen",

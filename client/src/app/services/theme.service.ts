@@ -60,7 +60,7 @@ export function revealCircle(
  * A switch from a button grows the new theme from it in a circle (a view
  * transition of type `theme`, styled in styles.css), where the browser has
  * typed view transitions and the visitor has not asked for reduced motion.
- * Anywhere else, and from the command palette, it applies at once.
+ * Anywhere else it applies at once.
  *
  * With no saved choice the site follows the system setting as it changes.
  */

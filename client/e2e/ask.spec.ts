@@ -2452,6 +2452,29 @@ test.describe("assistant terminal", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Check the fit");
   });
 
+  test("the palette's first row asks what was typed, so no search ends empty (plan 4 U19)", async ({
+    page,
+  }) => {
+    const mock = await mockAsk(page, (route) => sse(route, answer({ text: "With evals." })));
+    await page.goto("/en/writing");
+    await interactive(page);
+    await page.keyboard.press("ControlOrMeta+k");
+    const palette = page.getByRole("dialog", { name: "Command palette" });
+    const input = palette.getByRole("combobox");
+    // A match keeps Enter for itself; the Ask row stays above it.
+    await input.fill("atlas");
+    await expect(palette.getByRole("option")).toHaveText(["Ask: atlas", "Atlas"]);
+    await expect(input).toHaveAttribute("aria-activedescendant", "palette-work-project-one");
+
+    await input.fill("how does he test");
+    await expect(palette.getByRole("option")).toHaveText(["Ask: how does he test"]);
+    await expect(input).toHaveAttribute("aria-activedescendant", "palette-ask");
+    await page.keyboard.press("Enter");
+    await expect(palette).toBeHidden();
+    await expect(askPanel(page)).toContainText("With evals.");
+    expect(JSON.stringify(mock.bodies[0]!.messages)).toContain("how does he test");
+  });
+
   test("the contact form is a WebMCP tool only once it works: the server's HTML names nothing, the honeypot never (plan 3 W5)", async ({
     page,
     request,

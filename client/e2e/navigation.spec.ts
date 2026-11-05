@@ -230,6 +230,20 @@ test.describe("site navigation", () => {
     await expect(menu).toBeHidden();
   });
 
+  test("on touch the palette closes from its own control; key hints are for keyboards", async ({
+    page,
+    isMobile,
+  }) => {
+    if (!isMobile) return;
+    await page.goto("/en/writing");
+    await interactive(page);
+    await page.keyboard.press("ControlOrMeta+k");
+    const palette = page.getByRole("dialog", { name: "Command palette" });
+    await expect(palette.locator("kbd")).toBeHidden();
+    await palette.getByRole("button", { name: "Close" }).click();
+    await expect(palette).toBeHidden();
+  });
+
   test("the ask button steps aside while the menu is open", async ({ page, isMobile }) => {
     if (!isMobile) return;
     await page.goto("/en/work/project-one");

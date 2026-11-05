@@ -353,7 +353,7 @@ test.describe("command palette", () => {
     await expect(input).toBeFocused();
 
     await input.fill("atlas");
-    await expect(dialog.getByRole("option")).toHaveText(["Atlas"]);
+    await expect(dialog.getByRole("option")).toHaveText(["Ask: atlas", "Atlas"]);
     await expect(input).toHaveAttribute("aria-activedescendant", "palette-work-project-one");
     await page.keyboard.press("Enter");
 

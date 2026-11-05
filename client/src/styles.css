@@ -221,8 +221,10 @@ a {
   overflow: hidden;
 }
 
-/* The panel's place while its code loads (ask-sheet.component.ts). */
-.ask-loading {
+/* The panel's and the palette's places while their code loads (ask-sheet.component.ts,
+   command-palette.component.ts). */
+.ask-loading,
+.palette-loading {
   position: fixed;
   inset: 4.5rem 1rem 1rem auto;
   z-index: var(--z-panel);
@@ -233,6 +235,12 @@ a {
   background: var(--card);
   font-size: 0.9375rem;
   font-weight: 600;
+}
+.palette-loading {
+  inset: 12dvh 0 auto;
+  width: min(36rem, calc(100vw - 2rem));
+  margin-inline: auto;
+  color: var(--muted-foreground);
 }
 @media (width < 64rem) {
   .ask-loading {

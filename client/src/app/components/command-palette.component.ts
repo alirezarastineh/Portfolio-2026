@@ -31,7 +31,7 @@ import {
 import { AskLauncherService } from "../ask/ask-launcher.service";
 import { newsCount, visitNews } from "../ask/news";
 import { fetchMap, updatesSince } from "../ask/portfolio-map";
-import { otherLocale, type Locale } from "../content/locale";
+import { otherLocale } from "../content/locale";
 import { splitCommentMark } from "../i18n/comment-mark";
 import { CHROME } from "../i18n/chrome";
 import { CommandPaletteService } from "../services/command-palette.service";
@@ -53,15 +53,14 @@ interface Group {
   commands: Command[];
 }
 
-/** The match page's entry (plan 3 W3): its words here, so no other chunk joins the palette's. */
-const MATCH_LABEL: Record<Locale, string> = { en: "Check the fit", de: "Passt es?" };
-
 /**
- * The public ⌘K palette: jump to a section, a case study or a post, or switch
- * language or theme, ask the assistant, download the CV. A native modal
- * `<dialog>` (the browser traps focus, closes on Escape and hands focus back)
- * holding a combobox over a listbox, the ARIA pattern screen readers know.
- * Loaded the first time someone opens it (see the public shell).
+ * The public ⌘K palette, the header's "Ask or search": its first row always asks
+ * the assistant what was typed, so no search ends empty; below it, jump to a
+ * section, a case study or a post, or switch language or theme, download the CV.
+ * A native modal `<dialog>` (the browser traps focus, closes on Escape and hands
+ * focus back) holding a combobox over a listbox, the ARIA pattern screen readers
+ * know. Loaded the first time someone opens it (see the public shell), and styled
+ * here, so its rules load with it.
  */
 @Component({
   selector: "app-command-palette",
@@ -89,13 +88,13 @@ const MATCH_LABEL: Record<Locale, string> = { en: "Check the fit", de: "Passt es
   template: `
     <dialog
       #dialog
-      class="palette mx-auto mt-[12vh] w-[min(36rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-popover p-0 text-popover-foreground shadow-e3 backdrop:bg-scrim backdrop:backdrop-blur-sm"
+      class="palette"
       [attr.aria-label]="labels().title"
       (close)="palette.hide()"
       (click)="closeOnBackdrop($event)"
     >
-      <div class="flex items-center gap-3 border-b border-border px-4">
-        <ng-icon name="lucideSearch" size="16" class="text-muted-foreground" aria-hidden="true" />
+      <div class="palette-search">
+        <ng-icon name="lucideSearch" size="16" class="palette-icon" aria-hidden="true" />
         <input
           #input
           type="text"
@@ -105,7 +104,8 @@ const MATCH_LABEL: Record<Locale, string> = { en: "Check the fit", de: "Passt es
           aria-controls="palette-list"
           autocomplete="off"
           spellcheck="false"
-          class="h-12 min-w-0 flex-1 bg-transparent text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-none"
+          enterkeyhint="go"
+          class="palette-input"
           [attr.aria-label]="labels().title"
           [attr.aria-activedescendant]="activeId()"
           [placeholder]="labels().placeholder"
@@ -113,75 +113,180 @@ const MATCH_LABEL: Record<Locale, string> = { en: "Check the fit", de: "Passt es
           (input)="search($event)"
           (keydown)="onKey($event)"
         />
-        <kbd class="kbd" aria-hidden="true">esc</kbd>
+        <kbd class="palette-key" aria-hidden="true">esc</kbd>
+        <button type="button" class="control press palette-close" (click)="palette.hide()">
+          {{ labels().close }}
+        </button>
       </div>
 
-      @if (flat().length) {
+      <div id="palette-list" role="listbox" class="palette-list" [attr.aria-label]="labels().title">
         <div
-          id="palette-list"
-          role="listbox"
-          class="max-h-[min(24rem,60vh)] overflow-y-auto p-2"
-          [attr.aria-label]="labels().title"
+          role="option"
+          class="palette-option"
+          [id]="ask().id"
+          [attr.aria-selected]="ask().id === activeId()"
+          (click)="run(ask())"
+          (pointermove)="highlight(ask().id)"
         >
-          @for (group of groups(); track group.label; let g = $index) {
-            <div role="group" [attr.aria-labelledby]="'palette-group-' + g">
-              <div [id]="'palette-group-' + g" class="eyebrow px-3 pb-1 pt-3 text-muted-foreground">
-                {{ group.label }}
-              </div>
-              @for (command of group.commands; track command.id) {
-                <div
-                  role="option"
-                  class="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-foreground"
-                  [class.bg-muted]="command.id === activeId()"
-                  [id]="command.id"
-                  [attr.aria-selected]="command.id === activeId()"
-                  (click)="run(command)"
-                  (pointermove)="highlight(command.id)"
-                >
-                  <ng-icon
-                    [name]="command.icon"
-                    size="15"
-                    class="shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <span class="truncate">{{ command.label }}</span>
-                  @if (command.hint) {
-                    <span class="ml-auto shrink-0 font-mono text-xs text-muted-foreground">{{
-                      command.hint
-                    }}</span>
-                  }
-                </div>
-              }
-            </div>
+          <ng-icon name="lucideSparkles" size="16" class="palette-icon" aria-hidden="true" />
+          @if (typed(); as text) {
+            <span class="palette-label"
+              ><span class="palette-muted">{{ labels().ask }}:</span> {{ text }}</span
+            >
+          } @else {
+            <span class="palette-label">{{ lang.t().ask.title }}…</span>
           }
         </div>
-      } @else {
-        <p class="m-0 px-4 py-8 text-center text-sm text-muted-foreground">{{ labels().empty }}</p>
-      }
+        @for (group of groups(); track group.label; let g = $index) {
+          <div role="group" [attr.aria-labelledby]="'palette-group-' + g">
+            <div [id]="'palette-group-' + g" class="palette-group">{{ group.label }}</div>
+            @for (command of group.commands; track command.id) {
+              <div
+                role="option"
+                class="palette-option"
+                [id]="command.id"
+                [attr.aria-selected]="command.id === activeId()"
+                (click)="run(command)"
+                (pointermove)="highlight(command.id)"
+              >
+                <ng-icon [name]="command.icon" size="16" class="palette-icon" aria-hidden="true" />
+                <span class="palette-label">{{ command.label }}</span>
+                @if (command.hint) {
+                  <span class="palette-hint">{{ command.hint }}</span>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
 
-      <p
-        class="m-0 border-t border-border px-4 py-2 font-mono text-meta text-muted-foreground"
-        aria-hidden="true"
-      >
-        {{ labels().hint }}
-      </p>
+      <p class="palette-keys" aria-hidden="true">{{ labels().hint }}</p>
     </dialog>
   `,
   styles: `
-    /* Opening, it grows from 98% and fades in over a fading backdrop; closing,
-       the reverse, faster (display and the top layer wait for it). Where the
-       browser cannot animate a dialog's display, it simply appears. The
-       fallbacks: ::backdrop inherits the tokens only in newer browsers. */
+    .palette {
+      width: min(36rem, calc(100vw - 2rem));
+      margin: 12dvh auto auto;
+      padding: 0;
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      border-radius: 0.5rem;
+      background: var(--popover);
+      color: var(--popover-foreground);
+      box-shadow: var(--shadow-e3);
+    }
+    .palette::backdrop {
+      background: var(--scrim, rgb(0 0 0 / 65%));
+    }
+    .palette-search {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding-inline: 1rem 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .palette-input {
+      flex: 1;
+      min-width: 0;
+      height: 3.25rem;
+      background: transparent;
+      font-size: 1rem;
+    }
+    .palette-input::placeholder {
+      color: var(--muted-foreground);
+    }
+    .palette-input:focus-visible {
+      outline: none;
+    }
+    .palette-key {
+      margin-inline-end: 0.5rem;
+      padding: 0 0.375rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--muted-foreground);
+      font: inherit;
+      font-size: 0.75rem;
+    }
+    .palette-list {
+      max-height: min(24rem, 60dvh);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 0.5rem;
+    }
+    .palette-group {
+      padding: 0.75rem 0.75rem 0.25rem;
+      color: var(--faint-foreground);
+      font-size: 0.8125rem;
+    }
+    .palette-option {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-height: 2.5rem;
+      padding-inline: 0.75rem;
+      border-radius: var(--radius);
+      font-size: 0.9375rem;
+      touch-action: manipulation;
+      cursor: pointer;
+    }
+    .palette-option[aria-selected="true"] {
+      background: var(--surface-2);
+    }
+    .palette-icon {
+      flex: none;
+      color: var(--muted-foreground);
+    }
+    .palette-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .palette-muted {
+      color: var(--muted-foreground);
+    }
+    .palette-hint {
+      flex: none;
+      margin-inline-start: auto;
+      color: var(--faint-foreground);
+      font-size: 0.8125rem;
+    }
+    .palette-keys {
+      margin: 0;
+      padding: 0.5rem 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--faint-foreground);
+      font-size: 0.8125rem;
+    }
+    /* A close control for touch; the keys for a keyboard. */
+    @media (pointer: coarse) {
+      .palette-option {
+        min-height: 2.75rem;
+      }
+      .palette-key,
+      .palette-keys {
+        display: none;
+      }
+    }
+    @media (pointer: fine) {
+      .palette-close {
+        display: none;
+      }
+    }
+
+    /* Opening, it grows from 98% and fades in over a fading backdrop, in 120ms:
+       it is used often. Closing, the reverse, faster (display and the top layer
+       wait for it). Where the browser cannot animate a dialog's display, it simply
+       appears. The fallbacks: ::backdrop inherits the tokens only in newer browsers. */
     @media (prefers-reduced-motion: no-preference) {
       @supports (transition-behavior: allow-discrete) {
         .palette,
         .palette::backdrop {
           opacity: 0;
           transition:
-            opacity var(--dur-2, 160ms) var(--ease-in, ease-in),
-            scale var(--dur-2, 160ms) var(--ease-in, ease-in),
-            overlay var(--dur-2, 160ms) allow-discrete,
-            display var(--dur-2, 160ms) allow-discrete;
+            opacity var(--dur-1, 90ms) var(--ease-in, ease-in),
+            scale var(--dur-1, 90ms) var(--ease-in, ease-in),
+            overlay var(--dur-1, 90ms) allow-discrete,
+            display var(--dur-1, 90ms) allow-discrete;
         }
         .palette {
           scale: 0.98;
@@ -189,7 +294,7 @@ const MATCH_LABEL: Record<Locale, string> = { en: "Check the fit", de: "Passt es
         .palette[open],
         .palette[open]::backdrop {
           opacity: 1;
-          transition-duration: var(--dur-3, 240ms);
+          transition-duration: 120ms;
           transition-timing-function: var(--ease-emph, ease-out);
         }
         .palette[open] {
@@ -210,7 +315,7 @@ const MATCH_LABEL: Record<Locale, string> = { en: "Check the fit", de: "Passt es
 })
 export class CommandPaletteComponent {
   protected readonly palette = inject(CommandPaletteService);
-  private readonly lang = inject(LanguageService);
+  protected readonly lang = inject(LanguageService);
   private readonly launcher = inject(AskLauncherService);
   private readonly theme = inject(ThemeService);
   private readonly router = inject(Router);
@@ -280,13 +385,6 @@ export class CommandPaletteComponent {
     const dark = this.theme.theme() === "dark";
     const actions: Command[] = [
       {
-        id: "palette-ask",
-        label: labels.palette.ask,
-        icon: "lucideSparkles",
-        keywords: t.hero.askCta,
-        run: () => this.launcher.openSheet("palette"),
-      },
-      {
         id: "palette-news",
         label: labels.palette.news,
         icon: "lucideBell",
@@ -303,7 +401,7 @@ export class CommandPaletteComponent {
       },
       {
         id: "palette-match",
-        label: MATCH_LABEL[l],
+        label: labels.footer.match,
         icon: "lucideListChecks",
         keywords: "match fit role project problem hire",
         run: go(["/", l, "match"]),
@@ -322,7 +420,8 @@ export class CommandPaletteComponent {
         id: "palette-theme",
         label: dark ? labels.header.toLight : labels.header.toDark,
         icon: dark ? "lucideSun" : "lucideMoon",
-        run: () => this.theme.toggle(),
+        // The new theme grows from the row (the dialog closes with the same render).
+        run: () => this.theme.toggle(this.doc.getElementById("palette-theme") ?? undefined),
       },
       ...(content.identity.resume
         ? [
@@ -362,7 +461,24 @@ export class CommandPaletteComponent {
       .filter((group) => group.commands.length > 0);
   });
 
-  protected readonly flat = computed(() => this.groups().flatMap((group) => group.commands));
+  /** What was typed, the Ask row's question. */
+  protected readonly typed = computed(() => this.query().trim());
+
+  /** Always the first row: asks the assistant what was typed, or opens it when nothing was. */
+  protected readonly ask = computed<Command>(() => {
+    const text = this.typed();
+    return {
+      id: "palette-ask",
+      label: text,
+      icon: "lucideSparkles",
+      run: () => (text ? this.launcher.ask(text, "palette") : this.launcher.openSheet("palette")),
+    };
+  });
+
+  protected readonly flat = computed(() => [
+    this.ask(),
+    ...this.groups().flatMap((group) => group.commands),
+  ]);
   protected readonly activeId = computed(() => this.flat()[this.active()]?.id ?? null);
 
   private returnFocus: HTMLElement | null = null;
@@ -376,7 +492,7 @@ export class CommandPaletteComponent {
       if (open && !dialog.open) {
         this.returnFocus = this.doc.activeElement as HTMLElement | null;
         this.query.set("");
-        this.active.set(0);
+        this.active.set(this.firstMatch());
         dialog.showModal();
         this.input().nativeElement.focus();
         void this.loadNews();
@@ -396,7 +512,12 @@ export class CommandPaletteComponent {
 
   protected search(event: Event): void {
     this.query.set((event.target as HTMLInputElement).value);
-    this.active.set(0);
+    this.active.set(this.firstMatch());
+  }
+
+  /** The first match under the Ask row, so Enter goes to it; the Ask row when nothing matches. */
+  private firstMatch(): number {
+    return this.flat().length > 1 ? 1 : 0;
   }
 
   protected highlight(id: string): void {
@@ -421,7 +542,7 @@ export class CommandPaletteComponent {
       return;
     }
     const move = moves[event.key];
-    if (!move || count === 0) return;
+    if (!move) return;
     event.preventDefault();
     this.active.set(move());
   }
