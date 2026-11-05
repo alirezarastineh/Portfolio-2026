@@ -140,6 +140,23 @@ test.describe("site navigation", () => {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     const menu = page.getByRole("navigation", { name: "Mobile" });
     await expect(menu).toBeVisible();
+    // The page behind it is inert and holds still.
+    const behind = () =>
+      page.evaluate(() => [
+        document.querySelector("main")?.closest("[inert]") !== null,
+        getComputedStyle(document.documentElement).overflowY,
+      ]);
+    expect(await behind()).toEqual([true, "hidden"]);
+    // The header's sections, Skills and Contact aside: "Let's talk" stays in the bar.
+    await expect(menu.getByRole("link")).toHaveText([
+      "Work",
+      "Experience",
+      "Writing",
+      "About",
+      /Download CV/,
+      /DE/,
+    ]);
+    await expect(page.getByRole("link", { name: "Let’s talk" })).toBeVisible();
     // The CV, and the language and theme switches, live in the menu below lg.
     await expect(menu.locator('a[href="/en/resume.pdf"][download]')).toBeVisible();
     await expect(
@@ -153,11 +170,28 @@ test.describe("site navigation", () => {
       "true",
     );
 
+    await menu.getByRole("link", { name: "Work" }).click();
+    await expect(menu).toBeHidden();
+    expect(await behind()).toEqual([false, "visible"]);
+  });
+
+  test("the mobile menu's Ask or search hands over to the palette", async ({ page, isMobile }) => {
+    if (!isMobile) return;
+    await page.goto("/en/writing");
+    await interactive(page);
+    const toggle = page.getByRole("button", { name: "Toggle navigation" });
+    await toggle.click();
     await page
       .getByRole("navigation", { name: "Mobile" })
-      .getByRole("link", { name: "Contact" })
+      .getByRole("button", { name: "Ask or search" })
       .click();
+
+    const palette = page.getByRole("dialog", { name: "Command palette" });
+    await expect(palette).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Mobile" })).toBeHidden();
+    await page.keyboard.press("Escape");
+    await expect(palette).toBeHidden();
+    await expect(toggle).toBeFocused();
   });
 
   test("the mobile menu keeps focus inside and closes on Escape or its toggle", async ({
@@ -196,10 +230,10 @@ test.describe("site navigation", () => {
     if (!isMobile) return;
     await page.goto("/en/work/project-one");
     await interactive(page);
-    // A circle on phones; it sat on the menu's theme switch.
+    // A pill with its word on phones too; it sat on the menu's theme switch.
     const ask = page.getByRole("button", { name: "Ask about my work" });
     await expect(ask).toBeVisible();
-    await expect(ask.getByText("ask", { exact: true })).toBeHidden();
+    await expect(ask).toHaveText("Ask");
 
     await page.getByRole("button", { name: "Toggle navigation" }).click();
     const menu = page.getByRole("navigation", { name: "Mobile" });

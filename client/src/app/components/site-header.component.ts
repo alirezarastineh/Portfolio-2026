@@ -41,16 +41,9 @@ interface NavLink {
 
 /**
  * Tailwind's `lg`: the desktop navigation takes over from the menu. Below it
- * six links, the CTA and the controls do not fit (German especially).
+ * the links and the controls do not fit beside the name and "Let's talk".
  */
 const DESKTOP = "(min-width: 1024px)";
-
-const iconButton =
-  "press inline-flex size-9 cursor-pointer items-center justify-center rounded-md border border-border text-muted-foreground hover:border-accent-orange/50 hover:text-foreground";
-
-/** One option of the mobile menu's language and theme switches (`press` on those that act). */
-const segment =
-  "inline-flex h-9 min-w-11 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3";
 
 @Component({
   selector: "app-site-header",
@@ -69,45 +62,44 @@ const segment =
          drops in, over the header, when focused (not sr-only: undoing that on
          focus makes it static, under the header). -->
     <a
-      class="fixed left-4 top-3 z-(--z-skip) -translate-y-16 rounded-md bg-signal px-4 py-2 text-sm font-medium text-signal-foreground focus:translate-y-0"
+      class="fixed left-4 top-3 z-(--z-skip) -translate-y-16 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background focus:translate-y-0"
       [attr.href]="skipHref()"
       (click)="skipToContent($event)"
       >{{ labels().skip }}</a
     >
 
-    <!-- See-through over the top of the page, a raised surface once scrolled
-         (styles/motion.css; without scroll timelines it stays as styled here).
-         Solid while the menu is open, so the page does not show through it. -->
+    <!-- See-through over the top of the page, solid once scrolled
+         (styles/motion.css; without scroll timelines it stays as styled here),
+         and while the menu is open. -->
     <header
       #bar
-      class="site-header fixed inset-x-0 top-0 z-(--z-header) border-b border-border backdrop-blur-md"
-      [class]="open() ? 'bg-background' : 'bg-background/80'"
+      class="site-header fixed inset-x-0 top-0 z-(--z-header) border-b border-border bg-background"
       [attr.data-open]="open() ? '' : null"
       (keydown)="trapFocus($event)"
     >
       <div
         class="site-header-row container-site grid h-16 grid-cols-[auto_1fr_auto] items-center gap-4"
       >
-        <!-- The favicon's mark. Its name starts with the visible word. -->
+        <!-- The name, ended by the favicon's square full stop. The first name alone below 360px. -->
         <a
-          class="inline-flex h-9 items-center text-sm font-semibold text-foreground"
+          class="inline-flex h-10 items-center text-small font-semibold text-foreground"
           [routerLink]="home()"
           fragment="hero"
           (click)="closeMenu()"
         >
-          <span class="text-accent-orange" aria-hidden="true">&gt;</span
-          ><span class="wordmark-caret" aria-hidden="true">_</span>
-          <span class="ml-2">{{ wordmark() }}</span
+          <span translate="no"
+            >{{ name().first }}<span class="max-[360px]:hidden">&ngsp;{{ name().rest }}</span></span
+          ><span class="text-signal" aria-hidden="true">.</span
           ><span class="sr-only"> – {{ labels().home }}</span>
         </a>
 
         <nav
-          class="hidden justify-center gap-5 lg:inline-flex xl:gap-7"
+          class="hidden justify-center gap-6 lg:inline-flex xl:gap-8"
           [attr.aria-label]="labels().primary"
         >
           @for (link of links(); track link.key) {
             <a
-              class="nav-link relative inline-flex h-9 items-center text-meta transition-colors duration-(--dur-2) hover:text-foreground"
+              class="nav-link relative inline-flex h-10 items-center text-small transition-colors duration-(--dur-2) hover:text-foreground pointer-coarse:h-11"
               [class.text-foreground]="isActive(link)"
               [class.text-muted-foreground]="!isActive(link)"
               [attr.aria-current]="isActive(link) ? 'true' : null"
@@ -121,33 +113,27 @@ const segment =
 
         <!-- Pinned to the last column: below lg the navigation before it is hidden. -->
         <div class="col-start-3 flex items-center justify-self-end gap-2">
-          <!-- Named by its hidden text, not aria-label: the ⌘K hint is no label (axe's label-in-name). -->
+          <!-- The palette, whose first row asks the assistant. Its keys show once the
+               browser knows the platform, so hydration never meets different markup. -->
           <button
             type="button"
-            [class]="searchClass"
+            class="control press hidden lg:inline-flex"
             aria-keyshortcuts="Control+K Meta+K"
             (click)="palette.show()"
           >
-            <ng-icon name="lucideSearch" size="15" aria-hidden="true" />
-            <span class="sr-only">{{ labels().search }}</span>
-            <kbd class="hidden font-mono text-meta lg:inline" aria-hidden="true">⌘K</kbd>
+            <ng-icon name="lucideSearch" size="16" aria-hidden="true" />
+            {{ labels().search }}
+            @if (shortcut(); as keys) {
+              <kbd class="ml-1 font-sans text-faint-foreground" aria-hidden="true">{{ keys }}</kbd>
+            }
           </button>
-          <!-- The one call to action that is always in view. The CV stays in
-               the hero, the palette and the mobile menu. -->
-          <a
-            class="btn btn-primary press hidden lg:inline-flex"
-            [routerLink]="home()"
-            fragment="contact"
-          >
-            {{ labels().talk }}
-          </a>
           <!-- The server renders dark; the icon for the other theme is picked
                in CSS, so hydration never meets different markup. Below lg the
                menu has the switch. The new theme grows from the button. -->
           <button
             #themeButton
             type="button"
-            [class]="iconButton + ' max-lg:hidden'"
+            class="control press hidden lg:inline-flex"
             [attr.aria-label]="theme.theme() === 'dark' ? labels().toLight : labels().toDark"
             (click)="theme.toggle(themeButton)"
           >
@@ -162,7 +148,7 @@ const segment =
                without JavaScript, and remembered for the next visit to "/".
                Its name keeps the visible "DE" and adds the language's name. -->
           <a
-            class="press hidden h-9 items-center justify-center rounded-md border border-border px-2.5 text-meta text-muted-foreground hover:border-accent-orange/50 hover:text-foreground lg:inline-flex"
+            class="control press hidden lg:inline-flex"
             [routerLink]="lang.alternates()[other()]"
             [attr.hreflang]="other()"
             [attr.lang]="other()"
@@ -170,33 +156,43 @@ const segment =
           >
             {{ other().toUpperCase() }}<span class="sr-only"> – {{ labels().switchTo }}</span>
           </a>
+          <!-- The one orange fill, in view at every width. -->
+          <a
+            class="btn btn-primary press"
+            [routerLink]="home()"
+            fragment="contact"
+            (click)="closeMenu()"
+          >
+            {{ labels().talk }}
+          </a>
           <button
             #toggle
             type="button"
-            [class]="iconButton + ' lg:hidden'"
+            class="control press pointer-coarse:size-12 lg:hidden"
             aria-controls="mobile-nav"
             [attr.aria-expanded]="open()"
             [attr.aria-label]="labels().menu"
             (click)="toggleMenu()"
           >
-            <ng-icon [name]="open() ? 'lucideX' : 'lucideMenu'" size="18" aria-hidden="true" />
+            <ng-icon [name]="open() ? 'lucideX' : 'lucideMenu'" size="20" aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      <!-- The rest of the screen: large links, then the CV, then language and
-           theme as switches at the bottom. -->
+      <!-- The rest of the screen, the page inert and still behind it (the public
+           shell, styles.css). Large links low, within a thumb's reach; then the
+           palette and the CV; language and theme at the bottom. -->
       @if (open()) {
         <nav
           id="mobile-nav"
-          class="flex h-[calc(100svh-4rem)] flex-col overflow-y-auto overscroll-contain border-t border-border px-(--gutter) pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-4 lg:hidden"
+          class="flex h-[calc(100dvh-4rem)] flex-col overflow-y-auto overscroll-contain border-t border-border px-(--gutter) pb-[max(env(safe-area-inset-bottom),1.5rem)] lg:hidden"
           [attr.aria-label]="labels().mobile"
         >
-          <ul class="m-0 flex list-none flex-col p-0" role="list">
+          <ul class="m-0 mt-auto flex list-none flex-col p-0 pt-6" role="list">
             @for (link of links(); track link.key; let i = $index) {
               <li class="menu-rise" [style.--i]="i">
                 <a
-                  class="flex items-center gap-3 py-2.5 text-h3 transition-colors duration-(--dur-2) hover:text-foreground"
+                  class="flex min-h-14 items-center gap-3 text-h2 transition-colors duration-(--dur-2) hover:text-foreground"
                   [class.text-foreground]="isActive(link)"
                   [class.text-muted-foreground]="!isActive(link)"
                   [attr.aria-current]="isActive(link) ? 'true' : null"
@@ -206,41 +202,46 @@ const segment =
                 >
                   {{ link.label }}
                   @if (isActive(link)) {
-                    <span class="size-1.5 rounded-full bg-signal" aria-hidden="true"></span>
+                    <span class="size-2 bg-signal" aria-hidden="true"></span>
                   }
                 </a>
               </li>
             }
           </ul>
-          @if (resumeHref(); as href) {
-            <a
-              class="menu-rise mt-4 inline-flex w-fit items-center gap-2 py-2 text-meta text-muted-foreground transition-colors duration-(--dur-2) hover:text-foreground"
-              [style.--i]="links().length"
-              [href]="href"
-              download
-              (click)="closeMenu()"
-            >
-              <ng-icon name="lucideDownload" size="16" aria-hidden="true" />
-              {{ lang.t().hero.downloadCv }}
-            </a>
-          }
+          <div
+            class="menu-rise mt-6 flex flex-wrap items-center gap-x-6 gap-y-2"
+            [style.--i]="links().length"
+          >
+            <button type="button" class="btn btn-secondary press" (click)="openPalette()">
+              <ng-icon name="lucideSearch" size="16" aria-hidden="true" />
+              {{ labels().search }}
+            </button>
+            @if (resumeHref(); as href) {
+              <a class="btn btn-quiet press" [href]="href" download (click)="closeMenu()">
+                <ng-icon name="lucideDownload" size="16" aria-hidden="true" />
+                {{ lang.t().hero.downloadCv }}
+              </a>
+            }
+          </div>
 
           <div
-            class="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5 text-meta"
+            class="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5"
           >
             <div
-              class="inline-flex rounded-lg border border-border p-1"
+              class="inline-flex rounded-lg border border-border"
               role="group"
               [attr.aria-label]="labels().language"
             >
               @for (locale of locales; track locale) {
                 @if (locale === lang.lang()) {
-                  <span [class]="segment + ' bg-muted text-foreground'" aria-current="true">{{
-                    locale.toUpperCase()
-                  }}</span>
+                  <span
+                    class="control cursor-default border-transparent bg-surface-2 text-foreground"
+                    aria-current="true"
+                    >{{ locale.toUpperCase() }}</span
+                  >
                 } @else {
                   <a
-                    [class]="segment + ' press text-muted-foreground hover:text-foreground'"
+                    class="control press border-transparent"
                     [routerLink]="lang.alternates()[locale]"
                     [attr.hreflang]="locale"
                     [attr.lang]="locale"
@@ -253,34 +254,28 @@ const segment =
               }
             </div>
             <div
-              class="inline-flex rounded-lg border border-border p-1"
+              class="inline-flex rounded-lg border border-border"
               role="group"
               [attr.aria-label]="labels().theme"
             >
               <button
                 #darkButton
                 type="button"
-                [class]="
-                  segment +
-                  ' press text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground'
-                "
+                class="control press border-transparent"
                 [attr.aria-pressed]="theme.theme() === 'dark'"
                 (click)="theme.set('dark', darkButton)"
               >
-                <ng-icon name="lucideMoon" size="14" aria-hidden="true" />
+                <ng-icon name="lucideMoon" size="16" aria-hidden="true" />
                 {{ labels().dark }}
               </button>
               <button
                 #lightButton
                 type="button"
-                [class]="
-                  segment +
-                  ' press text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground'
-                "
+                class="control press border-transparent"
                 [attr.aria-pressed]="theme.theme() === 'light'"
                 (click)="theme.set('light', lightButton)"
               >
-                <ng-icon name="lucideSun" size="14" aria-hidden="true" />
+                <ng-icon name="lucideSun" size="16" aria-hidden="true" />
                 {{ labels().light }}
               </button>
             </div>
@@ -296,41 +291,44 @@ export class SiteHeaderComponent {
   readonly palette = inject(CommandPaletteService);
   private readonly doc = inject(DOCUMENT);
 
-  protected readonly iconButton = iconButton;
-  protected readonly segment = segment;
-  protected readonly searchClass = `${iconButton} lg:w-auto lg:gap-1.5 lg:px-2.5`;
   protected readonly locales = LOCALES;
 
   private readonly bar = viewChild.required<ElementRef<HTMLElement>>("bar");
   private readonly toggleButton = viewChild.required<ElementRef<HTMLElement>>("toggle");
 
-  /** The wordmark: the first name, as a shell would print it. */
-  readonly wordmark = computed(() =>
-    this.lang.content().identity.name.split(" ")[0]!.toLowerCase(),
-  );
+  /** The full name, split where narrow phones drop the rest. */
+  readonly name = computed(() => {
+    const [first = "", ...rest] = this.lang.content().identity.name.split(" ");
+    return { first, rest: rest.join(" ") };
+  });
+
+  /** The palette's keys on this platform, known only in the browser. */
+  protected readonly shortcut = signal<string | null>(null);
 
   /** Home sections that exist in this language's content. */
   private readonly sections = computed(() => homeSections(this.lang.content()));
 
-  /** Writing links to its own page; on home it lights up while its section is in view. */
+  /**
+   * Work, Experience, Writing and About, in the page's order: Skills and Contact stay on
+   * the page, in the palette and behind "Let's talk". Writing links to its own page; on
+   * home it lights up while its section is in view.
+   */
   readonly links = computed<NavLink[]>(() => {
     const n = this.lang.t().nav;
-    const labels: Record<Exclude<SectionId, "hero">, string> = {
+    const labels: Partial<Record<SectionId, string>> = {
       projects: n.projects,
       experience: n.experience,
-      skills: n.skills,
       writing: n.writing,
       about: n.about,
-      contact: n.contact,
     };
     const home = this.home();
-    return this.sections()
-      .filter((id) => id !== "hero")
-      .map((id) =>
-        id === "writing"
-          ? { label: labels[id], key: id, commands: [...home, "writing"] }
-          : { label: labels[id], key: id, commands: home, fragment: id },
-      );
+    return this.sections().flatMap<NavLink>((id) => {
+      const label = labels[id];
+      if (!label) return [];
+      return id === "writing"
+        ? [{ label, key: id, commands: [...home, "writing"] }]
+        : [{ label, key: id, commands: home, fragment: id }];
+    });
   });
 
   readonly home = computed(() => ["/", this.lang.lang()]);
@@ -360,6 +358,10 @@ export class SiteHeaderComponent {
   constructor() {
     afterNextRender(() => {
       this.rendered = true;
+      // This runs in the server's render too, whose platform is not the visitor's.
+      if (this.isBrowser) {
+        this.shortcut.set(/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘\u00A0K" : "Ctrl\u00A0K");
+      }
       this.watchSections();
       this.closeOnDesktop();
     });
@@ -391,6 +393,13 @@ export class SiteHeaderComponent {
 
   closeMenu(): void {
     this.open.set(false);
+  }
+
+  /** From the menu: the palette takes over, and gives focus back to the menu's toggle. */
+  protected openPalette(): void {
+    this.closeMenu();
+    this.toggleButton().nativeElement.focus();
+    this.palette.show();
   }
 
   /** Moves focus into the page's <main>, rather than only scrolling to it. */

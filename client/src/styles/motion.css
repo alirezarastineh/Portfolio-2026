@@ -146,11 +146,6 @@
     animation-delay: calc(var(--i, 0) * 40ms);
   }
 
-  /* The wordmark's `_` blinks three times after load, then rests. */
-  .wordmark-caret {
-    animation: terminal-caret-blink 1s steps(2, jump-none) 3;
-  }
-
   .card-media img {
     transition: scale var(--dur-5) var(--ease-out);
   }
@@ -197,7 +192,7 @@
 @media (prefers-reduced-motion: no-preference) {
   @supports (animation-timeline: scroll()) {
     /* The header: see-through at the top of the page, then over the first
-       64px of scroll a raised surface that looks 8px shorter (moved, never
+       64px of scroll solid, with its line, and 8px shorter (moved, never
        resized, so nothing reflows). Not while the menu is open: that needs
        its solid background. */
     .site-header:not([data-open]) {
@@ -292,14 +287,8 @@
   from {
     background-color: transparent;
     border-bottom-color: transparent;
-    box-shadow: none;
-    backdrop-filter: blur(0);
   }
   to {
-    background-color: color-mix(in oklab, var(--surface-2) 80%, transparent);
-    border-bottom-color: var(--border);
-    box-shadow: var(--shadow-e2);
-    backdrop-filter: blur(12px);
     translate: 0 -8px;
   }
 }

@@ -190,7 +190,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       toLight: "Zum hellen Design wechseln",
       toDark: "Zum dunklen Design wechseln",
       search: "Fragen oder suchen",
-      talk: "Sprechen wir",
+      talk: "Kontakt",
       language: "Sprache",
       theme: "Design",
       dark: "Dunkel",

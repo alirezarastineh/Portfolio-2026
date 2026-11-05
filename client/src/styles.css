@@ -216,6 +216,11 @@ a {
   display: none;
 }
 
+/* The page holds still behind the open menu. */
+:root:has(.site-header[data-open]) {
+  overflow: hidden;
+}
+
 /* The panel's place while its code loads (ask-sheet.component.ts). */
 .ask-loading {
   position: fixed;
@@ -238,12 +243,6 @@ a {
   }
 }
 
-@keyframes terminal-caret-blink {
-  50% {
-    opacity: 0;
-  }
-}
-
 /* The public page uses smooth anchor scrolling; inside the admin it makes
    jumping between long forms feel sluggish and fights focus management.
    It has to be set on <html>: the document scrolls there, not in the admin's
@@ -253,6 +252,8 @@ html:has(app-admin-layout) {
 }
 
 html:not(:has(app-admin-layout)) {
+  /* A focused control stops clear of the floating Ask button, as of the header (WCAG 2.4.11). */
+  scroll-padding-bottom: 5rem;
   /* eslint-disable-next-line css/use-baseline -- a detail: without it the browser draws its own. */
   scrollbar-color: var(--border-strong) transparent;
 }

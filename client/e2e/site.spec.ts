@@ -330,6 +330,18 @@ test.describe("keyboard", () => {
 });
 
 test.describe("command palette", () => {
+  test("the header's Ask or search shows this platform's keys, once the browser knows them", async ({
+    page,
+    request,
+  }) => {
+    const html = await (await request.get("/en")).text();
+    expect(html).not.toMatch(/<kbd[^>]*>\s*(Ctrl|⌘)/);
+    await page.goto("/en");
+    await interactive(page);
+    const keys = page.locator('header [aria-keyshortcuts="Control+K Meta+K"] kbd');
+    await expect(keys).toHaveText(/^(Ctrl|⌘)\u00A0K$/);
+  });
+
   test("⌘K opens it; typing filters, and Enter goes to the result", async ({ page, problems }) => {
     await page.goto("/en");
     await interactive(page);

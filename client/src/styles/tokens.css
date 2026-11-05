@@ -33,7 +33,12 @@
 
   /* One container and one left edge (styles/primitives.css). */
   --container: 90rem;
-  --gutter: clamp(1.25rem, 0.75rem + 2.5vw, 3rem);
+  /* Clear of a phone's notch in landscape, on both sides so the content stays centred. */
+  --gutter: max(
+    clamp(1.25rem, 0.75rem + 2.5vw, 3rem),
+    env(safe-area-inset-left),
+    env(safe-area-inset-right)
+  );
   --col-gap: clamp(1rem, 0.5rem + 1.5vw, 2rem);
   --section-y: clamp(4rem, 3rem + 4vw, 7rem);
 

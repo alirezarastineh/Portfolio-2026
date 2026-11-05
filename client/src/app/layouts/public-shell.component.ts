@@ -6,6 +6,7 @@ import {
   computed,
   inject,
   PLATFORM_ID,
+  viewChild,
 } from "@angular/core";
 
 import { AskLauncherService } from "../ask/ask-launcher.service";
@@ -31,31 +32,32 @@ import { LanguageService } from "../services/language.service";
     "(document:keydown)": "onKeydown($event)",
   },
   template: `
-    <!-- The page, inert behind the assistant's sheet on phones (plan 4 U8). -->
+    <!-- The page, inert behind the assistant's sheet on phones (plan 4 U8), and
+         behind the open menu, which the header holds. -->
     <div class="contents" [attr.inert]="launcher.sheetOpen() && launcher.narrow() ? '' : null">
       <app-site-header />
-      <ng-content />
-      <app-site-footer />
+      <div class="contents" [attr.inert]="header()?.open() ? '' : null">
+        <ng-content />
+        <app-site-footer />
+      </div>
     </div>
     <!-- Its code loads the first time someone opens it. -->
     @defer (when palette.requested()) {
       <app-command-palette />
     }
     <!-- Opens the assistant's panel (loaded on first use); on home it waits until
-         the hero's stage has left the screen. A 44px circle on phones, a
-         \`>_ ask\` pill from lg. Its press, and hiding it while the mobile menu or
-         the panel is open, are in styles.css. -->
+         the hero's stage has left the screen. A 48px pill clear of the phone's
+         edges. Hiding it while the mobile menu or the panel is open is in styles.css. -->
     <button
       type="button"
-      class="ask-fab press fixed bottom-4 right-4 z-(--z-float) inline-flex h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-full border border-border bg-card font-mono text-sm shadow-e3 hover:border-accent-orange lg:px-4"
+      class="ask-fab press fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-(--z-float) inline-flex h-12 cursor-pointer touch-manipulation items-center rounded-full border border-border-strong bg-card px-5 text-small font-semibold shadow-e3 hover:border-foreground"
       [attr.aria-label]="lang.t().ask.title"
       [attr.aria-expanded]="launcher.sheetOpen()"
       [hidden]="onHome() && launcher.stageInView()"
       aria-keyshortcuts="/"
       (click)="launcher.openSheet('button')"
     >
-      <span class="text-accent-orange" aria-hidden="true">&gt;_</span
-      ><span class="max-lg:hidden">{{ fabWord() }}</span>
+      {{ fabWord() }}
     </button>
     @defer (when launcher.sheetRequested()) {
       <app-ask-sheet />
@@ -70,9 +72,11 @@ export class PublicShellComponent {
   protected readonly launcher = inject(AskLauncherService);
   protected readonly lang = inject(LanguageService);
   protected readonly onHome = computed(() => this.lang.page() === "/");
+  /** The header, whose open menu makes the page behind it inert. */
+  protected readonly header = viewChild(SiteHeaderComponent);
   /**
-   * The pill's word, the first of the button's accessible name ("ask",
-   * "frag"): the name then always contains what the button says.
+   * The pill's word, the first of the button's accessible name ("Ask",
+   * "Fragen"): the name then always contains what the button says.
    */
   protected readonly fabWord = computed(() => this.lang.t().ask.title.trim().split(/\s+/)[0] ?? "");
   private readonly doc = inject(DOCUMENT);
