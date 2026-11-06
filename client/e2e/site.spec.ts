@@ -77,6 +77,46 @@ test.describe("home", () => {
     expect(wider).toBe(0);
   });
 
+  test("the headline ends in the wordmark's orange full stop, unread, and its text stays whole", async ({
+    page,
+    request,
+  }) => {
+    const headline = "I turn language models into products that keep working after the demo.";
+    // verify-deploy.sh finds the published headline in the server's HTML with the tags removed.
+    const html = await (await request.get("/en")).text();
+    expect(html.replace(/<[^>]*>/g, "")).toContain(headline);
+
+    await page.goto("/en");
+    await expect(page.locator("h1")).toHaveText(`Alireza Rastineh — ${headline}`);
+    const stop = page.locator("h1 .hero-dot");
+    await expect(stop).toHaveText(".");
+    await expect(stop).toHaveAttribute("aria-hidden", "true");
+    await expect(stop).toHaveCSS("color", "rgb(255, 79, 0)");
+  });
+
+  test("from lg the line starts at that stop: down to the headline's foot, back to the gutter, on to the page's line", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/en");
+    test.skip(
+      !(await page.evaluate(() => CSS.supports("anchor-name: --a"))),
+      "no anchor positioning: the stop stands alone",
+    );
+    const box = (selector: string) =>
+      page.locator(selector).evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
+    const [h1, stop, start, line] = await Promise.all(
+      ["h1", "h1 .hero-dot", ".hero-line", ".page-line"].map(box),
+    );
+    const near = (a: number, b: number) => expect(Math.abs(a - b)).toBeLessThanOrEqual(1);
+    near(start.top, h1.bottom);
+    // Its drop is the 1px column at the stop's middle.
+    near(start.right - 1, stop.left + stop.width / 2);
+    near(start.left, line.left);
+    near(start.bottom, line.top);
+    await expect(page.locator(".hero-line")).toHaveAttribute("aria-hidden", "true");
+  });
+
   test("the hero shows proof only when there is some: orgs and a project's numbers", async ({
     page,
   }) => {

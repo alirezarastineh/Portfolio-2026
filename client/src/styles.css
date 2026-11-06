@@ -311,6 +311,7 @@ html:not(:has(app-admin-layout)) {
       app-ask-stage,
       .page-line,
       .page-line-node,
+      .hero-line,
       .reading-progress,
       main aside,
       article > nav,

@@ -26,8 +26,8 @@ interface AskEntryState {
 }
 
 /**
- * The assistant's stage in the hero (plan 4 U11b): a frame of a set height, so nothing around it
- * ever moves. The server prints a light copy of the console: the hint, the suggestions, the prompt,
+ * The assistant's stage in the hero (plan 4 U11b): a frame as tall as the text beside it, set at the
+ * first paint, so nothing around it ever moves. The server prints a light copy of the console: the hint, the suggestions, the prompt,
  * the commands and the line that says an AI answers. The console itself, with the store and the AI
  * SDK, loads when the visitor hovers or focuses here, and takes over at the first send, click, `/`
  * or palette request; it shows here while a conversation exists. While the panel is open the stage
@@ -154,10 +154,17 @@ interface AskEntryState {
       border-radius: 0.5rem;
       background: var(--card);
     }
-    /* A set height from the first paint: it never grows, its log scrolls. */
+    /* As tall as the hero's text beside it, from the first paint, and never past the first screen.
+       Its own content never sizes the row, so it never grows and nothing beside it moves; its log
+       scrolls. */
     @media (width >= 64rem) {
+      :host {
+        contain: size;
+        min-height: 24rem;
+      }
       section {
-        height: min(34rem, calc(100svh - 7.5rem));
+        height: 100%;
+        max-height: calc(100svh - 7.5rem);
       }
     }
     .title {

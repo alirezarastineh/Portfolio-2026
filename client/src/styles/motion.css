@@ -10,14 +10,12 @@
   --dur-2: 160ms; /* colour and border on hover */
   --dur-3: 240ms; /* a component's state: chip, menu item, underline */
   --dur-4: 360ms; /* panels, dialogs */
-  --dur-5: 640ms; /* reveals, the hero's entrance */
+  --dur-5: 640ms; /* slow, deliberate changes */
 
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1); /* exits, at 70% of the entrance's duration */
   --ease-emph: cubic-bezier(0.05, 0.7, 0.1, 1); /* entrances */
   --ease-spring: var(--ease-out);
-
-  --stagger: 60ms;
 }
 
 /* Without `linear()` the spring is a plain ease-out. */
@@ -73,6 +71,59 @@
   width: min(0.5625rem, var(--gutter) * 0.3);
   border-top: 1px solid var(--signal);
 }
+
+/*
+ * The line's start (hero.component.ts), from lg where anchors exist: from the headline's full stop
+ * a drop to the headline's foot, a run back under it to the spine, then the spine down beside the
+ * lead to the hero's foot, where the page's line goes on. Elsewhere the stop stands alone and the
+ * line starts under the hero.
+ */
+.hero-line {
+  display: none;
+}
+
+/* eslint-disable css/use-baseline -- progressive enhancement: without anchor positioning the
+   stop stands alone and the line starts under the hero. */
+@supports (anchor-name: --a) {
+  @media (width >= 64rem) {
+    .hero-headline {
+      anchor-name: --headline;
+      /* The run's room, clear of the last line's descenders. */
+      padding-bottom: 0.22em;
+    }
+
+    .hero-dot {
+      anchor-name: --dot;
+    }
+
+    .hero-line {
+      display: block;
+      position: absolute;
+      top: anchor(--headline bottom);
+      /* 1px on, so the drop's column is the stop's middle, not the one before it. */
+      right: calc(anchor(--dot center) - 1px);
+      bottom: 0;
+      left: calc(max(0px, (100% - var(--container)) / 2) + var(--spine));
+      border: solid var(--signal);
+      border-width: 1px 0 0 1px;
+      /* The headline's, so the drop meets its stop at any size. */
+      font-size: var(--text-h1);
+      pointer-events: none;
+    }
+
+    /* The drop, down through the run's end: from just inside the stop, whose foot is the
+       baseline, 0.14em above the line box's foot and the padding's 0.22em. */
+    .hero-line::after {
+      content: "";
+      position: absolute;
+      right: 0;
+      bottom: 100%;
+      height: calc(0.4em + 1px);
+      border-right: 1px solid var(--signal);
+    }
+  }
+}
+/* eslint-enable css/use-baseline */
 
 /* The header's current link: an orange bar under it that grows from the left.
    One rule rather than a dozen utilities on each of six links, which every
@@ -158,13 +209,6 @@
 
   .press:active {
     scale: 0.98;
-  }
-
-  /* The hero's supporting lines, one after another (`--i`), shortly after
-     load. Never the headline: it is the LCP element and paints at once. */
-  .hero-rise {
-    animation: rise var(--dur-5) var(--ease-emph) both;
-    animation-delay: calc(120ms + var(--i, 0) * var(--stagger));
   }
 
   /* The mobile menu's links, as it opens. */
