@@ -79,20 +79,70 @@ describe("AboutSectionComponent", () => {
     expect(heading().textContent?.trim()).toBe("Über mich");
   });
 
-  it("shows the person beside the text, leaving out what the content lacks", async () => {
+  it("leaves out what the content lacks: without a photo, no frame and no initials", async () => {
     // The seed: no bio, no photo, no experience, no city.
     const fixture = TestBed.createComponent(AboutSectionComponent);
     fixture.detectChanges();
     await fixture.whenStable();
     const root: HTMLElement = fixture.nativeElement;
 
-    expect(root.textContent).toContain("@alirezarastineh");
-    expect(root.querySelector(".rounded-full span[aria-hidden]")?.textContent?.trim()).toBe("AR");
+    expect(root.querySelector("img")).toBeNull();
+    expect(root.textContent).not.toContain("AR");
     expect([...root.querySelectorAll("dt")].map((dt) => dt.textContent?.trim())).toEqual([
       "Based in",
       "Status",
     ]);
     expect(root.querySelector("dd")?.textContent?.trim()).toBe("Remote");
+  });
+
+  it("shows a portrait in black and white, 4:5, when there is one", async () => {
+    const store = TestBed.inject(ContentStore) as unknown as StubContentStore;
+    store.state.en.update((content) => ({
+      ...content,
+      identity: {
+        ...content.identity,
+        avatar: {
+          src: "/media/portrait.jpg",
+          srcset: "",
+          sources: [],
+          width: 800,
+          height: 1000,
+          alt: "Alireza Rastineh",
+          blur: null,
+        },
+      },
+    }));
+    const fixture = TestBed.createComponent(AboutSectionComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const portrait = fixture.nativeElement.querySelector("img") as HTMLImageElement;
+    expect(portrait.alt).toBe("Alireza Rastineh");
+    expect(portrait.className).toContain("grayscale");
+    expect(portrait.className).toContain("aspect-[4/5]");
+  });
+
+  it("says how an answer is made, as text on the line, in both languages", async () => {
+    const fixture = TestBed.createComponent(AboutSectionComponent);
+    const language = TestBed.inject(LanguageService);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const figure = () => fixture.nativeElement.querySelector("figure") as HTMLElement;
+    const steps = () =>
+      [...figure().querySelectorAll("li > span:first-child")].map((s) => s.textContent);
+
+    expect(figure().querySelector("figcaption")?.textContent?.trim()).toBe("How an answer is made");
+    expect(steps()).toEqual(["Question", "Search", "Answer", "Check"]);
+    // No model name: which model answers is the receipt's to say, per answer.
+    expect(figure().textContent).not.toMatch(/gemini|gpt|claude|llama/i);
+
+    language.activate("de");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(figure().querySelector("figcaption")?.textContent?.trim()).toBe(
+      "Wie eine Antwort entsteht",
+    );
+    expect(steps()).toEqual(["Frage", "Suche", "Antwort", "Prüfung"]);
   });
 
   it("says how he works as prose, with no terminal around it (plan 4 U10)", async () => {

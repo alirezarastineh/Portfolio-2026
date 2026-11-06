@@ -156,6 +156,9 @@ test.describe("home", () => {
       "2018",
       "Open to senior AI / full-stack roles",
     ]);
+    // How an answer is made: real text, so it needs no other alternative.
+    await expect(about.locator("figure figcaption")).toHaveText("How an answer is made");
+    await expect(about.locator("figure li")).toHaveCount(4);
   });
 
   test("the latest posts, with a link to all of them", async ({ page }) => {
