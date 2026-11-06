@@ -117,9 +117,9 @@ HEADLINE="$(curl -fsS "${API}/v2/content/en" | sed -n 's/.*"heroHeadline":"\([^"
 # match, curl fails writing the rest of a page larger than the pipe buffer
 # (curl: (23)), and under pipefail a found headline would count as missing.
 HOME_EN="$(curl -fsS "${CLIENT}/en" || true)"
-# The headline's closing full stop is an element of its own (the line starts there), so the text is
-# compared with the tags removed: here-strings, not a pipe, for the same reason as above.
-if [[ -n "${HEADLINE}" ]] && grep -qF "${HEADLINE}" <<<"$(sed 's/<[^>]*>//g' <<<"${HOME_EN}")"; then
+# The headline's closing full stop is an element of its own (the line starts there), so the check
+# looks for the text before it, which the page prints whole.
+if [[ -n "${HEADLINE}" ]] && grep -qF "${HEADLINE%.}" <<<"${HOME_EN}"; then
   pass "SSR renders the published hero headline"
 else
   fail "SSR renders the published hero headline (got '${HEADLINE}')"

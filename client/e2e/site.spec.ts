@@ -82,9 +82,9 @@ test.describe("home", () => {
     request,
   }) => {
     const headline = "I turn language models into products that keep working after the demo.";
-    // verify-deploy.sh finds the published headline in the server's HTML with the tags removed.
+    // verify-deploy.sh finds the published headline's text before its full stop in the server's HTML.
     const html = await (await request.get("/en")).text();
-    expect(html.replace(/<[^>]*>/g, "")).toContain(headline);
+    expect(html).toContain(headline.slice(0, -1));
 
     await page.goto("/en");
     await expect(page.locator("h1")).toHaveText(`Alireza Rastineh — ${headline}`);
