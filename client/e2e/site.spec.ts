@@ -89,14 +89,15 @@ test.describe("home", () => {
     await expect(hero.locator(".metric-value")).toHaveText(["−42%", "3.1×", "99.95%"]);
   });
 
-  test("section headings are real text, numbered in page order", async ({ page }) => {
+  test("section headings are real text: the name and its node, no number or label", async ({
+    page,
+  }) => {
     await page.goto("/en");
     const heading = page.getByRole("heading", { level: 2, name: "Selected work", exact: true });
     await expect(heading).toBeVisible();
     await expect(page.locator("#projects")).toHaveAttribute("aria-labelledby", "projects-heading");
-    // Numbered in page order, counting only the sections that render.
-    await expect(page.locator("#projects header span[aria-hidden]").first()).toHaveText("01");
-    await expect(page.locator("#contact header span[aria-hidden]").first()).toHaveText("06");
+    await expect(page.locator("#projects header")).toHaveText("Selected work");
+    await expect(heading.locator(".page-line-node")).toHaveAttribute("aria-hidden", "true");
   });
 
   test("the server sends About's whole text, as prose", async ({ request }) => {
@@ -254,27 +255,34 @@ test.describe("theme", () => {
 });
 
 test.describe("motion", () => {
-  test("a card below the fold rises in as it is reached; under reduced motion it is just there", async ({
+  test("the line fills as the page is read and a node lights as it is reached; under reduced motion it rests", async ({
     page,
   }) => {
     await page.goto("/en");
-    await interactive(page);
-    // motion.css reveals on scroll timelines; without them (Firefox) a card is simply there.
+    // motion.css fills it on scroll timelines; without them (Firefox) it rests.
     test.skip(
       !(await page.evaluate(() => CSS.supports("animation-timeline: view()"))),
       "no scroll timelines in this browser",
     );
-    const card = page.locator("#projects > div > ul > li").first();
-    const opacity = () => card.evaluate((el) => getComputedStyle(el).opacity);
+    const fill = () =>
+      page.locator(".page-line").evaluate((el) => getComputedStyle(el, "::after").scale);
+    const node = (id: string) =>
+      page.locator(`#${id} .page-line-node`).evaluate((el) => getComputedStyle(el).borderTopColor);
+    const signal = "rgb(255, 79, 0)";
 
-    expect(await opacity()).toBe("0");
-    await card.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }));
-    await expect.poll(opacity).toBe("1");
+    expect(await fill()).toBe("1 0");
+    expect(await node("projects")).not.toBe(signal);
 
-    await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
-    await expect.poll(opacity).toBe("0");
+    await page
+      .locator("#skills")
+      .evaluate((el) => el.scrollIntoView({ block: "start", behavior: "instant" }));
+    await expect.poll(fill).toMatch(/^1 0\.\d+$/);
+    await expect.poll(() => node("projects")).toBe(signal);
+    expect(await node("contact")).not.toBe(signal);
+
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await expect.poll(opacity).toBe("1");
+    await expect.poll(fill).toBe("none");
+    expect(await node("contact")).toBe(signal);
   });
 
   test("a held button sinks a little; not under reduced motion", async ({ page, browserName }) => {

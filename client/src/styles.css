@@ -269,14 +269,13 @@ html:not(:has(app-admin-layout)) {
 /*
  * On paper (case studies and posts, above all): the content, black on white,
  * whatever theme the screen shows. Off the page goes what only works on
- * screen: the header, footer and ask button, the reading progress, the table
- * of contents, an article's closing links (its ask and share buttons, the
- * next and previous studies), code's Copy, the marks a match puts on the
- * work, the match page's controls, whose report prints its date and AI
+ * screen: the header, footer and ask button, the line, the reading progress,
+ * the table of contents, an article's closing links (its ask and share
+ * buttons, the next and previous studies), code's Copy, the marks a match puts
+ * on the work, the match page's controls, whose report prints its date and AI
  * disclosure instead, and a case study's "In depth" left closed. Links to other
- * sites print their address. No reveals: they would leave content at opacity
- * 0. Code prints in one colour: its highlighting is made for one screen
- * background.
+ * sites print their address. Code prints in one colour: its highlighting is
+ * made for one screen background.
  *
  * The utilities are not in a layer here (`@tailwind utilities` above), and one
  * class (`flex`, `pt-28`) outranks an element's name: the rules that hide or
@@ -310,6 +309,8 @@ html:not(:has(app-admin-layout)) {
       .ask-fab,
       .ask-sheet,
       app-ask-stage,
+      .page-line,
+      .page-line-node,
       .reading-progress,
       main aside,
       article > nav,
@@ -332,11 +333,6 @@ html:not(:has(app-admin-layout)) {
 
   :root main {
     padding: 0;
-  }
-
-  .reveal,
-  .hairline-draw {
-    animation: none;
   }
 
   main a[href^="http"] {

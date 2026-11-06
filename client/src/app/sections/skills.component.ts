@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
 import { NgIcon } from "@ng-icons/core";
 
 import { SectionHeadingComponent } from "../components/section-heading.component";
@@ -30,19 +30,13 @@ const SPAN_MAP: Record<BentoSpan, string> = {
   template: `
     <section id="skills" aria-labelledby="skills-heading" class="container-site section-y relative">
       <div class="flex flex-col gap-12">
-        <app-section-heading
-          headingId="skills-heading"
-          [index]="index()"
-          [heading]="lang.t().skills.heading"
-          [eyebrow]="lang.t().skills.subtitle"
-        />
+        <app-section-heading headingId="skills-heading" [heading]="lang.t().skills.heading" />
         <ul
           class="m-0 grid list-none auto-rows-[minmax(180px,auto)] grid-flow-dense grid-cols-1 gap-4 p-0 md:grid-cols-2 lg:grid-cols-4 lg:gap-5"
           role="list"
         >
           @for (card of cards(); track card.id) {
-            <!-- Rises into view (motion.css), one card after another. -->
-            <li class="reveal" [class]="card.layout">
+            <li [class]="card.layout">
               <app-spotlight-card class="skill-card h-full">
                 <article class="flex h-full flex-col gap-5 p-6">
                   <header class="flex items-start justify-between gap-3">
@@ -89,9 +83,6 @@ const SPAN_MAP: Record<BentoSpan, string> = {
   `,
 })
 export class SkillsSectionComponent {
-  /** The section's number on the home page, `01`; set by the page. */
-  readonly index = input("");
-
   readonly lang = inject(LanguageService);
 
   /**

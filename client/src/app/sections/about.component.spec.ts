@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { signal, type Signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { ContentStore } from "../content/content.store";
 import { appContentSchema, type AppContent, type Locale } from "../content/schema";
@@ -29,30 +29,6 @@ class StubContentStore {
 }
 
 describe("AboutSectionComponent", () => {
-  beforeAll(() => {
-    // jsdom has neither; the heading's scramble guards matchMedia but constructs
-    // an IntersectionObserver directly once it believes it is in a browser.
-    globalThis.IntersectionObserver ??= class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-      takeRecords() {
-        return [];
-      }
-      root = null;
-      rootMargin = "";
-      thresholds = [];
-    } as unknown as typeof IntersectionObserver;
-
-    globalThis.matchMedia ??= ((query: string) =>
-      ({
-        matches: true, // report reduced motion, so the scramble shows the heading at once
-        media: query,
-        addEventListener() {},
-        removeEventListener() {},
-      }) as unknown as MediaQueryList) as typeof globalThis.matchMedia;
-  });
-
   beforeEach(() => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({

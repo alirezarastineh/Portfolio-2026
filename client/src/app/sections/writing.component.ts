@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideArrowRight } from "@ng-icons/lucide";
@@ -28,12 +28,7 @@ const LATEST = 3;
         class="container-site section-y relative"
       >
         <div class="flex flex-col gap-12">
-          <app-section-heading
-            headingId="writing-heading"
-            [index]="index()"
-            [heading]="lang.t().writing.heading"
-            [eyebrow]="lang.t().writing.subtitle"
-          >
+          <app-section-heading headingId="writing-heading" [heading]="lang.t().writing.heading">
             <a
               class="link-underline inline-flex items-center gap-2 font-mono text-sm"
               [routerLink]="['/', lang.lang(), 'writing']"
@@ -51,9 +46,6 @@ const LATEST = 3;
   `,
 })
 export class WritingSectionComponent {
-  /** The section's number on the home page, `01`; set by the page. */
-  readonly index = input("");
-
   protected readonly lang = inject(LanguageService);
 
   /** Already newest first. */

@@ -563,6 +563,25 @@ test.describe("home: experience", () => {
   });
 });
 
+test.describe("home: the line", () => {
+  test("runs beside the sections with a node at each heading, unread, and stays off paper", async ({
+    page,
+  }) => {
+    await page.goto("/en");
+    const line = page.locator(".page-line");
+    const nodes = page.locator("#main h2 .page-line-node");
+    await expect(line).toHaveAttribute("aria-hidden", "true");
+    await expect(line).toBeVisible();
+    // One per rendered section: projects, experience, skills, writing, about, contact.
+    await expect(nodes).toHaveCount(6);
+    for (const node of await nodes.all()) await expect(node).toHaveAttribute("aria-hidden", "true");
+
+    await page.emulateMedia({ media: "print" });
+    await expect(line).toBeHidden();
+    await expect(nodes.first()).toBeHidden();
+  });
+});
+
 test.describe("404", () => {
   test("speaks the site's language and offers a way home and to Ask", async ({ page }) => {
     const res = await page.goto("/de/gibt-es-nicht");

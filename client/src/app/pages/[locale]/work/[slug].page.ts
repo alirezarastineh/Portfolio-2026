@@ -393,9 +393,7 @@ const AID_LABELS = {
 
           <!-- The end, as terminal output: what to do next. The article's
                footer, as on a post: print leaves it out (styles.css). -->
-          <footer
-            class="reveal surface-card flex flex-col items-start gap-4 rounded-2xl p-6 sm:p-10"
-          >
+          <footer class="surface-card flex flex-col items-start gap-4 rounded-2xl p-6 sm:p-10">
             <p class="m-0 font-mono text-meta text-muted-foreground" aria-hidden="true">
               <span class="text-accent-orange">&gt;</span> next
             </p>
@@ -450,7 +448,7 @@ export default class CaseStudyPageComponent {
   );
 
   protected readonly neighbourLink =
-    "reveal flex flex-col gap-2 rounded-xl border border-border p-6 transition-colors duration-200 hover:border-accent-orange/40";
+    "flex flex-col gap-2 rounded-xl border border-border p-6 transition-colors duration-200 hover:border-accent-orange/40";
 
   /** Shared with the home page's card, which morphs into these. */
   protected readonly transitionName = computed(() => {

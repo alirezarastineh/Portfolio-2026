@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
 
 import { ProjectCardComponent } from "../components/project-card.component";
-import { cardColumns, cardLayouts } from "../components/project-layout";
+import { cardLayouts } from "../components/project-layout";
 import { SectionHeadingComponent } from "../components/section-heading.component";
 import { LanguageService } from "../services/language.service";
 
@@ -24,21 +24,11 @@ import { LanguageService } from "../services/language.service";
       class="container-site section-y relative"
     >
       <div class="flex flex-col gap-12">
-        <app-section-heading
-          headingId="projects-heading"
-          [index]="index()"
-          [heading]="lang.t().projects.heading"
-          [eyebrow]="lang.t().projects.subtitle"
-        />
+        <app-section-heading headingId="projects-heading" [heading]="lang.t().projects.heading" />
 
         <ul class="m-0 grid list-none gap-6 p-0 lg:grid-cols-2" role="list">
           @for (project of projects(); track project.slug; let i = $index) {
-            <!-- Rises into view (motion.css), the second of a pair a little after the first. -->
-            <li
-              class="reveal"
-              [class]="layouts()[i] === 'half' ? '' : 'lg:col-span-2'"
-              [style.--i]="columns()[i]"
-            >
+            <li [class]="layouts()[i] === 'half' ? '' : 'lg:col-span-2'">
               <app-project-card
                 class="h-full"
                 [project]="project"
@@ -53,11 +43,7 @@ import { LanguageService } from "../services/language.service";
   `,
 })
 export class ProjectsSectionComponent {
-  /** The section's number on the home page, `01`; set by the page. */
-  readonly index = input("");
-
   readonly lang = inject(LanguageService);
   readonly projects = computed(() => this.lang.content().projects);
   protected readonly layouts = computed(() => cardLayouts(this.projects()));
-  protected readonly columns = computed(() => cardColumns(this.layouts()));
 }

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
 
 import { PictureComponent } from "../components/picture.component";
 import { SectionHeadingComponent } from "../components/section-heading.component";
@@ -22,12 +22,7 @@ import { LanguageService } from "../services/language.service";
   template: `
     <section id="about" aria-labelledby="about-heading" class="container-site section-y relative">
       <div class="flex flex-col gap-12">
-        <app-section-heading
-          headingId="about-heading"
-          [index]="index()"
-          [heading]="lang.t().about.heading"
-          [eyebrow]="lang.t().about.subtitle"
-        />
+        <app-section-heading headingId="about-heading" [heading]="lang.t().about.heading" />
 
         <div class="grid grid-cols-12 gap-x-(--col-gap) gap-y-8">
           <!-- The CMS may break it into paragraphs with new lines. -->
@@ -82,9 +77,6 @@ import { LanguageService } from "../services/language.service";
   `,
 })
 export class AboutSectionComponent {
-  /** The section's number on the home page, `01`; set by the page. */
-  readonly index = input("");
-
   readonly lang = inject(LanguageService);
 
   protected readonly chrome = computed(() => CHROME[this.lang.lang()].about);

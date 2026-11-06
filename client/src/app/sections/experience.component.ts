@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import {
   lucideAward,
@@ -71,9 +71,7 @@ const HIGHLIGHTS = 3;
         <div class="flex flex-col gap-12">
           <app-section-heading
             headingId="experience-heading"
-            [index]="index()"
             [heading]="lang.t().experience.heading"
-            [eyebrow]="lang.t().experience.subtitle"
           />
 
           @for (group of groups(); track group.kind) {
@@ -85,7 +83,7 @@ const HIGHLIGHTS = 3;
 
               <ol class="m-0 flex list-none flex-col border-l border-border p-0" role="list">
                 @for (entry of group.entries; track entry.experience.id) {
-                  <li class="reveal relative pb-10 pl-8 last:pb-0">
+                  <li class="relative pb-10 pl-8 last:pb-0">
                     <!-- Filled while ongoing. -->
                     <span
                       class="absolute -left-1.25 top-1.5 size-2.25 rounded-full border border-signal"
@@ -211,9 +209,6 @@ const HIGHLIGHTS = 3;
   `,
 })
 export class ExperienceSectionComponent {
-  /** The section's number on the home page, `01`; set by the page. */
-  readonly index = input("");
-
   protected readonly lang = inject(LanguageService);
   protected readonly marks = inject(MatchMarks);
 

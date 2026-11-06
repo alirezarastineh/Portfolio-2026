@@ -71,7 +71,7 @@ import { LanguageService } from "../services/language.service";
       role="list"
     >
       @for (post of posts(); track post.slug) {
-        <li class="reveal py-2">
+        <li class="py-2">
           <article
             class="post-row relative -mx-3 grid gap-x-(--col-gap) gap-y-2 rounded-xl px-3 py-4 md:grid-cols-12"
           >

@@ -40,6 +40,8 @@
     env(safe-area-inset-right)
   );
   --col-gap: clamp(1rem, 0.5rem + 1.5vw, 2rem);
+  /* The line's place: inside the gutter, beside the content (motion.css). */
+  --spine: calc(var(--gutter) * 0.45);
   --section-y: clamp(4rem, 3rem + 4vw, 7rem);
 
   /* What stacks over what. Modal dialogs use the top layer. */
