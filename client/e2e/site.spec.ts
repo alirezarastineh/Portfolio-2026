@@ -217,6 +217,33 @@ test.describe("home", () => {
     await page.mouse.click(image.x + image.width / 2, image.y + image.height / 2);
     await expect(page).toHaveURL(/\/en\/work\/project-one$/);
   });
+
+  test("a plate is flat: its stack plain text, its hook whole, its title underlined while its link is hovered or focused", async ({
+    page,
+  }) => {
+    await page.goto("/en");
+    await interactive(page);
+    const plate = page.locator("#projects li").first();
+    await expect(plate.getByText("TypeScript, Python, FastAPI, Postgres")).toBeVisible();
+    await expect(plate.locator(".chip")).toHaveCount(0);
+    await expect(plate.getByText(/^Answers support agents/)).toHaveCSS(
+      "-webkit-line-clamp",
+      "none",
+    );
+
+    const underline = () =>
+      plate.locator("h3 .title-draw").evaluate((el) => getComputedStyle(el).backgroundSize);
+    expect(await underline()).toBe("0px 2px");
+    // Over the cover, which the plate's one link covers too.
+    await plate.scrollIntoViewIfNeeded();
+    const cover = (await plate.locator(".card-media").boundingBox())!;
+    await page.mouse.move(cover.x + cover.width / 2, cover.y + cover.height / 2);
+    await expect.poll(underline).toBe("100% 2px");
+    await page.mouse.move(0, 0);
+    await expect.poll(underline).toBe("0px 2px");
+    await plate.getByRole("link", { name: /Read case study/ }).focus();
+    await expect.poll(underline).toBe("100% 2px");
+  });
 });
 
 test.describe("theme", () => {

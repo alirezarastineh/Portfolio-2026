@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideArrowRight, lucideExternalLink, lucideFileText } from "@ng-icons/lucide";
+import { lucideExternalLink, lucideFileText } from "@ng-icons/lucide";
 
 import { MatchMarkComponent, MatchMarks } from "../ask/match-marks";
 import { MetricsComponent } from "./metrics.component";
@@ -10,7 +10,6 @@ import { PictureComponent } from "./picture.component";
 import type { CardLayout } from "./project-layout";
 import type { Project } from "../content/schema";
 import { CHROME } from "../i18n/chrome";
-import { fmt } from "../i18n/interpolate";
 import { projectTitleTransitionName, projectTransitionName } from "../navigation/view-transitions";
 import { LanguageService } from "../services/language.service";
 
@@ -28,25 +27,24 @@ interface ExternalLink {
   icon: string;
 }
 
-/** Metrics a card shows; the case study shows them all. */
+/** Metrics a plate shows; the case study shows them all. */
 const CARD_METRICS = 3;
-/** Technologies a card shows as chips; the rest are counted (`+2`). */
-const CARD_STACK = 5;
 
 /**
- * Per layout: the card's grid, the image's and the text's columns, and the
- * image's rendered width for `sizes`. Below `lg` every card is one column.
+ * Per layout: the plate's grid, the cover's and the text's columns, and the
+ * cover's rendered width for `sizes`. Below `lg`, and without a cover, a plate
+ * is one column.
  */
 const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; sizes: string }> = {
   featured: {
-    card: "lg:grid lg:grid-cols-12",
-    media: "lg:col-span-7 lg:aspect-auto lg:border-b-0 lg:border-r",
+    card: "lg:grid lg:grid-cols-12 lg:items-start lg:gap-x-(--col-gap)",
+    media: "lg:col-span-7",
     body: "lg:col-span-5",
     sizes: "(min-width: 1280px) 690px, (min-width: 1024px) 55vw, 100vw",
   },
   wide: {
-    card: "lg:grid lg:grid-cols-12",
-    media: "lg:col-span-5 lg:aspect-auto lg:border-b-0 lg:border-r",
+    card: "lg:grid lg:grid-cols-12 lg:items-start lg:gap-x-(--col-gap)",
+    media: "lg:col-span-5",
     body: "lg:col-span-7",
     sizes: "(min-width: 1280px) 495px, (min-width: 1024px) 40vw, 100vw",
   },
@@ -54,101 +52,87 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
     card: "",
     media: "",
     body: "",
-    sizes: "(min-width: 1280px) 580px, (min-width: 1024px) 46vw, 100vw",
+    sizes: "(min-width: 1280px) 580px, (min-width: 768px) 46vw, 100vw",
   },
 };
 
 /**
- * A project on the home page. With a case study the whole card is its "Read
- * case study" link (stretched over the card; the live and repo links sit above
- * it), and its image and title morph into the case study's. Without one, its
- * problem / architecture / infra / outcomes open in place (a native
- * `<details>`, so no script is needed). Hover and focus styles: motion.css.
+ * A project on the home page, as a flat plate: no box, space around it. With a
+ * case study the whole plate is its "Read case study" link (stretched over it;
+ * the live and repo links sit above it), its title's underline draws while the
+ * link is hovered, focused or pressed, and its cover and title morph into the
+ * case study's. Without one, its problem / architecture / infra / outcomes open
+ * in place (a native `<details>`, so no script is needed). Link styles:
+ * motion.css.
  */
 @Component({
   selector: "app-project-card",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatchMarkComponent, MetricsComponent, NgIcon, PictureComponent, RouterLink],
-  viewProviders: [
-    provideIcons({ lucideArrowRight, lucideExternalLink, lucideFileText, brandGithub }),
-  ],
+  viewProviders: [provideIcons({ lucideExternalLink, lucideFileText, brandGithub })],
   host: {
     class: "block",
   },
   template: `
-    <article
-      class="project-card surface-card relative isolate flex h-full flex-col overflow-hidden transition-[border-color,box-shadow] duration-(--dur-3) data-link:hover:border-border-strong data-link:hover:shadow-e2 data-link:has-focus-visible:border-border-strong data-link:has-focus-visible:shadow-e2"
-      [class]="classes().card"
-      [attr.data-link]="project().hasCaseStudy ? '' : null"
-    >
-      <div
-        class="card-media relative aspect-16/10 shrink-0 overflow-hidden border-b border-border bg-muted"
-        [class]="classes().media"
-        [style.view-transition-name]="transitionName()"
-      >
-        <app-picture
-          [image]="project().cover"
-          [sizes]="classes().sizes"
-          [imgClass]="'block size-full object-cover'"
-        />
-      </div>
-
-      <div class="flex flex-1 flex-col gap-5 p-6 sm:p-8" [class]="classes().body">
-        <!-- The number is decoration: the list's order already says it. -->
-        <p class="eyebrow m-0 flex flex-wrap gap-x-3 text-muted-foreground">
-          <span class="text-foreground" aria-hidden="true">{{ indexLabel() }}</span>
-          @if (project().descriptor) {
-            <span>{{ project().descriptor }}</span>
-          }
-        </p>
-        <h3
-          class="m-0 w-fit text-balance text-h3 text-foreground"
-          [style.view-transition-name]="titleTransitionName()"
+    <article class="relative isolate flex h-full flex-col gap-6" [class]="classes().card">
+      @if (project().cover; as cover) {
+        <div
+          class="card-media relative aspect-16/10 shrink-0 overflow-hidden bg-muted"
+          [class]="classes().media"
+          [style.view-transition-name]="transitionName()"
         >
-          {{ project().name }}
-        </h3>
-        @if (project().hook) {
-          <p class="m-0 line-clamp-2 text-pretty text-muted-foreground">
-            {{ project().hook }}
-          </p>
-        }
+          <app-picture
+            [image]="cover"
+            [sizes]="classes().sizes"
+            [imgClass]="'block size-full object-cover'"
+          />
+        </div>
+      }
+
+      <!-- What it is close together; its proof and its stack apart. -->
+      <div class="flex flex-1 flex-col gap-6" [class]="classes().body">
+        <div class="flex flex-col gap-3">
+          <div class="flex flex-col gap-1">
+            <h3
+              class="m-0 w-fit text-balance text-title text-foreground"
+              [style.view-transition-name]="titleTransitionName()"
+            >
+              <span class="title-draw">{{ project().name }}</span>
+            </h3>
+            @if (project().descriptor) {
+              <p class="m-0 text-muted-foreground">{{ project().descriptor }}</p>
+            }
+          </div>
+          @if (project().hook) {
+            <p class="m-0 max-w-[60ch] text-pretty text-foreground/85">{{ project().hook }}</p>
+          }
+        </div>
         @if (marks.count("project:" + project().slug); as n) {
           <app-match-mark [n]="n" />
         }
 
         @if (metrics().length) {
-          <!-- Under the title in size: the card is the project, not the number. -->
-          <app-metrics class="[--metric-max:2.5rem]" [metrics]="metrics()" />
+          <!-- No larger than the title: the plate is the project, not the number. -->
+          <app-metrics class="[--metric-max:2rem] [--metric-min:8.5rem]" [metrics]="metrics()" />
         }
 
-        @if (stack().shown.length) {
-          <ul
-            class="m-0 flex list-none flex-wrap gap-2 p-0"
-            role="list"
-            [attr.aria-label]="lang.t().projectCard.techStackAriaLabel"
-          >
-            @for (tech of stack().shown; track tech) {
-              <li class="chip">{{ tech }}</li>
-            }
-            @if (stack().more) {
-              <li class="chip text-muted-foreground">
-                <span aria-hidden="true">+{{ stack().more }}</span
-                ><span class="sr-only">{{ stack().rest }}</span>
-              </li>
-            }
-          </ul>
+        @if (project().stack.length) {
+          <p class="m-0 text-small text-muted-foreground">
+            <span class="sr-only">{{ lang.t().projectCard.techStackAriaLabel }}: </span
+            ><span translate="no">{{ project().stack.join(", ") }}</span>
+          </p>
         }
 
         @if (!project().hasCaseStudy && hasDetails()) {
-          <details class="disclosure rounded-lg border border-border">
-            <summary class="press px-4">{{ chrome().details }}</summary>
-            <dl class="m-0 grid gap-4 border-t border-border px-4 py-4">
+          <details class="disclosure">
+            <summary class="press w-fit">{{ chrome().details }}</summary>
+            <dl class="m-0 grid gap-4 pt-2">
               @for (block of blocks(); track block.label) {
-                <div class="flex flex-col gap-1.5">
-                  <dt class="eyebrow text-accent-orange">{{ block.label }}</dt>
+                <div class="flex flex-col gap-1">
+                  <dt class="text-data text-muted-foreground">{{ block.label }}</dt>
                   @if (block.list) {
                     <dd class="m-0">
-                      <ul class="list-trace text-sm text-foreground/90" role="list">
+                      <ul class="list-trace text-small text-foreground/90" role="list">
                         @for (item of block.list; track item) {
                           <li>{{ item }}</li>
                         }
@@ -157,7 +141,7 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
                   } @else {
                     <!-- Sanitized on write by the API; Angular sanitizes again here. -->
                     <dd
-                      class="prose-compact m-0 text-sm leading-relaxed text-foreground/90"
+                      class="prose-compact m-0 text-small text-foreground/90"
                       [innerHTML]="block.body"
                     ></dd>
                   }
@@ -168,24 +152,15 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
         }
 
         @if (project().hasCaseStudy || links().length) {
-          <div class="mt-auto flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pt-1">
+          <div class="mt-auto flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
             @if (project().hasCaseStudy) {
-              <!-- Stretched over the whole card (motion.css). -->
+              <!-- Stretched over the whole plate (motion.css). -->
               <a
-                class="card-link inline-flex min-h-6 items-center gap-2 font-mono text-meta font-medium text-foreground"
+                class="card-link inline-flex min-h-6 items-center font-medium text-foreground"
                 [routerLink]="caseStudyLink()"
+                >{{ lang.t().caseStudy.readCaseStudy
+                }}<span class="sr-only">: {{ project().name }}</span></a
               >
-                <span
-                  >{{ lang.t().caseStudy.readCaseStudy
-                  }}<span class="sr-only">: {{ project().name }}</span></span
-                >
-                <ng-icon
-                  class="card-arrow text-accent-orange"
-                  name="lucideArrowRight"
-                  size="14"
-                  aria-hidden="true"
-                />
-              </a>
             }
             @if (links().length) {
               <ul
@@ -217,11 +192,13 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
 export class ProjectCardComponent {
   readonly lang = inject(LanguageService);
   readonly project = input.required<Project>();
-  readonly index = input<number>(0);
-  /** Where the card sits in the section's grid (project-layout.ts). */
+  /** Where the plate sits in the section's grid (project-layout.ts). */
   readonly layout = input<CardLayout>("half");
 
-  protected readonly classes = computed(() => LAYOUTS[this.layout()]);
+  /** A plate without a cover is its text alone, one column at every width. */
+  protected readonly classes = computed(
+    () => LAYOUTS[this.project().cover ? this.layout() : "half"],
+  );
   protected readonly chrome = computed(() => CHROME[this.lang.lang()].projectCard);
   protected readonly marks = inject(MatchMarks);
 
@@ -234,24 +211,7 @@ export class ProjectCardComponent {
     this.project().hasCaseStudy ? projectTitleTransitionName(this.project().slug) : null,
   );
 
-  readonly indexLabel = computed(() => {
-    // Padding lives here now rather than baked into the copy, so the editable
-    // string is just `case · {i}` and it still reads correctly past 9.
-    const i = String(this.index() + 1).padStart(2, "0");
-    return fmt(this.lang.t().projectCard.caseLabel, { i });
-  });
-
   protected readonly metrics = computed(() => this.project().metrics.slice(0, CARD_METRICS));
-
-  /** The chips shown, and the rest: counted on screen, named for screen readers. */
-  protected readonly stack = computed(() => {
-    const stack = this.project().stack;
-    return {
-      shown: stack.slice(0, CARD_STACK),
-      more: Math.max(0, stack.length - CARD_STACK),
-      rest: stack.slice(CARD_STACK).join(", "),
-    };
-  });
 
   readonly blocks = computed<DetailBlock[]>(() => {
     const p = this.project();

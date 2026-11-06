@@ -6,9 +6,10 @@ import { SectionHeadingComponent } from "../components/section-heading.component
 import { LanguageService } from "../services/language.service";
 
 /**
- * Selected work: every project, in the admin's order, as cards that lead to
- * their case studies. Featured projects span the row; the rest go two across,
- * and a card that would be left alone on its row spans it too.
+ * Selected work: every project, in the admin's order, as flat plates that lead
+ * to their case studies, with space between them. Featured projects span the
+ * row; the rest go two across, and a plate that would be left alone on its row
+ * spans it too.
  */
 @Component({
   selector: "app-projects-section",
@@ -26,13 +27,15 @@ import { LanguageService } from "../services/language.service";
       <div class="flex flex-col gap-12">
         <app-section-heading headingId="projects-heading" [heading]="lang.t().projects.heading" />
 
-        <ul class="m-0 grid list-none gap-6 p-0 lg:grid-cols-2" role="list">
+        <ul
+          class="m-0 grid list-none gap-x-(--col-gap) gap-y-12 p-0 md:grid-cols-2 md:gap-y-16"
+          role="list"
+        >
           @for (project of projects(); track project.slug; let i = $index) {
-            <li [class]="layouts()[i] === 'half' ? '' : 'lg:col-span-2'">
+            <li [class]="layouts()[i] === 'half' ? '' : 'md:col-span-2'">
               <app-project-card
                 class="h-full"
                 [project]="project"
-                [index]="i"
                 [layout]="layouts()[i] ?? 'half'"
               />
             </li>

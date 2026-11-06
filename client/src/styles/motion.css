@@ -145,17 +145,21 @@
 }
 
 /*
- * Project cards (components/project-card.component.ts). A card with a case
- * study (`data-link`) is its "Read case study" link, stretched over the card,
- * and its focus ring follows the card's edge. Hovering the card or focusing a
- * link in it lifts it (utilities in the template), zooms the image a little
- * and nudges the arrow.
+ * Work plates and post rows (project-card, post-list): a plate with a case study, and a post row,
+ * is one link stretched over it, its focus ring just outside its edge. The title's underline draws
+ * from the left while that link is hovered, focused or pressed (at once under reduced motion).
  */
 .card-link::after {
   content: "";
   position: absolute;
-  inset: 0;
-  border-radius: var(--radius-xl);
+  inset: -0.5rem;
+  border-radius: var(--radius);
+}
+
+/* No grey flash over the whole plate on a tap: the title's underline is the press. */
+.card-link {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .card-link:focus-visible {
@@ -164,7 +168,14 @@
 
 .card-link:focus-visible::after {
   outline: 2px solid var(--accent-orange);
-  outline-offset: -2px;
+}
+
+.title-draw {
+  background: linear-gradient(var(--accent-orange), var(--accent-orange)) no-repeat 0 100% / 0 2px;
+}
+
+article:has(.card-link:is(:focus-visible, :active)) .title-draw {
+  background-size: 100% 2px;
 }
 
 /* A contact field's focus: a 2px orange line over its own, drawn from the
@@ -217,12 +228,8 @@
     animation-delay: calc(var(--i, 0) * 40ms);
   }
 
-  .card-media img {
-    transition: scale var(--dur-5) var(--ease-out);
-  }
-
-  .card-arrow {
-    transition: translate var(--dur-3) var(--ease-out);
+  .title-draw {
+    transition: background-size var(--dur-3) var(--ease-out);
   }
 
   /* A skill card's chips rise 2px under the pointer, one after another. */
@@ -230,26 +237,16 @@
     transition: translate var(--dur-3) var(--ease-spring) calc(var(--i, 0) * 20ms);
   }
 
-  .project-card[data-link]:has(a:focus-visible) .card-media img {
-    scale: 1.03;
-  }
-
-  .project-card[data-link]:has(a:focus-visible) .card-arrow {
-    translate: 4px 0;
-  }
-
   @media (hover: hover) {
-    .project-card[data-link]:hover .card-media img {
-      scale: 1.03;
-    }
-
-    .project-card[data-link]:hover .card-arrow {
-      translate: 4px 0;
-    }
-
     .skill-card:hover .chip {
       translate: 0 -2px;
     }
+  }
+}
+
+@media (hover: hover) {
+  article:has(.card-link:hover) .title-draw {
+    background-size: 100% 2px;
   }
 }
 

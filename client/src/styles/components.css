@@ -209,10 +209,11 @@
   border-radius: 50%;
 }
 
-/* `app-metrics`. Each number sizes to its own cell, so none can run out of a narrow slot. */
+/* `app-metrics`. Each number sizes to its own cell, so none can run out of a narrow slot; a slot
+   may narrow the cells (`--metric-min`) and cap the numbers (`--metric-max`). */
 .metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(var(--metric-min, 11rem), 100%), 1fr));
   gap: 2rem 1.5rem;
 }
 
