@@ -309,7 +309,7 @@ export class SiteHeaderComponent {
   private readonly sections = computed(() => homeSections(this.lang.content()));
 
   /**
-   * Work, Experience, Writing and About, in the page's order: Skills and Contact stay on
+   * Work, About, Experience and Writing, in the page's order: Skills and Contact stay on
    * the page, in the palette and behind "Let's talk". Writing links to its own page; on
    * home it lights up while its section is in view.
    */

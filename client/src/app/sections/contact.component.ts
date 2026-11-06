@@ -16,13 +16,15 @@ import {
 } from "@angular/core";
 import { FormBuilder, ReactiveFormsModule, Validators } from "@angular/forms";
 import { RouterLink } from "@angular/router";
+import { NgIcon, provideIcons } from "@ng-icons/core";
+import { lucideCircleAlert } from "@ng-icons/lucide";
 import { z } from "zod";
 
 import { SectionHeadingComponent } from "../components/section-heading.component";
 import { AVAILABILITY_DOT, availabilityLabel } from "../content/availability";
 import type { Locale } from "../content/locale";
 import { placeName, timeZoneLabel } from "../content/place";
-import { isWebLink, socialHandle } from "../content/social";
+import { isWebLink } from "../content/social";
 import { CHROME } from "../i18n/chrome";
 import { fmt } from "../i18n/interpolate";
 import { ClockService } from "../services/clock.service";
@@ -59,18 +61,22 @@ const MATCH_LINE: Record<Locale, { lead: string; link: string }> = {
 const TOOL_DESCRIPTION =
   "Prepares a message to Alireza Rastineh through his portfolio's contact form: the sender's name, an email address for his reply, and the message (10 to 4,000 characters). The agent only fills the form; the user reviews it and clicks Send, which runs a bot check.";
 
-const labelClass = "eyebrow text-muted-foreground";
-const errorClass = "m-0 font-mono text-meta text-destructive";
+/** Sentence case whatever the CMS sends ("name" reads "Name"). */
+const labelClass = "block text-base font-medium text-foreground first-letter:uppercase";
+const errorClass = "m-0 flex items-start gap-1.5 text-small text-destructive";
 
 /**
- * The last section: from `lg`, the ways to reach him at the left (the email,
- * to copy; profiles by their handles; availability, local time and how soon
- * he replies) and the form at the right. Below `lg` they stack.
+ * The last section. From `md` the ways to reach him stand at the left (the statement, the email
+ * to copy, the profiles, availability with the local time, how soon he replies, the match page)
+ * and the form at the right; on phones they stack. The page's line ends at Send (motion.css):
+ * from `md` the form spans two rows with Send alone in the second, so the run to it crosses no
+ * text. After a send, "Message sent" takes the line's end and closes on the wordmark's dot.
  */
 @Component({
   selector: "app-contact-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink, SectionHeadingComponent],
+  imports: [NgIcon, ReactiveFormsModule, RouterLink, SectionHeadingComponent],
+  viewProviders: [provideIcons({ lucideCircleAlert })],
   host: {
     class: "block",
   },
@@ -87,16 +93,17 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
              to its message instead, which then reads itself. -->
         <p class="sr-only" role="status">{{ announcement() }}</p>
 
-        <div class="grid grid-cols-12 gap-x-(--col-gap) gap-y-12">
-          <div class="col-span-12 flex flex-col gap-8 lg:col-span-5">
-            <div class="flex flex-col gap-2">
-              <p class="eyebrow m-0 text-muted-foreground">{{ chrome().email }}</p>
-              <!-- The button under the address: "Copied ✓" is wider than "Copy", and beside it would jump a line. -->
+        <div class="grid grid-cols-12 gap-x-(--col-gap) gap-y-12 md:gap-y-6">
+          <div class="col-span-12 flex flex-col gap-8 md:col-span-5 md:row-start-1">
+            <div class="flex flex-col gap-3">
+              <p class="m-0 text-balance text-title text-foreground">
+                {{ lang.t().contact.subtitle }}
+              </p>
+              <!-- The button under the address: "Copied ✓" is wider than "Copy", and beside it
+                   would jump a line. The address breaks after its @, never inside a word. -->
               <div class="flex flex-col items-start gap-2">
-                <a
-                  class="link-underline break-all font-mono text-h3"
-                  [href]="'mailto:' + contactEmail()"
-                  >{{ contactEmail() }}</a
+                <a class="link-underline text-subtitle" [href]="'mailto:' + contactEmail()"
+                  >{{ email().local }}<wbr />{{ email().domain }}</a
                 >
                 <!-- Its name starts with the visible word. -->
                 <button type="button" class="control press" (click)="copyEmail()">
@@ -111,95 +118,84 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
             </div>
 
             @if (socials().length) {
-              <div class="flex flex-col gap-3">
-                <p class="eyebrow m-0 text-muted-foreground">{{ chrome().elsewhere }}</p>
-                <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list">
-                  @for (social of socials(); track social.href) {
-                    <li>
-                      <!-- The label in a column of its own; a long handle wraps, the arrow after it. -->
-                      <a
-                        class="grid grid-cols-[4.5rem_1fr] items-baseline gap-x-3 font-mono text-meta"
-                        [href]="social.href"
-                        [attr.target]="social.web ? '_blank' : null"
-                        [attr.rel]="social.web ? 'noreferrer noopener' : null"
-                      >
-                        <span class="text-muted-foreground">{{ social.label }}</span>
-                        <span class="min-w-0 break-all"
-                          ><span class="link-underline">{{ social.handle }}</span>
-                          @if (social.web) {
-                            <span class="text-muted-foreground" aria-hidden="true"> ↗</span>
-                          }
-                        </span>
-                      </a>
-                    </li>
-                  }
-                </ul>
-              </div>
+              <ul class="m-0 flex list-none flex-wrap gap-x-6 gap-y-2 p-0" role="list">
+                @for (social of socials(); track social.href) {
+                  <li>
+                    <a
+                      class="link-underline"
+                      [href]="social.href"
+                      [attr.target]="social.web ? '_blank' : null"
+                      [attr.rel]="social.web ? 'noreferrer noopener' : null"
+                      >{{ social.label
+                      }}<span aria-hidden="true" [hidden]="!social.web"> ↗</span></a
+                    >
+                  </li>
+                }
+              </ul>
             }
 
-            <div
-              class="flex flex-col gap-2 border-t border-border pt-6 font-mono text-meta text-muted-foreground"
-            >
-              <p class="m-0 flex items-center gap-2">
-                <span class="status-dot" [class]="dot()" aria-hidden="true"></span>
-                <span class="text-foreground">{{ availability() }}</span>
-              </p>
-              <!-- The zone from the server; the time in the browser, in space kept for it. -->
-              <p class="m-0">
-                {{ where() }}
-                @if (zone(); as zone) {
-                  <span aria-hidden="true"> · </span>{{ zone }}
-                  <span class="sr-only">{{ chrome().localTime }}</span>
-                  <time class="inline-block min-w-[5ch] tabular-nums">{{ time() }}</time>
-                }
+            <div class="flex flex-col gap-2">
+              <p class="m-0 flex flex-col gap-0.5">
+                <span class="flex items-center gap-2 text-small font-medium text-foreground">
+                  <span class="status-dot" [class]="dot()" aria-hidden="true"></span
+                  >{{ availability() }}
+                </span>
+                <!-- The zone from the server; the time added in the browser, into space already
+                     kept for it at the end of the line. -->
+                <span class="pl-4 text-data text-faint-foreground"
+                  >{{ where() }}
+                  @if (zone()) {
+                    <span class="sr-only">{{ chrome().localTime }}</span>
+                    <time class="inline-block min-w-[5ch] tabular-nums">{{ time() }}</time>
+                  }
+                </span>
               </p>
               @if (replyTime()) {
-                <p class="m-0">{{ replyTime() }}</p>
+                <p class="m-0 text-small text-muted-foreground">{{ replyTime() }}</p>
               }
             </div>
 
-            <p class="m-0 font-mono text-meta text-muted-foreground">
+            <p class="m-0 text-small text-muted-foreground">
               {{ matchLine().lead }}
-              <a
-                class="link-underline text-foreground"
-                [routerLink]="['/', lang.lang(), 'match']"
-                >{{ matchLine().link }}</a
-              >
+              <a class="link-underline" [routerLink]="['/', lang.lang(), 'match']">{{
+                matchLine().link
+              }}</a>
             </p>
           </div>
 
-          <div class="col-span-12 lg:col-span-7">
-            @if (state() === "success") {
-              <div
-                #success
-                tabindex="-1"
-                class="flex flex-col gap-4 rounded-xl border border-border bg-card px-6 py-7 font-mono text-sm leading-relaxed shadow-e3"
-              >
-                <div>
-                  <p class="m-0 text-accent-orange">{{ lang.t().contact.successLine1 }}</p>
-                  <p class="m-0 mt-1 text-muted-foreground">
-                    {{ lang.t().contact.successLine2 }}
-                    <a class="link-underline" [href]="'mailto:' + contactEmail()">{{
-                      contactEmail()
-                    }}</a>
-                  </p>
-                </div>
-                <button type="button" class="link-underline w-fit cursor-pointer" (click)="reset()">
-                  {{ chrome().sendAnother }}
-                </button>
-              </div>
-            } @else {
-              <form
-                [formGroup]="form"
-                (ngSubmit)="submit()"
-                novalidate
-                class="relative flex flex-col gap-6"
-                [attr.aria-busy]="state() === 'submitting' ? 'true' : null"
-                [attr.data-ready]="ready() ? '' : null"
-                [attr.toolname]="ready() ? 'contact_alireza' : null"
-                [attr.tooldescription]="ready() ? toolDescription : null"
-              >
-                <div class="flex flex-col gap-1.5">
+          @if (state() === "success") {
+            <div
+              #success
+              tabindex="-1"
+              class="col-span-12 flex flex-col items-start gap-3 md:col-span-7 md:row-start-1"
+            >
+              <!-- The line ends here after a send, and the words close on its dot. -->
+              <p class="page-line-end m-0 text-title text-foreground">
+                {{ sent() }}<span class="text-signal" aria-hidden="true">.</span>
+              </p>
+              <p class="m-0 text-muted-foreground">
+                {{ lang.t().contact.successLine2 }}
+                <a class="link-underline" [href]="'mailto:' + contactEmail()">{{
+                  contactEmail()
+                }}</a>
+              </p>
+              <button type="button" class="btn-quiet press" (click)="reset()">
+                {{ chrome().sendAnother }}
+              </button>
+            </div>
+          } @else {
+            <form
+              [formGroup]="form"
+              (ngSubmit)="submit()"
+              novalidate
+              class="col-span-12 flex flex-col gap-6 md:col-span-7 md:row-span-2 md:grid md:grid-rows-subgrid"
+              [attr.aria-busy]="state() === 'submitting' ? 'true' : null"
+              [attr.data-ready]="ready() ? '' : null"
+              [attr.toolname]="ready() ? 'contact_alireza' : null"
+              [attr.tooldescription]="ready() ? toolDescription : null"
+            >
+              <div class="flex flex-col gap-6">
+                <div class="flex flex-col gap-2">
                   <label for="contact-name" [class]="labelClass">{{
                     lang.t().contact.labelName
                   }}</label>
@@ -209,6 +205,7 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                       id="contact-name"
                       type="text"
                       autocomplete="name"
+                      enterkeyhint="next"
                       required
                       maxlength="120"
                       formControlName="name"
@@ -220,11 +217,15 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                     />
                   </div>
                   @if (showError("name")) {
-                    <p id="contact-name-error" [class]="errorClass">{{ fieldError("name") }}</p>
+                    <p id="contact-name-error" [class]="errorClass">
+                      <ng-icon class="mt-0.75 shrink-0" name="lucideCircleAlert" size="16" />{{
+                        fieldError("name")
+                      }}
+                    </p>
                   }
                 </div>
 
-                <div class="flex flex-col gap-1.5">
+                <div class="flex flex-col gap-2">
                   <label for="contact-email" [class]="labelClass">{{
                     lang.t().contact.labelEmail
                   }}</label>
@@ -234,6 +235,8 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                       id="contact-email"
                       type="email"
                       autocomplete="email"
+                      enterkeyhint="next"
+                      spellcheck="false"
                       required
                       maxlength="200"
                       formControlName="email"
@@ -245,11 +248,15 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                     />
                   </div>
                   @if (showError("email")) {
-                    <p id="contact-email-error" [class]="errorClass">{{ fieldError("email") }}</p>
+                    <p id="contact-email-error" [class]="errorClass">
+                      <ng-icon class="mt-0.75 shrink-0" name="lucideCircleAlert" size="16" />{{
+                        fieldError("email")
+                      }}
+                    </p>
                   }
                 </div>
 
-                <div class="flex flex-col gap-1.5">
+                <div class="flex flex-col gap-2">
                   <label for="contact-message" [class]="labelClass">{{
                     lang.t().contact.labelMessage
                   }}</label>
@@ -272,14 +279,16 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                   </div>
                   @if (showError("message")) {
                     <p id="contact-message-error" [class]="errorClass">
-                      {{ fieldError("message") }}
+                      <ng-icon class="mt-0.75 shrink-0" name="lucideCircleAlert" size="16" />{{
+                        fieldError("message")
+                      }}
                     </p>
                   }
                 </div>
 
                 @if (attachable()) {
                   <!-- After the assistant's hand-off: the conversation goes only if ticked. -->
-                  <div class="flex items-start gap-2 text-sm">
+                  <div class="flex items-start gap-2 text-small">
                     <input
                       id="contact-attach"
                       type="checkbox"
@@ -290,7 +299,7 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                     />
                     <div class="flex flex-col gap-0.5">
                       <label for="contact-attach">{{ chrome().attach }}</label>
-                      <p id="contact-attach-hint" class="m-0 text-xs text-muted-foreground">
+                      <p id="contact-attach-hint" class="m-0 text-muted-foreground">
                         {{ chrome().attachHint }}
                       </p>
                     </div>
@@ -313,24 +322,30 @@ const errorClass = "m-0 font-mono text-meta text-destructive";
                 </div>
 
                 @if (state() === "error" && errorMsg()) {
-                  <p class="m-0 font-mono text-sm text-destructive">{{ errorMsg() }}</p>
-                }
-
-                <div class="flex items-center gap-3">
-                  <button
-                    type="submit"
-                    class="btn btn-solid press"
-                    [disabled]="state() === 'submitting'"
-                    [attr.aria-busy]="state() === 'submitting' ? 'true' : null"
-                  >
-                    {{
-                      state() === "submitting" ? lang.t().contact.sending : lang.t().contact.submit
+                  <p [class]="errorClass">
+                    <ng-icon class="mt-0.75 shrink-0" name="lucideCircleAlert" size="16" />{{
+                      errorMsg()
                     }}
-                  </button>
-                </div>
-              </form>
-            }
-          </div>
+                  </p>
+                }
+              </div>
+
+              <!-- The page's line ends at Send: a run from the spine to the button (motion.css). -->
+              <div class="flex items-center">
+                <span class="page-line-run" aria-hidden="true"></span>
+                <button
+                  type="submit"
+                  class="page-line-end btn btn-solid press"
+                  [disabled]="state() === 'submitting'"
+                  [attr.aria-busy]="state() === 'submitting' ? 'true' : null"
+                >
+                  {{
+                    state() === "submitting" ? lang.t().contact.sending : lang.t().contact.submit
+                  }}
+                </button>
+              </div>
+            </form>
+          }
         </div>
       </div>
     </section>
@@ -362,17 +377,28 @@ export class ContactSectionComponent {
   protected readonly matchLine = computed(() => MATCH_LINE[this.lang.lang()]);
 
   readonly contactEmail = computed(() => this.lang.content().identity.contactEmail);
+  /** The address up to its @, and the rest: it may break there and nowhere else. */
+  protected readonly email = computed(() => {
+    const email = this.contactEmail();
+    const at = email.lastIndexOf("@") + 1;
+    return { local: email.slice(0, at), domain: email.slice(at) };
+  });
+
+  /** "Message sent", its own full stop left to the dot. */
+  protected readonly sent = computed(() =>
+    this.lang.t().contact.successLine1.trim().replace(/\.$/, ""),
+  );
 
   /** True for a moment after the email address was copied. */
   protected readonly copied = signal<CopyResult | null>(null);
   private copiedTimer: ReturnType<typeof setTimeout> | undefined;
 
-  /** Profiles by their handles; the email is shown on its own above them. */
+  /** Profiles by name; the email is shown on its own above them. */
   protected readonly socials = computed(() =>
     this.lang
       .content()
       .socials.filter((s) => !s.href.startsWith("mailto:"))
-      .map((s) => ({ ...s, handle: socialHandle(s.href), web: isWebLink(s.href) })),
+      .map((s) => ({ ...s, web: isWebLink(s.href) })),
   );
 
   private readonly identity = computed(() => this.lang.content().identity);
@@ -380,11 +406,17 @@ export class ContactSectionComponent {
   protected readonly availability = computed(() =>
     availabilityLabel(this.lang.t().hero, this.identity().availability),
   );
-  protected readonly where = computed(
-    () => placeName(this.identity().location, this.lang.lang()) || this.lang.t().profile.location,
-  );
   protected readonly zone = computed(() =>
     timeZoneLabel(this.identity().timezone, this.lang.lang()),
+  );
+  /** As the hero's status says it: the place, else the CMS's "Remote", then the zone. */
+  protected readonly where = computed(() =>
+    [
+      placeName(this.identity().location, this.lang.lang()) || this.lang.t().profile.location,
+      this.zone(),
+    ]
+      .filter(Boolean)
+      .join(", "),
   );
   private readonly clock = inject(ClockService);
   protected readonly time = computed(() => this.clock.time(this.identity().timezone));

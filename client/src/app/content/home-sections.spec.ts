@@ -9,20 +9,20 @@ describe("homeSections", () => {
     expect(homeSections({ experiences: [], posts: [] })).toEqual([
       "hero",
       "projects",
-      "skills",
       "about",
+      "skills",
       "contact",
     ]);
   });
 
-  it("keeps every section when there is content for it", () => {
+  it("keeps every section when there is content for it, the person after the work", () => {
     expect(homeSections({ experiences: [entry], posts: [entry] })).toEqual([
       "hero",
       "projects",
+      "about",
       "experience",
       "skills",
       "writing",
-      "about",
       "contact",
     ]);
   });

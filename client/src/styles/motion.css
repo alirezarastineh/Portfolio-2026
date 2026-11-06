@@ -78,12 +78,13 @@
  * lead to the hero's foot, where the page's line goes on. Elsewhere the stop stands alone and the
  * line starts under the hero.
  */
-.hero-line {
+.hero-line,
+.page-line-run {
   display: none;
 }
 
 /* eslint-disable css/use-baseline -- progressive enhancement: without anchor positioning the
-   stop stands alone and the line starts under the hero. */
+   stop stands alone and the line starts under the hero, and runs to the foot of the page. */
 @supports (anchor-name: --a) {
   @media (width >= 64rem) {
     .hero-headline {
@@ -121,6 +122,27 @@
       height: calc(0.4em + 1px);
       border-right: 1px solid var(--signal);
     }
+  }
+
+  /* The line's end (contact.component.ts), at every width: the spine stops at Send's middle and a
+     run joins it to the button, lit like a node; after a send it stops at "Message sent". With no
+     end on the page it runs to its foot. */
+  .page-line {
+    bottom: anchor(--page-line-end center, 0px);
+  }
+
+  .page-line-end {
+    anchor-name: --page-line-end;
+  }
+
+  .page-line-run {
+    display: block;
+    position: absolute;
+    top: anchor(--page-line-end center);
+    right: anchor(--page-line-end left);
+    left: var(--spine);
+    border-top: 1px solid var(--signal);
+    pointer-events: none;
   }
 }
 /* eslint-enable css/use-baseline */
@@ -285,7 +307,8 @@ article:has(.card-link:is(:focus-visible, :active)) .title-draw {
       animation-range: cover 40vh cover calc(100% - 60vh);
     }
 
-    .page-line-node {
+    .page-line-node,
+    .page-line-run {
       animation: node-fill linear both;
       animation-timeline: view(block 0px);
       animation-range: cover 40vh cover calc(40vh + 1px);

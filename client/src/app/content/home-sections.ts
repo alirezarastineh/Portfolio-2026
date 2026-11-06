@@ -1,13 +1,13 @@
 import type { AppContent } from "./schema";
 
-/** The home page's sections, in page order. */
+/** The home page's sections, in page order: the work, then the person, then the record. */
 export const HOME_SECTIONS = [
   "hero",
   "projects",
+  "about",
   "experience",
   "skills",
   "writing",
-  "about",
   "contact",
 ] as const;
 export type HomeSection = (typeof HOME_SECTIONS)[number];

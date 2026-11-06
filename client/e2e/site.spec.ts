@@ -33,7 +33,9 @@ function recordReveals() {
 }
 
 test.describe("home", () => {
-  test("leads with the work, in the planned order", async ({ page }) => {
+  test("leads with the work, then the person, then the record, and the header follows", async ({
+    page,
+  }) => {
     await page.goto("/en");
     const ids = await page
       .locator("#main section[id]")
@@ -41,11 +43,17 @@ test.describe("home", () => {
     expect(ids).toEqual([
       "hero",
       "projects",
+      "about",
       "experience",
       "skills",
       "writing",
-      "about",
       "contact",
+    ]);
+    await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link")).toHaveText([
+      "Work",
+      "About",
+      "Experience",
+      "Writing",
     ]);
   });
 
@@ -538,13 +546,29 @@ test.describe("contact form", () => {
     await expect(name).toHaveAttribute("aria-invalid", "true");
     await expect(name).toHaveAttribute("aria-describedby", "contact-name-error");
     await expect(page.locator("#contact-name-error")).toHaveText("Required.");
+    // Text with an icon beside it, never colour alone.
+    await expect(page.locator("#contact-name-error svg")).toBeVisible();
     await expect(page.locator("#contact-email")).toHaveAttribute("aria-invalid", "true");
     await expect(page.locator("#contact [role=status]")).toHaveText(
       "Please fix the highlighted fields.",
     );
   });
 
-  test("beside it: the email to copy, profiles by handle, and a reply time", async ({
+  test("labels stand above 56px fields, and the address breaks only after its @", async ({
+    page,
+    request,
+  }) => {
+    const label = (await page.locator('label[for="contact-name"]').boundingBox())!;
+    const name = page.locator("#contact-name");
+    expect(label.y + label.height).toBeLessThanOrEqual((await name.boundingBox())!.y);
+    await expect(name).toHaveCSS("min-height", "56px");
+    await expect(page.locator('label[for="contact-name"]')).toHaveCSS("font-size", "16px");
+    const html = await (await request.get("/en")).text();
+    expect(html).toMatch(/>contact@<wbr\/?>alirezarastineh\.me</);
+    expect(html).not.toContain("break-all");
+  });
+
+  test("beside it: the email to copy, profiles by name, and a reply time", async ({
     page,
     context,
     browserName,
@@ -553,9 +577,10 @@ test.describe("contact form", () => {
     const readable = browserName === "chromium";
     if (readable) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     const contact = page.locator("#contact");
-    await expect(
-      contact.getByRole("link", { name: /^GitHub\s*github\.com\/alirezarastineh$/ }),
-    ).toHaveAttribute("href", "https://github.com/alirezarastineh");
+    await expect(contact.getByRole("link", { name: "GitHub", exact: true })).toHaveAttribute(
+      "href",
+      "https://github.com/alirezarastineh",
+    );
     await expect(contact).toContainText("I reply within 24 hours.");
 
     await contact.getByRole("button", { name: "Copy the email address" }).click();
@@ -610,6 +635,83 @@ test.describe("contact form", () => {
     await page.getByRole("button", { name: "Send message" }).click();
     await expect(page.locator("#contact").getByText("Message sent")).toBeVisible();
     expect(requests).toBe(0);
+  });
+
+  test("the page's line ends at Send, and after a send at “Message sent”, which closes on the dot", async ({
+    page,
+  }) => {
+    test.skip(
+      !(await page.evaluate(() => CSS.supports("anchor-name: --a"))),
+      "no anchor positioning: the line runs to the foot of the page",
+    );
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const box = (selector: string) =>
+      page.locator(selector).evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
+    const near = (a: number, b: number) => expect(Math.abs(a - b)).toBeLessThanOrEqual(1);
+    const middle = (rect: DOMRect) => rect.top + rect.height / 2;
+    const [line, run, send] = await Promise.all(
+      [".page-line", ".page-line-run", "#contact button[type=submit]"].map(box),
+    );
+    near(line.bottom, middle(send));
+    near(run.top, middle(send));
+    near(run.left, line.left);
+    near(run.right, send.left);
+    await expect(page.locator(".page-line-run")).toHaveAttribute("aria-hidden", "true");
+
+    await mockContact(page, () => undefined);
+    await page.locator("#contact-name").fill("Ada");
+    await page.locator("#contact-email").fill("ada@example.com");
+    await page.locator("#contact-message").fill("Hello there, a question about Atlas.");
+    await page.getByRole("button", { name: "Send message" }).click();
+    const sent = page.locator("#contact .page-line-end");
+    await expect(sent).toHaveText("Message sent.");
+    await expect(sent.locator("[aria-hidden=true]")).toHaveCSS("color", "rgb(255, 79, 0)");
+    await expect(page.locator(".page-line-run")).toHaveCount(0);
+    near((await box(".page-line")).bottom, middle(await box("#contact .page-line-end")));
+  });
+
+  test("an unsent message asks before a link leaves home; its sections and the other language do not", async ({
+    page,
+  }) => {
+    const message = page.locator("#contact-message");
+    await message.fill("A question about Atlas.");
+    const asked: string[] = [];
+    page.on("dialog", (dialog) => {
+      asked.push(dialog.message());
+      // Stay the first time, leave the second.
+      void (asked.length === 1 ? dialog.dismiss() : dialog.accept());
+    });
+
+    await page
+      .getByRole("navigation", { name: "Primary" })
+      .getByRole("link", { name: "Work" })
+      .click();
+    await expect(page).toHaveURL(/\/en#projects$/);
+    // The other language keeps the place, and the form with it.
+    await page.locator('header a[hreflang="de"]').click();
+    await expect(page).toHaveURL(/\/de#projects$/);
+    await expect(message).toHaveValue("A question about Atlas.");
+    expect(asked).toEqual([]);
+
+    const writing = page
+      .getByRole("navigation", { name: "Hauptnavigation" })
+      .getByRole("link", { name: "Artikel" });
+    await writing.click();
+    await expect
+      .poll(() => asked)
+      .toEqual(["Ihre Nachricht ist noch nicht gesendet. Seite trotzdem verlassen?"]);
+    await expect(page).toHaveURL(/\/de#projects$/);
+    await expect(message).toHaveValue("A question about Atlas.");
+    await writing.click();
+    await expect(page).toHaveURL(/\/de\/writing$/);
+  });
+
+  test("an unsent message asks before the page reloads or closes", async ({ page }) => {
+    await page.locator("#contact-message").fill("A question about Atlas.");
+    const dialog = page.waitForEvent("dialog");
+    await page.close({ runBeforeUnload: true });
+    expect((await dialog).type()).toBe("beforeunload");
+    await (await dialog).dismiss();
   });
 });
 

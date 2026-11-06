@@ -1,7 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
 import { RouterLink } from "@angular/router";
-import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideArrowRight } from "@ng-icons/lucide";
 
 import { PostListComponent } from "../components/post-list.component";
 import { SectionHeadingComponent } from "../components/section-heading.component";
@@ -11,14 +9,13 @@ import { LanguageService } from "../services/language.service";
 const LATEST = 3;
 
 /**
- * The newest posts on the home page, with a link to all of them. Rendered
- * only when this language has any.
+ * The newest posts on the home page, up to three, with a link to all of them. Rendered only when
+ * this language has any.
  */
 @Component({
   selector: "app-writing-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgIcon, PostListComponent, RouterLink, SectionHeadingComponent],
-  viewProviders: [provideIcons({ lucideArrowRight })],
+  imports: [PostListComponent, RouterLink, SectionHeadingComponent],
   host: { class: "block" },
   template: `
     @if (posts().length) {
@@ -29,13 +26,9 @@ const LATEST = 3;
       >
         <div class="flex flex-col gap-12">
           <app-section-heading headingId="writing-heading" [heading]="lang.t().writing.heading">
-            <a
-              class="link-underline inline-flex items-center gap-2 font-mono text-sm"
-              [routerLink]="['/', lang.lang(), 'writing']"
-            >
-              {{ lang.t().writing.allPosts }}
-              <ng-icon name="lucideArrowRight" size="14" aria-hidden="true" />
-            </a>
+            <a class="link-underline" [routerLink]="['/', lang.lang(), 'writing']">{{
+              lang.t().writing.allPosts
+            }}</a>
           </app-section-heading>
 
           <!-- The writing index's rows (titles h3 here, under the section's h2). -->

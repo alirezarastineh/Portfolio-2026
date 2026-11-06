@@ -52,10 +52,8 @@ export interface ChromeLabels {
   share: { share: string; copy: string; copied: string; failed: string; idle: ""; on: string };
   contact: {
     sendAnother: string;
-    email: string;
     /** Read after the copy button's visible "Copy". */
     copyWhat: string;
-    elsewhere: string;
     localTime: string;
     /** The opt-in after the assistant's hand-off: off unless ticked. */
     attach: string;
@@ -146,9 +144,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
     },
     contact: {
       sendAnother: "Send another message",
-      email: "Email",
       copyWhat: "the email address",
-      elsewhere: "Elsewhere",
       localTime: "local time",
       attach: "Attach my conversation with the assistant",
       attachHint:
@@ -226,9 +222,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
     },
     contact: {
       sendAnother: "Weitere Nachricht senden",
-      email: "E-Mail",
       copyWhat: "die E-Mail-Adresse",
-      elsewhere: "Im Netz",
       localTime: "Ortszeit",
       attach: "Mein Gespräch mit dem Assistenten anhängen",
       attachHint:

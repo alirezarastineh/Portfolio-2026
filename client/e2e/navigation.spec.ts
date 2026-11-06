@@ -154,9 +154,9 @@ test.describe("site navigation", () => {
     // The header's sections, Skills and Contact aside: "Let's talk" stays in the bar.
     await expect(menu.getByRole("link")).toHaveText([
       "Work",
+      "About",
       "Experience",
       "Writing",
-      "About",
       /Download CV/,
       /DE/,
     ]);
