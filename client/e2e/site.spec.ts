@@ -244,6 +244,35 @@ test.describe("home", () => {
     await plate.getByRole("link", { name: /Read case study/ }).focus();
     await expect.poll(underline).toBe("100% 2px");
   });
+
+  test("skills are plain text in two columns, each group leading to the work that uses it", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/en");
+    const skills = page.locator("#skills");
+    await expect(skills.locator("h3")).toHaveCount(4);
+    await expect(skills.locator(".chip, svg")).toHaveCount(0);
+    const columns = await skills
+      .locator("li")
+      .evaluateAll((items) => new Set(items.map((li) => li.getBoundingClientRect().left)).size);
+    expect(columns).toBe(2);
+
+    const core = skills.locator("li").filter({ hasText: "Core Architecture" });
+    await expect(core).toContainText(
+      "Used in: Atlas, Supplier catalogue ingestion, Release gate for prompt changes",
+    );
+    await expect(core.getByRole("link", { name: "Atlas" })).toHaveAttribute(
+      "href",
+      "/en/work/project-one",
+    );
+    // No case study: its plate, on this page.
+    const gate = core.getByRole("link", { name: "Release gate for prompt changes" });
+    await expect(gate).toHaveAttribute("href", "/en#work-project-three");
+    await interactive(page);
+    await gate.click();
+    await expect(page.locator("#work-project-three h3")).toBeInViewport();
+  });
 });
 
 test.describe("theme", () => {

@@ -32,7 +32,11 @@ import { LanguageService } from "../services/language.service";
           role="list"
         >
           @for (project of projects(); track project.slug; let i = $index) {
-            <li [class]="layouts()[i] === 'half' ? '' : 'md:col-span-2'">
+            <!-- Its id is where the skills' links find a project without a case study. -->
+            <li
+              [id]="'work-' + project.slug"
+              [class]="layouts()[i] === 'half' ? '' : 'md:col-span-2'"
+            >
               <app-project-card
                 class="h-full"
                 [project]="project"

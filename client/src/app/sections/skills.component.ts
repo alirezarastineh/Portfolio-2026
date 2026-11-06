@@ -1,29 +1,24 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
-import { NgIcon } from "@ng-icons/core";
+import { RouterLink } from "@angular/router";
 
 import { SectionHeadingComponent } from "../components/section-heading.component";
-import { SpotlightCardComponent } from "../components/spotlight-card.component";
-import type { BentoSpan } from "../content/schema";
-import { splitCommentMark } from "../i18n/comment-mark";
-import { iconFor, provideRegistryIcons } from "../icons/icon-registry";
+import type { Locale } from "../content/locale";
+import { skillProof } from "../content/skill-proof";
 import { LanguageService } from "../services/language.service";
 
-/**
- * Bento cells on the four-column grid: `lg` is two by two, `tall` one by two,
- * `sm` one by one — so lg, tall, sm, sm fill two rows exactly. On two columns
- * `lg` takes the full width.
- */
-const SPAN_MAP: Record<BentoSpan, string> = {
-  lg: "md:col-span-2 lg:row-span-2",
-  tall: "lg:row-span-2",
-  sm: "",
-};
+/** Before the projects that use a group's skills. Here: only this section's chunk needs it. */
+const USED_IN: Record<Locale, string> = { en: "Used in:", de: "Eingesetzt in:" };
 
+/**
+ * Skills as plain text in two columns from `md`, one on phones: each group's name, its skills as
+ * a comma list, what it says about them, and the projects whose stack names one of them, each a
+ * link to its case study, or to its plate on this page when it has none. The CMS's `span`, `icon`
+ * and `caption` are no longer shown.
+ */
 @Component({
   selector: "app-skills-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgIcon, SectionHeadingComponent, SpotlightCardComponent],
-  viewProviders: [provideRegistryIcons()],
+  imports: [RouterLink, SectionHeadingComponent],
   host: {
     class: "block",
   },
@@ -32,49 +27,35 @@ const SPAN_MAP: Record<BentoSpan, string> = {
       <div class="flex flex-col gap-12">
         <app-section-heading headingId="skills-heading" [heading]="lang.t().skills.heading" />
         <ul
-          class="m-0 grid list-none auto-rows-[minmax(180px,auto)] grid-flow-dense grid-cols-1 gap-4 p-0 md:grid-cols-2 lg:grid-cols-4 lg:gap-5"
+          class="m-0 grid list-none gap-x-(--col-gap) gap-y-10 p-0 md:grid-cols-2 md:gap-y-12"
           role="list"
         >
-          @for (card of cards(); track card.id) {
-            <li [class]="card.layout">
-              <app-spotlight-card class="skill-card h-full">
-                <article class="flex h-full flex-col gap-5 p-6">
-                  <header class="flex items-start justify-between gap-3">
-                    <div class="flex flex-col gap-1.5">
-                      @if (card.caption.text) {
-                        <p class="eyebrow m-0 text-muted-foreground">
-                          @if (card.caption.marked) {
-                            <span aria-hidden="true">// </span>
-                          }
-                          {{ card.caption.text }}
-                        </p>
-                      }
-                      <h3 class="m-0 text-h4 text-foreground">
-                        {{ card.title }}
-                      </h3>
-                    </div>
-                    <span
-                      class="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
-                      aria-hidden="true"
-                    >
-                      <ng-icon [name]="card.icon" size="20" />
-                    </span>
-                  </header>
-                  <!-- The chips rise one after another as the card is hovered (motion.css). -->
-                  <ul class="m-0 flex list-none flex-wrap gap-2 p-0" role="list">
-                    @for (item of card.items; track item; let i = $index) {
-                      <li class="chip" [style.--i]="i">{{ item }}</li>
-                    }
-                  </ul>
-                  @if (card.narrative) {
-                    <p
-                      class="m-0 mt-auto text-pretty text-sm leading-relaxed text-muted-foreground"
-                    >
-                      {{ card.narrative }}
-                    </p>
+          @for (group of groups(); track group.id) {
+            <li class="flex flex-col gap-2">
+              <h3 class="m-0 text-subtitle text-foreground">{{ group.title }}</h3>
+              @if (group.items.length) {
+                <p class="m-0 max-w-[60ch] text-pretty text-foreground/85" translate="no">
+                  {{ group.items.join(", ") }}
+                </p>
+              }
+              @if (group.narrative) {
+                <p class="m-0 max-w-[60ch] text-pretty text-small text-muted-foreground">
+                  {{ group.narrative }}
+                </p>
+              }
+              @if (group.proof.length) {
+                <p class="m-0 text-small text-muted-foreground">
+                  {{ usedIn() }}
+                  @for (project of group.proof; track project.slug) {
+                    <a
+                      class="link-underline"
+                      [routerLink]="project.hasCaseStudy ? caseStudy(project.slug) : home()"
+                      [fragment]="project.hasCaseStudy ? undefined : 'work-' + project.slug"
+                      >{{ project.name }}</a
+                    >{{ $last ? "" : ", " }}
                   }
-                </article>
-              </app-spotlight-card>
+                </p>
+              }
             </li>
           }
         </ul>
@@ -85,16 +66,16 @@ const SPAN_MAP: Record<BentoSpan, string> = {
 export class SkillsSectionComponent {
   readonly lang = inject(LanguageService);
 
-  /**
-   * Copy and layout arrive pre-joined by skill id, so a reorder in the admin
-   * cannot pair the wrong title with the wrong card.
-   */
-  readonly cards = computed(() =>
-    this.lang.content().skills.map((skill) => ({
-      ...skill,
-      caption: splitCommentMark(skill.caption),
-      icon: iconFor(skill.icon, "lucideSparkles"),
-      layout: SPAN_MAP[skill.span],
-    })),
-  );
+  protected readonly usedIn = computed(() => USED_IN[this.lang.lang()]);
+  protected readonly home = computed(() => ["/", this.lang.lang()]);
+
+  /** Each group with its proof, read from the projects' stacks: no field of its own. */
+  protected readonly groups = computed(() => {
+    const { skills, projects } = this.lang.content();
+    return skills.map((skill) => ({ ...skill, proof: skillProof(skill.items, projects) }));
+  });
+
+  protected caseStudy(slug: string): string[] {
+    return ["/", this.lang.lang(), "work", slug];
+  }
 }

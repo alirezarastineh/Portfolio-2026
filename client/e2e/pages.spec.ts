@@ -552,6 +552,29 @@ test.describe("home: experience", () => {
     await expect(page.locator("#experience details")).toHaveCount(1);
   });
 
+  test("hangs from the page's line: a tick per entry, headings above roles, dates in the data face, held from lg", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/en");
+    const section = page.locator("#experience");
+    await expect(section.locator("li > .page-line-node")).toHaveCount(6);
+    await expect(section.locator("li > .page-line-node").first()).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    const size = (selector: string) =>
+      section
+        .locator(selector)
+        .first()
+        .evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
+    expect(await size("h3")).toBeGreaterThan(await size("h4"));
+    const dates = section.locator("time").first();
+    await expect(dates).toHaveCSS("font-family", /B612/);
+    await expect(dates.locator("..")).toHaveCSS("position", "sticky");
+    await expect(section.locator(".chip")).toHaveCount(0);
+  });
+
   test("the header links to it, and to the writing index", async ({ page }) => {
     await page.goto("/de");
     const nav = page.getByRole("navigation", { name: "Hauptnavigation" });

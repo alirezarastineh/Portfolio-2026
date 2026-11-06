@@ -231,17 +231,6 @@ article:has(.card-link:is(:focus-visible, :active)) .title-draw {
   .title-draw {
     transition: background-size var(--dur-3) var(--ease-out);
   }
-
-  /* A skill card's chips rise 2px under the pointer, one after another. */
-  .skill-card .chip {
-    transition: translate var(--dur-3) var(--ease-spring) calc(var(--i, 0) * 20ms);
-  }
-
-  @media (hover: hover) {
-    .skill-card:hover .chip {
-      translate: 0 -2px;
-    }
-  }
 }
 
 @media (hover: hover) {

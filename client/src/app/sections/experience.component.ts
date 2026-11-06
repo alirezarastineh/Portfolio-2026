@@ -1,11 +1,4 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
-import { NgIcon, provideIcons } from "@ng-icons/core";
-import {
-  lucideAward,
-  lucideBriefcase,
-  lucideExternalLink,
-  lucideGraduationCap,
-} from "@ng-icons/lucide";
 
 import { MatchMarkComponent, MatchMarks } from "../ask/match-marks";
 import { PictureComponent } from "../components/picture.component";
@@ -19,7 +12,6 @@ import { LanguageService } from "../services/language.service";
 interface Group {
   kind: ExperienceKind;
   label: string;
-  icon: string;
   entries: Entry[];
 }
 
@@ -31,35 +23,27 @@ interface Entry {
   duration: string;
   /** Employment type and location, as one line. */
   details: string;
-  /** Still going: a role or a degree without an end (a certification's open end means it does not expire). */
   /** The highlights always shown; the rest fold behind "+N more". */
   highlights: string[];
   more: string[];
 }
 
 const KIND_ORDER: ExperienceKind[] = ["work", "education", "certification"];
-const KIND_ICON: Record<ExperienceKind, string> = {
-  work: "lucideBriefcase",
-  education: "lucideGraduationCap",
-  certification: "lucideAward",
-};
 
 /** Highlights shown before the rest fold away. */
 const HIGHLIGHTS = 3;
 
 /**
- * The CV as a timeline: work, education and certifications, each in the
- * order set in the admin. Rendered only when there is something to show.
- * From `lg` each entry has two columns: its period and duration at the left
- * (held in view while the entry scrolls past), the role at the right.
+ * The CV as a timeline drawn from the page's line: work, education and certifications under
+ * headings of their own, each entry a tick on the line, in the order set in the admin. Rendered
+ * only when there is something to show. Phones read the role, its organisation, then its dates;
+ * from `md` the dates stand in a column of their own at the left, from `lg` held in view while the
+ * entry scrolls past.
  */
 @Component({
   selector: "app-experience-section",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatchMarkComponent, NgIcon, PictureComponent, SectionHeadingComponent],
-  viewProviders: [
-    provideIcons({ lucideAward, lucideBriefcase, lucideExternalLink, lucideGraduationCap }),
-  ],
+  imports: [MatchMarkComponent, PictureComponent, SectionHeadingComponent],
   host: { class: "block" },
   template: `
     @if (groups().length) {
@@ -76,28 +60,53 @@ const HIGHLIGHTS = 3;
 
           @for (group of groups(); track group.kind) {
             <div class="flex flex-col gap-6">
-              <h3 class="eyebrow m-0 flex items-center gap-2 text-accent-orange">
-                <ng-icon [name]="group.icon" size="14" aria-hidden="true" />
-                {{ group.label }}
-              </h3>
+              <h3 class="m-0 text-title text-foreground">{{ group.label }}</h3>
 
-              <ol class="m-0 flex list-none flex-col border-l border-border p-0" role="list">
+              <ol class="m-0 flex list-none flex-col gap-8 p-0 lg:gap-10" role="list">
                 @for (entry of group.entries; track entry.experience.id) {
-                  <li class="relative pb-10 pl-8 last:pb-0">
-                    <!-- Filled while ongoing. -->
-                    <span
-                      class="absolute -left-1.25 top-1.5 size-2.25 rounded-full border border-signal"
-                      [class.bg-signal]="!entry.experience.period.end"
-                      [class.bg-background]="!!entry.experience.period.end"
-                      aria-hidden="true"
-                    ></span>
-
+                  <li class="relative">
+                    <!-- Its tick on the page's line, lit as the line reaches it (motion.css). -->
+                    <span class="page-line-node" aria-hidden="true"></span>
                     <article
-                      class="flex flex-col gap-4 lg:grid lg:grid-cols-12 lg:gap-x-(--col-gap)"
+                      class="flex flex-col gap-3 md:grid md:grid-cols-12 md:gap-x-(--col-gap)"
                     >
-                      <!-- Above the role on phones; beside it from lg, in view while it scrolls past. -->
+                      <div class="flex flex-col gap-1 md:col-span-9 md:col-start-4 md:row-start-1">
+                        <h4 class="m-0 text-subtitle text-foreground">
+                          {{ entry.experience.title }}
+                        </h4>
+                        <p class="m-0 flex flex-wrap items-center gap-x-2 text-muted-foreground">
+                          @if (entry.experience.org.logo; as logo) {
+                            <app-picture
+                              class="block size-5 shrink-0"
+                              [image]="logo"
+                              alt=""
+                              [sizes]="'20px'"
+                              [imgClass]="'block size-full object-contain'"
+                            />
+                          }
+                          <!-- A link only with an address: bound, not branched, so no space
+                               lands before the comma. -->
+                          <span
+                            ><a
+                              [class]="
+                                entry.experience.org.url ? 'link-underline' : 'text-foreground'
+                              "
+                              [attr.href]="entry.experience.org.url || null"
+                              [attr.target]="entry.experience.org.url ? '_blank' : null"
+                              [attr.rel]="entry.experience.org.url ? 'noreferrer noopener' : null"
+                              >{{ entry.experience.org.name
+                              }}<span aria-hidden="true" [hidden]="!entry.experience.org.url">
+                                ↗</span
+                              ></a
+                            >{{ entry.details ? ", " + entry.details : "" }}</span
+                          >
+                        </p>
+                      </div>
+
+                      <!-- After the role on phones; its own column from md, held in view from lg
+                           while the entry scrolls past. -->
                       <p
-                        class="m-0 flex flex-wrap gap-x-2 font-mono text-meta text-muted-foreground lg:sticky lg:top-24 lg:col-span-3 lg:flex-col lg:self-start"
+                        class="m-0 text-data text-muted-foreground md:col-span-3 md:col-start-1 md:row-span-2 md:row-start-1 md:flex md:flex-col md:self-start lg:sticky lg:top-24"
                       >
                         <time
                           class="text-foreground"
@@ -105,97 +114,56 @@ const HIGHLIGHTS = 3;
                           >{{ entry.when }}</time
                         >
                         @if (entry.duration) {
-                          <span class="lg:hidden" aria-hidden="true">·</span>
-                          <span>{{ entry.duration }}</span>
+                          <span class="md:hidden">, </span><span>{{ entry.duration }}</span>
                         }
                       </p>
 
-                      <div class="flex flex-col gap-3 sm:flex-row sm:gap-5 lg:col-span-9">
-                        <div
-                          class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-card font-mono text-sm text-muted-foreground shadow-e1"
-                          aria-hidden="true"
-                        >
-                          @if (entry.experience.org.logo; as logo) {
-                            <app-picture
-                              [image]="logo"
-                              alt=""
-                              [sizes]="'40px'"
-                              [imgClass]="'block size-full object-contain p-1'"
-                            />
-                          } @else {
-                            {{ initial(entry.experience.org.name) }}
-                          }
-                        </div>
-
-                        <div class="flex min-w-0 flex-col gap-2">
-                          <h4 class="m-0 text-h4 text-foreground">
-                            {{ entry.experience.title }}
-                          </h4>
-                          <p class="m-0 text-sm text-muted-foreground">
-                            @if (entry.experience.org.url) {
-                              <a
-                                class="link-underline"
-                                [href]="entry.experience.org.url"
-                                target="_blank"
-                                rel="noreferrer noopener"
-                                >{{ entry.experience.org.name }}</a
-                              >
-                            } @else {
-                              <span class="text-foreground">{{ entry.experience.org.name }}</span>
-                            }
-                            @if (entry.details) {
-                              <span> · {{ entry.details }}</span>
-                            }
+                      <div class="flex flex-col gap-3 md:col-span-9 md:col-start-4 md:row-start-2">
+                        @if (marks.count("experience:" + entry.experience.id); as n) {
+                          <app-match-mark [n]="n" />
+                        }
+                        @if (entry.experience.summary) {
+                          <p class="m-0 max-w-[60ch] text-pretty text-foreground/85">
+                            {{ entry.experience.summary }}
                           </p>
-                          @if (marks.count("experience:" + entry.experience.id); as n) {
-                            <app-match-mark [n]="n" />
-                          }
-
-                          @if (entry.experience.summary) {
-                            <p
-                              class="m-0 max-w-3xl text-pretty leading-relaxed text-muted-foreground"
+                        }
+                        @if (entry.highlights.length) {
+                          <ul class="list-trace m-0 p-0 text-small text-foreground/90" role="list">
+                            @for (highlight of entry.highlights; track $index) {
+                              <li class="text-pretty">{{ highlight }}</li>
+                            }
+                          </ul>
+                        }
+                        @if (entry.more.length) {
+                          <details class="disclosure">
+                            <summary class="press w-fit">
+                              {{ moreLabel(entry.more.length) }}
+                            </summary>
+                            <ul
+                              class="list-trace m-0 p-0 pt-1.5 text-small text-foreground/90"
+                              role="list"
                             >
-                              {{ entry.experience.summary }}
-                            </p>
-                          }
-                          @if (entry.highlights.length) {
-                            <ul class="list-trace text-sm text-foreground/90" role="list">
-                              @for (highlight of entry.highlights; track $index) {
-                                <li>{{ highlight }}</li>
+                              @for (highlight of entry.more; track $index) {
+                                <li class="text-pretty">{{ highlight }}</li>
                               }
                             </ul>
-                          }
-                          @if (entry.more.length) {
-                            <details class="disclosure">
-                              <summary class="press w-fit">
-                                {{ moreLabel(entry.more.length) }}
-                              </summary>
-                              <ul class="list-trace pt-1.5 text-sm text-foreground/90" role="list">
-                                @for (highlight of entry.more; track $index) {
-                                  <li>{{ highlight }}</li>
-                                }
-                              </ul>
-                            </details>
-                          }
-                          @if (entry.experience.skills.length) {
-                            <ul class="m-0 mt-1 flex list-none flex-wrap gap-2 p-0" role="list">
-                              @for (skill of entry.experience.skills; track skill) {
-                                <li class="chip">{{ skill }}</li>
-                              }
-                            </ul>
-                          }
-                          @if (entry.experience.credential?.url; as url) {
-                            <a
-                              class="link-underline inline-flex w-fit items-center gap-1.5 font-mono text-meta"
-                              [href]="url"
-                              target="_blank"
-                              rel="noreferrer noopener"
-                            >
-                              {{ lang.t().experience.credential }}
-                              <ng-icon name="lucideExternalLink" size="14" aria-hidden="true" />
-                            </a>
-                          }
-                        </div>
+                          </details>
+                        }
+                        @if (entry.experience.skills.length) {
+                          <p class="m-0 text-small text-muted-foreground" translate="no">
+                            {{ entry.experience.skills.join(", ") }}
+                          </p>
+                        }
+                        @if (entry.experience.credential?.url; as url) {
+                          <a
+                            class="link-underline w-fit text-small"
+                            [href]="url"
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            >{{ lang.t().experience.credential
+                            }}<span aria-hidden="true"> ↗</span></a
+                          >
+                        }
                       </div>
                     </article>
                   </li>
@@ -226,14 +194,9 @@ export class ExperienceSectionComponent {
     return KIND_ORDER.map((kind) => ({
       kind,
       label: labels[kind],
-      icon: KIND_ICON[kind],
       entries: experiences.filter((e) => e.kind === kind).map((e) => this.entry(e)),
     })).filter((group) => group.entries.length > 0);
   });
-
-  protected initial(name: string): string {
-    return name.trim().charAt(0).toUpperCase();
-  }
 
   protected moreLabel(n: number): string {
     return fmt(CHROME[this.lang.lang()].experience.more, { n });
@@ -267,7 +230,7 @@ export class ExperienceSectionComponent {
       duration: formatDuration(period, t, this.now, period.precision),
       details: [this.employmentLabel(experience.employmentType), experience.location]
         .filter(Boolean)
-        .join(" · "),
+        .join(", "),
       ...folded,
     };
   }
