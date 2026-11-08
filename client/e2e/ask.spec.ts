@@ -1442,6 +1442,7 @@ test.describe("assistant terminal", () => {
     await expect(wider).toHaveAttribute("aria-pressed", "true");
     expect((await panel.boundingBox())!.width).toBeGreaterThan(narrow);
     await wider.click();
+    await expect(wider).toHaveAttribute("aria-pressed", "false");
     expect((await panel.boundingBox())!.width).toBe(narrow);
 
     // Turned or zoomed across 1024px while open: the same dialog becomes the sheet and back.
