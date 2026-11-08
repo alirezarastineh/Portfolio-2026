@@ -860,4 +860,6 @@ test("legal and the writing index share the site's one left edge, and legal's he
 
   await page.goto("/en/writing");
   expect((await page.locator("main h1").boundingBox())?.x).toBe(left);
+  await page.goto("/en/match");
+  expect((await page.locator("main h1").boundingBox())?.x).toBe(left);
 });

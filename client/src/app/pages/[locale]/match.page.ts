@@ -8,10 +8,12 @@ import {
   PLATFORM_ID,
   signal,
 } from "@angular/core";
-import type { ResolveFn } from "@angular/router";
+import { toSignal } from "@angular/core/rxjs-interop";
+import { ActivatedRoute, Router, type ParamMap, type ResolveFn } from "@angular/router";
 import type { MetaTag, RouteMeta } from "@analogjs/router";
+import { map } from "rxjs";
 
-import { MATCH_KINDS, type MatchKind } from "../../ask/match";
+import { isMatchKind, MATCH_KINDS, type MatchKind } from "../../ask/match";
 import { MatchPanelComponent } from "../../ask/match-panel.component";
 import { MATCH_PAGE_COPY } from "../../ask/match-page-copy";
 import { applyHead } from "../../seo/head";
@@ -45,6 +47,12 @@ const headResolver: ResolveFn<true> = () => {
   return true;
 };
 
+/** The kind the address asks for; anything else is the default. */
+function kindIn(params: ParamMap): MatchKind {
+  const kind = params.get("kind");
+  return kind && isMatchKind(kind) ? kind : "role";
+}
+
 /** `/en/match`: a role, a project or a problem checked against the published work (plan 3 W3). */
 export const routeMeta: RouteMeta = {
   title: titleResolver,
@@ -63,45 +71,136 @@ export const routeMeta: RouteMeta = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatchPanelComponent],
   host: { class: "block" },
-  template: `
-    <main id="main" class="mx-auto flex max-w-3xl flex-col gap-10 px-6 pb-24 pt-32 sm:px-8">
-      <header class="flex flex-col gap-3">
-        <p class="eyebrow m-0 text-muted-foreground">
-          <span aria-hidden="true">// </span>{{ copy().eyebrow }}
-        </p>
-        <h1 class="m-0 text-3xl font-medium tracking-tight text-foreground sm:text-4xl">
-          {{ copy().heading }}
-        </h1>
-        <p class="m-0 max-w-prose leading-relaxed text-muted-foreground">{{ copy().intro }}</p>
-      </header>
-
-      <!-- Native radios: the arrow keys move the choice, with no roving focus to build. -->
-      <fieldset class="match-controls m-0 flex flex-wrap gap-x-6 gap-y-2 border-0 p-0">
-        <legend class="eyebrow mb-3 p-0 text-muted-foreground">{{ copy().legend }}</legend>
-        @for (k of kinds; track k) {
-          <label class="flex min-h-6 cursor-pointer items-center gap-2">
-            <input type="radio" name="match-kind" [checked]="k === kind()" (change)="kind.set(k)" />
-            {{ copy().kinds[k] }}
-          </label>
-        }
-      </fieldset>
-
-      @defer (when ready()) {
-        <app-match-panel [kind]="kind()" />
+  styles: `
+    /* One control of three native radios: the arrow keys move the choice, with no roving focus. */
+    .kinds {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .kind {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 2.5rem;
+      border-radius: calc(var(--radius) - 1px);
+      color: var(--muted-foreground);
+      font-size: 0.9375rem;
+      text-align: center;
+      touch-action: manipulation;
+      transition:
+        color var(--dur-2) var(--ease-out),
+        background-color var(--dur-2) var(--ease-out);
+    }
+    .kind + .kind {
+      border-inline-start: 1px solid var(--border);
+    }
+    /* Over the whole segment, so a tap or a screen reader's touch lands on the radio itself. */
+    .kind input {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .kind:has(:checked) {
+      background: var(--surface-2);
+      color: var(--foreground);
+    }
+    .kind:has(:focus-visible) {
+      outline: 2px solid var(--accent-orange);
+      outline-offset: 2px;
+    }
+    @media (width >= 40rem) {
+      .kinds {
+        width: fit-content;
       }
+      .kind {
+        padding-inline: 1.25rem;
+      }
+    }
+    @media (hover: hover) {
+      .kind:hover {
+        color: var(--foreground);
+      }
+    }
+    @media (pointer: coarse) {
+      .kind {
+        min-height: 2.75rem;
+      }
+    }
+    /* Forced colours drop the fill, and with it which kind is chosen. */
+    @media (forced-colors: active) {
+      .kind:has(:checked) {
+        forced-color-adjust: none;
+        background: Highlight;
+        color: HighlightText;
+      }
+    }
+  `,
+  template: `
+    <main id="main" class="pb-24 pt-28 lg:pt-32">
+      <div class="container-site flex flex-col gap-8 lg:gap-12">
+        <header class="flex max-w-[68ch] flex-col gap-3">
+          <h1 class="m-0 text-h1 text-foreground">{{ copy().heading }}</h1>
+          <p class="m-0 text-lead text-muted-foreground">{{ copy().intro }}</p>
+        </header>
+
+        <fieldset class="match-controls m-0 border-0 p-0">
+          <legend class="mb-2 p-0 text-small text-muted-foreground">{{ copy().legend }}</legend>
+          <div class="kinds">
+            @for (k of kinds; track k) {
+              <label class="kind">
+                <input
+                  type="radio"
+                  name="match-kind"
+                  [checked]="k === kind()"
+                  (change)="choose(k)"
+                />
+                {{ copy().kinds[k] }}
+              </label>
+            }
+          </div>
+        </fieldset>
+
+        @defer (when ready()) {
+          <app-match-panel [kind]="kind()" />
+        } @placeholder {
+          <p class="match-frame m-0">{{ copy().loading }}</p>
+        }
+      </div>
     </main>
   `,
 })
 export default class MatchPageComponent {
   private readonly lang = inject(LanguageService);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   protected readonly copy = computed(() => MATCH_PAGE_COPY[this.lang.lang()]);
   protected readonly kinds = MATCH_KINDS;
-  protected readonly kind = signal<MatchKind>("role");
+  /** In the address, so the page can be shared and reloaded. */
+  protected readonly kind = toSignal(this.route.queryParamMap.pipe(map(kindIn)), {
+    requireSync: true,
+  });
   /** Set once hydrated, in the browser only (`afterNextRender` runs in the server render too). */
   protected readonly ready = signal(false);
 
   constructor() {
     const browser = isPlatformBrowser(inject(PLATFORM_ID));
     afterNextRender(() => this.ready.set(browser));
+  }
+
+  /** Replaces the address: the arrow keys step through the kinds, and Back should leave the page. */
+  protected choose(kind: MatchKind): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { kind },
+      replaceUrl: true,
+    });
   }
 }

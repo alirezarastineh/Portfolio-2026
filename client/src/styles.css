@@ -253,6 +253,30 @@ a {
   }
 }
 
+/* The match page's field while its code and the assistant's settings load: the same place, so
+   nothing below it moves. Without scripts it would never load, so it does not promise to. */
+.match-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 48rem;
+  min-height: 25.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+  font-size: 0.9375rem;
+}
+@media (pointer: coarse) {
+  .match-frame {
+    min-height: 27.5rem;
+  }
+}
+@media (scripting: none) {
+  .match-frame {
+    display: none;
+  }
+}
+
 /* The public page uses smooth anchor scrolling; inside the admin it makes
    jumping between long forms feel sluggish and fights focus management.
    It has to be set on <html>: the document scrolls there, not in the admin's
@@ -298,6 +322,7 @@ html:not(:has(app-admin-layout)) {
     --muted-foreground: #333;
     --border: #bbb;
     --accent-orange: #b83a0a;
+    --available: #137738;
     --gutter: 0px;
   }
 
@@ -367,6 +392,7 @@ html:not(:has(app-admin-layout)) {
   img,
   pre,
   blockquote,
+  tr,
   .surface-card {
     break-inside: avoid;
   }

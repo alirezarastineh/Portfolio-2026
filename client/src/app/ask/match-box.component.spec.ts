@@ -6,13 +6,14 @@ import { LanguageService } from "../services/language.service";
 import { MatchBoxComponent } from "./match-box.component";
 
 /** The brief's paste box (visitor plan V20): its label, counter and keys, and nothing sent unasked. */
-function mount(lang: "en" | "de" = "en") {
+function mount(lang: "en" | "de" = "en", page = false) {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [{ provide: LanguageService, useValue: { lang: signal(lang) } }],
   });
   const fixture = TestBed.createComponent(MatchBoxComponent);
   fixture.componentRef.setInput("kind", "project");
+  fixture.componentRef.setInput("page", page);
   const sent: string[] = [];
   let dismissed = 0;
   fixture.componentInstance.sent.subscribe((brief) => sent.push(brief));
@@ -76,6 +77,22 @@ describe("the brief's paste box (visitor plan V20)", () => {
     expect(reached).toBe(false);
     el.querySelector<HTMLButtonElement>('button[type="button"]')!.click();
     expect(dismissed()).toBe(2);
+  });
+
+  it("on the match page is the site's field, and shows a brief being checked", () => {
+    const { fixture, el, type } = mount("en", true);
+    const send = el.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    expect(el.querySelector("textarea")?.classList.contains("field")).toBe(true);
+    expect(send.classList.contains("btn-solid")).toBe(true);
+    type("A data platform");
+    expect(send.disabled).toBe(false);
+    expect(send.getAttribute("aria-busy")).toBeNull();
+    fixture.componentRef.setInput("busy", true);
+    fixture.detectChanges();
+    // `aria-disabled`, so the focus stays on it; the panel takes no second brief while one runs.
+    expect(send.disabled).toBe(false);
+    expect(send.getAttribute("aria-disabled")).toBe("true");
+    expect(send.getAttribute("aria-busy")).toBe("true");
   });
 
   it("speaks German on a German page", () => {

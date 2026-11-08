@@ -4,7 +4,19 @@ import type { AppContent } from "../content/schema";
 import { ASK_COPY } from "./ask-copy";
 import type { AskMessage } from "./ask-types";
 import { linkPolicyFor } from "./link-policy";
-import { counterLine, isMatchKind, matchData, matchStep, stepLine } from "./match";
+import { counterLine, isMatchKind, markOf, matchData, matchStep, stepLine } from "./match";
+
+describe("markOf (plan 4 U30)", () => {
+  it("is the row's status, unless the server's line says to ask him", () => {
+    expect(markOf({ status: "evidence", summary: "Built it." })).toBe("evidence");
+    expect(markOf({ status: "partial", summary: "Some of it." })).toBe("partial");
+    expect(markOf({ status: "not-published", summary: "nothing on his site shows this." })).toBe(
+      "not-published",
+    );
+    expect(markOf({ status: "not-published", summary: "ask him directly." })).toBe("ask");
+    expect(markOf({ status: "not-published", summary: "frag ihn direkt." })).toBe("ask");
+  });
+});
 
 describe("matchData (plan 3 W2)", () => {
   const policy = linkPolicyFor({

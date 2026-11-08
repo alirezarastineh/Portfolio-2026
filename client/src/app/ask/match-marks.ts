@@ -13,7 +13,6 @@ import {
 import { RouterLink } from "@angular/router";
 
 import type { Locale } from "../content/locale";
-import { fmt } from "../i18n/interpolate";
 import { LanguageService } from "../services/language.service";
 
 /**
@@ -95,12 +94,9 @@ export class MatchMarks {
   }
 }
 
-const MARK_COPY: Record<Locale, { one: string; many: string }> = {
-  en: { one: "Evidence for 1 point of your brief", many: "Evidence for {n} points of your brief" },
-  de: {
-    one: "Beleg für 1 Punkt deiner Beschreibung",
-    many: "Belege für {n} Punkte deiner Beschreibung",
-  },
+const MARK_COPY: Record<Locale, string> = {
+  en: "Matches your brief",
+  de: "Passt zur Beschreibung",
 };
 
 /**
@@ -115,22 +111,18 @@ const MARK_COPY: Record<Locale, { one: string; many: string }> = {
   host: { class: "match-mark relative z-10 w-fit" },
   template: `
     <a
-      class="chip gap-1.5 hover:border-available"
+      class="link-underline inline-flex items-center text-data pointer-coarse:min-h-11"
       [routerLink]="['/', lang.lang(), 'match']"
       (click)="followed()"
+      >{{ text() }}</a
     >
-      <span class="text-available" aria-hidden="true">✓</span>{{ text() }}
-    </a>
   `,
 })
 export class MatchMarkComponent {
   readonly n = input.required<number>();
 
   protected readonly lang = inject(LanguageService);
-  protected readonly text = computed(() => {
-    const copy = MARK_COPY[this.lang.lang()];
-    return this.n() === 1 ? copy.one : fmt(copy.many, { n: this.n() });
-  });
+  protected readonly text = computed(() => `${MARK_COPY[this.lang.lang()]}: ${this.n()}`);
 
   protected followed(): void {
     // Loaded on the click: a static import would put one more chunk on every page with marks.

@@ -118,6 +118,8 @@ interface AskState {
   history: string[];
   stats: boolean;
   remote: RemoteConfig | null;
+  /** The settings call failed, so `remote` will stay null. */
+  configFailed: boolean;
   /** Until when the rate limit holds (ms since epoch), for the countdown. */
   limitedUntil: number | null;
   /** An async command or a delete is on its way: "Loading…" in the log (plan 4 U12). */
@@ -297,6 +299,7 @@ export const AskStore = signalStore(
       history: stored?.history ?? [],
       stats: stored?.stats ?? false,
       remote: null,
+      configFailed: false,
       limitedUntil: null,
       loading: false,
       handoff: null,
@@ -1431,10 +1434,14 @@ export const AskStore = signalStore(
       async loadConfig(): Promise<void> {
         try {
           const res = await fetch(`${apiBaseUrl()}/v1/ask/config`);
-          if (res.ok) patchState(store, { remote: (await res.json()) as RemoteConfig });
+          if (res.ok) {
+            patchState(store, { remote: (await res.json()) as RemoteConfig });
+            return;
+          }
         } catch {
           // Unknown: questions are tried, and their failure says why.
         }
+        patchState(store, { configFailed: true });
       },
     };
   }),

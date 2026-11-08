@@ -29,40 +29,57 @@ let instances = 0;
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: "block" },
   template: `
-    <form class="flex flex-col gap-1.5 pb-3" (submit)="$event.preventDefault(); send()">
-      <label [for]="inputId" class="text-accent-orange">{{ copy().label[kind()] }}</label>
-      <textarea
-        #box
-        [id]="inputId"
-        rows="6"
-        [attr.maxlength]="max"
-        class="w-full resize-y rounded-md border border-border bg-transparent p-2 text-foreground focus-visible:outline-2 focus-visible:outline-accent-orange"
-        [attr.aria-describedby]="noteId + ' ' + countId"
-        autocomplete="off"
-        (input)="text.set(box.value)"
-        (keydown)="onKey($event)"
-      ></textarea>
-      <span [id]="noteId" class="text-xs text-muted-foreground">{{ copy().note }}</span>
+    <form
+      [class]="page() ? 'flex max-w-3xl flex-col gap-3' : 'flex flex-col gap-1.5 pb-3'"
+      (submit)="$event.preventDefault(); send()"
+    >
+      <label
+        [for]="inputId"
+        [class]="page() ? 'text-base font-medium text-foreground' : 'text-accent-orange'"
+        >{{ copy().label[kind()] }}</label
+      >
+      <div [class.field-line]="page()">
+        <textarea
+          #box
+          [id]="inputId"
+          [attr.rows]="page() ? 10 : 6"
+          [attr.maxlength]="max"
+          [class]="page() ? 'field resize-y' : terminalField"
+          [attr.aria-describedby]="noteId + ' ' + countId"
+          autocomplete="off"
+          (input)="text.set(box.value)"
+          (keydown)="onKey($event)"
+        ></textarea>
+      </div>
+      <span
+        [id]="noteId"
+        [class]="page() ? 'text-small text-muted-foreground' : 'text-xs text-muted-foreground'"
+        >{{ copy().note }}</span
+      >
       <span class="flex flex-wrap items-center gap-2">
         <button
           type="submit"
-          class="press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange disabled:cursor-default disabled:opacity-50"
+          [class]="page() ? 'btn btn-solid press' : terminalButton"
           [disabled]="!ready()"
+          [attr.aria-disabled]="busy() ? 'true' : null"
+          [attr.aria-busy]="busy() ? 'true' : null"
         >
           {{ copy().send }}
         </button>
         @if (!page()) {
-          <button
-            type="button"
-            class="press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange"
-            (click)="dismissed.emit()"
-          >
+          <button type="button" [class]="terminalButton" (click)="dismissed.emit()">
             {{ copy().cancel }}
           </button>
         }
-        <span [id]="countId" class="ml-auto text-xs tabular-nums text-muted-foreground">{{
-          counter()
-        }}</span>
+        <span
+          [id]="countId"
+          [class]="
+            page()
+              ? 'ml-auto text-data text-muted-foreground'
+              : 'ml-auto text-xs tabular-nums text-muted-foreground'
+          "
+          >{{ counter() }}</span
+        >
       </span>
     </form>
   `,
@@ -74,7 +91,7 @@ let instances = 0;
       }
     }
     @media (pointer: coarse) {
-      button {
+      button:not(.btn) {
         min-height: 2.75rem;
       }
     }
@@ -84,6 +101,8 @@ export class MatchBoxComponent {
   readonly kind = input.required<MatchKind>();
   /** On the match page (plan 3 W3): it stays, so it takes no focus and has nothing to cancel. */
   readonly page = input(false);
+  /** A brief is being checked: on the page, its button shows it and takes no second one. */
+  readonly busy = input(false);
   /** The brief, trimmed, once the visitor sends it. */
   readonly sent = output<string>();
   /** Put away, nothing sent. */
@@ -91,6 +110,11 @@ export class MatchBoxComponent {
 
   private readonly lang = inject(LanguageService);
   private readonly box = viewChild.required<ElementRef<HTMLTextAreaElement>>("box");
+
+  protected readonly terminalField =
+    "w-full resize-y rounded-md border border-border bg-transparent p-2 text-foreground focus-visible:outline-2 focus-visible:outline-accent-orange";
+  protected readonly terminalButton =
+    "press min-h-7 cursor-pointer rounded-md border border-border px-2.5 hover:border-accent-orange disabled:cursor-default disabled:opacity-50";
 
   protected readonly max = MATCH_BRIEF_CHARS;
   private readonly n = ++instances;

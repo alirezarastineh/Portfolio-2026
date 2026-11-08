@@ -2303,7 +2303,7 @@ test.describe("assistant terminal", () => {
     // The server's words in each row, and the page each rests on.
     const rows = table.getByRole("row");
     await expect(rows).toHaveCount(3);
-    await expect(rows.nth(1)).toContainText("✓ evidence");
+    await expect(rows.nth(1)).toContainText("evidence");
     await expect(rows.nth(1).getByRole("rowheader")).toHaveText("Retrieval in production (must)");
     await expect(
       rows.nth(1).getByRole("link", { name: "Supplier catalogue ingestion" }),
@@ -2324,12 +2324,121 @@ test.describe("assistant terminal", () => {
     expect(confirmed[0]).toMatchObject({ messageId: "m_e2epage0003" });
   });
 
+  test("the match page keeps the kind in the address: shared, reloaded, and never a kind it lacks (plan 4 U30)", async ({
+    page,
+  }) => {
+    await mockAsk(page, () => undefined, { match: true });
+    await page.goto("/en/match?kind=project");
+    await interactive(page);
+    await expect(page.getByRole("radio", { name: "A project" })).toBeChecked();
+    await expect(page.getByLabel("Describe your project")).toBeVisible();
+
+    await page.getByRole("radio", { name: "A problem" }).check();
+    await expect(page).toHaveURL(/\/en\/match\?kind=problem$/);
+    await expect(page.getByLabel("Describe the problem")).toBeVisible();
+    await page.reload();
+    await interactive(page);
+    await expect(page.getByRole("radio", { name: "A problem" })).toBeChecked();
+
+    await page.goto("/en/match?kind=nonsense");
+    await interactive(page);
+    await expect(page.getByRole("radio", { name: "A role" })).toBeChecked();
+  });
+
+  test("the match page shows a failure, and a rate limit that sends nothing (plan 4 U30)", async ({
+    page,
+  }) => {
+    const mock = await mockAsk(
+      page,
+      async (route, n) => {
+        if (n === 1) {
+          await sse(route, [
+            { type: "start", messageId: "m_e2epagefail" },
+            { type: "error", errorText: "timeout" },
+          ]);
+        } else {
+          await route.fulfill({
+            status: 429,
+            headers: cors,
+            json: { error: "rate_limited", retryAfter: 42 },
+          });
+        }
+      },
+      { match: true },
+    );
+    await page.goto("/en/match");
+    await interactive(page);
+    const main = page.locator("main");
+    const box = page.getByLabel("Paste the role");
+    await box.fill("Senior AI engineer: retrieval in production.");
+    await page.getByRole("button", { name: "Check it" }).click();
+    await expect(main).toContainText("That took too long to answer. Try again.");
+
+    // The limit, from a question in the terminal: nothing on this page has been refused yet.
+    await page.locator("main h1").click();
+    await page.keyboard.press("/");
+    const prompt = askPanel(page).locator("textarea");
+    await expect(prompt).toBeFocused();
+    await run(prompt, "A rate limit?");
+    await expect(askPanel(page).locator("[role=log]")).toContainText(/Try again in 4[0-2] s/);
+    await page.keyboard.press("Escape");
+    await expect(prompt).toBeHidden();
+    await page.getByRole("button", { name: "Check it" }).click();
+    await expect(main).toContainText(/Try again in \d+ s/);
+    expect(mock.bodies).toHaveLength(2);
+  });
+
+  test("the match page holds the field's place while it loads, and says so if the settings fail (plan 4 U30)", async ({
+    page,
+  }) => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route("**/v1/ask/config", async (route) => {
+      await held;
+      await route.fulfill({ status: 503, headers: cors, json: {} });
+    });
+    await page.goto("/en/match");
+    // Not `interactive`: the network never goes idle while the settings are held.
+    await page.locator("html[data-hydrated]").waitFor({ state: "attached" });
+    await expect(page.locator(".match-frame")).toContainText("Loading…");
+    release();
+    await expect(page.getByText("Matching is not offered just now.")).toBeVisible();
+    await expect(page.locator(".match-frame")).toHaveCount(0);
+  });
+
+  test("the match report prints its date, address and AI disclosure, and none of its controls (plan 4 U30)", async ({
+    page,
+  }) => {
+    await mockAsk(page, (route) => sse(route, matchChunks("m_e2epagepaper", "role", "Role: x.")), {
+      match: true,
+    });
+    await page.goto("/en/match");
+    await interactive(page);
+    await page.getByLabel("Paste the role").fill("Senior AI engineer: retrieval in production.");
+    await page.getByRole("button", { name: "Check it" }).click();
+    await expect(page.getByRole("table")).toBeVisible();
+
+    const printed = page.locator(".match-print-only");
+    await expect(printed).toBeHidden();
+    await page.emulateMedia({ media: "print" });
+    await expect(printed).toBeVisible();
+    await expect(printed).toContainText("by the AI assistant");
+    await expect(printed).toContainText(/\/en\/match$/);
+    await expect(page.getByRole("table")).toBeVisible();
+    for (const control of await page.locator(".match-controls").all()) {
+      await expect(control).toBeHidden();
+    }
+  });
+
   test("the match page's server HTML says what it does and offers the kinds, with nothing of the store (plan 3 W3)", async ({
     request,
   }) => {
     const html = await (await request.get("/en/match")).text();
     expect(html).toMatch(/<h1[^>]*>\s*Check the fit\s*<\/h1>/);
     expect(html.match(/type="radio"/g)).toHaveLength(3);
+    // The address's kind, chosen before the app has loaded.
+    const shared = await (await request.get("/en/match?kind=project")).text();
+    expect(shared).toMatch(/<input[^>]*type="radio"[^>]*checked[^>]*>\s*A project/);
     expect(html).toMatch(/hreflang="de" href="[^"]*\/de\/match"/);
     // The paste box and the table come with the store, after hydration.
     expect(html).not.toContain("<textarea");
@@ -2386,7 +2495,7 @@ test.describe("assistant terminal", () => {
     await interactive(page);
     await page.getByLabel("Paste the role").fill("Senior AI engineer: retrieval in production.");
     await page.getByRole("button", { name: "check it" }).click();
-    const mark = { name: "Evidence for 1 point of your brief" };
+    const mark = { name: "Matches your brief: 1" };
     // Through the router: the store keeps the marks in step, no reload needed.
     await page
       .getByRole("table")
@@ -2784,7 +2893,7 @@ for (const colorScheme of ["dark", "light"] as const) {
       await page.goto("/en");
       await interactive(page);
       await page.locator("#experience").scrollIntoViewIfNeeded();
-      const marks = page.getByRole("link", { name: "Evidence for 1 point of your brief" });
+      const marks = page.getByRole("link", { name: "Matches your brief: 1" });
       await expect(marks).toHaveCount(2);
       expect(await axeViolations(page)).toEqual([]);
     });
@@ -2793,6 +2902,25 @@ for (const colorScheme of ["dark", "light"] as const) {
 
 test.describe("assistant on a phone", () => {
   test.use({ viewport: { width: 390, height: 780 }, hasTouch: true, isMobile: true });
+
+  test("the match report is cards on a phone, with no sideways scroll (plan 4 U30)", async ({
+    page,
+  }) => {
+    await mockAsk(page, (route) => sse(route, matchChunks("m_e2epagecard", "role", "Role: x.")), {
+      match: true,
+    });
+    await page.goto("/en/match");
+    await interactive(page);
+    // The kind: 44px on touch.
+    expect((await page.locator(".kind").first().boundingBox())?.height).toBeGreaterThanOrEqual(44);
+    await page.getByLabel("Paste the role").fill("Senior AI engineer: retrieval in production.");
+    await page.getByRole("button", { name: "Check it" }).tap();
+    const rows = page.getByRole("table").getByRole("row");
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(1)).toHaveCSS("display", "flex");
+    await expect(rows.nth(1).getByRole("rowheader")).toHaveText("Retrieval in production (must)");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
+  });
 
   test("the stage is the sheet's door, and shows the last question afterwards (plan 4 U11b)", async ({
     page,

@@ -8,11 +8,12 @@ import type { MatchKind } from "./match";
 export interface MatchPageCopy {
   /** The page's heading, and its title. */
   heading: string;
-  eyebrow: string;
   /** What the page does: server-rendered, and the search result's description. */
   intro: string;
   legend: string;
   kinds: Record<MatchKind, string>;
+  /** In the field's place while its code and the assistant's settings load. */
+  loading: string;
   /** The table's name, for screen readers. */
   caption: string;
   columns: { status: string; item: Record<MatchKind, string>; shows: string; evidence: string };
@@ -31,11 +32,11 @@ export interface MatchPageCopy {
 export const MATCH_PAGE_COPY: Record<Locale, MatchPageCopy> = {
   en: {
     heading: "Check the fit",
-    eyebrow: "match a brief",
     intro:
-      "Paste a role, or describe a project or a problem. The site's AI assistant checks each point against Alireza's published work, and every row shows the pages it rests on.",
+      "The site’s AI assistant checks each point against Alireza’s published work, and every row shows the pages it rests on.",
     legend: "What are you checking?",
     kinds: { role: "A role", project: "A project", problem: "A problem" },
+    loading: "Loading…",
     caption: "Each point of the brief, with what his work shows",
     columns: {
       status: "Status",
@@ -48,16 +49,16 @@ export const MATCH_PAGE_COPY: Record<Locale, MatchPageCopy> = {
     clear: "Clear",
     cleared: "Cleared: the rows and the marks on his pages are gone.",
     printed:
-      "Checked on {date} by the AI assistant on Alireza's portfolio; each row cites a published page. {url}",
+      "Checked on {date} by the AI assistant on Alireza’s portfolio; each row cites a published page. {url}",
     contact: "Write to him instead",
   },
   de: {
     heading: "Passt es?",
-    eyebrow: "Beschreibung abgleichen",
     intro:
-      "Eine Stelle einfügen oder ein Projekt oder Problem beschreiben. Der KI-Assistent der Website gleicht jeden Punkt mit Alirezas veröffentlichter Arbeit ab, und jede Zeile zeigt die Seiten, auf denen sie beruht.",
+      "Der KI-Assistent der Website gleicht jeden Punkt mit Alirezas veröffentlichter Arbeit ab, und jede Zeile zeigt die Seiten, auf denen sie beruht.",
     legend: "Was soll geprüft werden?",
     kinds: { role: "Eine Stelle", project: "Ein Projekt", problem: "Ein Problem" },
+    loading: "Wird geladen…",
     caption: "Jeder Punkt der Beschreibung und was seine Arbeit zeigt",
     columns: {
       status: "Status",

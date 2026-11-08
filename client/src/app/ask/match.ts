@@ -75,6 +75,16 @@ export function matchData(
   return items.length ? { kind, items } : null;
 }
 
+/** Which mark a row carries: its status, or "ask" on a careful topic (a budget, a rate, pay). */
+export type MatchMark = MatchStatus | "ask";
+
+/** The server's line for a careful topic (`LINES.careful`, in `PROMPT_HASH`): the row says ask him. */
+const ASK_HIM = new Set(["ask him directly.", "frag ihn direkt."]);
+
+export function markOf(row: Pick<MatchRow, "status" | "summary">): MatchMark {
+  return row.status === "not-published" && ASK_HIM.has(row.summary) ? "ask" : row.status;
+}
+
 /** The most a brief may be, as the server takes it (`MATCH_BRIEF_CHARS`, server/src/ask/match/prompt.ts). */
 export const MATCH_BRIEF_CHARS = 4_000;
 
