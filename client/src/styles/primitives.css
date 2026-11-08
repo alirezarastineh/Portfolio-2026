@@ -44,6 +44,7 @@
   text-decoration-color: var(--border-strong);
   text-decoration-thickness: 1px;
   text-underline-offset: 4px;
+  touch-action: manipulation;
   transition:
     text-decoration-color var(--dur-2),
     text-decoration-thickness var(--dur-2);

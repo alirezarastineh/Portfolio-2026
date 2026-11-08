@@ -52,7 +52,7 @@ describe("decorateSections (visitor plan V9)", () => {
       "Ask about this section: Problem",
       "Ask about this section: The gate",
     ]);
-    expect(buttons.every((b) => b.getAttribute("data-label") === ">_ ask")).toBe(true);
+    expect(buttons.every((b) => b.getAttribute("data-label") === "Ask")).toBe(true);
     expect(buttons.every((b) => b.textContent === "" && b.getAttribute("type") === "button")).toBe(
       true,
     );
@@ -74,7 +74,7 @@ describe("decorateSections (visitor plan V9)", () => {
     expect(heading.querySelector("button")!.getAttribute("aria-label")).toBe(
       "Zu diesem Abschnitt fragen: Das Problem",
     );
-    expect(heading.querySelector("button")!.getAttribute("data-label")).toBe(">_ fragen");
+    expect(heading.querySelector("button")!.getAttribute("data-label")).toBe("Fragen");
     expect(heading.querySelectorAll("button")).toHaveLength(1);
   });
 });

@@ -124,22 +124,28 @@ test.describe("case study", () => {
     expect(html).toContain('<span class="shd-ff7b72 shl-cf222e">const</span>');
   });
 
-  test("the narrative's headings are numbered for the eye, not for screen readers", async ({
+  test("the narrative's headings are their names alone, listed in a rail that stays beside the story", async ({
     page,
   }) => {
     await page.goto("/en/work/project-one");
+    await interactive(page);
     const main = page.locator("main");
-    // The fixed sections read as headings, not the card's capitals (PROBLEM).
+    // The fixed sections read as headings, not the card's capitals (PROBLEM), and unnumbered.
     await expect(
       main.getByRole("heading", { level: 2, name: "Problem", exact: true }),
     ).toBeVisible();
-    // The body's own headings join the same count, and keep their names too.
+    // The body's own headings look the same, and keep their names too.
     await expect(
       main.getByRole("heading", { level: 2, name: "Architecture decisions", exact: true }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("navigation", { name: "On this page" }).getByRole("link", { name: "Problem" }),
-    ).toBeVisible();
+    // From lg the contents are no fold: their links show, and stay in view down the story.
+    const contents = page.getByRole("navigation", { name: "On this page" });
+    await expect(contents.getByRole("link", { name: "Problem" })).toBeVisible();
+    await expect(contents.locator("summary")).toBeHidden();
+    await main
+      .getByRole("heading", { name: "What I would do differently" })
+      .scrollIntoViewIfNeeded();
+    await expect(contents.getByRole("link", { name: "Gallery" })).toBeInViewport();
   });
 
   test("a code block names its language and copies its code", async ({
@@ -323,6 +329,59 @@ test.describe("case study", () => {
       expect(await res.text()).toMatch(/<meta name="robots" content="noindex/);
     });
   }
+});
+
+test.describe("case study on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  const top = async (locator: Locator) => (await locator.boundingBox())!.y;
+
+  test("puts the result above the story, with the contents folded between them", async ({
+    page,
+  }) => {
+    await page.goto("/en/work/project-two");
+    await interactive(page);
+    const main = page.locator("main");
+    const fold = main.locator("aside details");
+    const order = [
+      main.locator(".case-aids"),
+      main.locator("app-metrics"),
+      fold,
+      main.locator("app-picture img").first(),
+      main.getByRole("heading", { level: 2, name: "Problem", exact: true }),
+    ];
+    const tops = await Promise.all(order.map(top));
+    expect(tops).toEqual([...tops].sort((a, b) => a - b));
+
+    // Folded: the links wait behind "On this page", a 44px row.
+    const contents = page.getByRole("navigation", { name: "On this page" });
+    await expect(contents.getByRole("link", { name: "Outcomes" })).toBeHidden();
+    const summary = fold.locator("summary");
+    expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await summary.tap();
+    await expect(contents.getByRole("link", { name: "Outcomes" })).toBeVisible();
+  });
+
+  for (const path of ["/de/work/project-one", "/de/writing/shipping-rag-to-production"]) {
+    test(`a very long word in ${path}'s title breaks instead of pushing the page sideways`, async ({
+      page,
+    }) => {
+      await page.goto(path);
+      await interactive(page);
+      await page.locator("main h1").evaluate((h1) => {
+        h1.textContent = "Datenbankverbindungsüberwachungswerkzeugkonfiguration";
+      });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+    });
+  }
+
+  test("a section's ask button shows where nothing hovers, 44px tall", async ({ page }) => {
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    const ask = page.getByRole("button", { name: "Ask about this section: Problem" });
+    await expect(ask).toHaveCSS("opacity", "1");
+    expect((await ask.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  });
 });
 
 test.describe("writing", () => {

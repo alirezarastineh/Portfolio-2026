@@ -27,7 +27,7 @@ interface FooterColumn {
 
 /** 44px tall on touch, so the rows themselves are the gap there. */
 const linkClass =
-  "inline-flex items-center text-muted-foreground transition-colors duration-(--dur-2) hover:text-foreground pointer-coarse:min-h-11";
+  "inline-flex items-center text-muted-foreground transition-colors duration-(--dur-2) [overflow-wrap:anywhere] hover:text-foreground pointer-coarse:min-h-11";
 
 /**
  * Every page's end: the name once more, as a closing statement, the site in

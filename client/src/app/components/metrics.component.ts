@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, input } from "@angular/core";
 
 import type { Metric } from "../content/schema";
 
@@ -8,7 +8,7 @@ import type { Metric } from "../content/schema";
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: "block" },
   template: `
-    <dl class="metrics">
+    <dl class="metrics" [style.--metric-chars]="chars()">
       @for (metric of metrics(); track $index) {
         <div class="metric">
           <dt>{{ metric.label }}</dt>
@@ -23,4 +23,9 @@ import type { Metric } from "../content/schema";
 })
 export class MetricsComponent {
   readonly metrics = input.required<readonly Metric[]>();
+
+  /** The longest value's length: one size for the whole row, small enough for its longest number. */
+  protected readonly chars = computed(() =>
+    Math.max(1, ...this.metrics().map((metric) => [...metric.value].length)),
+  );
 }

@@ -1873,7 +1873,7 @@ test.describe("assistant terminal", () => {
       /^Supplier catalogue ingestion/,
       /^Shipping RAG to production/,
     ]);
-    await expect(readNext.getByRole("link").nth(1)).toContainText("case study · updated");
+    await expect(readNext.getByRole("link").nth(1)).toContainText("case study, updated");
     // The article's end, before its footer; fetched once.
     await expect(page.locator("article > nav.read-next + footer")).toHaveCount(1);
     expect(maps).toEqual(["en"]);

@@ -4,7 +4,7 @@ import { toSignal } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, RouterLink, type ResolveFn } from "@angular/router";
 import type { MetaTag, RouteMeta } from "@analogjs/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideArrowLeft, lucideArrowRight, lucideExternalLink } from "@ng-icons/lucide";
+import { lucideArrowLeft, lucideArrowRight } from "@ng-icons/lucide";
 import { map } from "rxjs";
 
 import { AskLauncherService } from "../../../ask/ask-launcher.service";
@@ -26,7 +26,6 @@ import type { Locale, Project, ProjectDoc } from "../../../content/schema";
 import { CHROME } from "../../../i18n/chrome";
 import { fmt } from "../../../i18n/interpolate";
 import { sentenceCase } from "../../../i18n/sentence-case";
-import { brandGithub } from "../../../icons/brand-icons";
 import {
   projectTitleTransitionName,
   projectTransitionName,
@@ -152,11 +151,11 @@ const AID_LABELS = {
 } as const satisfies Record<Locale, Record<string, string>>;
 
 /**
- * A case study: a spec-sheet header (name and hook, beside a card of facts,
- * stack and links), the metrics, the cover, then the narrative — numbered
- * headings, with the table of contents alongside — and an end block that
- * hands over to the assistant or the contact form. The cover and the `<h1>`
- * are what the home page's card morphs into.
+ * A case study, outcome first: the name, descriptor and hook beside the facts,
+ * then "In short" and the metrics, then the story (the contents beside it from
+ * lg, folded above it on phones), previous and next, and an end that hands over
+ * to the contact form or the assistant. The cover and the `<h1>` are what the
+ * home page's plate morphs into.
  */
 @Component({
   selector: "app-case-study-page",
@@ -173,9 +172,7 @@ const AID_LABELS = {
     RouterLink,
     TocComponent,
   ],
-  viewProviders: [
-    provideIcons({ brandGithub, lucideArrowLeft, lucideArrowRight, lucideExternalLink }),
-  ],
+  viewProviders: [provideIcons({ lucideArrowLeft, lucideArrowRight })],
   host: { class: "block" },
   template: `
     @if (study(); as s) {
@@ -184,17 +181,21 @@ const AID_LABELS = {
         <div class="reading-progress" aria-hidden="true"></div>
         <article class="container-site flex flex-col gap-12 lg:gap-16">
           <header class="grid gap-8 lg:grid-cols-12 lg:gap-x-(--col-gap)">
-            <div class="flex flex-col gap-5 lg:col-span-7">
+            <div class="flex flex-col gap-6 lg:col-span-7">
               <app-breadcrumb [items]="crumbs()" [locale]="lang.lang()" />
-              @if (s.project.descriptor) {
-                <p class="eyebrow m-0 mt-2 text-muted-foreground">{{ s.project.descriptor }}</p>
-              }
-              <h1
-                class="m-0 w-fit text-balance text-h1 text-foreground hyphens-auto"
-                [style.view-transition-name]="titleTransitionName()"
-              >
-                {{ s.project.name }}
-              </h1>
+              <div class="flex flex-col gap-3">
+                <h1
+                  class="m-0 w-fit text-balance text-h1 text-foreground hyphens-auto"
+                  [style.view-transition-name]="titleTransitionName()"
+                >
+                  {{ s.project.name }}
+                </h1>
+                @if (s.project.descriptor) {
+                  <p class="m-0 text-pretty text-subtitle text-foreground">
+                    {{ s.project.descriptor }}
+                  </p>
+                }
+              </div>
               @if (s.project.hook) {
                 <p class="m-0 max-w-[46ch] text-pretty text-lead text-muted-foreground">
                   {{ s.project.hook }}
@@ -203,11 +204,53 @@ const AID_LABELS = {
               @if (marks.count("project:" + s.project.slug); as n) {
                 <app-match-mark [n]="n" />
               }
+            </div>
+
+            @if (facts().length || s.project.stack.length || links().length) {
+              <div
+                class="flex flex-col gap-4 lg:col-span-5 lg:self-end xl:col-span-4 xl:col-start-9"
+              >
+                @if (facts().length || s.project.stack.length) {
+                  <dl class="facts m-0">
+                    @for (fact of facts(); track fact.label) {
+                      <dt>{{ fact.label }}</dt>
+                      <dd class="m-0 text-small leading-6 text-foreground">{{ fact.value }}</dd>
+                    }
+                    @if (s.project.stack.length) {
+                      <dt>{{ lang.t().projectCard.techStackAriaLabel }}</dt>
+                      <dd class="m-0 text-small leading-6 text-foreground" translate="no">
+                        {{ s.project.stack.join(", ") }}
+                      </dd>
+                    }
+                  </dl>
+                }
+                @if (links().length) {
+                  <ul class="m-0 flex list-none flex-wrap gap-x-6 p-0" role="list">
+                    @for (link of links(); track link.href) {
+                      <li>
+                        <a
+                          class="link-underline inline-flex items-center text-small pointer-coarse:min-h-11"
+                          [href]="link.href"
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          >{{ link.label }}<span aria-hidden="true">&nbsp;↗</span></a
+                        >
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+            }
+          </header>
+
+          <!-- The result before the story: the summary, then the numbers. -->
+          @if (aids().plain || aids().expert || s.project.metrics.length) {
+            <div class="flex flex-col gap-8">
               @if (aids().plain || aids().expert) {
                 <section
-                  class="case-aids flex max-w-[60ch] flex-col gap-2 border-l-2 border-signal pl-4"
+                  class="case-aids flex max-w-[68ch] flex-col gap-3 rounded border border-border-strong bg-card p-5 sm:p-6"
                 >
-                  <h2 class="eyebrow m-0 text-muted-foreground">{{ aids().labels.inShort }}</h2>
+                  <h2 class="m-0 text-subtitle text-foreground">{{ aids().labels.inShort }}</h2>
                   @if (aids().plain) {
                     <p class="m-0 text-pretty text-foreground">{{ aids().plain }}</p>
                   }
@@ -220,96 +263,47 @@ const AID_LABELS = {
                       <p class="m-0 mt-2 text-pretty text-muted-foreground">{{ aids().expert }}</p>
                     </details>
                   }
-                  <p class="m-0 font-mono text-meta text-muted-foreground">
+                  <p class="m-0 text-small text-faint-foreground">
                     {{ aids().labels.disclosure }}
                   </p>
                 </section>
               }
-            </div>
-
-            @if (facts().length || s.project.stack.length || links().length) {
-              <div
-                class="surface-card flex flex-col gap-5 p-6 lg:col-span-5 lg:self-end xl:col-span-4 xl:col-start-9"
-              >
-                @if (facts().length || s.project.stack.length) {
-                  <dl class="facts">
-                    @for (fact of facts(); track fact.label) {
-                      <dt>{{ fact.label }}</dt>
-                      <dd class="text-small leading-6 text-foreground">{{ fact.value }}</dd>
-                    }
-                    @if (s.project.stack.length) {
-                      <dt>{{ lang.t().projectCard.techStackAriaLabel }}</dt>
-                      <dd>
-                        <ul class="m-0 flex list-none flex-wrap gap-1.5 p-0" role="list">
-                          @for (tech of s.project.stack; track tech) {
-                            <li class="chip">{{ tech }}</li>
-                          }
-                        </ul>
-                      </dd>
-                    }
-                  </dl>
-                }
-                @if (links().length) {
-                  <ul
-                    class="m-0 flex list-none flex-wrap gap-2 border-t border-border p-0 pt-5"
-                    role="list"
-                  >
-                    @for (link of links(); track link.href) {
-                      <li>
-                        <a
-                          class="control press text-foreground"
-                          [href]="link.href"
-                          target="_blank"
-                          rel="noreferrer noopener"
-                        >
-                          <ng-icon [name]="link.icon" size="14" aria-hidden="true" />
-                          <span>{{ link.label }}</span>
-                        </a>
-                      </li>
-                    }
-                  </ul>
-                }
-              </div>
-            }
-          </header>
-
-          @if (s.project.metrics.length) {
-            <section>
-              <h2 class="sr-only">{{ lang.t().caseStudy.metrics }}</h2>
-              <app-metrics [metrics]="s.project.metrics" />
-            </section>
-          }
-
-          @if (s.project.cover) {
-            <div
-              class="aspect-video overflow-hidden rounded-2xl border border-border bg-muted"
-              [style.view-transition-name]="transitionName()"
-            >
-              <!-- Bound, not static: the server would print static inputs
-                   on <app-picture> as attributes too. -->
-              <app-picture
-                [image]="s.project.cover"
-                [priority]="true"
-                [sizes]="'(min-width: 1280px) 1184px, 100vw'"
-                [imgClass]="'block size-full object-cover'"
-              />
+              @if (s.project.metrics.length) {
+                <section>
+                  <h2 class="sr-only">{{ lang.t().caseStudy.metrics }}</h2>
+                  <app-metrics [metrics]="s.project.metrics" />
+                </section>
+              }
             </div>
           }
 
+          <!-- One grid, so on phones the folded contents come before the cover; from lg they
+               stand beside the story, in its row. -->
           <div class="grid gap-12 lg:grid-cols-12 lg:gap-x-(--col-gap)">
             @if (toc().length > 1) {
-              <aside class="lg:col-span-3 lg:col-start-10 lg:row-start-1">
-                <app-toc
-                  class="lg:sticky lg:top-28"
-                  [items]="toc()"
-                  [label]="lang.t().caseStudy.toc"
-                />
+              <aside class="lg:col-span-3 lg:col-start-10" [class]="storyRow()">
+                <app-toc [items]="toc()" [label]="lang.t().caseStudy.toc" />
               </aside>
             }
 
-            <!-- The narrative. Its top-level headings are numbered in CSS
-                 (.case-flow in styles/prose.css), the body's included. -->
-            <div class="case-flow flex min-w-0 flex-col gap-14 lg:col-span-8 lg:row-start-1">
+            @if (s.project.cover) {
+              <div
+                class="aspect-16/10 overflow-hidden bg-muted lg:col-span-12 lg:row-start-1"
+                [style.view-transition-name]="transitionName()"
+              >
+                <!-- Bound, not static: the server would print static inputs
+                     on <app-picture> as attributes too. -->
+                <app-picture
+                  [image]="s.project.cover"
+                  [priority]="true"
+                  [sizes]="'(min-width: 1280px) 1184px, 100vw'"
+                  [imgClass]="'block size-full object-cover'"
+                />
+              </div>
+            }
+
+            <!-- The narrative: the fixed sections, then the body, its headings unnumbered. -->
+            <div class="case-flow flex min-w-0 flex-col gap-12 lg:col-span-8" [class]="storyRow()">
               @for (section of sections(); track section.id) {
                 <section class="flex flex-col gap-4">
                   <h2 class="case-h" [id]="section.id">{{ section.label }}</h2>
@@ -321,7 +315,7 @@ const AID_LABELS = {
               @if (s.project.outcomes.length) {
                 <section class="flex flex-col gap-4">
                   <h2 class="case-h" [id]="ids().outcomes">{{ labels().outcomes }}</h2>
-                  <ul class="list-trace text-muted-foreground" role="list">
+                  <ul class="list-trace text-pretty text-muted-foreground" role="list">
                     @for (outcome of s.project.outcomes; track $index) {
                       <li>{{ outcome }}</li>
                     }
@@ -345,11 +339,11 @@ const AID_LABELS = {
               }
             </div>
 
-            <!-- After the narrative, not in it: unnumbered, out of the contents, and without
-                 the reader's ask buttons (the assistant's corpus has no such section). -->
+            <!-- After the narrative, not in it: out of the contents, and without the
+                 reader's ask buttons (the assistant's corpus has no such section). -->
             @if (aids().glossary.length) {
               <section class="flex flex-col gap-4 lg:col-span-8">
-                <h2 class="m-0 text-h3 text-foreground">{{ aids().labels.terms }}</h2>
+                <h2 class="m-0 text-title text-foreground">{{ aids().labels.terms }}</h2>
                 <dl class="m-0 flex flex-col gap-3">
                   @for (item of aids().glossary; track $index) {
                     <div>
@@ -364,16 +358,16 @@ const AID_LABELS = {
 
           @if (neighbours().previous || neighbours().next) {
             <nav
-              class="grid gap-4 border-t border-border pt-10 sm:grid-cols-2"
+              class="grid gap-8 border-t border-border pt-12 sm:grid-cols-2"
               [attr.aria-label]="lang.t().caseStudy.allWork"
             >
               @if (neighbours().previous; as previous) {
                 <a [class]="neighbourLink" [routerLink]="workLink(previous.slug)">
-                  <span class="eyebrow flex items-center gap-2 text-muted-foreground">
-                    <ng-icon name="lucideArrowLeft" size="14" aria-hidden="true" />
+                  <span class="flex items-center gap-2 text-small text-muted-foreground">
+                    <ng-icon name="lucideArrowLeft" size="16" aria-hidden="true" />
                     {{ lang.t().caseStudy.previous }}
                   </span>
-                  <span class="text-lg text-foreground">{{ previous.name }}</span>
+                  <span [class]="neighbourName">{{ previous.name }}</span>
                 </a>
               }
               @if (neighbours().next; as next) {
@@ -381,37 +375,34 @@ const AID_LABELS = {
                   [class]="neighbourLink + ' sm:col-start-2 sm:items-end sm:text-right'"
                   [routerLink]="workLink(next.slug)"
                 >
-                  <span class="eyebrow flex items-center gap-2 text-muted-foreground">
+                  <span class="flex items-center gap-2 text-small text-muted-foreground">
                     {{ lang.t().caseStudy.next }}
-                    <ng-icon name="lucideArrowRight" size="14" aria-hidden="true" />
+                    <ng-icon name="lucideArrowRight" size="16" aria-hidden="true" />
                   </span>
-                  <span class="text-lg text-foreground">{{ next.name }}</span>
+                  <span [class]="neighbourName">{{ next.name }}</span>
                 </a>
               }
             </nav>
           }
 
-          <!-- The end, as terminal output: what to do next. The article's
-               footer, as on a post: print leaves it out (styles.css). -->
-          <footer class="surface-card flex flex-col items-start gap-4 rounded-2xl p-6 sm:p-10">
-            <p class="m-0 font-mono text-meta text-muted-foreground" aria-hidden="true">
-              <span class="text-accent-orange">&gt;</span> next
-            </p>
-            <h2 class="m-0 text-h3 text-foreground">{{ lang.t().caseStudy.ctaHeading }}</h2>
-            <p class="m-0 max-w-2xl text-pretty text-muted-foreground">
+          <!-- What to do next. The article's footer, as on a post: print leaves it out
+               (styles.css). -->
+          <footer class="flex flex-col items-start gap-4">
+            <h2 class="m-0 text-balance text-title text-foreground">
+              {{ lang.t().caseStudy.ctaHeading }}
+            </h2>
+            <p class="m-0 max-w-[60ch] text-pretty text-muted-foreground">
               {{ lang.t().caseStudy.ctaBody }}
             </p>
             <div class="mt-2 flex flex-wrap gap-3">
               <a class="btn btn-solid press" [routerLink]="['/', lang.lang()]" fragment="contact">
                 {{ lang.t().caseStudy.ctaButton }}
-                <ng-icon name="lucideArrowRight" size="16" aria-hidden="true" />
               </a>
               <button
                 type="button"
                 class="btn btn-secondary press text-left"
                 (click)="askAbout(s.project.name)"
               >
-                <span class="text-accent-orange" aria-hidden="true">&gt;_</span>
                 {{ askLabel() }}
               </button>
             </div>
@@ -447,8 +438,15 @@ export default class CaseStudyPageComponent {
     { initialValue: null },
   );
 
-  protected readonly neighbourLink =
-    "flex flex-col gap-2 rounded-xl border border-border p-6 transition-colors duration-200 hover:border-accent-orange/40";
+  /** Previous and next: the word with its arrow, then the name, underlined in orange on hover. */
+  protected readonly neighbourLink = "group flex touch-manipulation flex-col gap-2";
+  protected readonly neighbourName =
+    "text-balance text-title text-foreground underline decoration-transparent decoration-2 underline-offset-4 transition-[text-decoration-color] duration-(--dur-2) group-hover:decoration-accent-orange";
+
+  /** From lg the contents and the narrative share a row: the second when a cover spans the first. */
+  protected readonly storyRow = computed(() =>
+    this.study()?.project.cover ? "lg:row-start-2" : "lg:row-start-1",
+  );
 
   /** Shared with the home page's card, which morphs into these. */
   protected readonly transitionName = computed(() => {
@@ -491,8 +489,8 @@ export default class CaseStudyPageComponent {
     if (!s) return [];
     const c = this.lang.t().projectCard;
     return [
-      { label: c.live, href: s.project.links.live, icon: "lucideExternalLink" },
-      { label: c.repo, href: s.project.links.repo, icon: "brandGithub" },
+      { label: c.live, href: s.project.links.live },
+      { label: c.repo, href: s.project.links.repo },
     ].filter((link) => link.href);
   });
 

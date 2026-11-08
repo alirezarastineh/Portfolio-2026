@@ -22,12 +22,14 @@ export interface BreadcrumbItem {
   host: { class: "block" },
   template: `
     <nav [attr.aria-label]="label()">
-      <ol class="m-0 flex list-none flex-wrap items-center gap-x-2 gap-y-1 p-0 font-mono text-xs">
+      <ol
+        class="m-0 flex list-none flex-wrap items-center gap-x-2 gap-y-1 p-0 text-small [overflow-wrap:anywhere]"
+      >
         @for (item of items(); track $index; let last = $last) {
           <li class="flex items-center gap-2">
             @if (item.link && !last) {
               <a
-                class="text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                class="inline-flex items-center text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline pointer-coarse:min-h-11"
                 [routerLink]="item.link"
                 [fragment]="item.fragment"
                 >{{ item.label }}</a

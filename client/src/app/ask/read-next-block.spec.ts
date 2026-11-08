@@ -47,7 +47,7 @@ describe("readNextBlock", () => {
     expect(nav.querySelector("h2#read-next-title")!.textContent).toBe("Read next");
     const items = [...nav.querySelectorAll("li.read-next-item")];
     expect(items.map((i) => i.querySelector(".read-next-kind")!.textContent)).toEqual([
-      `case study · updated ${month("2026-10-01")}`,
+      `case study, updated ${month("2026-10-01")}`,
       // The publish dates an experience entry: no date of its own is claimed.
       "experience",
     ]);

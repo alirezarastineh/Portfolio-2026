@@ -19,34 +19,41 @@ export interface TocItem {
 
 /**
  * "On this page": links to the page's own sections, with the one being read
- * marked. Links go through the router (`[routerLink]="[]"` + fragment): with
- * `<base href="/">` a bare `#id` would resolve to `/#id` and leave the page.
+ * marked. Folded on phones; from lg a rail that stays in view (prose.css), its
+ * label shown in place of the fold's. Links go through the router
+ * (`[routerLink]="[]"` + fragment): with `<base href="/">` a bare `#id` would
+ * resolve to `/#id` and leave the page.
  */
 @Component({
   selector: "app-toc",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink],
-  host: { class: "block" },
+  // The rail sticks within its parent: the host, not the nav inside it, which would have no room.
+  host: { class: "toc block" },
   template: `
     <nav [attr.aria-label]="label()">
-      <p class="eyebrow m-0 mb-3 text-muted-foreground" aria-hidden="true">// {{ label() }}</p>
-      <ol class="m-0 flex list-none flex-col gap-1 border-l border-border p-0">
-        @for (item of items(); track item.id) {
-          <li>
-            <!-- Styled in prose.css: one short class per link, the current
-                 one marked by aria-current alone. -->
-            <a
-              class="toc-link"
-              [class.pl-4]="item.level === 2"
-              [class.pl-7]="item.level === 3"
-              [attr.aria-current]="active() === item.id ? 'location' : null"
-              [routerLink]="[]"
-              [fragment]="item.id"
-              >{{ item.text }}</a
-            >
-          </li>
-        }
-      </ol>
+      <details class="toc-fold disclosure">
+        <summary class="press">{{ label() }}</summary>
+        <p class="toc-label" aria-hidden="true">{{ label() }}</p>
+        <!-- Its block padding is room for a link's focus ring: the fold clips what it holds. -->
+        <ol class="m-0 flex list-none flex-col gap-1 border-l border-border px-0 py-1">
+          @for (item of items(); track item.id) {
+            <li>
+              <!-- Styled in prose.css: one short class per link, the current
+                   one marked by aria-current alone. -->
+              <a
+                class="toc-link"
+                [class.pl-4]="item.level === 2"
+                [class.pl-7]="item.level === 3"
+                [attr.aria-current]="active() === item.id ? 'location' : null"
+                [routerLink]="[]"
+                [fragment]="item.id"
+                >{{ item.text }}</a
+              >
+            </li>
+          }
+        </ol>
+      </details>
     </nav>
   `,
 })

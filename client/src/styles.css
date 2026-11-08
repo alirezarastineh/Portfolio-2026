@@ -97,11 +97,13 @@ a {
     background-color: var(--signal);
     color: var(--signal-foreground);
   }
-  /* `overflow-wrap`: hyphens need a dictionary the browser may not have. */
+  /* `overflow-wrap`: hyphens need a dictionary the browser may not have. `anywhere`, not
+     `break-word`: only it lets a long word shrink the box around it (a `w-fit` title, a grid's
+     auto column), which would otherwise push the page sideways. */
   app-public-shell :is(h1, h2, h3, h4) {
     text-wrap: balance;
     hyphens: auto;
-    overflow-wrap: break-word;
+    overflow-wrap: anywhere;
   }
   app-public-shell p {
     text-wrap: pretty;

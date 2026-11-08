@@ -209,8 +209,9 @@
   border-radius: 50%;
 }
 
-/* `app-metrics`. Each number sizes to its own cell, so none can run out of a narrow slot; a slot
-   may narrow the cells (`--metric-min`) and cap the numbers (`--metric-max`). */
+/* `app-metrics`. Each number sizes to its own cell, and to the row's longest value
+   (`--metric-chars`), so none can run out of a narrow slot or break mid-number; a slot may narrow
+   the cells (`--metric-min`) and cap the numbers (`--metric-max`). */
 .metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(var(--metric-min, 11rem), 100%), 1fr));
@@ -235,7 +236,7 @@
 .metric-value {
   order: 1;
   color: var(--foreground);
-  font-size: min(var(--metric-max, var(--text-metric)), 24cqi);
+  font-size: min(var(--metric-max, var(--text-metric)), 24cqi, 168cqi / var(--metric-chars, 7));
   font-variant-numeric: tabular-nums;
   font-weight: var(--text-metric--font-weight);
   line-height: var(--text-metric--line-height);

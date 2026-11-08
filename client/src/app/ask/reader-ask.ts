@@ -31,26 +31,26 @@ export interface ReaderAskCopy {
 export const READER_ASK_COPY: Record<Locale, ReaderAskCopy> = {
   en: {
     section: {
-      label: ">_ ask",
+      label: "Ask",
       name: "Ask about this section: {title}",
       question: "Explain this section",
     },
     code: { label: "Explain", name: "Explain code block {n}", question: "Explain this code" },
     selection: {
-      label: ">_ ask about this",
+      label: "Ask about this",
       name: "Ask about this selected text",
       question: "What does this mean?",
     },
   },
   de: {
     section: {
-      label: ">_ fragen",
+      label: "Fragen",
       name: "Zu diesem Abschnitt fragen: {title}",
       question: "Erklär diesen Abschnitt",
     },
     code: { label: "Erklären", name: "Codeblock {n} erklären", question: "Erklär diesen Code" },
     selection: {
-      label: ">_ dazu fragen",
+      label: "Dazu fragen",
       name: "Dazu fragen: zum markierten Text",
       question: "Was bedeutet das?",
     },

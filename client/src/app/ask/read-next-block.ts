@@ -121,7 +121,7 @@ export function readNextBlock(
       dated ? fmt(copy.updated, { date: formatMonth(page.updated!, locale) }) : "",
     ]
       .filter(Boolean)
-      .join(" · ");
+      .join(", ");
     const name = doc.createElement("span");
     name.className = "read-next-name";
     name.id = `read-next-${i}`;

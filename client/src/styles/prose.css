@@ -187,13 +187,14 @@
   display: inline-flex;
   align-items: center;
   min-height: 1.75rem;
-  padding-inline: 0.5rem;
+  padding-inline: 0.625rem;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--color-background);
-  font: 500 var(--text-label) / 1 var(--font-mono);
+  font: 500 0.8125rem / 1 var(--font-sans);
   letter-spacing: normal;
   color: var(--color-muted-foreground);
+  touch-action: manipulation;
   cursor: pointer;
   transition:
     opacity var(--dur-2),
@@ -230,6 +231,13 @@
   }
 }
 
+@media (pointer: coarse) {
+  .reader-ask,
+  .reader-ask-selection {
+    min-height: 2.75rem;
+  }
+}
+
 /* A selection's button, placed under it in the page. */
 .reader-ask-selection {
   position: absolute;
@@ -248,22 +256,23 @@
 .read-next {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.5rem;
   border-top: 1px solid var(--color-border);
   padding-top: 2.5rem;
 }
 
 .read-next-title {
   margin: 0;
-  font: 500 var(--text-label) / 1 var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-muted-foreground);
+  font-size: var(--text-title);
+  font-weight: var(--text-title--font-weight);
+  line-height: var(--text-title--line-height);
+  letter-spacing: var(--text-title--letter-spacing);
+  color: var(--color-foreground);
 }
 
 .read-next-list {
   display: grid;
-  gap: 1rem;
+  gap: 2rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -279,42 +288,33 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
-  padding: 1.25rem;
-  transition: border-color var(--dur-2);
-}
-
-.read-next-item:hover {
-  border-color: var(--color-border-strong);
+  gap: 0.75rem;
 }
 
 /* The title comes first in the markup, which names the link; the kind shows above it. */
 .read-next-link {
   display: flex;
   flex-direction: column-reverse;
-  gap: 0.5rem;
+  gap: 0.25rem;
   color: var(--color-foreground);
   text-decoration: none;
+  touch-action: manipulation;
 }
 
 .read-next-kind {
-  font: 500 var(--text-label) / 1.3 var(--font-mono);
-  color: var(--color-muted-foreground);
+  font: 400 0.8125rem / 1.5 var(--font-data);
+  color: var(--faint-foreground);
 }
 
 .read-next-name {
-  font-size: 1.125rem;
-  line-height: 1.35;
+  font-size: var(--text-subtitle);
+  font-weight: var(--text-subtitle--font-weight);
+  line-height: var(--text-subtitle--line-height);
+  letter-spacing: var(--text-subtitle--letter-spacing);
   text-decoration: underline;
-  text-decoration-color: var(--color-border);
+  text-decoration-color: var(--color-border-strong);
+  text-decoration-thickness: 1px;
   text-underline-offset: 4px;
-}
-
-.read-next-link:hover .read-next-name {
-  text-decoration-color: var(--color-accent-orange);
 }
 
 .read-next-ask {
@@ -323,31 +323,87 @@
   min-height: 2rem;
   padding-inline: 0.625rem;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: transparent;
-  font: 500 var(--text-label) / 1 var(--font-mono);
+  font: 500 0.8125rem / 1 var(--font-sans);
   color: var(--color-muted-foreground);
+  touch-action: manipulation;
   cursor: pointer;
   transition:
     color var(--dur-2),
     border-color var(--dur-2);
 }
 
-.read-next-ask:hover {
-  color: var(--color-foreground);
-  border-color: var(--color-border-strong);
+@media (hover: hover) {
+  .read-next-link:hover .read-next-name {
+    text-decoration-color: var(--color-accent-orange);
+    text-decoration-thickness: 2px;
+  }
+
+  .read-next-ask:hover {
+    color: var(--color-foreground);
+    border-color: var(--color-border-strong);
+  }
 }
 
-/* A table of contents' link (components/toc.component.ts), on the list's
-   left rule; the section being read (`aria-current`) takes it in orange. */
+@media (pointer: coarse) {
+  .read-next-ask {
+    min-height: 2.75rem;
+  }
+}
+
+/* A table of contents (components/toc.component.ts): folded on phones; from lg a rail beside the
+   story, held below the header and scrolling within itself when it is taller than the screen. A
+   browser without `::details-content` keeps the fold there too. */
+.toc-label {
+  display: none;
+}
+
+@media (width >= 64rem) {
+  .toc {
+    position: sticky;
+    top: 7rem;
+    /* Its foot stops clear of the floating Ask button. */
+    max-block-size: calc(100svh - 12rem);
+    overflow-y: auto;
+    /* Room for a link's focus ring, which the scrolling box would clip. */
+    padding: 0.25rem;
+    scroll-padding-block: 0.5rem;
+  }
+
+  @supports selector(::details-content) {
+    .toc-fold > summary {
+      display: none;
+    }
+
+    .toc-fold::details-content {
+      /* eslint-disable-next-line css/use-baseline -- behind the @supports above. */
+      content-visibility: visible;
+      block-size: auto;
+    }
+
+    .toc-label {
+      display: block;
+      margin-bottom: 0.75rem;
+      color: var(--faint-foreground);
+      font-family: var(--font-data);
+      font-size: 0.8125rem;
+    }
+  }
+}
+
+/* A table of contents' link, on the list's left rule; the section being read (`aria-current`)
+   takes it in orange. */
 .toc-link {
   display: block;
   margin-left: -1px;
   border-left: 1px solid transparent;
   padding-block: 0.25rem;
-  font-size: 0.875rem;
-  line-height: 1.375;
+  font-size: var(--text-small);
+  line-height: var(--text-small--line-height);
+  overflow-wrap: anywhere;
   color: var(--color-muted-foreground);
+  touch-action: manipulation;
   transition:
     color var(--dur-2),
     border-color var(--dur-2);
@@ -362,13 +418,21 @@
   border-color: var(--signal);
 }
 
+@media (pointer: coarse) {
+  .toc-link {
+    display: flex;
+    align-items: center;
+    min-height: 2.75rem;
+  }
+}
+
 /* A case study's fixed sections' headings (.case-h) and its body's top-level ones share one look. */
 .case-h,
 .case-flow app-prose-body > .prose-body > h2 {
-  font-size: var(--text-h3);
-  font-weight: var(--text-h3--font-weight);
-  line-height: var(--text-h3--line-height);
-  letter-spacing: var(--text-h3--letter-spacing);
+  font-size: var(--text-title);
+  font-weight: var(--text-title--font-weight);
+  line-height: var(--text-title--line-height);
+  letter-spacing: var(--text-title--letter-spacing);
   color: var(--color-foreground);
 }
 
