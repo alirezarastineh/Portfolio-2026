@@ -3,11 +3,10 @@ import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/c
 import { toSignal } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, RouterLink, type ResolveFn } from "@angular/router";
 import type { MetaTag, RouteMeta } from "@analogjs/router";
-import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideRss } from "@ng-icons/lucide";
 import { map } from "rxjs";
 
 import { PostListComponent } from "../../../components/post-list.component";
+import type { Locale } from "../../../content/schema";
 import { applyHead } from "../../../seo/head";
 import { feedsOf, languageAlternates, pageMeta, pageUrl, siteOrigin } from "../../../seo/seo-meta";
 import { writingJsonLd } from "../../../seo/structured-data";
@@ -51,54 +50,101 @@ export const routeMeta: RouteMeta = {
   resolve: { head: headResolver },
 };
 
+/** Only a stale or hand-typed `?tag=` gets here: every tag in the row has posts. */
+const NONE_TAGGED = {
+  en: "No posts with this tag.",
+  de: "Keine Artikel zu diesem Thema.",
+} as const satisfies Record<Locale, string>;
+
 @Component({
   selector: "app-writing-page",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgIcon, PostListComponent, RouterLink],
-  viewProviders: [provideIcons({ lucideRss })],
+  imports: [PostListComponent, RouterLink],
   host: { class: "block" },
   styles: `
-    /* The tag shown: filled, where the others are outlined. */
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      min-height: 2rem;
+      padding-inline: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--muted-foreground);
+      font-size: 0.9375rem;
+      white-space: nowrap;
+      touch-action: manipulation;
+    }
+    /* The tag shown: filled in the text colour, since orange means act or live. */
     .tag[aria-current="page"] {
-      border-color: color-mix(in oklab, var(--accent-orange) 60%, transparent);
-      background-color: var(--accent-orange-soft);
-      color: var(--foreground);
+      border-color: var(--foreground);
+      background: var(--foreground);
+      color: var(--background);
     }
     .tag-count {
-      opacity: 0.7;
+      font-family: var(--font-data);
+      font-size: 0.8125rem;
+    }
+    /* One row on phones, running to the edge of the screen, where a tag is cut: that shows there
+       is more. The padding keeps focus rings inside and lets the last tag scroll clear. */
+    @media (width < 48rem) {
+      .tag-row {
+        flex-wrap: nowrap;
+        margin: -0.25rem calc(var(--gutter) * -1) -0.25rem -0.25rem;
+        padding: 0.25rem var(--gutter) 0.25rem 0.25rem;
+        overflow-x: auto;
+        scroll-snap-type: x proximity;
+        scroll-padding-inline: 0.25rem;
+        scrollbar-width: none;
+      }
+      .tag {
+        scroll-snap-align: start;
+      }
+    }
+    @media (hover: hover) {
+      .tag:not([aria-current]):hover {
+        border-color: var(--border-strong);
+        color: var(--foreground);
+      }
+    }
+    @media (pointer: coarse) {
+      .tag {
+        min-height: 2.75rem;
+      }
     }
   `,
   template: `
     <main id="main" class="pb-24 pt-28 lg:pt-32">
-      <div class="container-site flex flex-col gap-10 lg:gap-12">
-        <header class="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
-          <div class="flex flex-col gap-4">
-            <p class="eyebrow m-0 text-muted-foreground">
-              <span aria-hidden="true">// </span>{{ lang.t().writing.subtitle }}
-            </p>
-            <h1 class="m-0 text-h1 text-foreground hyphens-auto">
-              {{ lang.t().writing.heading }}
-            </h1>
-          </div>
+      <div class="container-site flex flex-col gap-8 lg:gap-12">
+        <header class="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+          <h1 class="m-0 text-h1 text-foreground hyphens-auto">
+            {{ lang.t().writing.heading }}
+          </h1>
           @if (posts().length) {
             <!-- A file, not a page: a plain link, so the router leaves it alone. -->
             <a
-              class="press inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 font-mono text-meta text-foreground hover:border-accent-orange/50 hover:text-accent-orange"
+              class="link-underline inline-flex items-center pointer-coarse:min-h-11"
               [href]="feed()"
               type="application/rss+xml"
+              >{{ lang.t().writing.rss }}</a
             >
-              <ng-icon name="lucideRss" size="14" aria-hidden="true" />
-              {{ lang.t().writing.rss }}
-            </a>
           }
         </header>
 
         @if (tags().length > 1) {
           <nav [attr.aria-label]="lang.t().writing.tags">
-            <ul class="m-0 flex list-none flex-wrap gap-2 p-0" role="list">
+            <ul class="tag-row" role="list">
               <li>
                 <a
-                  [class]="chip"
+                  class="tag press"
                   [attr.aria-current]="tag() ? null : 'page'"
                   [routerLink]="[]"
                   [queryParams]="{ tag: null }"
@@ -109,7 +155,7 @@ export const routeMeta: RouteMeta = {
               @for (t of tags(); track t.name) {
                 <li>
                   <a
-                    [class]="chip"
+                    class="tag press"
                     [attr.aria-current]="tag() === t.name ? 'page' : null"
                     [routerLink]="[]"
                     [queryParams]="{ tag: t.name }"
@@ -124,25 +170,19 @@ export const routeMeta: RouteMeta = {
         @if (visible().length) {
           <app-post-list [posts]="visible()" />
         } @else {
-          <!-- Nothing to list, as terminal output. -->
-          <div class="surface-card flex flex-col gap-2 p-6 font-mono text-meta">
-            <p class="m-0 text-foreground" aria-hidden="true">
-              <span class="text-accent-orange">&gt;</span> ls posts/{{ tag() ? " #" + tag() : "" }}
-            </p>
-            <p class="m-0 text-muted-foreground">
-              (empty) —
-              @if (tag() && posts().length) {
-                <a class="link-underline" [routerLink]="[]" [queryParams]="{ tag: null }">{{
-                  lang.t().writing.allPosts
-                }}</a>
-              } @else {
-                {{ lang.t().writing.empty }} ·
-                <a class="link-underline" [href]="feed()" type="application/rss+xml">{{
-                  lang.t().writing.rss
-                }}</a>
-              }
-            </p>
-          </div>
+          <p class="m-0 text-muted-foreground">
+            @if (tag() && posts().length) {
+              {{ noneTagged() }}
+              <a class="link-underline" [routerLink]="[]" [queryParams]="{ tag: null }">{{
+                lang.t().writing.allPosts
+              }}</a>
+            } @else {
+              {{ lang.t().writing.empty }}
+              <a class="link-underline" [href]="feed()" type="application/rss+xml">{{
+                lang.t().writing.rss
+              }}</a>
+            }
+          </p>
         }
       </div>
     </main>
@@ -151,15 +191,12 @@ export const routeMeta: RouteMeta = {
 export default class WritingPageComponent {
   protected readonly lang = inject(LanguageService);
 
-  /** A tag filter: a chip with a 32px target and its count; the one shown is filled. */
-  protected readonly chip =
-    "tag chip press h-8 gap-1.5 px-3 text-muted-foreground hover:border-accent-orange/60 hover:text-foreground";
-
   protected readonly tag = toSignal(
     inject(ActivatedRoute).queryParamMap.pipe(map((params) => params.get("tag"))),
     { initialValue: null },
   );
 
+  protected readonly noneTagged = computed(() => NONE_TAGGED[this.lang.lang()]);
   protected readonly posts = computed(() => this.lang.content().posts);
   protected readonly feed = computed(() => `/${this.lang.lang()}/rss.xml`);
 

@@ -29,12 +29,7 @@
 /* Headings in the display face, like the rest of the site; mono is for
    labels and code. */
 .prose-body h2 {
-  margin-top: 2.75rem;
-  font-size: 1.5rem;
-  font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.015em;
-  color: var(--color-foreground);
+  margin-top: 3rem;
 }
 
 .prose-body h3 {
@@ -426,9 +421,9 @@
   }
 }
 
-/* A case study's fixed sections' headings (.case-h) and its body's top-level ones share one look. */
+/* A case study's fixed sections' headings (.case-h), as a body's top-level ones. */
 .case-h,
-.case-flow app-prose-body > .prose-body > h2 {
+.prose-body h2 {
   font-size: var(--text-title);
   font-weight: var(--text-title--font-weight);
   line-height: var(--text-title--line-height);

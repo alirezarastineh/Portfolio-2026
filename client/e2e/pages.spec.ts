@@ -422,6 +422,40 @@ test.describe("writing", () => {
     await expect(page.locator("main ol h2")).toHaveText(["RAG in Produktion bringen"]);
   });
 
+  test("the index: the heading alone, and the tag shown filled in the text colour", async ({
+    page,
+  }) => {
+    await page.goto("/en/writing?tag=rag");
+    await interactive(page);
+    await expect(page.locator("main header > *")).toHaveText(["Writing", "RSS feed"]);
+    const ink = await page.locator("main h1").evaluate((h) => getComputedStyle(h).color);
+    const tags = page.getByRole("navigation", { name: "Tags" });
+    await expect(tags.locator("[aria-current]")).toHaveText(/^#rag/);
+    await expect(tags.locator("[aria-current]")).toHaveCSS("background-color", ink);
+  });
+
+  test("a tag with no posts says so in a sentence, with the way back", async ({ page }) => {
+    await page.goto("/en/writing?tag=nope");
+    await interactive(page);
+    const empty = page.locator("main p");
+    await expect(empty).toHaveText("No posts with this tag. All posts");
+    await empty.getByRole("link", { name: "All posts" }).click();
+    await expect(page).toHaveURL(/\/en\/writing$/);
+    await expect(page.locator("main ol h2")).toHaveCount(2);
+  });
+
+  test("a post ends with share, ask and back, in that order", async ({ page }) => {
+    await page.goto("/en/writing/shipping-rag-to-production");
+    const end = page.locator("article > footer > *");
+    expect(await end.evaluateAll((els) => els.map((el) => el.tagName))).toEqual([
+      "APP-SHARE-LINKS",
+      "BUTTON",
+      "A",
+    ]);
+    await expect(end.nth(1)).toHaveText("Ask the assistant about this post");
+    await expect(end.nth(2)).toHaveText("All posts");
+  });
+
   test("the index declares a Blog and advertises the feed", async ({ page, request }) => {
     await page.goto("/en/writing");
     await expect(page.locator('link[rel="alternate"][type="application/rss+xml"]')).toHaveAttribute(
@@ -474,6 +508,25 @@ test.describe("writing", () => {
       expect(await res.text()).toMatch(/<meta name="robots" content="noindex/);
     });
   }
+});
+
+test.describe("writing on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("the filter is one row running to the screen's edge, each tag 44px tall", async ({
+    page,
+  }) => {
+    await page.goto("/en/writing");
+    await interactive(page);
+    const tags = page.getByRole("navigation", { name: "Tags" }).getByRole("link");
+    const boxes = await Promise.all((await tags.all()).map((tag) => tag.boundingBox()));
+    expect(new Set(boxes.map((box) => box!.y)).size).toBe(1);
+    expect(boxes.every((box) => box!.height >= 44)).toBe(true);
+
+    const row = (await page.locator("main nav ul").boundingBox())!;
+    expect(row.x + row.width).toBe(390);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  });
 });
 
 test.describe("feeds and files", () => {

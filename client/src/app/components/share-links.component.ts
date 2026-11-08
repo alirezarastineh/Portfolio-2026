@@ -20,13 +20,13 @@ import { brandLinkedin, brandX } from "../icons/brand-icons";
   host: { class: "block" },
   template: `
     <div class="flex flex-wrap items-center gap-2" role="group" [attr.aria-label]="labels().share">
-      <span class="eyebrow mr-1 text-muted-foreground" aria-hidden="true">
+      <span class="mr-1 text-small text-muted-foreground" aria-hidden="true">
         {{ labels().share }}
       </span>
       <button type="button" [class]="control" (click)="copy()">
         <ng-icon
           [name]="copied() === 'copied' ? 'lucideCheck' : 'lucideLink'"
-          size="14"
+          size="16"
           aria-hidden="true"
         />
         <span>{{ labels()[copied() ?? "copy"] }}</span>
@@ -39,7 +39,7 @@ import { brandLinkedin, brandX } from "../icons/brand-icons";
           rel="noreferrer noopener"
           [attr.aria-label]="network.label"
         >
-          <ng-icon [name]="network.icon" size="14" aria-hidden="true" />
+          <ng-icon [name]="network.icon" size="16" aria-hidden="true" />
           <span aria-hidden="true">{{ network.name }}</span>
         </a>
       }

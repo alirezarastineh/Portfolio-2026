@@ -3,8 +3,6 @@ import { ChangeDetectionStrategy, Component, computed, ElementRef, inject } from
 import { toSignal } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, RouterLink, type ResolveFn } from "@angular/router";
 import type { MetaTag, RouteMeta } from "@analogjs/router";
-import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideArrowLeft } from "@ng-icons/lucide";
 import { map } from "rxjs";
 
 import { AskLauncherService } from "../../../ask/ask-launcher.service";
@@ -119,7 +117,6 @@ export const routeMeta: RouteMeta = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     BreadcrumbComponent,
-    NgIcon,
     NotFoundComponent,
     PictureComponent,
     ProseBodyComponent,
@@ -127,16 +124,15 @@ export const routeMeta: RouteMeta = {
     ShareLinksComponent,
     TocComponent,
   ],
-  viewProviders: [provideIcons({ lucideArrowLeft })],
   host: { class: "block" },
   template: `
     @if (post(); as p) {
       <main id="main" class="pb-24 pt-28 lg:pt-32">
         <!-- Fills as the page scrolls (styles/motion.css). -->
         <div class="reading-progress" aria-hidden="true"></div>
-        <article class="container-site flex flex-col gap-10 lg:gap-12">
+        <article class="container-site flex flex-col gap-8 lg:gap-12">
           <header class="grid lg:grid-cols-12 lg:gap-x-(--col-gap)">
-            <div class="flex flex-col gap-5 lg:col-span-7">
+            <div class="flex flex-col gap-6 lg:col-span-8">
               <app-breadcrumb [items]="crumbs()" [locale]="lang.lang()" />
               <h1 class="m-0 text-balance text-h1 text-foreground hyphens-auto">
                 {{ p.title }}
@@ -146,44 +142,44 @@ export const routeMeta: RouteMeta = {
                   {{ p.excerpt }}
                 </p>
               }
-              <p class="m-0 flex flex-wrap gap-x-2 font-mono text-meta text-muted-foreground">
-                <span>
-                  {{ lang.t().writing.published }}
-                  <time [attr.datetime]="p.publishedAt">{{ day(p.publishedAt) }}</time>
-                </span>
-                @if (wasUpdated()) {
-                  <span aria-hidden="true">·</span>
+              <div class="flex flex-col gap-1">
+                <p class="m-0 flex flex-wrap gap-x-4 text-data text-muted-foreground">
                   <span>
-                    {{ lang.t().writing.updated }}
-                    <time [attr.datetime]="p.updatedAt">{{ day(p.updatedAt) }}</time>
+                    {{ lang.t().writing.published }}
+                    <time [attr.datetime]="p.publishedAt">{{ day(p.publishedAt) }}</time>
                   </span>
-                }
-                <span aria-hidden="true">·</span>
-                <span>{{ readingTime() }}</span>
-              </p>
-              @if (p.tags.length) {
-                <ul
-                  class="m-0 flex list-none flex-wrap gap-2 p-0"
-                  role="list"
-                  [attr.aria-label]="lang.t().writing.tags"
-                >
-                  @for (t of p.tags; track t) {
-                    <li>
-                      <a
-                        class="chip press h-8 px-3 text-muted-foreground hover:border-accent-orange/60 hover:text-foreground"
-                        [routerLink]="['/', lang.lang(), 'writing']"
-                        [queryParams]="{ tag: t }"
-                        >#{{ t }}</a
-                      >
-                    </li>
+                  @if (wasUpdated()) {
+                    <span>
+                      {{ lang.t().writing.updated }}
+                      <time [attr.datetime]="p.updatedAt">{{ day(p.updatedAt) }}</time>
+                    </span>
                   }
-                </ul>
-              }
+                  <span>{{ readingTime() }}</span>
+                </p>
+                @if (p.tags.length) {
+                  <ul
+                    class="m-0 flex list-none flex-wrap gap-x-4 p-0 text-data"
+                    role="list"
+                    [attr.aria-label]="lang.t().writing.tags"
+                  >
+                    @for (t of p.tags; track t) {
+                      <li>
+                        <a
+                          class="link-underline inline-flex items-center pointer-coarse:min-h-11"
+                          [routerLink]="['/', lang.lang(), 'writing']"
+                          [queryParams]="{ tag: t }"
+                          >#{{ t }}</a
+                        >
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
             </div>
           </header>
 
           @if (p.cover) {
-            <div class="aspect-video overflow-hidden rounded-2xl border border-border bg-card">
+            <div class="aspect-16/10 overflow-hidden bg-muted">
               <!-- Bound, not static: the server would print static inputs
                    on <app-picture> as attributes too. -->
               <app-picture
@@ -198,11 +194,7 @@ export const routeMeta: RouteMeta = {
           <div class="grid gap-12 lg:grid-cols-12 lg:gap-x-(--col-gap)">
             @if (p.toc.length > 1) {
               <aside class="lg:col-span-3 lg:col-start-10 lg:row-start-1">
-                <app-toc
-                  class="lg:sticky lg:top-28"
-                  [items]="p.toc"
-                  [label]="lang.t().caseStudy.toc"
-                />
+                <app-toc [items]="p.toc" [label]="lang.t().caseStudy.toc" />
               </aside>
             }
             <div class="min-w-0 lg:col-span-8 lg:row-start-1">
@@ -210,25 +202,16 @@ export const routeMeta: RouteMeta = {
             </div>
           </div>
 
-          <footer class="flex flex-col gap-6 border-t border-border pt-8">
-            <button
-              type="button"
-              class="press inline-flex min-h-11 cursor-pointer items-center gap-2 self-start rounded-lg border border-border px-5 py-2 text-left font-mono text-meta text-foreground hover:border-border-strong"
-              (click)="ask(p.title)"
-            >
-              <span class="text-accent-orange" aria-hidden="true">&gt;_</span>
+          <footer class="flex flex-col items-start gap-6 border-t border-border pt-8">
+            <app-share-links [url]="url()" [title]="p.title" [locale]="lang.lang()" />
+            <button type="button" class="btn btn-secondary press text-left" (click)="ask(p.title)">
               {{ chrome().ask }}
             </button>
-            <div class="flex flex-wrap items-center justify-between gap-6">
-              <app-share-links [url]="url()" [title]="p.title" [locale]="lang.lang()" />
-              <a
-                class="link-underline inline-flex items-center gap-2 font-mono text-sm"
-                [routerLink]="['/', lang.lang(), 'writing']"
-              >
-                <ng-icon name="lucideArrowLeft" size="14" aria-hidden="true" />
-                {{ lang.t().writing.allPosts }}
-              </a>
-            </div>
+            <a
+              class="link-underline inline-flex items-center pointer-coarse:min-h-11"
+              [routerLink]="['/', lang.lang(), 'writing']"
+              >{{ lang.t().writing.allPosts }}</a
+            >
           </footer>
         </article>
       </main>
