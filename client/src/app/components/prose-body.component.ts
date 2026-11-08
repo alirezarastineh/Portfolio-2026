@@ -41,6 +41,18 @@ export function restoreHeadingIds(root: Element, toc: readonly TocEntry[]): void
 }
 
 /**
+ * The same for a body with no table of contents (a legal page), from its published HTML. By
+ * position: every heading is listed, one the build gave no id too, so none shifts the rest.
+ */
+export function restoreHeadingIdsInOrder(root: Element, html: string): void {
+  const ids = [...html.matchAll(/<h[23](?:\s+id="([^"<>]*)")?[\s>]/g)].map((match) => match[1]);
+  Array.from(root.querySelectorAll("h2, h3")).forEach((heading, index) => {
+    const id = ids[index];
+    if (id && heading.getAttribute("id") !== id) heading.setAttribute("id", id);
+  });
+}
+
+/**
  * The published body minus the heading ids Angular's sanitizer would strip
  * anyway (they are restored from the table of contents after rendering). With
  * nothing left for it to remove, the sanitizer stays on and silent: in dev mode
@@ -143,6 +155,7 @@ export class ProseBodyComponent implements AfterViewChecked {
   ngAfterViewChecked(): void {
     const root = this.body().nativeElement;
     if (this.toc().length > 0) restoreHeadingIds(root, this.toc());
+    else restoreHeadingIdsInOrder(root, this.html());
     if (this.isBrowser) frameCodeBlocks(root, CHROME[this.lang.lang()].code.copy);
   }
 }

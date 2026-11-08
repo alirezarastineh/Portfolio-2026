@@ -32,9 +32,6 @@ const COPY: Record<Locale, Copy> = {
   },
 };
 
-/** How much of the address the shell line repeats. */
-const MAX_PATH = 64;
-
 /** Every page this language's content has, but home (linked anyway). */
 function knownPages(locale: Locale, content: AppContent): PageSuggestion[] {
   const at = (path: string) => `/${locale}${path}`;
@@ -49,13 +46,12 @@ function knownPages(locale: Locale, content: AppContent): PageSuggestion[] {
 }
 
 /**
- * The 404 body, as terminal output: the shell's own complaint about the
- * address, then what happened, the pages it most likely meant (by edit
- * distance over this language's case studies, posts and legal pages), and a
- * way home or to the assistant. With a locale it renders in that language
- * (inside the site chrome), in the CMS's words; without one — an address
- * outside `/en` and `/de` — it offers both, without suggestions (no content
- * has loaded). "Ask" opens the assistant's panel, which only the site chrome has.
+ * The 404 body: what happened, closing on the headline's orange stop, the pages it most likely
+ * meant (by edit distance over this language's case studies, posts and legal pages), and a way
+ * home or to the assistant. With a locale it renders in that language (inside the site chrome), in
+ * the CMS's words; without one — an address outside `/en` and `/de` — it offers both, the first
+ * as the page's heading, without suggestions (no content has loaded). "Ask" opens the
+ * assistant's panel, which only the site chrome has.
  */
 @Component({
   selector: "app-not-found",
@@ -67,48 +63,45 @@ function knownPages(locale: Locale, content: AppContent): PageSuggestion[] {
       id="main"
       class="container-site flex min-h-[70vh] flex-col justify-center gap-12 pb-24 pt-32"
     >
-      @for (entry of entries(); track entry.locale) {
-        <section class="flex max-w-3xl flex-col gap-4 font-mono" [attr.lang]="entry.locale">
-          <p class="m-0 break-all text-meta text-muted-foreground">
-            zsh: {{ entry.command }}: {{ path() }}
-          </p>
-          <h1 class="m-0 text-2xl font-medium tracking-tight text-foreground sm:text-3xl">
-            <span class="text-accent-orange" aria-hidden="true">&gt; </span>{{ entry.copy.title }}
-          </h1>
-          <p class="m-0 max-w-xl text-pretty font-sans leading-relaxed text-muted-foreground">
-            {{ entry.copy.body }}
-          </p>
-          @if (entry.suggestions.length) {
-            <div class="flex flex-col gap-2 text-sm">
-              <p class="m-0 text-muted-foreground">{{ entry.didYouMean }}</p>
-              <ul class="m-0 flex list-none flex-col gap-1.5 p-0" role="list">
-                @for (page of entry.suggestions; track page.path) {
-                  <li class="flex flex-wrap items-baseline gap-x-3">
-                    <a class="link-underline" [routerLink]="page.path">{{ page.path }}</a>
-                    <span class="font-sans text-muted-foreground">{{ page.label }}</span>
-                  </li>
-                }
-              </ul>
-            </div>
-          }
-          <ul class="m-0 flex list-none flex-wrap gap-x-6 gap-y-2 p-0 text-sm" role="list">
-            <li>
-              <a class="link-underline" [routerLink]="['/', entry.locale]"
-                >← {{ entry.copy.home }}</a
-              >
-            </li>
-            @if (locale()) {
-              <li>
-                <button
-                  type="button"
-                  class="link-underline cursor-pointer"
-                  (click)="launcher.openSheet('button')"
-                >
-                  &gt;_ {{ entry.copy.ask }}
-                </button>
-              </li>
+      @for (entry of entries(); track entry.locale; let first = $first) {
+        <section class="flex max-w-5xl flex-col items-start gap-6" [attr.lang]="entry.locale">
+          <div class="flex flex-col gap-4">
+            @if (first) {
+              <h1 class="m-0 text-h1 text-foreground">
+                {{ entry.title
+                }}<span class="text-signal" aria-hidden="true">{{ entry.stop }}</span>
+              </h1>
+            } @else {
+              <p class="m-0 text-title text-foreground">
+                {{ entry.title
+                }}<span class="text-signal" aria-hidden="true">{{ entry.stop }}</span>
+              </p>
             }
-          </ul>
+            <p class="m-0 max-w-xl text-pretty text-muted-foreground">{{ entry.copy.body }}</p>
+            @if (entry.suggestions.length) {
+              <p class="m-0 wrap-anywhere">
+                {{ entry.didYouMean }}:
+                @for (page of entry.suggestions; track page.path; let last = $last) {
+                  <a class="link-underline" [routerLink]="page.path">{{ page.label }}</a
+                  >{{ last ? "?" : ", " }}
+                }
+              </p>
+            }
+          </div>
+          <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <a class="btn btn-solid press" [routerLink]="['/', entry.locale]">{{
+              entry.copy.home
+            }}</a>
+            @if (locale()) {
+              <button
+                type="button"
+                class="btn btn-quiet press"
+                (click)="launcher.openSheet('button')"
+              >
+                {{ entry.copy.ask }}
+              </button>
+            }
+          </div>
         </section>
       }
     </main>
@@ -133,23 +126,20 @@ export class NotFoundComponent {
     return this.router.url;
   });
 
-  /** As the shell repeats it: no query or fragment, cut if long. */
-  protected readonly path = computed(() => {
-    const path = this.url().split(/[?#]/, 1)[0] ?? "/";
-    return path.length > MAX_PATH ? `${path.slice(0, MAX_PATH - 1)}…` : path;
-  });
-
   protected readonly entries = computed(() => {
     const locale = this.locale();
     const locales: Locale[] = locale ? [locale] : ["en", "de"];
     return locales.map((l) => {
       const content = this.store.content(l)();
-      const chrome = CHROME[l].notFound;
+      const copy = content ? { ...content.ui.notFound, ask: content.ui.hero.askCta } : COPY[l];
+      const title = copy.title.trim();
       return {
         locale: l,
-        copy: content ? { ...content.ui.notFound, ask: content.ui.hero.askCta } : COPY[l],
-        command: chrome.command,
-        didYouMean: chrome.didYouMean,
+        copy,
+        // As the hero's headline: the stop is the site's mark, wherever the sentence has one.
+        title: title.endsWith(".") ? title.slice(0, -1) : title,
+        stop: title.endsWith(".") ? "." : "",
+        didYouMean: CHROME[l].notFound.didYouMean,
         suggestions: content && locale ? suggestPages(this.url(), knownPages(l, content)) : [],
       };
     });

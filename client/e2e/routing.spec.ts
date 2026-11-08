@@ -130,6 +130,8 @@ test.describe("content BFF (v2)", () => {
     const html = await (await request.get("/en/legal/privacy")).text();
     expect(html).toContain('<div class="prose-body">');
     expect(html).toMatch(/<h2[^>]*>Hosting and server logs<\/h2>/);
+    // The anchors the sanitizer strips, back in the server's HTML: a shared `#section` link works.
+    expect(html).toContain('<h2 id="hosting-and-server-logs">');
     expect(html).toMatch(/<time datetime="\d{4}-\d{2}-\d{2}T/);
   });
 });

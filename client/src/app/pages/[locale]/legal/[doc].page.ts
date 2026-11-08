@@ -6,6 +6,7 @@ import type { MetaTag, RouteMeta } from "@analogjs/router";
 import { map } from "rxjs";
 
 import { NotFoundComponent } from "../../../components/not-found.component";
+import { ProseBodyComponent } from "../../../components/prose-body.component";
 import { DocStore } from "../../../content/doc.store";
 import { legalDocSchema, type LegalDocPayload } from "../../../content/schema";
 import { applyHead } from "../../../seo/head";
@@ -79,24 +80,22 @@ export const routeMeta: RouteMeta = {
 @Component({
   selector: "app-legal-page",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NotFoundComponent],
+  imports: [NotFoundComponent, ProseBodyComponent],
   host: { class: "block" },
   template: `
     @if (doc(); as page) {
-      <main id="main" class="mx-auto max-w-3xl px-6 pb-24 pt-32 sm:px-8">
-        <article class="flex flex-col gap-10">
+      <main id="main" class="pb-24 pt-28 lg:pt-32">
+        <article class="container-site flex flex-col gap-8 lg:gap-12">
           <header class="flex flex-col gap-3">
-            <p class="eyebrow m-0 text-muted-foreground">
-              <span aria-hidden="true">// </span>{{ lang.t().legal.updated }}
+            <h1 class="m-0 text-h1 text-foreground">{{ page.title }}</h1>
+            <p class="m-0 text-data text-muted-foreground">
+              {{ lang.t().legal.updated }}
               <time [attr.datetime]="page.updatedAt">{{ updated() }}</time>
             </p>
-            <h1 class="m-0 text-3xl font-medium tracking-tight text-foreground sm:text-4xl">
-              {{ page.title }}
-            </h1>
           </header>
 
           <!-- Sanitized on write by the API; Angular sanitizes again here. -->
-          <div class="prose-body" [innerHTML]="page.body"></div>
+          <app-prose-body [html]="page.body" />
         </article>
       </main>
     } @else {

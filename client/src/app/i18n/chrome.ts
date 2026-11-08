@@ -77,7 +77,7 @@ export interface ChromeLabels {
     colophon: string;
     build: string;
   };
-  notFound: { command: string; didYouMean: string };
+  notFound: { didYouMean: string };
   projectCard: { details: string; links: string };
   caseStudy: {
     /** The end block's action, `{name}` the project's. */
@@ -165,7 +165,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
         "Built with Angular {angular}, Analog and Hono. Server-rendered, fonts self-hosted.",
       build: "Build",
     },
-    notFound: { command: "command not found", didYouMean: "Did you mean" },
+    notFound: { didYouMean: "Did you mean" },
     projectCard: { details: "Details", links: "Project links" },
     caseStudy: { ask: "Ask about {name}", question: "What did he build in {name}, and how?" },
     post: {
@@ -243,7 +243,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
         "Gebaut mit Angular {angular}, Analog und Hono. Serverseitig gerendert, Schriften selbst gehostet.",
       build: "Build",
     },
-    notFound: { command: "Befehl nicht gefunden", didYouMean: "Meinten Sie" },
+    notFound: { didYouMean: "Meinten Sie" },
     projectCard: { details: "Details", links: "Projektlinks" },
     caseStudy: { ask: "Zu {name} fragen", question: "Was hat er bei {name} gebaut – und wie?" },
     post: {

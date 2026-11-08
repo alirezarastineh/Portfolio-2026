@@ -8,6 +8,7 @@ import {
   frameCodeBlocks,
   ProseBodyComponent,
   restoreHeadingIds,
+  restoreHeadingIdsInOrder,
   withoutHeadingIds,
 } from "./prose-body.component";
 
@@ -31,6 +32,17 @@ describe("restoreHeadingIds", () => {
       "setup-2",
       "",
     ]);
+  });
+});
+
+describe("restoreHeadingIdsInOrder", () => {
+  it("gives each heading its published id by position, with a heading that has none in place", () => {
+    const html = '<h2 id="why"><strong>Why</strong></h2><h2></h2><h3 id="a-b">A &amp; B</h3>';
+    const root = document.createElement("div");
+    root.innerHTML = withoutHeadingIds(html);
+    restoreHeadingIdsInOrder(root, html);
+
+    expect([...root.querySelectorAll("h2, h3")].map((h) => h.id)).toEqual(["why", "", "a-b"]);
   });
 });
 

@@ -800,7 +800,7 @@ test.describe("404", () => {
   test("speaks the site's language and offers a way home and to Ask", async ({ page }) => {
     const res = await page.goto("/de/gibt-es-nicht");
     expect(res?.status()).toBe(404);
-    await expect(page.locator("main h1")).toHaveText("> Diese Seite gibt es nicht.");
+    await expect(page.locator("main h1")).toHaveText("Diese Seite gibt es nicht.");
     await expect(page.getByRole("link", { name: /Zur Startseite/ })).toHaveAttribute("href", "/de");
     // "Ask" opens the assistant right here (plan 4 U10).
     await interactive(page);
@@ -813,17 +813,51 @@ test.describe("404", () => {
     await expect(page.locator("main")).not.toContainText("Meinten Sie");
   });
 
-  test("repeats the address as a shell would, and suggests what it most likely meant", async ({
+  test("closes on the orange stop and offers what it most likely meant, by name", async ({
     page,
   }) => {
     const res = await page.goto("/en/work/project-on");
     expect(res?.status()).toBe(404);
     const main = page.locator("main");
-    await expect(main).toContainText("zsh: command not found: /en/work/project-on");
-    await expect(main).toContainText("Did you mean");
-    await expect(main.getByRole("link", { name: "/en/work/project-one" })).toHaveAttribute(
+    await expect(main.locator("h1")).toHaveText("This page isn’t here.");
+    await expect(main.locator("h1 span")).toHaveText(".");
+    await expect(main).toContainText("Did you mean: Atlas");
+    await expect(main.getByRole("link", { name: "Atlas", exact: true })).toHaveAttribute(
       "href",
       "/en/work/project-one",
     );
+    // Words, not a shell's.
+    await expect(main).not.toContainText("zsh");
+    await expect(main).not.toContainText(">_");
+    await expect(main).not.toContainText("←");
+    await expect(main.locator("h1")).not.toHaveCSS("font-family", /mono/i);
   });
+
+  test("outside the two languages it has one heading and offers both", async ({ page }) => {
+    const res = await page.goto("/fr/nope");
+    expect(res?.status()).toBe(404);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("This page isn’t here.");
+    await expect(page.getByRole("link", { name: "Back to the homepage" })).toHaveAttribute(
+      "href",
+      "/en",
+    );
+    await expect(page.getByRole("link", { name: "Zur Startseite" })).toHaveAttribute("href", "/de");
+  });
+});
+
+test("legal and the writing index share the site's one left edge, and legal's headings have anchors", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1920, height: 900 });
+  await page.goto("/en/legal/privacy");
+  const heading = page.locator("main h1");
+  await expect(heading).toHaveClass(/text-h1/);
+  await expect(page.locator("main header p")).not.toContainText("//");
+  const left = (await heading.boundingBox())?.x;
+  // The body's anchors, for a shared `#section` link.
+  await expect(page.locator(".prose-body h2").first()).toHaveAttribute("id", "controller");
+
+  await page.goto("/en/writing");
+  expect((await page.locator("main h1").boundingBox())?.x).toBe(left);
 });
