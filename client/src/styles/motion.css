@@ -231,6 +231,7 @@ article:has(.card-link:is(:focus-visible, :active)) .title-draw {
     background-color var(--dur-2) var(--ease-out),
     border-color var(--dur-2) var(--ease-out),
     text-decoration-color var(--dur-3) var(--ease-out),
+    background-size var(--underline-draw, 0s) var(--ease-out),
     scale var(--dur-1) var(--ease-spring);
 }
 
@@ -238,6 +239,10 @@ article:has(.card-link:is(:focus-visible, :active)) .title-draw {
   .nav-link::after,
   .field-line::after {
     transition: scale var(--dur-3) var(--ease-out);
+  }
+
+  .press {
+    --underline-draw: var(--dur-3);
   }
 
   .press:active {
@@ -248,6 +253,11 @@ article:has(.card-link:is(:focus-visible, :active)) .title-draw {
   .menu-rise {
     animation: rise var(--dur-4) var(--ease-emph) both;
     animation-delay: calc(var(--i, 0) * 40ms);
+  }
+
+  /* "Message sent", and then its full stop. */
+  .sent-dot {
+    animation: rise var(--dur-3) var(--ease-out) var(--dur-3) backwards;
   }
 
   .title-draw {

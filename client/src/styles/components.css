@@ -38,14 +38,13 @@
   color: var(--foreground);
 }
 
+/* The underline draws from the left under the text (`background-size`, `.press` times it). */
 .btn-quiet {
   min-height: 2.75rem;
   padding-inline: 0;
   color: var(--foreground);
-  text-decoration-line: underline;
-  text-decoration-color: transparent;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
+  background: linear-gradient(var(--accent-orange), var(--accent-orange)) no-repeat 0
+    calc(50% + 0.7em) / 0 2px;
 }
 
 .btn:disabled,
@@ -75,9 +74,10 @@
   border-radius: 50%;
 }
 
+/* Six turns, 4.8 s: nothing moves over 5 s. Past that the ring stands still. */
 @media (prefers-reduced-motion: no-preference) {
   .btn[aria-busy="true"]::before {
-    animation: btn-busy 800ms linear infinite;
+    animation: btn-busy 800ms linear 6;
   }
 }
 
@@ -264,7 +264,7 @@
   }
 
   .btn-quiet:not(:disabled, [aria-disabled="true"]):hover {
-    text-decoration-color: var(--accent-orange);
+    background-size: 100% 2px;
   }
 
   .control:not(:disabled):hover {

@@ -307,14 +307,15 @@ const SHEET_ENTRY = "askSheet";
       }
     }
 
-    /* Opening, it rises 16px and fades in; closing, it goes the same way, faster
-       (display waits for it). Where the browser cannot animate a dialog's
-       display, it simply appears. */
+    /* Opening, the panel slides 24px in from its side and the sheet rises 16px, both fading in;
+       closing, they go the same way, faster (display waits for it). Where the browser cannot
+       animate a dialog's display, it simply appears. */
     @media (prefers-reduced-motion: no-preference) {
       @supports (transition-behavior: allow-discrete) {
         .ask-sheet {
+          --enter: 24px 0;
           opacity: 0;
-          translate: 0 16px;
+          translate: var(--enter);
           transition:
             opacity var(--dur-3, 240ms) var(--ease-in, ease-in),
             translate var(--dur-3, 240ms) var(--ease-in, ease-in),
@@ -329,7 +330,12 @@ const SHEET_ENTRY = "askSheet";
         @starting-style {
           .ask-sheet[open] {
             opacity: 0;
-            translate: 0 16px;
+            translate: var(--enter);
+          }
+        }
+        @media (width < 64rem) {
+          .ask-sheet {
+            --enter: 0 16px;
           }
         }
       }

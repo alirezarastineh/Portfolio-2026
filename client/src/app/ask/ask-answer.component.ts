@@ -355,10 +355,10 @@ interface Footnote {
             [class.drawing]="opened()"
             [attr.aria-label]="copy().receipt.toggle"
           >
-            @for (clause of receipt(); track clause) {
-              <li>{{ clause }}</li>
+            @for (clause of receipt(); track clause; let i = $index) {
+              <li [style.--step-delay]="(i * 1430) / receipt().length + 'ms'">{{ clause }}</li>
             }
-            <li>
+            <li [style.--step-delay]="'1430ms'">
               <button type="button" class="word press" (click)="inspect.emit(message()!.id)">
                 {{ copy().receipt.inspect }}
               </button>
@@ -674,18 +674,21 @@ interface Footnote {
           background-color var(--dur-2),
           color var(--dur-2);
       }
+      /* A receipt plays its steps once, 1.75 s in all (--step-delay); a live trace as they come. */
       .drawing li {
-        animation: trace-in var(--dur-3) var(--ease-out) backwards;
+        animation: trace-in var(--dur-3) var(--ease-out) var(--step-delay, 0s) backwards;
       }
       .drawing li::after {
-        animation: trace-run var(--dur-2) var(--ease-out) backwards;
+        animation: trace-run var(--dur-2) var(--ease-out) var(--step-delay, 0s) backwards;
       }
       .drawing li::before {
-        animation: trace-tick var(--dur-2) var(--ease-out) var(--dur-2) backwards;
+        animation: trace-tick var(--dur-2) var(--ease-out)
+          calc(var(--dur-2) + var(--step-delay, 0s)) backwards;
       }
+      /* Six turns, 4.8 s: nothing moves over 5 s. Past that it stands still. */
       .step-spin::after {
         content: "⠋";
-        animation: step-spin 0.8s steps(1) infinite;
+        animation: step-spin 0.8s steps(1) 6;
       }
     }
     @keyframes trace-in {

@@ -171,7 +171,7 @@ const errorClass = "m-0 flex items-start gap-1.5 text-small text-destructive";
             >
               <!-- The line ends here after a send, and the words close on its dot. -->
               <p class="page-line-end m-0 text-title text-foreground">
-                {{ sent() }}<span class="text-signal" aria-hidden="true">.</span>
+                {{ sent() }}<span class="sent-dot text-signal" aria-hidden="true">.</span>
               </p>
               <p class="m-0 text-muted-foreground">
                 {{ lang.t().contact.successLine2 }}
