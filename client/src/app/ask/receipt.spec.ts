@@ -144,9 +144,9 @@ describe("the receipt line (visitor plan V12)", () => {
 
 describe("duration", () => {
   it("prints milliseconds under a second, seconds with one decimal above", () => {
-    expect(duration(12, "en")).toBe("12 ms");
-    expect(duration(1420, "en")).toBe("1.4 s");
-    expect(duration(1420, "de")).toBe("1,4 s");
+    expect(duration(12, "en")).toBe("12\u00A0ms");
+    expect(duration(1420, "en")).toBe("1.4\u00A0s");
+    expect(duration(1420, "de")).toBe("1,4\u00A0s");
   });
 });
 

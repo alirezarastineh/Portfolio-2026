@@ -21,12 +21,12 @@ function own<T>(record: Record<string, T>, key: string): T | undefined {
 
 /** Milliseconds under a second, seconds with one decimal above. */
 export function duration(ms: number, locale: Locale): string {
-  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 1000) return `${Math.round(ms)}\u00A0ms`;
   const seconds = (ms / 1000).toLocaleString(locale === "de" ? "de-DE" : "en-GB", {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   });
-  return `${seconds} s`;
+  return `${seconds}\u00A0s`;
 }
 
 /** A count in its words. */

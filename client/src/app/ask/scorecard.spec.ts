@@ -58,7 +58,7 @@ describe("evals' lines (visitor plan V13)", () => {
       ["repaired", "2% written again: the first try had no words"],
       // Below its minimum, the server sent none.
       ["figures", "not enough answers yet"],
-      ["first word", "median 1.8 s in visitors' browsers (30 answers)"],
+      ["first word", "median 1.8\u00A0s in visitors' browsers (30 answers)"],
       ["turned away", "invalid_input 16 · rate_limited 2"],
       ["judge", "median faithfulness 92% in a nightly sample of 25 answers"],
       ["", "how this assistant works", "How does this assistant work?"],

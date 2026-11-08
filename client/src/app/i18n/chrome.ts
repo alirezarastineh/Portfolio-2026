@@ -123,7 +123,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       actions: "Actions",
       home: "Home",
       ask: "Ask",
-      news: "What's new",
+      news: "What’s new",
       tour: "Take the tour",
       close: "Close",
     },
@@ -140,7 +140,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       copied: "Link copied",
       failed: "Couldn’t copy",
       idle: "",
-      on: "Share on {site}",
+      on: "Share on {site} (opens in a new tab)",
     },
     contact: {
       sendAnother: "Send another message",
@@ -218,7 +218,7 @@ export const CHROME: Record<Locale, ChromeLabels> = {
       copied: "Link kopiert",
       failed: "Nicht kopiert",
       idle: "",
-      on: "Auf {site} teilen",
+      on: "Auf {site} teilen (öffnet in einem neuen Tab)",
     },
     contact: {
       sendAnother: "Weitere Nachricht senden",

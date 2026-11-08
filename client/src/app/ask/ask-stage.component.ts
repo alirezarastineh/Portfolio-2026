@@ -263,6 +263,12 @@ interface AskEntryState {
       border-color: var(--accent-orange);
       box-shadow: 0 0 0 1px var(--accent-orange);
     }
+    /* Forced colours keep one border colour and no shadow. */
+    @media (forced-colors: active) {
+      .composer:focus-within {
+        outline: 2px solid Highlight;
+      }
+    }
     .prompt {
       flex: none;
       color: var(--signal);

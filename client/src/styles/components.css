@@ -182,8 +182,7 @@
   inset-inline-start: 0;
   top: 0.5lh;
   width: 0.625rem;
-  height: 1px;
-  background: var(--signal);
+  border-top: 1px solid var(--signal);
 }
 
 /* One line box each, not `align-items: baseline`: its row height moves when the fonts swap in. */

@@ -16,6 +16,8 @@ const PAGES = [
   "/de/writing/shipping-rag-to-production",
   "/en/legal/imprint",
   "/de/legal/privacy",
+  "/en/match",
+  "/de/match",
   "/en/does-not-exist",
   "/admin/login",
 ];
@@ -75,5 +77,24 @@ for (const colorScheme of ["dark", "light"] as const) {
       await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("rag");
       expect(await unexpected(page)).toEqual([]);
     });
+
+    test("the open gallery has no new accessibility violations", async ({ page }) => {
+      await page.goto("/en/work/project-one");
+      await interactive(page);
+      await page.getByRole("link", { name: /^Open image 1 of 2/ }).click();
+      await expect(page.getByRole("dialog", { name: "Gallery" })).toBeVisible();
+      expect(await unexpected(page)).toEqual([]);
+    });
   });
 }
+
+test("a link that opens a new tab says so, in the page's language", async ({ page }) => {
+  for (const [path, name] of [
+    ["/en", /^LinkedIn \(opens in a new tab\)$/],
+    ["/de", /^LinkedIn \(öffnet in einem neuen Tab\)$/],
+  ] as const) {
+    await page.goto(path);
+    await interactive(page);
+    await expect(page.locator("footer").getByRole("link", { name })).toBeVisible();
+  }
+});

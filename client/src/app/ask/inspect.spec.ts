@@ -65,8 +65,8 @@ describe("inspect's timeline (visitor plan V12)", () => {
       ["page", "project:atlas@en · its text came with the question"],
       ["focus", "selection · not found on the page"],
       ["level", "plain"],
-      ["step 1", "nemotron-3-ultra · first token 640 ms · 9,000 in (8,000 cached) · 120 out"],
-      [" ", "↳ passed over gemini-3.5-flash-lite: timeout after 6.0 s"],
+      ["step 1", "nemotron-3-ultra · first token 640\u00A0ms · 9,000 in (8,000 cached) · 120 out"],
+      [" ", "↳ passed over gemini-3.5-flash-lite: timeout after 6.0\u00A0s"],
       [" ", '↳ search "atlas evals" → ok · 812 chars'],
       [" ", "↳ cat project:atlas@en → ok · 2,400 chars"],
       [" ", "↳ ls projects → no_hits · 15 chars"],
@@ -78,7 +78,7 @@ describe("inspect's timeline (visitor plan V12)", () => {
       ["guard", "canary ×2, instructions ×1"],
       ["checks", "invented-citation, degraded"],
       ["repair", "stub · words by the model"],
-      ["time", "9.1 s · first token 6.6 s"],
+      ["time", "9.1\u00A0s · first token 6.6\u00A0s"],
     ]);
   });
 
@@ -120,7 +120,7 @@ describe("inspect's timeline (visitor plan V12)", () => {
   it("speaks German on a German page", () => {
     const lines = inspectLines(VIEW, ASK_COPY.de, "de");
     expect(lines.find((l) => l.label === "Schritt 1")?.text).toBe(
-      "nemotron-3-ultra · erstes Token 640 ms · 9.000 rein (8.000 aus dem Cache) · 120 raus",
+      "nemotron-3-ultra · erstes Token 640\u00A0ms · 9.000 rein (8.000 aus dem Cache) · 120 raus",
     );
     expect(lines.find((l) => l.label === "Ausgabefilter")?.text).toBe("canary ×2, instructions ×1");
   });

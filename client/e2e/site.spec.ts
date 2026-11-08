@@ -577,10 +577,9 @@ test.describe("contact form", () => {
     const readable = browserName === "chromium";
     if (readable) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     const contact = page.locator("#contact");
-    await expect(contact.getByRole("link", { name: "GitHub", exact: true })).toHaveAttribute(
-      "href",
-      "https://github.com/alirezarastineh",
-    );
+    await expect(
+      contact.getByRole("link", { name: "GitHub (opens in a new tab)" }),
+    ).toHaveAttribute("href", "https://github.com/alirezarastineh");
     await expect(contact).toContainText("I reply within 24 hours.");
 
     await contact.getByRole("button", { name: "Copy the email address" }).click();
@@ -758,5 +757,71 @@ test.describe("visitor preferences", () => {
     await page.goto("/admin/login");
     await interactive(page);
     expect(publicTint).not.toBe(await tint());
+  });
+
+  test("more contrast raises borders and quiet text, on public pages only", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== "chromium", "Chromium's emulation of prefers-contrast");
+    const token = (name: string) =>
+      page.evaluate(
+        (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim(),
+        name,
+      );
+    await page.goto("/en");
+    await interactive(page);
+    const before = await token("--faint-foreground");
+    await page.emulateMedia({ contrast: "more" });
+    expect(await token("--faint-foreground")).not.toBe(before);
+
+    await page.goto("/admin/login");
+    await interactive(page);
+    const admin = await token("--border");
+    await page.emulateMedia({ contrast: "no-preference" });
+    expect(await token("--border")).toBe(admin);
+  });
+
+  test("forced colours keep the dot, a field's focus line and the palette's row", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== "chromium", "Chromium's emulation of forced-colors");
+    await page.emulateMedia({ forcedColors: "active" });
+    await page.goto("/en");
+    await interactive(page);
+    await expect(page.locator(".status-dot").first()).toHaveCSS("forced-color-adjust", "none");
+
+    await page.evaluate(() =>
+      document.getElementById("contact")?.scrollIntoView({ behavior: "instant" }),
+    );
+    await expect(page.locator("#contact form[data-ready]")).toBeAttached();
+    await page.locator("#contact-name").focus();
+    expect(
+      await page
+        .locator("#contact-name")
+        .evaluate((el) => getComputedStyle(el.parentElement!, "::after").forcedColorAdjust),
+    ).toBe("none");
+
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(page.locator(".palette-option[aria-selected='true']")).toHaveCSS(
+      "forced-color-adjust",
+      "none",
+    );
+  });
+
+  test("a screen 200px tall (400% zoom): no pinned header, the palette's field and keys stay", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 200 });
+    await page.goto("/en/writing");
+    await interactive(page);
+    await expect(page.locator(".site-header")).toHaveCSS("position", "absolute");
+    await page.keyboard.press("ControlOrMeta+k");
+    const palette = page.getByRole("dialog", { name: "Command palette" });
+    await expect(palette.getByRole("combobox")).toBeInViewport();
+    const box = await palette.boundingBox();
+    expect(box!.y + box!.height).toBeLessThanOrEqual(200);
+    await expect(palette.locator(".palette-keys")).toBeInViewport();
   });
 });

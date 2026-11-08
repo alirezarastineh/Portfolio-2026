@@ -43,7 +43,7 @@ describe("the brief's paste box (visitor plan V20)", () => {
     expect(box.getAttribute("maxlength")).toBe("4000");
     const described = (box.getAttribute("aria-describedby") ?? "").split(" ");
     expect(described.map((id) => el.querySelector(`#${id}`)?.textContent?.trim())).toEqual([
-      "Don't paste confidential details: the text goes to the model provider.",
+      "Don’t paste confidential details: the text goes to the model provider.",
       `0 / ${new Intl.NumberFormat("en").format(4000)} characters`,
     ]);
     type("A data platform");

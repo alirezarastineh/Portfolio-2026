@@ -56,6 +56,28 @@
   --text-metric--font-weight: 600;
 }
 
+/*
+ * prefers-contrast: more raises borders and the quieter text. On :root, where the theme's aliases
+ * (`--color-*`) resolve; only on public pages: the admin has no app-public-shell.
+ */
+@media (prefers-contrast: more) {
+  :root:has(app-public-shell) {
+    --border: rgb(255 255 255 / 45%);
+    --border-strong: rgb(255 255 255 / 70%);
+    --input-line: rgb(255 255 255 / 80%);
+    --muted-foreground: #d7d7db;
+    --faint-foreground: #c4c4c9;
+  }
+
+  :root[data-theme="light"]:has(app-public-shell) {
+    --border: rgb(0 0 0 / 45%);
+    --border-strong: rgb(0 0 0 / 70%);
+    --input-line: rgb(0 0 0 / 80%);
+    --muted-foreground: #2e2e33;
+    --faint-foreground: #404046;
+  }
+}
+
 /* A `--text-*` theme entry cannot set a family. */
 @utility text-data {
   font-family: var(--font-data);

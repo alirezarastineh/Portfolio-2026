@@ -197,6 +197,12 @@ const SHEET_ENTRY = "askSheet";
     .dot.live {
       background: var(--available);
     }
+    @media (forced-colors: active) {
+      .dot {
+        forced-color-adjust: none;
+        background: Highlight;
+      }
+    }
     .tool {
       display: inline-flex;
       flex: none;

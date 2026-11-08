@@ -180,11 +180,18 @@ interface Group {
       color: var(--popover-foreground);
       box-shadow: var(--shadow-e3);
     }
+    /* In a short window (400% zoom) the list gives way, so the field and the keys stay. */
+    .palette[open] {
+      display: flex;
+      flex-direction: column;
+      max-height: calc(88dvh - 1rem);
+    }
     .palette::backdrop {
       background: var(--scrim, rgb(0 0 0 / 65%));
     }
     .palette-search {
       display: flex;
+      flex: none;
       align-items: center;
       gap: 0.75rem;
       padding-inline: 1rem 0.5rem;
@@ -205,6 +212,10 @@ interface Group {
     .palette-input:focus-visible {
       outline: none;
     }
+    .palette-search:has(.palette-input:focus-visible) {
+      border-bottom-color: var(--accent-orange);
+      box-shadow: 0 1px 0 var(--accent-orange);
+    }
     .palette-key {
       margin-inline-end: 0.5rem;
       padding: 0 0.375rem;
@@ -215,6 +226,8 @@ interface Group {
       font-size: 0.75rem;
     }
     .palette-list {
+      flex: 0 1 auto;
+      min-height: 0;
       max-height: min(24rem, 60dvh);
       overflow-y: auto;
       overscroll-behavior: contain;
@@ -243,10 +256,9 @@ interface Group {
       flex: none;
       color: var(--muted-foreground);
     }
+    /* In full, on as many lines as it takes: larger text or wider spacing must not lose its end. */
     .palette-label {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      overflow-wrap: anywhere;
     }
     .palette-muted {
       color: var(--muted-foreground);
@@ -258,11 +270,20 @@ interface Group {
       font-size: 0.8125rem;
     }
     .palette-keys {
+      flex: none;
       margin: 0;
       padding: 0.5rem 1rem;
       border-top: 1px solid var(--border);
       color: var(--faint-foreground);
       font-size: 0.8125rem;
+    }
+    /* Forced colours drop the fill, and with it which one this is. */
+    @media (forced-colors: active) {
+      .palette-option[aria-selected="true"] {
+        forced-color-adjust: none;
+        background: Highlight;
+        color: HighlightText;
+      }
     }
     /* A close control for touch; the keys for a keyboard. */
     @media (pointer: coarse) {

@@ -860,7 +860,7 @@ test.describe("assistant terminal", () => {
     await log.getByRole("button", { name: "Not helpful" }).first().click();
     const why = page.getByRole("group", { name: "What was wrong?" });
     await expect(why.getByRole("button")).toHaveCount(3);
-    await why.getByRole("button", { name: "didn't answer my question" }).click();
+    await why.getByRole("button", { name: "didn’t answer my question" }).click();
     await expect(why.getByRole("button")).toHaveCount(1);
     await expect(why.getByRole("button")).toHaveAttribute("aria-pressed", "true");
     await expect
@@ -1016,11 +1016,11 @@ test.describe("assistant terminal", () => {
     const log = askPanel(page).locator("[role=log]");
 
     await run(prompt, "First question");
-    await expect(log).toContainText(/Try again in 4[0-2] s/);
+    await expect(log).toContainText(/Try again in 4[0-2]\ss/);
     // Heard once, from the terminal's live region; the countdown is for the eye
     // (a live region would read it again every second).
     await expect(askPanel(page).locator('[aria-live="polite"]')).toContainText(
-      /Try again in 42 s/,
+      /Try again in 42\ss/,
     );
     await expect(log.getByRole("status")).toHaveCount(0);
     // It waits: send is off, a question stays in the prompt, and a person is a click away.
@@ -1914,9 +1914,9 @@ test.describe("assistant terminal", () => {
 
     // Off: offered, with what it would keep; a no stores nothing, and nothing is fetched.
     await run(prompt, "news");
-    const offer = page.getByRole("group", { name: "Turn on what's new?" });
+    const offer = page.getByRole("group", { name: "Turn on what’s new?" });
     await expect(offer).toBeVisible();
-    await expect(offer).toHaveAccessibleDescription(/remember today's date/);
+    await expect(offer).toHaveAccessibleDescription(/remember today’s date/);
     expect(await axeViolations(page)).toEqual([]);
     await offer.getByRole("button", { name: "No", exact: true }).click();
     await expect(log).toContainText("OK, nothing was stored.");
@@ -1926,7 +1926,7 @@ test.describe("assistant terminal", () => {
     // A yes keeps today's date, and only that.
     await run(prompt, "news");
     await run(prompt, "y");
-    await expect(log).toContainText("What's new is on.");
+    await expect(log).toContainText("What’s new is on.");
     const today = new Date().toISOString().slice(0, 10);
     expect(JSON.parse((await kept())!)).toEqual({ since: today, last: today });
 
@@ -1945,7 +1945,7 @@ test.describe("assistant terminal", () => {
     await expect(updates).toBeVisible();
     expect(JSON.parse((await kept())!)).toEqual({ since: "2026-09-01", last: today });
     await page.keyboard.press("Control+k");
-    await expect(page.getByRole("option", { name: /What's new/ })).toContainText(
+    await expect(page.getByRole("option", { name: /What’s new/ })).toContainText(
       `2 updates since ${since}`,
     );
     await page.keyboard.press("Escape");
@@ -1963,7 +1963,7 @@ test.describe("assistant terminal", () => {
     );
 
     await run(again, "news off");
-    await expect(log).toContainText("What's new is off");
+    await expect(log).toContainText("What’s new is off");
     expect(await kept()).toBeNull();
   });
 
@@ -2199,7 +2199,7 @@ test.describe("assistant terminal", () => {
       const box = log.getByLabel(label);
       await expect(box).toBeFocused();
       await expect(log).toContainText(
-        "Don't paste confidential details: the text goes to the model provider.",
+        "Don’t paste confidential details: the text goes to the model provider.",
       );
       if (i === 0) {
         await settled(page);
@@ -2386,11 +2386,11 @@ test.describe("assistant terminal", () => {
     const prompt = askPanel(page).locator("textarea");
     await expect(prompt).toBeFocused();
     await run(prompt, "A rate limit?");
-    await expect(askPanel(page).locator("[role=log]")).toContainText(/Try again in 4[0-2] s/);
+    await expect(askPanel(page).locator("[role=log]")).toContainText(/Try again in 4[0-2]\ss/);
     await page.keyboard.press("Escape");
     await expect(prompt).toBeHidden();
     await page.getByRole("button", { name: "Check it" }).click();
-    await expect(main).toContainText(/Try again in \d+ s/);
+    await expect(main).toContainText(/Try again in \d+\ss/);
     expect(mock.bodies).toHaveLength(2);
   });
 
@@ -2908,6 +2908,53 @@ for (const colorScheme of ["dark", "light"] as const) {
 
 test.describe("assistant on a phone", () => {
   test.use({ viewport: { width: 390, height: 780 }, hasTouch: true, isMobile: true });
+
+  // The page-level axe runs never open these on a phone (plan 4 U33).
+  for (const colorScheme of ["dark", "light"] as const) {
+    test.describe(`accessibility (${colorScheme})`, () => {
+      test.use({ colorScheme });
+
+      test("the sheet, empty and with an answer", async ({ page }) => {
+        await mockAsk(page, (route) => sse(route, answer({ text: "From the sheet." })));
+        await page.goto("/en/work/project-one");
+        await interactive(page);
+        await page.getByRole("button", { name: "Ask about my work" }).tap();
+        const sheet = page.getByRole("dialog", { name: "Ask about my work" });
+        await expect(sheet).toBeFocused();
+        expect(await axeViolations(page)).toEqual([]);
+        await run(sheet.locator("textarea"), "Hello");
+        await expect(sheet).toContainText("From the sheet.");
+        expect(await axeViolations(page)).toEqual([]);
+      });
+
+      test("the palette", async ({ page, browserName }) => {
+        test.skip(
+          browserName === "firefox",
+          "Firefox has no mobile emulation, so no coarse pointer",
+        );
+        await page.goto("/en/writing");
+        await interactive(page);
+        await page.getByRole("button", { name: "Toggle navigation" }).tap();
+        await page.getByRole("button", { name: "Ask or search" }).tap();
+        await expect(page.getByRole("button", { name: "Close", exact: true })).toBeFocused();
+        expect(await axeViolations(page)).toEqual([]);
+      });
+
+      test("the match report as cards", async ({ page }) => {
+        await mockAsk(
+          page,
+          (route) => sse(route, matchChunks("m_e2epagecard", "role", "Role: x.")),
+          { match: true },
+        );
+        await page.goto("/en/match");
+        await interactive(page);
+        await page.getByLabel("Paste the role").fill("Senior AI engineer.");
+        await page.getByRole("button", { name: "Check it" }).tap();
+        await expect(page.getByRole("table")).toBeVisible();
+        expect(await axeViolations(page)).toEqual([]);
+      });
+    });
+  }
 
   test("the match report is cards on a phone, with no sideways scroll (plan 4 U30)", async ({
     page,

@@ -659,6 +659,19 @@ interface Footnote {
     .word.on {
       color: var(--accent-orange);
     }
+    /* Forced colours drop fills: the trace and the writing dot keep a system colour. */
+    @media (forced-colors: active) {
+      .trace li::before,
+      .trace li::after,
+      .writing {
+        forced-color-adjust: none;
+        background: CanvasText;
+      }
+      .word.on {
+        forced-color-adjust: none;
+        color: Highlight;
+      }
+    }
     .trace .word {
       margin-left: -0.375rem;
       color: var(--accent-orange);

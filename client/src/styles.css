@@ -97,6 +97,16 @@ a {
     /* A tap answers in the signal, not the browser's grey; `.card-link` keeps its own (motion.css). */
     -webkit-tap-highlight-color: color-mix(in srgb, var(--signal) 24%, transparent);
   }
+  /* Said, not shown: a link that opens a new tab. Out of flow, so a flex row's gap ignores it. */
+  @media screen {
+    app-public-shell a[target="_blank"]::after {
+      position: absolute;
+      content: "" / "(opens in a new tab)";
+    }
+    app-public-shell:lang(de) a[target="_blank"]::after {
+      content: "" / "(öffnet in einem neuen Tab)";
+    }
+  }
   /* Controls only: a double-tap on text still zooms. */
   app-public-shell :is(a, button, summary, label, input, textarea, [role="option"]) {
     touch-action: manipulation;
@@ -292,6 +302,26 @@ a {
   }
 }
 
+/* Forced colours drop fills, so what only a fill showed takes a system colour; borders and rings stay on their own. */
+/* eslint-disable css/use-baseline -- progressive enhancement: without forced colours none of this applies. */
+@media (forced-colors: active) {
+  .status-dot,
+  .bg-signal,
+  .nav-link::after,
+  .field-line::after,
+  .reading-progress {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+
+  .control:is([aria-pressed="true"], [aria-current="true"]) {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+/* eslint-enable css/use-baseline */
+
 /* The public page uses smooth anchor scrolling; inside the admin it makes
    jumping between long forms feel sluggish and fights focus management.
    It has to be set on <html>: the document scrolls there, not in the admin's
@@ -306,6 +336,21 @@ html:not(:has(app-admin-layout)) {
   scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom));
   /* eslint-disable-next-line css/use-baseline -- a detail: without it the browser draws its own. */
   scrollbar-color: var(--border-strong) transparent;
+}
+
+/* 400% zoom is a screen 200px tall: a pinned header would take a third of it. */
+@media (height < 20rem) {
+  .site-header {
+    position: absolute;
+  }
+
+  .reading-progress {
+    top: 0;
+  }
+
+  html:not(:has(app-admin-layout)) {
+    scroll-padding-top: 0;
+  }
 }
 
 /*

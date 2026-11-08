@@ -109,6 +109,15 @@ const NONE_TAGGED = {
         scroll-snap-align: start;
       }
     }
+    /* Forced colours drop the fill, and with it which one this is. */
+    @media (forced-colors: active) {
+      .tag[aria-current="page"] {
+        forced-color-adjust: none;
+        border-color: Highlight;
+        background: Highlight;
+        color: HighlightText;
+      }
+    }
     @media (hover: hover) {
       .tag:not([aria-current]):hover {
         border-color: var(--border-strong);

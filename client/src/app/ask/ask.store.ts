@@ -1057,7 +1057,7 @@ export const AskStore = signalStore(
           summary:
             l === "de"
               ? "Hallo Alireza, ich würde gern über eine Zusammenarbeit sprechen."
-              : "Hi Alireza, I'd like to talk to you about working together.",
+              : "Hi Alireza, I’d like to talk to you about working together.",
           messageId: "",
         },
       });
