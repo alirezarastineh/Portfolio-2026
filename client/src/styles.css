@@ -105,7 +105,7 @@ a {
     hyphens: auto;
     overflow-wrap: anywhere;
   }
-  app-public-shell p {
+  app-public-shell :is(p, .prose-body li) {
     text-wrap: pretty;
   }
   /* eslint-enable css/use-baseline */
@@ -349,8 +349,6 @@ html:not(:has(app-admin-layout)) {
   }
 
   :root[data-theme] .code-block {
-    --code-bg: #fff;
-    --code-fg: #000;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }

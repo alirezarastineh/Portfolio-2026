@@ -12,6 +12,7 @@
   max-width: 68ch;
   color: var(--color-muted-foreground);
   line-height: 1.75;
+  overflow-wrap: break-word;
   /* `font-synthesis: none` on the body would leave `em` upright: no italic file ships. */
   font-synthesis-style: auto;
 }
@@ -26,17 +27,16 @@
   margin-top: 1rem;
 }
 
-/* Headings in the display face, like the rest of the site; mono is for
-   labels and code. */
 .prose-body h2 {
   margin-top: 3rem;
 }
 
 .prose-body h3 {
   margin-top: 2rem;
-  font-size: 1.15rem;
-  font-weight: 600;
-  line-height: 1.35;
+  font-size: var(--text-subtitle);
+  font-weight: var(--text-subtitle--font-weight);
+  line-height: var(--text-subtitle--line-height);
+  letter-spacing: var(--text-subtitle--letter-spacing);
   color: var(--color-foreground);
 }
 
@@ -60,32 +60,42 @@
   color: var(--color-foreground);
   text-decoration: underline;
   text-decoration-color: var(--border-strong);
-  text-underline-offset: 3px;
+  text-underline-offset: 4px;
 }
 
 .prose-body ul,
 .prose-body ol {
-  padding-left: 1.25rem;
+  padding-left: 1.5rem;
 }
 
+/* A short rule, as `.list-trace`. A string, not `none`: Safari drops a list's meaning with that. */
 .prose-body ul {
-  list-style: disc;
+  list-style-type: "–  ";
 }
 
 .prose-body ol {
   list-style: decimal;
 }
 
-.prose-body li + li {
-  margin-top: 0.35rem;
+/* eslint-disable css/use-baseline -- a detail: a marker otherwise takes its text's colour. */
+.prose-compact ul > li::marker,
+.prose-body ul > li::marker {
+  color: var(--color-accent-orange);
 }
 
-/* A callout: set apart on a card, not in italics. */
+.prose-body ol > li::marker {
+  color: var(--faint-foreground);
+}
+/* eslint-enable css/use-baseline */
+
+.prose-body li + li {
+  margin-top: 0.5rem;
+}
+
+/* A callout hangs from the line, not in italics. */
 .prose-body blockquote {
-  border-left: 2px solid var(--signal);
-  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
-  background: var(--color-card);
-  padding: 1rem 1.25rem;
+  border-left: 1px solid var(--signal);
+  padding-left: 1.5rem;
   color: var(--color-foreground);
 }
 
@@ -104,7 +114,7 @@
 .prose-body img {
   max-width: 100%;
   height: auto;
-  border-radius: 0.75rem;
+  border-radius: var(--radius);
   border: 1px solid var(--color-border);
 }
 
@@ -121,12 +131,12 @@
 .prose-body pre.code-block {
   overflow-x: auto;
   border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
-  background: var(--code-bg);
-  color: var(--code-fg);
-  padding: 2.5rem 1.25rem 1rem;
+  border-radius: var(--radius);
+  background: var(--color-card);
+  color: var(--color-foreground);
+  padding: 3rem 1rem 1rem;
   font-family: var(--font-mono);
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   line-height: 1.6;
 }
 
@@ -136,53 +146,23 @@
 
 .code-tools {
   position: absolute;
-  inset: 0.5rem 0.75rem auto;
+  inset: 0.5rem 0.5rem auto 1rem;
   display: flex;
   align-items: center;
-  font: 500 var(--text-label) / 1 var(--font-mono);
-  color: var(--color-muted-foreground);
+  font: 400 0.8125rem / 1 var(--font-data);
+  color: var(--faint-foreground);
 }
 
+/* The reader's small buttons, which the browser adds: 44px where the pointer is coarse. */
 .code-copy,
-.code-explain {
-  margin-left: auto;
-  min-height: 1.5rem;
-  padding-inline: 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition:
-    color var(--dur-2),
-    border-color var(--dur-2);
-}
-
-.code-copy:hover,
-.code-explain:hover {
-  color: var(--color-foreground);
-  border-color: var(--color-border-strong);
-}
-
-/* "Explain" (visitor plan V9, ask/reader-ask.ts) takes the free space; "Copy" follows it. */
-.code-explain + .code-copy {
-  margin-left: 0.375rem;
-}
-
-/*
- * Asking about a section (visitor plan V9, ask/reader-ask.ts): added in the
- * browser, inside the heading but placed above its right end, in the space
- * before it, so nothing moves. Shown on hover and on focus, and always where
- * nothing hovers.
- */
-.reader-asks {
-  position: relative;
-}
-
+.code-explain,
 .reader-ask,
-.reader-ask-selection {
+.reader-ask-selection,
+.read-next-ask {
   display: inline-flex;
   align-items: center;
   min-height: 1.75rem;
-  padding-inline: 0.625rem;
+  padding-inline: 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-background);
@@ -195,6 +175,51 @@
     opacity var(--dur-2),
     color var(--dur-2),
     border-color var(--dur-2);
+}
+
+@media (hover: hover) {
+  .code-copy:hover,
+  .code-explain:hover,
+  .reader-ask:hover,
+  .reader-ask-selection:hover,
+  .read-next-ask:hover {
+    color: var(--color-foreground);
+    border-color: var(--color-border-strong);
+  }
+}
+
+@media (pointer: coarse) {
+  .code-copy,
+  .code-explain,
+  .reader-ask,
+  .reader-ask-selection,
+  .read-next-ask {
+    min-height: 2.75rem;
+  }
+
+  .prose-body pre.code-block {
+    padding-top: 4rem;
+  }
+}
+
+.code-copy,
+.code-explain {
+  margin-left: auto;
+}
+
+/* "Explain" (visitor plan V9, ask/reader-ask.ts) takes the free space; "Copy" follows it. */
+.code-explain + .code-copy {
+  margin-left: 0.5rem;
+}
+
+/*
+ * Asking about a section (visitor plan V9, ask/reader-ask.ts): added in the
+ * browser, inside the heading but placed above its right end, in the space
+ * before it, so nothing moves. Shown on hover and on focus, and always where
+ * nothing hovers.
+ */
+.reader-asks {
+  position: relative;
 }
 
 .reader-ask {
@@ -214,22 +239,9 @@
   opacity: 1;
 }
 
-.reader-ask:hover,
-.reader-ask-selection:hover {
-  color: var(--color-foreground);
-  border-color: var(--color-border-strong);
-}
-
 @media (hover: none) {
   .reader-ask {
     opacity: 1;
-  }
-}
-
-@media (pointer: coarse) {
-  .reader-ask,
-  .reader-ask-selection {
-    min-height: 2.75rem;
   }
 }
 
@@ -253,7 +265,7 @@
   flex-direction: column;
   gap: 1.5rem;
   border-top: 1px solid var(--color-border);
-  padding-top: 2.5rem;
+  padding-top: 3rem;
 }
 
 .read-next-title {
@@ -312,38 +324,10 @@
   text-underline-offset: 4px;
 }
 
-.read-next-ask {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2rem;
-  padding-inline: 0.625rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: transparent;
-  font: 500 0.8125rem / 1 var(--font-sans);
-  color: var(--color-muted-foreground);
-  touch-action: manipulation;
-  cursor: pointer;
-  transition:
-    color var(--dur-2),
-    border-color var(--dur-2);
-}
-
 @media (hover: hover) {
   .read-next-link:hover .read-next-name {
     text-decoration-color: var(--color-accent-orange);
     text-decoration-thickness: 2px;
-  }
-
-  .read-next-ask:hover {
-    color: var(--color-foreground);
-    border-color: var(--color-border-strong);
-  }
-}
-
-@media (pointer: coarse) {
-  .read-next-ask {
-    min-height: 2.75rem;
   }
 }
 
@@ -431,11 +415,6 @@
   color: var(--color-foreground);
 }
 
-.prose-body pre.code-block .line {
-  display: block;
-  min-height: 1lh;
-}
-
 .prose-compact p {
   margin: 0 0 0.5rem;
 }
@@ -447,11 +426,11 @@
 .prose-compact ul,
 .prose-compact ol {
   margin: 0 0 0.5rem;
-  padding-left: 1.15rem;
+  padding-left: 1rem;
 }
 
 .prose-compact ul {
-  list-style: disc;
+  list-style-type: "–  ";
 }
 
 .prose-compact ol {
@@ -459,7 +438,7 @@
 }
 
 .prose-compact li {
-  margin-bottom: 0.15rem;
+  margin-bottom: 0.25rem;
 }
 
 .prose-compact strong {
@@ -469,14 +448,14 @@
 
 .prose-compact code {
   font-family: var(--font-mono);
-  font-size: 0.92em;
+  font-size: 0.9em;
 }
 
 .prose-compact a {
   color: var(--color-foreground);
   text-decoration: underline;
   text-decoration-color: var(--border-strong);
-  text-underline-offset: 2px;
+  text-underline-offset: 4px;
 }
 
 /* As `link-underline` (primitives.css): thicker and orange on hover. */

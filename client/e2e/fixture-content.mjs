@@ -32,7 +32,8 @@ const CODE =
   '<span class="shd-ff7b72 shl-cf222e">const</span><span class="shd-e6edf3 shl-1f2328"> answer = </span>' +
   '<span class="shd-ff7b72 shl-cf222e">await</span><span class="shd-e6edf3 shl-1f2328"> </span>' +
   '<span class="shd-d2a8ff shl-8250df">retrieve</span><span class="shd-e6edf3 shl-1f2328">(</span>' +
-  '<span class="shd-a5d6ff shl-0a3069">"query"</span><span class="shd-e6edf3 shl-1f2328">);</span></span></code></pre>';
+  '<span class="shd-a5d6ff shl-0a3069">"query"</span><span class="shd-e6edf3 shl-1f2328">);</span></span>\n' +
+  '<span class="line"><span class="shd-ff7b72 shl-cf222e">return</span><span class="shd-e6edf3 shl-1f2328"> answer.text;</span></span></code></pre>';
 
 const COPY = {
   en: {

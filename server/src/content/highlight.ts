@@ -6,12 +6,35 @@ import { escapeHtml } from "./sanitize.js";
  * Syntax highlighting at publish time, so visitors download no highlighter.
  *
  * Tokens become classes (`shd-ff7b72 shl-cf222e`), not inline styles: Angular's
- * sanitizer strips `style` from `[innerHTML]`, and a stylesheet generated from
- * the two themes (`pnpm content:code-css`) maps every class to its colour —
- * the dark palette now, the light one ready for the light theme.
+ * sanitizer strips `style` from `[innerHTML]`. The class names stay in published
+ * content; a generated stylesheet (`pnpm content:code-css`) gives each the site's
+ * colour for what it marks, so code follows the page's theme.
  */
 
 export const CODE_THEMES = { dark: "github-dark-default", light: "github-light-default" } as const;
+
+/** The site's colour for what each theme colour marks. The two themes mark the same things. */
+const CODE_ROLES: Record<string, readonly string[]> = {
+  // Keywords; invalid and deleted text.
+  "--accent-orange": ["shd-ff7b72", "shd-ffa198", "shl-cf222e", "shl-82071e"],
+  // Strings and constants.
+  "--data-2": ["shd-a5d6ff", "shd-79c0ff", "shl-0a3069", "shl-0550ae"],
+  // Comments, brackets, ignored lines.
+  "--faint-foreground": ["shd-8b949e", "shd-161b22", "shl-6e7781", "shl-57606a", "shl-eaeef2"],
+  // Functions, variables, tags and plain text.
+  "--foreground": [
+    "shd-7ee787",
+    "shd-d2a8ff",
+    "shd-e6edf3",
+    "shd-f0f6fc",
+    "shd-ffa657",
+    "shl-116329",
+    "shl-1f2328",
+    "shl-8250df",
+    "shl-953800",
+    "shl-f6f8fa",
+  ],
+};
 
 /** What a code block may name; anything else is shown as plain, escaped text. */
 const LANGUAGES = [
@@ -113,30 +136,24 @@ function themeColors(theme: ReturnType<HighlighterCore["getTheme"]>): string[] {
   return [...colors].sort((a, b) => a.localeCompare(b));
 }
 
-function themeRules(mode: "dark" | "light", name: string, hl: HighlighterCore): string[] {
-  const theme = hl.getTheme(name);
-  const prefix = mode === "dark" ? "shd" : "shl";
-  const scope = mode === "dark" ? ".code-block" : ':root[data-theme="light"] .code-block';
-  const rules = [`${scope} {\n  --code-fg: ${theme.fg};\n  --code-bg: ${theme.bg};\n}`];
-
-  for (const color of themeColors(theme)) {
-    const cls = colorClass(prefix, color);
-    if (cls) rules.push(`${scope} .${cls} {\n  color: ${color};\n}`);
-  }
-  return rules;
-}
-
 /**
- * The stylesheet for the classes above: each theme's foreground colours, plus
- * the block's own colours as custom properties.
+ * The stylesheet for the classes above: each role's classes in the site's colour, and the
+ * three styles a theme can add. A theme colour with no role stops it, so nothing ships uncoloured.
  */
 export async function codeStylesheet(): Promise<string> {
   const hl = await getHighlighter();
-  const rules: string[] = [];
-
+  const mapped = new Set(Object.values(CODE_ROLES).flat());
   for (const [mode, name] of Object.entries(CODE_THEMES) as ["dark" | "light", string][]) {
-    rules.push(...themeRules(mode, name, hl));
+    for (const color of themeColors(hl.getTheme(name))) {
+      const cls = colorClass(mode === "dark" ? "shd" : "shl", color);
+      if (cls && !mapped.has(cls)) throw new Error(`[code-css] no role for ${cls} (${name})`);
+    }
   }
+
+  const rules = Object.entries(CODE_ROLES).map(
+    ([token, classes]) =>
+      `${classes.map((cls) => `.code-block .${cls}`).join(",\n")} {\n  color: var(${token});\n}`,
+  );
   rules.push(
     ".code-block .sh-i {\n  font-style: italic;\n}",
     ".code-block .sh-b {\n  font-weight: 600;\n}",

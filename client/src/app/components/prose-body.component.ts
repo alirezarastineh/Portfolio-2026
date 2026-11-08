@@ -10,6 +10,7 @@ import {
   inject,
   input,
   PLATFORM_ID,
+  signal,
   viewChild,
 } from "@angular/core";
 
@@ -69,6 +70,7 @@ export function frameCodeBlocks(root: Element, copyLabel: string): void {
     if (lang) {
       const label = doc.createElement("span");
       label.textContent = lang;
+      label.setAttribute("translate", "no");
       tools.append(label);
     }
     const button = doc.createElement("button");
@@ -93,13 +95,16 @@ export function frameCodeBlocks(root: Element, copyLabel: string): void {
   selector: "app-prose-body",
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: "block" },
-  template: `<div #body class="prose-body" [innerHTML]="sanitizable()"></div>`,
+  template: `<div #body class="prose-body" [innerHTML]="sanitizable()"></div>
+    <span class="sr-only" aria-live="polite">{{ copyResult() }}</span>`,
 })
 export class ProseBodyComponent implements AfterViewChecked {
   readonly html = input.required<string>();
   readonly toc = input<readonly TocEntry[]>([]);
 
   protected readonly sanitizable = computed(() => withoutHeadingIds(this.html()));
+  /** What the last Copy did, for screen readers: the button's new word is not announced. */
+  protected readonly copyResult = signal("");
 
   private readonly body = viewChild.required<ElementRef<HTMLElement>>("body");
   private readonly lang = inject(LanguageService);
@@ -113,10 +118,13 @@ export class ProseBodyComponent implements AfterViewChecked {
       const code = button?.closest(".code-frame")?.querySelector("code");
       if (!button || !code) return;
       const labels = CHROME[this.lang.lang()].code;
-      button.textContent = labels[await copyText(code.textContent ?? "")];
+      const result = labels[await copyText(code.textContent ?? "")];
+      button.textContent = result;
+      this.copyResult.set(result);
       const timer = setTimeout(() => {
         timers.delete(timer);
         button.textContent = labels.copy;
+        this.copyResult.set("");
       }, COPIED_MS);
       timers.add(timer);
     };

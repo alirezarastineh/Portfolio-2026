@@ -667,7 +667,13 @@ test.describe("contact form", () => {
     await expect(sent).toHaveText("Message sent.");
     await expect(sent.locator("[aria-hidden=true]")).toHaveCSS("color", "rgb(255, 79, 0)");
     await expect(page.locator(".page-line-run")).toHaveCount(0);
-    near((await box(".page-line")).bottom, middle(await box("#contact .page-line-end")));
+    // In one read: the page is still scrolling to the message, which moves both boxes.
+    const offset = await page.evaluate(() => {
+      const end = document.querySelector("#contact .page-line-end")!.getBoundingClientRect();
+      const line = document.querySelector(".page-line")!.getBoundingClientRect();
+      return line.bottom - (end.top + end.height / 2);
+    });
+    near(offset, 0);
   });
 
   test("an unsent message asks before a link leaves home; its sections and the other language do not", async ({

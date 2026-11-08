@@ -125,11 +125,17 @@ describe("ProseBodyComponent", () => {
       "button.code-copy",
     );
     expect(button?.textContent).toBe("Copy");
+    const live = (fixture.nativeElement as HTMLElement).querySelector("[aria-live=polite]");
+    expect(live?.textContent).toBe("");
     vi.useFakeTimers();
     button?.click();
     await vi.waitFor(() => expect(button?.textContent).toBe("Copied"));
     expect(writeText).toHaveBeenCalledWith("const a = 1;\na;");
+    fixture.detectChanges();
+    expect(live?.textContent).toBe("Copied");
     vi.advanceTimersByTime(1600);
     expect(button?.textContent).toBe("Copy");
+    fixture.detectChanges();
+    expect(live?.textContent).toBe("");
   });
 });

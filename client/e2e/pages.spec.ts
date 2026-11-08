@@ -163,8 +163,50 @@ test.describe("case study", () => {
     await frame.getByRole("button", { name: "Copy" }).click();
     await expect(frame.getByRole("button", { name: "Copied" })).toBeVisible();
     if (readable) {
-      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-        'const answer = await retrieve("query");',
+      // Windows' clipboard reads back \r\n.
+      const copied = await page.evaluate(() => navigator.clipboard.readText());
+      expect(copied.replaceAll("\r\n", "\n")).toBe(
+        'const answer = await retrieve("query");\nreturn answer.text;',
+      );
+    }
+
+    // Two lines take two lines: the published newline is the only break.
+    const lines = await frame.locator("pre").evaluate((pre) => {
+      const style = getComputedStyle(pre);
+      const inner =
+        pre.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+      return inner / parseFloat(style.lineHeight);
+    });
+    expect(lines).toBeCloseTo(2, 1);
+  });
+
+  test("code takes the page's colours, in both themes", async ({ page }) => {
+    const colour = (selector: string) =>
+      page
+        .locator(`main .code-block ${selector}`)
+        .first()
+        .evaluate((el) => getComputedStyle(el).color);
+    const token = (name: string) =>
+      page.evaluate((name) => {
+        const probe = document.createElement("i");
+        probe.style.color = `var(${name})`;
+        document.body.append(probe);
+        const value = getComputedStyle(probe).color;
+        probe.remove();
+        return value;
+      }, name);
+
+    for (const theme of ["dark", "light"] as const) {
+      await page.emulateMedia({ colorScheme: theme });
+      await page.goto("/en/work/project-one");
+      await interactive(page);
+      expect(await colour(".shd-ff7b72")).toBe(await token("--accent-orange"));
+      expect(await colour(".shd-a5d6ff")).toBe(await token("--data-2"));
+      // The themes' purple is gone.
+      expect(await colour(".shd-d2a8ff")).toBe(await token("--foreground"));
+      await expect(page.locator("main .code-block").first()).toHaveCSS(
+        "background-color",
+        await token("--card"),
       );
     }
   });
@@ -193,7 +235,9 @@ test.describe("case study", () => {
     const dialog = page.getByRole("dialog", { name: "Gallery" });
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText("1 / 2");
-    await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
+    const close = dialog.getByRole("button", { name: "Close" });
+    await expect(close).toBeFocused();
+    expect((await close.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
     await page.keyboard.press("ArrowRight");
     await expect(dialog).toContainText("2 / 2");
@@ -381,6 +425,41 @@ test.describe("case study on a phone", () => {
     const ask = page.getByRole("button", { name: "Ask about this section: Problem" });
     await expect(ask).toHaveCSS("opacity", "1");
     expect((await ask.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  });
+
+  test("code's Copy and Explain show, 44px tall, in the band kept for them", async ({ page }) => {
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    const frame = page.locator("main .code-frame");
+    for (const name of ["Copy", "Explain code block 1"]) {
+      const button = frame.getByRole("button", { name });
+      await expect(button).toBeVisible();
+      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    const tools = (await frame.locator(".code-tools").boundingBox())!;
+    expect(tools.y + tools.height).toBeLessThanOrEqual(
+      (await frame.locator("code").boundingBox())!.y,
+    );
+  });
+
+  test("the gallery is a row running to the screen's edge, the next image cut by it", async ({
+    page,
+  }) => {
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    const row = page.locator("app-gallery ul");
+    await row.scrollIntoViewIfNeeded();
+    const box = (await row.boundingBox())!;
+    expect(box.x + box.width).toBe(390);
+    const images = await row
+      .locator("li")
+      .evaluateAll((items) =>
+        items.map((item) => item.getBoundingClientRect().toJSON() as DOMRect),
+      );
+    expect(images[1]!.top).toBe(images[0]!.top);
+    expect(images[1]!.left).toBeLessThan(390);
+    expect(images[1]!.right).toBeGreaterThan(390);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   });
 });
 
