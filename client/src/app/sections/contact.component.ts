@@ -51,7 +51,7 @@ const FIELDS: readonly Field[] = ["name", "email", "message"];
  */
 const MATCH_LINE: Record<Locale, { lead: string; link: string }> = {
   en: { lead: "Hiring, or have a project?", link: "Check the fit first" },
-  de: { lead: "Du stellst ein oder hast ein Projekt?", link: "Prüf zuerst, ob es passt" },
+  de: { lead: "Sie stellen ein oder haben ein Projekt?", link: "Prüfen Sie zuerst, ob es passt" },
 };
 
 /**
@@ -102,7 +102,9 @@ const errorClass = "m-0 flex items-start gap-1.5 text-small text-destructive";
               <!-- The button under the address: "Copied ✓" is wider than "Copy", and beside it
                    would jump a line. The address breaks after its @, never inside a word. -->
               <div class="flex flex-col items-start gap-2">
-                <a class="link-underline text-subtitle" [href]="'mailto:' + contactEmail()"
+                <a
+                  class="link-underline text-subtitle pointer-coarse:py-2.5"
+                  [href]="'mailto:' + contactEmail()"
                   >{{ email().local }}<wbr />{{ email().domain }}</a
                 >
                 <!-- Its name starts with the visible word. -->
@@ -218,9 +220,12 @@ const errorClass = "m-0 flex items-start gap-1.5 text-small text-destructive";
                   </div>
                   @if (showError("name")) {
                     <p id="contact-name-error" [class]="errorClass">
-                      <ng-icon class="mt-0.75 shrink-0" name="lucideCircleAlert" size="16" />{{
-                        fieldError("name")
-                      }}
+                      <ng-icon
+                        class="mt-0.75 shrink-0"
+                        name="lucideCircleAlert"
+                        size="16"
+                        aria-hidden="true"
+                      />{{ fieldError("name") }}
                     </p>
                   }
                 </div>
@@ -249,9 +254,12 @@ const errorClass = "m-0 flex items-start gap-1.5 text-small text-destructive";
                   </div>
                   @if (showError("email")) {
                     <p id="contact-email-error" [class]="errorClass">
-                      <ng-icon class="mt-0.75 shrink-0" name="lucideCircleAlert" size="16" />{{
-                        fieldError("email")
-                      }}
+                      <ng-icon
+                        class="mt-0.75 shrink-0"
+                        name="lucideCircleAlert"
+                        size="16"
+                        aria-hidden="true"
+                      />{{ fieldError("email") }}
                     </p>
                   }
                 </div>
@@ -265,6 +273,7 @@ const errorClass = "m-0 flex items-start gap-1.5 text-small text-destructive";
                       #field
                       id="contact-message"
                       rows="5"
+                      autocomplete="off"
                       required
                       maxlength="4000"
                       formControlName="message"
@@ -279,9 +288,12 @@ const errorClass = "m-0 flex items-start gap-1.5 text-small text-destructive";
                   </div>
                   @if (showError("message")) {
                     <p id="contact-message-error" [class]="errorClass">
-                      <ng-icon class="mt-0.75 shrink-0" name="lucideCircleAlert" size="16" />{{
-                        fieldError("message")
-                      }}
+                      <ng-icon
+                        class="mt-0.75 shrink-0"
+                        name="lucideCircleAlert"
+                        size="16"
+                        aria-hidden="true"
+                      />{{ fieldError("message") }}
                     </p>
                   }
                 </div>
@@ -292,13 +304,17 @@ const errorClass = "m-0 flex items-start gap-1.5 text-small text-destructive";
                     <input
                       id="contact-attach"
                       type="checkbox"
-                      class="mt-1 size-4 accent-current"
+                      class="mt-1 size-4 accent-current pointer-coarse:mt-3.5"
                       [checked]="attach()"
                       (change)="attach.set($any($event.target).checked)"
                       aria-describedby="contact-attach-hint"
                     />
                     <div class="flex flex-col gap-0.5">
-                      <label for="contact-attach">{{ chrome().attach }}</label>
+                      <label
+                        for="contact-attach"
+                        class="pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
+                        >{{ chrome().attach }}</label
+                      >
                       <p id="contact-attach-hint" class="m-0 text-muted-foreground">
                         {{ chrome().attachHint }}
                       </p>
@@ -323,9 +339,12 @@ const errorClass = "m-0 flex items-start gap-1.5 text-small text-destructive";
 
                 @if (state() === "error" && errorMsg()) {
                   <p [class]="errorClass">
-                    <ng-icon class="mt-0.75 shrink-0" name="lucideCircleAlert" size="16" />{{
-                      errorMsg()
-                    }}
+                    <ng-icon
+                      class="mt-0.75 shrink-0"
+                      name="lucideCircleAlert"
+                      size="16"
+                      aria-hidden="true"
+                    />{{ errorMsg() }}
                   </p>
                 }
               </div>

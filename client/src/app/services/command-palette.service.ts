@@ -12,7 +12,11 @@ export class CommandPaletteService {
   readonly requested = this._requested.asReadonly();
   readonly open = this._open.asReadonly();
 
-  show(): void {
+  /** Opened from the keyboard: then a field may take the focus on touch too, a keyboard is there already. */
+  byKey = false;
+
+  show(byKey = false): void {
+    this.byKey = byKey;
     this._requested.set(true);
     this._open.set(true);
   }
@@ -23,6 +27,6 @@ export class CommandPaletteService {
 
   toggle(): void {
     if (this._open()) this.hide();
-    else this.show();
+    else this.show(true);
   }
 }

@@ -88,13 +88,14 @@ const SHEET_ENTRY = "askSheet";
           </button>
           <!-- What help lists, without typing: the browser closes it on Escape or a click outside. -->
           <div #more id="ask-menu" class="menu" popover>
-            <button type="button" (click)="run('clear')">{{ menu().clear }}</button>
-            <button type="button" (click)="run('forget')">{{ menu().forget }}</button>
+            <button type="button" class="press" (click)="run('clear')">{{ menu().clear }}</button>
+            <button type="button" class="press" (click)="run('forget')">{{ menu().forget }}</button>
             <div class="levels" role="group" [attr.aria-label]="menu().level">
               <span aria-hidden="true">{{ menu().level }}</span>
               @for (level of levels; track level) {
                 <button
                   type="button"
+                  class="press"
                   [attr.aria-pressed]="store.level() === level"
                   (click)="run('level ' + level)"
                 >
@@ -102,8 +103,8 @@ const SHEET_ENTRY = "askSheet";
                 </button>
               }
             </div>
-            <button type="button" (click)="run('news')">{{ menu().news }}</button>
-            <button type="button" (click)="run('tour')">{{ menu().tour }}</button>
+            <button type="button" class="press" (click)="run('news')">{{ menu().news }}</button>
+            <button type="button" class="press" (click)="run('tour')">{{ menu().tour }}</button>
           </div>
           <button
             type="button"
@@ -207,8 +208,10 @@ const SHEET_ENTRY = "askSheet";
       color: var(--muted-foreground);
       cursor: pointer;
     }
-    .tool:hover {
-      color: var(--foreground);
+    @media (hover: hover) {
+      .tool:hover {
+        color: var(--foreground);
+      }
     }
 
     /* In the top layer, under the header's ⋯: the panel's place is fixed, so no anchor is needed. */
@@ -236,8 +239,10 @@ const SHEET_ENTRY = "askSheet";
       text-align: left;
       cursor: pointer;
     }
-    .menu button:hover {
-      background: var(--muted);
+    @media (hover: hover) {
+      .menu button:hover {
+        background: var(--muted);
+      }
     }
     .levels {
       display: flex;

@@ -1019,7 +1019,9 @@ test.describe("assistant terminal", () => {
     await expect(log).toContainText(/Try again in 4[0-2] s/);
     // Heard once, from the terminal's live region; the countdown is for the eye
     // (a live region would read it again every second).
-    await expect(askPanel(page).locator('[aria-live="polite"]')).toContainText(/Try again in 42 s/);
+    await expect(askPanel(page).locator('[aria-live="polite"]')).toContainText(
+      /Try again in 42 s/,
+    );
     await expect(log.getByRole("status")).toHaveCount(0);
     // It waits: send is off, a question stays in the prompt, and a person is a click away.
     await expect(askPanel(page).getByRole("button", { name: "Ask", exact: true })).toBeDisabled();
@@ -1401,6 +1403,10 @@ test.describe("assistant terminal", () => {
       await expect(page.locator("#contact-message")).toHaveValue(summary);
       await expect(page.locator("#contact-name")).toBeFocused();
       await (phone ? expect(panel).toBeHidden() : expect(panel).toBeVisible());
+      if (phone) {
+        const attach = await page.locator('label[for="contact-attach"]').boundingBox();
+        expect(attach!.height).toBeGreaterThanOrEqual(44);
+      }
     },
   );
 
@@ -2972,6 +2978,7 @@ test.describe("assistant on a phone", () => {
       await expect(prompt).toHaveAttribute("autocapitalize", "sentences");
       await expect(prompt).toHaveAttribute("spellcheck", "true");
       await expect(prompt).toHaveAttribute("enterkeyhint", "send");
+      expect((await prompt.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
       const close = sheet.getByRole("button", { name: "Close the assistant", exact: true });
       const target = await close.boundingBox();

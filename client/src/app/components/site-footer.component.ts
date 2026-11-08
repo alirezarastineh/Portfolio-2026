@@ -45,7 +45,7 @@ const linkClass =
   },
   template: `
     <footer class="mt-24 border-t border-border">
-      <p class="container-site m-0 pb-14 pt-16 text-display" translate="no">
+      <p class="container-site m-0 pb-14 pt-16 text-display wrap-anywhere" translate="no">
         {{ name() }}<span class="text-signal" aria-hidden="true">.</span>
       </p>
       <div
@@ -81,7 +81,7 @@ const linkClass =
       </div>
       <!-- Clear of the ask button, fixed at the bottom right. -->
       <div
-        class="container-site flex flex-wrap justify-between gap-x-6 gap-y-2 pb-20 text-meta text-muted-foreground"
+        class="container-site flex flex-wrap justify-between gap-x-6 gap-y-2 pb-[calc(5rem+env(safe-area-inset-bottom))] text-meta text-muted-foreground"
       >
         <p class="m-0">
           © {{ year() }} <span translate="no">{{ name() }}</span>

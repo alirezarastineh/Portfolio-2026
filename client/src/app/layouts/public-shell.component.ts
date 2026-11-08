@@ -29,7 +29,7 @@ import { LanguageService } from "../services/language.service";
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [AskSheetComponent, CommandPaletteComponent, SiteFooterComponent, SiteHeaderComponent],
   host: {
-    class: "block min-h-screen",
+    class: "block min-h-screen pt-[env(safe-area-inset-top)]",
     "(document:keydown)": "onKeydown($event)",
   },
   template: `

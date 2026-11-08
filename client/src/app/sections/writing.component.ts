@@ -26,9 +26,11 @@ const LATEST = 3;
       >
         <div class="flex flex-col gap-12">
           <app-section-heading headingId="writing-heading" [heading]="lang.t().writing.heading">
-            <a class="link-underline" [routerLink]="['/', lang.lang(), 'writing']">{{
-              lang.t().writing.allPosts
-            }}</a>
+            <a
+              class="link-underline inline-flex items-center pointer-coarse:min-h-11"
+              [routerLink]="['/', lang.lang(), 'writing']"
+              >{{ lang.t().writing.allPosts }}</a
+            >
           </app-section-heading>
 
           <!-- The writing index's rows (titles h3 here, under the section's h2). -->

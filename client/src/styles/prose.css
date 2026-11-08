@@ -388,9 +388,14 @@
     border-color var(--dur-2);
 }
 
-.toc-link:hover,
 .toc-link[aria-current] {
   color: var(--color-foreground);
+}
+
+@media (hover: hover) {
+  .toc-link:hover {
+    color: var(--color-foreground);
+  }
 }
 
 .toc-link[aria-current] {

@@ -230,6 +230,18 @@ test.describe("site navigation", () => {
     await expect(menu).toBeHidden();
   });
 
+  test("the header's name and controls are 44px tall on touch (plan 4 U32)", async ({
+    page,
+    isMobile,
+  }) => {
+    if (!isMobile) return;
+    await page.goto("/en");
+    await interactive(page);
+    for (const control of await page.locator(".site-header-row :is(a, button):visible").all()) {
+      expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+  });
+
   test("on touch the palette closes from its own control; key hints are for keyboards", async ({
     page,
     isMobile,
@@ -237,11 +249,18 @@ test.describe("site navigation", () => {
     if (!isMobile) return;
     await page.goto("/en/writing");
     await interactive(page);
-    await page.keyboard.press("ControlOrMeta+k");
+    await page.getByRole("button", { name: "Toggle navigation" }).click();
+    await page.getByRole("button", { name: "Ask or search" }).click();
     const palette = page.getByRole("dialog", { name: "Command palette" });
     await expect(palette.locator("kbd")).toBeHidden();
-    await palette.getByRole("button", { name: "Close" }).click();
+    // No keyboard over the list until the field is tapped.
+    const close = palette.getByRole("button", { name: "Close" });
+    await expect(close).toBeFocused();
+    await close.click();
     await expect(palette).toBeHidden();
+    // A keyboard is attached: its shortcut goes straight to the field.
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(palette.getByRole("combobox")).toBeFocused();
   });
 
   test("the ask button steps aside while the menu is open", async ({ page, isMobile }) => {

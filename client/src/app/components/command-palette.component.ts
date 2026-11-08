@@ -114,7 +114,12 @@ interface Group {
           (keydown)="onKey($event)"
         />
         <kbd class="palette-key" aria-hidden="true">esc</kbd>
-        <button type="button" class="control press palette-close" (click)="palette.hide()">
+        <button
+          type="button"
+          class="control press palette-close"
+          [attr.autofocus]="touch ? '' : null"
+          (click)="palette.hide()"
+        >
           {{ labels().close }}
         </button>
       </div>
@@ -191,6 +196,8 @@ interface Group {
       height: 3.25rem;
       background: transparent;
       font-size: 1rem;
+      /* The German hint is wider than the field at 320px. */
+      text-overflow: ellipsis;
     }
     .palette-input::placeholder {
       color: var(--muted-foreground);
@@ -320,6 +327,9 @@ export class CommandPaletteComponent {
   private readonly theme = inject(ThemeService);
   private readonly router = inject(Router);
   private readonly doc = inject(DOCUMENT);
+
+  /** On touch the list shows first: a focused field would raise a keyboard over it (the sheet does the same). */
+  protected readonly touch = this.doc.defaultView?.matchMedia("(pointer: coarse)").matches ?? false;
 
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>("dialog");
   private readonly input = viewChild.required<ElementRef<HTMLInputElement>>("input");
@@ -494,7 +504,7 @@ export class CommandPaletteComponent {
         this.query.set("");
         this.active.set(this.firstMatch());
         dialog.showModal();
-        this.input().nativeElement.focus();
+        if (!this.touch || this.palette.byKey) this.input().nativeElement.focus();
         void this.loadNews();
       } else if (!open && dialog.open) {
         dialog.close();

@@ -190,7 +190,7 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
             </div>
             <!-- What changed since the last visit, once the visitor turned what's new on (V15). -->
             @if (newsLine(); as line) {
-              <button type="button" class="news" (click)="send('news')">{{ line }}</button>
+              <button type="button" class="news press" (click)="send('news')">{{ line }}</button>
             }
           } @else {
             <p class="hint">{{ lang.t().ask.offline }}</p>
@@ -333,8 +333,10 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
       text-align: left;
       cursor: pointer;
     }
-    .suggestion:hover {
-      border-color: var(--accent-orange);
+    @media (hover: hover) {
+      .suggestion:hover {
+        border-color: var(--accent-orange);
+      }
     }
     .news {
       min-height: 1.5rem;
@@ -346,8 +348,10 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
       text-underline-offset: 0.25em;
       cursor: pointer;
     }
-    .news:hover {
-      text-decoration-color: var(--accent-orange);
+    @media (hover: hover) {
+      .news:hover {
+        text-decoration-color: var(--accent-orange);
+      }
     }
 
     /* Near-instant work never flashes it. */
@@ -386,8 +390,10 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
       border-radius: 0.25rem;
       cursor: pointer;
     }
-    .ghost:hover {
-      border-color: var(--accent-orange);
+    @media (hover: hover) {
+      .ghost:hover {
+        border-color: var(--accent-orange);
+      }
     }
     .quiet {
       min-height: 1.5rem;
@@ -396,8 +402,10 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
       font-size: 0.75rem;
       cursor: pointer;
     }
-    .quiet:hover {
-      color: var(--foreground);
+    @media (hover: hover) {
+      .quiet:hover {
+        color: var(--foreground);
+      }
     }
 
     .composer {
@@ -453,8 +461,10 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
       color: var(--muted-foreground);
       cursor: pointer;
     }
-    .send:hover {
-      color: var(--foreground);
+    @media (hover: hover) {
+      .send:hover {
+        color: var(--foreground);
+      }
     }
     .send:disabled {
       opacity: 0.5;
@@ -500,8 +510,10 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
       text-align: left;
       cursor: pointer;
     }
-    .commands button:hover {
-      color: var(--foreground);
+    @media (hover: hover) {
+      .commands button:hover {
+        color: var(--foreground);
+      }
     }
     .ai-note {
       flex: none;
@@ -528,6 +540,9 @@ const TYPING = new Set<AskSource>(["shortcut", "hero", "link"]);
       .send {
         width: 2.75rem;
         height: 2.75rem;
+      }
+      .prompt-input {
+        min-height: 2.75rem;
       }
     }
   `,

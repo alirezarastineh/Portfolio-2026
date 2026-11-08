@@ -212,9 +212,11 @@ interface AskEntryState {
       text-align: left;
       cursor: pointer;
     }
-    .resume:hover .said {
-      text-decoration: underline;
-      text-underline-offset: 0.25em;
+    @media (hover: hover) {
+      .resume:hover .said {
+        text-decoration: underline;
+        text-underline-offset: 0.25em;
+      }
     }
     .said {
       min-width: 0;
@@ -238,8 +240,10 @@ interface AskEntryState {
       text-align: left;
       cursor: pointer;
     }
-    .suggestion:hover {
-      border-color: var(--accent-orange);
+    @media (hover: hover) {
+      .suggestion:hover {
+        border-color: var(--accent-orange);
+      }
     }
     a.suggestion {
       text-decoration: none;
@@ -302,8 +306,10 @@ interface AskEntryState {
       color: var(--muted-foreground);
       cursor: pointer;
     }
-    .send:hover {
-      color: var(--foreground);
+    @media (hover: hover) {
+      .send:hover {
+        color: var(--foreground);
+      }
     }
     .commands {
       display: flex;
@@ -320,8 +326,10 @@ interface AskEntryState {
       text-align: left;
       cursor: pointer;
     }
-    .commands button:hover {
-      color: var(--foreground);
+    @media (hover: hover) {
+      .commands button:hover {
+        color: var(--foreground);
+      }
     }
     .ai-note {
       flex: none;
@@ -356,6 +364,9 @@ interface AskEntryState {
       .send {
         width: 2.75rem;
         height: 2.75rem;
+      }
+      .prompt-input {
+        min-height: 2.75rem;
       }
     }
   `,

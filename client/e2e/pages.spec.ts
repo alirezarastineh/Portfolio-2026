@@ -248,6 +248,22 @@ test.describe("case study", () => {
     expect(problems.pageErrors).toEqual([]);
   });
 
+  test("at 400% zoom the gallery scrolls, and its caption stays clear of its buttons", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 200 });
+    await page.goto("/en/work/project-one");
+    await interactive(page);
+    await page.getByRole("link", { name: /^Open image 1 of 2/ }).click();
+    const dialog = page.getByRole("dialog", { name: "Gallery" });
+    await expect(dialog.locator("img")).toBeVisible();
+    const close = dialog.getByRole("button", { name: "Close" });
+    const caption = await dialog.locator("figcaption").boundingBox();
+    expect(caption!.y + caption!.height).toBeLessThanOrEqual((await close.boundingBox())!.y);
+    await close.scrollIntoViewIfNeeded();
+    await expect(close).toBeInViewport();
+  });
+
   test("links to the next case study, which exists in English only", async ({ page }) => {
     await page.goto("/en/work/project-one");
     await interactive(page);

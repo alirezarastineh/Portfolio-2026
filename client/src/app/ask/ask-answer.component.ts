@@ -540,9 +540,13 @@ interface Footnote {
       line-height: 0;
       margin-left: 1px;
     }
-    .cite:hover sup,
     .cite:focus-visible sup {
       text-decoration: underline;
+    }
+    @media (hover: hover) {
+      .cite:hover sup {
+        text-decoration: underline;
+      }
     }
 
     .sources {
@@ -567,8 +571,10 @@ interface Footnote {
       border-radius: 0.25rem;
       text-decoration: none;
     }
-    .note:hover {
-      color: var(--foreground);
+    @media (hover: hover) {
+      .note:hover {
+        color: var(--foreground);
+      }
     }
     /* The source of the citation pointed at or focused. */
     .note.lit {
@@ -619,8 +625,10 @@ interface Footnote {
       text-align: left;
       cursor: pointer;
     }
-    .ghost:hover {
-      border-color: var(--accent-orange);
+    @media (hover: hover) {
+      .ghost:hover {
+        border-color: var(--accent-orange);
+      }
     }
     .controls {
       display: flex;
@@ -643,8 +651,10 @@ interface Footnote {
       color: inherit;
       cursor: pointer;
     }
-    .word:hover {
-      color: var(--foreground);
+    @media (hover: hover) {
+      .word:hover {
+        color: var(--foreground);
+      }
     }
     .word.on {
       color: var(--accent-orange);

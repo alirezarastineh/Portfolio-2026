@@ -90,8 +90,16 @@ a {
      Details a browser without them simply skips. */
   /* eslint-disable css/use-baseline */
   app-public-shell {
+    /* A word wider than its box breaks rather than leaves it (large text in a narrow column). */
+    overflow-wrap: break-word;
     caret-color: var(--signal);
     accent-color: var(--signal);
+    /* A tap answers in the signal, not the browser's grey; `.card-link` keeps its own (motion.css). */
+    -webkit-tap-highlight-color: color-mix(in srgb, var(--signal) 24%, transparent);
+  }
+  /* Controls only: a double-tap on text still zooms. */
+  app-public-shell :is(a, button, summary, label, input, textarea, [role="option"]) {
+    touch-action: manipulation;
   }
   app-public-shell ::selection {
     background-color: var(--signal);
@@ -218,9 +226,16 @@ a {
   display: none;
 }
 
-/* The page holds still behind the open menu. */
+/* The page holds still behind the open menu, and on touch behind a modal (the palette, the
+   gallery), where a finger on the backdrop would scroll it; a mouse keeps its scrollbar. */
 :root:has(.site-header[data-open]) {
   overflow: hidden;
+}
+
+@media (pointer: coarse) {
+  :root:has(app-public-shell dialog:modal) {
+    overflow: hidden;
+  }
 }
 
 /* The panel's and the palette's places while their code loads (ask-sheet.component.ts,
@@ -287,7 +302,8 @@ html:has(app-admin-layout) {
 
 html:not(:has(app-admin-layout)) {
   /* A focused control stops clear of the floating Ask button, as of the header (WCAG 2.4.11). */
-  scroll-padding-bottom: 5rem;
+  scroll-padding-top: calc(5rem + env(safe-area-inset-top));
+  scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom));
   /* eslint-disable-next-line css/use-baseline -- a detail: without it the browser draws its own. */
   scrollbar-color: var(--border-strong) transparent;
 }

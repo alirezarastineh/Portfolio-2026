@@ -96,7 +96,7 @@ const MAX_ORGS = 5;
       @if (orgs().length || metrics().length) {
         <div class="container-site pb-12 lg:pb-16">
           <div
-            class="flex flex-col gap-8 border-t border-border pt-8 lg:flex-row lg:items-end lg:justify-between"
+            class="flex flex-col gap-8 border-t border-border pt-8 xl:flex-row xl:items-end xl:justify-between"
           >
             @if (orgs().length) {
               <div class="flex flex-col gap-3">

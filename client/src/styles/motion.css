@@ -331,7 +331,7 @@ article:has(.card-link:is(:focus-visible, :active)) .title-draw {
     .reading-progress {
       position: fixed;
       inset-inline: 0;
-      top: calc(3.5rem + 1px);
+      top: calc(3.5rem + 1px + env(safe-area-inset-top));
       z-index: calc(var(--z-header) + 1);
       display: block;
       height: 2px;

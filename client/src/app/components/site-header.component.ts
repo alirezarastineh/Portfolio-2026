@@ -73,22 +73,23 @@ const DESKTOP = "(min-width: 1024px)";
          and while the menu is open. -->
     <header
       #bar
-      class="site-header fixed inset-x-0 top-0 z-(--z-header) border-b border-border bg-background"
+      class="site-header fixed inset-x-0 top-0 z-(--z-header) border-b border-border bg-background pt-[env(safe-area-inset-top)]"
       [attr.data-open]="open() ? '' : null"
       (keydown)="trapFocus($event)"
     >
       <div
-        class="site-header-row container-site grid h-16 grid-cols-[auto_1fr_auto] items-center gap-4"
+        class="site-header-row container-site grid h-16 grid-cols-[minmax(0,auto)_1fr_auto] items-center gap-4"
       >
-        <!-- The name, ended by the favicon's square full stop. The first name alone below 360px. -->
+        <!-- The name, ended by the favicon's square full stop. The first name alone below 360px at the default text size. -->
         <a
-          class="inline-flex h-10 items-center text-small font-semibold text-foreground"
+          class="inline-flex h-10 min-w-0 items-center overflow-hidden text-small font-semibold text-foreground pointer-coarse:h-11"
           [routerLink]="home()"
           fragment="hero"
           (click)="closeMenu()"
         >
           <span translate="no"
-            >{{ name().first }}<span class="max-[360px]:hidden">&ngsp;{{ name().rest }}</span></span
+            >{{ name().first
+            }}<span class="max-[22.5rem]:hidden">&ngsp;{{ name().rest }}</span></span
           ><span class="text-signal" aria-hidden="true">.</span
           ><span class="sr-only"> – {{ labels().home }}</span>
         </a>
@@ -185,7 +186,7 @@ const DESKTOP = "(min-width: 1024px)";
       @if (open()) {
         <nav
           id="mobile-nav"
-          class="flex h-[calc(100dvh-4rem)] flex-col overflow-y-auto overscroll-contain border-t border-border px-(--gutter) pb-[max(env(safe-area-inset-bottom),1.5rem)] lg:hidden"
+          class="flex h-[calc(100dvh-4rem-env(safe-area-inset-top))] flex-col overflow-y-auto overscroll-contain border-t border-border px-(--gutter) pb-[max(env(safe-area-inset-bottom),1.5rem)] lg:hidden"
           [attr.aria-label]="labels().mobile"
         >
           <ul class="m-0 mt-auto flex list-none flex-col p-0 pt-6" role="list">

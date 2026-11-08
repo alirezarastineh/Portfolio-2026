@@ -156,7 +156,7 @@ const HIGHLIGHTS = 3;
                         }
                         @if (entry.experience.credential?.url; as url) {
                           <a
-                            class="link-underline w-fit text-small"
+                            class="link-underline w-fit text-small pointer-coarse:py-3"
                             [href]="url"
                             target="_blank"
                             rel="noreferrer noopener"

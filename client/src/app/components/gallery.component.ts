@@ -83,14 +83,14 @@ import { PictureComponent } from "./picture.component";
 
     <dialog
       #dialog
-      class="m-0 h-dvh max-h-none w-screen max-w-none bg-background p-0 text-foreground"
+      class="m-0 h-dvh max-h-none w-screen max-w-none overscroll-contain bg-background p-0 text-foreground"
       [attr.aria-label]="label()"
       (close)="current.set(null)"
       (click)="closeOnBackdrop($event)"
       (keydown)="onKey($event)"
     >
       <div
-        class="flex size-full flex-col items-center justify-center gap-4 p-4 sm:p-8"
+        class="flex min-h-full w-full flex-col items-center justify-center gap-4 p-4 sm:p-8"
         data-dismiss
       >
         <figure class="m-0 flex min-h-0 max-w-full flex-col items-center gap-3">
@@ -98,7 +98,7 @@ import { PictureComponent } from "./picture.component";
             <app-picture
               [image]="image"
               sizes="100vw"
-              imgClass="block max-h-[78vh] w-auto max-w-full rounded object-contain"
+              imgClass="block max-h-[max(10rem,min(78vh,calc(100dvh_-_11rem)))] w-auto max-w-full rounded object-contain"
             />
             <figcaption class="flex max-w-2xl flex-col gap-1 text-center text-muted-foreground">
               <span class="text-data">{{ (current() ?? 0) + 1 }} / {{ images().length }}</span>

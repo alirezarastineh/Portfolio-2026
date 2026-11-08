@@ -12,6 +12,7 @@ import {
 } from "@angular/core";
 
 import { LanguageService } from "../services/language.service";
+import { AskLauncherService } from "./ask-launcher.service";
 import { ASK_COPY } from "./ask-copy";
 import { counterLine, MATCH_BRIEF_CHARS, type MatchKind } from "./match";
 
@@ -109,6 +110,7 @@ export class MatchBoxComponent {
   readonly dismissed = output<void>();
 
   private readonly lang = inject(LanguageService);
+  private readonly launcher = inject(AskLauncherService);
   private readonly box = viewChild.required<ElementRef<HTMLTextAreaElement>>("box");
 
   protected readonly terminalField =
@@ -134,7 +136,8 @@ export class MatchBoxComponent {
 
   constructor() {
     afterNextRender(() => {
-      if (!this.page()) this.box().nativeElement.focus();
+      // On a phone it waits for a tap: a focused field would raise a keyboard over the log.
+      if (!this.page() && !this.launcher.narrow()) this.box().nativeElement.focus();
     });
   }
 

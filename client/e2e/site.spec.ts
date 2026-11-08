@@ -738,3 +738,25 @@ test.describe("contact form before hydration", () => {
     await expect(page.locator("#contact-name")).toHaveValue("Ada");
   });
 });
+
+// What a visitor's own settings ask of the public site (plan 4 U32, U33).
+test.describe("visitor preferences", () => {
+  test("a tap answers in the signal on the public site, not in the admin", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== "chromium", "only Chromium reports the tap colour");
+    const tint = () =>
+      page.evaluate(() =>
+        getComputedStyle(document.querySelector("a, button")!).getPropertyValue(
+          "-webkit-tap-highlight-color",
+        ),
+      );
+    await page.goto("/en");
+    await interactive(page);
+    const publicTint = await tint();
+    await page.goto("/admin/login");
+    await interactive(page);
+    expect(publicTint).not.toBe(await tint());
+  });
+});
