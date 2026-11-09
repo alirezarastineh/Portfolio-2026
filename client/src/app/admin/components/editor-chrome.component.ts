@@ -105,7 +105,7 @@ const PREVIEW_WAIT_MS = 30_000;
   selector: "app-save-bar",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [HlmButton, HlmSpinner],
-  host: { class: "block", "(document:keydown)": "onKeydown($event)" },
+  host: { class: "sticky bottom-0 z-20 block", "(document:keydown)": "onKeydown($event)" },
   styles: `
     /* One status fades into the next (both sit in the same grid cell). */
     @media (prefers-reduced-motion: no-preference) {
@@ -123,9 +123,7 @@ const PREVIEW_WAIT_MS = 30_000;
     }
   `,
   template: `
-    <div
-      class="sticky bottom-0 z-20 -mx-6 border-t border-border bg-card/95 px-6 py-3 backdrop-blur"
-    >
+    <div class="-mx-6 border-t border-border bg-card/95 px-6 py-3 backdrop-blur">
       <div class="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <!-- A new status takes the other branch, so the old one leaves as the new one enters. -->
         <p class="m-0 grid font-mono text-meta" role="status">

@@ -27,7 +27,12 @@
 /* A page with the sticky header on top and the sticky save bar below: a
    focused field, or a jump to an anchor, stops clear of both (WCAG 2.4.11). */
 :root:has(app-page-header) {
-  scroll-padding-block: 5rem 5.5rem;
+  scroll-padding-block: 5rem 6rem;
+}
+
+/* A toast stays above the save bar: Save is never under one. */
+:root:has(app-save-bar) [data-sonner-toaster][data-y-position="bottom"] {
+  bottom: 6rem;
 }
 
 /* On a short window the sidebar's list scrolls: its edges fade where there is
