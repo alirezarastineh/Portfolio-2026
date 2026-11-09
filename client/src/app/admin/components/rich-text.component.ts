@@ -41,6 +41,7 @@ import Image from "@tiptap/extension-image";
 import StarterKit from "@tiptap/starter-kit";
 
 import type { MediaAsset } from "../admin-api.service";
+import { isSaveShortcut } from "./editor-chrome.component";
 import { MediaPickerComponent } from "./media-picker.component";
 
 interface ToolbarAction {
@@ -220,7 +221,7 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
       lucideStrikethrough,
     }),
   ],
-  host: { class: "block" },
+  host: { class: "block", "(keydown)": "onKeydown($event)" },
   template: `
     <div class="overflow-hidden rounded-lg border border-border">
       <div
@@ -572,6 +573,11 @@ export class RichTextComponent implements ControlValueAccessor {
 
     this.lastEmitted = html;
     this.onChange(html);
+  }
+
+  /** Runs before the save bar's own listener on `document`: a save sees every word typed. */
+  protected onKeydown(event: KeyboardEvent): void {
+    if (isSaveShortcut(event)) this.flush();
   }
 
   private refreshActive(editor: Editor): void {
