@@ -2053,6 +2053,7 @@ test.describe("admin", () => {
     await details.getByRole("button", { name: "Suggest alt text in German with AI" }).click();
     await expect(details.getByLabel("de", { exact: true })).toHaveValue("Architekturdiagramm 2");
     await page.keyboard.press("Escape");
+    await page.getByRole("alertdialog").getByRole("button", { name: "Discard" }).click();
     await expect.poll(() => verdicts).toHaveLength(2);
     expect(verdicts[1]).toEqual({
       outcomes: [{ id: id(2), outcome: "discarded", distance: null }],
@@ -3990,6 +3991,7 @@ test.describe("admin", () => {
       "Architekturdiagramm der Suchpipeline",
     );
     await page.keyboard.press("Escape");
+    await page.getByRole("alertdialog").getByRole("button", { name: "Discard" }).click();
 
     // What nothing uses can go, several at once.
     await page.getByRole("button", { name: "Select unused (1)" }).click();
@@ -4980,6 +4982,790 @@ test.describe("admin", () => {
     expect(problems.pageErrors).toEqual([]);
     expect(problems.consoleErrors).toEqual([]);
     expect(unmocked).toEqual([]);
+  });
+});
+
+test.describe("never losing work", () => {
+  const SIGNED_OUT = "Not saved: you were signed out. Sign in, then save again.";
+  const LOST = { status: 401, body: { error: "unauthenticated" } };
+  const CODE_WANTED = { status: 401, body: { error: "totp_required" } };
+  const STALE = { status: 409, body: { error: "stale" } };
+  const NEWER = new Date(Date.now() + 60_000).toISOString();
+  const TYPED = "Typed before the session ended";
+  const saved = (body: unknown = { ok: true, updatedAt: NEWER }) => ({ status: 200, body });
+
+  /** The JSON of every request to this method and path, as they go. */
+  function sent(page: Page, method: string, path: string): Record<string, unknown>[] {
+    const bodies: Record<string, unknown>[] = [];
+    page.on("request", (request) => {
+      if (request.method() === method && new URL(request.url()).pathname === path) {
+        bodies.push(request.postDataJSON() as Record<string, unknown>);
+      }
+    });
+    return bodies;
+  }
+
+  const saveDraft = (page: Page) => page.getByRole("button", { name: "Save draft" });
+  const aboutHeading = (page: Page) => page.locator("#about-heading-en");
+  const signIn = (page: Page) => page.getByRole("dialog", { name: "Sign in to carry on" });
+
+  /** The `ui` document at a newer version, with one field of it changed in English. */
+  function uiChanged(group: string, key: string, text: string) {
+    const en = content("en")["ui"] as Record<string, Record<string, string>>;
+    return saved({
+      section: "ui",
+      updatedAt: NEWER,
+      data: {
+        en: { ...en, [group]: { ...en[group], [key]: text } },
+        de: content("de")["ui"],
+      },
+    });
+  }
+
+  const uiAsLoaded = () =>
+    saved({
+      section: "ui",
+      updatedAt: HOUR_AGO,
+      data: { en: content("en")["ui"], de: content("de")["ui"] },
+    });
+
+  test("a 401 mid-edit opens the sign-in over the page, and the text saves after it", async ({
+    page,
+    baseURL,
+    problems,
+  }) => {
+    let signedIn = false;
+    const unmocked = await fakeApi(page, baseURL, {
+      "PATCH /admin/sections/ui": () => (signedIn ? saved() : LOST),
+      "POST /auth/login": () => {
+        signedIn = true;
+        return saved({ ok: true, totpRequired: false, user: USER });
+      },
+    });
+    const patches = sent(page, "PATCH", "/admin/sections/ui");
+    await openAdmin(page, "/admin/about");
+
+    await aboutHeading(page).fill(TYPED);
+    await saveDraft(page).click();
+
+    await expect(signIn(page)).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/about$/);
+    await expect(page.getByText(SIGNED_OUT)).toBeVisible();
+    await expect(aboutHeading(page)).toHaveValue(TYPED);
+    await expect(signIn(page).getByLabel("Email")).toHaveValue(USER.email);
+
+    await signIn(page).getByLabel("Password").fill("hunter2hunter2");
+    await signIn(page).getByRole("button", { name: "Sign in" }).click();
+    await expect(signIn(page)).toBeHidden();
+    await expect(aboutHeading(page)).toHaveValue(TYPED);
+    await expect(page).toHaveURL(/\/admin\/about$/);
+
+    await saveDraft(page).click();
+    await expect(page.getByText("Draft saved")).toBeVisible();
+    expect(patches).toHaveLength(2);
+    expect(patches[1]).toMatchObject({
+      groups: { about: { en: { heading: TYPED } } },
+    });
+    expect(problems.pageErrors).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a wrong password stays in the sign-in, and both steps run over the page", async ({
+    page,
+    baseURL,
+  }) => {
+    let signedIn = false;
+    let attempts = 0;
+    await fakeApi(page, baseURL, {
+      "PATCH /admin/sections/ui": () => (signedIn ? saved() : CODE_WANTED),
+      "POST /auth/login": () =>
+        ++attempts === 1
+          ? { status: 401, body: { error: "invalid_credentials" } }
+          : saved({ ok: true, totpRequired: true, user: null }),
+      "POST /auth/totp": () => {
+        signedIn = true;
+        return saved({ ok: true, user: USER });
+      },
+    });
+    await openAdmin(page, "/admin/about");
+    await aboutHeading(page).fill(TYPED);
+    await saveDraft(page).click();
+
+    const password = signIn(page).getByLabel("Password");
+    await password.fill("wrong-password");
+    await signIn(page).getByRole("button", { name: "Sign in" }).click();
+    await expect(signIn(page).getByText("Incorrect email or password.")).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/about$/);
+
+    await password.fill("hunter2hunter2");
+    await signIn(page).getByRole("button", { name: "Sign in" }).click();
+    // The password's controls are gone: the code field takes the focus.
+    await expect(signIn(page).getByLabel("Code", { exact: true })).toBeFocused();
+    await expect(aboutHeading(page)).toHaveValue(TYPED);
+    await page.keyboard.type("123456");
+
+    await expect(signIn(page)).toBeHidden();
+    await expect(aboutHeading(page)).toHaveValue(TYPED);
+    await saveDraft(page).click();
+    await expect(page.getByText("Draft saved")).toBeVisible();
+  });
+
+  test("while the session is lost, Escape and Back stay on the page", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL, { "PATCH /admin/sections/ui": () => LOST });
+    await openAdmin(page, "/admin");
+    await page
+      .locator("[data-slot=sidebar-inner]")
+      .getByRole("link", { name: "About", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/admin\/about$/);
+    await aboutHeading(page).fill(TYPED);
+    await saveDraft(page).click();
+    await expect(signIn(page)).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(signIn(page)).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/admin\/about$/);
+    await expect(signIn(page)).toBeVisible();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(aboutHeading(page)).toHaveValue(TYPED);
+  });
+
+  test("Sign out with unsaved edits asks before calling the server", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL, { "POST /auth/logout": { ok: true } });
+    const logouts = sent(page, "POST", "/auth/logout");
+    await openAdmin(page, "/admin/about");
+    await aboutHeading(page).fill(TYPED);
+
+    const signOut = page.getByRole("button", { name: "Sign out" });
+    await signOut.click();
+    const ask = page.getByRole("alertdialog");
+    await expect(ask).toContainText("Sign out and lose your unsaved changes?");
+    expect(logouts).toEqual([]);
+
+    await ask.getByRole("button", { name: "Stay" }).click();
+    await expect(ask).toBeHidden();
+    await expect(signOut).toBeFocused();
+    await expect(aboutHeading(page)).toHaveValue(TYPED);
+    expect(logouts).toEqual([]);
+
+    await signOut.click();
+    await ask.getByRole("button", { name: "Discard and sign out" }).click();
+    await expect(page).toHaveURL(/\/admin\/login/);
+    expect(logouts).toHaveLength(1);
+  });
+
+  test("Sign out with nothing unsaved goes straight away", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL, { "POST /auth/logout": { ok: true } });
+    await openAdmin(page, "/admin/about");
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL(/\/admin\/login/);
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  });
+
+  for (const wait of [0, 100]) {
+    test(`Ctrl+S ${wait} ms after typing in rich text saves every word`, async ({
+      page,
+      baseURL,
+    }) => {
+      const post = postRow();
+      await fakeApi(page, baseURL, {
+        "GET /admin/posts": {
+          posts: [{ ...post, translations: { en: { title: post.translations.en.title } } }],
+        },
+        "GET /admin/posts/w1": { post },
+        "PUT /admin/posts/w1": { ok: true },
+      });
+      await openAdmin(page, "/admin/writing/shipping-llms");
+
+      const editor = page.getByRole("textbox", { name: "Body (en)" });
+      await editor.click();
+      await page.keyboard.press("Control+End");
+      await page.keyboard.type(" Right to the last word.");
+      await expect(editor).toContainText("Right to the last word.");
+      // The delay is the case: the debounce it races is 250 ms.
+      if (wait) {
+        const until = (await page.evaluate(() => performance.now())) + wait;
+        await page.waitForFunction((target) => performance.now() >= target, until);
+      }
+      const put = page.waitForRequest(
+        (r) => r.method() === "PUT" && r.url().endsWith("/admin/posts/w1"),
+        { timeout: 5_000 },
+      );
+      await page.keyboard.press("Control+s");
+
+      const body = (await put).postDataJSON() as { translations: { en: { body: string } } };
+      expect(body.translations.en.body).toContain("Right to the last word.");
+    });
+  }
+
+  test("Save stays in view at scroll 900 on a long editor", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await openAdmin(page, "/admin/hero");
+    await expect(saveDraft(page)).toBeAttached();
+
+    await page.evaluate(() => window.scrollTo(0, 900));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(900);
+    await expect(saveDraft(page)).toBeInViewport({ ratio: 1 });
+
+    // A toast stays clear of it: the Undo after Discard does not cover Save.
+    await page.locator("#profile-role-en").fill("Staff engineer");
+    await page.getByRole("button", { name: "Discard" }).click();
+    const toast = page.locator("[data-sonner-toast]").first();
+    await expect(toast).toBeVisible();
+    await settled(page);
+    const [above, below] = await Promise.all([toast.boundingBox(), saveDraft(page).boundingBox()]);
+    expect(above!.y + above!.height).toBeLessThanOrEqual(below!.y);
+  });
+
+  test("a 409 from another group saves again on the new version, without asking", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      // The nav changed in another tab: About's own fields did not.
+      "GET /admin/sections/ui": (n: number) =>
+        n === 1 ? uiAsLoaded() : uiChanged("nav", "about", "Elsewhere"),
+      "PATCH /admin/sections/ui": (n: number) => (n === 1 ? STALE : saved()),
+    });
+    const patches = sent(page, "PATCH", "/admin/sections/ui");
+    await openAdmin(page, "/admin/about");
+
+    await aboutHeading(page).fill(TYPED);
+    await saveDraft(page).click();
+
+    await expect(page.getByText("Draft saved")).toBeVisible();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    expect(patches).toHaveLength(2);
+    expect(patches[1]).toMatchObject({
+      updatedAt: NEWER,
+      groups: { about: { en: { heading: TYPED } } },
+    });
+    await expect(aboutHeading(page)).toHaveValue(TYPED);
+  });
+
+  test("a 409 on this group asks with the edits kept, and Reload brings that version", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "GET /admin/sections/ui": (n: number) =>
+        n === 1 ? uiAsLoaded() : uiChanged("about", "heading", "Changed in another tab"),
+      "PATCH /admin/sections/ui": () => STALE,
+    });
+    await openAdmin(page, "/admin/about");
+
+    await aboutHeading(page).fill(TYPED);
+    await saveDraft(page).click();
+
+    const ask = page.getByRole("alertdialog");
+    await expect(ask).toContainText("Saved elsewhere");
+    await expect(aboutHeading(page)).toHaveValue(TYPED);
+
+    await ask.getByRole("button", { name: "Reload" }).click();
+    await expect(aboutHeading(page)).toHaveValue("Changed in another tab");
+    await expect(page.locator("app-save-bar [role=status]")).toHaveText(/^saved/);
+  });
+
+  test("Keep my edits after a 409 stays on the form, and the next Save replaces that version", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "GET /admin/sections/ui": (n: number) =>
+        n === 1 ? uiAsLoaded() : uiChanged("about", "heading", "Changed in another tab"),
+      "PATCH /admin/sections/ui": (n: number) => (n === 1 ? STALE : saved()),
+    });
+    const patches = sent(page, "PATCH", "/admin/sections/ui");
+    await openAdmin(page, "/admin/about");
+
+    await aboutHeading(page).fill(TYPED);
+    await saveDraft(page).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Keep my edits" }).click();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(aboutHeading(page)).toHaveValue(TYPED);
+
+    await saveDraft(page).click();
+    await expect(page.getByText("Draft saved")).toBeVisible();
+    expect(patches).toHaveLength(2);
+    expect(patches[1]).toMatchObject({ updatedAt: NEWER });
+  });
+
+  test("a 409 on the hero page from another group saves again on the new version", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      // Three groups load on opening; the fourth read is the check after the 409.
+      "GET /admin/sections/ui": (n: number) =>
+        n <= 3 ? uiAsLoaded() : uiChanged("about", "heading", "Elsewhere"),
+      "PUT /admin/hero": (n: number) =>
+        n === 1 ? STALE : saved({ ok: true, updatedAt: NEWER, profileUpdatedAt: NEWER }),
+    });
+    const puts = sent(page, "PUT", "/admin/hero");
+    await openAdmin(page, "/admin/hero");
+
+    await page.locator("#profile-role-en").fill("Staff engineer");
+    await saveDraft(page).click();
+
+    await expect(page.getByText("Draft saved")).toBeVisible();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    expect(puts).toHaveLength(2);
+    expect(puts[1]).toMatchObject({ updatedAt: NEWER, profileUpdatedAt: HOUR_AGO });
+  });
+
+  test("a 409 on the SEO section asks with the edits kept", async ({ page, baseURL }) => {
+    const seo = { en: content("en")["seo"], de: content("de")["seo"] };
+    await fakeApi(page, baseURL, {
+      "GET /admin/sections/seo": (n: number) =>
+        saved({
+          section: "seo",
+          updatedAt: n === 1 ? HOUR_AGO : NEWER,
+          data: n === 1 ? seo : { ...seo, en: { ...(seo.en as object), title: "Theirs" } },
+        }),
+      "PUT /admin/sections/seo": (n: number) => (n === 1 ? STALE : saved()),
+    });
+    const puts = sent(page, "PUT", "/admin/sections/seo");
+    await openAdmin(page, "/admin/seo");
+    // By id: under a dialog the page is hidden from the accessibility tree.
+    const title = page.locator("#seo-title-en");
+
+    await title.fill("Mine");
+    await saveDraft(page).click();
+    const ask = page.getByRole("alertdialog");
+    await expect(ask).toContainText("Saved elsewhere");
+    await expect(title).toHaveValue("Mine");
+
+    await ask.getByRole("button", { name: "Keep my edits" }).click();
+    await expect(title).toHaveValue("Mine");
+    await saveDraft(page).click();
+    await expect(page.getByText("Draft saved")).toBeVisible();
+    expect(puts[1]).toMatchObject({ updatedAt: NEWER });
+  });
+
+  test("a 409 on a legal page asks with the edits kept, and Reload brings that version", async ({
+    page,
+    baseURL,
+  }) => {
+    const doc = (title: string) => ({
+      en: { title, body: "<p>Text.</p>" },
+      de: { title: "Impressum", body: "<p>Text.</p>" },
+    });
+    await fakeApi(page, baseURL, {
+      "GET /admin/sections/imprint": (n: number) =>
+        saved({
+          section: "imprint",
+          updatedAt: n === 1 ? HOUR_AGO : NEWER,
+          data: doc(n === 1 ? "Imprint" : "Theirs"),
+        }),
+      "GET /admin/sections/privacy": saved({
+        section: "privacy",
+        updatedAt: HOUR_AGO,
+        data: doc("Privacy"),
+      }).body,
+      "PUT /admin/sections/imprint": () => STALE,
+    });
+    await openAdmin(page, "/admin/legal");
+    const title = page.locator("#legal-title-en");
+
+    await title.fill("Mine");
+    await saveDraft(page).click();
+    const ask = page.getByRole("alertdialog");
+    await expect(ask).toContainText("Saved elsewhere");
+    await expect(title).toHaveValue("Mine");
+
+    await ask.getByRole("button", { name: "Reload" }).click();
+    await expect(title).toHaveValue("Theirs");
+  });
+
+  test("a post's language switch keeps the text until Save, and asks once", async ({
+    page,
+    baseURL,
+  }) => {
+    const row = postRow();
+    const post = {
+      ...row,
+      translations: {
+        en: row.translations.en,
+        de: {
+          title: "Sprachmodelle ausliefern",
+          excerpt: "Was es braucht.",
+          body: "<p>Eine Woche Evals.</p>",
+          seoTitle: "",
+          seoDescription: "",
+        },
+      },
+    };
+    await fakeApi(page, baseURL, {
+      "GET /admin/posts": {
+        posts: [{ ...post, translations: { en: { title: row.translations.en.title } } }],
+      },
+      "GET /admin/posts/w1": { post },
+      "PUT /admin/posts/w1": { ok: true },
+    });
+    const puts = sent(page, "PUT", "/admin/posts/w1");
+    await openAdmin(page, "/admin/writing/shipping-llms");
+
+    const toggle = page.getByRole("switch", { name: "German version" });
+    const title = page.locator("#post-title-de");
+    const ask = page.getByRole("alertdialog");
+    await expect(title).toHaveValue("Sprachmodelle ausliefern");
+
+    // Declined: the switch goes back on, with the text.
+    await toggle.click();
+    await expect(ask).toContainText("Remove the German version when you save?");
+    await ask.getByRole("button", { name: "Keep it" }).click();
+    await expect(toggle).toBeChecked();
+    await expect(title).toHaveValue("Sprachmodelle ausliefern");
+
+    // Off, asked; on again, the text is back and nothing was sent.
+    await toggle.click();
+    await ask.getByRole("button", { name: "Remove when I save" }).click();
+    await expect(toggle).not.toBeChecked();
+    await expect(title).toHaveCount(0);
+    expect(puts).toEqual([]);
+
+    await toggle.click();
+    await expect(toggle).toBeChecked();
+    await expect(ask).toHaveCount(0);
+    await expect(title).toHaveValue("Sprachmodelle ausliefern");
+    await expect(page.locator("app-save-bar [role=status]")).toHaveText(/^saved/);
+
+    // Asked once: off again goes without the question, and Save removes it.
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+    await expect(ask).toHaveCount(0);
+    await saveDraft(page).click();
+    await expect(page.getByText("Draft saved")).toBeVisible();
+    expect(puts).toHaveLength(1);
+    expect(puts[0]).toMatchObject({ translations: { de: null } });
+  });
+
+  test("Media's panel asks before dropping unsaved alt text and description", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/media");
+
+    const open = page.getByRole("button", { name: "Details of architecture.png" });
+    const details = page.locator("hlm-sheet-content");
+    const ask = page.getByRole("alertdialog");
+    const alt = details.getByLabel("en", { exact: true });
+
+    await open.click();
+    await alt.fill("Boxes and arrows");
+    await page.keyboard.press("Escape");
+    await expect(ask).toContainText("Discard unsaved text?");
+
+    await ask.getByRole("button", { name: "Keep editing" }).click();
+    await expect(ask).toHaveCount(0);
+    await expect(alt).toHaveValue("Boxes and arrows");
+
+    await page.keyboard.press("Escape");
+    await ask.getByRole("button", { name: "Discard" }).click();
+    await expect(details).toHaveCount(0);
+
+    // The description is guarded the same way; the panel opens on what is saved.
+    await open.click();
+    await expect(alt).toHaveValue("A diagram");
+    await details.locator("#description-en").fill("Three services and a queue");
+    await page.keyboard.press("Escape");
+    await ask.getByRole("button", { name: "Discard" }).click();
+    await expect(details).toHaveCount(0);
+
+    // Nothing typed: it closes without asking.
+    await open.click();
+    await expect(alt).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(details).toHaveCount(0);
+    await expect(ask).toHaveCount(0);
+  });
+
+  test("EN → DE, Translate, Tighten and Discard each have an Undo", async ({ page, baseURL }) => {
+    const seo = { en: content("en")["seo"], de: content("de")["seo"] };
+    await fakeApi(page, baseURL, {
+      "GET /admin/sections/seo": { section: "seo", updatedAt: HOUR_AGO, data: seo },
+      "POST /admin/ai/copilot": (n: number) => saved({ text: `Draft ${n}`, model: "gemini-flash" }),
+    });
+    await openAdmin(page, "/admin/seo");
+    const en = page.getByRole("textbox", { name: "Page title EN" });
+    const de = page.getByRole("textbox", { name: "Page title DE" });
+    const undo = page.locator("[data-sonner-toast]").getByRole("button", { name: "Undo" });
+    const english = await en.inputValue();
+
+    await de.fill("Mein Titel");
+    await page.getByRole("button", { name: /^EN → DE: copy the English Page title/ }).click();
+    await expect(de).toHaveValue(english);
+    await undo.click();
+    await expect(de).toHaveValue("Mein Titel");
+    await expect(de).toBeFocused();
+    await expect(undo).toHaveCount(0);
+
+    await page.getByRole("button", { name: /^Translate → DE: the English Page title/ }).click();
+    await expect(de).toHaveValue("Draft 1");
+    await undo.click();
+    await expect(de).toHaveValue("Mein Titel");
+    await expect(undo).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Tighten the Page title with AI" }).click();
+    await expect(en).toHaveValue("Draft 2");
+    await expect(de).toHaveValue("Draft 3");
+    await undo.click();
+    await expect(en).toHaveValue(english);
+    await expect(de).toHaveValue("Mein Titel");
+    await expect(undo).toHaveCount(0);
+
+    // Discard puts the saved text back; its Undo puts the edits back, and Save takes the focus.
+    await page.getByRole("button", { name: "Discard" }).click();
+    await expect(de).toHaveValue((seo.de as { title: string }).title);
+    await undo.click();
+    await expect(de).toHaveValue("Mein Titel");
+    await expect(page.locator("app-save-bar [role=status]")).toHaveText("1 field changed");
+    await expect(saveDraft(page)).toBeFocused();
+  });
+
+  test("Remove CV names the file and asks", async ({ page, baseURL }) => {
+    const resume = {
+      mediaId: "a3",
+      path: "/media/a3.pdf",
+      originalName: "cv-english.pdf",
+      byteSize: 10_000,
+      updatedAt: HOUR_AGO,
+    };
+    await fakeApi(page, baseURL, {
+      "GET /admin/resumes": (n: number) =>
+        saved({ resumes: { en: n === 1 ? resume : null, de: null } }),
+      "DELETE /admin/resumes/en": { ok: true },
+    });
+    const deletes = sent(page, "DELETE", "/admin/resumes/en");
+    await openAdmin(page, "/admin/hero");
+
+    const remove = page.getByRole("button", { name: "Remove CV (EN)" });
+    const ask = page.getByRole("alertdialog");
+    await remove.click();
+    await expect(ask).toContainText("Remove cv-english.pdf?");
+    await ask.getByRole("button", { name: "Keep it" }).click();
+    await expect(ask).toHaveCount(0);
+    expect(deletes).toEqual([]);
+
+    await remove.click();
+    await ask.getByRole("button", { name: "Remove" }).click();
+    await expect(page.getByText("CV (EN) removed")).toBeVisible();
+    expect(deletes).toHaveLength(1);
+  });
+
+  test("a question naming a very long file stays inside a phone's window", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "GET /admin/resumes": saved({
+        resumes: {
+          en: {
+            mediaId: "a3",
+            path: "/media/a3.pdf",
+            originalName: `${"lebenslauf".repeat(20)}.pdf`,
+            byteSize: 10_000,
+            updatedAt: HOUR_AGO,
+          },
+          de: null,
+        },
+      }).body,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/admin/hero");
+    await interactive(page);
+
+    await page.getByRole("button", { name: "Remove CV (EN)" }).click();
+    const ask = page.getByRole("alertdialog");
+    await expect(ask).toBeVisible();
+    // An unbroken name: one with hyphens wraps by itself. Without the wrap its right edge is 1679.
+    const title = await ask.locator("h2").boundingBox();
+    expect(title!.x + title!.width).toBeLessThanOrEqual(390);
+  });
+
+  /** What each collection editor is opened on, what it edits, and where its save goes. */
+  const row = {
+    socials: (updatedAt: string) => ({
+      socials: [
+        {
+          id: "s1",
+          label: "GitHub",
+          href: "https://github.com/someone",
+          icon: "github",
+          isVisible: true,
+          position: 0,
+          updatedAt,
+        },
+      ],
+    }),
+    skills: (updatedAt: string) => ({
+      skills: [
+        {
+          id: "card",
+          icon: "cpu",
+          span: "sm",
+          items: [],
+          position: 0,
+          isVisible: true,
+          updatedAt,
+          translations: {
+            en: { title: "Backend", caption: "// caption", narrative: "" },
+            de: { title: "Backend", caption: "// caption", narrative: "" },
+          },
+        },
+      ],
+    }),
+    experiences: (updatedAt: string) => ({
+      experiences: [
+        {
+          id: "e1",
+          position: 0,
+          kind: "work",
+          orgName: "Acme",
+          orgUrl: "",
+          logoId: null,
+          logoPath: null,
+          location: "",
+          employmentType: "full_time",
+          startDate: "2024-01-01",
+          endDate: null,
+          datePrecision: "month",
+          credentialId: "",
+          credentialUrl: "",
+          skills: [],
+          isVisible: true,
+          updatedAt,
+          translations: {
+            en: { title: "Engineer", summary: "", highlights: [] },
+            de: { title: "Ingenieur", summary: "", highlights: [] },
+          },
+        },
+      ],
+    }),
+  };
+  const projects = (content("en")["projects"] as FixtureProject[]).map((p, i) =>
+    projectRow(p, (content("de")["projects"] as FixtureProject[])[i]!, i),
+  );
+  const post = postRow();
+
+  const COLLECTIONS: {
+    name: string;
+    path: string;
+    put: string;
+    answers: (updatedAt: (call: number) => string) => Record<string, Answer>;
+    open?: (page: Page) => Promise<void>;
+    field: (page: Page) => ReturnType<Page["locator"]>;
+    save: (page: Page) => ReturnType<Page["locator"]>;
+  }[] = [
+    {
+      name: "a project",
+      path: "/admin/projects/project-one",
+      put: "/admin/projects/p0",
+      answers: (updatedAt) => ({
+        "GET /admin/projects/p0": (n: number) =>
+          saved({ project: { ...projects[0], updatedAt: updatedAt(n) } }),
+      }),
+      field: (page) => page.locator("#category"),
+      save: saveDraft,
+    },
+    {
+      name: "a post",
+      path: "/admin/writing/shipping-llms",
+      put: "/admin/posts/w1",
+      answers: (updatedAt) => ({
+        "GET /admin/posts": {
+          posts: [{ ...post, translations: { en: { title: post.translations.en.title } } }],
+        },
+        "GET /admin/posts/w1": (n: number) => saved({ post: { ...post, updatedAt: updatedAt(n) } }),
+      }),
+      field: (page) => page.locator("#post-title-en"),
+      save: saveDraft,
+    },
+    {
+      name: "a social link",
+      path: "/admin/socials",
+      put: "/admin/socials/s1",
+      answers: (updatedAt) => ({
+        "GET /admin/socials": (n: number) => saved(row.socials(updatedAt(n))),
+      }),
+      field: (page) => page.getByRole("textbox", { name: "Link label" }),
+      save: saveDraft,
+    },
+    {
+      name: "a skill card",
+      path: "/admin/skills",
+      put: "/admin/skills/card",
+      answers: (updatedAt) => ({
+        "GET /admin/skills": (n: number) => saved(row.skills(updatedAt(n))),
+      }),
+      field: (page) => page.getByRole("textbox", { name: "Title (en)" }),
+      save: saveDraft,
+    },
+    {
+      name: "an experience entry",
+      path: "/admin/experience",
+      put: "/admin/experiences/e1",
+      answers: (updatedAt) => ({
+        "GET /admin/experiences": (n: number) => saved(row.experiences(updatedAt(n))),
+      }),
+      open: (page) => page.getByRole("button", { name: "Edit" }).click(),
+      field: (page) => page.locator("#exp-org"),
+      save: (page) => page.getByRole("button", { name: "Save entry" }),
+    },
+  ];
+
+  for (const editor of COLLECTIONS) {
+    test(`saving ${editor.name} changed elsewhere asks before it overwrites`, async ({
+      page,
+      baseURL,
+    }) => {
+      await fakeApi(page, baseURL, {
+        ...editor.answers((n) => (n === 1 ? HOUR_AGO : NEWER)),
+        [`PUT ${editor.put}`]: { ok: true },
+      });
+      const puts = sent(page, "PUT", editor.put);
+      await openAdmin(page, editor.path);
+      await editor.open?.(page);
+
+      await editor.field(page).fill("changed-here");
+      await editor.save(page).click();
+      const ask = page.getByRole("alertdialog");
+      await expect(ask).toContainText("changed in another tab or session");
+      expect(puts).toEqual([]);
+
+      await ask.getByRole("button", { name: "Keep editing" }).click();
+      await expect(ask).toHaveCount(0);
+      await expect(editor.field(page)).toHaveValue("changed-here");
+      expect(puts).toEqual([]);
+
+      await editor.save(page).click();
+      await ask.getByRole("button", { name: "Save anyway" }).click();
+      await expect.poll(() => puts).toHaveLength(1);
+    });
+  }
+
+  test("a project's own save does not count as changed elsewhere", async ({ page, baseURL }) => {
+    const later = new Date(Date.now() + 120_000).toISOString();
+    await fakeApi(page, baseURL, {
+      // Opened, checked before the first save, read after it, checked before the second.
+      "GET /admin/projects/p0": (n: number) =>
+        saved({ project: { ...projects[0], updatedAt: n <= 2 ? HOUR_AGO : later } }),
+      "PUT /admin/projects/p0": { ok: true },
+    });
+    const puts = sent(page, "PUT", "/admin/projects/p0");
+    await openAdmin(page, "/admin/projects/project-one");
+
+    await page.locator("#category").fill("Infra");
+    await saveDraft(page).click();
+    await expect.poll(() => puts).toHaveLength(1);
+    await page.locator("#category").fill("Infra and data");
+    await saveDraft(page).click();
+    await expect.poll(() => puts).toHaveLength(2);
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
   });
 });
 
