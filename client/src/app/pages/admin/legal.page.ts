@@ -19,7 +19,11 @@ import { HlmSeparator } from "@spartan-ng/helm/separator";
 import { BrnTabsContent } from "@spartan-ng/brain/tabs";
 import { HlmTabsImports } from "@spartan-ng/helm/tabs";
 
-import { AdminApiService, type LegalSectionInput } from "../../admin/admin-api.service";
+import {
+  AdminApiService,
+  type ApiIssue,
+  type LegalSectionInput,
+} from "../../admin/admin-api.service";
 import { countChangedFields } from "../../admin/changed-fields";
 import {
   FieldIssueComponent,
@@ -35,8 +39,9 @@ import {
   UiGroupEditorComponent,
   type UiFieldDef,
 } from "../../admin/components/ui-group-editor.component";
+import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
-import { toastIssues, toastStale } from "../../admin/save-feedback";
+import { askStale, toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import type { LegalDoc, Locale } from "../../content/schema";
 
@@ -188,6 +193,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 export default class AdminLegalPage implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly unsaved = inject(UnsavedChangesService);
+  private readonly confirm = inject(ConfirmService);
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly labels = viewChild.required(UiGroupEditorComponent);
 
@@ -272,11 +278,17 @@ export default class AdminLegalPage implements OnInit {
   }
 
   protected discard(): void {
+    const edits = this.docs();
     const pristine = this.pristine();
     this.docs.set(pristine ? structuredClone(pristine) : null);
     this.issues.clear();
     this.unsaved.clear("legal");
-    this.labels().discard();
+    const undoLabels = this.labels().discard();
+    toastDiscarded(() => {
+      this.docs.set(edits);
+      this.unsaved.set("legal", this.docsDirty());
+      undoLabels();
+    });
   }
 
   /** The documents that changed, then the labels: one save bar, one Ctrl+S. */
@@ -288,28 +300,50 @@ export default class AdminLegalPage implements OnInit {
 
     for (const { id } of DOCS) {
       if (JSON.stringify(docs[id]) === JSON.stringify(pristine[id])) continue;
-      const result = await this.api.putSection(id, docs[id], this.tokens[id]);
-      if (!result.ok) {
+      const ok = await this.saveDoc(id, docs[id]);
+      if (!ok) {
         this.savingDocs.set(false);
-        if (result.status === 409) {
-          toastStale(() => this.load(), "This page");
-        } else if (result.issues?.length) {
-          // `[locale, field]` of this document.
-          this.issues.set(result.issues.map((i) => ({ ...i, path: [id, ...i.path] })));
-          this.active.set(id);
-          toastIssues(result.issues);
-          focusFirstInvalid(this.host.nativeElement);
-        } else {
-          toast.error("Not saved", { description: result.error });
-        }
         return;
       }
-      this.tokens[id] = result.data.updatedAt;
-      this.pristine.update((p) => (p ? { ...p, [id]: structuredClone(docs[id]) } : p));
     }
     this.savingDocs.set(false);
     this.unsaved.clear("legal");
 
     if (await this.labels().save()) toast.success("Draft saved");
+  }
+
+  private async saveDoc(id: LegalDoc, doc: Record<Locale, LegalSectionInput>): Promise<boolean> {
+    const result = await this.api.putSection(id, doc, this.tokens[id]);
+    if (result.ok) {
+      this.tokens[id] = result.data.updatedAt;
+      this.pristine.update((p) => (p ? { ...p, [id]: structuredClone(doc) } : p));
+      return true;
+    }
+
+    if (result.status === 409) {
+      await this.handleStale(id);
+    } else if (result.issues?.length) {
+      this.handleIssues(id, result.issues);
+    } else {
+      toastNotSaved(result.error);
+    }
+    return false;
+  }
+
+  private async handleStale(id: LegalDoc): Promise<void> {
+    const fresh = await this.api.getSection<LegalSectionInput>(id);
+    if (await askStale(this.confirm, "This page")) {
+      await this.load();
+    } else if (fresh.ok) {
+      this.tokens[id] = fresh.data.updatedAt;
+    }
+  }
+
+  private handleIssues(id: LegalDoc, issues: readonly ApiIssue[]): void {
+    // `[locale, field]` of this document.
+    this.issues.set(issues.map((i) => ({ ...i, path: [id, ...i.path] })));
+    this.active.set(id);
+    toastIssues(issues);
+    focusFirstInvalid(this.host.nativeElement);
   }
 }

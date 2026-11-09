@@ -26,6 +26,7 @@ import { HlmTextarea } from "@spartan-ng/helm/textarea";
 import { AdminApiService } from "../admin-api.service";
 import { CopilotLedger } from "../copilot-ledger";
 import { draftOffer, type CopilotDraft, type DraftOffer } from "../copilot-skills";
+import { toastUndo } from "../save-feedback";
 import { DraftOfferComponent } from "./draft-offer.component";
 import { FieldIssueComponent } from "./editor-chrome.component";
 
@@ -381,7 +382,7 @@ export class FieldPairComponent {
    */
   protected async aiTranslate(from: "en" | "de"): Promise<void> {
     const to = from === "en" ? "de" : "en";
-    const source = (from === "en" ? this.controlEn() : this.controlDe()).value ?? "";
+    const source = this.controlFor(from).value ?? "";
     if (!source.trim() || !this.api) return;
     this.aiBusy.set(to);
     const result = await this.api.copilot({
@@ -398,31 +399,54 @@ export class FieldPairComponent {
       toast.error("No translation", { description: result.error });
       return;
     }
+    const undo = this.undoOf(to);
     this.apply(to, result.data);
+    if (undo && !this.gone) toastUndo(`${this.label()} translated`, undo, `#${this.id()}-${to}`);
   }
 
   protected async aiTighten(): Promise<void> {
     if (!this.api) return;
     const view = this.view();
     const locales: ("en" | "de")[] = view === "both" ? ["en", "de"] : [view];
+    const undos: (() => void)[] = [];
     this.aiBusy.set("tighten");
     for (const locale of locales) {
       if (this.gone) break;
-      const text = (locale === "en" ? this.controlEn() : this.controlDe()).value ?? "";
-      if (!text.trim()) continue;
-      const result = await this.api.copilot({
-        task: "tighten",
-        text,
-        locale,
-        ...(this.maxLength() ? { maxLength: this.maxLength() } : {}),
-      });
-      if (!result.ok) {
-        toast.error("Not tightened", { description: result.error });
-        break;
-      }
-      this.apply(locale, result.data);
+      const step = await this.tightenLocale(locale);
+      if (!step.ok) break;
+      if (step.undo) undos.push(step.undo);
     }
     this.aiBusy.set(null);
+    // Over one Undo: both languages went with one press.
+    if (undos.length && !this.gone) {
+      toastUndo(
+        `${this.label()} tightened`,
+        () => undos.forEach((undo) => undo()),
+        `#${this.id()}-${locales[0]}`,
+      );
+    }
+  }
+
+  private async tightenLocale(locale: "en" | "de"): Promise<{ ok: boolean; undo?: () => void }> {
+    const text = this.controlFor(locale).value ?? "";
+    if (!text.trim() || !this.api) return { ok: true };
+    const result = await this.api.copilot({
+      task: "tighten",
+      text,
+      locale,
+      ...(this.maxLength() ? { maxLength: this.maxLength() } : {}),
+    });
+    if (!result.ok) {
+      toast.error("Not tightened", { description: result.error });
+      return { ok: false };
+    }
+    const undo = this.undoOf(locale);
+    this.apply(locale, result.data);
+    return { ok: true, undo: undo ?? undefined };
+  }
+
+  private controlFor(locale: "en" | "de"): FormControl<string> {
+    return locale === "en" ? this.controlEn() : this.controlDe();
   }
 
   /**
@@ -444,12 +468,30 @@ export class FieldPairComponent {
     this.offers.update((offers) => ({ ...offers, [locale]: draftOffer(draft) }));
   }
 
+  /**
+   * The way back for a step about to replace this field's text: the text, its
+   * stale mark, and the draft (not kept). Null when there is nothing to lose.
+   */
+  private undoOf(locale: "en" | "de"): (() => void) | null {
+    const control = this.controlFor(locale);
+    const edited = locale === "en" ? this.editedEn : this.editedDe;
+    const text = control.value ?? "";
+    const tick = edited();
+    if (!text.trim()) return null;
+    return () => {
+      this.ledger?.abandon(this.drafts + locale);
+      this.clearOffer(locale);
+      control.setValue(text);
+      edited.set(tick);
+    };
+  }
+
   /** A text into a field as the admin's edit; what the field held before comes back with it. */
   private setField(
     locale: "en" | "de",
     text: string,
   ): { control: FormControl<string>; before: string } {
-    const control = locale === "en" ? this.controlEn() : this.controlDe();
+    const control = this.controlFor(locale);
     const before = control.value ?? "";
     control.setValue(text);
     control.markAsDirty();
@@ -485,10 +527,12 @@ export class FieldPairComponent {
   }
 
   protected copyToGerman(): void {
+    const undo = this.undoOf("de");
     this.controlDe().setValue(this.controlEn().value);
     // Mark dirty explicitly: setValue alone leaves the form looking untouched,
     // so the save bar would not light up.
     this.controlDe().markAsDirty();
     this.editedDe.set(++this.tick);
+    if (undo) toastUndo(`${this.label()} copied to German`, undo, `#${this.id()}-de`);
   }
 }

@@ -47,8 +47,10 @@ import {
   NotFoundStateComponent,
 } from "../../../admin/components/load-state.component";
 import { AdminPageHeaderComponent } from "../../../admin/components/page-header.component";
+import { ChangedElsewhere } from "../../../admin/changed-elsewhere";
+import { ConfirmService } from "../../../admin/components/confirm-dialog.component";
 import { FieldIssues, focusFirstInvalid } from "../../../admin/issues";
-import { toastIssues } from "../../../admin/save-feedback";
+import { toastDiscarded, toastIssues, toastNotSaved } from "../../../admin/save-feedback";
 import { isLocale } from "../../../content/locale";
 import {
   CopilotSuggestComponent,
@@ -597,6 +599,12 @@ export default class AdminProjectEditorPage implements OnInit {
   private readonly router = inject(Router);
   private readonly unsaved = inject(UnsavedChangesService);
   private readonly ledger = inject(CopilotLedger);
+  private readonly confirm = inject(ConfirmService);
+  private readonly versions = new ChangedElsewhere(this.confirm, async () => {
+    const id = this.project()?.id;
+    const found = id ? await this.api.getProject(id) : null;
+    return found?.ok ? [found.data.project] : null;
+  });
 
   private readonly host = inject(ElementRef<HTMLElement>);
 
@@ -756,6 +764,7 @@ export default class AdminProjectEditorPage implements OnInit {
     const found = result?.ok ? result.data.project : null;
     this.project.set(found ? structuredClone(found) : null);
     this.pristine = found ? structuredClone(found) : null;
+    if (found) this.versions.remember([found]);
     this.showGlossary(found);
     this.revision.update((v) => v + 1);
   }
@@ -837,6 +846,13 @@ export default class AdminProjectEditorPage implements OnInit {
   }
 
   protected discard(): void {
+    const edits = this.project();
+    const typed = this.typedGlossary();
+    toastDiscarded(() => {
+      this.project.set(edits);
+      this.typedGlossary.set(typed);
+      this.revision.update((v) => v + 1);
+    });
     this.project.set(this.pristine ? structuredClone(this.pristine) : null);
     this.showGlossary(this.pristine);
     this.revision.update((v) => v + 1);
@@ -850,6 +866,11 @@ export default class AdminProjectEditorPage implements OnInit {
     if (!current || this.saving()) return;
 
     this.saving.set(true);
+    const name = current.translations.en.name || current.slug;
+    if (!(await this.versions.mayOverwrite([current.id], name))) {
+      this.saving.set(false);
+      return;
+    }
     // The copilot's drafts are judged by what this save sends (plan phase 27).
     const ended = this.ledger.beginSave(
       Object.fromEntries(
@@ -881,6 +902,7 @@ export default class AdminProjectEditorPage implements OnInit {
         de: { ...current.translations.de, metrics: filledMetrics(current.translations.de.metrics) },
       },
     });
+    if (result.ok) await this.versions.refresh();
     this.saving.set(false);
     ended(result.ok);
 
@@ -900,7 +922,7 @@ export default class AdminProjectEditorPage implements OnInit {
         toastIssues(result.issues);
         focusFirstInvalid(this.host.nativeElement);
       } else {
-        toast.error("Save failed", { description: result.error });
+        toastNotSaved(result.error, "Save failed");
       }
       return;
     }

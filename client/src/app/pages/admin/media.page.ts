@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   inject,
   OnInit,
   signal,
@@ -35,6 +36,8 @@ import {
   type MediaAsset,
   type MediaReconcile,
 } from "../../admin/admin-api.service";
+import type { RouteMeta } from "@analogjs/router";
+
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import { MediaTileComponent } from "../../admin/components/media-tile.component";
 import { DraftOfferComponent } from "../../admin/components/draft-offer.component";
@@ -49,7 +52,11 @@ import {
 } from "../../admin/media-library.service";
 import { deleteBlocker, missingAlt, usagePlace } from "../../admin/media-usage";
 import { absoluteTime } from "../../admin/relative-time";
+import { toastNotSaved } from "../../admin/save-feedback";
+import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import type { Locale } from "../../content/schema";
+
+export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
 type Filter = "all" | "images" | "documents" | "unused" | "alt";
 
@@ -561,6 +568,7 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
 export default class AdminMediaPage implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly confirm = inject(ConfirmService);
+  private readonly unsaved = inject(UnsavedChangesService);
   protected readonly library = inject(MediaLibraryService);
   /** The copilot's drafts (alt text, descriptions), judged when saved (plan phase 27). */
   private readonly ledger = inject(CopilotLedger);
@@ -673,9 +681,11 @@ export default class AdminMediaPage implements OnInit {
   }
 
   constructor() {
+    effect(() => this.unsaved.set("media", this.altChanged() || this.descriptionChanged()));
     // Leaving the page: a draft not saved was not kept.
     inject(DestroyRef).onDestroy(() => {
       this.gone = true;
+      this.unsaved.clear("media");
       this.ledger.abandonPrefix("media:");
     });
   }
@@ -719,13 +729,37 @@ export default class AdminMediaPage implements OnInit {
     this.description.set({ en: asset.descriptionEn ?? "", de: asset.descriptionDe ?? "" });
   }
 
-  protected onSheet(state: string): void {
-    if (state !== "closed") return;
-    this.ledger.abandonPrefix("media:");
+  /** Closing with unsaved text asks first; keeping it opens the details again, with the text. */
+  protected async onSheet(state: string): Promise<void> {
+    const id = this.activeId();
+    // The sheet reports "closed" again once its state input follows: only the
+    // first report, while a file is still open here, is a request to close.
+    if (state !== "closed" || !id || this.gone) return;
+    const unsaved = this.altChanged() || this.descriptionChanged();
     this.activeId.set(null);
+    if (unsaved) {
+      const discard = await this.confirm.ask({
+        title: "Discard unsaved text?",
+        description: "The alt text or description you changed has not been saved.",
+        confirmLabel: "Discard",
+        cancelLabel: "Keep editing",
+        destructive: true,
+      });
+      if (!discard) {
+        this.activeId.set(id);
+        return;
+      }
+    }
+    this.ledger.abandonPrefix("media:");
   }
 
+  /** A link out of the details. With unsaved text the route's guard asks, and they stay open. */
   protected close(): void {
+    if (this.altChanged() || this.descriptionChanged()) return;
+    this.dropDetails();
+  }
+
+  private dropDetails(): void {
     this.ledger.abandonPrefix("media:");
     this.activeId.set(null);
   }
@@ -772,7 +806,7 @@ export default class AdminMediaPage implements OnInit {
     this.savingAlt.set(false);
     ended(result.ok);
     if (!result.ok) {
-      toast.error("Not saved", { description: result.error });
+      toastNotSaved(result.error);
       return;
     }
     toast.success("Alt text saved", { description: "Live after the next publish." });
@@ -821,7 +855,7 @@ export default class AdminMediaPage implements OnInit {
     this.savingDescription.set(false);
     ended(result.ok);
     if (!result.ok) {
-      toast.error("Not saved", { description: result.error });
+      toastNotSaved(result.error);
       return;
     }
     toast.success("Description saved", { description: "The assistant reads it from now on." });
@@ -863,7 +897,7 @@ export default class AdminMediaPage implements OnInit {
       toast.error("Not deleted", { description: result.error });
       return;
     }
-    this.activeId.set(null);
+    this.dropDetails();
     await this.afterChange();
     toast.success("Deleted");
   }

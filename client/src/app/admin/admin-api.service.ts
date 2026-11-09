@@ -1065,10 +1065,10 @@ export interface MediaReconcile {
 
 export type ProfileRow = ProfileInput & { avatarPath: string | null; updatedAt: string };
 
-export type SocialRow = SocialInput & { id: string; position: number };
+export type SocialRow = SocialInput & { id: string; position: number; updatedAt: string };
 
 export type SkillTranslation = SkillInput["translations"]["en"];
-export type SkillRow = SkillInput & { position: number };
+export type SkillRow = SkillInput & { position: number; updatedAt: string };
 
 export type ProjectTranslation = ProjectTranslationInput;
 

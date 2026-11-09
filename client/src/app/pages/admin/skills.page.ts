@@ -56,8 +56,9 @@ import {
   UiGroupEditorComponent,
   type UiFieldDef,
 } from "../../admin/components/ui-group-editor.component";
+import { ChangedElsewhere } from "../../admin/changed-elsewhere";
 import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
-import { toastIssues } from "../../admin/save-feedback";
+import { toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
 import type { Locale } from "../../content/schema";
 
 /** Any registry key; the capability icons first. */
@@ -310,6 +311,10 @@ export default class AdminSkillsPage implements OnInit {
   private readonly unsaved = inject(UnsavedChangesService);
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly heading = viewChild.required(UiGroupEditorComponent);
+  private readonly versions = new ChangedElsewhere(this.confirm, async () => {
+    const list = await this.api.listSkills();
+    return list.ok ? list.data.skills : null;
+  });
 
   protected readonly icons = ICONS;
   protected readonly spans = SPANS;
@@ -402,6 +407,7 @@ export default class AdminSkillsPage implements OnInit {
     if (!result.ok) return;
     this.rows.set(result.data.skills);
     this.saved.set(new Map(result.data.skills.map((row) => [row.id, structuredClone(row)])));
+    this.versions.remember(result.data.skills);
   }
 
   protected patch(id: string, change: Partial<SkillInput>): void {
@@ -433,10 +439,15 @@ export default class AdminSkillsPage implements OnInit {
   }
 
   protected discard(): void {
+    const edits = this.rows();
     const saved = this.saved();
     this.rows.update((list) => list.map((row) => structuredClone(saved.get(row.id) ?? row)));
     this.issues.clear();
-    this.heading().discard();
+    const undoHeading = this.heading().discard();
+    toastDiscarded(() => {
+      this.rows.set(edits);
+      undoHeading();
+    });
   }
 
   /** Every changed card, then the heading. A card that fails keeps its edits. */
@@ -448,12 +459,18 @@ export default class AdminSkillsPage implements OnInit {
       .map((id) => this.rows().find((r) => r.id === id))
       .filter((r): r is SkillRow => r !== undefined);
 
+    const ids = changedRows.map((row) => row.id);
+    if (!(await this.versions.mayOverwrite(ids, "A card on this page"))) {
+      this.savingCards.set(false);
+      return;
+    }
     const results = await Promise.all(
       changedRows.map(async (row) => ({
         row,
         result: await this.api.updateSkill(row.id, toInput(row)),
       })),
     );
+    if (ids.length) await this.versions.refresh();
 
     const failed: { id: string; issues: ApiIssue[] }[] = [];
     let error = "";
@@ -483,7 +500,7 @@ export default class AdminSkillsPage implements OnInit {
       return;
     }
     if (error) {
-      toast.error("Not saved", { description: error });
+      toastNotSaved(error);
       return;
     }
     this.issues.clear();
@@ -556,6 +573,9 @@ export default class AdminSkillsPage implements OnInit {
     if (!result.ok) {
       this.rows.set(previous);
       toast.error("Could not reorder", { description: result.error });
+      return;
     }
+    // A reorder is an edit to every row, so it moves their versions.
+    void this.versions.refresh();
   }
 }

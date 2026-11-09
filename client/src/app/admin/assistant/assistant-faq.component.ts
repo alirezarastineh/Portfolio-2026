@@ -24,6 +24,7 @@ import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-st
 import { AdminApiService } from "../admin-api.service";
 import type { FaqEntry, FaqInput } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
+import { toastNotSaved } from "../save-feedback";
 import { DraftOfferComponent } from "../components/draft-offer.component";
 import { CopilotLedger } from "../copilot-ledger";
 import { draftOffer, type DraftOffer } from "../copilot-skills";
@@ -376,12 +377,11 @@ export class AssistantFaqComponent implements OnInit {
     this.saving.set(false);
     ended(result.ok);
     if (!result.ok) {
-      toast.error("Not saved", {
-        description:
-          result.error === "invalid_input"
-            ? "Questions need 3+ characters, answers too."
-            : result.error,
-      });
+      toastNotSaved(
+        result.error === "invalid_input"
+          ? "Questions need 3+ characters, answers too."
+          : result.error,
+      );
       return;
     }
     this.replaceForm(null);

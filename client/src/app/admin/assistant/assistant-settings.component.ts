@@ -11,6 +11,8 @@ import {
 } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { toast } from "@spartan-ng/brain/sonner";
+
+import { toastDiscarded, toastNotSaved } from "../save-feedback";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
 import { HlmInput } from "@spartan-ng/helm/input";
@@ -392,8 +394,10 @@ export class AssistantSettingsComponent implements OnInit {
   }
 
   protected discard(): void {
+    const edits = this.draft();
     const saved = this.saved();
     if (saved) this.draft.set(structuredClone(saved));
+    toastDiscarded(() => this.draft.set(edits));
   }
 
   protected async save(): Promise<void> {
@@ -428,7 +432,7 @@ export class AssistantSettingsComponent implements OnInit {
     const result = await this.api.saveAssistantSettings(input);
     this.saving.set(false);
     if (!result.ok) {
-      toast.error("Not saved", { description: result.error });
+      toastNotSaved(result.error);
       return;
     }
     const draft = toDraft(result.data.settings);

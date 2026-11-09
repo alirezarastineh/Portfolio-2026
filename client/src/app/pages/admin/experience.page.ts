@@ -50,12 +50,13 @@ import {
   type UiFieldDef,
 } from "../../admin/components/ui-group-editor.component";
 import { EditorLayoutComponent } from "../../admin/components/editor-layout.component";
+import { ChangedElsewhere } from "../../admin/changed-elsewhere";
 import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
 import { withExperiences, withUi, type LiveCompose } from "../../admin/preview/live-content";
 import { LivePreviewComponent } from "../../admin/preview/live-preview.component";
 import { LivePreviewToggleComponent } from "../../admin/preview/live-preview-toggle.component";
 import { LivePreviewService } from "../../admin/preview/live-preview.service";
-import { toastIssues } from "../../admin/save-feedback";
+import { toastIssues, toastNotSaved } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import type { Locale } from "../../content/schema";
 
@@ -497,6 +498,10 @@ export default class AdminExperiencePage implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly confirm = inject(ConfirmService);
   private readonly unsaved = inject(UnsavedChangesService);
+  private readonly versions = new ChangedElsewhere(this.confirm, async () => {
+    const list = await this.api.listExperiences();
+    return list.ok ? list.data.experiences : null;
+  });
 
   protected readonly copyFields = COPY_FIELDS;
   protected readonly kinds = KINDS;
@@ -589,7 +594,9 @@ export default class AdminExperiencePage implements OnInit {
     const result = await this.api.listExperiences();
     this.loading.set(false);
     this.loadError.set(result.ok ? null : result.error);
-    if (result.ok) this.rows.set(result.data.experiences);
+    if (!result.ok) return;
+    this.rows.set(result.data.experiences);
+    this.versions.remember(result.data.experiences);
   }
 
   protected edit(row: ExperienceRow | null): void {
@@ -683,6 +690,10 @@ export default class AdminExperiencePage implements OnInit {
     };
 
     this.saving.set(true);
+    if (!(await this.versions.mayOverwrite(d.id ? [d.id] : [], d.orgName || "This entry"))) {
+      this.saving.set(false);
+      return;
+    }
     const result = d.id
       ? await this.api.updateExperience(d.id, input)
       : await this.api.createExperience(input);
@@ -694,7 +705,7 @@ export default class AdminExperiencePage implements OnInit {
         toastIssues(result.issues);
         focusFirstInvalid(form);
       } else {
-        toast.error("Not saved", { description: result.error });
+        toastNotSaved(result.error);
       }
       return;
     }
@@ -711,8 +722,10 @@ export default class AdminExperiencePage implements OnInit {
     const result = await this.api.setVisibility("experiences", row.id, isVisible);
     if (!result.ok) {
       this.rows.set(previous);
-      toast.error("Not saved", { description: result.error });
+      toastNotSaved(result.error);
+      return;
     }
+    void this.versions.refresh();
   }
 
   protected async remove(row: ExperienceRow): Promise<void> {
@@ -743,6 +756,9 @@ export default class AdminExperiencePage implements OnInit {
     if (!result.ok) {
       this.rows.set(previous);
       toast.error("Could not reorder", { description: result.error });
+      return;
     }
+    // A reorder is an edit to every row, so it moves their versions.
+    void this.versions.refresh();
   }
 }

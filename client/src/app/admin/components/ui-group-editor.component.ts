@@ -14,12 +14,14 @@ import { FormBuilder, FormControl, ReactiveFormsModule } from "@angular/forms";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
 
+import { ConfirmService } from "./confirm-dialog.component";
+
 import { countChangedFields } from "../changed-fields";
 import { withUi, type LiveCompose } from "../preview/live-content";
 import { LivePreviewToggleComponent } from "../preview/live-preview-toggle.component";
 import { EditorLayoutComponent } from "./editor-layout.component";
 import { applyIssues, countServerErrors, focusFirstInvalid } from "../issues";
-import { toastIssues, toastStale } from "../save-feedback";
+import { askStale, toastDiscarded, toastIssues, toastNotSaved } from "../save-feedback";
 import { UiSectionService, type UiGroup } from "../ui-section.service";
 import { UnsavedChangesService } from "../unsaved-changes.service";
 import { isLocale } from "../../content/locale";
@@ -180,6 +182,7 @@ export class UiGroupEditorComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly ui = inject(UiSectionService);
   private readonly unsaved = inject(UnsavedChangesService);
+  private readonly confirm = inject(ConfirmService);
   private readonly host = inject(ElementRef<HTMLElement>);
 
   protected readonly view = signal<LocaleView>("both");
@@ -281,12 +284,20 @@ export class UiGroupEditorComponent implements OnInit {
     this.loaded.set(true);
   }
 
-  discard(): void {
-    if (!this.pristine || !this.baseline) return;
+  /** Returns the way back; with its own save bar, the toast offers it too. */
+  discard(): () => void {
+    if (!this.pristine || !this.baseline) return () => undefined;
+    const edits = this.form.getRawValue();
     this.form.reset(this.baseline);
     this.form.markAsPristine();
     this.revision.update((v) => v + 1);
     this.unsaved.clear(`ui:${this.group()}`);
+    const undo = (): void => {
+      this.form.setValue(edits);
+      this.form.markAsDirty();
+    };
+    if (this.saveBar()) toastDiscarded(undo);
+    return undo;
   }
 
   /** Resolves to whether the group is saved (true too when there was nothing to save). */
@@ -302,12 +313,16 @@ export class UiGroupEditorComponent implements OnInit {
       en: { ...this.pristine?.en, ...raw.en },
       de: { ...this.pristine?.de, ...raw.de },
     };
-    const result = await this.ui.saveGroup(this.group(), value as never, this.updatedAt);
+    const owned = this.pristine ?? { en: {}, de: {} };
+    const result = await this.ui.saveGroup(this.group(), value as never, this.updatedAt, {
+      [this.group()]: owned,
+    });
     this.saving.set(false);
 
     if (!result.ok) {
       if (result.reason === "stale") {
-        toastStale(() => this.load());
+        if (await askStale(this.confirm)) await this.load();
+        else this.updatedAt = result.version ?? this.updatedAt;
       } else if (result.reason === "invalid") {
         const unplaced = applyIssues(result.issues, ([, locale, key]) =>
           isLocale(locale) && typeof key === "string"
@@ -319,7 +334,7 @@ export class UiGroupEditorComponent implements OnInit {
         toastIssues(unplaced.length ? unplaced : result.issues);
         focusFirstInvalid(this.host.nativeElement);
       } else {
-        toast.error("Save failed", { description: result.error });
+        toastNotSaved(result.error, "Save failed");
       }
       return false;
     }

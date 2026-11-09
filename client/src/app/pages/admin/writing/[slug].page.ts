@@ -44,8 +44,10 @@ import {
   NotFoundStateComponent,
 } from "../../../admin/components/load-state.component";
 import { AdminPageHeaderComponent } from "../../../admin/components/page-header.component";
+import { ChangedElsewhere } from "../../../admin/changed-elsewhere";
+import { ConfirmService } from "../../../admin/components/confirm-dialog.component";
 import { FieldIssues, focusFirstInvalid } from "../../../admin/issues";
-import { toastIssues } from "../../../admin/save-feedback";
+import { toastDiscarded, toastIssues, toastNotSaved } from "../../../admin/save-feedback";
 import { MediaFieldComponent } from "../../../admin/components/media-field.component";
 import { RichTextComponent } from "../../../admin/components/rich-text.component";
 import { StringListComponent } from "../../../admin/components/string-list.component";
@@ -323,8 +325,13 @@ type PostDraft = PostRow;
                 </div>
               } @else {
                 <p class="m-0 text-sm text-muted-foreground">
-                  This post does not exist in {{ locale.toUpperCase() }}; its alternate link stays
-                  empty.
+                  @if (setAside()[locale]) {
+                    The {{ locale.toUpperCase() }} version goes when you save. Turn the switch back
+                    on to keep it.
+                  } @else {
+                    This post does not exist in {{ locale.toUpperCase() }}; its alternate link stays
+                    empty.
+                  }
                 </p>
               }
             </section>
@@ -350,6 +357,12 @@ export default class AdminPostEditorPage implements OnInit {
   private readonly router = inject(Router);
   private readonly unsaved = inject(UnsavedChangesService);
   private readonly ledger = inject(CopilotLedger);
+  private readonly confirm = inject(ConfirmService);
+  private readonly versions = new ChangedElsewhere(this.confirm, async () => {
+    const id = this.post()?.id;
+    const found = id ? await this.api.getPost(id) : null;
+    return found?.ok ? [found.data.post] : null;
+  });
 
   private readonly host = inject(ElementRef<HTMLElement>);
 
@@ -416,6 +429,10 @@ export default class AdminPostEditorPage implements OnInit {
 
   private pristine: PostDraft | null = null;
   private readonly revision = signal(0);
+  /** A language switched off: its text, kept here until Save. */
+  private readonly setAside = signal<Partial<Record<Locale, PostTranslationInput>>>({});
+  /** Languages whose removal was asked about and agreed, since the last save or discard. */
+  private readonly asked = new Set<Locale>();
 
   protected readonly dirty = computed(() => {
     this.revision();
@@ -481,6 +498,7 @@ export default class AdminPostEditorPage implements OnInit {
     const found = result?.ok ? result.data.post : null;
     this.post.set(found ? structuredClone(found) : null);
     this.pristine = found ? structuredClone(found) : null;
+    if (found) this.versions.remember([found]);
     this.revision.update((v) => v + 1);
   }
 
@@ -509,16 +527,46 @@ export default class AdminPostEditorPage implements OnInit {
     });
   }
 
-  protected setLocale(locale: Locale, exists: boolean): void {
+  /**
+   * On: the text set aside comes back. Off: the text is set aside until Save, so
+   * nothing is lost by a slip, and the first time for a language it asks.
+   */
+  protected async setLocale(locale: Locale, exists: boolean): Promise<void> {
     const current = this.post();
     if (!current) return;
     this.issues.resolve("translations");
-    this.patch({
-      translations: {
-        ...current.translations,
-        [locale]: exists ? (current.translations[locale] ?? blankTranslation()) : null,
-      },
+    if (exists) {
+      this.putTranslation(locale, this.setAside()[locale] ?? blankTranslation());
+      this.setAside.update((kept) => ({ ...kept, [locale]: undefined }));
+      return;
+    }
+    const text = current.translations[locale];
+    const typed = text && Object.values(text).some((v) => v.trim() !== "" && v !== "<p></p>");
+    this.setAside.update((kept) => ({ ...kept, [locale]: typed ? text : undefined }));
+    this.putTranslation(locale, null);
+    if (!typed || this.asked.has(locale)) return;
+
+    const language = locale === "en" ? "English" : "German";
+    const remove = await this.confirm.ask({
+      title: `Remove the ${language} version when you save?`,
+      description: "The text stays here until you save. Turn the switch back on to keep it.",
+      confirmLabel: "Remove when I save",
+      cancelLabel: "Keep it",
+      destructive: true,
     });
+    if (remove) {
+      this.asked.add(locale);
+      return;
+    }
+    this.putTranslation(locale, text);
+    this.setAside.update((kept) => ({ ...kept, [locale]: undefined }));
+  }
+
+  private putTranslation(locale: Locale, text: PostTranslationInput | null): void {
+    this.post.update((p) =>
+      p ? { ...p, translations: { ...p.translations, [locale]: text } } : p,
+    );
+    this.revision.update((v) => v + 1);
   }
 
   protected patchText(locale: Locale, change: Partial<PostTranslationInput>): void {
@@ -536,7 +584,16 @@ export default class AdminPostEditorPage implements OnInit {
   }
 
   protected discard(): void {
+    const edits = this.post();
+    const setAside = this.setAside();
+    toastDiscarded(() => {
+      this.post.set(edits);
+      this.setAside.set(setAside);
+      this.revision.update((v) => v + 1);
+    });
     this.post.set(this.pristine ? structuredClone(this.pristine) : null);
+    this.setAside.set({});
+    this.asked.clear();
     this.revision.update((v) => v + 1);
     this.issues.clear();
     // Thrown away with the other unsaved edits: the copilot's drafts were not kept.
@@ -548,6 +605,11 @@ export default class AdminPostEditorPage implements OnInit {
     if (!current || this.saving()) return;
 
     this.saving.set(true);
+    const title = current.translations.en?.title || current.translations.de?.title || current.slug;
+    if (!(await this.versions.mayOverwrite([current.id], title))) {
+      this.saving.set(false);
+      return;
+    }
     // The copilot's drafts are judged by what this save sends (plan phase 27).
     const ended = this.ledger.beginSave({
       [this.seoTarget("en", current.id)]: current.translations.en?.seoDescription ?? "",
@@ -562,6 +624,7 @@ export default class AdminPostEditorPage implements OnInit {
       canonicalUrl: current.canonicalUrl.trim(),
       translations: current.translations,
     });
+    if (result.ok) await this.versions.refresh();
     this.saving.set(false);
     ended(result.ok);
 
@@ -574,13 +637,15 @@ export default class AdminPostEditorPage implements OnInit {
         toastIssues(result.issues);
         focusFirstInvalid(this.host.nativeElement);
       } else {
-        toast.error("Save failed", { description: result.error });
+        toastNotSaved(result.error, "Save failed");
       }
       return;
     }
 
     const slugChanged = this.pristine?.slug !== current.slug;
     this.pristine = structuredClone(current);
+    this.setAside.set({});
+    this.asked.clear();
     this.revision.update((v) => v + 1);
     this.issues.clear();
     toast.success("Draft saved");

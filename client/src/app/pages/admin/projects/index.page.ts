@@ -21,6 +21,7 @@ import { unsavedChangesGuard } from "../../../admin/unsaved-changes.service";
 
 import { AdminApiService, type ProjectListRow } from "../../../admin/admin-api.service";
 import { ConfirmService } from "../../../admin/components/confirm-dialog.component";
+import { toastNotSaved } from "../../../admin/save-feedback";
 import { createBlankProject } from "../../../admin/create-entities";
 import {
   FormSkeletonComponent,
@@ -234,7 +235,7 @@ export default class AdminProjectsPage implements OnInit {
     const result = await this.api.setVisibility("projects", row.id, isVisible);
     if (!result.ok) {
       this.rows.set(previous);
-      toast.error("Not saved", { description: result.error });
+      toastNotSaved(result.error);
     }
   }
 

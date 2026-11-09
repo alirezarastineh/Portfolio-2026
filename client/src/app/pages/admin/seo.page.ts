@@ -13,11 +13,12 @@ import { FormBuilder, FormControl, ReactiveFormsModule } from "@angular/forms";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
 
-import { AdminApiService } from "../../admin/admin-api.service";
+import { AdminApiService, type ApiIssue } from "../../admin/admin-api.service";
 import { countChangedFields } from "../../admin/changed-fields";
 import { applyIssues, countServerErrors, focusFirstInvalid } from "../../admin/issues";
-import { toastIssues, toastStale } from "../../admin/save-feedback";
+import { askStale, toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
+import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import { SaveBarComponent } from "../../admin/components/editor-chrome.component";
 import { FieldPairComponent, type LocaleView } from "../../admin/components/field-pair.component";
 import {
@@ -136,6 +137,7 @@ export default class AdminSeoPage implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(AdminApiService);
   private readonly unsaved = inject(UnsavedChangesService);
+  private readonly confirm = inject(ConfirmService);
 
   protected readonly fields = FIELDS;
   protected readonly view = signal<LocaleView>("both");
@@ -223,10 +225,15 @@ export default class AdminSeoPage implements OnInit {
 
   protected reset(): void {
     if (!this.pristine) return;
+    const edits = this.form.getRawValue();
     this.form.reset({ en: this.pristine.en, de: this.pristine.de });
     this.form.markAsPristine();
     this.formVersion.update((v) => v + 1);
     this.unsaved.clear("seo");
+    toastDiscarded(() => {
+      this.form.setValue(edits);
+      this.form.markAsDirty();
+    });
   }
 
   protected async save(): Promise<void> {
@@ -239,24 +246,11 @@ export default class AdminSeoPage implements OnInit {
 
     if (!result.ok) {
       if (result.status === 409) {
-        toastStale(() => this.load());
+        await this.handleStale();
       } else if (result.issues?.length) {
-        // `[locale, field]`, straight onto the pair's control.
-        const issues = result.issues;
-        const unplaced = applyIssues(issues, ([locale, key]) =>
-          isLocale(locale) && typeof key === "string"
-            ? ((this.form.controls[locale].controls as Record<string, FormControl>)[key] ?? null)
-            : null,
-        );
-        this.formVersion.update((v) => v + 1);
-        const view = this.view();
-        if (view !== "both" && issues.some((i) => isLocale(i.path[0]) && i.path[0] !== view)) {
-          this.view.set("both");
-        }
-        toastIssues(unplaced.length ? unplaced : issues);
-        focusFirstInvalid(this.host.nativeElement);
+        this.handleIssues(result.issues);
       } else {
-        toast.error("Save failed", { description: result.error });
+        toastNotSaved(result.error, "Save failed");
       }
       return;
     }
@@ -268,5 +262,30 @@ export default class AdminSeoPage implements OnInit {
     this.formVersion.update((v) => v + 1);
     this.unsaved.clear("seo");
     toast.success("Draft saved", { description: "Publish to go live." });
+  }
+
+  private async handleStale(): Promise<void> {
+    const fresh = await this.api.getSection<Seo>("seo");
+    if (await askStale(this.confirm)) {
+      await this.load();
+    } else if (fresh.ok) {
+      this.updatedAt = fresh.data.updatedAt;
+    }
+  }
+
+  private handleIssues(issues: readonly ApiIssue[]): void {
+    // `[locale, field]`, straight onto the pair's control.
+    const unplaced = applyIssues(issues, ([locale, key]) =>
+      isLocale(locale) && typeof key === "string"
+        ? ((this.form.controls[locale].controls as Record<string, FormControl>)[key] ?? null)
+        : null,
+    );
+    this.formVersion.update((v) => v + 1);
+    const view = this.view();
+    if (view !== "both" && issues.some((i) => isLocale(i.path[0]) && i.path[0] !== view)) {
+      this.view.set("both");
+    }
+    toastIssues(unplaced.length ? unplaced : issues);
+    focusFirstInvalid(this.host.nativeElement);
   }
 }

@@ -40,8 +40,9 @@ import {
   SortableListComponent,
   SortableRowDirective,
 } from "../../admin/components/sortable-list.component";
+import { ChangedElsewhere } from "../../admin/changed-elsewhere";
 import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
-import { toastIssues } from "../../admin/save-feedback";
+import { toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 
 /** Any registry key; the link icons first. */
@@ -205,6 +206,10 @@ export default class AdminSocialsPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly unsaved = inject(UnsavedChangesService);
   private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly versions = new ChangedElsewhere(this.confirm, async () => {
+    const list = await this.api.listSocials();
+    return list.ok ? list.data.socials : null;
+  });
 
   protected readonly icons = ICONS;
   protected readonly rows = signal<SocialRow[]>([]);
@@ -263,6 +268,7 @@ export default class AdminSocialsPage implements OnInit {
     if (!result.ok) return;
     this.rows.set(result.data.socials);
     this.saved.set(new Map(result.data.socials.map((row) => [row.id, structuredClone(row)])));
+    this.versions.remember(result.data.socials);
   }
 
   protected patch(id: string, change: Partial<SocialInput>): void {
@@ -271,9 +277,11 @@ export default class AdminSocialsPage implements OnInit {
   }
 
   protected discard(): void {
+    const edits = this.rows();
     const saved = this.saved();
     this.rows.update((list) => list.map((row) => structuredClone(saved.get(row.id) ?? row)));
     this.issues.clear();
+    toastDiscarded(() => this.rows.set(edits));
   }
 
   /** Every changed link. One that fails keeps its edits and says why. */
@@ -285,12 +293,18 @@ export default class AdminSocialsPage implements OnInit {
       .map((id) => this.rows().find((r) => r.id === id))
       .filter((r): r is SocialRow => r !== undefined);
 
+    const ids = changedRows.map((row) => row.id);
+    if (!(await this.versions.mayOverwrite(ids, "A link on this page"))) {
+      this.saving.set(false);
+      return;
+    }
     const results = await Promise.all(
       changedRows.map(async (row) => ({
         row,
         result: await this.api.updateSocial(row.id, toInput(row)),
       })),
     );
+    if (ids.length) await this.versions.refresh();
 
     const failed: ApiIssue[] = [];
     let error = "";
@@ -315,7 +329,7 @@ export default class AdminSocialsPage implements OnInit {
       toastIssues(failed);
       focusFirstInvalid(this.host.nativeElement);
     } else if (error) {
-      toast.error("Not saved", { description: error });
+      toastNotSaved(error);
     } else {
       this.issues.clear();
       toast.success("Draft saved");
@@ -380,6 +394,9 @@ export default class AdminSocialsPage implements OnInit {
     if (!result.ok) {
       this.rows.set(previous);
       toast.error("Could not reorder", { description: result.error });
+      return;
     }
+    // A reorder is an edit to every row, so it moves their versions.
+    void this.versions.refresh();
   }
 }

@@ -34,8 +34,9 @@ import { hasText, type OutlineItem } from "../../admin/editor-outline";
 import { applyIssues, countServerErrors, focusFirstInvalid } from "../../admin/issues";
 import { withIdentity, withUi, type LiveCompose } from "../../admin/preview/live-content";
 import { LivePreviewToggleComponent } from "../../admin/preview/live-preview-toggle.component";
-import { toastIssues, toastStale } from "../../admin/save-feedback";
+import { askStale, toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
+import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import {
   FieldIssueComponent,
   SaveBarComponent,
@@ -301,6 +302,7 @@ export default class AdminHeroPage implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly ui = inject(UiSectionService);
   private readonly unsaved = inject(UnsavedChangesService);
+  private readonly confirm = inject(ConfirmService);
 
   private readonly host = inject(ElementRef<HTMLElement>);
 
@@ -530,7 +532,19 @@ export default class AdminHeroPage implements OnInit {
   }
 
   protected discard(): void {
+    const identity = this.identity.getRawValue();
+    const copy = this.form.getRawValue();
+    const avatarId = this.avatarId();
+    const avatarPath = this.avatarPath();
     this.applyPristine();
+    toastDiscarded(() => {
+      this.avatarId.set(avatarId);
+      this.avatarPath.set(avatarPath);
+      this.identity.setValue(identity);
+      this.form.setValue(copy);
+      this.identity.markAsDirty();
+      this.form.markAsDirty();
+    });
   }
 
   protected chooseAvatar(asset: MediaAsset | null): void {
@@ -542,6 +556,17 @@ export default class AdminHeroPage implements OnInit {
 
   /** CVs point at media; changing one is saved at once and goes live with the next publish. */
   protected async chooseResume(locale: Locale, asset: MediaAsset | null): Promise<void> {
+    if (!asset) {
+      const keep = this.resumes()[locale];
+      const remove = await this.confirm.ask({
+        title: `Remove ${keep?.originalName ?? "this CV"}?`,
+        description: `The ${locale.toUpperCase()} CV leaves the draft now, and the site at the next publish. The file stays in Media.`,
+        confirmLabel: "Remove",
+        cancelLabel: "Keep it",
+        destructive: true,
+      });
+      if (!remove) return;
+    }
     const result = asset
       ? await this.api.putResume(locale, asset.id)
       : await this.api.deleteResume(locale);
@@ -557,7 +582,7 @@ export default class AdminHeroPage implements OnInit {
   }
 
   /** Identity and copy in one request, so the page is never left half-saved. */
-  protected async save(): Promise<void> {
+  protected async save(retried = false): Promise<void> {
     if (this.saving()) return;
     this.saving.set(true);
 
@@ -580,11 +605,11 @@ export default class AdminHeroPage implements OnInit {
 
     if (!result.ok) {
       if (result.status === 409) {
-        toastStale(() => this.reload(), "This page");
+        await this.afterConflict(retried);
       } else if (result.issues?.length) {
         this.showIssues(result.issues);
       } else {
-        toast.error("Save failed", { description: result.error });
+        toastNotSaved(result.error, "Save failed");
       }
       return;
     }
@@ -603,6 +628,28 @@ export default class AdminHeroPage implements OnInit {
     this.revision.update((v) => v + 1);
     this.unsaved.clear("hero");
     toast.success("Draft saved");
+  }
+
+  /**
+   * A 409 can come from another group of the `ui` document: its one version
+   * moves for all of them. Nothing of this page changed there: save again on the
+   * new version. Otherwise ask, with the edits kept.
+   */
+  private async afterConflict(retried: boolean): Promise<void> {
+    const saved = this.pristine;
+    if (!saved) return;
+    const [latest, profile] = await Promise.all([
+      this.ui.latest({ profile: saved.profile, hero: saved.hero, nav: saved.nav }),
+      this.api.getProfile(),
+    ]);
+    const identityAt = profile.ok ? profile.data.profile.updatedAt : null;
+    if (latest?.unchanged && identityAt === this.profileUpdatedAt && !retried) {
+      this.uiUpdatedAt = latest.updatedAt;
+      return this.save(true);
+    }
+    if (await askStale(this.confirm, "This page")) return this.reload();
+    if (latest) this.uiUpdatedAt = latest.updatedAt;
+    if (identityAt) this.profileUpdatedAt = identityAt;
   }
 
   /** `profile.<field>` → an identity control; `ui.<group>.<locale>.<field>` → a copy control. */
@@ -633,7 +680,7 @@ export default class AdminHeroPage implements OnInit {
     return (this.identity.controls[key].errors?.["server"] as string | undefined) ?? null;
   }
 
-  /** After "Saved elsewhere", or a load that failed: the stored version, replacing any edits here. */
+  /** After Reload at "Saved elsewhere", or a load that failed: the stored version, replacing any edits here. */
   protected async reload(): Promise<void> {
     this.loading.set(true);
     await this.load();
