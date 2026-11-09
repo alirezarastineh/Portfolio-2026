@@ -53,6 +53,7 @@ import {
 import { deleteBlocker, missingAlt, usagePlace } from "../../admin/media-usage";
 import { absoluteTime } from "../../admin/relative-time";
 import { toastNotSaved } from "../../admin/save-feedback";
+import { LoadErrorComponent } from "../../admin/components/load-state.component";
 import { RecoveryBannerComponent } from "../../admin/components/recovery-banner.component";
 import { RecoveryService, type RecoveryHandle } from "../../admin/recovery.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
@@ -92,6 +93,7 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DraftOfferComponent,
+    LoadErrorComponent,
     RecoveryBannerComponent,
     AdminPageHeaderComponent,
     FormsModule,
@@ -249,6 +251,13 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
 
       @if (!library.loaded()) {
         <hlm-spinner class="size-5 self-center" />
+      } @else if (library.error() && !library.assets().length) {
+        <app-load-error
+          title="Could not load the media library"
+          description="Nothing was lost: the files are still on the server."
+          [reason]="library.error() ?? ''"
+          (retry)="retry()"
+        />
       } @else if (!visible().length) {
         <div hlmEmpty class="border border-dashed border-border">
           <div hlmEmptyHeader>
@@ -730,6 +739,11 @@ export default class AdminMediaPage implements OnInit {
     const ids = await this.recovery.items("media");
     const asset = this.library.assets().find((a) => ids.includes(a.id));
     if (asset && !this.activeId() && !this.gone) this.open(asset);
+  }
+
+  /** After a failed load: asks again. */
+  protected retry(): void {
+    void this.library.load(true);
   }
 
   protected size(bytes: number): string {

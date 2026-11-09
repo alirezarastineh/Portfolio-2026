@@ -46,6 +46,8 @@ export class MediaLibraryService {
 
   readonly assets = signal<MediaAsset[]>([]);
   readonly loaded = signal(false);
+  /** The API's reason when the library did not arrive; what was there stays. */
+  readonly error = signal<string | null>(null);
   private inFlight: Promise<void> | null = null;
 
   private readonly byPath = computed(() => new Map(this.assets().map((a) => [a.path, a])));
@@ -63,6 +65,7 @@ export class MediaLibraryService {
   private async fetch(): Promise<void> {
     const result = await this.api.listMedia();
     if (result.ok) this.assets.set(result.data.media);
+    this.error.set(result.ok ? null : result.error);
     this.loaded.set(true);
   }
 

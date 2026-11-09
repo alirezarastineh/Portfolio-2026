@@ -17,7 +17,14 @@ import {
   untracked,
 } from "@angular/core";
 import { toSignal } from "@angular/core/rxjs-interop";
-import { NavigationEnd, Router, RouterLink, RouterOutlet } from "@angular/router";
+import {
+  NavigationEnd,
+  Router,
+  RouterLink,
+  RouterOutlet,
+  type ActivatedRouteSnapshot,
+  type RouterStateSnapshot,
+} from "@angular/router";
 import type { RouteMeta } from "@analogjs/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import {
@@ -38,6 +45,7 @@ import {
   lucideCircleCheck,
   lucidePenLine,
   lucidePlus,
+  lucideRefreshCw,
   lucideRocket,
   lucideScale,
   lucideSearch,
@@ -85,7 +93,9 @@ import { UnsavedChangesService } from "../admin/unsaved-changes.service";
 import { ThemeService } from "../services/theme.service";
 
 export const routeMeta: RouteMeta = {
-  title: "Admin",
+  title: adminTitle,
+  // The title follows each page inside the layout, so it is worked out on every navigation.
+  runGuardsAndResolvers: "always",
   // Belt and braces alongside robots.txt and the Caddy X-Robots-Tag header.
   meta: [{ name: "robots", content: "noindex, nofollow" }],
   canActivateChild: [adminAuthGuard],
@@ -145,7 +155,43 @@ const NAV: NavItem[] = [
   { path: "/admin/media", label: "Media", icon: "lucideImages", group: "Content" },
 ];
 
+const ACCOUNT: NavItem = {
+  path: "/admin/account",
+  label: "Account",
+  icon: "lucideUser",
+  group: "Overview",
+};
+
 const GROUPS: NavItem["group"][] = ["Overview", "Content"];
+
+/** The most specific entry for a URL, for the breadcrumb and the tab's title. */
+function navItemFor(url: string): NavItem | null {
+  return (
+    [...NAV, ACCOUNT]
+      .sort((a, b) => b.path.length - a.path.length)
+      .find((item) => (item.path === "/admin" ? url === "/admin" : url.startsWith(item.path))) ??
+    null
+  );
+}
+
+/** The tab's title: the page, then the admin ("Legal pages · Admin"); a project or post leads with its slug. */
+function adminTitle(_route: ActivatedRouteSnapshot, state: RouterStateSnapshot): string {
+  const url = state.url.split(/[?#]/)[0] ?? "";
+  const slug = /^\/admin\/(?:projects|writing)\/([^/]+)$/.exec(url)?.[1];
+  return [slug && decodeURIComponent(slug), navItemFor(url)?.label, "Admin"]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+type PublishState = "checking" | "failed" | "publish" | "published";
+
+/** What the sidebar's Publish says: nothing is claimed before the server has answered. */
+const PUBLISH: Record<PublishState, { word: string; icon: string }> = {
+  checking: { word: "Checking…", icon: "lucideRocket" },
+  failed: { word: "Could not check", icon: "lucideRefreshCw" },
+  publish: { word: "Publish", icon: "lucideRocket" },
+  published: { word: "All published", icon: "lucideCircleCheck" },
+};
 
 /** Long enough for the palette to close and give focus back before an action takes it. */
 const PALETTE_CLOSE_MS = 120;
@@ -214,6 +260,7 @@ function openTab(href: string): void {
       lucideNewspaper,
       lucidePenLine,
       lucidePlus,
+      lucideRefreshCw,
       lucideRocket,
       lucideScale,
       lucideSearch,
@@ -251,7 +298,7 @@ function openTab(href: string): void {
         <!-- A landmark of its own: everything in it is the admin's navigation. -->
         <hlm-sidebar collapsible="icon" role="navigation" aria-label="Admin">
           <div hlmSidebarHeader>
-            <!-- The public site's mark; collapsed to icons, the mark alone. -->
+            <!-- The admin's mark; collapsed to icons, the mark alone. -->
             <a
               routerLink="/admin"
               class="flex h-8 items-center gap-2 px-2 font-mono text-sm font-semibold text-foreground group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center"
@@ -325,17 +372,13 @@ function openTab(href: string): void {
                   hlmSidebarMenuButton
                   variant="outline"
                   class="relative"
-                  [disabled]="!pulse.unpublished()"
+                  [disabled]="publishState() === 'checking' || publishState() === 'published'"
                   [tooltip]="publishName()"
                   [attr.aria-label]="publishName()"
-                  (click)="pulse.publishOpen.set(true)"
+                  (click)="onPublish()"
                 >
-                  <ng-icon
-                    [name]="pulse.unpublished() ? 'lucideRocket' : 'lucideCircleCheck'"
-                    size="16"
-                    aria-hidden="true"
-                  />
-                  <span>{{ pulse.unpublished() ? "Publish" : "All published" }}</span>
+                  <ng-icon [name]="publishWords().icon" size="16" aria-hidden="true" />
+                  <span>{{ publishWords().word }}</span>
                   @if (pulse.unpublished()) {
                     @if (pendingCount(); as n) {
                       <!-- A kept space: "Publish 3", two words, as the name says it (axe's label-in-name). -->
@@ -426,7 +469,7 @@ function openTab(href: string): void {
             >
               <ng-icon name="lucideSearch" size="14" aria-hidden="true" />
               <span>Jump to…</span>
-              <kbd class="kbd" aria-hidden="true">⌘K</kbd>
+              <kbd class="kbd" aria-hidden="true">{{ paletteKey }}</kbd>
             </button>
           </header>
 
@@ -472,8 +515,10 @@ function openTab(href: string): void {
               >
                 <ng-icon name="lucideRocket" size="14" aria-hidden="true" />
                 <span class="ml-2">Review and publish…</span>
-                @if (!pulse.unpublished()) {
-                  <span class="ml-auto font-mono text-xs text-muted-foreground">all published</span>
+                @if (publishState() !== "publish") {
+                  <span class="ml-auto font-mono text-xs text-muted-foreground">{{
+                    publishWords().word.toLowerCase()
+                  }}</span>
                 }
               </button>
               <button
@@ -622,8 +667,24 @@ export default class AdminLayout {
     return review.issues || review.total;
   });
 
+  protected readonly publishState = computed<PublishState>(() => {
+    if (this.pulse.status() === null) {
+      return this.pulse.failed().has("status") ? "failed" : "checking";
+    }
+    return this.pulse.unpublished() ? "publish" : "published";
+  });
+  protected readonly publishWords = computed(() => PUBLISH[this.publishState()]);
+
+  /** Ctrl K, or ⌘K on a Mac. */
+  protected readonly paletteKey =
+    typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform ?? "")
+      ? "⌘K"
+      : "Ctrl K";
+
   protected readonly publishName = computed(() => {
-    if (!this.pulse.unpublished()) return "All published";
+    const state = this.publishState();
+    if (state === "failed") return "Could not check what is unpublished: try again";
+    if (state !== "publish") return PUBLISH[state].word;
     const review = this.pulse.review();
     if (review?.issues) {
       return `Publish: ${review.issues} ${review.issues === 1 ? "problem" : "problems"} to fix first`;
@@ -656,22 +717,7 @@ export default class AdminLayout {
   );
 
   /** The most specific nav entry for the current URL, for the breadcrumb. */
-  protected readonly currentItem = computed(() => {
-    const url = this.url();
-    return (
-      [...NAV]
-        .sort((a, b) => b.path.length - a.path.length)
-        .find((item) => (item.path === "/admin" ? url === "/admin" : url.startsWith(item.path))) ??
-      (url.startsWith("/admin/account")
-        ? {
-            path: "/admin/account",
-            label: "Account",
-            icon: "lucideUser",
-            group: "Overview" as const,
-          }
-        : null)
-    );
-  });
+  protected readonly currentItem = computed(() => navItemFor(this.url()));
 
   protected readonly projectSlug = computed(() => {
     const match = /^\/admin\/(?:projects|writing)\/([^/]+)$/.exec(this.url());
@@ -744,6 +790,12 @@ export default class AdminLayout {
   protected after(action: () => void | Promise<void>): void {
     this.paletteOpen.set(false);
     setTimeout(() => void action(), PALETTE_CLOSE_MS);
+  }
+
+  /** Publish opens the review; after a failed check it asks the server again. */
+  protected onPublish(): void {
+    if (this.publishState() === "failed") void this.pulse.refresh(["status", "review"]);
+    else this.pulse.publishOpen.set(true);
   }
 
   protected readonly publish = (): void => this.pulse.publishOpen.set(true);

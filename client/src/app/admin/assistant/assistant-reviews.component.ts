@@ -24,7 +24,7 @@ import {
   type ReviewQueue,
 } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
-import { FormSkeletonComponent } from "../components/load-state.component";
+import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
 import { isShortcutTarget } from "../components/shortcut-sheet.component";
 import { isActive } from "../eval-runs";
 import { stepFrom } from "../inbox";
@@ -56,6 +56,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
     FormsModule,
     FormSkeletonComponent,
     FreezeCaseComponent,
+    LoadErrorComponent,
     HlmBadge,
     HlmButton,
   ],
@@ -107,6 +108,13 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
 
       @if (loading()) {
         <app-form-skeleton kind="list" [rows]="3" label="Loading the review queue…" />
+      } @else if (loadError(); as reason) {
+        <app-load-error
+          title="Could not load the review queue"
+          description="Nothing was lost: the answers and your verdicts are kept on the server."
+          [reason]="reason"
+          (retry)="reload()"
+        />
       } @else if (!queue().length) {
         <p class="m-0 text-sm text-muted-foreground">Nothing to review this week.</p>
       } @else {
@@ -278,6 +286,8 @@ export class AssistantReviewsComponent implements OnInit {
 
   protected readonly data = signal<ReviewQueue | null>(null);
   protected readonly loading = signal(true);
+  /** The API's reason when the queue did not arrive: never shown as an empty week. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly saving = signal(false);
   protected readonly selectedId = signal<string | null>(null);
   protected readonly draft = signal<ReviewLabels>(emptyLabels());
@@ -341,14 +351,21 @@ export class AssistantReviewsComponent implements OnInit {
     const result = await this.api.assistantReviews(week);
     this.loading.set(false);
     if (!result.ok) {
-      toast.error("Could not load the review queue", { description: result.error });
+      if (this.data()) {
+        toast.error("Could not load the review queue", { description: result.error });
+      } else this.loadError.set(result.error);
       return;
     }
+    this.loadError.set(null);
     this.data.set(result.data);
     const next = keep ?? nextUnreviewed(result.data.queue, null)?.message.id ?? null;
     const entry = result.data.queue.find((e) => e.message.id === next) ?? result.data.queue[0];
     if (entry) this.select(entry);
     else this.selectedId.set(null);
+  }
+
+  protected reload(): void {
+    void this.load();
   }
 
   protected select(entry: ReviewEntry): void {
@@ -365,6 +382,11 @@ export class AssistantReviewsComponent implements OnInit {
     const entry = this.selected();
     const week = this.data()?.week;
     if (!entry || !week || this.saving()) return;
+    // An empty review would count as reviewed and say nothing.
+    if (Object.values(this.draft()).every((v) => v === null) && !this.note().trim()) {
+      toast.error("Pick a verdict or write a note first.");
+      return;
+    }
     this.saving.set(true);
     const result = await this.api.saveReview(entry.message.id, {
       labels: this.draft(),

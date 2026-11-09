@@ -22,6 +22,7 @@ import type { InsightTopic } from "../assistant-types";
 import { FaqDraftsService } from "../faq-drafts.service";
 import { faqProposalWords } from "../faq-proposals";
 import { scopeFromTitle, topicProblem, type InsightSnapshot, type InsightsView } from "../lessons";
+import { LoadErrorComponent } from "../components/load-state.component";
 import { LessonFormComponent } from "./lesson-form.component";
 
 /**
@@ -35,7 +36,7 @@ import { LessonFormComponent } from "./lesson-form.component";
 @Component({
   selector: "app-assistant-insights",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmBadge, HlmButton, HlmSpinner, LessonFormComponent],
+  imports: [HlmBadge, HlmButton, HlmSpinner, LessonFormComponent, LoadErrorComponent],
   host: { class: "block" },
   template: `
     <section class="flex flex-col gap-4" aria-labelledby="insights-heading">
@@ -61,6 +62,9 @@ import { LessonFormComponent } from "./lesson-form.component";
         One model call (a fraction of a cent), counted toward the daily budget. The last run shows
         here without one.
       </p>
+      @if (loadError()) {
+        <app-load-error compact title="Could not load the last analysis" (retry)="retry()" />
+      }
       @if (runLine(); as line) {
         <p class="m-0 text-xs">{{ line }}</p>
       }
@@ -180,6 +184,8 @@ export class AssistantInsightsComponent implements OnInit {
   protected readonly analysed = signal(0);
   protected readonly cached = signal(false);
   protected readonly loading = signal(false);
+  /** The last analysis did not arrive: said, with Try again; the button still works. */
+  protected readonly loadError = signal(false);
   /** The topic a lesson is being written for. */
   protected readonly lessonFor = signal<number | null>(null);
   /** The topic a lesson was just made from. */
@@ -226,12 +232,17 @@ export class AssistantInsightsComponent implements OnInit {
   private async load(): Promise<void> {
     const mine = ++this.latest;
     const result = await this.api.latestInsights();
-    // An API without kept runs: the button still works.
-    if (!result.ok || mine !== this.latest) return;
+    if (mine !== this.latest) return;
+    this.loadError.set(!result.ok);
+    if (!result.ok) return;
     this.view.set(result.data);
     const run = result.data.snapshot;
     if (run) this.show(run.topics, run.analysed, false);
     await this.seen(run);
+  }
+
+  protected retry(): void {
+    void this.load();
   }
 
   private show(topics: InsightTopic[], analysed: number, cached: boolean): void {

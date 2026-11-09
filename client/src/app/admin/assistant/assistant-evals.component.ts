@@ -16,6 +16,7 @@ import { HlmButton } from "@spartan-ng/helm/button";
 import { AdminApiService } from "../admin-api.service";
 import type { RunItem, RunRow } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
+import { LoadErrorComponent } from "../components/load-state.component";
 import {
   canResume,
   compareRuns,
@@ -49,7 +50,7 @@ const POLL_MS = 2_000;
 @Component({
   selector: "app-assistant-evals",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, HlmBadge, HlmButton],
+  imports: [DecimalPipe, HlmBadge, HlmButton, LoadErrorComponent],
   host: { class: "block" },
   template: `
     <div class="flex flex-col gap-6">
@@ -264,49 +265,53 @@ const POLL_MS = 2_000;
 
       <section class="flex flex-col gap-2" aria-labelledby="eval-history">
         <h2 id="eval-history" class="m-0 text-sm font-medium">Past runs</h2>
-        <div class="overflow-x-auto rounded-lg border border-border">
-          <table class="w-full text-sm">
-            <thead class="text-left text-xs text-muted-foreground">
-              <tr>
-                <th class="p-2 font-normal">Started</th>
-                <th class="p-2 font-normal">Status</th>
-                <th class="p-2 text-right font-normal">Passed</th>
-                <th class="p-2 text-right font-normal">Cost</th>
-                <th class="p-2 font-normal"><span class="sr-only">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (r of evalRuns(); track r.id) {
-                <tr class="border-t border-border text-xs">
-                  <td class="p-2 font-mono">{{ when(r.createdAt) }}</td>
-                  <td class="p-2">{{ statusLabel(r) }}</td>
-                  <td class="p-2 text-right font-mono">
-                    @if (r.summary; as s) {
-                      {{ s.passed }}/{{ s.completed }}
-                    } @else {
-                      {{ r.progress.done }}/{{ r.progress.total }} done
-                    }
-                  </td>
-                  <td class="p-2 text-right font-mono">\${{ r.usd | number: "1.3-4" }}</td>
-                  <td class="flex flex-wrap justify-end gap-2 p-2">
-                    <button hlmBtn size="sm" variant="ghost" (click)="open(r.id)">Open</button>
-                    @if (view(); as v) {
-                      @if (v.run.id !== r.id) {
-                        <button hlmBtn size="sm" variant="ghost" (click)="compare(r)">
-                          Compare
-                        </button>
-                      }
-                    }
-                  </td>
-                </tr>
-              } @empty {
+        @if (loadError()) {
+          <app-load-error compact title="Could not load the eval runs" (retry)="reload()" />
+        } @else {
+          <div class="overflow-x-auto rounded-lg border border-border">
+            <table class="w-full text-sm">
+              <thead class="text-left text-xs text-muted-foreground">
                 <tr>
-                  <td class="p-2 text-muted-foreground" colspan="5">No runs yet.</td>
+                  <th class="p-2 font-normal">Started</th>
+                  <th class="p-2 font-normal">Status</th>
+                  <th class="p-2 text-right font-normal">Passed</th>
+                  <th class="p-2 text-right font-normal">Cost</th>
+                  <th class="p-2 font-normal"><span class="sr-only">Actions</span></th>
                 </tr>
-              }
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                @for (r of evalRuns(); track r.id) {
+                  <tr class="border-t border-border text-xs">
+                    <td class="p-2 font-mono">{{ when(r.createdAt) }}</td>
+                    <td class="p-2">{{ statusLabel(r) }}</td>
+                    <td class="p-2 text-right font-mono">
+                      @if (r.summary; as s) {
+                        {{ s.passed }}/{{ s.completed }}
+                      } @else {
+                        {{ r.progress.done }}/{{ r.progress.total }} done
+                      }
+                    </td>
+                    <td class="p-2 text-right font-mono">\${{ r.usd | number: "1.3-4" }}</td>
+                    <td class="flex flex-wrap justify-end gap-2 p-2">
+                      <button hlmBtn size="sm" variant="ghost" (click)="open(r.id)">Open</button>
+                      @if (view(); as v) {
+                        @if (v.run.id !== r.id) {
+                          <button hlmBtn size="sm" variant="ghost" (click)="compare(r)">
+                            Compare
+                          </button>
+                        }
+                      }
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td class="p-2 text-muted-foreground" colspan="5">No runs yet.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
       </section>
     </div>
   `,
@@ -319,6 +324,8 @@ export class AssistantEvalsComponent implements OnInit {
 
   /** Every run, whatever its kind; the history lists the eval runs. */
   protected readonly runs = signal<RunRow[]>([]);
+  /** The runs did not arrive: the history says so, never "No runs yet". */
+  protected readonly loadError = signal(false);
   protected readonly view = signal<{ run: RunRow; items: RunItem[] } | null>(null);
   protected readonly busy = signal(false);
   protected readonly comparison = signal<{ label: string; rows: ComparisonRow[] } | null>(null);
@@ -358,14 +365,22 @@ export class AssistantEvalsComponent implements OnInit {
   private async load(): Promise<void> {
     const [list, judge] = await Promise.all([this.api.listRuns(), this.api.judgeStatus()]);
     if (judge.ok) this.judge.set(judge.data);
+    // With runs on screen, a toast; before, the history says so, with Try again.
     if (!list.ok) {
-      toast.error("Could not load the eval runs", { description: list.error });
+      if (this.runs().length) {
+        toast.error("Could not load the eval runs", { description: list.error });
+      } else this.loadError.set(true);
       return;
     }
+    this.loadError.set(false);
     this.runs.set(list.data.runs);
     const evals = this.evalRuns();
     const first = evals.find(isActive) ?? evals[0];
     if (first && !this.view()) await this.open(first.id);
+  }
+
+  protected reload(): void {
+    void this.load();
   }
 
   /** Whether reviewers' labels back the judge that scored this run. */

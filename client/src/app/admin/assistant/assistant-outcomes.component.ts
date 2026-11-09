@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@ang
 import { toast } from "@spartan-ng/brain/sonner";
 
 import { AdminApiService } from "../admin-api.service";
+import { LoadErrorComponent } from "../components/load-state.component";
 import {
   browserTiles,
   tourLine,
@@ -27,6 +28,7 @@ import {
 @Component({
   selector: "app-assistant-outcomes",
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [LoadErrorComponent],
   host: { class: "block" },
   template: `
     <section class="flex flex-col gap-3" aria-labelledby="assistant-outcomes">
@@ -125,6 +127,8 @@ import {
             </p>
           }
         </div>
+      } @else if (loadError()) {
+        <app-load-error compact title="Could not load the outcomes" (retry)="retry()" />
       } @else {
         <p class="m-0 text-xs text-muted-foreground">Loading…</p>
       }
@@ -147,6 +151,8 @@ export class AssistantOutcomesComponent implements OnInit {
   protected readonly matchRowsLine = matchRowsLine;
 
   protected readonly view = signal<OutcomesView | null>(null);
+  /** The outcomes did not arrive: said, with Try again, never "Loading…" for ever. */
+  protected readonly loadError = signal(false);
   protected readonly saving = signal(false);
 
   ngOnInit(): void {
@@ -156,7 +162,12 @@ export class AssistantOutcomesComponent implements OnInit {
   private async load(): Promise<void> {
     const result = await this.api.assistantOutcomes();
     if (result.ok) this.view.set(result.data);
-    else toast.error("Could not load the outcomes", { description: result.error });
+    else if (this.view()) toast.error("Could not load the outcomes", { description: result.error });
+    this.loadError.set(!result.ok && !this.view());
+  }
+
+  protected retry(): void {
+    void this.load();
   }
 
   protected tiles(v: OutcomesView): { label: string; value: string }[] {
