@@ -119,6 +119,20 @@ describe("AdminPulseService", () => {
     vi.useRealTimers();
   });
 
+  it("asks for nothing while paused, and looks again on resuming", async () => {
+    const { api, pulse } = setup();
+    pulse.start();
+    await vi.waitFor(() => expect(api.calls).toHaveLength(5));
+    api.calls.length = 0;
+
+    pulse.pause(true);
+    await pulse.refresh();
+    expect(api.calls).toEqual([]);
+
+    pulse.pause(false);
+    await vi.waitFor(() => expect(api.calls).toHaveLength(5));
+  });
+
   it("loads every part once started, and leaves spam out of the inbox", async () => {
     const { api, pulse } = setup();
     await pulse.refresh();

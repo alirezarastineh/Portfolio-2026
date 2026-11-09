@@ -1,10 +1,12 @@
 import { provideZonelessChangeDetection } from "@angular/core";
-import { TestBed } from "@angular/core/testing";
+import { TestBed, type ComponentFixture } from "@angular/core/testing";
+import { By } from "@angular/platform-browser";
 import { provideRouter } from "@angular/router";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { AdminApiService, type ApiResult } from "../../admin/admin-api.service";
 import { AdminSessionService } from "../../admin/admin-session.service";
+import { SignInFormComponent } from "../../admin/components/sign-in-form.component";
 import AdminLoginPage from "./login.page";
 
 type LoginPayload = { ok: true; totpRequired: boolean; user: unknown };
@@ -49,6 +51,11 @@ function setup() {
 
 const text = (fixture: { nativeElement: HTMLElement }) => fixture.nativeElement.textContent ?? "";
 
+/** The two steps live in the form the page holds. */
+const form = (fixture: ComponentFixture<AdminLoginPage>): SignInFormComponent =>
+  fixture.debugElement.query(By.directive(SignInFormComponent))
+    .componentInstance as SignInFormComponent;
+
 describe("AdminLoginPage", () => {
   beforeEach(() => {
     try {
@@ -74,7 +81,7 @@ describe("AdminLoginPage", () => {
 
   it("does not call the API until the form is valid", async () => {
     const { fixture, api } = setup();
-    await fixture.componentInstance["submitCredentials"]();
+    await form(fixture)["submitCredentials"]();
 
     expect(api.calls).toEqual([]);
   });
@@ -83,11 +90,11 @@ describe("AdminLoginPage", () => {
     const { fixture, api } = setup();
     api.loginResult = { ok: true, data: { ok: true, totpRequired: true, user: null } };
 
-    fixture.componentInstance["credentials"].setValue({
+    form(fixture)["credentials"].setValue({
       email: "admin@example.com",
       password: "hunter2hunter2",
     });
-    await fixture.componentInstance["submitCredentials"]();
+    await form(fixture)["submitCredentials"]();
     fixture.detectChanges();
 
     expect(fixture.componentInstance["step"]()).toBe("totp");
@@ -99,14 +106,14 @@ describe("AdminLoginPage", () => {
     const { fixture, api } = setup();
     api.loginResult = { ok: false, error: "invalid_credentials", status: 401 };
 
-    fixture.componentInstance["credentials"].setValue({
+    form(fixture)["credentials"].setValue({
       email: "admin@example.com",
       password: "wrong-password",
     });
-    await fixture.componentInstance["submitCredentials"]();
+    await form(fixture)["submitCredentials"]();
     fixture.detectChanges();
 
-    expect(fixture.componentInstance["error"]()).toBe("Incorrect email or password.");
+    expect(form(fixture)["error"]()).toBe("Incorrect email or password.");
     expect(text(fixture)).not.toContain("invalid_credentials");
   });
 
@@ -117,11 +124,11 @@ describe("AdminLoginPage", () => {
     expect(title()).toContain("admin@portfolio — login");
 
     api.loginResult = { ok: true, data: { ok: true, totpRequired: true, user: null } };
-    fixture.componentInstance["credentials"].setValue({
+    form(fixture)["credentials"].setValue({
       email: "admin@example.com",
       password: "hunter2hunter2",
     });
-    await fixture.componentInstance["submitCredentials"]();
+    await form(fixture)["submitCredentials"]();
     fixture.detectChanges();
     expect(title()).toContain("admin@portfolio — two-factor");
   });
@@ -130,11 +137,11 @@ describe("AdminLoginPage", () => {
   it("shakes on a refused attempt, and is still again once the shake ends", async () => {
     const { fixture, api } = setup();
     api.loginResult = { ok: false, error: "invalid_credentials", status: 401 };
-    fixture.componentInstance["credentials"].setValue({
+    form(fixture)["credentials"].setValue({
       email: "admin@example.com",
       password: "wrong-password",
     });
-    await fixture.componentInstance["submitCredentials"]();
+    await form(fixture)["submitCredentials"]();
     fixture.detectChanges();
 
     const frame: HTMLElement =
@@ -150,12 +157,12 @@ describe("AdminLoginPage", () => {
     const { fixture, api } = setup();
     api.loginResult = { ok: false, error: "teapot", status: 418 };
 
-    fixture.componentInstance["credentials"].setValue({
+    form(fixture)["credentials"].setValue({
       email: "admin@example.com",
       password: "hunter2hunter2",
     });
-    await fixture.componentInstance["submitCredentials"]();
+    await form(fixture)["submitCredentials"]();
 
-    expect(fixture.componentInstance["error"]()).toBe("Sign-in failed.");
+    expect(form(fixture)["error"]()).toBe("Sign-in failed.");
   });
 });

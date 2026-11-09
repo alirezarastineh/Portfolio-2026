@@ -1,7 +1,6 @@
 import type { HttpInterceptorFn } from "@angular/common/http";
 import { inject, PLATFORM_ID } from "@angular/core";
 import { isPlatformBrowser } from "@angular/common";
-import { Router } from "@angular/router";
 import { catchError, from, switchMap, throwError } from "rxjs";
 
 import { AdminSessionService } from "./admin-session.service";
@@ -12,9 +11,9 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 /**
  * 401s that mean the session itself is gone. Every other 401 — a wrong
  * password, a wrong TOTP code — is an answer to the form that asked, and must
- * stay there rather than bounce the admin to the login screen.
+ * stay there rather than open the sign-in.
  */
-const SESSION_LOST = new Set(["unauthenticated", "totp_required"]);
+export const SESSION_LOST: ReadonlySet<string> = new Set(["unauthenticated", "totp_required"]);
 
 /** The double-submit CSRF token, for requests made outside HttpClient (the playground stream). */
 export function readCsrfCookie(): string | null {
@@ -43,8 +42,8 @@ export function isAdminCall(url: string): boolean {
 }
 
 /**
- * Adds credentials and the CSRF header to admin calls only, and funnels a lost
- * session back to the login screen.
+ * Adds credentials and the CSRF header to admin calls only, and reports a lost
+ * session, which opens the sign-in over the page.
  *
  * `withCredentials: true` also disables Angular's HTTP transfer cache for these
  * requests, which is exactly right — an authenticated response must never be
@@ -54,7 +53,6 @@ export const adminApiInterceptor: HttpInterceptorFn = (req, next) => {
   if (!isAdminCall(req.url)) return next(req);
 
   const isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
-  const router = inject(Router);
   const session = inject(AdminSessionService);
 
   let retried = false;
@@ -73,7 +71,7 @@ export const adminApiInterceptor: HttpInterceptorFn = (req, next) => {
       const code = (error as { error?: { error?: string } })?.error?.error;
 
       // Not on /auth/me: the guard calls it precisely to discover that there is
-      // no session, and redirecting from here would fight the guard.
+      // no session.
       if (
         status === 401 &&
         code !== undefined &&
@@ -81,14 +79,7 @@ export const adminApiInterceptor: HttpInterceptorFn = (req, next) => {
         isBrowser &&
         !req.url.endsWith("/auth/me")
       ) {
-        // Cleared, not just redirected: otherwise the guard's cached answer
-        // keeps reporting a session that the server has already dropped.
-        session.clear();
-
-        const here = router.url;
-        void router.navigate(["/admin/login"], {
-          queryParams: here.startsWith("/admin/login") ? {} : { r: here },
-        });
+        session.lose();
         return throwError(() => error);
       }
 

@@ -2,7 +2,6 @@ import { HttpClient, provideHttpClient, withInterceptors } from "@angular/common
 import { HttpTestingController, provideHttpClientTesting } from "@angular/common/http/testing";
 import { PLATFORM_ID } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
-import { provideRouter, Router } from "@angular/router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { adminApiInterceptor, isAdminCall } from "./admin-api.interceptor";
@@ -13,16 +12,14 @@ const API = "https://api.test";
 describe("adminApiInterceptor", () => {
   let http: HttpClient;
   let backend: HttpTestingController;
-  let navigate: ReturnType<typeof vi.spyOn>;
-  let session: { clear: ReturnType<typeof vi.fn> };
+  let session: { lose: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    session = { clear: vi.fn() };
+    session = { lose: vi.fn() };
 
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
-        provideRouter([]),
         provideHttpClient(withInterceptors([adminApiInterceptor])),
         provideHttpClientTesting(),
         { provide: PLATFORM_ID, useValue: "browser" },
@@ -32,7 +29,6 @@ describe("adminApiInterceptor", () => {
 
     http = TestBed.inject(HttpClient);
     backend = TestBed.inject(HttpTestingController);
-    navigate = vi.spyOn(TestBed.inject(Router), "navigate").mockResolvedValue(true);
   });
 
   afterEach(() => backend.verify());
@@ -42,18 +38,16 @@ describe("adminApiInterceptor", () => {
     backend.expectOne(`${API}${path}`).flush({ error }, { status, statusText: "Error" });
   }
 
-  it("clears the session and goes to login when the session is gone", () => {
+  it("reports a lost session, and leaves the page where it is", () => {
     failWith("/admin/status", 401, "unauthenticated");
 
-    expect(session.clear).toHaveBeenCalledOnce();
-    expect(navigate).toHaveBeenCalledWith(["/admin/login"], { queryParams: { r: "/" } });
+    expect(session.lose).toHaveBeenCalledOnce();
   });
 
   it("treats a half-authenticated session the same way", () => {
     failWith("/admin/status", 401, "totp_required");
 
-    expect(session.clear).toHaveBeenCalledOnce();
-    expect(navigate).toHaveBeenCalled();
+    expect(session.lose).toHaveBeenCalledOnce();
   });
 
   /**
@@ -64,22 +58,19 @@ describe("adminApiInterceptor", () => {
   it("leaves a wrong password to the form that asked", () => {
     failWith("/auth/login", 401, "invalid_credentials", "POST");
 
-    expect(session.clear).not.toHaveBeenCalled();
-    expect(navigate).not.toHaveBeenCalled();
+    expect(session.lose).not.toHaveBeenCalled();
   });
 
   it("leaves a wrong TOTP code to the form that asked", () => {
     failWith("/auth/totp", 401, "invalid_code", "POST");
 
-    expect(session.clear).not.toHaveBeenCalled();
-    expect(navigate).not.toHaveBeenCalled();
+    expect(session.lose).not.toHaveBeenCalled();
   });
 
-  it("does not redirect from the session probe the guard relies on", () => {
+  it("leaves the session probe the guard relies on alone", () => {
     failWith("/auth/me", 401, "unauthenticated");
 
-    expect(session.clear).not.toHaveBeenCalled();
-    expect(navigate).not.toHaveBeenCalled();
+    expect(session.lose).not.toHaveBeenCalled();
   });
 
   /** Regression: the old pattern matched `/auth` anywhere, so a post slug `auth` counted. */

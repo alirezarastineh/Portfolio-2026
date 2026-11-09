@@ -2,6 +2,7 @@ import { PLATFORM_ID } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 
+import { AdminSessionService } from "./admin-session.service";
 import { ConfirmService } from "./components/confirm-dialog.component";
 import { UnsavedChangesService, unsavedChangesGuard } from "./unsaved-changes.service";
 
@@ -14,13 +15,14 @@ class StubConfirm {
   }
 }
 
-function setup() {
+function setup(lost = false) {
   TestBed.resetTestingModule();
   const confirm = new StubConfirm();
   TestBed.configureTestingModule({
     providers: [
       { provide: PLATFORM_ID, useValue: "browser" },
       { provide: ConfirmService, useValue: confirm },
+      { provide: AdminSessionService, useValue: { lost: () => lost } },
     ],
   });
   return { service: TestBed.inject(UnsavedChangesService), confirm };
@@ -122,5 +124,14 @@ describe("unsavedChangesGuard", () => {
     expect(await runGuard()).toBe(true);
     // Otherwise the next page would warn about edits that were just discarded.
     expect(service.hasAny()).toBe(false);
+  });
+
+  it("stays put under the sign-in dialog, without a second question", async () => {
+    const { service, confirm } = setup(true);
+    service.set("seo", true);
+
+    expect(await runGuard()).toBe(false);
+    expect(confirm.asked).toBe(0);
+    expect(service.hasAny()).toBe(true);
   });
 });

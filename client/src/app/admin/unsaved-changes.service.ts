@@ -2,6 +2,7 @@ import { isPlatformBrowser } from "@angular/common";
 import { computed, inject, Injectable, PLATFORM_ID, signal } from "@angular/core";
 import type { CanDeactivateFn } from "@angular/router";
 
+import { AdminSessionService } from "./admin-session.service";
 import { ConfirmService } from "./components/confirm-dialog.component";
 
 /**
@@ -79,6 +80,8 @@ function beforeUnloadHandler(event: BeforeUnloadEvent): void {
  */
 export const unsavedChangesGuard: CanDeactivateFn<unknown> = async () => {
   const unsaved = inject(UnsavedChangesService);
+  // Under the sign-in dialog the page cannot be left: no second question over it.
+  if (inject(AdminSessionService, { optional: true })?.lost()) return false;
   if (!unsaved.hasAny()) return true;
 
   const leave = await inject(ConfirmService).ask({

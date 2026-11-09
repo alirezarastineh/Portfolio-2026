@@ -74,6 +74,7 @@ export class AdminPulseService {
   readonly assistantAlert = computed(() => assistantAlert(this.assistant()));
 
   private started = false;
+  private paused = false;
   private lastRefresh = 0;
   private settle: ReturnType<typeof setTimeout> | undefined;
   /** Per part, the latest request: an older answer arriving late is dropped. */
@@ -109,7 +110,18 @@ export class AdminPulseService {
     void this.refresh();
   }
 
+  /**
+   * While the session is lost nothing is asked for: the calls would answer
+   * `totp_required` during the code step. Signing back in looks again.
+   */
+  pause(paused: boolean): void {
+    const resumed = this.paused && !paused;
+    this.paused = paused;
+    if (resumed && this.started) void this.refresh();
+  }
+
   async refresh(parts: readonly PulsePart[] = ALL): Promise<void> {
+    if (this.paused) return;
     this.lastRefresh = Date.now();
     await Promise.all(parts.map((part) => this.load(part)));
   }

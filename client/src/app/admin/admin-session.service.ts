@@ -12,11 +12,14 @@ export class AdminSessionService {
   private readonly _user = signal<AdminUser | null>(null);
   private readonly _pendingTotp = signal(false);
   private readonly _checked = signal(false);
+  private readonly _lost = signal(false);
   private inFlight: Promise<boolean> | null = null;
 
   readonly user = this._user.asReadonly();
   readonly pendingTotp = this._pendingTotp.asReadonly();
   readonly checked = this._checked.asReadonly();
+  /** The server dropped the session under an open page: the sign-in dialog is over it. */
+  readonly lost = this._lost.asReadonly();
   readonly isAuthenticated = computed(() => this._user() !== null && !this._pendingTotp());
 
   /**
@@ -59,10 +62,27 @@ export class AdminSessionService {
     this._checked.set(true);
   }
 
-  /** Called by the interceptor on a 401, and after an explicit logout. */
+  /** After an explicit logout. */
   clear(): void {
     this._user.set(null);
     this._pendingTotp.set(false);
     this._checked.set(true);
+    this._lost.set(false);
+  }
+
+  /**
+   * Called by the interceptor on a 401. The user stays, so the page and what is
+   * typed in it stay too; with nobody signed in there is nothing to keep.
+   */
+  lose(): void {
+    if (this.isAuthenticated()) this._lost.set(true);
+    else this.clear();
+  }
+
+  /** The sign-in over the page went through. */
+  regain(user: AdminUser): void {
+    this._user.set(user);
+    this._pendingTotp.set(false);
+    this._lost.set(false);
   }
 }

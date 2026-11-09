@@ -9,7 +9,12 @@ import { AdminSessionService } from "./admin-session.service";
 
 class StubSession {
   authenticated = false;
+  isLost = false;
   ensureCalls = 0;
+
+  lost(): boolean {
+    return this.isLost;
+  }
 
   async ensure(): Promise<boolean> {
     this.ensureCalls++;
@@ -59,6 +64,14 @@ describe("adminAuthGuard", () => {
   it("allows an authenticated visitor through", async () => {
     session.authenticated = true;
     expect(await run("/admin/seo", "browser", session)).toBe(true);
+  });
+
+  it("refuses to navigate while the session is lost, without asking the server", async () => {
+    session.authenticated = true;
+    session.isLost = true;
+
+    expect(await run("/admin/seo", "browser", session)).toBe(false);
+    expect(session.ensureCalls).toBe(0);
   });
 
   /**

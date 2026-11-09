@@ -21,6 +21,9 @@ export const adminAuthGuard: CanActivateChildFn = async (_route, state) => {
   const session = inject(AdminSessionService);
   const router = inject(Router);
 
+  // The sign-in dialog is over a page that may hold unsaved text: nothing leaves it.
+  if (session.lost()) return false;
+
   if (await session.ensure()) return true;
 
   // A half-authenticated session belongs on the login screen's TOTP step.

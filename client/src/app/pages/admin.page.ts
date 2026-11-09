@@ -64,9 +64,11 @@ import { adminAuthGuard } from "../admin/admin-auth.guard";
 import { AdminApiService } from "../admin/admin-api.service";
 import { addAdminStyles } from "../admin/admin-styles";
 import { AdminSessionService } from "../admin/admin-session.service";
+import { ConfirmService } from "../admin/components/confirm-dialog.component";
 import { isSaveShortcut } from "../admin/components/editor-chrome.component";
 import { CopilotLedger } from "../admin/copilot-ledger";
 import { PublishDialogComponent } from "../admin/components/publish-dialog.component";
+import { SessionDialogComponent } from "../admin/components/session-dialog.component";
 import {
   isShortcutTarget,
   ShortcutSheetComponent,
@@ -187,6 +189,7 @@ function openTab(href: string): void {
     PublishDialogComponent,
     RouterLink,
     RouterOutlet,
+    SessionDialogComponent,
     ShortcutSheetComponent,
   ],
   viewProviders: [
@@ -227,6 +230,7 @@ function openTab(href: string): void {
     <!-- Browser only: the toaster reads window.matchMedia, which the server's DOM lacks. -->
     @if (isBrowser) {
       <hlm-toaster position="bottom-right" />
+      <app-session-dialog />
     }
 
     @if (!ready()) {
@@ -539,6 +543,7 @@ function openTab(href: string): void {
 })
 export default class AdminLayout {
   private readonly api = inject(AdminApiService);
+  private readonly confirm = inject(ConfirmService);
   private readonly router = inject(Router);
   protected readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   protected readonly session = inject(AdminSessionService);
@@ -579,6 +584,11 @@ export default class AdminLayout {
         if (chrome) this.pulse.start();
         else if (login) this.pulse.reset();
       });
+    });
+
+    effect(() => {
+      const lost = this.session.lost();
+      untracked(() => this.pulse.pause(lost));
     });
   }
 
@@ -699,6 +709,8 @@ export default class AdminLayout {
       event.preventDefault();
       return;
     }
+    // The sign-in dialog holds the keyboard: no palette or sheet over it.
+    if (this.session.lost()) return;
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
       this.paletteOpen.update((open) => !open);
@@ -765,6 +777,17 @@ export default class AdminLayout {
   );
 
   protected async logout(): Promise<void> {
+    if (this.unsaved.hasAny()) {
+      const leave = await this.confirm.ask({
+        title: "Sign out and lose your unsaved changes?",
+        description: "The edits on this page have not been saved to the draft.",
+        confirmLabel: "Discard and sign out",
+        cancelLabel: "Stay",
+        destructive: true,
+      });
+      if (!leave) return;
+      this.unsaved.clearAll();
+    }
     await this.api.logout();
     this.pulse.reset();
     this.session.clear();
