@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { changedFieldsLabel, countChangedFields } from "./changed-fields";
+import { changedFields, changedFieldsLabel, countChangedFields } from "./changed-fields";
+
+describe("changedFields", () => {
+  it("names each changed field by its path, with its value before and after", () => {
+    expect(
+      changedFields(
+        { slug: "a", translations: { en: { hook: "Old" }, de: null }, stack: ["x"] },
+        { slug: "a", translations: { en: { hook: "New" }, de: { hook: "" } }, stack: ["x", "y"] },
+      ),
+    ).toEqual([
+      { path: ["translations", "en", "hook"], before: "Old", after: "New" },
+      { path: ["translations", "de"], before: null, after: { hook: "" } },
+      { path: ["stack"], before: ["x"], after: ["x", "y"] },
+    ]);
+  });
+});
 
 describe("countChangedFields", () => {
   const saved = {

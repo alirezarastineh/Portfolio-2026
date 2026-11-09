@@ -68,6 +68,7 @@ import { ConfirmService } from "../admin/components/confirm-dialog.component";
 import { isSaveShortcut } from "../admin/components/editor-chrome.component";
 import { CopilotLedger } from "../admin/copilot-ledger";
 import { PublishDialogComponent } from "../admin/components/publish-dialog.component";
+import { RecoveryBannerComponent } from "../admin/components/recovery-banner.component";
 import { SessionDialogComponent } from "../admin/components/session-dialog.component";
 import {
   isShortcutTarget,
@@ -78,6 +79,7 @@ import { MediaLibraryService } from "../admin/media-library.service";
 import { LivePreviewService } from "../admin/preview/live-preview.service";
 import { changesLabel } from "../admin/publish-summary";
 import { AdminPulseService } from "../admin/pulse.service";
+import { RecoveryService } from "../admin/recovery.service";
 import { UiSectionService } from "../admin/ui-section.service";
 import { UnsavedChangesService } from "../admin/unsaved-changes.service";
 import { ThemeService } from "../services/theme.service";
@@ -187,6 +189,7 @@ function openTab(href: string): void {
     HlmToaster,
     NgIcon,
     PublishDialogComponent,
+    RecoveryBannerComponent,
     RouterLink,
     RouterOutlet,
     SessionDialogComponent,
@@ -441,6 +444,7 @@ function openTab(href: string): void {
                 <a hlmBtn size="sm" routerLink="/admin/account">Enable now</a>
               </div>
             }
+            <app-recovery-banner />
             <router-outlet />
           </div>
         </main>
@@ -549,6 +553,7 @@ export default class AdminLayout {
   protected readonly session = inject(AdminSessionService);
   protected readonly unsaved = inject(UnsavedChangesService);
   protected readonly pulse = inject(AdminPulseService);
+  private readonly recovery = inject(RecoveryService);
 
   private readonly theme = inject(ThemeService);
 
@@ -788,6 +793,8 @@ export default class AdminLayout {
       if (!leave) return;
       this.unsaved.clearAll();
     }
+    // A deliberate sign-out: no unsaved copy stays on this device.
+    await this.recovery.clearAll();
     await this.api.logout();
     this.pulse.reset();
     this.session.clear();

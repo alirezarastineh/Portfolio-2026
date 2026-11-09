@@ -42,6 +42,7 @@ import {
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
 import { askStale, toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
+import { RecoveryService } from "../../admin/recovery.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import type { LegalDoc, Locale } from "../../content/schema";
 
@@ -224,6 +225,15 @@ export default class AdminLegalPage implements OnInit {
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.unsaved.clear("legal"));
+    inject(RecoveryService).track({
+      editor: "legal",
+      saved: this.pristine,
+      current: this.docs,
+      restore: (docs) => {
+        this.docs.set(docs);
+        this.unsaved.set("legal", this.docsDirty());
+      },
+    });
   }
 
   ngOnInit(): void {

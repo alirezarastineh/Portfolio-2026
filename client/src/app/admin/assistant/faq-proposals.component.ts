@@ -21,6 +21,7 @@ import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
 import type { Locale } from "../../content/schema";
 import { AdminApiService } from "../admin-api.service";
+import { RecoveryService, type RecoveryHandle } from "../recovery.service";
 import {
   acceptBody,
   acceptForm,
@@ -232,9 +233,21 @@ export class FaqProposalsComponent {
   private focused: string | null = null;
   /** Left (another tab): a decision answered meanwhile is only told in a toast. */
   private gone = false;
+  private readonly backup: RecoveryHandle;
 
   constructor() {
     inject(DestroyRef).onDestroy(() => (this.gone = true));
+    // Each proposal's edits by its id; nothing is looked for before the list is in.
+    this.backup = inject(RecoveryService).track({
+      editor: "faq-proposals",
+      rows: true,
+      saved: () => {
+        const list = this.proposals();
+        return list.length ? Object.fromEntries(list.map((p) => [p.id, acceptForm(p)])) : null;
+      },
+      current: () => Object.fromEntries(this.proposals().map((p) => [p.id, this.formOf(p)])),
+      restore: (forms) => this.forms.set(forms),
+    });
     // A proposal just drafted elsewhere: its heading takes focus once it is listed, once.
     effect(() => {
       const id = this.focus();
@@ -311,6 +324,7 @@ export class FaqProposalsComponent {
 
   /** Decided: the proposal leaves the list, so its heading's place goes to the list's. */
   private done(words: string, p: FaqProposal): void {
+    this.backup.drop(p.id);
     if (this.gone) {
       toast.success(words);
       return;

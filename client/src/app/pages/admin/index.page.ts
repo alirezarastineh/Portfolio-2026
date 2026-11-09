@@ -33,6 +33,7 @@ import { AdminPageHeaderComponent } from "../../admin/components/page-header.com
 import { ReadinessCardComponent } from "../../admin/components/readiness-card.component";
 import { editorLinkForI18n } from "../../admin/editor-links";
 import { AdminPulseService, type PulsePart } from "../../admin/pulse.service";
+import { RecoveryService, typedAt, type RecoveryCopy } from "../../admin/recovery.service";
 import { absoluteTime, relativeTime } from "../../admin/relative-time";
 
 /** Shown before "show all": enough to act on without burying the rest of the page. */
@@ -128,6 +129,30 @@ function usd(value: number): string {
             </p>
           </div>
         }
+      }
+
+      @if (copies().length) {
+        <section hlmCard aria-labelledby="copies-title">
+          <div hlmCardHeader>
+            <h2 hlmCardTitle id="copies-title">Unsaved edits</h2>
+            <p hlmCardDescription>
+              Kept in this browser when a page closed before you saved. Open one to keep or discard
+              it.
+            </p>
+          </div>
+          <div hlmCardContent>
+            <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list">
+              @for (copy of copies(); track copy.href) {
+                <li class="text-sm wrap-anywhere">
+                  <a class="underline underline-offset-4" [routerLink]="copy.href">{{
+                    copy.page
+                  }}</a
+                  >, from {{ when(copy.at) }}
+                </li>
+              }
+            </ul>
+          </div>
+        </section>
       }
 
       <section aria-labelledby="glance-title">
@@ -511,8 +536,12 @@ export default class AdminDashboardPage implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly doc = inject(DOCUMENT);
   protected readonly pulse = inject(AdminPulseService);
+  private readonly recovery = inject(RecoveryService);
 
   protected readonly preview = I18N_PREVIEW;
+  /** Unsaved edits kept in this browser: one row a page, newest first. */
+  protected readonly copies = signal<RecoveryCopy[]>([]);
+  protected readonly when = typedAt;
   protected readonly reconcile = signal<MediaReconcile | null>(null);
   protected readonly publications = signal<PublicationRow[] | null>(null);
   protected readonly publicationsFailed = signal(false);
@@ -571,6 +600,16 @@ export default class AdminDashboardPage implements OnInit {
     void this.pulse.refreshIfStale();
     void this.loadPublications();
     void this.loadReconcile();
+    void this.loadCopies();
+  }
+
+  private async loadCopies(): Promise<void> {
+    const newest = new Map<string, RecoveryCopy>();
+    for (const copy of await this.recovery.list()) {
+      const seen = newest.get(copy.href);
+      if (!seen || copy.at > seen.at) newest.set(copy.href, copy);
+    }
+    this.copies.set([...newest.values()].sort((a, b) => b.at - a.at));
   }
 
   protected isFailed(part: PulsePart): boolean {

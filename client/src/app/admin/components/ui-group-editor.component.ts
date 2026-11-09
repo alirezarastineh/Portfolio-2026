@@ -21,6 +21,7 @@ import { withUi, type LiveCompose } from "../preview/live-content";
 import { LivePreviewToggleComponent } from "../preview/live-preview-toggle.component";
 import { EditorLayoutComponent } from "./editor-layout.component";
 import { applyIssues, countServerErrors, focusFirstInvalid } from "../issues";
+import { RecoveryService } from "../recovery.service";
 import { askStale, toastDiscarded, toastIssues, toastNotSaved } from "../save-feedback";
 import { UiSectionService, type UiGroup } from "../ui-section.service";
 import { UnsavedChangesService } from "../unsaved-changes.service";
@@ -233,6 +234,21 @@ export class UiGroupEditorComponent implements OnInit {
     });
     // Leaving a dirty editor must not keep warning about it forever.
     inject(DestroyRef).onDestroy(() => this.unsaved.clear(`ui:${this.group()}`));
+    inject(RecoveryService).track<Record<Locale, StringRecord>>({
+      editor: () => `ui:${this.group()}`,
+      saved: () => {
+        this.revision();
+        return this.baseline;
+      },
+      current: () => {
+        this.revision();
+        return this.loaded() ? (this.form.getRawValue() as Record<Locale, StringRecord>) : null;
+      },
+      restore: (value) => {
+        this.form.patchValue(value);
+        this.form.markAsDirty();
+      },
+    });
   }
 
   // Not from the constructor: a page the router creates gets its first check on a later frame,

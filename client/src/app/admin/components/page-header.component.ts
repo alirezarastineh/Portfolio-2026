@@ -14,6 +14,7 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideExternalLink } from "@ng-icons/lucide";
 import { HlmButton } from "@spartan-ng/helm/button";
 
+import { RecoveryService } from "../recovery.service";
 import { LocaleToggleComponent } from "./editor-chrome.component";
 import type { LocaleView } from "./field-pair.component";
 
@@ -44,7 +45,9 @@ import type { LocaleView } from "./field-pair.component";
       [attr.data-stuck]="stuck() ? '' : null"
     >
       <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <h1 class="m-0 min-w-0 text-h3 wrap-break-word text-foreground">{{ title() }}</h1>
+        <h1 tabindex="-1" class="m-0 min-w-0 text-h3 wrap-break-word text-foreground outline-none">
+          {{ title() }}
+        </h1>
         <ng-content select="[headerStatus]" />
       </div>
       <div class="flex flex-wrap items-center gap-2">
@@ -71,6 +74,12 @@ import type { LocaleView } from "./field-pair.component";
         }
       </div>
     }
+    @if (recovery.full()) {
+      <p class="m-0 -mt-3 text-sm text-destructive" role="status">
+        The browser's storage is full or blocked: these edits have no recovery copy. Save to keep
+        them.
+      </p>
+    }
   `,
 })
 export class AdminPageHeaderComponent {
@@ -88,6 +97,7 @@ export class AdminPageHeaderComponent {
   readonly view = input<LocaleView | null>(null);
   readonly viewChange = output<LocaleView>();
 
+  protected readonly recovery = inject(RecoveryService);
   private readonly bar = viewChild.required<ElementRef<HTMLElement>>("bar");
   protected readonly stuck = signal(false);
 

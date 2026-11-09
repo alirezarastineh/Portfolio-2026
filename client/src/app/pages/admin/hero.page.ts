@@ -35,6 +35,7 @@ import { applyIssues, countServerErrors, focusFirstInvalid } from "../../admin/i
 import { withIdentity, withUi, type LiveCompose } from "../../admin/preview/live-content";
 import { LivePreviewToggleComponent } from "../../admin/preview/live-preview-toggle.component";
 import { askStale, toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
+import { RecoveryService } from "../../admin/recovery.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import {
@@ -357,9 +358,9 @@ export default class AdminHeroPage implements OnInit {
   });
 
   /** The fields as loaded or last saved, in the forms' own shape: what "changed" compares with. */
-  private baseline: object | null = null;
+  private baseline: ReturnType<AdminHeroPage["snapshot"]> | null = null;
 
-  private snapshot(): object {
+  private snapshot() {
     return {
       identity: this.identity.getRawValue(),
       copy: this.form.getRawValue(),
@@ -455,6 +456,27 @@ export default class AdminHeroPage implements OnInit {
     this.form.valueChanges.subscribe(bump);
     this.identity.valueChanges.subscribe(bump);
     inject(DestroyRef).onDestroy(() => this.unsaved.clear("hero"));
+    inject(RecoveryService).track({
+      editor: "hero",
+      saved: () => {
+        this.revision();
+        const baseline = this.baseline;
+        return baseline ? { ...baseline, avatarPath: this.pristine?.avatar.path ?? null } : null;
+      },
+      current: () => {
+        this.revision();
+        return this.loaded() ? { ...this.snapshot(), avatarPath: this.avatarPath() } : null;
+      },
+      restore: ({ identity, copy, avatarId, avatarPath }) => {
+        this.identity.patchValue(identity);
+        this.form.patchValue(copy);
+        this.identity.markAsDirty();
+        this.form.markAsDirty();
+        this.avatarId.set(avatarId);
+        this.avatarPath.set(avatarPath);
+        this.revision.update((v) => v + 1);
+      },
+    });
   }
 
   ngOnInit(): void {

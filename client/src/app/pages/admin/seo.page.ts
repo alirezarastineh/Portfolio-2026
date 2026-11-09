@@ -17,6 +17,7 @@ import { AdminApiService, type ApiIssue } from "../../admin/admin-api.service";
 import { countChangedFields } from "../../admin/changed-fields";
 import { applyIssues, countServerErrors, focusFirstInvalid } from "../../admin/issues";
 import { askStale, toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
+import { RecoveryService } from "../../admin/recovery.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import { SaveBarComponent } from "../../admin/components/editor-chrome.component";
@@ -182,6 +183,21 @@ export default class AdminSeoPage implements OnInit {
       this.unsaved.set("seo", this.dirty());
     });
     inject(DestroyRef).onDestroy(() => this.unsaved.clear("seo"));
+    inject(RecoveryService).track<Record<Locale, Seo>>({
+      editor: "seo",
+      saved: () => {
+        this.formVersion();
+        return this.baseline as Record<Locale, Seo> | null;
+      },
+      current: () => {
+        this.formVersion();
+        return this.loaded() ? (this.form.getRawValue() as Record<Locale, Seo>) : null;
+      },
+      restore: (value) => {
+        this.form.patchValue(value);
+        this.form.markAsDirty();
+      },
+    });
   }
 
   ngOnInit(): void {

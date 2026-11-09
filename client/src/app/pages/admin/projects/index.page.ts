@@ -21,6 +21,7 @@ import { unsavedChangesGuard } from "../../../admin/unsaved-changes.service";
 
 import { AdminApiService, type ProjectListRow } from "../../../admin/admin-api.service";
 import { ConfirmService } from "../../../admin/components/confirm-dialog.component";
+import { RecoveryService } from "../../../admin/recovery.service";
 import { toastNotSaved } from "../../../admin/save-feedback";
 import { createBlankProject } from "../../../admin/create-entities";
 import {
@@ -203,6 +204,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 export default class AdminProjectsPage implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly confirm = inject(ConfirmService);
+  private readonly recovery = inject(RecoveryService);
 
   protected readonly headingFields = HEADING_FIELDS;
   protected readonly rows = signal<ProjectListRow[]>([]);
@@ -267,7 +269,9 @@ export default class AdminProjectsPage implements OnInit {
     if (!result.ok) {
       this.rows.set(previous);
       toast.error("Could not delete", { description: result.error });
+      return;
     }
+    this.recovery.forget("project", row.id);
   }
 
   protected async onReorder(next: ProjectListRow[]): Promise<void> {

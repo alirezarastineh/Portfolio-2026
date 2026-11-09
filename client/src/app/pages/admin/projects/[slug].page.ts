@@ -66,6 +66,7 @@ import { MediaFieldComponent } from "../../../admin/components/media-field.compo
 import { MetricsEditorComponent } from "../../../admin/components/metrics-editor.component";
 import { RichTextComponent } from "../../../admin/components/rich-text.component";
 import { StringListComponent } from "../../../admin/components/string-list.component";
+import { RecoveryService } from "../../../admin/recovery.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../../admin/unsaved-changes.service";
 import type { Locale } from "../../../content/schema";
 
@@ -726,6 +727,30 @@ export default class AdminProjectEditorPage implements OnInit {
       this.unsaved.clear("project");
       // Leaving unsaved: the copilot's drafts were not kept.
       this.ledger.abandonPrefix("project:");
+    });
+    // The glossary as typed goes too: a line that does not parse yet is still text.
+    inject(RecoveryService).track<ProjectRow & { typedGlossary: Record<Locale, string> }>({
+      editor: "project",
+      item: () => this.project()?.id ?? null,
+      saved: () => {
+        this.revision();
+        const row = this.pristine;
+        if (!row) return null;
+        const typedGlossary = {
+          en: glossaryText(row.translations.en.glossary),
+          de: glossaryText(row.translations.de.glossary),
+        };
+        return { ...row, typedGlossary };
+      },
+      current: () => {
+        const row = this.project();
+        return row ? { ...row, typedGlossary: this.typedGlossary() } : null;
+      },
+      restore: ({ typedGlossary, ...row }) => {
+        this.project.set(row);
+        this.typedGlossary.set(typedGlossary);
+        this.revision.update((v) => v + 1);
+      },
     });
   }
 

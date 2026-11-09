@@ -24,6 +24,7 @@ import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-st
 import { AdminApiService } from "../admin-api.service";
 import type { FaqEntry, FaqInput } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
+import { RecoveryService, type RecoveryHandle } from "../recovery.service";
 import { toastNotSaved } from "../save-feedback";
 import { DraftOfferComponent } from "../components/draft-offer.component";
 import { CopilotLedger } from "../copilot-ledger";
@@ -220,6 +221,11 @@ export class AssistantFaqComponent implements OnInit {
   /** The API's reason when the entries did not arrive. */
   protected readonly loadError = signal<string | null>(null);
   protected readonly form = signal<Form | null>(null);
+  /** The form as it opened: what its edits are told apart from. */
+  private readonly opened = signal<Form | null>(null);
+  private readonly recovery = inject(RecoveryService);
+  private readonly backup: RecoveryHandle;
+  private reopened = false;
   protected readonly saving = signal(false);
   protected readonly drafting = signal(false);
   /** Each form opened gets a number: a draft that comes back for an earlier one never lands. */
@@ -257,6 +263,16 @@ export class AssistantFaqComponent implements OnInit {
       this.gone = true;
       this.ledger.abandonPrefix("faq:");
     });
+    this.backup = this.recovery.track<Form>({
+      editor: "faq",
+      item: () => {
+        const form = this.form();
+        return form ? (form.id ?? "new") : null;
+      },
+      saved: this.opened,
+      current: this.form,
+      restore: (form) => this.form.set(form),
+    });
   }
 
   /** Another form, or none: a drafted answer not saved in the one before was not kept. */
@@ -264,6 +280,7 @@ export class AssistantFaqComponent implements OnInit {
     this.ledger.abandonPrefix("faq:");
     this.formSerial++;
     this.offers.set({});
+    this.opened.set(next ? structuredClone(next) : null);
     this.form.set(next);
   }
 
@@ -281,8 +298,19 @@ export class AssistantFaqComponent implements OnInit {
     this.loading.set(false);
     this.loadError.set(result.ok ? null : result.error);
     if (result.ok) this.entries.set(result.data.faq);
+    if (result.ok && !this.reopened) void this.reopen();
     // An API without the pipeline answers 404: there is nothing to propose.
     if (proposals.ok) this.proposals.set(proposals.data.proposals);
+  }
+
+  /** A copy kept in this browser: its form opens again, and the copy comes back over it. */
+  private async reopen(): Promise<void> {
+    this.reopened = true;
+    const [item] = await this.recovery.items("faq");
+    if (!item || this.form()) return;
+    const entry = this.entries().find((e) => e.id === item);
+    if (entry) this.edit(entry);
+    else if (item === "new") this.startNew();
   }
 
   protected langs(entry: FaqEntry): string {
@@ -296,6 +324,7 @@ export class AssistantFaqComponent implements OnInit {
   }
 
   protected cancel(): void {
+    this.backup.drop();
     this.replaceForm(null);
   }
 
@@ -384,6 +413,7 @@ export class AssistantFaqComponent implements OnInit {
       );
       return;
     }
+    this.backup.drop();
     this.replaceForm(null);
     toast.success("Saved — the assistant uses it from now on");
     await this.load();
@@ -414,6 +444,7 @@ export class AssistantFaqComponent implements OnInit {
       toast.error("Not deleted", { description: result.error });
       return;
     }
+    this.recovery.forget("faq", entry.id);
     await this.load();
   }
 }

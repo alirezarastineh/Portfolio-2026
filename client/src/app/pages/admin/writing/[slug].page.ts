@@ -51,6 +51,7 @@ import { toastDiscarded, toastIssues, toastNotSaved } from "../../../admin/save-
 import { MediaFieldComponent } from "../../../admin/components/media-field.component";
 import { RichTextComponent } from "../../../admin/components/rich-text.component";
 import { StringListComponent } from "../../../admin/components/string-list.component";
+import { RecoveryService } from "../../../admin/recovery.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../../admin/unsaved-changes.service";
 import type { Locale } from "../../../content/schema";
 
@@ -465,6 +466,26 @@ export default class AdminPostEditorPage implements OnInit {
       this.unsaved.clear("post");
       // Leaving unsaved: the copilot's drafts were not kept.
       this.ledger.abandonPrefix("post:");
+    });
+    // A language switched off keeps its text aside: that goes too.
+    inject(RecoveryService).track<
+      PostDraft & { setAside: Partial<Record<Locale, PostTranslationInput>> }
+    >({
+      editor: "post",
+      item: () => this.post()?.id ?? null,
+      saved: () => {
+        this.revision();
+        return this.pristine ? { ...this.pristine, setAside: {} } : null;
+      },
+      current: () => {
+        const row = this.post();
+        return row ? { ...row, setAside: this.setAside() } : null;
+      },
+      restore: ({ setAside, ...row }) => {
+        this.post.set(row);
+        this.setAside.set(setAside);
+        this.revision.update((v) => v + 1);
+      },
     });
   }
 

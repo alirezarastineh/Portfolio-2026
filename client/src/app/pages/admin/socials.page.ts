@@ -42,6 +42,7 @@ import {
 } from "../../admin/components/sortable-list.component";
 import { ChangedElsewhere } from "../../admin/changed-elsewhere";
 import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
+import { RecoveryService } from "../../admin/recovery.service";
 import { toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 
@@ -244,6 +245,18 @@ export default class AdminSocialsPage implements OnInit {
   constructor() {
     effect(() => this.unsaved.set("socials", this.changedIds().length > 0));
     inject(DestroyRef).onDestroy(() => this.unsaved.clear("socials"));
+    // Each link's copy by its id: add, delete and reorder save at once.
+    inject(RecoveryService).track({
+      editor: "socials",
+      rows: true,
+      saved: () =>
+        this.loading() || this.loadError() !== null
+          ? null
+          : Object.fromEntries([...this.saved().values()].map((row) => [row.id, toInput(row)])),
+      current: () => Object.fromEntries(this.rows().map((row) => [row.id, toInput(row)])),
+      restore: (copy) =>
+        this.rows.update((list) => list.map((row) => ({ ...row, ...copy[row.id] }))),
+    });
   }
 
   ngOnInit(): void {

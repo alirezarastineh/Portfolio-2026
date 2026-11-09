@@ -46,6 +46,7 @@ import {
   type JournalPatch,
   type JournalStatus,
 } from "../journal";
+import { RecoveryService, type RecoveryHandle } from "../recovery.service";
 import { FreezeCaseComponent } from "./freeze-case.component";
 
 const POLL_MS = 2_000;
@@ -436,7 +437,21 @@ export class JournalEntryComponent {
   private readonly heading = viewChild<ElementRef<HTMLElement>>("heading");
   private readonly injector = inject(Injector);
   private timer?: ReturnType<typeof setTimeout>;
+  private readonly backup: RecoveryHandle;
 
+  /** The fields as the server has them. */
+  private readonly server = computed<Fields>(() => {
+    const e = this.entry();
+    const located = e.diagnosis.located;
+    return {
+      rootCause: e.rootCause,
+      fixType: e.fixType,
+      fix: e.fix,
+      fixRef: e.fixRef ?? "",
+      heuristic: e.heuristic,
+      expected: located?.named ? located.id : "",
+    };
+  });
   protected readonly leading = computed(() => leadingLine(this.entry().diagnosis));
   protected readonly located = computed(() => {
     const located = this.entry().diagnosis.located;
@@ -475,17 +490,8 @@ export class JournalEntryComponent {
     // The entry as the server has it (a save, a new analysis, the list read again): a field
     // follows it unless the admin has typed in it since, so nothing unsaved is lost.
     effect(() => {
-      const e = this.entry();
+      const server = this.server();
       untracked(() => {
-        const located = e.diagnosis.located;
-        const server: Fields = {
-          rootCause: e.rootCause,
-          fixType: e.fixType,
-          fix: e.fix,
-          fixRef: e.fixRef ?? "",
-          heuristic: e.heuristic,
-          expected: located?.named ? located.id : "",
-        };
         const seen = this.seen;
         const follow = <K extends keyof Fields>(key: K, field: WritableSignal<Fields[K]>) => {
           if (!seen || field() === seen[key]) field.set(server[key]);
@@ -498,6 +504,27 @@ export class JournalEntryComponent {
         follow("expected", this.expected);
         this.seen = server;
       });
+    });
+    this.backup = inject(RecoveryService).track<Fields>({
+      editor: "journal",
+      item: () => this.entry().id,
+      saved: this.server,
+      current: () => ({
+        rootCause: this.rootCause(),
+        fixType: this.fixType(),
+        fix: this.fix(),
+        fixRef: this.fixRef(),
+        heuristic: this.heuristic(),
+        expected: this.expected(),
+      }),
+      restore: (fields) => {
+        this.rootCause.set(fields.rootCause);
+        this.fixType.set(fields.fixType);
+        this.fix.set(fields.fix);
+        this.fixRef.set(fields.fixRef);
+        this.heuristic.set(fields.heuristic);
+        this.expected.set(fields.expected);
+      },
     });
   }
 
@@ -619,6 +646,7 @@ export class JournalEntryComponent {
       toast.error("Could not delete the entry", { description: refusal(result.error) });
       return;
     }
+    this.backup.drop();
     this.deleted.emit(this.entry().id);
   }
 

@@ -18,6 +18,7 @@ import { HlmButton } from "@spartan-ng/helm/button";
 
 import { AdminApiService } from "../admin-api.service";
 import { ConfirmService } from "../components/confirm-dialog.component";
+import { RecoveryService } from "../recovery.service";
 import {
   APPLIED_AS,
   appliedLabel,
@@ -211,6 +212,36 @@ export class JournalLessonsComponent {
   protected readonly said = signal("");
   private readonly headings = viewChildren<ElementRef<HTMLElement>>("heading");
   private readonly listHeading = viewChild.required<ElementRef<HTMLElement>>("listHeading");
+
+  constructor() {
+    // Each lesson's typed fix by its id; nothing is looked for before the list is in.
+    inject(RecoveryService).track({
+      editor: "journal-lessons",
+      rows: true,
+      saved: () => {
+        const list = this.lessons();
+        if (!list.length) return null;
+        return Object.fromEntries(
+          list.map((l) => [l.id, { as: l.appliedAs ?? "faq", ref: l.appliedRef ?? "" }]),
+        );
+      },
+      current: () =>
+        Object.fromEntries(
+          this.lessons().map((l) => [
+            l.id,
+            {
+              as: this.draftAs()[l.id] ?? l.appliedAs ?? "faq",
+              ref: this.draftRef()[l.id] ?? l.appliedRef ?? "",
+            },
+          ]),
+        ),
+      restore: (typed) => {
+        const rows = Object.entries(typed);
+        this.draftAs.set(Object.fromEntries(rows.map(([id, row]) => [id, row.as])));
+        this.draftRef.set(Object.fromEntries(rows.map(([id, row]) => [id, row.ref])));
+      },
+    });
+  }
 
   protected status(status: Lesson["status"]): string {
     return STATUS[status];

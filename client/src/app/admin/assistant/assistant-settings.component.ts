@@ -12,6 +12,7 @@ import {
 import { FormsModule } from "@angular/forms";
 import { toast } from "@spartan-ng/brain/sonner";
 
+import { RecoveryService } from "../recovery.service";
 import { toastDiscarded, toastNotSaved } from "../save-feedback";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
@@ -342,6 +343,12 @@ export class AssistantSettingsComponent implements OnInit {
     const unsaved = inject(UnsavedChangesService);
     effect(() => unsaved.set("assistant-settings", this.dirty()));
     inject(DestroyRef).onDestroy(() => unsaved.clear("assistant-settings"));
+    inject(RecoveryService).track({
+      editor: "assistant-settings",
+      saved: this.saved,
+      current: this.draft,
+      restore: (draft) => this.draft.set(draft),
+    });
   }
 
   ngOnInit(): void {

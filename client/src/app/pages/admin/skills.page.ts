@@ -58,6 +58,7 @@ import {
 } from "../../admin/components/ui-group-editor.component";
 import { ChangedElsewhere } from "../../admin/changed-elsewhere";
 import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
+import { RecoveryService } from "../../admin/recovery.service";
 import { toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
 import type { Locale } from "../../content/schema";
 
@@ -367,6 +368,18 @@ export default class AdminSkillsPage implements OnInit {
   constructor() {
     effect(() => this.unsaved.set("skills", this.changedIds().length > 0));
     inject(DestroyRef).onDestroy(() => this.unsaved.clear("skills"));
+    // Each card's copy by its id: add, delete and reorder save at once.
+    inject(RecoveryService).track({
+      editor: "skills",
+      rows: true,
+      saved: () =>
+        this.loading() || this.loadError() !== null
+          ? null
+          : Object.fromEntries([...this.saved().values()].map((row) => [row.id, toInput(row)])),
+      current: () => Object.fromEntries(this.rows().map((row) => [row.id, toInput(row)])),
+      restore: (copy) =>
+        this.rows.update((list) => list.map((row) => ({ ...row, ...copy[row.id] }))),
+    });
   }
 
   ngOnInit(): void {

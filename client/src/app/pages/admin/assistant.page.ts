@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, inject, signal, type OnInit } from "@angular/core";
 import type { RouteMeta } from "@analogjs/router";
 import { BrnTabsContent } from "@spartan-ng/brain/tabs";
 import { HlmTabsImports } from "@spartan-ng/helm/tabs";
@@ -8,6 +8,7 @@ import { HlmBadge } from "@spartan-ng/helm/badge";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 import { AdminPulseService } from "../../admin/pulse.service";
+import { RecoveryService } from "../../admin/recovery.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 
 import { AssistantConversationsComponent } from "../../admin/assistant/assistant-conversations.component";
@@ -42,6 +43,15 @@ type Tab =
   | "trust";
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
+
+/** Where each editor on this page lives: a copy kept in the browser opens its tab. */
+const TAB_OF: Partial<Record<string, Tab>> = {
+  "assistant-settings": "settings",
+  faq: "faq",
+  "faq-proposals": "faq",
+  journal: "journal",
+  "journal-lessons": "journal",
+};
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -186,10 +196,11 @@ const TABS: { id: Tab; label: string }[] = [
     </div>
   `,
 })
-export default class AdminAssistantPage {
+export default class AdminAssistantPage implements OnInit {
   private readonly unsaved = inject(UnsavedChangesService);
   private readonly confirm = inject(ConfirmService);
   protected readonly pulse = inject(AdminPulseService);
+  private readonly recovery = inject(RecoveryService);
 
   protected readonly tabs = TABS;
   /** The section shown; the settings tab's edits die with it on a switch. */
@@ -201,6 +212,13 @@ export default class AdminAssistantPage {
   protected readonly faqProposal = signal<string | null>(null);
   /** The journal entry Diagnose opened (plan phase 24). */
   protected readonly journalFocus = signal<string | null>(null);
+
+  ngOnInit(): void {
+    void this.recovery.list().then((copies) => {
+      const tab = copies.map((copy) => TAB_OF[copy.editor]).find(Boolean);
+      if (tab && this.tab() === "overview") void this.select(tab);
+    });
+  }
 
   protected async select(next: Tab): Promise<void> {
     const current = this.tab();

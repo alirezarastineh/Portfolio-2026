@@ -53,6 +53,8 @@ import {
 import { deleteBlocker, missingAlt, usagePlace } from "../../admin/media-usage";
 import { absoluteTime } from "../../admin/relative-time";
 import { toastNotSaved } from "../../admin/save-feedback";
+import { RecoveryBannerComponent } from "../../admin/components/recovery-banner.component";
+import { RecoveryService, type RecoveryHandle } from "../../admin/recovery.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import type { Locale } from "../../content/schema";
 
@@ -90,6 +92,7 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DraftOfferComponent,
+    RecoveryBannerComponent,
     AdminPageHeaderComponent,
     FormsModule,
     HlmAlert,
@@ -318,6 +321,8 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
           </hlm-sheet-header>
 
           <div class="flex flex-col gap-6 px-4 pb-6">
+            <!-- The page's own banner sits under this sheet, out of reach. -->
+            <app-recovery-banner />
             <div
               class="flex max-h-[50svh] min-h-40 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted p-2"
             >
@@ -682,6 +687,23 @@ export default class AdminMediaPage implements OnInit {
 
   constructor() {
     effect(() => this.unsaved.set("media", this.altChanged() || this.descriptionChanged()));
+    this.backup = this.recovery.track({
+      editor: "media",
+      item: this.activeId,
+      saved: () => {
+        const asset = this.active();
+        if (!asset) return null;
+        return {
+          alt: { en: asset.altEn ?? "", de: asset.altDe ?? "" },
+          description: { en: asset.descriptionEn ?? "", de: asset.descriptionDe ?? "" },
+        };
+      },
+      current: () => ({ alt: this.alt(), description: this.description() }),
+      restore: ({ alt, description }) => {
+        this.alt.set(alt);
+        this.description.set(description);
+      },
+    });
     // Leaving the page: a draft not saved was not kept.
     inject(DestroyRef).onDestroy(() => {
       this.gone = true;
@@ -695,9 +717,19 @@ export default class AdminMediaPage implements OnInit {
     return !this.gone && this.activeId() === asset.id;
   }
 
+  private readonly recovery = inject(RecoveryService);
+  private readonly backup: RecoveryHandle;
+
   ngOnInit(): void {
-    void this.library.load(true);
+    void this.library.load(true).then(() => this.reopen());
     void this.loadReconcile();
+  }
+
+  /** A copy kept in this browser: its file's details open again, and the copy comes back. */
+  private async reopen(): Promise<void> {
+    const ids = await this.recovery.items("media");
+    const asset = this.library.assets().find((a) => ids.includes(a.id));
+    if (asset && !this.activeId() && !this.gone) this.open(asset);
   }
 
   protected size(bytes: number): string {
@@ -750,6 +782,7 @@ export default class AdminMediaPage implements OnInit {
         return;
       }
     }
+    this.backup.drop(id);
     this.ledger.abandonPrefix("media:");
   }
 
@@ -897,6 +930,7 @@ export default class AdminMediaPage implements OnInit {
       toast.error("Not deleted", { description: result.error });
       return;
     }
+    this.backup.drop(asset.id);
     this.dropDetails();
     await this.afterChange();
     toast.success("Deleted");
@@ -967,6 +1001,7 @@ export default class AdminMediaPage implements OnInit {
     this.selected.set(new Set());
     await this.afterChange();
     const { deleted, skipped, freedBytes } = result.data;
+    for (const id of deleted) this.recovery.forget("media", id);
     toast.success(`Deleted ${deleted.length} ${deleted.length === 1 ? "file" : "files"}`, {
       description:
         `${formatBytes(freedBytes)} freed.` +

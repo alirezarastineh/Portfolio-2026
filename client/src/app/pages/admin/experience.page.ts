@@ -57,6 +57,8 @@ import { LivePreviewComponent } from "../../admin/preview/live-preview.component
 import { LivePreviewToggleComponent } from "../../admin/preview/live-preview-toggle.component";
 import { LivePreviewService } from "../../admin/preview/live-preview.service";
 import { toastIssues, toastNotSaved } from "../../admin/save-feedback";
+import { RecoveryBannerComponent } from "../../admin/components/recovery-banner.component";
+import { RecoveryService, type RecoveryHandle } from "../../admin/recovery.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import type { Locale } from "../../content/schema";
 
@@ -126,6 +128,7 @@ function blankDraft(): Draft {
     AdminPageHeaderComponent,
     EditorLayoutComponent,
     FieldIssueComponent,
+    RecoveryBannerComponent,
     FormSkeletonComponent,
     FormsModule,
     LivePreviewComponent,
@@ -252,6 +255,8 @@ function blankDraft(): Draft {
               publish.
             </p>
           </hlm-sheet-header>
+          <!-- The page's own banner sits under this sheet, out of reach. -->
+          <app-recovery-banner />
           <div
             class="grid gap-6"
             [class]="
@@ -522,6 +527,12 @@ export default class AdminExperiencePage implements OnInit {
   protected readonly sheetOpen = signal(false);
   /** The entry as it was when the sheet opened, to tell whether closing loses anything. */
   private readonly opened = signal("");
+  private readonly openedDraft = computed(() =>
+    this.opened() ? (JSON.parse(this.opened()) as Draft) : null,
+  );
+  private readonly recovery = inject(RecoveryService);
+  private readonly backup: RecoveryHandle;
+  private reopened = false;
   /** The last save's problems, by the input's path. */
   protected readonly issues = new FieldIssues();
 
@@ -569,6 +580,16 @@ export default class AdminExperiencePage implements OnInit {
   constructor() {
     effect(() => this.unsaved.set("experience-entry", this.draftDirty()));
     inject(DestroyRef).onDestroy(() => this.unsaved.clear("experience-entry"));
+    this.backup = this.recovery.track<Draft>({
+      editor: "experience-entry",
+      item: () => {
+        const draft = this.draft();
+        return draft ? (draft.id ?? "new") : null;
+      },
+      saved: this.openedDraft,
+      current: this.draft,
+      restore: (draft) => this.draft.set(draft),
+    });
   }
 
   ngOnInit(): void {
@@ -597,6 +618,15 @@ export default class AdminExperiencePage implements OnInit {
     if (!result.ok) return;
     this.rows.set(result.data.experiences);
     this.versions.remember(result.data.experiences);
+    if (!this.reopened) void this.reopen();
+  }
+
+  /** A copy kept in this browser: its entry opens again, and the copy comes back over it. */
+  private async reopen(): Promise<void> {
+    this.reopened = true;
+    const [item] = await this.recovery.items("experience-entry");
+    const row = this.rows().find((r) => r.id === item);
+    if ((row || item === "new") && !this.draft()) this.edit(row ?? null);
   }
 
   protected edit(row: ExperienceRow | null): void {
@@ -635,6 +665,7 @@ export default class AdminExperiencePage implements OnInit {
         return;
       }
     }
+    this.backup.drop();
     this.draft.set(null);
   }
 
@@ -711,6 +742,7 @@ export default class AdminExperiencePage implements OnInit {
     }
     this.opened.set(JSON.stringify(d));
     this.sheetOpen.set(false);
+    this.backup.drop();
     this.draft.set(null);
     toast.success(d.id ? "Entry saved" : "Entry added");
     await this.load();
@@ -743,7 +775,9 @@ export default class AdminExperiencePage implements OnInit {
     if (!result.ok) {
       this.rows.set(previous);
       toast.error("Could not delete", { description: result.error });
+      return;
     }
+    this.recovery.forget("experience-entry", row.id);
   }
 
   protected async onReorder(next: ExperienceRow[]): Promise<void> {

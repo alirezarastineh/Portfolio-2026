@@ -4,6 +4,8 @@ import { Router, RouterLink } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucidePencil, lucidePlus, lucideTrash2 } from "@ng-icons/lucide";
 import { toast } from "@spartan-ng/brain/sonner";
+
+import { RecoveryService } from "../../../admin/recovery.service";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmSeparator } from "@spartan-ng/helm/separator";
@@ -125,6 +127,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 export default class AdminWritingPage implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly confirm = inject(ConfirmService);
+  private readonly recovery = inject(RecoveryService);
   private readonly router = inject(Router);
 
   protected readonly copyFields = COPY_FIELDS;
@@ -194,6 +197,8 @@ export default class AdminWritingPage implements OnInit {
     if (!result.ok) {
       this.rows.set(previous);
       toast.error("Could not delete", { description: result.error });
+      return;
     }
+    this.recovery.forget("post", row.id);
   }
 }

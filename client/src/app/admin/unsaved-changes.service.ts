@@ -4,6 +4,7 @@ import type { CanDeactivateFn } from "@angular/router";
 
 import { AdminSessionService } from "./admin-session.service";
 import { ConfirmService } from "./components/confirm-dialog.component";
+import { RecoveryService } from "./recovery.service";
 
 /**
  * Tracks which editors hold unsaved work.
@@ -15,6 +16,7 @@ import { ConfirmService } from "./components/confirm-dialog.component";
 @Injectable({ providedIn: "root" })
 export class UnsavedChangesService {
   private readonly platform = inject(PLATFORM_ID);
+  private readonly recovery = inject(RecoveryService);
   private readonly dirty = signal<ReadonlySet<string>>(new Set());
   private listening = false;
 
@@ -43,8 +45,10 @@ export class UnsavedChangesService {
     this.set(id, false);
   }
 
+  /** The edits on the page were thrown away on purpose. */
   clearAll(): void {
     this.dirty.set(new Set());
+    this.recovery.dropLive();
     this.syncBeforeUnload();
   }
 
