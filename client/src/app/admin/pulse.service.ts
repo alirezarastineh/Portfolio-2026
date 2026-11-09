@@ -9,6 +9,7 @@ import {
   type MessageRow,
 } from "./admin-api.service";
 import type { AssistantHealth } from "./assistant-types";
+import { visibleI18n } from "./hidden-fields";
 import { trustAlert } from "./trust";
 import { summarizeReview, type PublishSummary } from "./publish-summary";
 
@@ -183,7 +184,7 @@ export class AdminPulseService {
         return this.fetchAndSet(
           "i18n",
           () => this.api.i18nStatus(),
-          (d) => this.i18n.set(d.items),
+          (d) => this.i18n.set(visibleI18n(d.items)),
         );
       case "assistant":
         return this.fetchAndSet(

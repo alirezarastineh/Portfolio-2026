@@ -62,22 +62,6 @@ export function isStandInCover(src: string): boolean {
   return src.startsWith(STAND_IN_COVER_PREFIX);
 }
 
-/**
- * The skill captions the seed content ships with, in both languages
- * (`content/fallback.*.json`; the spec keeps the two equal). Some describe
- * another card — the AI / ML card is captioned "database + API + AI" — so
- * each one still there is worth a look.
- */
-export const STARTER_SKILL_CAPTIONS: ReadonlySet<string> = new Set([
-  "// frontend + backend + AI",
-  "// database + API + AI",
-  "// data + ML + cloud",
-  "// storage + streams",
-  "// frontend + backend + KI",
-  "// datenbank + API + KI",
-  "// speicher + streams",
-]);
-
 const SEVERITY_ORDER: Record<ReadinessSeverity, number> = { blocker: 0, warn: 1, tip: 2 };
 
 /** How much of a placeholder's text a hit shows. */
@@ -88,6 +72,8 @@ interface Finding {
   path: (string | number)[];
   label: string;
   detail: string;
+  /** Where it is fixed, when that is not the editor of its path. */
+  link?: string;
 }
 
 interface CheckDef extends Omit<ReadinessCheck, "hits" | "passed"> {
@@ -157,6 +143,7 @@ const CHECKS: CheckDef[] = [
                 path: ["projects", i, "cover", "alt"],
                 label: `projects[${project.slug}].cover.alt`,
                 detail: project.name,
+                link: "/admin/media",
               },
             ]
           : [],
@@ -168,6 +155,7 @@ const CHECKS: CheckDef[] = [
                 path: ["posts", i, "cover", "alt"],
                 label: `posts[${post.slug}].cover.alt`,
                 detail: post.title,
+                link: "/admin/media",
               },
             ]
           : [],
@@ -240,7 +228,7 @@ const CHECKS: CheckDef[] = [
     id: "avatar",
     severity: "tip",
     title: "No photo",
-    why: "A face makes the hero and the About section personal.",
+    why: "A face makes the About section personal.",
     link: "/admin/hero",
     listsPlaces: false,
     find: (content) => (content.identity.avatar === null ? missing(["identity", "avatar"]) : []),
@@ -253,26 +241,6 @@ const CHECKS: CheckDef[] = [
     link: "/admin/writing",
     listsPlaces: false,
     find: (content) => (content.posts.length === 0 ? missing(["posts"]) : []),
-  },
-  {
-    id: "skill-captions",
-    severity: "tip",
-    title: "Starter skill captions",
-    why: "They came with the site, and some describe another card: check each fits its own.",
-    link: "/admin/skills",
-    listsPlaces: true,
-    find: (content) =>
-      content.skills.flatMap((skill, i) =>
-        STARTER_SKILL_CAPTIONS.has(skill.caption.trim())
-          ? [
-              {
-                path: ["skills", i, "caption"],
-                label: `skills[${skill.id}].caption`,
-                detail: `${skill.title}: ${skill.caption}`,
-              },
-            ]
-          : [],
-      ),
   },
 ];
 
@@ -292,7 +260,7 @@ export function checkReadiness(drafts: Partial<Record<Locale, AppContent>>): Rea
         hits.set(finding.label, {
           label: finding.label,
           detail: finding.detail,
-          link: editorLinkFor(finding),
+          link: finding.link ?? editorLinkFor(finding),
           locales: [locale],
         });
       }

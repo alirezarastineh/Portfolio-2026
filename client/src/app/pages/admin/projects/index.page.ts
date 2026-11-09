@@ -78,14 +78,14 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
       <app-page-header
         title="Projects"
-        description="The section's heading, and the case-study cards in the order they stack on the page."
+        description="The Work section's heading, and the projects in the home page's order: a featured one spans the row, the rest go two across."
         preview="/admin/preview/en#projects"
       />
 
       <app-ui-group-editor
         group="projects"
-        title="Above the cards"
-        description="The section's heading and subtitle on the home page."
+        title="Heading"
+        description="The Work section's heading on the home page; the search palette and the console name the section by it."
         [fields]="headingFields"
         [level]="2"
       />
@@ -96,7 +96,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
         <div>
           <h2 class="m-0 text-h4">Case studies</h2>
           <p class="m-0 mt-1 text-sm text-muted-foreground">
-            Order here is the order they stack on the page.
+            The home page shows them in this order.
           </p>
         </div>
         <button hlmBtn variant="outline" (click)="add()">

@@ -21,6 +21,7 @@ import { withUi, type LiveCompose } from "../preview/live-content";
 import { LivePreviewToggleComponent } from "../preview/live-preview-toggle.component";
 import { EditorLayoutComponent } from "./editor-layout.component";
 import { applyIssues, countServerErrors, focusFirstInvalid } from "../issues";
+import { isHidden } from "../hidden-fields";
 import { RecoveryService } from "../recovery.service";
 import { askStale, toastDiscarded, toastIssues, toastNotSaved } from "../save-feedback";
 import { UiSectionService, type UiGroup } from "../ui-section.service";
@@ -119,7 +120,7 @@ type StringRecord = Record<string, string>;
           <app-load-error (retry)="reload()" />
         } @else {
           <form [formGroup]="form" class="flex flex-col gap-6">
-            @for (field of fields(); track field.key; let last = $last) {
+            @for (field of shown(); track field.key; let last = $last) {
               <app-field-pair
                 [id]="group() + '-' + field.key"
                 [label]="field.label"
@@ -177,8 +178,13 @@ export class UiGroupEditorComponent implements OnInit {
     return (base, locale) => withUi(base, locale, { [group]: value });
   });
 
+  /** What nothing on the site reads stays out of sight; its value stays in the form, and saves. */
+  protected readonly shown = computed(() =>
+    this.fields().filter((field) => !isHidden("section", "ui", `${this.group()}.${field.key}`)),
+  );
+
   /** As many placeholder fields as the form will have, up to a screenful. */
-  protected readonly skeletonRows = computed(() => Math.min(this.fields().length, 6));
+  protected readonly skeletonRows = computed(() => Math.min(this.shown().length, 6));
 
   private readonly fb = inject(FormBuilder);
   private readonly ui = inject(UiSectionService);

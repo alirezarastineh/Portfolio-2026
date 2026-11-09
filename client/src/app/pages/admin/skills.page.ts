@@ -34,7 +34,6 @@ import { countChangedFields } from "../../admin/changed-fields";
 import { EditorLayoutComponent } from "../../admin/components/editor-layout.component";
 import { withSkills, withUi, type LiveCompose } from "../../admin/preview/live-content";
 import { LivePreviewToggleComponent } from "../../admin/preview/live-preview-toggle.component";
-import { ICON_KEYS } from "../../icons/icon-registry";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import {
   FieldIssueComponent,
@@ -61,16 +60,6 @@ import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
 import { RecoveryService } from "../../admin/recovery.service";
 import { toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
 import type { Locale } from "../../content/schema";
-
-/** Any registry key; the capability icons first. */
-const ICONS = [
-  "cpu",
-  "brain-circuit",
-  "container",
-  "database",
-  ...ICON_KEYS.filter((k) => !["cpu", "brain-circuit", "container", "database"].includes(k)),
-];
-const SPANS: SkillInput["span"][] = ["lg", "tall", "sm"];
 
 const HEADING_FIELDS: UiFieldDef[] = [
   { key: "heading", label: "Section heading" },
@@ -122,7 +111,7 @@ function toInput(row: SkillRow): SkillInput {
       <div class="flex flex-col gap-6 pb-28">
         <app-page-header
           title="Skills"
-          description="The section's heading and the bento cards. One Save covers both."
+          description="The Skills section's heading, and its groups in the order the home page shows them, two columns wide. One Save covers both."
           preview="/admin/preview/en#skills"
         >
           <app-live-preview-toggle headerActions />
@@ -130,8 +119,8 @@ function toInput(row: SkillRow): SkillInput {
 
         <app-ui-group-editor
           group="skills"
-          title="Above the cards"
-          description="The section's heading and subtitle on the home page."
+          title="Heading"
+          description="The Skills section's heading on the home page; the search palette, the console and the assistant name the section by it."
           [fields]="headingFields"
           [saveBar]="false"
           [level]="2"
@@ -184,26 +173,6 @@ function toInput(row: SkillRow): SkillInput {
                       >unsaved</span
                     >
                   }
-                  <select
-                    class="h-8 rounded-md border border-border bg-card px-2 font-mono text-xs"
-                    [ngModel]="row.icon"
-                    (ngModelChange)="patch(row.id, { icon: $event })"
-                    aria-label="Icon"
-                  >
-                    @for (icon of icons; track icon) {
-                      <option [value]="icon">{{ icon }}</option>
-                    }
-                  </select>
-                  <select
-                    class="h-8 rounded-md border border-border bg-card px-2 font-mono text-xs"
-                    [ngModel]="row.span"
-                    (ngModelChange)="patch(row.id, { span: $event })"
-                    aria-label="Card size"
-                  >
-                    @for (span of spans; track span) {
-                      <option [value]="span">{{ span }}</option>
-                    }
-                  </select>
                   <label class="flex items-center gap-2 text-xs text-muted-foreground">
                     <hlm-switch
                       [checked]="row.isVisible"
@@ -244,25 +213,6 @@ function toInput(row: SkillRow): SkillInput {
                       <app-field-issue
                         [id]="issueId(row.id, locale, 'title')"
                         [message]="issue(row.id, locale, 'title')"
-                      />
-                      <input
-                        hlmInput
-                        class="h-8"
-                        maxlength="160"
-                        [ngModel]="row.translations[locale].caption"
-                        (ngModelChange)="patchTranslation(row.id, locale, { caption: $event })"
-                        [attr.aria-label]="'Caption (' + locale + ')'"
-                        [attr.aria-invalid]="issue(row.id, locale, 'caption') ? true : null"
-                        [aria-describedby]="
-                          issue(row.id, locale, 'caption')
-                            ? issueId(row.id, locale, 'caption')
-                            : null
-                        "
-                        placeholder="// caption"
-                      />
-                      <app-field-issue
-                        [id]="issueId(row.id, locale, 'caption')"
-                        [message]="issue(row.id, locale, 'caption')"
                       />
                       <textarea
                         hlmTextarea
@@ -317,8 +267,6 @@ export default class AdminSkillsPage implements OnInit {
     return list.ok ? list.data.skills : null;
   });
 
-  protected readonly icons = ICONS;
-  protected readonly spans = SPANS;
   protected readonly headingFields = HEADING_FIELDS;
   protected readonly view = signal<LocaleView>("both");
 

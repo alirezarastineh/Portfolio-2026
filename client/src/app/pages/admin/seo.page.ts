@@ -17,6 +17,7 @@ import { AdminApiService, type ApiIssue } from "../../admin/admin-api.service";
 import { countChangedFields } from "../../admin/changed-fields";
 import { applyIssues, countServerErrors, focusFirstInvalid } from "../../admin/issues";
 import { askStale, toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
+import { isHidden } from "../../admin/hidden-fields";
 import { RecoveryService } from "../../admin/recovery.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
@@ -140,7 +141,8 @@ export default class AdminSeoPage implements OnInit {
   private readonly unsaved = inject(UnsavedChangesService);
   private readonly confirm = inject(ConfirmService);
 
-  protected readonly fields = FIELDS;
+  /** The OG URL is the page's own address now: hidden, its value kept. */
+  protected readonly fields = FIELDS.filter((field) => !isHidden("section", "seo", field.key));
   protected readonly view = signal<LocaleView>("both");
 
   protected readonly loading = signal(true);

@@ -130,7 +130,7 @@ describe("the spending fences in the admin", () => {
       },
       {
         feature: "terminal",
-        label: "Visitors' terminal",
+        label: "Visitors' assistant",
         todayUsd: 0.1,
         periodUsd: 0,
         capUsd: null,

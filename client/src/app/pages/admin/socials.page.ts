@@ -24,7 +24,6 @@ import {
   type SocialInput,
   type SocialRow,
 } from "../../admin/admin-api.service";
-import { ICON_KEYS } from "../../icons/icon-registry";
 import { countChangedFields } from "../../admin/changed-fields";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import {
@@ -45,20 +44,6 @@ import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
 import { RecoveryService } from "../../admin/recovery.service";
 import { toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
-
-/** Any registry key; the link icons first. */
-const ICONS = [
-  "github",
-  "linkedin",
-  "x",
-  "mail",
-  "website",
-  "rss",
-  "mastodon",
-  ...ICON_KEYS.filter(
-    (k) => !["github", "linkedin", "x", "mail", "website", "rss", "mastodon"].includes(k),
-  ),
-];
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
@@ -117,7 +102,7 @@ function toInput(row: SocialRow): SocialInput {
         >
           <ng-template appSortableRow let-row>
             <div
-              class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto_auto_auto] sm:items-start"
+              class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto_auto] sm:items-start"
             >
               <div class="flex flex-col">
                 <input
@@ -155,16 +140,6 @@ function toInput(row: SocialRow): SocialInput {
                   [message]="issues.get(row.id + '.href')"
                 />
               </div>
-              <select
-                class="h-9 rounded-md border border-border bg-card px-2 font-mono text-xs"
-                [ngModel]="row.icon"
-                (ngModelChange)="patch(row.id, { icon: $event })"
-                aria-label="Icon"
-              >
-                @for (icon of icons; track icon) {
-                  <option [value]="icon">{{ icon }}</option>
-                }
-              </select>
               <label class="flex h-9 items-center gap-2 text-xs text-muted-foreground">
                 <hlm-switch
                   [checked]="row.isVisible"
@@ -212,7 +187,6 @@ export default class AdminSocialsPage implements OnInit {
     return list.ok ? list.data.socials : null;
   });
 
-  protected readonly icons = ICONS;
   protected readonly rows = signal<SocialRow[]>([]);
   /** Each link as last saved, by id. */
   private readonly saved = signal<ReadonlyMap<string, SocialRow>>(new Map());
@@ -371,7 +345,8 @@ export default class AdminSocialsPage implements OnInit {
     // until published — so it always asks first.
     const go = await this.confirm.ask({
       title: `Delete ${row.label}?`,
-      description: "It disappears from the footer on the next publish. This cannot be undone.",
+      description:
+        "It leaves the footer and the contact section at the next publish. This cannot be undone.",
       confirmLabel: "Delete link",
       destructive: true,
     });

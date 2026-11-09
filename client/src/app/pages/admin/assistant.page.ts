@@ -106,7 +106,7 @@ const TABS: { id: Tab; label: string }[] = [
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
       <app-page-header
         title="Assistant"
-        description="The About terminal's AI: answers from the published portfolio, with citations."
+        description="The assistant on the home page's stage, and in its panel on every page: answers from the published portfolio, with citations."
       >
         <span headerStatus>
           @if (pulse.assistantAlert(); as alert) {

@@ -157,9 +157,10 @@ interface ModelTotal {
               </div>
               @if (h.spend; as s) {
                 <p class="m-0 text-xs text-muted-foreground">
-                  All but the terminal stop at \${{ s.reserveLineUsd | number: "1.2-2" }} ({{
-                    s.publicReserve * 100 | number: "1.0-0"
+                  All but the visitors' assistant stop at \${{
+                    s.reserveLineUsd | number: "1.2-2"
                   }}
+                  ({{ s.publicReserve * 100 | number: "1.0-0" }}
                   % kept for visitors)
                 </p>
               }

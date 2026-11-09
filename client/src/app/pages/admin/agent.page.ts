@@ -17,6 +17,7 @@ import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 import { HlmToggleGroupImports } from "@spartan-ng/helm/toggle-group";
 
+import { isHidden } from "../../admin/hidden-fields";
 import { AdminApiService, type ApiResult } from "../../admin/admin-api.service";
 import {
   agentWords,
@@ -493,7 +494,10 @@ export default class AdminAgentPage implements OnInit {
       this.runsError.set(agentWords(runs.error));
     }
     if (proposals.ok) {
-      this.proposals.set(proposals.data.proposals);
+      // Hidden text is no gap to fill: its proposals stay out of sight.
+      this.proposals.set(
+        proposals.data.proposals.filter((p) => !isHidden(p.kind, p.entityId, p.field)),
+      );
       this.limited.set(proposals.data.limited ?? false);
       this.loadError.set(null);
     } else {

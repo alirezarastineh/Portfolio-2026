@@ -103,7 +103,7 @@ const CARD_FIELDS: TextFieldDef[] = [
   {
     key: "descriptor",
     label: "Descriptor",
-    hint: "Short uppercase eyebrow above the title.",
+    hint: "Under the name on the home page's plate and the case study; over the title on its share image. The search palette, the tour, the console, llms.txt and the assistant read it too, and search engines when the hook and search description are empty.",
     maxLength: 200,
   },
   {
@@ -118,7 +118,7 @@ const CARD_FIELDS: TextFieldDef[] = [
   {
     key: "categoryLabel",
     label: "Category label",
-    hint: "How the category key reads in this language.",
+    hint: "The category in the case study's facts, and what the assistant calls it. Empty: the category key shows instead.",
     maxLength: 80,
   },
 ];
@@ -401,7 +401,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
             <div class="flex flex-col gap-2">
               <span class="text-sm font-medium">{{ field.label }}</span>
               @if (field.hint) {
-                <p class="m-0 text-xs text-muted-foreground">{{ field.hint }}</p>
+                <p class="m-0 max-w-prose text-xs text-muted-foreground">{{ field.hint }}</p>
               }
               <div [class]="columns()">
                 @for (locale of visibleLocales(); track locale) {

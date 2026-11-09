@@ -35,6 +35,7 @@ import { applyIssues, countServerErrors, focusFirstInvalid } from "../../admin/i
 import { withIdentity, withUi, type LiveCompose } from "../../admin/preview/live-content";
 import { LivePreviewToggleComponent } from "../../admin/preview/live-preview-toggle.component";
 import { askStale, toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
+import { isHidden } from "../../admin/hidden-fields";
 import { RecoveryService } from "../../admin/recovery.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
@@ -65,12 +66,20 @@ interface Field<K extends string> {
 }
 
 const PROFILE_FIELDS: Field<keyof ProfileGroup>[] = [
-  { key: "role", label: "Role", hint: "Shown next to your handle and in the footer." },
+  {
+    key: "role",
+    label: "Role",
+    hint: "Shown by the console's whoami, as the job title in the structured data, on the share images and in llms.txt; the assistant knows it too.",
+  },
   { key: "heroHeadline", label: "Hero headline", multiline: true },
   { key: "heroSubheadline", label: "Hero subheadline", multiline: true },
   { key: "primaryCta", label: "Primary button label" },
   { key: "secondaryCta", label: "Secondary button label" },
-  { key: "location", label: "Location", hint: "Rendered in the footer." },
+  {
+    key: "location",
+    label: "Location",
+    hint: "Used only while City and Country are empty: then it is the place in the hero, in About's facts, in the contact section, in the console and in what the assistant knows.",
+  },
 ];
 
 const HERO_FIELDS: Field<keyof HeroGroup>[] = [
@@ -83,12 +92,20 @@ const HERO_FIELDS: Field<keyof HeroGroup>[] = [
 
 const NAV_FIELDS: Field<keyof NavGroup>[] = [
   { key: "skills", label: "Nav — skills" },
-  { key: "projects", label: "Nav — projects" },
-  { key: "about", label: "Nav — about" },
+  { key: "projects", label: "Nav — projects", hint: "The header's link to the work section." },
+  { key: "about", label: "Nav — about", hint: "The header's link to About." },
   { key: "contact", label: "Nav — contact" },
-  { key: "work", label: "Nav — work (case studies)" },
-  { key: "experience", label: "Nav — experience" },
-  { key: "writing", label: "Nav — writing" },
+  {
+    key: "work",
+    label: "Nav — work (case studies)",
+    hint: "Over the project links in the footer, in the case study's breadcrumb, and on the share image of a project without a descriptor.",
+  },
+  { key: "experience", label: "Nav — experience", hint: "The header's link to Experience." },
+  {
+    key: "writing",
+    label: "Nav — writing",
+    hint: "The header's link to Writing; also over the posts in the footer and in the search palette, the 404 page's link to the posts, and on a post's share image.",
+  },
 ];
 
 type IdentityKey = Exclude<keyof ProfileInput, "avatarId" | "availability">;
@@ -211,7 +228,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
             <app-media-field
               id="avatar"
               label="Photo"
-              hint="Optional; shown in the hero and in the structured data."
+              hint="Optional; shown in the About section, in black and white and cropped to 4:5."
               [path]="avatarPath()"
               (chosen)="chooseAvatar($event)"
             />
@@ -277,6 +294,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
               <app-field-pair
                 [id]="'nav-' + field.key"
                 [label]="field.label"
+                [hint]="field.hint ?? ''"
                 [view]="view()"
                 [controlEn]="control('nav', 'en', field.key)"
                 [controlDe]="control('nav', 'de', field.key)"
@@ -307,10 +325,17 @@ export default class AdminHeroPage implements OnInit {
 
   private readonly host = inject(ElementRef<HTMLElement>);
 
-  protected readonly identityFields = IDENTITY_FIELDS;
-  protected readonly profileFields = PROFILE_FIELDS;
+  // What nothing on the site reads stays out of sight; its value stays in the form, and saves.
+  protected readonly identityFields = IDENTITY_FIELDS.filter(
+    (f) => !isHidden("identity", "", f.key),
+  );
+  protected readonly profileFields = PROFILE_FIELDS.filter(
+    (f) => !isHidden("section", "ui", `profile.${f.key}`),
+  );
   protected readonly heroFields = HERO_FIELDS;
-  protected readonly navFields = NAV_FIELDS;
+  protected readonly navFields = NAV_FIELDS.filter(
+    (f) => !isHidden("section", "ui", `nav.${f.key}`),
+  );
   protected readonly availability = AVAILABILITY;
   protected readonly locales: Locale[] = ["en", "de"];
   protected readonly view = signal<LocaleView>("both");

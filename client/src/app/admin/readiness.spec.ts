@@ -4,12 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { appContentSchema, type AppContent, type Image } from "../content/schema";
-import {
-  checkReadiness,
-  findPlaceholders,
-  STARTER_SKILL_CAPTIONS,
-  type ReadinessReport,
-} from "./readiness";
+import { checkReadiness, findPlaceholders, type ReadinessReport } from "./readiness";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const load = (file: string): AppContent =>
@@ -41,7 +36,6 @@ function finished(content: AppContent): AppContent {
       avatar: image("Portrait"),
       resume: { href: "/media/cv.pdf", bytes: 120_000 },
     },
-    skills: written.skills.map((skill) => ({ ...skill, caption: `// ${skill.title}` })),
     projects: written.projects.map((project, i) => ({
       ...project,
       cover: image(`${project.name} dashboard`),
@@ -130,26 +124,8 @@ describe("checkReadiness", () => {
     ]);
   });
 
-  it("knows the seed's skill captions, and asks for a look at each one still there", () => {
-    const seeded = new Set([...en.skills, ...de.skills].map((skill) => skill.caption));
-    expect(seeded).toEqual(STARTER_SKILL_CAPTIONS);
-
-    const report = checkReadiness({ en, de });
-    expect(check(report, "skill-captions").hits.map((hit) => hit.label)).toEqual([
-      "skills[core-architecture].caption",
-      "skills[ai-ml-stack].caption",
-      "skills[devops].caption",
-      "skills[data-pipelines].caption",
-    ]);
-    const aiMl = check(report, "skill-captions").hits[1];
-    expect(aiMl).toMatchObject({
-      detail: "AI / ML Stack: // database + API + AI",
-      link: "/admin/skills",
-      locales: ["en", "de"],
-    });
-
-    const rewritten = finished(en);
-    expect(check(checkReadiness({ en: rewritten }), "skill-captions").passed).toBe(true);
+  it("has no rule about skill captions, which no page shows", () => {
+    expect(checkReadiness({ en, de }).checks.map((c) => c.id)).not.toContain("skill-captions");
   });
 
   it("lists failing checks first, the worst first, and counts what passes", () => {
@@ -185,6 +161,8 @@ describe("checkReadiness", () => {
     expect(check(report, "alt-text").hits.map((hit) => hit.label)).toEqual([
       "projects[project-one].cover.alt",
     ]);
+    // Alt text belongs to the file: Media is where it is fixed.
+    expect(check(report, "alt-text").hits[0]?.link).toBe("/admin/media");
   });
 
   it("checks only the languages it was given (a draft that does not build is left out)", () => {

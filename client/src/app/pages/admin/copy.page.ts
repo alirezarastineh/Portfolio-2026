@@ -44,7 +44,8 @@ const GROUPS: GroupDef[] = [
   {
     group: "projectCard",
     title: "Project cards",
-    description: "Labels on the project cards of the home page.",
+    description:
+      "Labels on the home page's project plates. The case-study pages use the same section names and link labels.",
     fields: [
       { key: "problem", label: "Problem label" },
       { key: "arch", label: "Architecture label" },
@@ -70,10 +71,11 @@ const GROUPS: GroupDef[] = [
   {
     group: "ask",
     title: "Assistant",
-    description: "The “ask my portfolio” terminal. Tell visitors it is an AI (EU AI Act, Art. 50).",
+    description:
+      "The assistant: on the home page's stage, and in its panel on every page. Tell visitors it is an AI (EU AI Act, Art. 50).",
     fields: [
       { key: "title", label: "Title" },
-      { key: "hint", label: "Hint under the prompt" },
+      { key: "hint", label: "Hint above the prompt" },
       { key: "placeholder", label: "Input placeholder" },
       { key: "disclosure", label: "AI disclosure", multiline: true },
       { key: "offline", label: "When it is resting", multiline: true },

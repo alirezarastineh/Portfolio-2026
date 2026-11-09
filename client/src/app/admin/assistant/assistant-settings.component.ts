@@ -153,7 +153,7 @@ function toDraft(s: AssistantSettings): Draft {
             (ngModelChange)="patch({ budget: $event === null ? '' : String($event) })"
           />
           <p class="m-0 text-xs text-muted-foreground">
-            The visitors' terminal may spend all of it; everything else stops at the line below.
+            The visitors' assistant may spend all of it; everything else stops at the line below.
             Empty = the deploy's default.
           </p>
         </div>
