@@ -2,8 +2,10 @@ import { isPlatformBrowser } from "@angular/common";
 import { inject, Injectable, PLATFORM_ID, signal } from "@angular/core";
 import type { ResolveFn } from "@angular/router";
 import type { RouteMeta } from "@analogjs/router";
+import { toast } from "@spartan-ng/brain/sonner";
 import { firstValueFrom, isObservable } from "rxjs";
 
+import { AskLauncherService } from "../../ask/ask-launcher.service";
 import { AdminApiService, type ApiIssue } from "../admin-api.service";
 import { ContentStore } from "../../content/content.store";
 import { CONTENT_PREVIEW, CONTENT_SOURCE, type ContentSource } from "../../content/content-source";
@@ -32,6 +34,22 @@ function draftSource(): ContentSource {
 }
 
 /**
+ * The draft tab's assistant stays still: a question there would be a real answer, paid for in
+ * production and logged as a visitor's. Here, in admin code, so the public launcher carries
+ * nothing for it.
+ */
+@Injectable()
+export class StillAskLauncher extends AskLauncherService {
+  override openSheet(): void {
+    toast.info("Not asked", { description: "The assistant does not answer in the draft preview." });
+  }
+
+  override openPanel(): void {
+    // Nothing opens in the draft preview.
+  }
+}
+
+/**
  * Everything the public pages read their content through, provided again for
  * the preview's routes: fresh instances whose source is the draft. The
  * language service is included because it holds the store it reads from.
@@ -39,6 +57,7 @@ function draftSource(): ContentSource {
 export const PREVIEW_PROVIDERS = [
   { provide: CONTENT_SOURCE, useFactory: draftSource },
   { provide: CONTENT_PREVIEW, useValue: true },
+  { provide: AskLauncherService, useClass: StillAskLauncher },
   ContentStore,
   DocStore,
   LanguageService,

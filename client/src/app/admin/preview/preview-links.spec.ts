@@ -28,6 +28,15 @@ describe("previewTarget", () => {
     });
   });
 
+  it("holds a link to the match page, which the preview does not have", () => {
+    const held = { hold: "The match page only runs on the live site." };
+    expect(previewTarget(at("/en/match"), ORIGIN)).toEqual(held);
+    expect(previewTarget(at("/de/match/"), ORIGIN)).toEqual(held);
+    expect(previewTarget(at("/en/work/match"), ORIGIN)).toEqual({
+      navigate: "/admin/preview/en/work/match",
+    });
+  });
+
   it("leaves mail links and admin links alone", () => {
     expect(previewTarget(at("mailto:hi@example.com"), ORIGIN)).toBeNull();
     expect(previewTarget(at("/admin/preview/en"), ORIGIN)).toBeNull();

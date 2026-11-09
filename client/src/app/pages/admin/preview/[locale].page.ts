@@ -169,6 +169,8 @@ export default class AdminPreviewFrame {
     event.stopPropagation();
     if ("navigate" in target) {
       void this.router.navigateByUrl(target.navigate);
+    } else if ("hold" in target) {
+      toast.info("Not opened", { description: target.hold });
     } else {
       window.open(target.newTab, "_blank", "noopener");
     }

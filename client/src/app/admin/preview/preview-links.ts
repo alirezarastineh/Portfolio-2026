@@ -7,6 +7,8 @@ export type PreviewTarget =
   | { navigate: string }
   /** Another site, or a file the site serves (a feed, the CV): a new tab. */
   | { newTab: string }
+  /** A page the preview does not have: the click is held, and this says why. */
+  | { hold: string }
   /** Leave the click alone (`mailto:`, admin links). */
   | null;
 
@@ -25,6 +27,10 @@ export function previewTarget(url: URL, origin: string): PreviewTarget {
   // Files and feeds are served by the server, not the router.
   if (/\.[a-z0-9]+$/i.test(path) || path.startsWith("/media/") || path.startsWith("/api/")) {
     return { newTab: url.href };
+  }
+  // The match page asks the assistant (paid) and has no draft: it is not in the preview.
+  if (/^\/[a-z]{2}\/match\/?$/.test(path) && localeOfPath(path)) {
+    return { hold: "The match page only runs on the live site." };
   }
   if (localeOfPath(path)) return { navigate: `${PREVIEW_PREFIX}${path}${url.search}${url.hash}` };
   return { newTab: url.href };
