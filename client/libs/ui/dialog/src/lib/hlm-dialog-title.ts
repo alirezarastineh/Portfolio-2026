@@ -11,6 +11,6 @@ import { classes } from "@spartan-ng/helm/utils";
 })
 export class HlmDialogTitle {
   constructor() {
-    classes(() => "text-lg leading-none font-semibold");
+    classes(() => "text-section-title");
   }
 }

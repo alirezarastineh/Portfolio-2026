@@ -23,8 +23,9 @@ export class HlmInputOtpSlot {
 
   constructor() {
     classes(() => [
-      "dark:bg-input/30 border-input relative flex h-9 w-9 items-center justify-center border-y border-r text-sm shadow-xs transition-all outline-none first:rounded-l-md first:border-l last:rounded-r-md",
-      'has-[brn-input-otp-slot[data-active="true"]]:border-ring has-[brn-input-otp-slot[data-active="true"]]:ring-ring/50 has-[brn-input-otp-slot[data-active="true"]]:z-10 has-[brn-input-otp-slot[data-active="true"]]:ring-[3px]',
+      "bg-card border-input-line relative flex h-9 w-9 pointer-coarse:h-11 pointer-coarse:w-11 items-center justify-center border-y border-r text-sm pointer-coarse:text-base transition-colors first:rounded-l-lg first:border-l last:rounded-r-lg",
+      // The slot being typed in carries the site's ring: the input it stands for is hidden.
+      'has-[brn-input-otp-slot[data-active="true"]]:z-10 has-[brn-input-otp-slot[data-active="true"]]:outline-2 has-[brn-input-otp-slot[data-active="true"]]:outline-accent-orange',
     ]);
   }
 }

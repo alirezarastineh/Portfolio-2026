@@ -20,7 +20,7 @@ import { cva } from "class-variance-authority";
 import { HlmSheetClose } from "./hlm-sheet-close";
 
 export const sheetVariants = cva(
-  "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
+  "bg-card data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-e3 transition ease-in-out data-[state=closed]:duration-200 data-[state=open]:duration-200",
   {
     variants: {
       side: {

@@ -98,8 +98,8 @@ export class HlmToaster {
     {
       "--normal-bg": "var(--popover)",
       "--normal-text": "var(--popover-foreground)",
-      "--normal-border": "var(--border)",
-      "--border-radius": "var(--radius)",
+      "--normal-border": "var(--border-strong)",
+      "--border-radius": "calc(var(--radius) * 2)",
     },
     { alias: "style" }, // NOSONAR - alias required: 'style' is a reserved keyword, cannot be a TS property name
   );

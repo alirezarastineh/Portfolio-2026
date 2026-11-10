@@ -16,7 +16,7 @@ export class HlmSheetOverlay {
   public readonly userClass = input<ClassValue>("", { alias: "class" }); // NOSONAR - alias required: 'class' is a reserved keyword, cannot be a TS property name
   protected readonly _computedClass = computed(() =>
     hlm(
-      "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 bg-black/50",
+      "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 bg-scrim",
       this.userClass(),
     ),
   );

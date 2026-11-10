@@ -10,7 +10,18 @@ import {
   runInInjectionContext,
 } from "@angular/core";
 import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+// The admin's own type and radius names (src/admin.css): an unknown `text-*` reads as a colour,
+// so `text-hint` would remove the `text-muted-foreground` beside it.
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "font-size": [{ text: ["page-title", "section-title", "hint", "figure", "data"] }],
+      rounded: [{ rounded: ["overlay"] }],
+    },
+  },
+});
 
 export function hlm(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

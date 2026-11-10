@@ -11,6 +11,6 @@ import { classes } from "@spartan-ng/helm/utils";
 })
 export class HlmSheetTitle {
   constructor() {
-    classes(() => "text-foreground font-semibold");
+    classes(() => "text-foreground text-section-title");
   }
 }
