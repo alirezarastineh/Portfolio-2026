@@ -30,7 +30,7 @@ import { sortCases, STALE_LABELS, type EvalCaseRow } from "../eval-cases";
   template: `
     <section class="flex flex-col gap-2" aria-labelledby="eval-cases-title">
       <h2 id="eval-cases-title" class="m-0 text-sm font-medium">Production eval cases</h2>
-      <p class="m-0 text-xs text-muted-foreground">
+      <p class="m-0 text-hint text-muted-foreground">
         Frozen from visitor answers, each with the corpus it was answered from; run them with
         <code>ai:eval --suite production</code>.
       </p>
@@ -52,7 +52,7 @@ import { sortCases, STALE_LABELS, type EvalCaseRow } from "../eval-cases";
                 </ol>
               }
               <p class="m-0">{{ row.question }}</p>
-              <p class="m-0 font-mono text-xs text-muted-foreground">
+              <p class="m-0 font-data text-xs text-muted-foreground">
                 {{ row.locale.toUpperCase() }} · must cite
                 {{ row.mustCite.length ? row.mustCite.join(", ") : "nothing" }}
                 @if (row.mustInclude.length) {
@@ -61,9 +61,7 @@ import { sortCases, STALE_LABELS, type EvalCaseRow } from "../eval-cases";
                 · {{ row.status }}
               </p>
               @if (row.stale) {
-                <p class="m-0 text-xs text-amber-700 dark:text-amber-400">
-                  Stale: {{ staleLabels[row.stale] }}.
-                </p>
+                <p class="m-0 text-xs text-accent-orange">Stale: {{ staleLabels[row.stale] }}.</p>
               }
               <div class="flex gap-2">
                 <button
@@ -91,7 +89,7 @@ import { sortCases, STALE_LABELS, type EvalCaseRow } from "../eval-cases";
           }
         </ul>
       } @else {
-        <p class="m-0 text-xs text-muted-foreground">
+        <p class="m-0 text-hint text-muted-foreground">
           None yet: freeze one from Conversations or Reviews.
         </p>
       }

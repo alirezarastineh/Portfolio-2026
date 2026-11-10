@@ -34,7 +34,7 @@ const USAGE: Record<string, { label: string; tone: string }> = {
             class="text-muted-foreground"
             aria-hidden="true"
           />
-          <span class="font-mono text-xs text-muted-foreground">PDF</span>
+          <span class="text-hint text-muted-foreground">PDF</span>
         </span>
       } @else {
         <img
@@ -49,9 +49,9 @@ const USAGE: Record<string, { label: string; tone: string }> = {
       }
     </span>
     <span class="flex min-w-0 flex-col gap-1 px-2 py-1.5">
-      <span class="truncate font-mono text-xs text-foreground">{{ asset().originalName }}</span>
+      <span class="truncate font-data text-xs text-foreground">{{ asset().originalName }}</span>
       <span
-        class="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-xs text-muted-foreground"
+        class="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-data text-xs text-muted-foreground"
       >
         <span>{{ facts() }}</span>
         @if (usage(); as u) {

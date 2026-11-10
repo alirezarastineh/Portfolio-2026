@@ -54,7 +54,7 @@ import { TerminalWindowComponent } from "../../admin/components/terminal-window.
                 <span class="text-accent-orange">~$</span>
                 {{ step() === "credentials" ? "sudo login" : "verify --totp" }}
               </p>
-              <h1 class="m-0 mt-3 font-sans text-h4 text-foreground">
+              <h1 class="m-0 mt-3 font-sans text-page-title text-foreground">
                 {{ step() === "credentials" ? "admin" : "two-factor" }}
               </h1>
               <p class="m-0 mt-1 font-sans text-sm text-muted-foreground">

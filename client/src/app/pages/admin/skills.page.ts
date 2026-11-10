@@ -130,7 +130,7 @@ function toInput(row: SkillRow): SkillInput {
 
         <header class="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 class="m-0 text-h4">Cards</h2>
+            <h2 class="m-0 text-section-title">Cards</h2>
             <p class="m-0 mt-1 text-sm text-muted-foreground">
               Edits are kept until you save. Adding, deleting and reordering a card take effect at
               once.
@@ -164,12 +164,12 @@ function toInput(row: SkillRow): SkillInput {
             <ng-template appSortableRow let-row>
               <div class="flex flex-col gap-4">
                 <div class="flex flex-wrap items-center gap-3">
-                  <code class="rounded bg-muted px-2 py-1 font-mono text-xs">{{ row.id }}</code>
+                  <code class="rounded bg-muted px-2 py-1 font-data text-xs">{{ row.id }}</code>
                   @if (isChanged(row.id)) {
                     <span
                       hlmBadge
                       variant="outline"
-                      class="border-accent-orange/50 font-mono text-accent-orange"
+                      class="border-accent-orange/50 text-accent-orange"
                       >unsaved</span
                     >
                   }
@@ -196,7 +196,9 @@ function toInput(row: SkillRow): SkillInput {
                 <div [class]="view() === 'both' ? 'grid gap-4 lg:grid-cols-2' : 'grid gap-4'">
                   @for (locale of visibleLocales(); track locale) {
                     <div class="flex flex-col gap-2 rounded-lg border border-border/60 p-3">
-                      <span class="eyebrow text-muted-foreground">{{ locale }}</span>
+                      <span class="text-xs font-medium text-muted-foreground">{{
+                        locale.toUpperCase()
+                      }}</span>
                       <input
                         hlmInput
                         class="h-8"

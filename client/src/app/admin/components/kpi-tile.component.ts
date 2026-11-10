@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 
 /**
  * One figure at a glance, as the dashboard shows what needs a look: the label
- * on top (the tile's heading), then whatever the page puts in (the number in
- * `text-h3`, a line or two under it, a link). An attribute component, so the
+ * on top (the tile's heading), then whatever the page puts in (the figure in
+ * `text-figure`, a line or two under it, a link). An attribute component, so the
  * host keeps its own element: an `<li>` in a list of tiles.
  */
 @Component({
@@ -12,9 +12,9 @@ import { ChangeDetectionStrategy, Component, input } from "@angular/core";
   host: { class: "surface-card flex min-w-0 flex-col gap-1.5 p-4" },
   template: `
     @if (level() === 2) {
-      <h2 class="eyebrow m-0 text-muted-foreground">{{ label() }}</h2>
+      <h2 class="m-0 text-sm font-medium text-muted-foreground">{{ label() }}</h2>
     } @else {
-      <h3 class="eyebrow m-0 text-muted-foreground">{{ label() }}</h3>
+      <h3 class="m-0 text-sm font-medium text-muted-foreground">{{ label() }}</h3>
     }
     <ng-content />
   `,

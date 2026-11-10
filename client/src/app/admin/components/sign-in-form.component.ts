@@ -130,7 +130,7 @@ const ERROR_COPY: Record<string, string> = {
               spellcheck="false"
               placeholder="ABCDE-FGHJK"
               formControlName="code"
-              class="font-mono uppercase tracking-label"
+              class="font-data uppercase"
             />
           </div>
         }

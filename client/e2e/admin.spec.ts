@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import AxeBuilder from "@axe-core/playwright";
-import type { Page, Route } from "@playwright/test";
+import type { Locator, Page, Route } from "@playwright/test";
 
 import { expect, interactive, settled, test } from "./fixtures";
 
@@ -2070,11 +2070,11 @@ test.describe("admin", () => {
     await open.click();
     const details = page.locator("hlm-sheet-content");
     await details.getByRole("button", { name: "Suggest alt text in German with AI" }).click();
-    await expect(details.getByLabel("de", { exact: true })).toHaveValue("Architekturdiagramm 1");
+    await expect(details.getByLabel("DE", { exact: true })).toHaveValue("Architekturdiagramm 1");
     await expect(details.locator("#alt-de-draft")).toHaveText(
       'Needs your eye: starts with "image of": say what it shows instead.',
     );
-    await expect(details.getByLabel("de", { exact: true })).toHaveAttribute(
+    await expect(details.getByLabel("DE", { exact: true })).toHaveAttribute(
       "aria-describedby",
       "alt-de-draft",
     );
@@ -2084,7 +2084,7 @@ test.describe("admin", () => {
     await expect(details.locator("#alt-de-draft")).toHaveText("");
 
     await details.getByRole("button", { name: "Suggest alt text in German with AI" }).click();
-    await expect(details.getByLabel("de", { exact: true })).toHaveValue("Architekturdiagramm 2");
+    await expect(details.getByLabel("DE", { exact: true })).toHaveValue("Architekturdiagramm 2");
     await page.keyboard.press("Escape");
     await page.getByRole("alertdialog").getByRole("button", { name: "Discard" }).click();
     await expect.poll(() => verdicts).toHaveLength(2);
@@ -2291,7 +2291,7 @@ test.describe("admin", () => {
           ],
         },
       ]);
-    await expect(details.getByLabel("de", { exact: true })).not.toHaveValue("Architekturdiagramm");
+    await expect(details.getByLabel("DE", { exact: true })).not.toHaveValue("Architekturdiagramm");
     expect(unmocked).toEqual([]);
   });
 
@@ -4020,7 +4020,7 @@ test.describe("admin", () => {
     // Live files cannot be deleted; the reason is given.
     await expect(details.getByRole("button", { name: "Delete" })).toBeDisabled();
     await details.getByRole("button", { name: "Suggest alt text in German with AI" }).click();
-    await expect(details.getByLabel("de", { exact: true })).toHaveValue(
+    await expect(details.getByLabel("DE", { exact: true })).toHaveValue(
       "Architekturdiagramm der Suchpipeline",
     );
     await page.keyboard.press("Escape");
@@ -4064,7 +4064,7 @@ test.describe("admin", () => {
     const section = details.getByRole("region", { name: "Description for the assistant" });
     await expect(section.getByRole("button", { name: "Save description" })).toBeDisabled();
     await section.getByRole("button", { name: "Describe the image in English with AI" }).click();
-    await expect(section.getByLabel("Assistant description, en")).toHaveValue(
+    await expect(section.getByLabel("Assistant description, EN")).toHaveValue(
       "OCR → LLM: page text\nLLM → review queue: low-confidence fields",
     );
     expect(asked).toEqual([{ task: "describe", mediaId: "a1", locale: "en" }]);
@@ -5451,7 +5451,7 @@ test.describe("never losing work", () => {
     const open = page.getByRole("button", { name: "Details of architecture.png" });
     const details = page.locator("hlm-sheet-content");
     const ask = page.getByRole("alertdialog");
-    const alt = details.getByLabel("en", { exact: true });
+    const alt = details.getByLabel("EN", { exact: true });
 
     await open.click();
     await alt.fill("Boxes and arrows");
@@ -7278,6 +7278,189 @@ test.describe("telling the truth", () => {
   });
 });
 
+/** Text the page shows in capitals set by CSS, or under 12px. */
+function typeProblems(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const found: string[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent?.trim();
+      const element = node.parentElement;
+      if (!text || !element?.checkVisibility({ visibilityProperty: true })) continue;
+      const { textTransform, fontSize } = getComputedStyle(element);
+      if (textTransform === "uppercase") found.push(`capitals: ${text}`);
+      if (Number.parseFloat(fontSize) < 12) found.push(`${fontSize}: ${text}`);
+    }
+    return found;
+  });
+}
+
+/** A control as the browser draws it. */
+function measures(locator: Locator) {
+  return locator.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      height: Math.round(element.getBoundingClientRect().height),
+      radius: style.borderTopLeftRadius,
+      fontSize: style.fontSize,
+    };
+  });
+}
+
+test.describe("the admin's own look", () => {
+  test.use({ reducedMotion: "reduce" });
+
+  for (const [colorScheme, paper, ink] of [
+    ["dark", "rgb(0, 0, 0)", "rgb(237, 237, 238)"],
+    ["light", "rgb(255, 255, 255)", "rgb(10, 10, 11)"],
+  ] as const) {
+    test(`wears its own theme in Instrument Sans, in the ${colorScheme} theme`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme });
+      await fakeApi(page, baseURL);
+      await openAdmin(page, "/admin");
+
+      const body = page.locator("body");
+      await expect(body).toHaveCSS("background-color", paper);
+      await expect(body).toHaveCSS("color", ink);
+      await expect(body).toHaveCSS("font-family", /^"Instrument Sans Variable"/);
+      await expect(body).toHaveCSS("font-size", "14px");
+      await expect(body).toHaveCSS("line-height", "20px");
+      // Geist left with its faces, and the mark's caret no longer blinks.
+      const geist = await page.evaluate(() =>
+        [...document.fonts].map((face) => face.family).filter((name) => name.includes("Geist")),
+      );
+      expect(geist).toEqual([]);
+      await expect(page.locator(".wordmark-caret")).toHaveCount(0);
+    });
+
+    test(`the toaster follows the ${colorScheme} theme`, async ({ page, baseURL }) => {
+      await page.emulateMedia({ colorScheme });
+      await fakeApi(page, baseURL);
+      await openAdmin(page, "/admin/hero");
+      await page.locator("#profile-role-en").fill("Staff engineer");
+      await page.getByRole("button", { name: "Discard" }).click();
+      await expect(page.locator("[data-sonner-toast]").first()).toBeVisible();
+      await expect(page.locator("[data-sonner-toaster]").first()).toHaveAttribute(
+        "data-theme",
+        colorScheme,
+      );
+    });
+  }
+
+  test("controls at a work tool's sizes, with the site's focus ring", async ({ page, baseURL }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/projects");
+
+    // With a mouse: buttons 32px and fields 36px, corners 4px, overlays 8px.
+    const add = page.getByRole("button", { name: "Add project" });
+    expect(await measures(add)).toMatchObject({ height: 32, radius: "4px" });
+    // One ring, the site's: a 2px outline in the accent, from the keyboard.
+    await page.keyboard.press("Tab");
+    await add.focus();
+    await expect(add).toHaveCSS("outline", "rgb(255, 138, 82) solid 2px");
+
+    await page.getByRole("button", { name: "More actions for project-one" }).click();
+    expect(await measures(page.getByRole("menu"))).toMatchObject({ radius: "8px" });
+    await page.keyboard.press("Escape");
+
+    await openAdmin(page, "/admin/about");
+    expect(await measures(page.locator("#about-heading-en"))).toEqual({
+      height: 36,
+      radius: "4px",
+      fontSize: "14px",
+    });
+    await page.getByRole("button", { name: "Publish: 3 changes unpublished" }).click();
+    expect(await measures(page.locator("hlm-dialog-content"))).toMatchObject({ radius: "8px" });
+  });
+
+  test("the rich text's frame carries the ring while its text has the focus", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    const doc = {
+      en: { title: "Imprint", body: "<p>Text.</p>" },
+      de: { title: "Impressum", body: "<p>Text.</p>" },
+    };
+    await fakeApi(page, baseURL, {
+      "GET /admin/sections/imprint": { section: "imprint", updatedAt: HOUR_AGO, data: doc },
+      "GET /admin/sections/privacy": { section: "privacy", updatedAt: HOUR_AGO, data: doc },
+    });
+    await openAdmin(page, "/admin/legal");
+    await page.locator(".ProseMirror").first().focus();
+    await expect(page.locator("app-rich-text > div").first()).toHaveCSS(
+      "outline",
+      "rgb(255, 138, 82) solid 2px",
+    );
+  });
+
+  test.describe("on a touch screen", () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    test.skip(({ browserName }) => browserName !== "chromium", "touch emulation is Chromium's");
+
+    test("controls are 44px and fields take 16px text", async ({ page, baseURL }) => {
+      await fakeApi(page, baseURL);
+      await openAdmin(page, "/admin/projects");
+      expect(await measures(page.getByRole("button", { name: "Add project" }))).toMatchObject({
+        height: 44,
+      });
+      await openAdmin(page, "/admin/about");
+      expect(await measures(page.locator("#about-heading-en"))).toMatchObject({
+        height: 44,
+        fontSize: "16px",
+      });
+    });
+  });
+
+  test("values are set in B612", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/publications");
+    await expect(page.getByText("#12", { exact: true }).first()).toHaveCSS("font-family", /^B612/);
+  });
+
+  // Each screen where the old look set labels in capitals or under 12px; the Assistant with its tabs.
+  for (const path of [
+    "/admin/login",
+    "/admin",
+    "/admin/inbox",
+    "/admin/hero",
+    "/admin/projects/project-one",
+    "/admin/writing",
+    "/admin/experience",
+    "/admin/skills",
+    "/admin/legal",
+    "/admin/media",
+    "/admin/publications",
+    "/admin/preview",
+    "/admin/agent",
+    "/admin/assistant",
+  ]) {
+    test(`${path} has no label in capitals and no text under 12px`, async ({ page, baseURL }) => {
+      await fakeApi(page, baseURL);
+      if (path === "/admin/login") {
+        await page.goto(path);
+        await interactive(page);
+      } else {
+        await openAdmin(page, path);
+      }
+      await expect(page.locator("[role=status] .sr-only")).toHaveCount(0);
+      const problems = await typeProblems(page);
+      for (const tab of path === "/admin/assistant" ? await page.getByRole("tab").all() : []) {
+        await tab.click();
+        await expect(tab).toHaveAttribute("aria-selected", "true");
+        await expect(page.locator("[role=status] .sr-only")).toHaveCount(0);
+        const name = await tab.innerText();
+        problems.push(...(await typeProblems(page)).map((problem) => `${name}: ${problem}`));
+      }
+      expect([...new Set(problems)]).toEqual([]);
+    });
+  }
+});
+
 /**
  * A public restyle as the visitor redesign makes one: tokens re-valued on the
  * public stylesheet's own selectors, and the body text, unlayered. Added last
@@ -7288,12 +7471,14 @@ const RESTYLE = `
     --background: rgb(255, 0, 0); --foreground: rgb(0, 0, 255); --card: rgb(0, 128, 0);
     --muted-foreground: rgb(255, 0, 255); --border: rgb(255, 255, 0); --primary: rgb(0, 255, 255);
     --accent-orange: rgb(0, 255, 255); --sidebar: rgb(128, 0, 128); --radius: 0px;
-    --font-sans: serif; --font-mono: serif;
+    --surface-2: rgb(255, 128, 0); --border-strong: rgb(0, 255, 0); --input-line: rgb(255, 0, 128);
+    --signal: rgb(0, 0, 128); --faint-foreground: rgb(128, 128, 0); --data-2: rgb(0, 128, 128);
+    --font-sans: serif; --font-mono: serif; --font-data: serif;
   }
   body { font-size: 22px; line-height: 1; font-weight: 700; }
 `;
 
-test.describe("the admin's freeze (styles/admin-freeze.css)", () => {
+test.describe("the admin's own theme (styles/admin-theme.css)", () => {
   test.use({ reducedMotion: "reduce" });
 
   for (const colorScheme of ["dark", "light"] as const) {

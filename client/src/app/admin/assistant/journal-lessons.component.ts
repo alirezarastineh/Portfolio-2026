@@ -80,7 +80,7 @@ const STATUS: Record<Lesson["status"], string> = {
                   status(lesson.status)
                 }}</span>
               </header>
-              <p class="m-0 text-xs text-muted-foreground">
+              <p class="m-0 text-hint text-muted-foreground">
                 About: {{ lesson.scope.join(", ") }} · {{ provenance(lesson) }}
               </p>
               @if (lesson.appliedAs) {
@@ -90,19 +90,19 @@ const STATUS: Record<Lesson["status"], string> = {
                 </p>
               }
               @if (lesson.reopenedAt && lesson.status === "active") {
-                <p class="m-0 text-xs text-muted-foreground">
+                <p class="m-0 text-hint text-muted-foreground">
                   Reopened {{ when(lesson.reopenedAt) }}: measured again from then.
                 </p>
               }
               <p class="m-0 text-xs">{{ effect(lesson) }}</p>
               @if (lesson.effect) {
-                <p class="m-0 text-xs text-muted-foreground">
+                <p class="m-0 text-hint text-muted-foreground">
                   Before: {{ rates(lesson.effect.before) }}. Since:
                   {{ rates(lesson.effect.after) }}.
                 </p>
               }
               @if (lesson.retiredReason) {
-                <p class="m-0 text-xs text-muted-foreground">
+                <p class="m-0 text-hint text-muted-foreground">
                   Retired ({{ lesson.decidedBy === "system" ? "by the nightly check" : "by you" }}):
                   {{ lesson.retiredReason }}
                 </p>
@@ -112,7 +112,7 @@ const STATUS: Record<Lesson["status"], string> = {
                   <label class="flex flex-col gap-1">
                     <span class="text-muted-foreground">Applied as</span>
                     <select
-                      class="h-8 rounded-md border border-border bg-background px-2 text-foreground"
+                      class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 text-foreground text-sm pointer-coarse:text-base"
                       [name]="'lesson-as-' + lesson.id"
                       [ngModel]="draftAs()[lesson.id] ?? lesson.appliedAs ?? 'faq'"
                       [ngModelOptions]="{ standalone: true }"
@@ -126,7 +126,7 @@ const STATUS: Record<Lesson["status"], string> = {
                   <label class="flex min-w-48 flex-1 flex-col gap-1">
                     <span class="text-muted-foreground">Reference</span>
                     <input
-                      class="h-8 rounded-md border border-border bg-background px-2 font-mono text-foreground"
+                      class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 font-data text-foreground text-sm pointer-coarse:text-base"
                       maxlength="200"
                       [name]="'lesson-ref-' + lesson.id"
                       [attr.aria-describedby]="'lesson-ref-hint-' + lesson.id"
@@ -178,7 +178,10 @@ const STATUS: Record<Lesson["status"], string> = {
                 </button>
               </div>
               @if (lesson.status !== "retired") {
-                <p [id]="'lesson-ref-hint-' + lesson.id" class="m-0 text-xs text-muted-foreground">
+                <p
+                  [id]="'lesson-ref-hint-' + lesson.id"
+                  class="m-0 text-hint text-muted-foreground"
+                >
                   {{ refHint(draftAs()[lesson.id] ?? lesson.appliedAs ?? "faq") }}. Applying starts
                   the measure again.
                 </p>

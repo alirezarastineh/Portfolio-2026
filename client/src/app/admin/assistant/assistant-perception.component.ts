@@ -42,7 +42,7 @@ import {
           <select
             name="perception-window"
             aria-label="Perception window"
-            class="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+            class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 text-sm pointer-coarse:text-base text-foreground"
             [value]="days()"
             (change)="choose(+$any($event.target).value)"
           >
@@ -53,14 +53,14 @@ import {
         </label>
       </div>
       @if (view(); as v) {
-        <p class="m-0 text-xs text-muted-foreground">
+        <p class="m-0 text-hint text-muted-foreground">
           What the assistant reads and how it uses it, over the last {{ v.days }} days:
           {{ v.answers }} visitor {{ v.answers === 1 ? "answer" : "answers" }}.
         </p>
         <dl class="m-0 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
             <dt class="text-xs text-muted-foreground">Prefix, English / German</dt>
-            <dd class="m-0 font-mono text-lg">
+            <dd class="m-0 text-section-title tabular-nums">
               @if (v.coreTokens; as t) {
                 {{ t.en | number }} / {{ t.de | number }}
               } @else {
@@ -70,14 +70,14 @@ import {
           </div>
           <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
             <dt class="text-xs text-muted-foreground">Cached, first / later steps</dt>
-            <dd class="m-0 font-mono text-lg">
+            <dd class="m-0 text-section-title tabular-nums">
               {{ cacheShare(v.cache.first) }} / {{ cacheShare(v.cache.later) }}
             </dd>
           </div>
           <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
             <dt class="text-xs text-muted-foreground">Re-read ratio</dt>
             <dd
-              class="m-0 font-mono text-lg"
+              class="m-0 text-section-title tabular-nums"
               [class]="verdict(v) === 'high' ? 'text-destructive' : ''"
             >
               {{ percent(v.rereadRatio) }}
@@ -85,7 +85,7 @@ import {
           </div>
           <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
             <dt class="text-xs text-muted-foreground">Input tokens per answer</dt>
-            <dd class="m-0 font-mono text-lg">
+            <dd class="m-0 text-section-title tabular-nums">
               {{
                 v.tokens.inputPerAnswer === null ? "–" : (v.tokens.inputPerAnswer | number: "1.0-0")
               }}
@@ -93,18 +93,18 @@ import {
           </div>
           <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
             <dt class="text-xs text-muted-foreground">Tokens per helpful answer</dt>
-            <dd class="m-0 font-mono text-lg">
+            <dd class="m-0 text-section-title tabular-nums">
               {{ v.tokens.perHelpful === null ? "–" : (v.tokens.perHelpful | number: "1.0-0") }}
             </dd>
           </div>
           <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
             <dt class="text-xs text-muted-foreground">Documents fetched</dt>
-            <dd class="m-0 font-mono text-lg">
+            <dd class="m-0 text-section-title tabular-nums">
               {{ v.fetches.whole + v.fetches.rest + v.fetches.handle + v.fetches.unknown }}
             </dd>
           </div>
         </dl>
-        <p class="m-0 text-xs text-muted-foreground">
+        <p class="m-0 text-hint text-muted-foreground">
           Fetches: {{ v.fetches.whole }} re-read a document the prefix held whole (healthy under
           {{ percent(v.healthyReread) }}), {{ v.fetches.rest }} read the rest of one held cut short,
           {{ v.fetches.handle }} the other language's version, {{ v.fetches.unknown }} that no
@@ -112,16 +112,16 @@ import {
           {{ v.cache.later.steps }} later steps on models that cache.
         </p>
         @if (v.localeMix.length) {
-          <p class="m-0 text-xs text-muted-foreground">{{ localeMixLine(v.localeMix) }}</p>
+          <p class="m-0 text-hint text-muted-foreground">{{ localeMixLine(v.localeMix) }}</p>
         }
         @if (searchLine(v.search); as line) {
-          <p class="m-0 text-xs text-muted-foreground">Searches: {{ line }}.</p>
+          <p class="m-0 text-hint text-muted-foreground">Searches: {{ line }}.</p>
         }
         @if (windowLine(v); as line) {
-          <p class="m-0 text-xs text-muted-foreground">{{ line }}.</p>
+          <p class="m-0 text-hint text-muted-foreground">{{ line }}.</p>
         }
         @if (pagesLine(v); as line) {
-          <p class="m-0 text-xs text-muted-foreground">{{ line }}.</p>
+          <p class="m-0 text-hint text-muted-foreground">{{ line }}.</p>
         }
 
         <div class="overflow-x-auto rounded-lg border border-border">
@@ -142,7 +142,7 @@ import {
             </thead>
             <tbody>
               @for (r of layouts(v); track r.layout) {
-                <tr class="border-t border-border font-mono text-xs">
+                <tr class="border-t border-border font-data text-xs">
                   <th scope="row" class="p-2 text-left font-sans text-sm font-normal">
                     {{ r.label }}
                   </th>
@@ -176,10 +176,10 @@ import {
                 <tr class="border-t border-border">
                   <td class="p-2">
                     {{ d.title }}
-                    <span class="font-mono text-xs text-muted-foreground">{{ d.id }}</span>
+                    <span class="font-data text-xs text-muted-foreground">{{ d.id }}</span>
                   </td>
-                  <td class="p-2 text-right font-mono text-xs">{{ d.fetched }}</td>
-                  <td class="p-2 text-right font-mono text-xs">{{ d.cited }}</td>
+                  <td class="p-2 text-right font-data text-xs">{{ d.fetched }}</td>
+                  <td class="p-2 text-right font-data text-xs">{{ d.cited }}</td>
                   <td class="p-2 text-xs">{{ d.tier ? tierLabel[d.tier] : "–" }}</td>
                 </tr>
               } @empty {
@@ -213,7 +213,7 @@ import {
               </thead>
               <tbody>
                 @for (t of tools(v); track t.name) {
-                  <tr class="border-t border-border font-mono text-xs">
+                  <tr class="border-t border-border font-data text-xs">
                     <th scope="row" class="p-2 text-left font-normal">{{ t.name }}</th>
                     <td class="p-2 text-right">{{ t.perAnswer }}</td>
                     <td class="p-2 text-right">{{ t.notFound }}</td>
@@ -231,7 +231,7 @@ import {
 
         <div class="flex flex-col gap-2 rounded-lg border border-border p-3 text-sm">
           <h3 class="m-0 text-sm font-medium">Tier suggestions</h3>
-          <p class="m-0 text-xs text-muted-foreground">
+          <p class="m-0 text-hint text-muted-foreground">
             Promoted: held whole at the front of the prefix (fetched in more than
             {{ percent(v.rules.promoteShare) }} of at least
             {{ v.rules.promoteMinAnswers }} answers). Clipped harder: half its kind's length (no
@@ -287,7 +287,7 @@ import {
               <li class="flex flex-wrap items-center justify-between gap-2">
                 <span
                   >{{ tierLabel[entry.tier] }}: {{ v.titles[entry.id] ?? entry.id }}
-                  <span class="font-mono text-xs text-muted-foreground">{{ entry.id }}</span></span
+                  <span class="font-data text-xs text-muted-foreground">{{ entry.id }}</span></span
                 >
                 <button
                   hlmBtn
@@ -311,7 +311,7 @@ import {
       } @else if (failed()) {
         <p class="m-0 text-xs text-destructive">Could not load the perception figures.</p>
       } @else {
-        <p class="m-0 text-xs text-muted-foreground">Loading…</p>
+        <p class="m-0 text-hint text-muted-foreground">Loading…</p>
       }
     </section>
   `,

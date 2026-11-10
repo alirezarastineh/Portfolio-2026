@@ -51,7 +51,7 @@ import {
         <textarea
           rows="3"
           maxlength="500"
-          class="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
+          class="rounded-lg border border-input-line bg-card px-2 py-1 text-sm pointer-coarse:text-base text-foreground"
           [name]="id('statement')"
           [attr.aria-describedby]="id('statement-hint')"
           [ngModel]="statement()"
@@ -66,7 +66,7 @@ import {
         <span class="text-muted-foreground">The questions it is about</span>
         <input
           maxlength="400"
-          class="h-8 rounded-md border border-border bg-background px-2 font-mono text-foreground"
+          class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 font-data text-foreground text-sm pointer-coarse:text-base"
           [name]="id('scope')"
           [attr.aria-describedby]="id('scope-hint')"
           [ngModel]="scopeText()"

@@ -40,7 +40,7 @@ import { WINDOWS } from "../perception";
           <select
             name="faithfulness-window"
             aria-label="Faithfulness window"
-            class="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+            class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 text-sm pointer-coarse:text-base text-foreground"
             [value]="days()"
             (change)="choose(+$any($event.target).value)"
           >
@@ -51,7 +51,7 @@ import { WINDOWS } from "../perception";
         </label>
       </div>
       @if (view(); as v) {
-        <p class="m-0 text-xs text-muted-foreground">
+        <p class="m-0 text-hint text-muted-foreground">
           The share of each answer's claims its cited documents support (faithful at 0.8) over the
           last {{ v.days }} days, {{ judges(v) }}. The random sample is the fair view; all judged
           adds the flagged and reviewed answers, which lean toward bad ones.
@@ -75,7 +75,7 @@ import { WINDOWS } from "../perception";
               </thead>
               <tbody>
                 @for (r of table.rows; track r.key) {
-                  <tr class="border-t border-border font-mono text-xs">
+                  <tr class="border-t border-border font-data text-xs">
                     <th scope="row" class="p-2 text-left font-sans text-sm font-normal">
                       {{ table.label(r.key) }}
                     </th>
@@ -93,11 +93,11 @@ import { WINDOWS } from "../perception";
             </table>
           </div>
         }
-        <p class="m-0 text-xs text-muted-foreground">{{ nightly(v.nightly) }}</p>
+        <p class="m-0 text-hint text-muted-foreground">{{ nightly(v.nightly) }}</p>
       } @else if (failed()) {
         <p class="m-0 text-xs text-destructive">Could not load the faithfulness figures.</p>
       } @else {
-        <p class="m-0 text-xs text-muted-foreground">Loading…</p>
+        <p class="m-0 text-hint text-muted-foreground">Loading…</p>
       }
     </section>
   `,

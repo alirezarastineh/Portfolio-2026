@@ -39,7 +39,7 @@ let counter = 0;
     <div class="flex flex-col gap-3">
       <div class="flex items-baseline justify-between gap-3">
         <span class="text-sm font-medium">{{ label() }}</span>
-        <span class="font-mono text-xs text-muted-foreground">
+        <span class="text-xs text-muted-foreground tabular-nums">
           {{ entries().length }}{{ max() ? " / " + max() : "" }}
         </span>
       </div>

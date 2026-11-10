@@ -89,8 +89,8 @@ function emptyForm(question = ""): Form {
         >
           @for (locale of locales; track locale) {
             <fieldset class="flex flex-col gap-2">
-              <legend class="font-mono text-xs uppercase text-muted-foreground">
-                {{ locale }}
+              <legend class="text-xs font-medium text-muted-foreground">
+                {{ locale.toUpperCase() }}
               </legend>
               <div hlmField>
                 <label hlmFieldLabel [for]="'faq-q-' + locale">Question</label>
@@ -141,7 +141,7 @@ function emptyForm(question = ""): Form {
             <button hlmBtn type="submit" [disabled]="saving()">Save</button>
             <button hlmBtn variant="ghost" type="button" (click)="cancel()">Cancel</button>
           </div>
-          <p class="m-0 text-xs text-muted-foreground">
+          <p class="m-0 text-hint text-muted-foreground">
             A drafted answer is only a suggestion in the field: check it, then save.
           </p>
         </form>
@@ -159,11 +159,11 @@ function emptyForm(question = ""): Form {
             >
               <span class="min-w-0 flex-1" [class.text-muted-foreground]="!entry.isVisible">
                 {{ entry.translations.en?.question ?? entry.translations.de?.question }}
-                <span class="font-mono text-xs text-muted-foreground">
+                <span class="text-hint text-muted-foreground">
                   {{ langs(entry) }}{{ entry.isVisible ? "" : " · hidden" }}
                 </span>
                 @if (provenance().get(entry.id); as from) {
-                  <span class="block text-xs text-muted-foreground">{{ from }}</span>
+                  <span class="block text-hint text-muted-foreground">{{ from }}</span>
                 }
               </span>
               <button

@@ -43,7 +43,7 @@ function sessionId(): string {
         <label class="flex items-center gap-2">
           Language
           <select
-            class="rounded-md border border-border bg-background px-2 py-1"
+            class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 text-sm pointer-coarse:text-base"
             [(ngModel)]="locale"
           >
             <option value="en">English</option>
@@ -58,7 +58,7 @@ function sessionId(): string {
       </div>
 
       <div
-        class="flex flex-col gap-4 rounded-lg border border-border bg-card p-4 font-mono text-sm"
+        class="flex flex-col gap-4 rounded-lg border border-border bg-card p-4 text-sm"
         role="log"
         aria-live="off"
       >
@@ -87,7 +87,7 @@ function sessionId(): string {
               }
               @if (m.metadata; as meta) {
                 @if (meta.model) {
-                  <p class="m-0 text-xs text-muted-foreground">
+                  <p class="m-0 text-hint text-muted-foreground">
                     ── {{ meta.model }}{{ meta.fallback ? " (fallback)" : "" }} · {{ meta.route }} ·
                     {{ ((meta.totalMs ?? 0) / 1000).toFixed(1) }} s · {{ meta.tokens?.input }} in /
                     {{ meta.tokens?.cached }} cached / {{ meta.tokens?.output }} out ──

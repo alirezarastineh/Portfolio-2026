@@ -123,26 +123,19 @@ function toView(review: LocaleReview): LocaleView {
                 class="flex min-w-0 flex-col gap-3"
                 [attr.aria-labelledby]="'review-' + l.locale"
               >
-                <h3 [id]="'review-' + l.locale" class="eyebrow m-0 flex items-center gap-2">
-                  {{ l.locale }}
+                <h3
+                  [id]="'review-' + l.locale"
+                  class="m-0 flex items-center gap-2 text-sm font-medium"
+                >
+                  {{ l.locale.toUpperCase() }}
                   @if (l.issues.length) {
-                    <span
-                      hlmBadge
-                      variant="destructive"
-                      class="font-mono normal-case tracking-normal"
-                    >
+                    <span hlmBadge variant="destructive">
                       {{ l.issues.length }} {{ l.issues.length === 1 ? "problem" : "problems" }}
                     </span>
                   } @else if (!l.changed) {
-                    <span
-                      hlmBadge
-                      variant="secondary"
-                      class="font-mono normal-case tracking-normal"
-                    >
-                      no changes
-                    </span>
+                    <span hlmBadge variant="secondary"> no changes </span>
                   } @else {
-                    <span hlmBadge variant="default" class="font-mono normal-case tracking-normal">
+                    <span hlmBadge variant="default">
                       {{ changeCount(l) }}
                     </span>
                   }
@@ -175,7 +168,7 @@ function toView(review: LocaleReview): LocaleView {
                       }
                     </ul>
                     @if (l.placeholders.length > placeholderPreview) {
-                      <p class="m-0 mt-1 text-xs text-muted-foreground">
+                      <p class="m-0 mt-1 text-hint text-muted-foreground">
                         and {{ l.placeholders.length - placeholderPreview }} more: the dashboard's
                         launch checklist lists them all.
                       </p>
@@ -228,7 +221,7 @@ function toView(review: LocaleReview): LocaleView {
                       <li class="rounded-lg border border-border p-3">
                         <div class="flex items-start justify-between gap-2">
                           <code class="font-mono text-xs break-all">{{ doc.key }}</code>
-                          <span hlmBadge variant="outline" class="shrink-0 font-mono">
+                          <span hlmBadge variant="outline" class="shrink-0">
                             page {{ doc.change }}
                           </span>
                         </div>
@@ -285,12 +278,12 @@ function toView(review: LocaleReview): LocaleView {
         <ng-template #diffEntry let-entry>
           <div class="mb-1.5 flex items-start justify-between gap-2">
             <code class="font-mono text-xs break-all text-foreground">{{ entry.path }}</code>
-            <span hlmBadge variant="outline" class="shrink-0 font-mono">{{ entry.kind }}</span>
+            <span hlmBadge variant="outline" class="shrink-0">{{ entry.kind }}</span>
           </div>
-          <dl class="m-0 grid gap-1 text-meta leading-relaxed">
+          <dl class="m-0 grid gap-1 text-hint leading-relaxed">
             @if (entry.before !== undefined) {
               <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2">
-                <dt class="eyebrow text-destructive">live</dt>
+                <dt class="text-xs font-medium text-destructive">Live</dt>
                 <dd class="m-0 whitespace-pre-wrap wrap-break-word text-muted-foreground">
                   {{ entry.before }}
                 </dd>
@@ -299,7 +292,7 @@ function toView(review: LocaleReview): LocaleView {
             @if (entry.after !== undefined) {
               <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2">
                 <!-- Indigo is for ambient marks, never text: the draft side reads in the orange of "live next". -->
-                <dt class="eyebrow text-accent-orange">draft</dt>
+                <dt class="text-xs font-medium text-accent-orange">Draft</dt>
                 <dd class="m-0 whitespace-pre-wrap wrap-break-word text-foreground">
                   {{ entry.after }}
                 </dd>

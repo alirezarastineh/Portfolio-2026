@@ -34,7 +34,7 @@ import {
           <select
             name="routing-window"
             aria-label="Routing window"
-            class="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+            class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 text-sm pointer-coarse:text-base text-foreground"
             [value]="days()"
             (change)="choose(+$any($event.target).value)"
           >
@@ -45,12 +45,12 @@ import {
         </label>
       </div>
       @if (view(); as v) {
-        <p class="m-0 text-xs text-muted-foreground">
+        <p class="m-0 text-hint text-muted-foreground">
           How {{ v.answers }} visitor {{ v.answers === 1 ? "answer was" : "answers were" }} routed
           over the last {{ v.days }} days.
         </p>
         <div class="flex flex-col gap-1 rounded-lg border border-border p-3">
-          <p class="m-0 text-xs text-muted-foreground">False-simple rate</p>
+          <p class="m-0 text-hint text-muted-foreground">False-simple rate</p>
           <p class="m-0 text-sm">
             {{ falseSimpleLine(v) ?? "No answer was kept on the lite route yet." }}
           </p>
@@ -72,7 +72,7 @@ import {
             </thead>
             <tbody>
               @for (r of rows(v); track r.tier) {
-                <tr class="border-t border-border font-mono text-xs">
+                <tr class="border-t border-border font-data text-xs">
                   <th scope="row" class="p-2 text-left font-sans text-sm font-normal">
                     {{ r.label }}
                   </th>
@@ -90,16 +90,16 @@ import {
           </table>
         </div>
         @if (escalationLine(v); as line) {
-          <p class="m-0 text-xs text-muted-foreground">{{ line }}.</p>
+          <p class="m-0 text-hint text-muted-foreground">{{ line }}.</p>
         }
         @if (sensitiveLine(v); as line) {
-          <p class="m-0 text-xs text-muted-foreground">{{ line }}.</p>
+          <p class="m-0 text-hint text-muted-foreground">{{ line }}.</p>
         }
 
         @if (v.falseSimple.listed.length) {
           <div class="flex flex-col gap-2 rounded-lg border border-border p-3 text-sm">
             <h3 class="m-0 text-sm font-medium">Kept lite, then went wrong</h3>
-            <p class="m-0 text-xs text-muted-foreground">
+            <p class="m-0 text-hint text-muted-foreground">
               Freeze one as a case in Conversations to replay it on the deep chain (<code
                 class="font-mono"
                 >ai:eval --suite production --on deep</code
@@ -109,10 +109,10 @@ import {
               @for (c of v.falseSimple.listed; track c.id) {
                 <li class="flex flex-col gap-0.5">
                   <span>{{ c.question }}</span>
-                  <span class="text-xs text-muted-foreground">
+                  <span class="text-hint text-muted-foreground">
                     {{ c.createdAt | date: "MMM d, HH:mm" }} ·
                     {{ c.tier === "lookup" ? "lookup" : "lite" }} · {{ reasons(c.reasons) }} ·
-                    <span class="font-mono">{{ c.id }}</span>
+                    <span class="font-data">{{ c.id }}</span>
                   </span>
                 </li>
               }
@@ -122,7 +122,7 @@ import {
       } @else if (failed()) {
         <p class="m-0 text-xs text-destructive">Could not load the routing figures.</p>
       } @else {
-        <p class="m-0 text-xs text-muted-foreground">Loading…</p>
+        <p class="m-0 text-hint text-muted-foreground">Loading…</p>
       }
     </section>
   `,

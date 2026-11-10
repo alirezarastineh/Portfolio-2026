@@ -81,7 +81,7 @@ describe("AdminPageHeaderComponent", () => {
     const bilingual = render(BilingualHost);
     const group = bilingual.root.querySelector('[role=group][aria-label="Language view"]');
     const options = group?.querySelectorAll<HTMLButtonElement>("button") ?? [];
-    expect([...options].map((b) => b.textContent?.trim())).toEqual(["en", "de", "both"]);
+    expect([...options].map((b) => b.textContent?.trim())).toEqual(["EN", "DE", "Both"]);
     expect(options[2]?.getAttribute("aria-pressed")).toBe("true");
 
     options[1]?.click();

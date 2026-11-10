@@ -47,7 +47,7 @@ export const routeMeta: RouteMeta = {
       <app-site-footer />
     } @else if (state.error()) {
       <main id="main" class="mx-auto flex max-w-3xl flex-col gap-4 px-6 py-24">
-        <h1 class="m-0 text-h3">This draft cannot be previewed</h1>
+        <h1 class="m-0 text-page-title">This draft cannot be previewed</h1>
         @if (state.issues().length) {
           <p class="m-0 text-sm text-muted-foreground">
             Publishing would refuse it for the same reasons. Fix these, then refresh.
@@ -76,13 +76,13 @@ export const routeMeta: RouteMeta = {
         }
       </main>
     } @else {
-      <p class="m-0 px-6 py-24 text-center font-mono text-sm text-muted-foreground" role="status">
+      <p class="m-0 px-6 py-24 text-center text-sm text-muted-foreground" role="status">
         loading the draft…
       </p>
     }
 
     <aside
-      class="fixed bottom-4 left-4 z-50 flex items-center gap-1 rounded-full border border-border bg-card/95 py-1 pl-3 pr-1 font-mono text-xs text-foreground shadow-lg backdrop-blur"
+      class="fixed bottom-4 left-4 z-50 flex items-center gap-1 rounded-full border border-border bg-card/95 py-1 pl-3 pr-1 text-xs text-foreground shadow-lg backdrop-blur"
       aria-label="Draft preview"
     >
       <span class="flex items-center gap-2 pr-1">
@@ -90,12 +90,12 @@ export const routeMeta: RouteMeta = {
         draft preview
       </span>
       <a
-        class="rounded-full px-2.5 py-1 uppercase hover:bg-muted"
+        class="rounded-full px-2.5 py-1 hover:bg-muted"
         [href]="switchHref()"
         [attr.hreflang]="other()"
         [attr.aria-label]="'Preview in ' + (other() === 'de' ? 'German' : 'English')"
         (click)="switchLocale($event)"
-        >{{ other() }}</a
+        >{{ other().toUpperCase() }}</a
       >
       <button
         type="button"

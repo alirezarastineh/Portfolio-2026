@@ -35,7 +35,7 @@ import {
       <h2 id="assistant-outcomes" class="m-0 text-sm font-medium">Outcomes</h2>
       @if (view(); as v) {
         @let o = v.outcomes;
-        <p class="m-0 text-xs text-muted-foreground">
+        <p class="m-0 text-hint text-muted-foreground">
           The last {{ v.days }} days: {{ o.answered }} answered of {{ o.answers }} questions,
           {{ usd(o.usd) }} in all.
         </p>
@@ -43,7 +43,7 @@ import {
           @for (tile of tiles(v); track tile.label) {
             <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
               <dt class="text-xs text-muted-foreground">{{ tile.label }}</dt>
-              <dd class="m-0 font-mono text-lg">{{ tile.value }}</dd>
+              <dd class="m-0 text-section-title tabular-nums">{{ tile.value }}</dd>
             </div>
           }
         </dl>
@@ -72,7 +72,7 @@ import {
         <!-- What the visitors' browsers saw (visitor plan V2); an older API sends none. -->
         @if (v.browser; as b) {
           <section class="flex flex-col gap-2" aria-labelledby="assistant-browser">
-            <h3 id="assistant-browser" class="m-0 text-xs font-medium">
+            <h3 id="assistant-browser" class="m-0 text-sm font-medium">
               In the visitor's browser
               <span class="font-normal text-muted-foreground"
                 >({{ b.reported }} {{ b.reported === 1 ? "answer" : "answers" }} reported)</span
@@ -82,7 +82,7 @@ import {
               @for (tile of browserTiles(b); track tile.label) {
                 <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
                   <dt class="text-xs text-muted-foreground">{{ tile.label }}</dt>
-                  <dd class="m-0 font-mono text-lg">{{ tile.value }}</dd>
+                  <dd class="m-0 text-section-title tabular-nums">{{ tile.value }}</dd>
                   @if (tile.detail) {
                     <dd class="m-0 text-xs text-muted-foreground">{{ tile.detail }}</dd>
                   }
@@ -100,7 +100,7 @@ import {
             <span class="text-muted-foreground">Primary metric</span>
             <select
               name="primary-metric"
-              class="h-8 rounded-md border border-border bg-background px-2 text-sm"
+              class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 text-sm pointer-coarse:text-base"
               [value]="v.primary.metric"
               [disabled]="saving()"
               (change)="choose($any($event.target).value)"
@@ -109,11 +109,11 @@ import {
                 <option [value]="metric">{{ labels[metric] }}</option>
               }
             </select>
-            <span class="text-xs text-muted-foreground">
+            <span class="text-hint text-muted-foreground">
               ({{ higher[v.primary.metric] ? "higher is better" : "lower is better" }})
             </span>
           </label>
-          <ol class="m-0 flex list-none flex-wrap gap-2 p-0 font-mono text-xs">
+          <ol class="m-0 flex list-none flex-wrap gap-2 p-0 font-data text-xs">
             @for (w of v.primary.weeks; track w.week) {
               <li class="rounded border border-border px-2 py-1">
                 {{ w.week }}: {{ share(w.value) }}
@@ -121,7 +121,9 @@ import {
             }
           </ol>
           @if (v.primary.rotate) {
-            <p class="m-0 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
+            <p
+              class="m-0 rounded-md border border-accent-orange/40 bg-accent-orange-soft p-2 text-xs"
+            >
               Flat for two weekly reviews: promote another metric, even though this one still looks
               fine.
             </p>
@@ -130,7 +132,7 @@ import {
       } @else if (loadError()) {
         <app-load-error compact title="Could not load the outcomes" (retry)="retry()" />
       } @else {
-        <p class="m-0 text-xs text-muted-foreground">Loading…</p>
+        <p class="m-0 text-hint text-muted-foreground">Loading…</p>
       }
     </section>
   `,

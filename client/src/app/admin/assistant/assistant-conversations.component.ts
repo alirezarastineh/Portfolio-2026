@@ -88,7 +88,7 @@ const TONE_CLASS: Record<Tone, string> = {
             <li class="flex flex-col gap-2 rounded-lg border border-border p-4 text-sm">
               <div class="flex flex-wrap items-baseline justify-between gap-2">
                 <p class="m-0 font-medium" [id]="'question-' + row.id">{{ row.question }}</p>
-                <p class="m-0 font-mono text-xs text-muted-foreground">
+                <p class="m-0 font-data text-xs text-muted-foreground">
                   {{ when(row.createdAt) }} · {{ row.locale.toUpperCase() }} · session
                   {{ row.session }}
                 </p>
@@ -97,7 +97,7 @@ const TONE_CLASS: Record<Tone, string> = {
                 {{ row.answer || "(no answer)" }}
               </p>
               <div
-                class="flex flex-wrap items-center gap-2 font-mono text-xs text-muted-foreground"
+                class="flex flex-wrap items-center gap-2 font-data text-xs text-muted-foreground"
               >
                 <span hlmBadge variant="outline">{{ row.model ?? "no model" }}</span>
                 <span hlmBadge variant="outline">{{ row.route }}</span>
@@ -138,12 +138,12 @@ const TONE_CLASS: Record<Tone, string> = {
                 }
               </div>
               @if (row.citedIds.length) {
-                <p class="m-0 font-mono text-xs text-muted-foreground">
+                <p class="m-0 font-data text-xs text-muted-foreground">
                   cited: {{ row.citedIds.join(", ") }}
                 </p>
               }
               @if (row.droppedCitations.length) {
-                <p class="m-0 font-mono text-xs text-destructive">
+                <p class="m-0 font-data text-xs text-destructive">
                   dropped (invented, never shown): {{ row.droppedCitations.join(", ") }}
                 </p>
               }
@@ -160,11 +160,11 @@ const TONE_CLASS: Record<Tone, string> = {
               @if (row.trace?.steps.length) {
                 @let steps = row.trace!.steps;
                 <details class="rounded-md border border-border px-3 py-2">
-                  <summary class="cursor-pointer font-mono text-xs text-muted-foreground">
+                  <summary class="cursor-pointer text-xs text-muted-foreground">
                     Timeline · {{ steps.length }} {{ steps.length === 1 ? "step" : "steps" }}
                   </summary>
                   <ol
-                    class="m-0 mt-2 flex list-none flex-col gap-2 p-0 font-mono text-xs"
+                    class="m-0 mt-2 flex list-none flex-col gap-2 p-0 font-data text-xs"
                     role="list"
                   >
                     @for (step of steps; track $index) {

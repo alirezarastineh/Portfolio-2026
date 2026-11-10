@@ -99,7 +99,7 @@ class LiveContentStore {
   host: { class: "flex h-full min-h-0 flex-col bg-background" },
   template: `
     <div class="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-      <h2 class="m-0 mr-auto flex items-center gap-2 font-mono text-meta text-foreground">
+      <h2 class="m-0 mr-auto flex items-center gap-2 text-sm font-medium text-foreground">
         <span class="size-1.5 rounded-full bg-accent-orange" aria-hidden="true"></span>
         live preview
       </h2>
@@ -114,13 +114,8 @@ class LiveContentStore {
         (valueChange)="onLocale($event)"
       >
         @for (option of locales; track option) {
-          <button
-            hlmToggleGroupItem
-            type="button"
-            class="font-mono text-xs uppercase tracking-label"
-            [value]="option"
-          >
-            {{ option }}
+          <button hlmToggleGroupItem type="button" class="text-xs" [value]="option">
+            {{ option.toUpperCase() }}
           </button>
         }
       </div>
@@ -153,7 +148,7 @@ class LiveContentStore {
       </button>
     </div>
     @if (note(); as text) {
-      <p class="m-0 border-b border-border bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
+      <p class="m-0 border-b border-border bg-muted/50 px-3 py-1.5 text-hint text-muted-foreground">
         {{ text }}
       </p>
     }
@@ -175,7 +170,7 @@ class LiveContentStore {
       @switch (base().state) {
         @case ("loading") {
           <div
-            class="absolute inset-0 flex items-center justify-center gap-2 bg-background/80 font-mono text-meta text-muted-foreground"
+            class="absolute inset-0 flex items-center justify-center gap-2 bg-background/80 text-hint text-muted-foreground"
             role="status"
           >
             <hlm-spinner class="size-4" />

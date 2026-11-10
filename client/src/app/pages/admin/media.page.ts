@@ -175,14 +175,14 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
             </div>
           </div>
         }
-        <p class="m-0 -mt-3 font-mono text-meta text-muted-foreground">
+        <p class="m-0 -mt-3 text-hint text-muted-foreground">
           {{ r.totalAssets }} file(s) · {{ size(r.totalBytes) }} in originals
         </p>
       }
 
       @if (uploading(); as u) {
         <div class="flex flex-col gap-2 rounded-lg border border-border p-3" role="status">
-          <p class="m-0 font-mono text-xs text-muted-foreground">
+          <p class="m-0 text-xs tabular-nums text-muted-foreground">
             uploading {{ u.name }} ({{ u.index }} of {{ u.total }})… {{ u.percent }}%
           </p>
           <hlm-progress [value]="u.percent" aria-label="Upload progress">
@@ -205,15 +205,13 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
           @for (option of filters; track option.id) {
             <button hlmToggleGroupItem type="button" [value]="option.id">
               {{ option.label }}
-              <span class="ml-1 font-mono text-xs text-muted-foreground">{{
-                counts()[option.id]
-              }}</span>
+              <span class="ml-1 text-xs tabular-nums">{{ counts()[option.id] }}</span>
             </button>
           }
         </div>
         <div class="flex flex-wrap items-center gap-2">
           @if (selected().size) {
-            <span class="font-mono text-xs text-muted-foreground" role="status">
+            <span class="text-xs tabular-nums text-muted-foreground" role="status">
               {{ selected().size }} selected · {{ size(selectedBytes()) }}
             </span>
             <button hlmBtn variant="ghost" size="sm" type="button" (click)="clearSelection()">
@@ -278,7 +276,7 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
             <li class="relative">
               <button
                 type="button"
-                class="block w-full overflow-hidden rounded-lg border text-left transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                class="block w-full overflow-hidden rounded-lg border text-left transition-colors hover:border-border-strong"
                 [class]="picked ? 'border-destructive' : 'border-border'"
                 (click)="open(asset)"
               >
@@ -311,7 +309,7 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
         class="pointer-events-none fixed inset-4 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-accent-indigo bg-background/85 backdrop-blur-sm"
         aria-hidden="true"
       >
-        <p class="m-0 flex items-center gap-2 text-h4 text-foreground">
+        <p class="m-0 flex items-center gap-2 text-section-title text-foreground">
           <ng-icon name="lucideUpload" size="20" />
           Drop to upload
         </p>
@@ -355,17 +353,17 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
 
             <dl class="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
               @if (asset.width && asset.height) {
-                <dt class="eyebrow text-muted-foreground">Size</dt>
-                <dd class="m-0 font-mono text-xs">
+                <dt class="text-xs font-medium text-muted-foreground">Size</dt>
+                <dd class="m-0 font-data text-xs">
                   {{ asset.width }}×{{ asset.height }} · {{ asset.variants.length }} resized
                   {{ asset.variants.length === 1 ? "copy" : "copies" }}
                 </dd>
               }
-              <dt class="eyebrow text-muted-foreground">Type</dt>
-              <dd class="m-0 font-mono text-xs">{{ asset.mime }}</dd>
-              <dt class="eyebrow text-muted-foreground">Path</dt>
+              <dt class="text-xs font-medium text-muted-foreground">Type</dt>
+              <dd class="m-0 font-data text-xs">{{ asset.mime }}</dd>
+              <dt class="text-xs font-medium text-muted-foreground">Path</dt>
               <dd class="m-0 flex min-w-0 items-center gap-1">
-                <code class="min-w-0 truncate font-mono text-xs">{{ asset.path }}</code>
+                <code class="min-w-0 truncate font-data text-xs">{{ asset.path }}</code>
                 <button
                   hlmBtn
                   variant="ghost"
@@ -402,7 +400,7 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
                 <p class="m-0 text-sm text-muted-foreground">Nothing uses it: safe to delete.</p>
               }
               @if (asset.usage && asset.usage.recent && !asset.usage.live) {
-                <p class="m-0 text-xs text-muted-foreground">
+                <p class="m-0 text-hint text-muted-foreground">
                   One of the last 20 publications shows it: a rollback to that one needs it.
                 </p>
               }
@@ -412,7 +410,7 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
               <section class="flex flex-col gap-3" aria-labelledby="alt-title">
                 <div>
                   <h3 id="alt-title" class="m-0 text-sm font-medium">Alt text</h3>
-                  <p class="m-0 mt-1 text-xs text-muted-foreground">
+                  <p class="m-0 mt-1 text-hint text-muted-foreground">
                     What the picture shows, for screen readers and for when it does not load.
                     Suggestions are drawn from the picture; nothing is saved until you save.
                   </p>
@@ -420,15 +418,17 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
                 @for (locale of locales; track locale) {
                   <div class="flex flex-col gap-1">
                     <div class="flex items-center justify-between gap-2">
-                      <label [for]="'alt-' + locale" class="eyebrow text-muted-foreground">{{
-                        locale
-                      }}</label>
+                      <label
+                        [for]="'alt-' + locale"
+                        class="text-xs font-medium text-muted-foreground"
+                        >{{ locale.toUpperCase() }}</label
+                      >
                       <button
                         hlmBtn
                         variant="ghost"
                         size="sm"
                         type="button"
-                        class="h-6 px-2 font-mono text-xs text-muted-foreground"
+                        class="h-6 px-2 text-xs text-muted-foreground"
                         [disabled]="suggesting() !== null"
                         [attr.aria-label]="
                           'Suggest alt text in ' +
@@ -476,7 +476,7 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
                   <h3 id="description-title" class="m-0 text-sm font-medium">
                     Description for the assistant
                   </h3>
-                  <p class="m-0 mt-1 text-xs text-muted-foreground">
+                  <p class="m-0 mt-1 text-hint text-muted-foreground">
                     What a diagram or screenshot shows: its parts and how they connect. Only the
                     assistant reads it, from the next question on; no page shows it. Drafts are
                     drawn from the picture; nothing is saved until you save.
@@ -485,15 +485,18 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
                 @for (locale of locales; track locale) {
                   <div class="flex flex-col gap-1">
                     <div class="flex items-center justify-between gap-2">
-                      <label [for]="'description-' + locale" class="eyebrow text-muted-foreground"
-                        ><span class="sr-only">Assistant description, </span>{{ locale }}</label
+                      <label
+                        [for]="'description-' + locale"
+                        class="text-xs font-medium text-muted-foreground"
+                        ><span class="sr-only">Assistant description, </span
+                        >{{ locale.toUpperCase() }}</label
                       >
                       <button
                         hlmBtn
                         variant="ghost"
                         size="sm"
                         type="button"
-                        class="h-6 px-2 font-mono text-xs text-muted-foreground"
+                        class="h-6 px-2 text-xs text-muted-foreground"
                         [disabled]="describing() !== null"
                         [attr.aria-label]="
                           'Describe the image in ' +
@@ -568,7 +571,10 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
                 <span class="ml-1.5">Delete</span>
               </button>
               @if (blocker(); as reason) {
-                <p id="delete-blocker" class="m-0 w-full text-right text-xs text-muted-foreground">
+                <p
+                  id="delete-blocker"
+                  class="m-0 w-full text-right text-hint text-muted-foreground"
+                >
                   {{ reason }}
                 </p>
               }

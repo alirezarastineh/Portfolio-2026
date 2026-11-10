@@ -56,7 +56,7 @@ import { leadName, type DraftOffer } from "../copilot-skills";
                   variant="ghost"
                   size="sm"
                   type="button"
-                  class="h-6 shrink-0 px-2 font-mono text-xs"
+                  class="h-6 shrink-0 px-2 text-xs"
                   [attr.aria-label]="'Use this draft (' + lead(draft.lead) + ') for ' + field()"
                   (click)="choose($index)"
                 >

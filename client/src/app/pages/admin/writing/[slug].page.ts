@@ -121,14 +121,9 @@ type PostDraft = PostRow;
             [preview]="previewPath()"
           >
             <span headerStatus class="flex flex-wrap gap-1.5">
-              <span hlmBadge [variant]="statusVariant()" class="font-mono">{{
-                statusLabel()
-              }}</span>
+              <span hlmBadge [variant]="statusVariant()">{{ statusLabel() }}</span>
               @if (dirty()) {
-                <span
-                  hlmBadge
-                  variant="outline"
-                  class="border-accent-orange/50 font-mono text-accent-orange"
+                <span hlmBadge variant="outline" class="border-accent-orange/50 text-accent-orange"
                   >unsaved</span
                 >
               }
@@ -140,7 +135,7 @@ type PostDraft = PostRow;
             aria-labelledby="post-details-title"
             class="flex flex-col gap-4"
           >
-            <h2 id="post-details-title" class="m-0 text-h4">Details</h2>
+            <h2 id="post-details-title" class="m-0 text-section-title">Details</h2>
             <div class="grid gap-4 sm:grid-cols-2">
               <div hlmField>
                 <label hlmFieldLabel for="post-slug">Slug</label>
@@ -168,7 +163,7 @@ type PostDraft = PostRow;
                     issues.get('publishedAt') ? 'post-date-issue post-date-hint' : 'post-date-hint'
                   "
                 />
-                <span id="post-date-hint" class="text-xs text-muted-foreground">
+                <span id="post-date-hint" class="text-hint text-muted-foreground">
                   In the future = scheduled: it appears with the first publish after this time.
                 </span>
                 <app-field-issue id="post-date-issue" [message]="issues.get('publishedAt')" />
@@ -206,7 +201,7 @@ type PostDraft = PostRow;
           <hlm-separator />
 
           <section id="post-cover" aria-labelledby="post-cover-title" class="flex flex-col gap-4">
-            <h2 id="post-cover-title" class="m-0 text-h4">Cover</h2>
+            <h2 id="post-cover-title" class="m-0 text-section-title">Cover</h2>
             <app-media-field
               id="post-cover-image"
               label="Cover image"
@@ -218,7 +213,7 @@ type PostDraft = PostRow;
           <hlm-separator />
 
           <section id="post-tags" aria-labelledby="post-tags-title" class="flex flex-col gap-4">
-            <h2 id="post-tags-title" class="m-0 text-h4">Tags</h2>
+            <h2 id="post-tags-title" class="m-0 text-section-title">Tags</h2>
             <app-string-list
               label="Tags"
               singular="tag"
@@ -239,7 +234,7 @@ type PostDraft = PostRow;
             >
               <!-- The switch is the section's heading: whether this language exists at all. -->
               <h2 [id]="'post-' + locale + '-title'" class="m-0">
-                <label class="flex items-center gap-3 text-h4">
+                <label class="flex items-center gap-3 text-section-title">
                   <hlm-switch
                     [checked]="p.translations[locale] !== null"
                     (checkedChange)="setLocale(locale, $event)"

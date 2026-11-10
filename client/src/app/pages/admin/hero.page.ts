@@ -184,7 +184,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
             aria-labelledby="hero-identity-title"
             class="flex flex-col gap-4"
           >
-            <h2 id="hero-identity-title" class="m-0 text-h4">Identity</h2>
+            <h2 id="hero-identity-title" class="m-0 text-section-title">Identity</h2>
             <p class="m-0 -mt-3 text-sm text-muted-foreground">
               Not translated: the same in both languages.
             </p>
@@ -196,7 +196,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                     <select
                       id="availability"
                       formControlName="availability"
-                      class="h-9 rounded-md border border-border bg-card px-2 text-sm"
+                      class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 text-sm pointer-coarse:text-base"
                     >
                       @for (option of availability; track option.value) {
                         <option [value]="option.value">{{ option.label }}</option>
@@ -237,7 +237,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           <hlm-separator />
 
           <section id="hero-cv" aria-labelledby="hero-cv-title" class="flex flex-col gap-4">
-            <h2 id="hero-cv-title" class="m-0 text-h4">CV</h2>
+            <h2 id="hero-cv-title" class="m-0 text-section-title">CV</h2>
             <p class="m-0 -mt-3 text-sm text-muted-foreground">
               A PDF per language, behind the "Download CV" button. Saved immediately; live after the
               next publish.
@@ -259,7 +259,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           <hlm-separator />
 
           <section id="hero-copy" aria-labelledby="hero-copy-title" class="flex flex-col gap-6">
-            <h2 id="hero-copy-title" class="m-0 text-h4">Hero copy</h2>
+            <h2 id="hero-copy-title" class="m-0 text-section-title">Hero copy</h2>
             <div class="flex flex-col gap-6">
               @for (field of profileFields; track field.key) {
                 <app-field-pair
@@ -289,7 +289,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           <hlm-separator />
 
           <section id="hero-nav" aria-labelledby="hero-nav-title" class="flex flex-col gap-6">
-            <h2 id="hero-nav-title" class="m-0 text-h4">Navigation labels</h2>
+            <h2 id="hero-nav-title" class="m-0 text-section-title">Navigation labels</h2>
             @for (field of navFields; track field.key) {
               <app-field-pair
                 [id]="'nav-' + field.key"

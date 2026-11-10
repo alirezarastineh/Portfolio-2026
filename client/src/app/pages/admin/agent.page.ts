@@ -87,7 +87,7 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
       />
 
       <section aria-labelledby="agent-start-title" class="flex flex-col gap-3">
-        <h2 id="agent-start-title" class="m-0 text-h4">Start a run</h2>
+        <h2 id="agent-start-title" class="m-0 text-section-title">Start a run</h2>
         <p class="m-0 text-sm text-muted-foreground">
           Paid: it spends under Admin agents' switch and cap (Settings → Spending), and stops at its
           own limit. Each draft is checked, repaired, and ranked or read twice, as the editors'
@@ -140,7 +140,9 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
       </section>
 
       <section aria-labelledby="agent-runs-title" class="flex flex-col gap-3">
-        <h2 id="agent-runs-title" tabindex="-1" class="m-0 text-h4 outline-none">Runs</h2>
+        <h2 id="agent-runs-title" tabindex="-1" class="m-0 text-section-title outline-none">
+          Runs
+        </h2>
         @if (runsError(); as reason) {
           <app-load-error title="Could not load the runs" [reason]="reason" (retry)="load()" />
         } @else if (runs() === null) {
@@ -154,7 +156,7 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
                 class="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-border px-3 py-2 text-sm"
               >
                 <span class="font-medium">{{ runStatus(run) }}</span>
-                <span class="font-mono text-xs tabular-nums">
+                <span class="text-xs tabular-nums">
                   {{ run.progress.done }} of {{ run.progress.total }} items · {{ cost(run.usd) }}
                 </span>
                 @if (summaryOf(run); as line) {
@@ -181,7 +183,9 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
       </section>
 
       <section aria-labelledby="agent-proposals-title" class="flex flex-col gap-4">
-        <h2 id="agent-proposals-title" tabindex="-1" class="m-0 text-h4 outline-none">Proposals</h2>
+        <h2 id="agent-proposals-title" tabindex="-1" class="m-0 text-section-title outline-none">
+          Proposals
+        </h2>
         <p class="m-0 text-sm text-muted-foreground">
           Applying writes your draft, never the live site. An editor already open on the same item
           keeps the text it loaded: reload it before you save there, or its save puts the old text
@@ -239,7 +243,7 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
           <p class="m-0 text-sm text-muted-foreground">{{ emptyText() }}</p>
         } @else {
           @if (limited()) {
-            <p class="m-0 text-xs text-muted-foreground">
+            <p class="m-0 text-hint text-muted-foreground">
               The newest 200 are shown: decide some, or pick another filter, to reach older ones.
             </p>
           }
@@ -270,9 +274,7 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
                     >
                       {{ field(p) }}
                     </h4>
-                    <span hlmBadge variant="outline" class="font-mono text-xs">{{
-                      status(p)
-                    }}</span>
+                    <span hlmBadge variant="outline">{{ status(p) }}</span>
                   </div>
                   @if (open(p) && p.changed) {
                     <p class="m-0 text-xs text-accent-orange">
@@ -288,13 +290,13 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
                   }
                   <div class="grid gap-3 text-sm sm:grid-cols-2">
                     <div class="min-w-0">
-                      <p class="eyebrow m-0 mb-1 text-muted-foreground">Before</p>
+                      <p class="m-0 mb-1 text-xs font-medium text-muted-foreground">Before</p>
                       <p class="m-0 whitespace-pre-wrap wrap-break-word">
                         {{ shown(p.before) || "(empty)" }}
                       </p>
                     </div>
                     <div class="min-w-0">
-                      <p class="eyebrow m-0 mb-1 text-muted-foreground">After</p>
+                      <p class="m-0 mb-1 text-xs font-medium text-muted-foreground">After</p>
                       @if (editing() === p.id) {
                         <div hlmField>
                           <label hlmFieldLabel class="sr-only" [for]="'proposal-' + p.id + '-text'">

@@ -74,7 +74,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
           >
             Previous week
           </button>
-          <span class="font-mono text-sm">{{ data()?.week ?? "…" }}</span>
+          <span class="text-data">{{ data()?.week ?? "…" }}</span>
           <button
             hlmBtn
             size="sm"
@@ -86,7 +86,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
           </button>
         </div>
         @if (data(); as d) {
-          <p class="m-0 text-xs text-muted-foreground">
+          <p class="m-0 text-hint text-muted-foreground">
             {{ d.stats.reviewed }} of {{ d.stats.queued }} reviewed · {{ d.stats.answers }}
             {{ d.stats.answers === 1 ? "answer" : "answers" }} this week
           </p>
@@ -95,10 +95,10 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
 
       @if (data(); as d) {
         <p class="m-0 flex flex-wrap items-center gap-2">
-          <span class="text-xs text-muted-foreground">Good in the random sample:</span>
+          <span class="text-hint text-muted-foreground">Good in the random sample:</span>
           @for (label of labels; track label) {
             @let share = goodShare(d.stats.labels[label]);
-            <span hlmBadge variant="outline" class="font-mono">
+            <span hlmBadge variant="outline">
               {{ names[label] }}:
               {{ share === null ? "–" : (share * 100 | number: "1.0-0") + " %" }}
             </span>
@@ -129,7 +129,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
               <li>
                 <button
                   type="button"
-                  class="flex w-full min-w-0 flex-col gap-1 px-3 py-2 text-left text-sm outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                  class="flex w-full min-w-0 flex-col gap-1 px-3 py-2 text-left text-sm hover:bg-muted/60 focus-visible:-outline-offset-2"
                   [class.bg-surface-2]="current"
                   [attr.aria-current]="current ? 'true' : null"
                   (click)="select(entry)"
@@ -140,7 +140,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
                     }
                     {{ entry.message.question }}
                   </span>
-                  <span class="flex flex-wrap gap-1 font-mono text-[11px] text-muted-foreground">
+                  <span class="flex flex-wrap gap-1 text-hint text-muted-foreground">
                     @for (reason of entry.reasons; track reason) {
                       <span>{{ reasonLabel(reason) }}</span>
                     } @empty {
@@ -163,7 +163,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
               <p class="m-0 whitespace-pre-wrap text-foreground/85">
                 {{ entry.message.answer || "(no answer)" }}
               </p>
-              <p class="m-0 flex flex-wrap gap-2 font-mono text-xs text-muted-foreground">
+              <p class="m-0 flex flex-wrap gap-2 font-data text-xs text-muted-foreground">
                 <span>{{ entry.message.model ?? "no model" }}</span>
                 <span>{{ entry.message.locale.toUpperCase() }}</span>
                 @for (flag of entry.message.checks?.flags ?? []; track flag) {
@@ -174,7 +174,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
                 }
               </p>
               @if (entry.message.citedIds.length) {
-                <p class="m-0 font-mono text-xs text-muted-foreground">
+                <p class="m-0 font-data text-xs text-muted-foreground">
                   cited: {{ entry.message.citedIds.join(", ") }}
                 </p>
               }
@@ -208,7 +208,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
                 <textarea
                   name="review-note"
                   rows="2"
-                  class="rounded-md border border-border bg-background p-2 text-sm text-foreground"
+                  class="rounded-lg border border-input-line bg-card p-2 text-sm pointer-coarse:text-base text-foreground"
                   [ngModel]="note()"
                   (ngModelChange)="note.set($event)"
                 ></textarea>
@@ -218,7 +218,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
                   Save and next
                 </button>
                 @if (entry.review) {
-                  <span class="text-xs text-muted-foreground">
+                  <span class="text-hint text-muted-foreground">
                     Reviewed {{ when(entry.review.reviewedAt) }}
                   </span>
                 }
@@ -239,7 +239,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
           </h2>
           @if (j.visitorJudge) {
             <p class="m-0">{{ calibrationLine(j.calibration) }}</p>
-            <p class="m-0 text-xs text-muted-foreground">
+            <p class="m-0 text-hint text-muted-foreground">
               {{ j.visitorJudge }} judges the answers given a "grounded" verdict, against the
               documents they cited; faithful from 0.8.
             </p>
@@ -257,7 +257,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
               </div>
             }
           } @else {
-            <p class="m-0 text-xs text-muted-foreground">
+            <p class="m-0 text-hint text-muted-foreground">
               No judge may read visitor answers: SERVER_AI_JUDGE_MODELS must name a model that
               already answers visitors.
             </p>

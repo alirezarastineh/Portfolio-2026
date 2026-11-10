@@ -39,13 +39,8 @@ import type { LocaleView } from "./field-pair.component";
       (valueChange)="onChange($event)"
     >
       @for (option of options; track option) {
-        <button
-          hlmToggleGroupItem
-          type="button"
-          class="font-mono text-xs uppercase tracking-label"
-          [value]="option"
-        >
-          {{ option }}
+        <button hlmToggleGroupItem type="button" class="text-xs" [value]="option">
+          {{ option === "both" ? "Both" : option.toUpperCase() }}
         </button>
       }
     </div>
@@ -126,7 +121,7 @@ const PREVIEW_WAIT_MS = 30_000;
     <div class="-mx-6 border-t border-border bg-card/95 px-6 py-3 backdrop-blur">
       <div class="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <!-- A new status takes the other branch, so the old one leaves as the new one enters. -->
-        <p class="m-0 grid font-mono text-meta" role="status">
+        <p class="m-0 grid text-hint" role="status">
           @let shown = statusShown();
           @if (shown.odd) {
             <span
@@ -148,7 +143,7 @@ const PREVIEW_WAIT_MS = 30_000;
         </p>
         <div class="flex flex-wrap items-center gap-2">
           <kbd
-            class="hidden rounded-sm border border-border px-1.5 py-px font-mono text-xs text-muted-foreground sm:inline"
+            class="hidden rounded-sm border border-border px-1.5 py-px font-data text-xs text-muted-foreground sm:inline"
             aria-hidden="true"
             >{{ shortcut }}</kbd
           >

@@ -105,7 +105,7 @@ type StringRecord = Record<string, string>;
         } @else {
           <header class="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h2 class="m-0 text-h4">{{ title() }}</h2>
+              <h2 class="m-0 text-section-title">{{ title() }}</h2>
               @if (description()) {
                 <p class="m-0 mt-1 text-sm text-muted-foreground">{{ description() }}</p>
               }

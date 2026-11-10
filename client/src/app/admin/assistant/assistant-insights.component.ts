@@ -53,12 +53,12 @@ import { LessonFormComponent } from "./lesson-form.component";
           <button hlmBtn variant="ghost" size="sm" [disabled]="loading()" (click)="analyse(true)">
             Refresh
           </button>
-          <span class="text-xs text-muted-foreground">
+          <span class="text-hint text-muted-foreground">
             {{ analysed() }} question(s){{ cached() ? " · cached" : "" }}
           </span>
         }
       </div>
-      <p class="m-0 text-xs text-muted-foreground">
+      <p class="m-0 text-hint text-muted-foreground">
         One model call (a fraction of a cent), counted toward the daily budget. The last run shows
         here without one.
       </p>
@@ -69,7 +69,7 @@ import { LessonFormComponent } from "./lesson-form.component";
         <p class="m-0 text-xs">{{ line }}</p>
       }
       @if (view()?.trigger; as check) {
-        <p class="m-0 text-xs text-muted-foreground">
+        <p class="m-0 text-hint text-muted-foreground">
           The nightly check, {{ when(check.at) }}: {{ check.reason }}
         </p>
       }
@@ -82,12 +82,10 @@ import { LessonFormComponent } from "./lesson-form.component";
                 <strong [id]="'insight-topic-' + $index" class="font-medium">{{
                   topic.title
                 }}</strong>
-                <span hlmBadge variant="outline" class="font-mono">{{ topic.questions }}×</span>
+                <span hlmBadge variant="outline">{{ topic.questions }}×</span>
                 @if (topic.unanswered) {
                   <!-- Outlined: the filled destructive badge is under 4.5:1 at this size. -->
-                  <span hlmBadge variant="outline" class="font-mono text-destructive"
-                    >not answered</span
-                  >
+                  <span hlmBadge variant="outline" class="text-destructive">not answered</span>
                 }
               </div>
               <p class="m-0 text-muted-foreground">{{ topic.summary }}</p>

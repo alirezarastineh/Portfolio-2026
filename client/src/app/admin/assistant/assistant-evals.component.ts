@@ -70,12 +70,12 @@ const POLL_MS = 2_000;
               Cancel the run
             </button>
           } @else {
-            <span class="text-xs text-muted-foreground">
+            <span class="text-hint text-muted-foreground">
               A {{ running.kind }} run is going; one paid run at a time.
             </span>
           }
         }
-        <span class="text-xs text-muted-foreground">
+        <span class="text-hint text-muted-foreground">
           Runs in the background with free-tier pacing (10–15 minutes); you can leave this page.
         </span>
       </div>
@@ -99,7 +99,9 @@ const POLL_MS = 2_000;
             ></div>
           </div>
           <p class="m-0 flex flex-wrap items-baseline gap-3 text-sm">
-            <strong class="font-mono text-lg">{{ counts().passed }}/{{ counts().graded }}</strong>
+            <strong class="text-section-title tabular-nums"
+              >{{ counts().passed }}/{{ counts().graded }}</strong
+            >
             <span>passed</span>
             <span class="text-muted-foreground">
               {{ v.run.progress.done }} of {{ v.run.progress.total }} cases done · \${{
@@ -118,7 +120,9 @@ const POLL_MS = 2_000;
             }
           </p>
           @if (v.run.error) {
-            <p class="m-0 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <p
+              class="m-0 rounded-md border border-accent-orange/40 bg-accent-orange-soft p-3 text-sm"
+            >
               {{ v.run.error }}
             </p>
           }
@@ -143,7 +147,6 @@ const POLL_MS = 2_000;
                   [variant]="
                     c[1].completed > 0 && c[1].passed < c[1].completed ? 'destructive' : 'outline'
                   "
-                  class="font-mono"
                   >{{ c[0] }} {{ c[1].passed }}/{{ c[1].completed }}</span
                 >
               }
@@ -154,22 +157,22 @@ const POLL_MS = 2_000;
               <li
                 class="rounded-lg border border-border p-3 text-sm"
                 [class.border-destructive]="r.status === 'failed'"
-                [class.border-amber-500]="r.status === 'unavailable'"
+                [class.border-accent-orange]="r.status === 'unavailable'"
               >
                 <details>
                   <summary class="flex cursor-pointer flex-wrap items-center gap-2">
                     <span
                       [class.text-destructive]="r.status === 'failed'"
-                      [class.text-amber-600]="r.status === 'unavailable'"
+                      [class.text-accent-orange]="r.status === 'unavailable'"
                     >
                       {{ r.status === "unavailable" ? "!" : r.passed ? "✓" : "✗" }}
                     </span>
-                    <span class="font-mono text-xs">{{ r.id }}</span>
-                    <span class="text-xs text-muted-foreground"
+                    <span class="font-data text-xs">{{ r.id }}</span>
+                    <span class="text-hint text-muted-foreground"
                       >{{ r.model ?? "no model" }} · {{ r.totalMs }} ms</span
                     >
                     @if (r.judge) {
-                      <span class="text-xs text-muted-foreground">
+                      <span class="text-hint text-muted-foreground">
                         judge {{ r.judge.faithfulness | number: "1.2-2" }} /
                         {{ r.judge.helpfulness }}
                       </span>
@@ -179,7 +182,7 @@ const POLL_MS = 2_000;
                     <ul
                       class="mt-2 text-xs"
                       [class.text-destructive]="r.status === 'failed'"
-                      [class.text-amber-700]="r.status === 'unavailable'"
+                      [class.text-accent-orange]="r.status === 'unavailable'"
                     >
                       @for (f of r.failures; track $index) {
                         <li>{{ f }}</li>
@@ -199,9 +202,9 @@ const POLL_MS = 2_000;
                             <p class="m-0">{{ t.question }}</p>
                             <p class="m-0 whitespace-pre-wrap text-muted-foreground">
                               @if (t.forged) {
-                                <span class="font-mono">[forged]</span>
+                                <span>[forged]</span>
                               } @else if (t.live) {
-                                <span class="font-mono">[answered live]</span>
+                                <span>[answered live]</span>
                               }
                               {{ t.answer || "(no text)" }}
                             </p>
@@ -214,7 +217,7 @@ const POLL_MS = 2_000;
                     {{ r.answer || "(no text)" }}
                   </p>
                   @if (r.tools.length) {
-                    <p class="m-0 mt-1 font-mono text-xs text-muted-foreground">
+                    <p class="m-0 mt-1 font-data text-xs text-muted-foreground">
                       tools: {{ tools(r.tools) }}
                     </p>
                   }
@@ -249,7 +252,7 @@ const POLL_MS = 2_000;
               <tbody>
                 @for (row of c.rows; track row.id) {
                   <tr
-                    class="border-t border-border font-mono text-xs"
+                    class="border-t border-border font-data text-xs"
                     [class.text-destructive]="row.changed"
                   >
                     <td class="p-2">{{ row.id }}</td>
@@ -282,16 +285,16 @@ const POLL_MS = 2_000;
               <tbody>
                 @for (r of evalRuns(); track r.id) {
                   <tr class="border-t border-border text-xs">
-                    <td class="p-2 font-mono">{{ when(r.createdAt) }}</td>
+                    <td class="p-2 font-data">{{ when(r.createdAt) }}</td>
                     <td class="p-2">{{ statusLabel(r) }}</td>
-                    <td class="p-2 text-right font-mono">
+                    <td class="p-2 text-right font-data">
                       @if (r.summary; as s) {
                         {{ s.passed }}/{{ s.completed }}
                       } @else {
                         {{ r.progress.done }}/{{ r.progress.total }} done
                       }
                     </td>
-                    <td class="p-2 text-right font-mono">\${{ r.usd | number: "1.3-4" }}</td>
+                    <td class="p-2 text-right font-data">\${{ r.usd | number: "1.3-4" }}</td>
                     <td class="flex flex-wrap justify-end gap-2 p-2">
                       <button hlmBtn size="sm" variant="ghost" (click)="open(r.id)">Open</button>
                       @if (view(); as v) {

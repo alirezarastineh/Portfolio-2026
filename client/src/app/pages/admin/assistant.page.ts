@@ -110,7 +110,7 @@ const TABS: { id: Tab; label: string }[] = [
       >
         <span headerStatus>
           @if (pulse.assistantAlert(); as alert) {
-            <span hlmBadge variant="destructive" class="font-mono">
+            <span hlmBadge variant="destructive">
               needs a look<span class="sr-only">: {{ alert }}</span>
             </span>
           }

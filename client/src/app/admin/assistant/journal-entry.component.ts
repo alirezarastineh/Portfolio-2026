@@ -93,11 +93,11 @@ const DECISIONS: Record<JournalStatus, string> = {
         <h3 #heading tabindex="-1" [id]="'journal-' + e.id" class="m-0 text-sm font-medium">
           {{ symptom(e.category) }}: {{ leading() }}
         </h3>
-        <div class="flex items-center gap-2 font-mono text-xs text-muted-foreground">
+        <div class="flex items-center gap-2 text-xs text-muted-foreground">
           <span hlmBadge [variant]="e.status === 'proposed' ? 'outline' : 'default'">{{
             statusLabel(e.status)
           }}</span>
-          <span>{{ when(e.createdAt) }}</span>
+          <span class="font-data">{{ when(e.createdAt) }}</span>
         </div>
       </header>
       <p class="m-0 text-muted-foreground">
@@ -109,7 +109,7 @@ const DECISIONS: Record<JournalStatus, string> = {
       </p>
 
       <details class="rounded-md border border-border px-3 py-2" [open]="open()">
-        <summary class="cursor-pointer font-mono text-xs text-muted-foreground">
+        <summary class="cursor-pointer text-xs text-muted-foreground">
           Evidence · {{ d.hypotheses.length }} hypotheses (a count, not a probability)
         </summary>
         <ol class="m-0 mt-2 flex list-none flex-col gap-2 p-0 text-xs" role="list">
@@ -170,7 +170,7 @@ const DECISIONS: Record<JournalStatus, string> = {
               <input
                 name="journal-expected"
                 maxlength="160"
-                class="h-8 rounded-md border border-border bg-background px-2 font-mono text-foreground"
+                class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 font-data text-foreground text-sm pointer-coarse:text-base"
                 [attr.aria-describedby]="'journal-expected-hint-' + e.id"
                 [ngModel]="expected()"
                 (ngModelChange)="expected.set($event)"
@@ -232,7 +232,7 @@ const DECISIONS: Record<JournalStatus, string> = {
             name="journal-root-cause"
             rows="3"
             maxlength="2000"
-            class="rounded-md border border-border bg-background px-2 py-1 text-foreground"
+            class="rounded-lg border border-input-line bg-card px-2 py-1 text-foreground text-sm pointer-coarse:text-base"
             [attr.aria-describedby]="'journal-hint-' + e.id"
             [ngModel]="rootCause()"
             (ngModelChange)="rootCause.set($event)"
@@ -243,7 +243,7 @@ const DECISIONS: Record<JournalStatus, string> = {
             <span class="text-muted-foreground">Fix type</span>
             <select
               name="journal-fix-type"
-              class="h-8 rounded-md border border-border bg-background px-2 text-foreground"
+              class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 text-foreground text-sm pointer-coarse:text-base"
               [ngModel]="fixType() ?? ''"
               (ngModelChange)="fixType.set($event || null)"
             >
@@ -259,7 +259,7 @@ const DECISIONS: Record<JournalStatus, string> = {
               <input
                 name="journal-fix-ref"
                 maxlength="200"
-                class="h-8 rounded-md border border-border bg-background px-2 font-mono text-foreground"
+                class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 font-data text-foreground text-sm pointer-coarse:text-base"
                 [attr.aria-describedby]="'journal-ref-hint-' + e.id + ' journal-hint-' + e.id"
                 [ngModel]="fixRef()"
                 (ngModelChange)="fixRef.set($event)"
@@ -276,7 +276,7 @@ const DECISIONS: Record<JournalStatus, string> = {
             name="journal-fix"
             rows="2"
             maxlength="2000"
-            class="rounded-md border border-border bg-background px-2 py-1 text-foreground"
+            class="rounded-lg border border-input-line bg-card px-2 py-1 text-foreground text-sm pointer-coarse:text-base"
             [attr.aria-describedby]="'journal-hint-' + e.id"
             [ngModel]="fix()"
             (ngModelChange)="fix.set($event)"
@@ -288,7 +288,7 @@ const DECISIONS: Record<JournalStatus, string> = {
             name="journal-heuristic"
             rows="2"
             maxlength="1000"
-            class="rounded-md border border-border bg-background px-2 py-1 text-foreground"
+            class="rounded-lg border border-input-line bg-card px-2 py-1 text-foreground text-sm pointer-coarse:text-base"
             [attr.aria-describedby]="'journal-heuristic-hint-' + e.id + ' journal-hint-' + e.id"
             [ngModel]="heuristic()"
             (ngModelChange)="heuristic.set($event)"
@@ -327,7 +327,7 @@ const DECISIONS: Record<JournalStatus, string> = {
 
       <div class="flex flex-wrap items-center gap-2 text-xs">
         @if (e.caseId) {
-          <p class="m-0 font-mono text-muted-foreground">regression case {{ e.caseId }}</p>
+          <p class="m-0 text-muted-foreground">regression case {{ e.caseId }}</p>
         } @else if (e.message && e.status !== "retired") {
           <app-freeze-case
             [message]="e.message"
@@ -388,12 +388,12 @@ const DECISIONS: Record<JournalStatus, string> = {
         </button>
       </div>
       @if (replayable() && resumable(); as run) {
-        <p [id]="'journal-stopped-' + e.id" class="m-0 text-xs text-muted-foreground">
+        <p [id]="'journal-stopped-' + e.id" class="m-0 text-hint text-muted-foreground">
           The last replay stopped: {{ run.error ?? run.status }}
         </p>
       }
       <!-- Always in the page, so what is put in it is announced. -->
-      <p class="m-0 text-xs text-muted-foreground" role="status">{{ status() }}</p>
+      <p class="m-0 text-hint text-muted-foreground" role="status">{{ status() }}</p>
     </article>
   `,
 })

@@ -102,7 +102,7 @@ function toDraft(s: AssistantSettings): Draft {
           />
           <div>
             <label for="ask-enabled">Assistant on</label>
-            <p id="ask-enabled-hint" class="m-0 text-xs text-muted-foreground">
+            <p id="ask-enabled-hint" class="m-0 text-hint text-muted-foreground">
               Off, visitors get the offline shell. The playground and evals still work.
             </p>
           </div>
@@ -117,7 +117,7 @@ function toDraft(s: AssistantSettings): Draft {
           />
           <div>
             <label for="ask-deep">Deep model for comparisons and architecture questions</label>
-            <p id="ask-deep-hint" class="m-0 text-xs text-muted-foreground">
+            <p id="ask-deep-hint" class="m-0 text-hint text-muted-foreground">
               Switches itself off for the rest of the day at 80 % of the budget.
             </p>
           </div>
@@ -132,7 +132,7 @@ function toDraft(s: AssistantSettings): Draft {
           />
           <div>
             <label for="ask-scorecard">Public scorecard</label>
-            <p id="ask-scorecard-hint" class="m-0 text-xs text-muted-foreground">
+            <p id="ask-scorecard-hint" class="m-0 text-hint text-muted-foreground">
               Visitors read the recorded eval run and 30 days of live checks with
               <code>evals</code>: aggregates only. Off, the scorecard answers 404.
             </p>
@@ -152,7 +152,7 @@ function toDraft(s: AssistantSettings): Draft {
             [ngModel]="d.budget"
             (ngModelChange)="patch({ budget: $event === null ? '' : String($event) })"
           />
-          <p class="m-0 text-xs text-muted-foreground">
+          <p class="m-0 text-hint text-muted-foreground">
             The visitors' assistant may spend all of it; everything else stops at the line below.
             Empty = the deploy's default.
           </p>
@@ -173,7 +173,7 @@ function toDraft(s: AssistantSettings): Draft {
               [ngModel]="d.spend.reserve"
               (ngModelChange)="patchSpend({ reserve: $event === null ? '' : String($event) })"
             />
-            <p id="ask-reserve-hint" class="m-0 text-xs text-muted-foreground">
+            <p id="ask-reserve-hint" class="m-0 text-hint text-muted-foreground">
               The copilot, insights, the playground and runs stop once the day's spend reaches the
               rest, so they cannot put visitors into "resting". At 0 % they may spend the whole
               budget.
@@ -201,7 +201,7 @@ function toDraft(s: AssistantSettings): Draft {
           <!-- The legend names what each field is: a cap, in USD, per day. -->
           <fieldset class="flex flex-col gap-2">
             <legend class="text-sm">Daily cap per feature (USD)</legend>
-            <p class="m-0 text-xs text-muted-foreground">Empty = only the reserve line.</p>
+            <p class="m-0 text-hint text-muted-foreground">Empty = only the reserve line.</p>
             <div class="grid gap-3 sm:grid-cols-3">
               @for (f of capped; track f) {
                 <div hlmField>
@@ -225,8 +225,8 @@ function toDraft(s: AssistantSettings): Draft {
 
         @for (locale of locales; track locale) {
           <fieldset class="flex flex-col gap-3 rounded-lg border border-border p-4">
-            <legend class="px-1 font-mono text-xs uppercase text-muted-foreground">
-              {{ locale }}
+            <legend class="px-1 text-xs font-medium text-muted-foreground">
+              {{ locale.toUpperCase() }}
             </legend>
             <div hlmField>
               <label hlmFieldLabel [for]="'ask-suggest-' + locale"
@@ -277,8 +277,8 @@ function toDraft(s: AssistantSettings): Draft {
             }
             @for (role of roles; track role) {
               <div>
-                <p class="m-0 text-xs text-muted-foreground">{{ role }}</p>
-                <p class="m-0 font-mono text-xs">
+                <p class="m-0 text-hint text-muted-foreground">{{ role }}</p>
+                <p class="m-0 font-data text-xs">
                   @for (m of e.chains[role]; track m.id; let last = $last) {
                     <span
                       [class.line-through]="!m.available"
@@ -298,7 +298,7 @@ function toDraft(s: AssistantSettings): Draft {
                 </p>
               </div>
             }
-            <p class="m-0 text-xs text-muted-foreground">
+            <p class="m-0 text-hint text-muted-foreground">
               {{ e.limits.ratePerHour }}/h and {{ e.limits.ratePerDay }}/day per visitor ·
               {{ e.limits.maxConcurrent }} streams at once · {{ e.limits.maxOutputTokens }} output
               tokens · {{ e.limits.historyTurns }} turns of memory · prompt {{ e.prompt }}

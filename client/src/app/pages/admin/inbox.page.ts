@@ -78,7 +78,7 @@ const MOVED: Partial<Record<MessageStatus, string>> = {
       >
         <span headerStatus>
           @if (fresh(); as n) {
-            <span hlmBadge class="font-mono">{{ n }} new</span>
+            <span hlmBadge>{{ n }} new</span>
           }
         </span>
       </app-page-header>
@@ -130,7 +130,7 @@ const MOVED: Partial<Record<MessageStatus, string>> = {
                 <li>
                   <button
                     type="button"
-                    class="flex w-full min-w-0 flex-col gap-1 px-4 py-3 text-left outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                    class="flex w-full min-w-0 flex-col gap-1 px-4 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:-outline-offset-2"
                     [class.bg-surface-2]="current"
                     [attr.data-message]="message.id"
                     [attr.aria-current]="current ? 'true' : null"
@@ -150,7 +150,7 @@ const MOVED: Partial<Record<MessageStatus, string>> = {
                         >{{ message.name }}</span
                       >
                       <time
-                        class="shrink-0 font-mono text-xs text-muted-foreground"
+                        class="shrink-0 font-data text-xs text-muted-foreground"
                         [attr.datetime]="message.createdAt"
                         >{{ relative(message.createdAt) }}</time
                       >
@@ -161,7 +161,7 @@ const MOVED: Partial<Record<MessageStatus, string>> = {
                       >{{ message.message }}</span
                     >
                     @if (message.mailStatus === "failed") {
-                      <span class="font-mono text-xs text-destructive">email failed</span>
+                      <span class="text-xs text-destructive">email failed</span>
                     }
                   </button>
                 </li>
@@ -192,15 +192,15 @@ const MOVED: Partial<Record<MessageStatus, string>> = {
                     <h2
                       id="inbox-reader-title"
                       tabindex="-1"
-                      class="m-0 text-h4 wrap-break-word outline-none"
+                      class="m-0 text-section-title wrap-break-word outline-none"
                     >
                       {{ message.name }}
                     </h2>
-                    <p class="m-0 font-mono text-xs wrap-anywhere text-muted-foreground">
+                    <p class="m-0 font-data text-xs wrap-anywhere text-muted-foreground">
                       {{ message.email }}
                     </p>
                   </div>
-                  <p class="m-0 font-mono text-xs text-muted-foreground">
+                  <p class="m-0 font-data text-xs text-muted-foreground">
                     <time [attr.datetime]="message.createdAt">{{
                       absolute(message.createdAt)
                     }}</time
@@ -209,23 +209,16 @@ const MOVED: Partial<Record<MessageStatus, string>> = {
                 </header>
 
                 <div class="flex flex-wrap items-center gap-2">
-                  <span
-                    hlmBadge
-                    [variant]="message.status === 'new' ? 'default' : 'outline'"
-                    class="font-mono"
-                    >{{ message.status }}</span
-                  >
+                  <span hlmBadge [variant]="message.status === 'new' ? 'default' : 'outline'">{{
+                    message.status
+                  }}</span>
                   @if (message.mailStatus === "failed") {
-                    <span
-                      hlmBadge
-                      variant="destructive"
-                      class="font-mono"
-                      [title]="message.mailError ?? ''"
+                    <span hlmBadge variant="destructive" [title]="message.mailError ?? ''"
                       >email failed</span
                     >
                   }
                   @if (message.origin === "ask") {
-                    <span hlmBadge variant="outline" class="font-mono">via the assistant</span>
+                    <span hlmBadge variant="outline">via the assistant</span>
                   }
                 </div>
 
@@ -248,7 +241,7 @@ const MOVED: Partial<Record<MessageStatus, string>> = {
                             {{ turn.answer || "(no answer)" }}
                           </p>
                           @if (turn.cited.length) {
-                            <p class="m-0 font-mono text-[11px] text-muted-foreground">
+                            <p class="m-0 font-data text-xs text-muted-foreground">
                               cited: {{ turn.cited.join(", ") }}
                             </p>
                           }

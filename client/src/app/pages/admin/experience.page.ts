@@ -189,11 +189,11 @@ function blankDraft(): Draft {
                   <p class="m-0 truncate text-sm font-medium">
                     {{ row.translations.en.title || "(untitled)" }} · {{ row.orgName }}
                   </p>
-                  <p class="m-0 mt-0.5 font-mono text-xs text-muted-foreground">
+                  <p class="m-0 mt-0.5 font-data text-xs text-muted-foreground">
                     {{ row.startDate }} – {{ row.endDate ?? "present" }}
                   </p>
                 </div>
-                <span hlmBadge variant="outline" class="font-mono">{{ row.kind }}</span>
+                <span hlmBadge variant="outline">{{ row.kind }}</span>
                 <label class="flex items-center gap-2 text-xs text-muted-foreground">
                   <hlm-switch
                     [checked]="row.isVisible"
@@ -275,7 +275,7 @@ function blankDraft(): Draft {
                   <select
                     id="exp-kind"
                     name="kind"
-                    class="h-9 rounded-md border border-border bg-card px-2 text-sm"
+                    class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 text-sm pointer-coarse:text-base"
                     [ngModel]="d.kind"
                     (ngModelChange)="patch({ kind: $event })"
                   >
@@ -289,7 +289,7 @@ function blankDraft(): Draft {
                   <select
                     id="exp-type"
                     name="employmentType"
-                    class="h-9 rounded-md border border-border bg-card px-2 text-sm"
+                    class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 text-sm pointer-coarse:text-base"
                     [ngModel]="d.employmentType"
                     (ngModelChange)="patch({ employmentType: $event })"
                   >
@@ -361,7 +361,7 @@ function blankDraft(): Draft {
                   <select
                     id="exp-precision"
                     name="datePrecision"
-                    class="h-9 rounded-md border border-border bg-card px-2 text-sm"
+                    class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 text-sm pointer-coarse:text-base"
                     [ngModel]="d.datePrecision"
                     (ngModelChange)="patch({ datePrecision: $event })"
                   >
@@ -426,7 +426,9 @@ function blankDraft(): Draft {
 
               @for (locale of locales; track locale) {
                 <hlm-separator />
-                <p class="eyebrow m-0 text-muted-foreground">{{ locale }}</p>
+                <p class="m-0 text-xs font-medium text-muted-foreground">
+                  {{ locale.toUpperCase() }}
+                </p>
                 <div hlmField>
                   <label hlmFieldLabel [for]="'exp-title-' + locale">Title</label>
                   <input

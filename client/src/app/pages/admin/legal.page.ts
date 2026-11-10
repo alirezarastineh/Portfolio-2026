@@ -129,7 +129,9 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
               @if (doc.id === active()) {
                 @for (locale of locales; track locale) {
                   <section class="flex flex-col gap-3">
-                    <p class="eyebrow m-0 text-muted-foreground">{{ locale }}</p>
+                    <p class="m-0 text-xs font-medium text-muted-foreground">
+                      {{ locale.toUpperCase() }}
+                    </p>
                     <div hlmField>
                       <label hlmFieldLabel [for]="'legal-title-' + locale">Title</label>
                       <input

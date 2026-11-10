@@ -123,21 +123,21 @@ interface ModelTotal {
         <ul class="m-0 grid list-none gap-3 p-0 sm:grid-cols-3" role="list">
           <li appKpiTile="Status">
             <p
-              class="m-0 text-h3"
+              class="m-0 text-figure"
               [class]="h.state.state === 'ok' ? 'text-foreground' : 'text-destructive'"
             >
               {{ stateLabel() }}
             </p>
             @if (h.state.state === "off") {
-              <p class="m-0 font-mono text-xs text-muted-foreground">{{ h.state.reason }}</p>
+              <p class="m-0 font-data text-xs text-muted-foreground">{{ h.state.reason }}</p>
             }
-            <p class="m-0 text-xs text-muted-foreground">
+            <p class="m-0 text-hint text-muted-foreground">
               {{ h.inFlight }} {{ h.inFlight === 1 ? "answer" : "answers" }} streaming now
             </p>
           </li>
           <li appKpiTile="Spent today (UTC)">
             @if (h.state.state !== "off") {
-              <p class="m-0 text-h3 tabular-nums">
+              <p class="m-0 text-figure tabular-nums">
                 \${{ h.state.spentUsd | number: "1.2-4" }}
                 <span class="text-sm font-normal text-muted-foreground"
                   >of \${{ h.state.budgetUsd | number: "1.2-2" }}</span
@@ -156,7 +156,7 @@ interface ModelTotal {
                 }
               </div>
               @if (h.spend; as s) {
-                <p class="m-0 text-xs text-muted-foreground">
+                <p class="m-0 text-hint text-muted-foreground">
                   All but the visitors' assistant stop at \${{
                     s.reserveLineUsd | number: "1.2-2"
                   }}
@@ -165,21 +165,21 @@ interface ModelTotal {
                 </p>
               }
               @if (h.models?.freeOnly) {
-                <p class="m-0 text-xs text-muted-foreground">
+                <p class="m-0 text-hint text-muted-foreground">
                   List-price equivalent: the free tier bills nothing
                 </p>
               }
               @if (h.state.state === "ok" && !h.state.deepAllowed) {
-                <p class="m-0 text-xs text-muted-foreground">
+                <p class="m-0 text-hint text-muted-foreground">
                   Deep model off (over 80 % or disabled)
                 </p>
               }
             } @else {
-              <p class="m-0 text-h3 text-muted-foreground">—</p>
+              <p class="m-0 text-figure text-muted-foreground">—</p>
             }
           </li>
           <li appKpiTile="Last 24 h">
-            <p class="m-0 text-h3 tabular-nums">
+            <p class="m-0 text-figure tabular-nums">
               {{ h.last24h.answers }}
               <span class="text-sm font-normal text-muted-foreground">{{
                 h.last24h.answers === 1 ? "answer" : "answers"
@@ -191,7 +191,7 @@ interface ModelTotal {
             >
               {{ h.last24h.failures }} failed
             </p>
-            <p class="m-0 text-xs text-muted-foreground">
+            <p class="m-0 text-hint text-muted-foreground">
               {{ h.last24h.fallbackRate * 100 | number: "1.0-1" }} % from a fallback
             </p>
           </li>
@@ -216,13 +216,13 @@ interface ModelTotal {
                 @for (f of features(); track f.feature) {
                   <tr class="border-t border-border">
                     <td class="p-2">{{ f.label }}</td>
-                    <td class="p-2 text-right font-mono text-xs">
+                    <td class="p-2 text-right font-data text-xs">
                       \${{ f.todayUsd | number: "1.2-4" }}
                     </td>
-                    <td class="p-2 text-right font-mono text-xs">
+                    <td class="p-2 text-right font-data text-xs">
                       {{ f.capUsd === null ? "–" : "$" + (f.capUsd | number: "1.2-2") }}
                     </td>
-                    <td class="p-2 text-right font-mono text-xs">
+                    <td class="p-2 text-right font-data text-xs">
                       \${{ f.periodUsd | number: "1.2-4" }}
                     </td>
                     <td
@@ -251,9 +251,9 @@ interface ModelTotal {
               Free-tier guard off (SERVER_AI_FREE_ONLY=false): models that bill may be called.
             </p>
           } @else if (guard.excluded.length) {
-            <p class="m-0 text-xs text-muted-foreground">
+            <p class="m-0 text-hint text-muted-foreground">
               Left out by the free-tier guard, since they bill:
-              <span class="font-mono">{{ guard.excluded.join(", ") }}</span>
+              <span class="font-data">{{ guard.excluded.join(", ") }}</span>
             </p>
           }
         }
@@ -272,16 +272,13 @@ interface ModelTotal {
               @for (b of h.breakers; track b.model) {
                 @let stats = modelStats().get(b.model);
                 <tr class="border-t border-border align-top">
-                  <td class="p-2 font-mono text-xs">{{ b.model }}</td>
+                  <td class="p-2 font-data text-xs">{{ b.model }}</td>
                   <td class="p-2">
-                    <span
-                      hlmBadge
-                      [variant]="b.state === 'closed' ? 'outline' : 'destructive'"
-                      class="font-mono"
-                      >{{ b.state }}</span
-                    >
+                    <span hlmBadge [variant]="b.state === 'closed' ? 'outline' : 'destructive'">{{
+                      b.state
+                    }}</span>
                   </td>
-                  <td class="p-2 font-mono text-xs">
+                  <td class="p-2 font-data text-xs">
                     @if (stats) {
                       {{ stats.p50TtftMs ?? "–" }} / {{ stats.p95TtftMs ?? "–" }} ms ({{
                         stats.answers
@@ -306,9 +303,7 @@ interface ModelTotal {
           <h2 class="m-0 text-sm font-medium">What it knows</h2>
           <div class="flex flex-wrap items-center gap-2 text-sm">
             @for (kind of kinds(); track kind[0]) {
-              <span hlmBadge variant="outline" class="font-mono"
-                >{{ kind[0] }} × {{ kind[1] }}</span
-              >
+              <span hlmBadge variant="outline">{{ kind[0] }} × {{ kind[1] }}</span>
             }
           </div>
           @if (c.byLocale; as by) {
@@ -360,12 +355,12 @@ interface ModelTotal {
           <li appKpiTile="Cache hits">
             @if (latestCache(); as c) {
               <p
-                class="m-0 text-h3 tabular-nums"
+                class="m-0 text-figure tabular-nums"
                 [class]="c.warn ? 'text-destructive' : 'text-foreground'"
               >
                 {{ c.share! * 100 | number: "1.0-0" }} %
               </p>
-              <p class="m-0 text-xs text-muted-foreground">
+              <p class="m-0 text-hint text-muted-foreground">
                 of {{ u.primaryModel ?? "the primary model" }}'s input came from the cache on
                 {{ c.day }}
               </p>
@@ -375,21 +370,21 @@ interface ModelTotal {
                 </p>
               }
             } @else {
-              <p class="m-0 text-h3 text-muted-foreground">—</p>
-              <p class="m-0 text-xs text-muted-foreground">
+              <p class="m-0 text-figure text-muted-foreground">—</p>
+              <p class="m-0 text-hint text-muted-foreground">
                 No answers from the primary model yet.
               </p>
             }
           </li>
           <li appKpiTile="Turned away (30 days)">
-            <p class="m-0 text-h3 tabular-nums">{{ refused().total }}</p>
-            <p class="m-0 text-xs text-muted-foreground">
+            <p class="m-0 text-figure tabular-nums">{{ refused().total }}</p>
+            <p class="m-0 text-hint text-muted-foreground">
               {{ refused().kinds || "No request refused at the gate." }}
             </p>
           </li>
           <li appKpiTile="MCP calls (30 days)">
-            <p class="m-0 text-h3 tabular-nums">{{ mcp().calls }}</p>
-            <p class="m-0 text-xs text-muted-foreground">
+            <p class="m-0 text-figure tabular-nums">{{ mcp().calls }}</p>
+            <p class="m-0 text-hint text-muted-foreground">
               @if (mcp().calls || mcp().refused) {
                 {{ mcp().tools || "No tool called yet." }}
                 @if (mcp().refused) {
@@ -401,15 +396,19 @@ interface ModelTotal {
             </p>
           </li>
           <li appKpiTile="Invented citations (30 days)">
-            <p class="m-0 text-h3 tabular-nums">{{ dropped().rate * 100 | number: "1.0-1" }} %</p>
-            <p class="m-0 text-xs text-muted-foreground">
+            <p class="m-0 text-figure tabular-nums">
+              {{ dropped().rate * 100 | number: "1.0-1" }} %
+            </p>
+            <p class="m-0 text-hint text-muted-foreground">
               {{ dropped().withDropped }} of {{ dropped().answers }} answers cited a document that
               does not exist; the marker was removed before the visitor saw it.
             </p>
           </li>
           <li appKpiTile="Flagged by checks (30 days)">
-            <p class="m-0 text-h3 tabular-nums">{{ flagged().rate * 100 | number: "1.0-1" }} %</p>
-            <p class="m-0 text-xs text-muted-foreground">
+            <p class="m-0 text-figure tabular-nums">
+              {{ flagged().rate * 100 | number: "1.0-1" }} %
+            </p>
+            <p class="m-0 text-hint text-muted-foreground">
               {{ flagged().count }} of {{ flagged().answers }} answers.
               {{ flagKinds() || "No check raised a flag." }}
             </p>
@@ -433,7 +432,7 @@ interface ModelTotal {
             </thead>
             <tbody>
               @for (m of modelTotals(); track m.model) {
-                <tr class="border-t border-border font-mono text-xs">
+                <tr class="border-t border-border font-data text-xs">
                   <td class="p-2">{{ m.model }}</td>
                   <td class="p-2 text-right">{{ m.requests | number }}</td>
                   <td class="p-2 text-right">{{ m.input | number }}</td>
@@ -467,7 +466,7 @@ interface ModelTotal {
             </thead>
             <tbody>
               @for (d of days(); track d.day) {
-                <tr class="border-t border-border font-mono text-xs">
+                <tr class="border-t border-border font-data text-xs">
                   <td class="p-2">{{ d.day }}</td>
                   <td class="p-2 text-right">{{ d.answers }}</td>
                   <td class="p-2 text-right">{{ d.up }} / {{ d.down }}</td>

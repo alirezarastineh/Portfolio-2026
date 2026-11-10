@@ -98,7 +98,7 @@ function pagesOf(locale: Locale, content: AppContent, livePosts: Set<string>) {
               [attr.aria-labelledby]="'preview-' + l.locale"
             >
               <div class="flex items-center justify-between gap-2">
-                <h2 [id]="'preview-' + l.locale" class="m-0 text-h4">
+                <h2 [id]="'preview-' + l.locale" class="m-0 text-section-title">
                   {{ l.locale === "en" ? "English" : "Deutsch" }}
                 </h2>
                 @if (l.ok) {
@@ -124,7 +124,7 @@ function pagesOf(locale: Locale, content: AppContent, livePosts: Set<string>) {
               @if (l.ok) {
                 @for (group of l.groups; track group.title) {
                   <div>
-                    <p class="eyebrow m-0 text-muted-foreground">{{ group.title }}</p>
+                    <p class="m-0 text-xs font-medium text-muted-foreground">{{ group.title }}</p>
                     <ul class="m-0 mt-1.5 flex list-none flex-col gap-1 p-0" role="list">
                       @for (page of group.pages; track page.path) {
                         <li class="flex items-center gap-2">
@@ -136,9 +136,7 @@ function pagesOf(locale: Locale, content: AppContent, livePosts: Set<string>) {
                             >{{ page.label }}</a
                           >
                           @if (page.note) {
-                            <span hlmBadge variant="outline" class="font-mono">{{
-                              page.note
-                            }}</span>
+                            <span hlmBadge variant="outline">{{ page.note }}</span>
                           }
                         </li>
                       }

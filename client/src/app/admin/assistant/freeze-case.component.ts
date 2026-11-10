@@ -37,7 +37,7 @@ const REFUSALS: Record<string, string> = {
   host: { class: "block" },
   template: `
     @if (frozen()) {
-      <p class="m-0 font-mono text-xs text-muted-foreground">frozen as an eval case</p>
+      <p class="m-0 text-hint text-muted-foreground">frozen as an eval case</p>
     } @else if (!open()) {
       <button
         hlmBtn
@@ -68,7 +68,7 @@ const REFUSALS: Record<string, string> = {
                   [name]="'freeze-turn-' + $index"
                   rows="2"
                   maxlength="600"
-                  class="rounded-md border border-border bg-background px-2 py-1 text-foreground"
+                  class="rounded-lg border border-input-line bg-card px-2 py-1 text-foreground text-sm pointer-coarse:text-base"
                   [attr.aria-describedby]="'freeze-turns-hint-' + message().id"
                   [ngModel]="turn"
                   (ngModelChange)="setTurn($index, $event)"
@@ -84,7 +84,7 @@ const REFUSALS: Record<string, string> = {
               name="freeze-question"
               rows="2"
               maxlength="600"
-              class="rounded-md border border-border bg-background px-2 py-1 text-foreground"
+              class="rounded-lg border border-input-line bg-card px-2 py-1 text-foreground text-sm pointer-coarse:text-base"
               [attr.aria-describedby]="'freeze-hint-' + message().id"
               [ngModel]="question()"
               (ngModelChange)="question.set($event)"
@@ -98,7 +98,7 @@ const REFUSALS: Record<string, string> = {
           <span class="text-muted-foreground">Must cite (ids, comma-separated)</span>
           <input
             name="freeze-must-cite"
-            class="h-8 rounded-md border border-border bg-background px-2 font-mono text-foreground"
+            class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 font-data text-foreground text-sm pointer-coarse:text-base"
             [ngModel]="mustCite()"
             (ngModelChange)="mustCite.set($event)"
           />
@@ -107,7 +107,7 @@ const REFUSALS: Record<string, string> = {
           <span class="text-muted-foreground">Must include (patterns, comma-separated)</span>
           <input
             name="freeze-must-include"
-            class="h-8 rounded-md border border-border bg-background px-2 font-mono text-foreground"
+            class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 font-data text-foreground text-sm pointer-coarse:text-base"
             [ngModel]="mustInclude()"
             (ngModelChange)="mustInclude.set($event)"
           />

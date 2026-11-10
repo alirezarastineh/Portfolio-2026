@@ -223,7 +223,9 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
   ],
   host: { class: "block", "(keydown)": "onKeydown($event)" },
   template: `
-    <div class="overflow-hidden rounded-lg border border-border">
+    <div
+      class="overflow-hidden rounded-lg border border-input-line bg-card has-[.ProseMirror:focus-visible]:outline-2 has-[.ProseMirror:focus-visible]:outline-offset-2 has-[.ProseMirror:focus-visible]:outline-accent-orange"
+    >
       <div
         class="flex flex-wrap items-center gap-0.5 border-b border-border bg-card/40 p-1"
         role="toolbar"
@@ -265,10 +267,10 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
           </button>
         }
         @if (inCodeBlock()) {
-          <label class="ml-1 flex items-center gap-1 font-mono text-xs text-muted-foreground">
+          <label class="ml-1 flex items-center gap-1 text-xs text-muted-foreground">
             <span>language</span>
             <select
-              class="h-7 rounded border border-border bg-card px-1 font-mono text-xs text-foreground"
+              class="h-7 rounded border border-border bg-card px-1 text-xs text-foreground"
               [ngModel]="codeLanguage()"
               (ngModelChange)="setCodeLanguage($event)"
               aria-label="Code block language"
@@ -406,8 +408,8 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
     .admin-prose pre {
       margin: 0 0 0.5rem;
       overflow-x: auto;
-      border-radius: 0.5rem;
-      background: oklch(0.2 0 0);
+      border-radius: var(--radius);
+      background: var(--surface-2);
       padding: 0.6rem 0.8rem;
       font-family: var(--font-mono);
       font-size: 0.8rem;

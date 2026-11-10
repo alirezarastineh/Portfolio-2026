@@ -37,8 +37,8 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
           >
             <div class="flex min-w-0 flex-col gap-1">
               <p class="m-0">{{ action(row) }} · {{ subject(row.target) }}</p>
-              <p class="m-0 text-xs text-muted-foreground">{{ row.reason }}</p>
-              <p class="m-0 text-xs text-muted-foreground" [title]="absolute(row.at)">
+              <p class="m-0 text-hint text-muted-foreground">{{ row.reason }}</p>
+              <p class="m-0 text-hint text-muted-foreground" [title]="absolute(row.at)">
                 {{ relative(row.at) }}
               </p>
             </div>
@@ -54,13 +54,13 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
             </button>
           </div>
         } @empty {
-          <p class="m-0 text-xs text-muted-foreground">Nothing waits for you.</p>
+          <p class="m-0 text-hint text-muted-foreground">Nothing waits for you.</p>
         }
       </section>
 
       <section class="flex flex-col gap-2" aria-labelledby="trust-demoted">
         <h2 id="trust-demoted" class="m-0 text-sm font-medium">Demoted</h2>
-        <p class="m-0 text-xs text-muted-foreground">
+        <p class="m-0 text-hint text-muted-foreground">
           Out of the visitors' service until you reinstate it. The playground, evals and pairwise
           runs still use it, so you can check it first.
         </p>
@@ -70,8 +70,8 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
           >
             <div class="flex min-w-0 flex-col gap-1">
               <p class="m-0">{{ subject(d.subject) }}</p>
-              <p class="m-0 text-xs text-muted-foreground">{{ d.reason }}</p>
-              <p class="m-0 text-xs text-muted-foreground" [title]="absolute(d.at)">
+              <p class="m-0 text-hint text-muted-foreground">{{ d.reason }}</p>
+              <p class="m-0 text-hint text-muted-foreground" [title]="absolute(d.at)">
                 since {{ relative(d.at) }}
               </p>
             </div>
@@ -87,7 +87,7 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
             </button>
           </div>
         } @empty {
-          <p class="m-0 text-xs text-muted-foreground">Every model and route is in service.</p>
+          <p class="m-0 text-hint text-muted-foreground">Every model and route is in service.</p>
         }
       </section>
 
@@ -105,21 +105,21 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
             Check now
           </button>
         </div>
-        <p class="m-0 text-xs text-muted-foreground">{{ rules(v.rules) }}</p>
+        <p class="m-0 text-hint text-muted-foreground">{{ rules(v.rules) }}</p>
         @if (v.lastCheck; as last) {
-          <p class="m-0 text-xs text-muted-foreground" [title]="absolute(last.at)">
+          <p class="m-0 text-hint text-muted-foreground" [title]="absolute(last.at)">
             {{ relative(last.at) }}: {{ last.reason }}
           </p>
           <ul class="m-0 flex list-none flex-col gap-1 p-0 text-xs" role="list">
             @for (verdict of last.alternatives; track verdict.option) {
               <li>
-                <span class="font-mono">{{ verdict.option }}</span>
+                <span class="font-data">{{ verdict.option }}</span>
                 <span class="text-muted-foreground"> · {{ verdict.why }}</span>
               </li>
             }
           </ul>
         } @else {
-          <p class="m-0 text-xs text-muted-foreground">
+          <p class="m-0 text-hint text-muted-foreground">
             Not run yet: it runs at 03:00 UTC on the server, or now.
           </p>
         }
@@ -140,14 +140,14 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
             <tbody>
               @for (entry of v.registry; track entry.action) {
                 <tr class="border-t border-border align-top">
-                  <td class="p-2 font-mono text-xs">
+                  <td class="p-2 font-data text-xs">
                     {{ entry.action }}
                     @if (!entry.built) {
                       <span hlmBadge variant="outline" class="ms-1">not built</span>
                     }
                   </td>
                   <td class="p-2 text-xs">
-                    <span class="font-mono">{{ entry.level }}</span> · {{ level(entry.level) }}
+                    <span class="font-data">{{ entry.level }}</span> · {{ level(entry.level) }}
                   </td>
                   <td class="p-2 text-xs">
                     {{ entry.approver === "none" ? "–" : entry.approver }}
@@ -181,7 +181,7 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
                   <td class="p-2">{{ row.actor }}</td>
                   <td class="p-2">
                     {{ action(row) }}
-                    <span class="block font-mono text-muted-foreground">{{ row.target }}</span>
+                    <span class="block font-data text-muted-foreground">{{ row.target }}</span>
                   </td>
                   <td class="p-2">
                     {{ row.decision }}<span class="text-muted-foreground"> · {{ row.reason }}</span>

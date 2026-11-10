@@ -49,7 +49,9 @@ const IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/avif,image/gif";
             <hlm-progress [value]="progress()" aria-label="Upload progress">
               <hlm-progress-indicator />
             </hlm-progress>
-            <p class="m-0 font-mono text-xs text-muted-foreground">uploading… {{ progress() }}%</p>
+            <p class="m-0 text-xs tabular-nums text-muted-foreground">
+              uploading… {{ progress() }}%
+            </p>
           </div>
         } @else {
           <ng-icon name="lucideUpload" size="20" class="text-muted-foreground" aria-hidden="true" />
@@ -57,7 +59,7 @@ const IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/avif,image/gif";
           <button hlmBtn variant="outline" size="sm" type="button" (click)="fileInput.click()">
             Choose a file
           </button>
-          <p class="m-0 font-mono text-xs text-muted-foreground">
+          <p class="m-0 text-hint text-muted-foreground">
             {{ documentsOnly() ? "PDF" : "PNG · JPEG · WebP · AVIF · GIF" }} — max 10 MB
           </p>
         }
@@ -93,7 +95,7 @@ const IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/avif,image/gif";
             <li>
               <button
                 type="button"
-                class="relative block w-full overflow-hidden rounded-lg border-2 text-left transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                class="relative block w-full overflow-hidden rounded-lg border-2 text-left transition-colors hover:border-border-strong"
                 [class]="isSelected ? 'border-accent-indigo' : 'border-border'"
                 [attr.aria-pressed]="isSelected"
                 (click)="chosen.emit(asset)"

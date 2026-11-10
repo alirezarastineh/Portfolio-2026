@@ -76,9 +76,7 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
         <h2 hlmCardTitle id="readiness-title" class="flex flex-wrap items-center gap-2">
           Launch readiness
           @if (report(); as r) {
-            <span hlmBadge [variant]="badgeVariant()" class="font-mono">
-              {{ r.passed }} / {{ r.total }} ready
-            </span>
+            <span hlmBadge [variant]="badgeVariant()"> {{ r.passed }} / {{ r.total }} ready </span>
           }
         </h2>
         <p hlmCardDescription>
@@ -96,7 +94,7 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
           </hlm-progress>
 
           @if (skipped().length) {
-            <p class="m-0 text-xs text-muted-foreground">
+            <p class="m-0 text-hint text-muted-foreground">
               The {{ skippedNames() }} draft does not build, so it was not checked. Review &amp;
               publish lists what stops it.
             </p>
@@ -113,7 +111,7 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
           <!-- Folded while anything more urgent is open, so the list leads with what matters. -->
           @if (tips().length) {
             <details [open]="!urgent().length">
-              <summary class="cursor-pointer font-mono text-xs text-muted-foreground">
+              <summary class="cursor-pointer text-xs text-muted-foreground">
                 {{ tips().length }} nice to have
               </summary>
               <ul class="m-0 mt-2 flex list-none flex-col gap-2 p-0" role="list">
@@ -146,15 +144,15 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
                     ></span>
                     <span class="font-medium">{{ check.title }}</span>
                     @if (check.listsPlaces) {
-                      <span hlmBadge variant="outline" class="font-mono">
+                      <span hlmBadge variant="outline">
                         {{ check.hits.length }}
                       </span>
                     }
-                    <span class="font-mono text-xs text-muted-foreground">
+                    <span class="text-hint text-muted-foreground">
                       {{ severityOf(check) }}{{ onlyIn(check) }}
                     </span>
                   </p>
-                  <p class="m-0 mt-0.5 text-xs text-muted-foreground">
+                  <p class="m-0 mt-0.5 text-hint text-muted-foreground">
                     {{ check.why }}
                   </p>
                 </div>
@@ -173,8 +171,8 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
                       <code class="font-mono text-xs break-all text-foreground">{{
                         hit.label
                       }}</code>
-                      <span class="eyebrow text-muted-foreground">{{
-                        hit.locales.join(" · ")
+                      <span class="text-xs font-medium text-muted-foreground">{{
+                        hit.locales.join(" · ").toUpperCase()
                       }}</span>
                       @if (hit.detail) {
                         <span class="min-w-0 wrap-break-word text-muted-foreground">{{
@@ -210,7 +208,7 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
 
           @if (passing().length) {
             <details>
-              <summary class="cursor-pointer font-mono text-xs text-muted-foreground">
+              <summary class="cursor-pointer text-xs text-muted-foreground">
                 {{ passing().length }} passing
               </summary>
               <ul class="m-0 mt-2 flex list-none flex-col gap-1 p-0" role="list">

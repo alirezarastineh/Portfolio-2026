@@ -45,7 +45,10 @@ import type { LocaleView } from "./field-pair.component";
       [attr.data-stuck]="stuck() ? '' : null"
     >
       <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <h1 tabindex="-1" class="m-0 min-w-0 text-h3 wrap-break-word text-foreground outline-none">
+        <h1
+          tabindex="-1"
+          class="m-0 min-w-0 text-page-title wrap-break-word text-foreground outline-none"
+        >
           {{ title() }}
         </h1>
         <ng-content select="[headerStatus]" />
@@ -67,10 +70,10 @@ import type { LocaleView } from "./field-pair.component";
     @if (meta() || description()) {
       <div class="-mt-7 flex max-w-prose flex-col gap-1">
         @if (meta()) {
-          <p class="m-0 font-mono text-meta wrap-anywhere text-muted-foreground">{{ meta() }}</p>
+          <p class="m-0 text-data wrap-anywhere text-muted-foreground">{{ meta() }}</p>
         }
         @if (description()) {
-          <p class="m-0 text-sm text-muted-foreground">{{ description() }}</p>
+          <p class="m-0 text-hint text-muted-foreground">{{ description() }}</p>
         }
       </div>
     }
@@ -85,7 +88,7 @@ import type { LocaleView } from "./field-pair.component";
 export class AdminPageHeaderComponent {
   readonly title = input.required<string>();
   readonly description = input("");
-  /** A machine line under the title, in mono: a project's path, say. */
+  /** A value under the title, in B612: a project's path, say. */
   readonly meta = input("");
   /** Where the draft of this page can be seen, opened in a new tab. */
   readonly preview = input<string | null>(null);

@@ -59,7 +59,7 @@ export const SHORTCUTS: { where: string; items: Shortcut[] }[] = [
         <div class="flex flex-col gap-4">
           @for (group of groups; track group.where) {
             <section class="flex flex-col gap-2" [attr.aria-labelledby]="'keys-' + $index">
-              <h3 [id]="'keys-' + $index" class="eyebrow m-0 text-muted-foreground">
+              <h3 [id]="'keys-' + $index" class="m-0 text-sm font-medium text-muted-foreground">
                 {{ group.where }}
               </h3>
               <dl class="m-0 flex flex-col gap-1.5">
@@ -67,7 +67,7 @@ export const SHORTCUTS: { where: string; items: Shortcut[] }[] = [
                   <div class="flex items-center justify-between gap-4 text-sm">
                     <dt class="order-2 flex shrink-0 items-center gap-1">
                       @for (key of item.keys; track key) {
-                        <kbd class="kbd">{{ key }}</kbd>
+                        <kbd class="key-cap">{{ key }}</kbd>
                       }
                     </dt>
                     <dd class="order-1 m-0">{{ item.does }}</dd>

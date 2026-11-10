@@ -23,7 +23,7 @@ const MAX = 6;
     <div class="flex flex-col gap-2">
       <div class="flex items-baseline justify-between">
         <span class="text-sm font-medium">{{ label() }}</span>
-        <span class="font-mono text-xs text-muted-foreground"
+        <span class="text-xs text-muted-foreground tabular-nums"
           >{{ value().length }} / {{ max }}</span
         >
       </div>

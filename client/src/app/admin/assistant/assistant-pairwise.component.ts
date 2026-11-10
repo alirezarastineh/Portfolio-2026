@@ -44,7 +44,7 @@ const POLL_MS = 2_000;
   template: `
     <section class="flex flex-col gap-3" aria-labelledby="pairwise-title">
       <h2 id="pairwise-title" class="m-0 text-sm font-medium">Compare two answerers</h2>
-      <p class="m-0 text-xs text-muted-foreground">
+      <p class="m-0 text-hint text-muted-foreground">
         A route (lite, deep) or a model id on each side. The judge ({{ judge() ?? "…" }}) reads both
         answers twice, their order swapped; a verdict counts only when both orders agree.
       </p>
@@ -58,7 +58,7 @@ const POLL_MS = 2_000;
           <input
             name="pairwise-a"
             list="pairwise-answerers"
-            class="h-8 rounded-md border border-border bg-background px-2 font-mono text-sm text-foreground"
+            class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 font-data text-sm pointer-coarse:text-base text-foreground"
             [ngModel]="a()"
             (ngModelChange)="a.set($event)"
           />
@@ -68,7 +68,7 @@ const POLL_MS = 2_000;
           <input
             name="pairwise-b"
             list="pairwise-answerers"
-            class="h-8 rounded-md border border-border bg-background px-2 font-mono text-sm text-foreground"
+            class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 font-data text-sm pointer-coarse:text-base text-foreground"
             [ngModel]="b()"
             (ngModelChange)="b.set($event)"
           />
@@ -92,7 +92,9 @@ const POLL_MS = 2_000;
               Cancel the comparison
             </button>
           } @else {
-            <span class="text-xs text-muted-foreground">Another run is going; one at a time.</span>
+            <span class="text-hint text-muted-foreground"
+              >Another run is going; one at a time.</span
+            >
           }
         }
       </form>
@@ -118,7 +120,9 @@ const POLL_MS = 2_000;
             ></div>
           </div>
           @if (v.run.error) {
-            <p class="m-0 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <p
+              class="m-0 rounded-md border border-accent-orange/40 bg-accent-orange-soft p-3 text-sm"
+            >
               {{ v.run.error }}
             </p>
           }
@@ -138,7 +142,7 @@ const POLL_MS = 2_000;
           @if (s) {
             <p class="m-0 text-sm">
               {{ verdictLine(s) }} Swap agreement
-              <strong class="font-mono">{{ percent(s.swapAgreement) }}</strong> · the graders passed
+              <strong class="font-data">{{ percent(s.swapAgreement) }}</strong> · the graders passed
               A {{ s.passed.a }}, B {{ s.passed.b }} of {{ s.judged }}.
             </p>
             <div class="overflow-x-auto rounded-lg border border-border">
@@ -154,7 +158,7 @@ const POLL_MS = 2_000;
                 </thead>
                 <tbody>
                   @for (row of tallyRows(s); track row.category) {
-                    <tr class="border-t border-border font-mono text-xs">
+                    <tr class="border-t border-border font-data text-xs">
                       <td class="p-2">{{ row.category }}</td>
                       <td class="p-2 text-right">{{ row.a }}</td>
                       <td class="p-2 text-right">{{ row.b }}</td>
@@ -171,9 +175,9 @@ const POLL_MS = 2_000;
               <li class="rounded-lg border border-border p-2 text-sm">
                 <details>
                   <summary class="flex cursor-pointer flex-wrap items-center gap-2">
-                    <span class="font-mono text-xs">{{ r.id }}</span>
+                    <span class="font-data text-xs">{{ r.id }}</span>
                     <span class="text-xs">{{ outcomeOf(r) }}</span>
-                    <span class="font-mono text-[11px] text-muted-foreground">
+                    <span class="font-data text-xs text-muted-foreground">
                       A {{ r.a.failures.length ? "✗" : "✓" }} · B
                       {{ r.b.failures.length ? "✗" : "✓" }}
                     </span>
@@ -189,7 +193,7 @@ const POLL_MS = 2_000;
                     </p>
                   </div>
                   @if (r.reasons.length) {
-                    <p class="m-0 mt-2 text-xs text-muted-foreground">
+                    <p class="m-0 mt-2 text-hint text-muted-foreground">
                       Judge: {{ r.reasons.join(" · ") }}
                     </p>
                   }
@@ -204,7 +208,7 @@ const POLL_MS = 2_000;
         <ul class="m-0 flex list-none flex-col gap-1 p-0 text-xs" aria-label="Past comparisons">
           @for (r of history(); track r.id) {
             <li class="flex flex-wrap items-center gap-2">
-              <span class="font-mono">{{ when(r.createdAt) }}</span>
+              <span class="font-data">{{ when(r.createdAt) }}</span>
               <span>{{ label(r) }} · {{ r.status }}</span>
               <button hlmBtn size="sm" variant="ghost" (click)="open(r.id)">Open</button>
             </li>

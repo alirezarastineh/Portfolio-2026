@@ -81,18 +81,16 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                 <p class="m-0 truncate text-sm font-medium">
                   {{ row.translations.en?.title || row.translations.de?.title || row.slug }}
                 </p>
-                <p class="m-0 mt-0.5 font-mono text-xs text-muted-foreground">
+                <p class="m-0 mt-0.5 font-data text-xs text-muted-foreground">
                   /{{ row.slug }} · {{ row.publishedAt ? formatDate(row.publishedAt) : "no date" }}
                 </p>
               </div>
               @for (locale of ["en", "de"]; track locale) {
                 @if (hasLocale(row, locale)) {
-                  <span hlmBadge variant="outline" class="font-mono uppercase">{{ locale }}</span>
+                  <span hlmBadge variant="outline">{{ locale.toUpperCase() }}</span>
                 }
               }
-              <span hlmBadge [variant]="statusVariant(row)" class="font-mono">{{
-                statusLabel(row)
-              }}</span>
+              <span hlmBadge [variant]="statusVariant(row)">{{ statusLabel(row) }}</span>
               <a hlmBtn variant="outline" size="sm" [routerLink]="['/admin/writing', row.slug]">
                 <ng-icon name="lucidePencil" size="14" aria-hidden="true" />
                 <span class="ml-1.5">Edit</span>

@@ -50,8 +50,10 @@ const WORDS: Record<OutlineState, string> = {
   template: `
     <nav aria-labelledby="outline-title" class="sticky top-20 flex flex-col gap-3">
       <div class="flex items-baseline justify-between gap-2">
-        <h2 id="outline-title" class="eyebrow m-0 text-muted-foreground">On this page</h2>
-        <span class="font-mono text-xs text-muted-foreground tabular-nums"
+        <h2 id="outline-title" class="m-0 text-sm font-medium text-muted-foreground">
+          On this page
+        </h2>
+        <span class="text-xs text-muted-foreground tabular-nums"
           >{{ done() }}/{{ items().length }}<span class="sr-only"> done</span></span
         >
       </div>
@@ -60,7 +62,7 @@ const WORDS: Record<OutlineState, string> = {
           @let here = item.id === current();
           <li>
             <a
-              class="-ml-px flex min-h-8 items-center gap-2 border-l-2 py-1 pl-3 pr-1 text-sm outline-none transition-colors duration-(--dur-2) hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              class="-ml-px flex min-h-8 items-center gap-2 border-l-2 py-1 pl-3 pr-1 text-sm transition-colors duration-(--dur-2) hover:text-foreground"
               [class]="
                 here
                   ? 'border-accent-orange text-foreground'

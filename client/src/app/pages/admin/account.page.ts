@@ -58,9 +58,9 @@ import { AdminPageHeaderComponent } from "../../admin/components/page-header.com
           <h2 hlmCardTitle class="flex items-center gap-2">
             Two-factor authentication
             @if (session.user()?.totpEnrolled) {
-              <span hlmBadge variant="secondary" class="font-mono">enabled</span>
+              <span hlmBadge variant="secondary">enabled</span>
             } @else {
-              <span hlmBadge variant="destructive" class="font-mono">not enrolled</span>
+              <span hlmBadge variant="destructive">not enrolled</span>
             }
           </h2>
           <p hlmCardDescription>
@@ -73,7 +73,7 @@ import { AdminPageHeaderComponent } from "../../admin/components/page-header.com
               <h3 hlmAlertTitle>Save these recovery codes</h3>
               <div hlmAlertDescription>
                 <p class="m-0 mb-2">Each works once. They are shown only now.</p>
-                <ul class="m-0 grid list-none grid-cols-2 gap-1 p-0 font-mono text-meta">
+                <ul class="m-0 grid list-none grid-cols-2 gap-1 p-0 text-data">
                   @for (code of recoveryCodes(); track code) {
                     <li>{{ code }}</li>
                   }
@@ -87,7 +87,7 @@ import { AdminPageHeaderComponent } from "../../admin/components/page-header.com
                 alt="Authenticator QR code"
                 class="h-44 w-44 rounded-lg bg-white p-2"
               />
-              <p class="m-0 break-all font-mono text-xs text-muted-foreground">
+              <p class="m-0 break-all font-data text-xs text-muted-foreground">
                 {{ otpauthUri() }}
               </p>
               <form
@@ -97,7 +97,7 @@ import { AdminPageHeaderComponent } from "../../admin/components/page-header.com
               >
                 <div hlmField class="flex-1">
                   <label hlmFieldLabel for="totp-code">Code from your app</label>
-                  <input hlmInput id="totp-code" formControlName="code" class="font-mono" />
+                  <input hlmInput id="totp-code" formControlName="code" class="font-data" />
                 </div>
                 <button hlmBtn type="submit" [disabled]="busy()">Confirm</button>
               </form>
@@ -135,7 +135,7 @@ import { AdminPageHeaderComponent } from "../../admin/components/page-header.com
             <div hlmField>
               <label hlmFieldLabel for="next">New password</label>
               <input hlmInput id="next" type="password" formControlName="newPassword" />
-              <p class="m-0 mt-1 text-xs text-muted-foreground">
+              <p class="m-0 mt-1 text-hint text-muted-foreground">
                 At least 12 characters. All other sessions are signed out.
               </p>
             </div>
@@ -165,13 +165,13 @@ import { AdminPageHeaderComponent } from "../../admin/components/page-header.com
                 class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
               >
                 <div class="min-w-0">
-                  <p class="m-0 font-mono text-meta">
+                  <p class="m-0 text-data">
                     {{ row.ip || "unknown IP" }}
                     @if (row.current) {
                       <span hlmBadge variant="secondary" class="ml-2 font-sans">this device</span>
                     }
                   </p>
-                  <p class="m-0 mt-0.5 truncate text-xs text-muted-foreground">
+                  <p class="m-0 mt-0.5 truncate text-hint text-muted-foreground">
                     {{ row.userAgent || "unknown device" }} · last seen
                     {{ formatDate(row.lastSeenAt) }}
                   </p>

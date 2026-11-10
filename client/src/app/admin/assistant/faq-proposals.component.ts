@@ -53,7 +53,7 @@ import {
       <h2 id="faq-proposals-title" tabindex="-1" class="m-0 text-sm font-medium outline-none">
         Proposals
       </h2>
-      <p class="m-0 text-xs text-muted-foreground">
+      <p class="m-0 text-hint text-muted-foreground">
         Drafted from a topic in Insights or an entry in the Journal: the question, an answer from
         the portfolio only, and both in German. Nothing is used until you accept one; accepting
         saves your text as an FAQ entry, used at once.
@@ -69,7 +69,7 @@ import {
             <h3 [id]="id" tabindex="-1" class="m-0 text-sm font-medium outline-none">
               {{ source(p) }}
             </h3>
-            <span hlmBadge variant="outline" class="font-mono text-xs">{{ status(p) }}</span>
+            <span hlmBadge variant="outline">{{ status(p) }}</span>
           </div>
           @if (p.notes.length) {
             <ul class="m-0 flex list-disc flex-col gap-0.5 pl-5 text-xs text-accent-orange">
@@ -80,8 +80,8 @@ import {
           }
           @for (locale of locales; track locale) {
             <fieldset class="m-0 flex flex-col gap-2 border-0 p-0">
-              <legend class="mb-1 font-mono text-xs uppercase text-muted-foreground">
-                {{ locale }}
+              <legend class="mb-1 text-xs font-medium text-muted-foreground">
+                {{ locale.toUpperCase() }}
               </legend>
               <div hlmField>
                 <label hlmFieldLabel [for]="id + '-q-' + locale">Question</label>
@@ -121,7 +121,7 @@ import {
             <label class="flex flex-col gap-1">
               <span class="text-muted-foreground">Measure its effect</span>
               <select
-                class="h-8 max-w-full rounded-md border border-border bg-background px-2 text-foreground"
+                class="h-9 pointer-coarse:h-11 max-w-full rounded-lg border border-input-line bg-card px-2 text-foreground text-sm pointer-coarse:text-base"
                 [attr.aria-describedby]="p.newLesson ? id + '-measure-hint' : null"
                 [ngModel]="f.measure"
                 [ngModelOptions]="{ standalone: true }"

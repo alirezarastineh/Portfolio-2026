@@ -72,7 +72,7 @@ let fieldPairs = 0;
             <span
               hlmBadge
               variant="outline"
-              class="border-accent-orange/50 font-mono text-accent-orange"
+              class="border-accent-orange/50 text-accent-orange"
               title="The English text changed after the German one was last edited."
             >
               DE may be stale
@@ -86,7 +86,7 @@ let fieldPairs = 0;
               variant="ghost"
               size="sm"
               type="button"
-              class="h-6 px-2 font-mono text-xs text-muted-foreground"
+              class="h-6 px-2 text-xs text-muted-foreground"
               (click)="copyToGerman()"
               [attr.aria-label]="'EN → DE: copy the English ' + label() + ' to German'"
             >
@@ -101,7 +101,7 @@ let fieldPairs = 0;
                 variant="ghost"
                 size="sm"
                 type="button"
-                class="h-6 px-2 font-mono text-xs text-muted-foreground"
+                class="h-6 px-2 text-xs text-muted-foreground"
                 [disabled]="!!aiBusy()"
                 (click)="aiTranslate('en')"
                 [attr.aria-label]="
@@ -116,7 +116,7 @@ let fieldPairs = 0;
                 variant="ghost"
                 size="sm"
                 type="button"
-                class="h-6 px-2 font-mono text-xs text-muted-foreground"
+                class="h-6 px-2 text-xs text-muted-foreground"
                 [disabled]="!!aiBusy()"
                 (click)="aiTranslate('de')"
                 [attr.aria-label]="
@@ -132,7 +132,7 @@ let fieldPairs = 0;
               variant="ghost"
               size="sm"
               type="button"
-              class="h-6 px-2 font-mono text-xs text-muted-foreground"
+              class="h-6 px-2 text-xs text-muted-foreground"
               [disabled]="!!aiBusy()"
               (click)="aiTighten()"
               [attr.aria-label]="'Tighten the ' + label() + ' with AI'"
@@ -145,14 +145,16 @@ let fieldPairs = 0;
       </div>
 
       @if (hint()) {
-        <p class="m-0 text-xs leading-snug text-muted-foreground">{{ hint() }}</p>
+        <p class="m-0 text-hint text-muted-foreground">{{ hint() }}</p>
       }
 
       <div [class]="view() === 'both' ? 'grid gap-3 lg:grid-cols-2' : 'grid gap-3'">
         @if (view() === "en" || view() === "both") {
           <div hlmField>
             @if (view() === "both") {
-              <span [id]="id() + '-en-tag'" class="eyebrow mb-1 text-muted-foreground">EN</span>
+              <span [id]="id() + '-en-tag'" class="mb-1 text-xs font-medium text-muted-foreground"
+                >EN</span
+              >
             }
             @if (multiline()) {
               <textarea
@@ -180,7 +182,7 @@ let fieldPairs = 0;
             <app-field-issue [id]="id() + '-en-issue'" [message]="errorEn()" />
             @if (limit()) {
               <span
-                class="mt-1 self-end font-mono text-xs tabular-nums"
+                class="mt-1 self-end text-xs tabular-nums"
                 [class]="lengthEn() > limit() ? 'text-accent-orange' : 'text-muted-foreground'"
               >
                 {{ lengthEn() }} / {{ limit() }}
@@ -198,7 +200,9 @@ let fieldPairs = 0;
         @if (view() === "de" || view() === "both") {
           <div hlmField>
             @if (view() === "both") {
-              <span [id]="id() + '-de-tag'" class="eyebrow mb-1 text-muted-foreground">DE</span>
+              <span [id]="id() + '-de-tag'" class="mb-1 text-xs font-medium text-muted-foreground"
+                >DE</span
+              >
             }
             @if (multiline()) {
               <textarea
@@ -226,7 +230,7 @@ let fieldPairs = 0;
             <app-field-issue [id]="id() + '-de-issue'" [message]="errorDe()" />
             @if (limit()) {
               <span
-                class="mt-1 self-end font-mono text-xs tabular-nums"
+                class="mt-1 self-end text-xs tabular-nums"
                 [class]="lengthDe() > limit() ? 'text-accent-orange' : 'text-muted-foreground'"
               >
                 {{ lengthDe() }} / {{ limit() }}

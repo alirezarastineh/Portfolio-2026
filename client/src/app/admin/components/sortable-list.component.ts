@@ -51,7 +51,7 @@ export class SortableRowDirective {}
           <button
             cdkDragHandle
             type="button"
-            class="mt-0.5 cursor-grab rounded p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent-indigo active:cursor-grabbing"
+            class="mt-0.5 cursor-grab rounded p-1 text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
             [attr.aria-label]="'Reorder ' + label() + ' ' + (i + 1) + '. Use Alt with arrow keys.'"
             (keydown)="onHandleKey($event, i)"
           >

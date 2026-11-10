@@ -96,7 +96,6 @@ function usd(value: number): string {
               id="draft-state"
               hlmBadge
               [variant]="s.hasUnpublishedChanges ? 'default' : 'secondary'"
-              class="font-mono"
             >
               {{ s.hasUnpublishedChanges ? "unpublished changes" : "all published" }}
             </span>
@@ -162,28 +161,28 @@ function usd(value: number): string {
           <li appKpiTile="Unpublished">
             @if (pulse.review(); as r) {
               @if (r.issues) {
-                <p class="m-0 text-h3 tabular-nums text-destructive">
+                <p class="m-0 text-figure tabular-nums text-destructive">
                   {{ r.issues }}
                   <span class="text-sm font-normal">{{
                     r.issues === 1 ? "problem to fix" : "problems to fix"
                   }}</span>
                 </p>
               } @else {
-                <p class="m-0 text-h3 tabular-nums">
+                <p class="m-0 text-figure tabular-nums">
                   {{ r.total }}
                   <span class="text-sm font-normal text-muted-foreground">{{
                     r.total === 1 ? "change" : "changes"
                   }}</span>
                 </p>
               }
-              <p class="m-0 font-mono text-xs text-muted-foreground">{{ localeLine() }}</p>
+              <p class="m-0 text-hint text-muted-foreground">{{ localeLine() }}</p>
             } @else if (isFailed("review")) {
               <app-load-error compact title="Could not load" (retry)="retry('review')" />
             } @else {
               <ng-container *ngTemplateOutlet="tileLoading" />
             }
             @if (pulse.status(); as s) {
-              <p class="m-0 text-xs text-muted-foreground">
+              <p class="m-0 text-hint text-muted-foreground">
                 Last publish
                 @if (s.lastPublish; as at) {
                   <time [attr.datetime]="at" [title]="absolute(at)">{{ relative(at) }}</time>
@@ -211,11 +210,11 @@ function usd(value: number): string {
 
           <li appKpiTile="Inbox">
             @if (pulse.messages(); as messages) {
-              <p class="m-0 text-h3 tabular-nums">
+              <p class="m-0 text-figure tabular-nums">
                 {{ pulse.newMessages() }}
                 <span class="text-sm font-normal text-muted-foreground">new</span>
               </p>
-              <p class="m-0 text-xs text-muted-foreground">
+              <p class="m-0 text-hint text-muted-foreground">
                 {{ messages.length }} {{ messages.length === 1 ? "message" : "messages" }} in the
                 inbox
               </p>
@@ -234,26 +233,26 @@ function usd(value: number): string {
 
           <li appKpiTile="Assistant · 24 h">
             @if (pulse.assistant(); as h) {
-              <p class="m-0 text-h3 tabular-nums">
+              <p class="m-0 text-figure tabular-nums">
                 {{ h.last24h.answers }}
                 <span class="text-sm font-normal text-muted-foreground">{{
                   h.last24h.answers === 1 ? "answer" : "answers"
                 }}</span>
               </p>
               @if (spend(); as s) {
-                <p class="m-0 font-mono text-xs text-muted-foreground">
+                <p class="m-0 font-data text-xs text-muted-foreground">
                   {{ s.spent }} of {{ s.budget }} today{{ s.resting ? " · resting" : "" }}
                 </p>
                 <div class="h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
                   <div class="h-full rounded-full bg-accent-orange" [style.width.%]="s.share"></div>
                 </div>
               } @else if (assistantOff(); as reason) {
-                <p class="m-0 text-xs text-muted-foreground">Off: {{ reason }}</p>
+                <p class="m-0 text-hint text-muted-foreground">Off: {{ reason }}</p>
               }
               @if (pulse.assistantAlert(); as alert) {
                 <p class="m-0 text-xs text-destructive">{{ alert }}</p>
               } @else {
-                <p class="m-0 text-xs text-muted-foreground">No failed answers</p>
+                <p class="m-0 text-hint text-muted-foreground">No failed answers</p>
               }
             } @else if (isFailed("assistant")) {
               <app-load-error compact title="Could not load" (retry)="retry('assistant')" />
@@ -270,11 +269,11 @@ function usd(value: number): string {
 
           <li appKpiTile="Translations">
             @if (pulse.i18n(); as items) {
-              <p class="m-0 text-h3 tabular-nums">
+              <p class="m-0 text-figure tabular-nums">
                 {{ items.length }}
                 <span class="text-sm font-normal text-muted-foreground">to check</span>
               </p>
-              <p class="m-0 text-xs text-muted-foreground">
+              <p class="m-0 text-hint text-muted-foreground">
                 {{ items.length ? "German and English out of step" : "Both languages in step" }}
               </p>
               @if (items.length) {
@@ -311,7 +310,7 @@ function usd(value: number): string {
             <p hlmCardDescription>
               @if (pulse.status()?.pointers?.length) {
                 Live:
-                <span class="font-mono">{{ liveVersions() }}</span>
+                <span class="font-data">{{ liveVersions() }}</span>
               } @else {
                 Nothing is live yet.
               }
@@ -334,13 +333,13 @@ function usd(value: number): string {
                 <ol class="m-0 flex list-none flex-col divide-y divide-border p-0" role="list">
                   @for (row of rows; track row.id) {
                     <li class="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                      <span class="font-mono text-xs text-muted-foreground">#{{ row.id }}</span>
+                      <span class="font-data text-xs text-muted-foreground">#{{ row.id }}</span>
                       <span class="min-w-0 flex-1 truncate text-sm">{{ labelOf(row) }}</span>
                       @if (row.live) {
-                        <span hlmBadge variant="secondary" class="font-mono">live</span>
+                        <span hlmBadge variant="secondary">live</span>
                       }
                       <time
-                        class="shrink-0 font-mono text-xs text-muted-foreground"
+                        class="shrink-0 font-data text-xs text-muted-foreground"
                         [attr.datetime]="row.createdAt"
                         [title]="absolute(row.createdAt)"
                         >{{ relative(row.createdAt) }}</time
@@ -401,13 +400,15 @@ function usd(value: number): string {
                           >{{ m.name }}</a
                         >
                         <time
-                          class="shrink-0 font-mono text-xs text-muted-foreground"
+                          class="shrink-0 font-data text-xs text-muted-foreground"
                           [attr.datetime]="m.createdAt"
                           [title]="absolute(m.createdAt)"
                           >{{ relative(m.createdAt) }}</time
                         >
                       </div>
-                      <p class="m-0 line-clamp-1 text-xs text-muted-foreground">{{ m.message }}</p>
+                      <p class="m-0 line-clamp-1 text-hint text-muted-foreground">
+                        {{ m.message }}
+                      </p>
                     </li>
                   }
                 </ol>
@@ -438,15 +439,11 @@ function usd(value: number): string {
             Translations
             @if (pulse.i18n(); as items) {
               @if (items.length) {
-                <span
-                  hlmBadge
-                  variant="outline"
-                  class="border-accent-orange/50 font-mono text-accent-orange"
-                >
+                <span hlmBadge variant="outline" class="border-accent-orange/50 text-accent-orange">
                   {{ items.length }} to check
                 </span>
               } @else {
-                <span hlmBadge variant="secondary" class="font-mono">complete</span>
+                <span hlmBadge variant="secondary">complete</span>
               }
             }
           </h2>
@@ -468,11 +465,11 @@ function usd(value: number): string {
                     <div class="min-w-0">
                       <p class="m-0 truncate text-sm">
                         {{ item.label }}
-                        <span class="ml-1 font-mono text-xs text-muted-foreground">{{
+                        <span class="ml-1 text-hint text-muted-foreground">{{
                           kindLabel(item)
                         }}</span>
                       </p>
-                      <p class="m-0 mt-0.5 font-mono text-xs text-muted-foreground">
+                      <p class="m-0 mt-0.5 text-hint text-muted-foreground">
                         {{ problemText(item) }}
                       </p>
                     </div>

@@ -70,12 +70,12 @@ type DetailTab = "changes" | "json";
             <li class="flex flex-wrap items-center gap-3 rounded-lg border border-border px-4 py-3">
               <div class="min-w-0 flex-1">
                 <p class="m-0 truncate text-sm">
-                  <span class="font-mono text-muted-foreground">#{{ row.id }}</span>
+                  <span class="text-data text-muted-foreground">#{{ row.id }}</span>
                   <span class="ml-2 font-medium">{{
                     row.label || (row.kind === "rollback" ? "Rollback" : "Unlabelled")
                   }}</span>
                 </p>
-                <p class="m-0 mt-0.5 font-mono text-xs text-muted-foreground">
+                <p class="m-0 mt-0.5 font-data text-xs text-muted-foreground">
                   {{ formatDate(row.createdAt) }} · schema v{{ row.schemaVersion }}
                   @if (row.restoredFrom) {
                     · from #{{ row.restoredFrom }}
@@ -83,14 +83,14 @@ type DetailTab = "changes" | "json";
                 </p>
               </div>
               @if (row.live) {
-                <span hlmBadge variant="secondary" class="font-mono">live</span>
+                <span hlmBadge variant="secondary">live</span>
               }
               @for (version of row.versions; track version.id) {
                 <button
                   hlmBtn
                   variant="ghost"
                   size="sm"
-                  class="font-mono text-xs uppercase"
+                  class="text-xs"
                   [disabled]="viewing() !== null"
                   [attr.aria-label]="'View ' + version.locale + ' of publication ' + row.id"
                   (click)="view(row, version.id)"
@@ -98,7 +98,7 @@ type DetailTab = "changes" | "json";
                   @if (viewing() === version.id) {
                     <hlm-spinner class="size-4" />
                   } @else {
-                    {{ version.locale }}
+                    {{ version.locale.toUpperCase() }}
                   }
                 </button>
               }
@@ -129,7 +129,7 @@ type DetailTab = "changes" | "json";
       <hlm-dialog-content *hlmDialogPortal="let ctx" class="sm:max-w-3xl">
         @if (detail(); as d) {
           <hlm-dialog-header>
-            <h2 hlmDialogTitle class="font-mono">
+            <h2 hlmDialogTitle class="font-data">
               #{{ detailPublication()?.id }} · {{ d.revision.locale.toUpperCase() }}
             </h2>
             <p hlmDialogDescription>
@@ -175,14 +175,12 @@ type DetailTab = "changes" | "json";
                         <code class="font-mono text-xs break-all text-foreground">{{
                           entry.path
                         }}</code>
-                        <span hlmBadge variant="outline" class="shrink-0 font-mono">{{
-                          entry.kind
-                        }}</span>
+                        <span hlmBadge variant="outline" class="shrink-0">{{ entry.kind }}</span>
                       </div>
-                      <dl class="m-0 grid gap-1.5 text-meta leading-relaxed">
+                      <dl class="m-0 grid gap-1.5 text-hint leading-relaxed">
                         @if (entry.before !== undefined) {
                           <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2">
-                            <dt class="eyebrow text-destructive">live</dt>
+                            <dt class="text-xs font-medium text-destructive">Live</dt>
                             <dd
                               class="m-0 whitespace-pre-wrap wrap-break-word text-muted-foreground"
                             >
@@ -192,7 +190,7 @@ type DetailTab = "changes" | "json";
                         }
                         @if (entry.after !== undefined) {
                           <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2">
-                            <dt class="eyebrow text-accent-orange">
+                            <dt class="font-data text-xs text-accent-orange">
                               #{{ detailPublication()?.id }}
                             </dt>
                             <dd class="m-0 whitespace-pre-wrap wrap-break-word text-foreground">

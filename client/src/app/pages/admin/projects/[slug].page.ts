@@ -253,16 +253,13 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           >
             <span headerStatus class="flex flex-wrap gap-1.5">
               @if (p.featured) {
-                <span hlmBadge variant="secondary" class="font-mono">featured</span>
+                <span hlmBadge variant="secondary">featured</span>
               }
               @if (!p.isVisible) {
-                <span hlmBadge variant="outline" class="font-mono">hidden</span>
+                <span hlmBadge variant="outline">hidden</span>
               }
               @if (dirty()) {
-                <span
-                  hlmBadge
-                  variant="outline"
-                  class="border-accent-orange/50 font-mono text-accent-orange"
+                <span hlmBadge variant="outline" class="border-accent-orange/50 text-accent-orange"
                   >unsaved</span
                 >
               }
@@ -271,7 +268,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           </app-page-header>
 
           <section id="details" aria-labelledby="details-title" class="flex flex-col gap-4">
-            <h2 id="details-title" class="m-0 text-h4">Details</h2>
+            <h2 id="details-title" class="m-0 text-section-title">Details</h2>
             <div class="grid gap-4 sm:grid-cols-2">
               <div hlmField>
                 <label hlmFieldLabel for="slug">Slug</label>
@@ -326,7 +323,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                     issues.get('periodEnd') ? 'periodEnd-issue periodEnd-hint' : 'periodEnd-hint'
                   "
                 />
-                <span id="periodEnd-hint" class="text-xs text-muted-foreground"
+                <span id="periodEnd-hint" class="text-hint text-muted-foreground"
                   >Empty = ongoing.</span
                 >
                 <app-field-issue id="periodEnd-issue" [message]="issues.get('periodEnd')" />
@@ -356,7 +353,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           <hlm-separator />
 
           <section id="cover" aria-labelledby="cover-title" class="flex flex-col gap-4">
-            <h2 id="cover-title" class="m-0 text-h4">Cover</h2>
+            <h2 id="cover-title" class="m-0 text-section-title">Cover</h2>
             <app-media-field
               id="cover-image"
               label="Cover image"
@@ -369,7 +366,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           <hlm-separator />
 
           <section id="stack" aria-labelledby="stack-title" class="flex flex-col gap-4">
-            <h2 id="stack-title" class="m-0 text-h4">Stack and tags</h2>
+            <h2 id="stack-title" class="m-0 text-section-title">Stack and tags</h2>
             <div class="grid gap-6 sm:grid-cols-2">
               <div class="flex flex-col">
                 <app-string-list
@@ -401,13 +398,15 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
             <div class="flex flex-col gap-2">
               <span class="text-sm font-medium">{{ field.label }}</span>
               @if (field.hint) {
-                <p class="m-0 max-w-prose text-xs text-muted-foreground">{{ field.hint }}</p>
+                <p class="m-0 max-w-prose text-hint text-muted-foreground">{{ field.hint }}</p>
               }
               <div [class]="columns()">
                 @for (locale of visibleLocales(); track locale) {
                   <div class="flex flex-col gap-1">
                     @if (view() === "both") {
-                      <span class="eyebrow text-muted-foreground">{{ locale }}</span>
+                      <span class="text-xs font-medium text-muted-foreground">{{
+                        locale.toUpperCase()
+                      }}</span>
                     }
                     @if (field.rich) {
                       <app-rich-text
@@ -467,7 +466,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
           <section id="card" aria-labelledby="card-title" class="flex flex-col gap-6">
             <div>
-              <h2 id="card-title" class="m-0 text-h4">On the card</h2>
+              <h2 id="card-title" class="m-0 text-section-title">On the card</h2>
               <p class="m-0 mt-1 text-sm text-muted-foreground">
                 What the home page's card shows, and the top of the case study.
               </p>
@@ -480,7 +479,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           <hlm-separator />
 
           <section id="story" aria-labelledby="story-title" class="flex flex-col gap-6">
-            <h2 id="story-title" class="m-0 text-h4">Problem and approach</h2>
+            <h2 id="story-title" class="m-0 text-section-title">Problem and approach</h2>
             @for (field of storyFields; track field.key) {
               <ng-container *ngTemplateOutlet="textField; context: { $implicit: field }" />
             }
@@ -489,7 +488,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           <hlm-separator />
 
           <section id="outcomes" aria-labelledby="outcomes-title" class="flex flex-col gap-4">
-            <h2 id="outcomes-title" class="m-0 text-h4">Outcomes</h2>
+            <h2 id="outcomes-title" class="m-0 text-section-title">Outcomes</h2>
             <div [class]="columns()">
               @for (locale of visibleLocales(); track locale) {
                 <div class="flex flex-col">
@@ -513,7 +512,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           <hlm-separator />
 
           <section id="metrics" aria-labelledby="metrics-title" class="flex flex-col gap-4">
-            <h2 id="metrics-title" class="m-0 text-h4">Metrics</h2>
+            <h2 id="metrics-title" class="m-0 text-section-title">Metrics</h2>
             <div [class]="columns()">
               @for (locale of visibleLocales(); track locale) {
                 <div class="flex flex-col">
@@ -535,7 +534,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
           <section id="case-study" aria-labelledby="case-study-title" class="flex flex-col gap-3">
             <div>
-              <h2 id="case-study-title" class="m-0 text-h4">Case study</h2>
+              <h2 id="case-study-title" class="m-0 text-section-title">Case study</h2>
               <p class="m-0 mt-1 text-sm text-muted-foreground">
                 The long read at /work/{{ p.slug }}. Empty in a language = no case-study page in
                 that language.
@@ -544,7 +543,9 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
             @for (locale of visibleLocales(); track locale) {
               <div class="flex flex-col gap-1">
                 @if (view() === "both") {
-                  <span class="eyebrow text-muted-foreground">{{ locale }}</span>
+                  <span class="text-xs font-medium text-muted-foreground">{{
+                    locale.toUpperCase()
+                  }}</span>
                 }
                 <app-rich-text
                   mode="long"
@@ -566,7 +567,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           <hlm-separator />
 
           <section id="search" aria-labelledby="search-title" class="flex flex-col gap-6">
-            <h2 id="search-title" class="m-0 text-h4">Search</h2>
+            <h2 id="search-title" class="m-0 text-section-title">Search</h2>
             @for (field of searchFields; track field.key) {
               <ng-container *ngTemplateOutlet="textField; context: { $implicit: field }" />
             }
@@ -575,7 +576,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           <hlm-separator />
 
           <section id="gallery" aria-labelledby="gallery-title" class="flex flex-col gap-4">
-            <h2 id="gallery-title" class="m-0 text-h4">Gallery</h2>
+            <h2 id="gallery-title" class="m-0 text-section-title">Gallery</h2>
             <app-gallery-editor [value]="gallery()" (valueChange)="patchGallery($event)" />
             <app-field-issue id="gallery-issue" [message]="issues.under('gallery')" />
           </section>

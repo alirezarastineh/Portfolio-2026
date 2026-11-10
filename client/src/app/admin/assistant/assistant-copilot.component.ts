@@ -32,7 +32,7 @@ import {
       <div class="flex flex-col gap-1">
         <h2 id="assistant-copilot" class="m-0 text-sm font-medium">The copilot's skills</h2>
         @if (view(); as v) {
-          <p class="m-0 text-xs text-muted-foreground">
+          <p class="m-0 text-hint text-muted-foreground">
             When you save, each draft the copilot wrote is judged against what you saved: kept (the
             same words), edited (at least half of its words kept, in order) or discarded. A
             version's keep rate counts kept and edited drafts of those decided; under
@@ -54,7 +54,7 @@ import {
               <h3 [id]="'copilot-skill-' + skill.id" class="m-0 text-sm font-medium">
                 {{ name(skill.id) }}
               </h3>
-              <span class="font-mono text-xs text-muted-foreground"
+              <span class="font-data text-xs text-muted-foreground"
                 >version {{ skill.version }}</span
               >
             </div>
@@ -102,7 +102,7 @@ import {
                 </thead>
                 <tbody>
                   @for (row of skill.versions; track row.version) {
-                    <tr class="border-t border-border font-mono text-xs">
+                    <tr class="border-t border-border font-data text-xs">
                       <th scope="row" class="p-2 text-left font-normal">
                         {{ row.version }}
                         @if (row.current) {
@@ -128,7 +128,7 @@ import {
                   }
                   <!-- The agents' drafts, decided on their proposals: counted apart. -->
                   @for (row of skill.agent ?? []; track row.version) {
-                    <tr class="border-t border-border font-mono text-xs">
+                    <tr class="border-t border-border font-data text-xs">
                       <th scope="row" class="p-2 text-left font-normal">
                         {{ row.version }}
                         <span class="font-sans text-muted-foreground"
@@ -154,7 +154,7 @@ import {
                 </tbody>
               </table>
             </div>
-            <p class="m-0 text-xs text-muted-foreground">
+            <p class="m-0 text-hint text-muted-foreground">
               {{ verdict(skill.versions[0]!, v.rules) }}
             </p>
             <ul
@@ -163,7 +163,7 @@ import {
             >
               @for (row of skill.versions; track row.version) {
                 <li>
-                  <span class="font-mono">{{ row.version }}</span> · {{ checks(row, skill) }}
+                  <span class="font-data">{{ row.version }}</span> · {{ checks(row, skill) }}
                 </li>
               }
             </ul>
@@ -181,7 +181,7 @@ import {
       } @else if (failed()) {
         <p class="m-0 text-xs text-destructive">Could not load the copilot's skills.</p>
       } @else {
-        <p class="m-0 text-xs text-muted-foreground">Loading…</p>
+        <p class="m-0 text-hint text-muted-foreground">Loading…</p>
       }
     </section>
   `,

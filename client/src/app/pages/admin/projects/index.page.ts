@@ -94,7 +94,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
       <header class="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 class="m-0 text-h4">Case studies</h2>
+          <h2 class="m-0 text-section-title">Case studies</h2>
           <p class="m-0 mt-1 text-sm text-muted-foreground">
             The home page shows them in this order.
           </p>
@@ -123,7 +123,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                 <p class="m-0 truncate text-sm font-medium">
                   {{ row.translations.en?.name || row.slug }}
                 </p>
-                <p class="m-0 mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                <p class="m-0 mt-0.5 truncate font-data text-xs text-muted-foreground">
                   /{{ row.slug }}
                 </p>
               </div>
@@ -132,13 +132,13 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                 !row.translations.de?.name ||
                 row.translations.de?.name === row.translations.en?.name
               ) {
-                <span hlmBadge variant="outline" class="font-mono">DE todo</span>
+                <span hlmBadge variant="outline">DE todo</span>
               }
               @if (row.translations.en?.hasCaseStudy || row.translations.de?.hasCaseStudy) {
-                <span hlmBadge variant="secondary" class="font-mono">case study</span>
+                <span hlmBadge variant="secondary">case study</span>
               }
               @if (row.featured) {
-                <span hlmBadge variant="secondary" class="font-mono">featured</span>
+                <span hlmBadge variant="secondary">featured</span>
               }
 
               <label class="flex items-center gap-2 text-xs text-muted-foreground">

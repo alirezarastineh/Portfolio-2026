@@ -48,7 +48,7 @@ import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
           <p hlmEmptyDescription>
             {{ description() }}
             @if (reason()) {
-              <span class="mt-1 block font-mono text-meta">{{ reason() }}</span>
+              <span class="mt-1 block text-data">{{ reason() }}</span>
             }
           </p>
         </div>

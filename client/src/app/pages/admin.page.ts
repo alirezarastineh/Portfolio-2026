@@ -279,7 +279,7 @@ function openTab(href: string): void {
   template: `
     <!-- Browser only: the toaster reads window.matchMedia, which the server's DOM lacks. -->
     @if (isBrowser) {
-      <hlm-toaster position="bottom-right" />
+      <hlm-toaster position="bottom-right" [theme]="theme.theme()" />
       <app-session-dialog />
     }
 
@@ -303,10 +303,7 @@ function openTab(href: string): void {
               routerLink="/admin"
               class="flex h-8 items-center gap-2 px-2 font-mono text-sm font-semibold text-foreground group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center"
             >
-              <span aria-hidden="true"
-                ><span class="text-accent-orange">&gt;</span
-                ><span class="wordmark-caret">_</span></span
-              >
+              <span aria-hidden="true"><span class="text-accent-orange">&gt;</span>_</span>
               <span class="group-data-[collapsible=icon]:sr-only">admin</span>
             </a>
           </div>
@@ -352,7 +349,7 @@ function openTab(href: string): void {
                             @if (badge?.alert) {
                               <span class="size-2 rounded-full bg-destructive"></span>
                             } @else if (badge?.count) {
-                              <span class="font-mono text-xs">{{ badge?.count }}</span>
+                              <span class="text-xs tabular-nums">{{ badge?.count }}</span>
                             }
                           </span>
                         }
@@ -384,7 +381,7 @@ function openTab(href: string): void {
                       <!-- A kept space: "Publish 3", two words, as the name says it (axe's label-in-name). -->
                       &ngsp;
                       <span
-                        class="ml-auto rounded-full px-1.5 font-mono text-xs"
+                        class="ml-auto rounded-full px-1.5 text-xs tabular-nums"
                         [class]="
                           pulse.review()?.issues
                             ? 'bg-destructive/15 text-destructive'
@@ -453,7 +450,7 @@ function openTab(href: string): void {
                 @if (projectSlug(); as slug) {
                   <li hlmBreadcrumbSeparator></li>
                   <li hlmBreadcrumbItem>
-                    <span hlmBreadcrumbPage class="font-mono">{{ slug }}</span>
+                    <span hlmBreadcrumbPage class="font-data">{{ slug }}</span>
                   </li>
                 }
               </ol>
@@ -469,7 +466,7 @@ function openTab(href: string): void {
             >
               <ng-icon name="lucideSearch" size="14" aria-hidden="true" />
               <span>Jump to…</span>
-              <kbd class="kbd" aria-hidden="true">{{ paletteKey }}</kbd>
+              <kbd class="key-cap" aria-hidden="true">{{ paletteKey }}</kbd>
             </button>
           </header>
 
@@ -516,7 +513,7 @@ function openTab(href: string): void {
                 <ng-icon name="lucideRocket" size="14" aria-hidden="true" />
                 <span class="ml-2">Review and publish…</span>
                 @if (publishState() !== "publish") {
-                  <span class="ml-auto font-mono text-xs text-muted-foreground">{{
+                  <span class="ml-auto text-xs text-muted-foreground">{{
                     publishWords().word.toLowerCase()
                   }}</span>
                 }
@@ -554,7 +551,7 @@ function openTab(href: string): void {
               <button hlmCommandItem value="Keyboard shortcuts" (selected)="after(showShortcuts)">
                 <ng-icon name="lucideKeyboard" size="14" aria-hidden="true" />
                 <span class="ml-2">Keyboard shortcuts</span>
-                <kbd class="kbd ml-auto" aria-hidden="true">?</kbd>
+                <kbd class="key-cap ml-auto" aria-hidden="true">?</kbd>
               </button>
             </hlm-command-group>
             @for (group of groups; track group) {
@@ -600,7 +597,7 @@ export default class AdminLayout {
   protected readonly pulse = inject(AdminPulseService);
   private readonly recovery = inject(RecoveryService);
 
-  private readonly theme = inject(ThemeService);
+  protected readonly theme = inject(ThemeService);
 
   protected readonly groups = GROUPS;
   protected readonly email = computed(() => this.session.user()?.email ?? "account");
