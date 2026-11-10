@@ -2,7 +2,7 @@
  * Two faces, vendored here with their licences (OFL), latin only: that covers
  * English and German (ä ö ü ß, €, dashes, quotes), and anything else falls back
  * per glyph. Code has no face of its own: --font-mono is the reader's system
- * mono. The admin keeps Geist (styles/admin-freeze.css).
+ * mono. The admin uses the same two (styles/admin-theme.css).
  *
  * Instrument Sans, from @fontsource-variable/instrument-sans 5.3.0: all text.
  * Preloaded (index.html): it paints the hero's headline, the LCP element.

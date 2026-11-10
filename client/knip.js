@@ -21,9 +21,6 @@ export default {
     "src/app/admin/admin-schema.ts",
   ],
   ignoreDependencies: [
-    // fonts.css loads their files by url().
-    "@fontsource-variable/geist",
-    "@fontsource-variable/geist-mono",
     // scripts/lhci.mjs finds it with require.resolve.
     "@lhci/cli",
     // Commands: the helm generator, and CI's format step.

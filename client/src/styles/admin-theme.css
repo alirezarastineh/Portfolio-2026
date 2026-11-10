@@ -1,0 +1,182 @@
+/*
+ * The admin's own theme (plan 5): Flight Recorder's tokens for a work tool, in
+ * the admin's own scope, so the public site can change without reskinning it
+ * unseen (e2e/admin.spec.ts, "the admin's own theme"). Imported by
+ * src/admin.css.
+ *
+ * Every token the admin or libs/ui reads, with the admin's value: a token read
+ * through from the public sheet would let a public change move the admin. One
+ * the admin starts to read joins this file, and the test's RESTYLE.
+ * Fonts are the site's (styles/fonts.css, which loads on admin pages too):
+ * Instrument Sans, B612 for values, and the reader's own mono for code.
+ *
+ * Unlayered, as tokens.css is, and `:root:root`, which outranks the public
+ * `:root[data-theme="light"]`. `:has()` holds in the server's first paint,
+ * with no script. Not on the draft preview tab (`app-admin-preview-frame`),
+ * which shows the public pages; the live preview's frame never copies this
+ * sheet (admin/preview/live-preview.component.ts). Screen only: on paper the
+ * public print colours apply.
+ */
+@media screen {
+  :root:root:has(app-admin-layout):not(:has(app-admin-preview-frame)) {
+    color-scheme: dark;
+
+    --font-sans:
+      "Instrument Sans Variable", "Instrument Sans Fallback", -apple-system, BlinkMacSystemFont,
+      "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji",
+      "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --font-data: "B612", "B612 Fallback", Arial, sans-serif;
+
+    --radius: 0.25rem;
+
+    --background: #000000;
+    --foreground: #ededee;
+    --card: #0e0e10;
+    --card-foreground: #ededee;
+    --surface-2: #18181b;
+    --popover: #0e0e10;
+    --popover-foreground: #ededee;
+    --primary: #ededee;
+    --primary-foreground: #000000;
+    --secondary: #18181b;
+    --secondary-foreground: #ededee;
+    --muted: #18181b;
+    --muted-foreground: #b4b4b9;
+    --faint-foreground: #8b8b91;
+    --accent: #18181b;
+    --accent-foreground: #ededee;
+    --destructive: #ff6b6b;
+    --border: rgb(255 255 255 / 12%);
+    --border-strong: rgb(255 255 255 / 22%);
+    --input: rgb(255 255 255 / 16%);
+    --input-line: rgb(255 255 255 / 42%);
+    --ring: var(--accent-orange);
+    --scrim: rgb(0 0 0 / 65%);
+
+    /* The unsaved trace and the Publish fill; never text. */
+    --signal: #ff4f00;
+    --signal-foreground: #000000;
+    --accent-orange: #ff8a52;
+    --accent-orange-soft: color-mix(in oklab, var(--accent-orange) 14%, transparent);
+    --available: #5fd48a;
+    --data-2: #8cb4d2;
+
+    /* Old names, on new values until their last reader goes: the terminal with the login's
+       costume, the indigo with the rich text, the sortable list and the media pickers. */
+    --accent-indigo: var(--input-line);
+    --terminal-bar: var(--surface-2);
+    --term-red: var(--border-strong);
+    --term-amber: var(--border-strong);
+    --term-green: var(--border-strong);
+
+    /* Only what floats has a shadow. */
+    --shadow-e1: 0 0 #0000;
+    --shadow-e2: 0 0 #0000;
+    --shadow-e3: 0 24px 60px rgb(0 0 0 / 35%);
+
+    --sidebar: #0e0e10;
+    --sidebar-foreground: #ededee;
+    --sidebar-primary: #ededee;
+    --sidebar-primary-foreground: #000000;
+    --sidebar-accent: #18181b;
+    --sidebar-accent-foreground: #ededee;
+    --sidebar-border: rgb(255 255 255 / 12%);
+    --sidebar-ring: var(--accent-orange);
+
+    /* State only, at most 200ms: no spring, nothing that is not an answer. */
+    --dur-1: 90ms;
+    --dur-2: 150ms;
+    --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  :root:root[data-theme="light"]:has(app-admin-layout):not(:has(app-admin-preview-frame)) {
+    color-scheme: light;
+
+    --background: #ffffff;
+    --foreground: #0a0a0b;
+    --card: #ffffff;
+    --card-foreground: #0a0a0b;
+    --surface-2: #f3f3f4;
+    --popover: #ffffff;
+    --popover-foreground: #0a0a0b;
+    --primary: #0a0a0b;
+    --primary-foreground: #ffffff;
+    --secondary: #f3f3f4;
+    --secondary-foreground: #0a0a0b;
+    --muted: #f3f3f4;
+    --muted-foreground: #4a4a50;
+    --faint-foreground: #6a6a70;
+    --accent: #f3f3f4;
+    --accent-foreground: #0a0a0b;
+    --destructive: #be2132;
+    --border: rgb(0 0 0 / 11%);
+    --border-strong: rgb(0 0 0 / 20%);
+    --input: rgb(0 0 0 / 16%);
+    --input-line: rgb(0 0 0 / 50%);
+    --scrim: rgb(0 0 0 / 35%);
+
+    --accent-orange: #b83a0a;
+    --available: #137738;
+    --data-2: #2f5f80;
+
+    --sidebar: #ffffff;
+    --sidebar-foreground: #0a0a0b;
+    --sidebar-primary: #0a0a0b;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #f3f3f4;
+    --sidebar-accent-foreground: #0a0a0b;
+    --sidebar-border: rgb(0 0 0 / 11%);
+  }
+
+  :root:root:has(app-admin-layout):not(:has(app-admin-preview-frame)),
+  :root:root:has(app-admin-layout):not(:has(app-admin-preview-frame)) body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  /* 14px on a 20px line, in both themes (the public body thins its light type). */
+  :root:root:has(app-admin-layout):not(:has(app-admin-preview-frame)) body {
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 400;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* The ring's colour is set before focus, or it fades in from `currentcolor` on controls with a colour transition. */
+  :root:root:has(app-admin-layout):not(:has(app-admin-preview-frame))
+    :is(a, button, input, select, textarea, summary, [tabindex]) {
+    outline-color: var(--accent-orange);
+  }
+
+  /* eslint-disable css/use-baseline -- progressive: a browser without them keeps its default wrap */
+  :root:root:has(app-admin-layout):not(:has(app-admin-preview-frame)) p {
+    text-wrap: pretty;
+  }
+
+  :root:root:has(app-admin-layout):not(:has(app-admin-preview-frame)) :is(h1, h2, h3, h4) {
+    text-wrap: balance;
+  }
+  /* eslint-enable css/use-baseline */
+
+  :root:root:has(app-admin-layout):not(:has(app-admin-preview-frame)) .press {
+    transition:
+      color var(--dur-2) var(--ease-out),
+      background-color var(--dur-2) var(--ease-out),
+      border-color var(--dur-2) var(--ease-out),
+      scale var(--dur-1) var(--ease-out);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    :root:root:has(app-admin-layout):not(:has(app-admin-preview-frame)) .press:active {
+      scale: 0.98;
+    }
+  }
+}

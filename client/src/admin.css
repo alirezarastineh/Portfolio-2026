@@ -3,9 +3,8 @@
  * all of libs/ui (Spartan). Compiled on its own so none of it reaches a
  * visitor; the admin layout (pages/admin.page.ts) imports it `?inline` and
  * adds it to the page. The public stylesheet (src/styles.css) is loaded on
- * admin pages too and provides the base styles; the admin keeps its own copy
- * of the tokens, fonts and the public rules it uses (styles/admin-freeze.css),
- * so the public redesign leaves it as it is.
+ * admin pages too and provides the base styles and the fonts; the admin has
+ * its own theme (styles/admin-theme.css), so a public change leaves it as it is.
  */
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
@@ -13,7 +12,56 @@
 
 @import "./styles/theme.css";
 @import "./styles/primitives.css";
-@import "./styles/admin-freeze.css";
+@import "./styles/admin-theme.css";
+
+/*
+ * The admin's own Tailwind names, on top of styles/theme.css. New names only:
+ * this sheet also loads in the draft tab, where a re-valued shared name would
+ * restyle the public pages (the public ones live in styles/public-theme.css).
+ */
+@theme inline {
+  --color-faint-foreground: var(--faint-foreground);
+  --color-signal: var(--signal);
+  --color-signal-foreground: var(--signal-foreground);
+  --color-data-2: var(--data-2);
+  --font-data: var(--font-data);
+  /* Dialogs, menus and toasts; controls take `rounded-lg`, the radius itself. */
+  --radius-overlay: calc(var(--radius) * 2);
+}
+
+/* The admin's type scale: small and fixed. The body is 14/20 and `text-xs` 12/16. */
+@theme {
+  --text-page-title: 1.25rem;
+  --text-page-title--line-height: 1.75rem;
+  --text-page-title--font-weight: 600;
+
+  --text-section-title: 1rem;
+  --text-section-title--line-height: 1.5rem;
+  --text-section-title--font-weight: 600;
+
+  /* Hints and meta, with `text-muted-foreground`. */
+  --text-hint: 0.8125rem;
+  --text-hint--line-height: 1.125rem;
+
+  /* A figure that leads a tile or a page (spend today), with `tabular-nums`. */
+  --text-figure: 1.75rem;
+  --text-figure--line-height: 2rem;
+  --text-figure--font-weight: 600;
+}
+
+/* Values (ids, slugs, times, costs, numbers in tables), as the public sheet has it, to the byte:
+   in the draft tab both sheets carry it. A `--text-*` entry cannot set a family. */
+@utility text-data {
+  font-family: var(--font-data);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+/* A key, as in "Ctrl K": a value, so B612. (`kbd` is a shared name and keeps its look.) */
+@utility key-cap {
+  @apply inline-flex items-center rounded-sm border border-border px-1.5 py-px font-data text-xs text-muted-foreground;
+}
 
 /* `@import "tailwindcss/utilities.css" source(none)`, as a plain at-rule so
    editors' CSS parsers accept it: only the `@source` paths below. */
@@ -33,6 +81,15 @@
 /* A toast stays above the save bar: Save is never under one. */
 :root:has(app-save-bar) [data-sonner-toaster][data-y-position="bottom"] {
   bottom: 6rem;
+}
+
+/* A toast floats as the other overlays do; `:root` outranks Sonner's own shadow and system font. */
+:root [data-sonner-toast][data-styled="true"] {
+  box-shadow: var(--shadow-e3);
+}
+
+:root [data-sonner-toaster] {
+  font-family: var(--font-sans);
 }
 
 /* On a short window the sidebar's list scrolls: its edges fade where there is
