@@ -10,6 +10,7 @@ import { classes } from "@spartan-ng/helm/utils";
 })
 export class HlmSidebarMenu {
   constructor() {
-    classes(() => "flex w-full min-w-0 flex-col gap-1");
+    // 2 px between entries, as the prototype: the rail fits a 1280×720 window.
+    classes(() => "flex w-full min-w-0 flex-col gap-0.5");
   }
 }

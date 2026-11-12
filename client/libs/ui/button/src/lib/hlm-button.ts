@@ -23,6 +23,9 @@ export const buttonVariants = cva(
         destructive:
           "bg-destructive/10 hover:bg-destructive/15 dark:bg-destructive/20 dark:hover:bg-destructive/30 text-destructive",
         link: "text-primary underline-offset-4 hover:underline",
+        // The one orange fill: Publish, while changes wait (plan 5, rule 5). 8% lighter on hover.
+        signal:
+          "bg-signal text-signal-foreground hover:bg-[color-mix(in_srgb,var(--signal)_92%,white)]",
       },
       size: {
         default:

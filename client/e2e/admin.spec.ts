@@ -20,6 +20,26 @@ const content = (locale: "en" | "de") =>
 const USER = { id: "u1", email: "admin@example.com", totpEnrolled: true };
 /** `GET /auth/me` for nobody signed in: the login's case, since a signed-in visitor leaves it. */
 const SIGNED_OUT = (): Reply => ({ status: 401, body: { error: "unauthenticated" } });
+/** The rail in the plan's order (plan 5, U8): the pages that exist today. */
+const RAIL = [
+  ["Today", "/admin"],
+  ["Inbox", "/admin/inbox"],
+  ["Profile", "/admin/hero"],
+  ["Socials", "/admin/socials"],
+  ["About", "/admin/about"],
+  ["Work", "/admin/projects"],
+  ["Experience", "/admin/experience"],
+  ["Skills", "/admin/skills"],
+  ["Writing", "/admin/writing"],
+  ["Contact copy", "/admin/contact"],
+  ["Page copy", "/admin/copy"],
+  ["Legal", "/admin/legal"],
+  ["SEO & sharing", "/admin/seo"],
+  ["Media", "/admin/media"],
+  ["Assistant", "/admin/assistant"],
+  ["Content agent", "/admin/agent"],
+  ["History", "/admin/publications"],
+] as const;
 /** A 1×1 GIF: an image the fake media library can show without a server. */
 const PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=";
 const NOW = new Date().toISOString();
@@ -1102,7 +1122,7 @@ async function openAdmin(page: Page, path: string): Promise<void> {
 }
 
 test.describe("admin", () => {
-  test("the dashboard's tiles and the sidebar agree on what needs a look", async ({
+  test("the dashboard's tiles, the rail and the top bar agree on what needs a look", async ({
     page,
     baseURL,
   }) => {
@@ -1126,17 +1146,15 @@ test.describe("admin", () => {
       page.getByRole("region", { name: "Recent publications" }).getByText("New case study"),
     ).toBeVisible();
 
-    const sidebar = page.locator("[data-slot=sidebar-inner]");
-    await expect(sidebar.getByRole("link", { name: "Inbox, 2 new" })).toBeVisible();
-    await expect(
-      sidebar.getByRole("link", { name: "Dashboard, 1 translation to check" }),
-    ).toBeVisible();
-    await expect(
-      sidebar.getByRole("link", { name: /^Assistant, A model is failing/ }),
-    ).toBeVisible();
+    const rail = page.locator("[data-slot=sidebar-inner]");
+    await expect(rail.getByRole("link", { name: "Inbox, 2 new" })).toBeVisible();
+    await expect(rail.getByRole("link", { name: "Today, 1 translation to check" })).toBeVisible();
+    await expect(rail.getByRole("link", { name: /^Assistant, A model is failing/ })).toBeVisible();
 
-    // Publish is in reach from the sidebar, and opens the one review.
-    const publish = sidebar.getByRole("button", { name: "Publish: 3 changes unpublished" });
+    // Publish is in reach from the top bar, and opens the one review.
+    const publish = page
+      .getByRole("banner")
+      .getByRole("button", { name: "Publish: 3 changes unpublished" });
     await expect(publish).toBeEnabled();
     await publish.click();
     const review = page.getByRole("dialog", { name: "Review and publish" });
@@ -1146,7 +1164,7 @@ test.describe("admin", () => {
     expect(unmocked).toEqual([]);
   });
 
-  test("the page header sticks to the top of a long editor, on a surface", async ({
+  test("the page header sticks under the top bar of a long editor, on a surface", async ({
     page,
     baseURL,
   }) => {
@@ -1165,8 +1183,10 @@ test.describe("admin", () => {
 
     await page.evaluate(() => window.scrollTo(0, 1500));
     await expect(row).toHaveAttribute("data-stuck", "");
+    // Below the 48 px top bar, which sticks too: nothing of the title under it.
     const box = await title.boundingBox();
-    expect(box?.y ?? 999).toBeLessThan(40);
+    expect(box?.y ?? 0).toBeGreaterThanOrEqual(48);
+    expect(box?.y ?? 999).toBeLessThan(48 + 40);
   });
 
   test("a section that did not load says so, and loads on Try again", async ({ page, baseURL }) => {
@@ -1593,9 +1613,9 @@ test.describe("admin", () => {
     await openAdmin(page, "/admin");
 
     await page.keyboard.press("Control+k");
-    const search = page.getByRole("combobox", { name: "Jump to a section or action…" });
+    const search = page.getByRole("combobox", { name: "Find a page, an action or content…" });
     await expect(search).toBeFocused();
-    // The first action is the one Enter runs on opening.
+    // Nothing visited before this page, so nothing recent: the first action is the one Enter runs.
     await expect(page.getByRole("option", { selected: true })).toHaveAccessibleName(
       /^Review and publish/,
     );
@@ -2310,7 +2330,7 @@ test.describe("admin", () => {
     // Nothing has changed yet, so the editor lets the admin leave without asking.
     await page
       .locator("[data-slot=sidebar-inner]")
-      .getByRole("link", { name: /^Dashboard/ })
+      .getByRole("link", { name: /^Today/ })
       .click();
     await expect(page.getByRole("region", { name: "At a glance" })).toBeVisible();
     late.release();
@@ -4362,7 +4382,7 @@ test.describe("admin", () => {
     // Left for the dashboard: its component is unmounted and reads no more.
     await page
       .locator("[data-slot=sidebar-inner]")
-      .getByRole("link", { name: /^Dashboard/ })
+      .getByRole("link", { name: /^Today/ })
       .click();
     await expect(page.getByRole("region", { name: "At a glance" })).toBeVisible();
     await expect(runs).not.toBeAttached();
@@ -4372,7 +4392,7 @@ test.describe("admin", () => {
     // Back, then cancelled: said, and the Runs heading takes the focus its button had.
     await page
       .locator("[data-slot=sidebar-inner]")
-      .getByRole("link", { name: /^Agent/ })
+      .getByRole("link", { name: /^Content agent/ })
       .click();
     await expect(runs).toBeVisible();
     await expect.poll(() => reads).toBe(left + 1);
@@ -4541,7 +4561,7 @@ test.describe("admin", () => {
       .click();
     await page
       .locator("[data-slot=sidebar-inner]")
-      .getByRole("link", { name: /^Dashboard/ })
+      .getByRole("link", { name: /^Today/ })
       .click();
     await expect(page.getByRole("region", { name: "At a glance" })).toBeVisible();
     const answered = page.waitForResponse((r) => r.url().endsWith("/e1/apply"));
@@ -6781,7 +6801,7 @@ test.describe("telling the truth", () => {
     await expect(page).toHaveURL(/\/admin\/preview\/en$/);
   });
 
-  test("the sidebar says Checking… until it knows, and never All published on a guess", async ({
+  test("Publish says Checking… until it knows, and never All live on a guess", async ({
     page,
     baseURL,
   }) => {
@@ -6790,17 +6810,20 @@ test.describe("telling the truth", () => {
     // Not interactive(page): the held request keeps the app from settling until it is let go.
     await page.goto("/admin/about");
     await page.locator("[data-slot=sidebar-inset]").waitFor();
-    const sidebar = page.locator("[data-slot=sidebar-inner]");
+    const bar = page.getByRole("banner");
 
-    await expect(sidebar.getByRole("button", { name: "Checking…" })).toBeVisible();
-    await expect(sidebar.getByText("All published")).toHaveCount(0);
+    await expect(bar.getByRole("button", { name: "Checking…" })).toBeDisabled();
+    await expect(bar.getByText("All live")).toHaveCount(0);
 
     status.release();
-    await expect(sidebar.getByRole("button", { name: "Could not check" })).toBeVisible();
-    await expect(sidebar.getByText("All published")).toHaveCount(0);
+    await expect(bar.getByRole("button", { name: "Could not check" })).toBeEnabled();
+    await expect(bar.getByText("All live")).toHaveCount(0);
   });
 
-  test("the sidebar says All published once the server has said so", async ({ page, baseURL }) => {
+  test("Publish says All live once the server has said so, without the orange", async ({
+    page,
+    baseURL,
+  }) => {
     await fakeApi(page, baseURL, {
       "GET /admin/status": saved({
         user: USER,
@@ -6811,9 +6834,9 @@ test.describe("telling the truth", () => {
       }),
     });
     await openAdmin(page, "/admin/about");
-    await expect(
-      page.locator("[data-slot=sidebar-inner]").getByRole("button", { name: "All published" }),
-    ).toBeVisible();
+    const live = page.getByRole("banner").getByRole("button", { name: "All live" });
+    await expect(live).toBeDisabled();
+    await expect(live).not.toHaveCSS("background-color", "rgb(255, 79, 0)");
   });
 
   const FAILED_LOADS: {
@@ -6939,10 +6962,11 @@ test.describe("telling the truth", () => {
       "GET /admin/sections/privacy": { section: "privacy", updatedAt: HOUR_AGO, data: {} },
     });
     for (const [path, title] of [
-      ["/admin", "Dashboard · Admin"],
-      ["/admin/legal", "Legal pages · Admin"],
-      ["/admin/projects", "Projects · Admin"],
-      ["/admin/projects/project-one", "project-one · Projects · Admin"],
+      ["/admin", "Today · Admin"],
+      ["/admin/legal", "Legal · Admin"],
+      ["/admin/projects", "Work · Admin"],
+      ["/admin/projects/project-one", "project-one · Work · Admin"],
+      ["/admin/agent", "Content agent · Assistant · Admin"],
       ["/admin/account", "Account · Admin"],
     ] as const) {
       await openAdmin(page, path);
@@ -6958,7 +6982,7 @@ test.describe("telling the truth", () => {
       );
       await fakeApi(page, baseURL);
       await openAdmin(page, "/admin/about");
-      await expect(page.getByRole("button", { name: "Jump to…" }).locator("kbd")).toHaveText(
+      await expect(page.getByRole("button", { name: "Find" }).locator("kbd")).toHaveText(
         platform === "MacIntel" ? "⌘K" : "Ctrl K",
       );
     });
@@ -7254,6 +7278,355 @@ test.describe("telling the truth", () => {
     );
     await openAdmin(page, "/admin/assistant");
     await expect(page.getByText("The About terminal")).toHaveCount(0);
+  });
+});
+
+/** The shell (plan 5, U8): the rail, the top bar, Find, the page's behaviour, the two-factor row. */
+test.describe("the shell", () => {
+  test("the rail lists the plan's pages in its order, 232 px wide from 1280, its counts in words", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/projects/project-one");
+    const width = await page
+      .locator("[data-slot=sidebar-container]")
+      .evaluate((el) => el.getBoundingClientRect().width);
+    expect(width).toBe(232);
+
+    const rail = page.locator("[data-slot=sidebar-inner]");
+    const hrefs = await rail
+      .getByRole("link")
+      .evaluateAll((links) => links.map((a) => a.getAttribute("href")));
+    expect(hrefs).toEqual([...RAIL.map(([, path]) => path), "/admin/account"]);
+    await expect(rail.getByRole("link", { name: "Today, 1 translation to check" })).toBeVisible();
+    await expect(rail.getByRole("link", { name: "Inbox, 2 new" })).toBeVisible();
+    await expect(rail.getByRole("link", { name: /^Assistant, A model is failing/ })).toBeVisible();
+    // The rail marks its entry; the breadcrumb holds the page's one aria-current="page".
+    await expect(rail.getByRole("link", { name: "Work", exact: true })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    await expect(page.locator("[aria-current=page]")).toHaveCount(1);
+    // Every entry in view on a 1280×720 laptop (1920×1080 at 150%): the list does not scroll.
+    const list = page.locator("[data-slot=sidebar-content]");
+    const fits = await list.evaluate((el) => el.scrollHeight <= el.clientHeight);
+    expect(fits, "the rail's list scrolls at 1280×720").toBe(true);
+
+    // The theme switches from the rail too.
+    await rail.getByRole("button", { name: "Switch to the light theme" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  });
+
+  test("[ collapses the rail to 56 px and back, remembered from 1280; 768 to 1279 starts collapsed", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/about");
+    const rail = page.locator("hlm-sidebar");
+    const width = () =>
+      page
+        .locator("[data-slot=sidebar-container]")
+        .evaluate((el) => el.getBoundingClientRect().width);
+    await expect(rail).toHaveAttribute("data-state", "expanded");
+    await page.keyboard.press("[");
+    await expect(rail).toHaveAttribute("data-state", "collapsed");
+    await expect.poll(width).toBe(56);
+    // Collapsed, an entry keeps its name, and a list taller than the window still scrolls.
+    await expect(
+      page.locator("[data-slot=sidebar-inner]").getByRole("link", { name: "About", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator("[data-slot=sidebar-content]")).toHaveCSS("overflow-y", "auto");
+    // The footer stacks its three controls, each at the entries' height.
+    const account = page
+      .locator("[data-slot=sidebar-inner]")
+      .getByRole("link", { name: /^Account:/ });
+    expect((await account.boundingBox())?.height).toBe(32);
+
+    await page.reload();
+    await interactive(page);
+    await expect(rail).toHaveAttribute("data-state", "collapsed");
+    await page.keyboard.press("[");
+    await expect(rail).toHaveAttribute("data-state", "expanded");
+
+    // A [ typed in a field stays in the field.
+    const field = page.locator("#about-heading-en");
+    await field.press("[");
+    await expect(field).toHaveValue(/\[/);
+    await expect(rail).toHaveAttribute("data-state", "expanded");
+
+    // A tablet's width starts collapsed: the choice above is the laptop's.
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await expect(rail).toHaveAttribute("data-state", "collapsed");
+  });
+
+  test("Ctrl+B in rich text makes the words bold and leaves the rail as it is (E08)", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/projects/project-one");
+    const rail = page.locator("hlm-sidebar");
+    await expect(rail).toHaveAttribute("data-state", "expanded");
+    const text = page.locator("app-rich-text [contenteditable=true]").first();
+    await text.click();
+    await page.keyboard.type("Bold words");
+    await page.keyboard.press("Control+a");
+    await page.keyboard.press("Control+b");
+    await expect(rail).toHaveAttribute("data-state", "expanded");
+    await expect(text.locator("strong")).not.toHaveCount(0);
+  });
+
+  test("a signed-in visitor on the login goes to Today (E11)", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL);
+    await page.goto("/admin/login");
+    await expect(page).toHaveURL(/\/admin$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
+  });
+
+  test("a skip link comes first, and after a navigation the new page's heading has the focus, at the top", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/projects/project-one");
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
+    await expect(
+      page.getByRole("navigation", { name: "Breadcrumb" }).locator("[aria-current=page]"),
+    ).toHaveText("project-one");
+
+    await page.evaluate(() => window.scrollTo(0, 800));
+    await page
+      .locator("[data-slot=sidebar-inner]")
+      .getByRole("link", { name: "About", exact: true })
+      .click();
+    await expect(page.getByRole("heading", { level: 1, name: "About" })).toBeFocused();
+    expect(await page.evaluate(() => scrollY)).toBe(0);
+    await expect(page).toHaveTitle("About · Admin");
+  });
+
+  test("the top bar: where you are, Find with its key, Preview in either language, Publish's count", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/projects/project-one");
+    const bar = page.getByRole("banner");
+    expect((await bar.boundingBox())?.height).toBe(48);
+    const crumbs = bar.getByRole("navigation", { name: "Breadcrumb" });
+    await expect(crumbs.getByRole("link")).toHaveCount(1);
+    await expect(crumbs.getByRole("link", { name: "Work" })).toHaveAttribute(
+      "href",
+      "/admin/projects",
+    );
+    await expect(bar.getByRole("button", { name: "Find" })).toHaveAttribute(
+      "aria-keyshortcuts",
+      "Control+K Meta+K",
+    );
+    const publish = bar.getByRole("button", { name: "Publish: 3 changes unpublished" });
+    await expect(publish).toHaveText(/^\s*Publish\s+3\s*$/);
+    await expect(publish).toHaveCSS("background-color", "rgb(255, 79, 0)");
+
+    // Preview opens the draft in a new tab, in either language: window.open, caught here.
+    await page.evaluate(() => {
+      window.open = (url) => {
+        document.body.dataset["opened"] = String(url);
+        return null;
+      };
+    });
+    await bar.getByRole("button", { name: "Preview" }).click();
+    await page.getByRole("menuitem", { name: /^German/ }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "/admin/preview/de");
+  });
+
+  test("Find lists recent pages at rest, finds content as you type, and says No matches only then", async ({
+    page,
+    baseURL,
+  }) => {
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/posts": { posts: [postRow()] },
+      "GET /admin/experiences": {
+        experiences: [
+          {
+            id: "e1",
+            orgName: "Acme",
+            translations: { en: { title: "Engineer" }, de: { title: "Ingenieur" } },
+          },
+        ],
+      },
+    });
+    await openAdmin(page, "/admin/about");
+    await page
+      .locator("[data-slot=sidebar-inner]")
+      .getByRole("link", { name: /^Inbox/ })
+      .click();
+    await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible();
+
+    await page.keyboard.press("Control+k");
+    const palette = page.getByRole("dialog");
+    const search = palette.getByRole("combobox");
+    await expect(search).toBeFocused();
+    // At rest: no empty line over a full list, and the page visited before this one first.
+    await expect(palette.getByText(/matches/i)).toHaveCount(0);
+    await expect(palette.getByRole("option").first()).toHaveAccessibleName("About");
+    // It is the one Enter opens.
+    await expect(palette.getByRole("option", { selected: true })).toHaveAccessibleName("About");
+
+    await search.fill("shipping");
+    await expect(palette.getByRole("option", { name: /^Shipping language models/ })).toBeVisible();
+    await search.fill("acme");
+    await expect(palette.getByRole("option", { name: /Acme/ })).toBeVisible();
+    // A screen reader hears what a search found.
+    const said = palette.locator("[aria-live=polite]");
+    await expect(said).toHaveText("1 match");
+    await search.fill("architecture");
+    await expect(palette.getByRole("option", { name: /^architecture\.png/ })).toBeVisible();
+    await search.fill("zzzz");
+    await expect(palette.getByText(/No matches\./)).toBeVisible();
+    await expect(said).toHaveText("No matches");
+
+    await search.fill("project one");
+    await expect(palette.getByRole("option", { name: /^TODO: Project One/ })).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/admin\/projects\/project-one$/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
+    expect(unmocked).toEqual([]);
+  });
+
+  test("two-factor off is a row on Today, not a banner on every page", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "GET /auth/me": {
+        user: { ...USER, totpEnrolled: false },
+        pendingTotp: false,
+        csrfToken: "x",
+      },
+    });
+    await openAdmin(page, "/admin/about");
+    await expect(page.getByText(/two-factor/i)).toHaveCount(0);
+
+    await openAdmin(page, "/admin");
+    await expect(page.getByText(/^Two-factor authentication is off/)).toBeVisible();
+    await expect(page.getByRole("link", { name: "Turn it on" })).toHaveAttribute(
+      "href",
+      "/admin/account",
+    );
+    // A row of the page, read in its place: not announced on every visit.
+    await expect(page.getByRole("alert").filter({ hasText: /two-factor/i })).toHaveCount(0);
+  });
+});
+
+test.describe("the shell on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("Find opens the palette, and the theme switches from it (E06)", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin");
+    const find = page.getByRole("banner").getByRole("button", { name: "Find" });
+    await expect(find).toBeVisible();
+    await find.tap();
+    await page.getByRole("option", { name: "Switch to the light theme" }).tap();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  });
+
+  test("the sheet closes on a tap, and the new page's heading has the focus (E07)", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin");
+    await page.locator("[data-sidebar=trigger]").tap();
+    // The CDK's container is the dialog, with no box of its own: its links are what shows.
+    const sheet = page.getByRole("dialog");
+    const inbox = sheet.getByRole("link", { name: /^Inbox/ });
+    await expect(inbox).toBeVisible();
+    await inbox.tap();
+    await expect(page).toHaveURL(/\/admin\/inbox$/);
+    await expect(sheet).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toBeFocused();
+  });
+
+  test("the breadcrumb's link up is a 44 px target on touch", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/projects/project-one");
+    const up = page
+      .getByRole("navigation", { name: "Breadcrumb" })
+      .getByRole("link", { name: "Work" });
+    const box = await up.boundingBox();
+    expect(box?.width).toBeGreaterThanOrEqual(44);
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+  });
+
+  test("the open sheet locks the page's scroll and makes it inert; Escape gives the focus back", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/about");
+    const main = page.locator("main");
+    const trigger = page.locator("[data-sidebar=trigger]");
+    await expect(main).toHaveJSProperty("inert", false);
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog").getByRole("link", { name: /^About/ })).toBeVisible();
+    await expect(main).toHaveJSProperty("inert", true);
+    await expect(page.locator("html")).toHaveClass(/cdk-global-scrollblock/);
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(main).toHaveJSProperty("inert", false);
+    await expect(trigger).toBeFocused();
+  });
+
+  test("every page is reachable from the keyboard: the rail and the account in the sheet, the rest in Find", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin");
+    await page.keyboard.press("Tab");
+    const skip = page.getByRole("link", { name: "Skip to content" });
+    await expect(skip).toBeFocused();
+    expect((await skip.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+    await page.keyboard.press("Tab");
+    await expect(page.locator("[data-sidebar=trigger]")).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog").getByRole("link", { name: /^Today/ })).toBeVisible();
+
+    const reached = new Set<string>();
+    for (let i = 0; i < 2 * (RAIL.length + 4); i++) {
+      const href = await page.evaluate(() => document.activeElement?.getAttribute("href"));
+      if (href) reached.add(href);
+      await page.keyboard.press("Tab");
+    }
+    expect([...reached].sort()).toEqual(
+      [...RAIL.map(([, path]) => path as string), "/admin/account"].sort(),
+    );
+
+    // The one page outside the rail: the draft's preview page, through Find.
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.getByRole("banner").getByRole("button", { name: "Find" }).press("Enter");
+    // Typed once the search has the focus, and Enter once the entry shows as chosen.
+    await expect(page.getByRole("combobox")).toBeFocused();
+    await page.keyboard.type("preview draft");
+    await expect(page.getByRole("option", { selected: true })).toHaveAccessibleName(
+      "Preview draft",
+    );
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/admin\/preview$/);
   });
 });
 

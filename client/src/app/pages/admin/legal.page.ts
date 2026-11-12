@@ -93,7 +93,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   template: `
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
       <app-page-header
-        title="Legal pages"
+        title="Legal"
         meta="/legal/imprint · /legal/privacy"
         description="Both pages, in both languages. Live after the next publish."
         preview="/admin/preview/en/legal/imprint"

@@ -30,14 +30,16 @@ import { injectHlmSidebarConfig } from "./hlm-sidebar.token";
         [state]="_sidebarService.openMobile() ? 'open' : 'closed'"
         (stateChanged)="_sidebarService.setOpenMobile($event === 'open')"
       >
+        <!-- Clear of a notch and the home bar; named, as a dialog must be. -->
         <hlm-sheet-content
           *hlmSheetPortal="let ctx"
           data-slot="sidebar"
           data-sidebar="sidebar"
           data-mobile="true"
-          class="bg-sidebar text-sidebar-foreground h-svh w-(--sidebar-width) p-0 [&>button]:hidden"
+          class="bg-background text-foreground h-svh w-(--sidebar-width) p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] [&>button]:hidden"
           [style.--sidebar-width]="sidebarWidthMobile()"
         >
+          <h2 hlmSheetTitle class="sr-only">Navigation</h2>
           <div class="flex h-full w-full flex-col">
             <ng-container *ngTemplateOutlet="contentContainer" />
           </div>
@@ -50,7 +52,7 @@ import { injectHlmSidebarConfig } from "./hlm-sidebar.token";
         <div
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
-          class="bg-sidebar group-data-[variant=floating]:border-sidebar-border flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow"
+          class="bg-background group-data-[variant=floating]:border-sidebar-border flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow"
         >
           <ng-container *ngTemplateOutlet="contentContainer" />
         </div>
@@ -69,7 +71,7 @@ export class HlmSidebar {
 
   protected readonly _sidebarGapComputedClass = computed(() =>
     hlm(
-      "relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear",
+      "relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear motion-reduce:transition-none",
       "group-data-[collapsible=offcanvas]:w-0",
       "group-data-[side=right]:rotate-180",
       this.variant() === "floating" || this.variant() === "inset"
@@ -81,7 +83,7 @@ export class HlmSidebar {
   public readonly sidebarContainerClass = input<ClassValue>("");
   protected readonly _sidebarContainerComputedClass = computed(() =>
     hlm(
-      "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
+      "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) border-border pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] transition-[left,right,width] duration-200 ease-linear motion-reduce:transition-none md:flex",
       this.side() === "left"
         ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
         : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",

@@ -159,7 +159,7 @@ const AGENT_WORDS: Record<string, string> = {
   not_found: "That proposal is gone.",
   failed: "It failed on the server and nothing was written: try it again.",
   // The request itself.
-  http_404: "This API does not know the Agent page yet: deploy the API first.",
+  http_404: "This API does not know the content agent yet: deploy the API first.",
   network_error: "The API did not answer: check the connection, then try again.",
   request_failed: "The request failed: try again.",
 };

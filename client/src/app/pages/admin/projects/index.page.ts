@@ -77,7 +77,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   template: `
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
       <app-page-header
-        title="Projects"
+        title="Work"
         description="The Work section's heading, and the projects in the home page's order: a featured one spans the row, the rest go two across."
         preview="/admin/preview/en#projects"
       />

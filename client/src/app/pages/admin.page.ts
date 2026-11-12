@@ -9,12 +9,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   inject,
   Injector,
   PLATFORM_ID,
   signal,
   untracked,
+  viewChild,
 } from "@angular/core";
 import { toSignal } from "@angular/core/rxjs-interop";
 import {
@@ -30,6 +32,8 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import {
   lucideBot,
   lucideBriefcase,
+  lucideChevronRight,
+  lucideCircleCheck,
   lucideExternalLink,
   lucideEye,
   lucideFileText,
@@ -40,9 +44,11 @@ import {
   lucideInbox,
   lucideKeyboard,
   lucideLayers,
+  lucideLink,
+  lucideListChecks,
   lucideLogOut,
+  lucideSignpost,
   lucideNewspaper,
-  lucideCircleCheck,
   lucidePenLine,
   lucidePlus,
   lucideRefreshCw,
@@ -51,18 +57,18 @@ import {
   lucideSearch,
   lucideSend,
   lucideShare2,
-  lucideSparkles,
   lucideSquareUser,
   lucideSunMoon,
+  lucideTriangleAlert,
   lucideUser,
 } from "@ng-icons/lucide";
+import { BrnCommand } from "@spartan-ng/brain/command";
 import type { BrnDialogState } from "@spartan-ng/brain/dialog";
 import { toast } from "@spartan-ng/brain/sonner";
-import { HlmBreadcrumbImports } from "@spartan-ng/helm/breadcrumb";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmCommandImports } from "@spartan-ng/helm/command";
-import { HlmSeparator } from "@spartan-ng/helm/separator";
-import { HlmSidebarImports } from "@spartan-ng/helm/sidebar";
+import { HlmDropdownMenuImports } from "@spartan-ng/helm/dropdown-menu";
+import { HlmSidebarImports, HlmSidebarService } from "@spartan-ng/helm/sidebar";
 import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 import { HlmToaster } from "@spartan-ng/helm/sonner";
 import { filter } from "rxjs";
@@ -79,11 +85,13 @@ import { PublishDialogComponent } from "../admin/components/publish-dialog.compo
 import { RecoveryBannerComponent } from "../admin/components/recovery-banner.component";
 import { SessionDialogComponent } from "../admin/components/session-dialog.component";
 import {
+  isRailKey,
   isShortcutTarget,
   ShortcutSheetComponent,
 } from "../admin/components/shortcut-sheet.component";
 import { createBlankPost, createBlankProject } from "../admin/create-entities";
 import { MediaLibraryService } from "../admin/media-library.service";
+import { ACCOUNT, crumbsFor, navItemFor, PAGES, RAIL, remember, titleFor } from "../admin/nav";
 import { LivePreviewService } from "../admin/preview/live-preview.service";
 import { changesLabel } from "../admin/publish-summary";
 import { AdminPulseService } from "../admin/pulse.service";
@@ -118,14 +126,7 @@ export const routeMeta: RouteMeta = {
   ],
 };
 
-interface NavItem {
-  path: string;
-  label: string;
-  icon: string;
-  group: "Overview" | "Content";
-}
-
-/** Something a sidebar entry reports: a count, or an alert, with the words for it. */
+/** Something a rail entry reports: a count, or an alert, with the words for it. */
 interface NavBadge {
   count: number;
   alert: boolean;
@@ -133,65 +134,62 @@ interface NavBadge {
   words: string;
 }
 
-const NAV: NavItem[] = [
-  { path: "/admin", label: "Dashboard", icon: "lucideHouse", group: "Overview" },
-  { path: "/admin/preview", label: "Preview draft", icon: "lucideEye", group: "Overview" },
-  { path: "/admin/publications", label: "Publications", icon: "lucideHistory", group: "Overview" },
-  { path: "/admin/inbox", label: "Inbox", icon: "lucideInbox", group: "Overview" },
-  { path: "/admin/assistant", label: "Assistant", icon: "lucideSparkles", group: "Overview" },
-  { path: "/admin/agent", label: "Agent", icon: "lucideBot", group: "Overview" },
-  { path: "/admin/hero", label: "Hero & identity", icon: "lucideSquareUser", group: "Content" },
-  { path: "/admin/about", label: "About", icon: "lucideFileText", group: "Content" },
-  { path: "/admin/skills", label: "Skills", icon: "lucideLayers", group: "Content" },
-  { path: "/admin/projects", label: "Projects", icon: "lucideImage", group: "Content" },
-  { path: "/admin/experience", label: "Experience", icon: "lucideBriefcase", group: "Content" },
-  { path: "/admin/writing", label: "Writing", icon: "lucideNewspaper", group: "Content" },
-  { path: "/admin/contact", label: "Contact copy", icon: "lucideSend", group: "Content" },
-  { path: "/admin/socials", label: "Socials", icon: "lucideShare2", group: "Content" },
-  { path: "/admin/copy", label: "Page copy", icon: "lucidePenLine", group: "Content" },
-  { path: "/admin/legal", label: "Legal pages", icon: "lucideScale", group: "Content" },
-  { path: "/admin/seo", label: "SEO & meta", icon: "lucideSearch", group: "Content" },
-  // Last in Content rather than a group of one: its label and padding cost a row.
-  { path: "/admin/media", label: "Media", icon: "lucideImages", group: "Content" },
-];
-
-const ACCOUNT: NavItem = {
-  path: "/admin/account",
-  label: "Account",
-  icon: "lucideUser",
-  group: "Overview",
-};
-
-const GROUPS: NavItem["group"][] = ["Overview", "Content"];
-
-/** The most specific entry for a URL, for the breadcrumb and the tab's title. */
-function navItemFor(url: string): NavItem | null {
-  return (
-    [...NAV, ACCOUNT]
-      .sort((a, b) => b.path.length - a.path.length)
-      .find((item) => (item.path === "/admin" ? url === "/admin" : url.startsWith(item.path))) ??
-    null
-  );
-}
-
-/** The tab's title: the page, then the admin ("Legal pages · Admin"); a project or post leads with its slug. */
+/** The tab's title: the page, then the admin ("Legal · Admin"); a project or post leads with its slug. */
 function adminTitle(_route: ActivatedRouteSnapshot, state: RouterStateSnapshot): string {
-  const url = state.url.split(/[?#]/)[0] ?? "";
-  const slug = /^\/admin\/(?:projects|writing)\/([^/]+)$/.exec(url)?.[1];
-  return [slug && decodeURIComponent(slug), navItemFor(url)?.label, "Admin"]
-    .filter(Boolean)
-    .join(" · ");
+  return titleFor(state.url.split(/[?#]/)[0] ?? "");
 }
 
 type PublishState = "checking" | "failed" | "publish" | "published";
 
-/** What the sidebar's Publish says: nothing is claimed before the server has answered. */
-const PUBLISH: Record<PublishState, { word: string; icon: string }> = {
-  checking: { word: "Checking…", icon: "lucideRocket" },
+/** What Publish says: nothing is claimed before the server has answered. */
+const PUBLISH: Record<PublishState, { word: string; icon: string | null }> = {
+  checking: { word: "Checking…", icon: null },
   failed: { word: "Could not check", icon: "lucideRefreshCw" },
-  publish: { word: "Publish", icon: "lucideRocket" },
-  published: { word: "All published", icon: "lucideCircleCheck" },
+  publish: { word: "Publish", icon: null },
+  published: { word: "All live", icon: "lucideCircleCheck" },
 };
+
+type ActionId =
+  "publish" | "preview-en" | "preview-de" | "new-project" | "new-post" | "theme" | "keys";
+
+interface PaletteAction {
+  id: ActionId;
+  label: string;
+  icon: string;
+  disabled?: boolean;
+  /** Opens a new tab, said to a screen reader. */
+  newTab?: boolean;
+  /** Its own key, shown at the end. */
+  key?: string;
+  /** A state beside it ("checking…"). */
+  note?: string;
+}
+
+/** A page visited or an action run, as Find keeps them in this browser. */
+interface RecentEntry {
+  key: string;
+  path?: string;
+  label?: string;
+  action?: ActionId;
+}
+
+/** Projects, posts, experience and media by name: what Find searches as you type. */
+interface FoundGroup {
+  label: string;
+  icon: string;
+  items: { key: string; label: string; search: string; path: string }[];
+}
+
+const RECENT_KEY = "admin.find.recent";
+const ACTION_IDS: ReadonlySet<string> = new Set<ActionId>([
+  "publish",
+  "preview-en",
+  "preview-de",
+  "new-project",
+  "new-post",
+  "theme",
+  "keys",
+]);
 
 /** Long enough for the palette to close and give focus back before an action takes it. */
 const PALETTE_CLOSE_MS = 120;
@@ -200,12 +198,12 @@ const PALETTE_CLOSE_MS = 120;
 const ENTRY_MARGIN = 40;
 
 /**
- * Scrolls the sidebar's list, and only it, until the current page's entry is
+ * Scrolls the rail's list, and only it, until the current page's entry is
  * in view (`scrollIntoView` would move the page too).
  */
 function revealCurrentEntry(doc: Document): void {
   const list = doc.querySelector<HTMLElement>('[data-slot="sidebar-content"]');
-  const entry = list?.querySelector<HTMLElement>('[aria-current="page"]');
+  const entry = list?.querySelector<HTMLElement>('[aria-current="true"]');
   if (!list || !entry) return;
   const area = list.getBoundingClientRect();
   const box = entry.getBoundingClientRect();
@@ -222,14 +220,29 @@ function openTab(href: string): void {
   if (opened) opened.opener = null;
 }
 
+/** Find's recent entries, as stored; anything else in storage is left out. */
+function readRecent(): RecentEntry[] {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    if (!Array.isArray(stored)) return [];
+    return stored.filter(
+      (entry: RecentEntry) =>
+        typeof entry?.key === "string" &&
+        (entry.path?.startsWith("/admin") === true ||
+          (entry.action !== undefined && ACTION_IDS.has(entry.action))),
+    );
+  } catch {
+    return [];
+  }
+}
+
 @Component({
   selector: "app-admin-layout",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    HlmBreadcrumbImports,
     HlmButton,
     HlmCommandImports,
-    HlmSeparator,
+    HlmDropdownMenuImports,
     HlmSidebarImports,
     HlmSkeleton,
     HlmToaster,
@@ -245,6 +258,7 @@ function openTab(href: string): void {
     provideIcons({
       lucideBot,
       lucideBriefcase,
+      lucideChevronRight,
       lucideCircleCheck,
       lucideExternalLink,
       lucideEye,
@@ -256,7 +270,10 @@ function openTab(href: string): void {
       lucideInbox,
       lucideKeyboard,
       lucideLayers,
+      lucideLink,
+      lucideListChecks,
       lucideLogOut,
+      lucideSignpost,
       lucideNewspaper,
       lucidePenLine,
       lucidePlus,
@@ -266,9 +283,9 @@ function openTab(href: string): void {
       lucideSearch,
       lucideSend,
       lucideShare2,
-      lucideSparkles,
       lucideSquareUser,
       lucideSunMoon,
+      lucideTriangleAlert,
       lucideUser,
     }),
   ],
@@ -294,289 +311,363 @@ function openTab(href: string): void {
       <!-- The login screen, and the draft preview: the public site's own pages. -->
       <router-outlet />
     } @else {
+      <!-- The first stop: past the rail and the top bar, to the page's heading. -->
+      <a
+        href="#main"
+        class="fixed left-2 top-2 z-50 -translate-y-16 rounded-lg bg-foreground px-3 py-2 text-sm font-medium text-background focus:translate-y-0 pointer-coarse:py-3"
+        (click)="skipToContent($event)"
+        >Skip to content</a
+      >
+
       <div hlmSidebarWrapper>
-        <!-- A landmark of its own: everything in it is the admin's navigation. -->
-        <hlm-sidebar collapsible="icon" role="navigation" aria-label="Admin">
-          <div hlmSidebarHeader>
-            <!-- The admin's mark; collapsed to icons, the mark alone. -->
-            <a
-              routerLink="/admin"
-              class="flex h-8 items-center gap-2 px-2 font-mono text-sm font-semibold text-foreground group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center"
+        <hlm-sidebar collapsible="icon">
+          <!-- The landmark goes with the rail's content: into the sheet on a phone. -->
+          <nav aria-label="Admin" class="flex min-h-0 flex-1 flex-col">
+            <div
+              hlmSidebarHeader
+              class="h-12 shrink-0 justify-center border-b border-border px-4 py-0"
             >
-              <span aria-hidden="true"><span class="text-accent-orange">&gt;</span>_</span>
-              <span class="group-data-[collapsible=icon]:sr-only">admin</span>
-            </a>
-          </div>
-
-          <div hlmSidebarContent>
-            @for (group of groups; track group) {
-              <div hlmSidebarGroup>
-                <div hlmSidebarGroupLabel>{{ group }}</div>
-                <div hlmSidebarGroupContent>
-                  <ul hlmSidebarMenu>
-                    @for (item of itemsIn(group); track item.path) {
-                      @let badge = badges()[item.path];
-                      @let dirty = unsaved.hasAny() && isCurrent(item.path);
-                      <li hlmSidebarMenuItem>
-                        <!-- Named in full, so it keeps a name collapsed to icons, where the words hide. -->
-                        <a
-                          hlmSidebarMenuButton
-                          class="relative group-has-data-[sidebar=menu-badge]/menu-item:pr-9"
-                          [routerLink]="item.path"
-                          [isActive]="isCurrent(item.path)"
-                          [tooltip]="item.label"
-                          [attr.aria-label]="navName(item.label, badge, dirty)"
-                          [attr.aria-current]="isCurrent(item.path) ? 'page' : null"
-                        >
-                          <ng-icon [name]="item.icon" size="16" aria-hidden="true" />
-                          <span>{{ item.label }}</span>
-                          @if (badge || dirty) {
-                            <i
-                              class="absolute right-1 top-1 hidden size-1.5 rounded-full group-data-[collapsible=icon]:block"
-                              [class]="badge?.alert ? 'bg-destructive' : 'bg-accent-orange'"
-                              aria-hidden="true"
-                            ></i>
-                          }
-                        </a>
-                        @if (badge || dirty) {
-                          <span hlmSidebarMenuBadge class="gap-1.5" aria-hidden="true">
-                            @if (dirty) {
-                              <span
-                                class="size-1.5 rounded-full bg-accent-orange"
-                                title="Unsaved changes"
-                              ></span>
-                            }
-                            @if (badge?.alert) {
-                              <span class="size-2 rounded-full bg-destructive"></span>
-                            } @else if (badge?.count) {
-                              <span class="text-xs tabular-nums">{{ badge?.count }}</span>
-                            }
-                          </span>
-                        }
-                      </li>
-                    }
-                  </ul>
-                </div>
-              </div>
-            }
-          </div>
-
-          <div hlmSidebarFooter>
-            <ul hlmSidebarMenu>
-              <!-- Always in reach: publishing needs no trip to the dashboard. -->
-              <li hlmSidebarMenuItem>
-                <button
-                  hlmSidebarMenuButton
-                  variant="outline"
-                  class="relative"
-                  [disabled]="publishState() === 'checking' || publishState() === 'published'"
-                  [tooltip]="publishName()"
-                  [attr.aria-label]="publishName()"
-                  (click)="onPublish()"
-                >
-                  <ng-icon [name]="publishWords().icon" size="16" aria-hidden="true" />
-                  <span>{{ publishWords().word }}</span>
-                  @if (pulse.unpublished()) {
-                    @if (pendingCount(); as n) {
-                      <!-- A kept space: "Publish 3", two words, as the name says it (axe's label-in-name). -->
-                      &ngsp;
-                      <span
-                        class="ml-auto rounded-full px-1.5 text-xs tabular-nums"
-                        [class]="
-                          pulse.review()?.issues
-                            ? 'bg-destructive/15 text-destructive'
-                            : 'bg-accent-orange-soft text-foreground'
-                        "
-                        >{{ n }}</span
-                      >
-                    }
-                    <i
-                      class="absolute right-1 top-1 hidden size-1.5 rounded-full bg-accent-orange group-data-[collapsible=icon]:block"
-                      aria-hidden="true"
-                    ></i>
-                  }
-                </button>
-              </li>
-              <!-- The account and signing out share a row (stacked when collapsed to icons):
-                   a row less keeps the whole list in view on a laptop's screen. -->
-              <li
-                hlmSidebarMenuItem
-                class="flex items-center gap-1 group-data-[collapsible=icon]:flex-col"
+              <p
+                class="m-0 truncate text-sm font-semibold text-foreground group-data-[collapsible=icon]:hidden"
+                translate="no"
               >
-                <a
-                  hlmSidebarMenuButton
-                  class="min-w-0 flex-1"
-                  routerLink="/admin/account"
-                  [isActive]="isCurrent('/admin/account')"
-                  [tooltip]="email()"
-                  [attr.aria-label]="'Account: ' + email()"
+                Alireza Rastineh
+              </p>
+            </div>
+
+            <div hlmSidebarContent>
+              @for (group of rail; track $index) {
+                <div hlmSidebarGroup>
+                  @if (group.label) {
+                    <div hlmSidebarGroupLabel [id]="'rail-group-' + $index">
+                      {{ group.label }}
+                    </div>
+                  }
+                  <div hlmSidebarGroupContent>
+                    <ul
+                      hlmSidebarMenu
+                      [attr.aria-labelledby]="group.label ? 'rail-group-' + $index : null"
+                    >
+                      @for (item of group.items; track item.path) {
+                        @let badge = badges()[item.path];
+                        @let current = item === currentItem();
+                        @let dirty = current && unsaved.hasAny();
+                        <li hlmSidebarMenuItem>
+                          <!-- Named in full, so it keeps a name collapsed to icons, where the words hide. -->
+                          <a
+                            hlmSidebarMenuButton
+                            class="relative data-sub:pl-8 group-has-data-[sidebar=menu-badge]/menu-item:pr-9"
+                            [attr.data-sub]="item.parent ? '' : null"
+                            [routerLink]="item.path"
+                            [isActive]="current"
+                            [tooltip]="item.label"
+                            [attr.aria-label]="navName(item.label, badge, dirty)"
+                            [attr.aria-current]="current ? 'true' : null"
+                          >
+                            <ng-icon [name]="item.icon" size="16" aria-hidden="true" />
+                            <span>{{ item.label }}</span>
+                            @if (badge || dirty) {
+                              <!-- Collapsed to icons: a dot on the icon. -->
+                              <i
+                                class="absolute right-2.5 top-1 hidden size-2 rounded-full ring-2 ring-background forced-color-adjust-none forced-colors:bg-[Highlight] group-data-[collapsible=icon]:block"
+                                [class]="
+                                  dirty
+                                    ? 'bg-signal'
+                                    : badge?.alert
+                                      ? 'bg-destructive'
+                                      : 'bg-foreground'
+                                "
+                                aria-hidden="true"
+                              ></i>
+                            }
+                          </a>
+                          @if (badge || dirty) {
+                            <span hlmSidebarMenuBadge aria-hidden="true">
+                              @if (dirty) {
+                                <span
+                                  class="size-2 rounded-full bg-signal forced-color-adjust-none forced-colors:bg-[Highlight]"
+                                  title="Unsaved changes"
+                                ></span>
+                              }
+                              @if (badge?.alert) {
+                                <span
+                                  class="size-2 rounded-full bg-destructive forced-color-adjust-none forced-colors:bg-[Highlight]"
+                                ></span>
+                              } @else if (badge?.count) {
+                                <span>{{ badge?.count }}</span>
+                              }
+                            </span>
+                          }
+                        </li>
+                      }
+                    </ul>
+                  </div>
+                </div>
+              }
+            </div>
+
+            <div hlmSidebarFooter class="border-t border-border py-1.5">
+              <ul hlmSidebarMenu>
+                <!-- The account, the theme and signing out share a row (stacked when collapsed). -->
+                <li
+                  hlmSidebarMenuItem
+                  class="flex items-center gap-1 group-data-[collapsible=icon]:flex-col"
                 >
-                  <ng-icon name="lucideUser" size="16" aria-hidden="true" />
-                  <span class="truncate">{{ email() }}</span>
-                </a>
-                <button
-                  hlmSidebarMenuButton
-                  class="w-auto shrink-0"
-                  tooltip="Sign out"
-                  title="Sign out"
-                  aria-label="Sign out"
-                  (click)="logout()"
-                >
-                  <ng-icon name="lucideLogOut" size="16" aria-hidden="true" />
-                </button>
-              </li>
-            </ul>
-          </div>
+                  <a
+                    hlmSidebarMenuButton
+                    class="min-w-0 flex-1 text-hint group-data-[collapsible=icon]:flex-none"
+                    routerLink="/admin/account"
+                    [isActive]="accountCurrent()"
+                    [tooltip]="email()"
+                    [attr.aria-label]="'Account: ' + email()"
+                    [attr.aria-current]="accountCurrent() ? 'true' : null"
+                  >
+                    <ng-icon name="lucideUser" size="16" aria-hidden="true" />
+                    <span class="truncate">{{ email() }}</span>
+                  </a>
+                  <button
+                    hlmSidebarMenuButton
+                    class="w-8 shrink-0 justify-center pointer-coarse:w-11"
+                    [closeMobileSidebarOnClick]="false"
+                    [tooltip]="themeLabel()"
+                    [title]="themeLabel()"
+                    [attr.aria-label]="themeLabel()"
+                    (click)="toggleTheme()"
+                  >
+                    <ng-icon name="lucideSunMoon" size="16" aria-hidden="true" />
+                  </button>
+                  <button
+                    hlmSidebarMenuButton
+                    class="w-8 shrink-0 justify-center pointer-coarse:w-11"
+                    tooltip="Sign out"
+                    title="Sign out"
+                    aria-label="Sign out"
+                    (click)="logout()"
+                  >
+                    <ng-icon name="lucideLogOut" size="16" aria-hidden="true" />
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </nav>
         </hlm-sidebar>
 
-        <!-- Clipped sideways: a stuck page header's surface reaches past the column to both edges. -->
-        <main hlmSidebarInset class="min-w-0 overflow-x-clip">
-          <header class="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
-            <button hlmSidebarTrigger aria-label="Toggle sidebar"></button>
-            <hlm-separator orientation="vertical" class="h-4" />
-            <nav hlmBreadcrumb aria-label="Breadcrumb">
-              <ol hlmBreadcrumbList>
-                <li hlmBreadcrumbItem>
-                  <a hlmBreadcrumbLink routerLink="/admin">admin</a>
-                </li>
-                @if (currentItem(); as item) {
-                  @if (item.path !== "/admin") {
-                    <li hlmBreadcrumbSeparator></li>
-                    <li hlmBreadcrumbItem>
-                      <span hlmBreadcrumbPage>{{ item.label }}</span>
+        <div hlmSidebarInset class="min-w-0">
+          <!-- Clear of a notch on the right in landscape; the rail covers the left. -->
+          <header
+            class="sticky top-0 z-40 flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background pl-2 pr-[max(0.5rem,env(safe-area-inset-right))] md:pl-3 md:pr-[max(0.75rem,env(safe-area-inset-right))]"
+          >
+            <button
+              hlmSidebarTrigger
+              aria-label="Navigation"
+              aria-keyshortcuts="["
+              title="Navigation ([)"
+            ></button>
+
+            <nav aria-label="Breadcrumb" class="min-w-0 flex-1">
+              <ol class="m-0 flex min-w-0 list-none items-center gap-1 p-0 text-sm">
+                @for (crumb of crumbs(); track crumb.path; let first = $first, last = $last) {
+                  @if (!first) {
+                    <li class="flex shrink-0 text-faint-foreground" aria-hidden="true">
+                      <ng-icon name="lucideChevronRight" size="14" aria-hidden="true" />
+                    </li>
+                  }
+                  @if (last) {
+                    <li class="min-w-0">
+                      <span
+                        aria-current="page"
+                        class="block truncate text-foreground"
+                        [class.font-medium]="!crumb.value"
+                        [class.text-data]="crumb.value"
+                        [attr.translate]="crumb.value ? 'no' : null"
+                        >{{ crumb.label }}</span
+                      >
+                    </li>
+                  } @else {
+                    <li class="shrink-0">
+                      <a
+                        class="inline-flex min-h-6 items-center text-muted-foreground hover:text-foreground hover:underline pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                        [routerLink]="crumb.path"
+                        >{{ crumb.label }}</a
+                      >
                     </li>
                   }
                 }
-                @if (projectSlug(); as slug) {
-                  <li hlmBreadcrumbSeparator></li>
-                  <li hlmBreadcrumbItem>
-                    <span hlmBreadcrumbPage class="font-data">{{ slug }}</span>
-                  </li>
-                }
               </ol>
             </nav>
+
+            <!-- Find at every width: the word and its key from 768, the icon on a phone. -->
             <button
               hlmBtn
               variant="outline"
               size="sm"
-              class="ml-auto hidden gap-2 text-muted-foreground sm:inline-flex"
+              class="w-44 justify-start border-border-strong font-normal text-muted-foreground max-md:w-8 max-md:justify-center max-md:border-transparent max-md:px-0 max-md:pointer-coarse:w-11"
               aria-haspopup="dialog"
               aria-keyshortcuts="Control+K Meta+K"
               (click)="paletteOpen.set(true)"
             >
-              <ng-icon name="lucideSearch" size="14" aria-hidden="true" />
-              <span>Jump to…</span>
-              <kbd class="key-cap" aria-hidden="true">{{ paletteKey }}</kbd>
+              <ng-icon name="lucideSearch" size="16" aria-hidden="true" />
+              <span class="max-md:sr-only">Find</span>
+              <kbd class="key-cap ml-auto max-md:hidden" aria-hidden="true">{{ paletteKey }}</kbd>
+            </button>
+
+            <!-- On a phone the draft opens from Find. -->
+            <button
+              hlmBtn
+              variant="outline"
+              size="sm"
+              class="max-md:hidden"
+              [hlmDropdownMenuTrigger]="previewMenu"
+            >
+              <ng-icon name="lucideEye" size="16" aria-hidden="true" />
+              Preview
+              <!-- Chevron-right turned down: chevron-down would join the icon chunk visitors load. -->
+              <ng-icon name="lucideChevronRight" size="14" class="rotate-90" aria-hidden="true" />
+            </button>
+            <ng-template #previewMenu>
+              <hlm-dropdown-menu class="w-40">
+                <button hlmDropdownMenuItem (triggered)="previewEn()">
+                  English<span class="sr-only">&ngsp;(opens in a new tab)</span>
+                </button>
+                <button hlmDropdownMenuItem (triggered)="previewDe()">
+                  German<span class="sr-only">&ngsp;(opens in a new tab)</span>
+                </button>
+              </hlm-dropdown-menu>
+            </ng-template>
+
+            <!-- The one orange fill, while changes wait; quiet otherwise. -->
+            <button
+              hlmBtn
+              size="sm"
+              class="shrink-0"
+              [variant]="publishState() === 'publish' ? 'signal' : 'outline'"
+              [disabled]="publishState() === 'checking' || publishState() === 'published'"
+              [attr.aria-label]="publishName()"
+              (click)="onPublish()"
+            >
+              @if (publishIcon(); as icon) {
+                <ng-icon [name]="icon" size="16" aria-hidden="true" />
+              }
+              {{ publishWords().word }}
+              @if (publishState() === "publish" && pendingCount(); as n) {
+                <!-- A kept space: "Publish 3", two words, as the name says it (axe's label-in-name). -->
+                &ngsp;<span class="tabular-nums">{{ n }}</span>
+              }
             </button>
           </header>
 
-          <!-- The page header's own padding makes up the top. -->
-          <div class="px-6 pb-8 pt-5">
-            @if (needsTotp()) {
-              <div
-                class="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent-orange/40 bg-accent-orange/10 px-4 py-3"
-                role="alert"
-              >
-                <p class="m-0 text-sm">
-                  Two-factor authentication is not enabled. This panel is reachable from the public
-                  internet.
-                </p>
-                <a hlmBtn size="sm" routerLink="/admin/account">Enable now</a>
-              </div>
-            }
+          <!-- Clipped sideways: a stuck page header's surface reaches past the column to both edges.
+               Behind the open sheet on a phone, the page is inert. -->
+          <main
+            id="main"
+            class="min-w-0 overflow-x-clip px-4 pb-8 pt-5 md:pl-6 md:pr-[max(1.5rem,env(safe-area-inset-right))]"
+            [attr.inert]="sidebar.openMobile() ? '' : null"
+          >
             <app-recovery-banner />
             <router-outlet />
-          </div>
-        </main>
+          </main>
+        </div>
       </div>
 
       <hlm-command-dialog
         [state]="paletteOpen() ? 'open' : 'closed'"
         (stateChange)="onPaletteState($event)"
-        title="Jump to"
-        description="Go to any admin section, or run an action"
+        title="Find"
+        description="Pages, actions, and projects, posts, experience and media files by name"
       >
         <!-- Each opening starts from an empty search. -->
         <hlm-command [(search)]="paletteSearch">
-          <hlm-command-input placeholder="Jump to a section or action…" />
+          <hlm-command-input placeholder="Find a page, an action or content…" />
           <hlm-command-list>
-            <div hlmCommandEmpty>Nothing matches.</div>
-            <hlm-command-group>
-              <hlm-command-group-label>Actions</hlm-command-group-label>
-              <!-- Always listed, so the list's order (and the first, active item) is fixed from the start. -->
-              <button
-                hlmCommandItem
-                value="Review and publish"
-                [disabled]="!pulse.unpublished()"
-                (selected)="after(publish)"
-              >
-                <ng-icon name="lucideRocket" size="14" aria-hidden="true" />
-                <span class="ml-2">Review and publish…</span>
-                @if (publishState() !== "publish") {
-                  <span class="ml-auto text-xs text-muted-foreground">{{
-                    publishWords().word.toLowerCase()
-                  }}</span>
-                }
-              </button>
-              <button
-                hlmCommandItem
-                value="Preview the draft in English"
-                (selected)="after(previewEn)"
-              >
-                <ng-icon name="lucideExternalLink" size="14" aria-hidden="true" />
-                <span class="ml-2">Preview the draft in English</span>
-                <span class="sr-only">(opens in a new tab)</span>
-              </button>
-              <button
-                hlmCommandItem
-                value="Preview the draft in German"
-                (selected)="after(previewDe)"
-              >
-                <ng-icon name="lucideExternalLink" size="14" aria-hidden="true" />
-                <span class="ml-2">Preview the draft in German</span>
-                <span class="sr-only">(opens in a new tab)</span>
-              </button>
-              <button hlmCommandItem value="New project" (selected)="after(newProject)">
-                <ng-icon name="lucidePlus" size="14" aria-hidden="true" />
-                <span class="ml-2">New project</span>
-              </button>
-              <button hlmCommandItem value="New post" (selected)="after(newPost)">
-                <ng-icon name="lucidePlus" size="14" aria-hidden="true" />
-                <span class="ml-2">New post</span>
-              </button>
-              <button hlmCommandItem [value]="themeLabel()" (selected)="after(toggleTheme)">
-                <ng-icon name="lucideSunMoon" size="14" aria-hidden="true" />
-                <span class="ml-2">{{ themeLabel() }}</span>
-              </button>
-              <button hlmCommandItem value="Keyboard shortcuts" (selected)="after(showShortcuts)">
-                <ng-icon name="lucideKeyboard" size="14" aria-hidden="true" />
-                <span class="ml-2">Keyboard shortcuts</span>
-                <kbd class="key-cap ml-auto" aria-hidden="true">?</kbd>
-              </button>
-            </hlm-command-group>
-            @for (group of groups; track group) {
+            <!-- Only when a search finds nothing: at rest the list is full. -->
+            <div *hlmCommandEmptyState hlmCommandEmpty>
+              @if (found().state === "loading") {
+                Looking through projects, posts, experience and media…
+              } @else {
+                No matches. Find looks through pages, actions, projects, posts, experience and media
+                file names.
+              }
+            </div>
+
+            @if (!paletteSearch() && recent().length) {
               <hlm-command-group>
-                <hlm-command-group-label>{{ group }}</hlm-command-group-label>
-                @for (item of itemsIn(group); track item.path) {
-                  <button hlmCommandItem [value]="item.label" (selected)="go(item.path)">
-                    <ng-icon [name]="item.icon" size="14" aria-hidden="true" />
-                    <span class="ml-2">{{ item.label }}</span>
+                <hlm-command-group-label>Recent</hlm-command-group-label>
+                @for (entry of recent(); track entry.key) {
+                  <button
+                    hlmCommandItem
+                    [value]="'recent ' + entry.key"
+                    [disabled]="entry.disabled"
+                    (selected)="openRecent(entry)"
+                  >
+                    <ng-icon [name]="entry.icon" size="14" aria-hidden="true" />
+                    <span>{{ entry.label }}</span>
                   </button>
                 }
               </hlm-command-group>
             }
+
             <hlm-command-group>
-              <hlm-command-group-label>Account</hlm-command-group-label>
-              <button hlmCommandItem value="Account" (selected)="go('/admin/account')">
-                <ng-icon name="lucideUser" size="14" aria-hidden="true" />
-                <span class="ml-2">Account &amp; security</span>
-              </button>
+              <hlm-command-group-label>Actions</hlm-command-group-label>
+              <!-- Always listed, so the list's order (and the first, active item) is fixed from the start. -->
+              @for (action of actions(); track action.id) {
+                <button
+                  hlmCommandItem
+                  [value]="action.label"
+                  [disabled]="!!action.disabled"
+                  (selected)="run(action.id)"
+                >
+                  <ng-icon [name]="action.icon" size="14" aria-hidden="true" />
+                  <span>{{ action.label }}</span>
+                  @if (action.newTab) {
+                    <span class="sr-only">(opens in a new tab)</span>
+                  }
+                  @if (action.note) {
+                    <span class="ml-auto text-xs text-muted-foreground">{{ action.note }}</span>
+                  }
+                  @if (action.key) {
+                    <kbd class="key-cap ml-auto" aria-hidden="true">{{ action.key }}</kbd>
+                  }
+                </button>
+              }
             </hlm-command-group>
+
+            <hlm-command-group>
+              <hlm-command-group-label>Pages</hlm-command-group-label>
+              @for (item of pages; track item.path) {
+                <button hlmCommandItem [value]="item.label" (selected)="go(item.path)">
+                  <ng-icon [name]="item.icon" size="14" aria-hidden="true" />
+                  <span>{{ item.label }}</span>
+                </button>
+              }
+            </hlm-command-group>
+
+            <!-- Content only once a search is typed: at rest it would bury the rest. -->
+            @if (paletteSearch()) {
+              @for (group of found().groups; track group.label) {
+                <hlm-command-group>
+                  <hlm-command-group-label>{{ group.label }}</hlm-command-group-label>
+                  @for (item of group.items; track item.key) {
+                    <button hlmCommandItem [value]="item.search" (selected)="go(item.path)">
+                      <ng-icon [name]="group.icon" size="14" aria-hidden="true" />
+                      <span class="truncate" translate="no">{{ item.label }}</span>
+                    </button>
+                  }
+                </hlm-command-group>
+              }
+              @if (found().state === "failed") {
+                <p class="m-0 px-2 py-3 text-hint text-muted-foreground">
+                  Some content did not load, so Find covers less of it. It tries again when Find
+                  opens next.
+                </p>
+              }
+            }
           </hlm-command-list>
+          <!-- What a search found, for a screen reader: the list itself says nothing. -->
+          <p class="sr-only" aria-live="polite">{{ paletteStatus() }}</p>
         </hlm-command>
       </hlm-command-dialog>
 
-      <!-- The one review dialog: the sidebar's Publish, the dashboard and the palette open it. -->
+      <!-- The one review dialog: the top bar's Publish, Today and Find open it. -->
       <app-publish-dialog
         [open]="pulse.publishOpen()"
         (openChange)="pulse.publishOpen.set($event)"
@@ -591,36 +682,72 @@ export default class AdminLayout {
   private readonly api = inject(AdminApiService);
   private readonly confirm = inject(ConfirmService);
   private readonly router = inject(Router);
+  private readonly doc = inject(DOCUMENT);
+  private readonly injector = inject(Injector);
   protected readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   protected readonly session = inject(AdminSessionService);
   protected readonly unsaved = inject(UnsavedChangesService);
   protected readonly pulse = inject(AdminPulseService);
+  protected readonly sidebar = inject(HlmSidebarService);
   private readonly recovery = inject(RecoveryService);
 
   protected readonly theme = inject(ThemeService);
 
-  protected readonly groups = GROUPS;
+  protected readonly rail = RAIL;
+  protected readonly pages = PAGES;
   protected readonly email = computed(() => this.session.user()?.email ?? "account");
   protected readonly paletteOpen = signal(false);
   protected readonly paletteSearch = signal("");
   protected readonly shortcutsOpen = signal(false);
+  private readonly command = viewChild(BrnCommand);
+  private readonly recentEntries = signal<RecentEntry[]>(this.isBrowser ? readRecent() : []);
+  protected readonly found = signal<{
+    state: "idle" | "loading" | "ready" | "failed";
+    groups: FoundGroup[];
+  }>({ state: "idle", groups: [] });
+
+  /** Stops waiting for a page's heading: the next navigation, or the person acting first. */
+  private stopArrival: () => void = () => undefined;
+  private destroyed = false;
 
   constructor() {
-    const doc = inject(DOCUMENT);
-    const injector = inject(Injector);
-    addAdminStyles(doc);
+    addAdminStyles(this.doc);
+    inject(DestroyRef).onDestroy(() => {
+      this.destroyed = true;
+      this.stopArrival();
+    });
 
-    // On a short window the sidebar's list scrolls: the page's own entry is
-    // brought into it after each navigation (Media, say, is last).
+    // On a short window the rail's list scrolls: the page's own entry is
+    // brought into it after each navigation (Media, say, is near the end).
     effect(() => {
       this.url();
       if (!this.ready()) return;
-      afterNextRender({ read: () => revealCurrentEntry(doc) }, { injector });
+      afterNextRender({ read: () => revealCurrentEntry(this.doc) }, { injector: this.injector });
     });
 
-    // A fresh search each time the palette opens.
+    // A navigation to another page starts it at the top, with its heading focused,
+    // and Find remembers the page.
+    let previous: string | null = null;
     effect(() => {
-      if (this.paletteOpen()) untracked(() => this.paletteSearch.set(""));
+      const path = this.url();
+      if (!this.ready() || this.isLogin() || this.isPreviewFrame()) return;
+      untracked(() => {
+        if (previous !== null && path !== previous) this.arrive();
+        previous = path;
+        this.rememberPage(path);
+      });
+    });
+
+    // A fresh search each time the palette opens, from its first entry; content loads on the
+    // first opening. The entries were made with this layout, before any page was visited, so
+    // the first is chosen again here: the newest recent page, or the first action.
+    effect(() => {
+      if (!this.paletteOpen()) return;
+      untracked(() => {
+        this.paletteSearch.set("");
+        this.command()?.keyManager.setFirstItemActive();
+        void this.loadFound();
+      });
     });
 
     // The counts load once the admin shows, and are dropped at the sign-in screen.
@@ -639,7 +766,7 @@ export default class AdminLayout {
     });
   }
 
-  /** Per sidebar entry: what needs a look there. */
+  /** Per rail entry: what needs a look there. */
   protected readonly badges = computed<Partial<Record<string, NavBadge>>>(() => {
     const badges: Partial<Record<string, NavBadge>> = {};
     const translations = this.pulse.i18n()?.length ?? 0;
@@ -657,7 +784,7 @@ export default class AdminLayout {
     return badges;
   });
 
-  /** The number on the Publish button: changes, or the problems that stop them. */
+  /** The number on Publish: changes, or the problems that stop them. */
   protected readonly pendingCount = computed(() => {
     const review = this.pulse.review();
     if (!review) return 0;
@@ -671,12 +798,18 @@ export default class AdminLayout {
     return this.pulse.unpublished() ? "publish" : "published";
   });
   protected readonly publishWords = computed(() => PUBLISH[this.publishState()]);
+  /** Problems to fix first carry a warning sign beside the count: never colour alone. */
+  protected readonly publishIcon = computed(() =>
+    this.publishState() === "publish" && this.pulse.review()?.issues
+      ? "lucideTriangleAlert"
+      : this.publishWords().icon,
+  );
 
   /** Ctrl K, or ⌘K on a Mac. */
   protected readonly paletteKey =
     typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform ?? "")
       ? "⌘K"
-      : "Ctrl K";
+      : "Ctrl K";
 
   protected readonly publishName = computed(() => {
     const state = this.publishState();
@@ -687,6 +820,79 @@ export default class AdminLayout {
       return `Publish: ${review.issues} ${review.issues === 1 ? "problem" : "problems"} to fix first`;
     }
     return review?.total ? `Publish: ${changesLabel(review.total)} unpublished` : "Publish";
+  });
+
+  protected readonly themeLabel = computed(() =>
+    this.theme.theme() === "dark" ? "Switch to the light theme" : "Switch to the dark theme",
+  );
+
+  /** Find's actions, in a fixed order: the first is the one Enter runs on opening. */
+  protected readonly actions = computed<PaletteAction[]>(() => [
+    {
+      id: "publish",
+      label: "Review and publish…",
+      icon: "lucideRocket",
+      disabled: !this.pulse.unpublished(),
+      note: this.publishState() === "publish" ? "" : this.publishWords().word.toLowerCase(),
+    },
+    {
+      id: "preview-en",
+      label: "Preview the draft in English",
+      icon: "lucideExternalLink",
+      newTab: true,
+    },
+    {
+      id: "preview-de",
+      label: "Preview the draft in German",
+      icon: "lucideExternalLink",
+      newTab: true,
+    },
+    { id: "new-project", label: "New project", icon: "lucidePlus" },
+    { id: "new-post", label: "New post", icon: "lucidePlus" },
+    { id: "theme", label: this.themeLabel(), icon: "lucideSunMoon" },
+    { id: "keys", label: "Keyboard shortcuts", icon: "lucideKeyboard", key: "?" },
+  ]);
+
+  /** How many entries a search finds, matched as Find matches them (brain's default filter). */
+  protected readonly paletteStatus = computed(() => {
+    const search = this.paletteSearch().toLowerCase();
+    if (!search) return "";
+    const values = [
+      ...this.actions().map((action) => action.label),
+      ...PAGES.map((page) => page.label),
+      ...this.found().groups.flatMap((group) => group.items.map((item) => item.search)),
+    ];
+    const count = values.filter((value) => value.toLowerCase().includes(search)).length;
+    if (count) return `${count} ${count === 1 ? "match" : "matches"}`;
+    return this.found().state === "loading" ? "Looking through the content…" : "No matches";
+  });
+
+  /** At rest: the pages visited and the actions run lately, newest first, this page left out. */
+  protected readonly recent = computed(() => {
+    const here = this.url();
+    const actions = this.actions();
+    return this.recentEntries()
+      .flatMap((entry) => {
+        if (entry.path) {
+          if (entry.path === here) return [];
+          const icon = navItemFor(entry.path)?.icon ?? "lucideFileText";
+          return [
+            { key: entry.key, label: entry.label ?? entry.path, icon, disabled: false, entry },
+          ];
+        }
+        const action = actions.find((a) => a.id === entry.action);
+        if (!action) return [];
+        return [
+          {
+            key: entry.key,
+            label: action.label,
+            icon: action.icon,
+            disabled: !!action.disabled,
+            entry,
+          },
+        ];
+      })
+      .slice(0, 5);
   });
 
   protected navName(label: string, badge: NavBadge | undefined, dirty: boolean): string {
@@ -704,22 +910,13 @@ export default class AdminLayout {
 
   private readonly url = computed(() => {
     this.navigated();
-    return this.router.url.split("?")[0] ?? "";
+    return this.router.url.split(/[?#]/)[0] ?? "";
   });
 
-  /** Nudged rather than hard-blocked: locking the only operator out of their
-   * own panel over a second factor they have not set up yet is worse. */
-  protected readonly needsTotp = computed(
-    () => this.session.user() !== null && this.session.user()?.totpEnrolled === false,
-  );
-
-  /** The most specific nav entry for the current URL, for the breadcrumb. */
+  /** The page the URL is on, for the rail's current entry. */
   protected readonly currentItem = computed(() => navItemFor(this.url()));
-
-  protected readonly projectSlug = computed(() => {
-    const match = /^\/admin\/(?:projects|writing)\/([^/]+)$/.exec(this.url());
-    return match ? decodeURIComponent(match[1] ?? "") : null;
-  });
+  protected readonly accountCurrent = computed(() => this.currentItem() === ACCOUNT);
+  protected readonly crumbs = computed(() => crumbsFor(this.url()));
 
   protected readonly isLogin = computed(() => this.url().startsWith("/admin/login"));
 
@@ -728,26 +925,16 @@ export default class AdminLayout {
 
   /**
    * The chrome stays hidden until the session has resolved, so a populated
-   * sidebar never flashes at someone about to be bounced to the login screen.
+   * rail never flashes at someone about to be bounced to the login screen.
    *
-   * Login is exempt: the guard deliberately lets that route through without
-   * calling `ensure()`, so waiting on `checked()` there would hang the form
-   * behind a skeleton forever.
+   * Login is exempt: the guard lets that route through once `ensure()` says no
+   * one is signed in, so the page needs no second wait here.
    */
   protected readonly ready = computed(() => {
     if (!this.isBrowser) return false;
     if (this.isLogin()) return true;
     return this.session.checked() && this.session.user() !== null;
   });
-
-  protected itemsIn(group: NavItem["group"]): NavItem[] {
-    return NAV.filter((item) => item.group === group);
-  }
-
-  protected isCurrent(path: string): boolean {
-    const url = this.url();
-    return path === "/admin" ? url === "/admin" : url.startsWith(path);
-  }
 
   protected onKeydown(event: KeyboardEvent): void {
     if (this.isLogin() || this.isPreviewFrame() || !this.ready()) return;
@@ -764,10 +951,29 @@ export default class AdminLayout {
       this.paletteOpen.update((open) => !open);
       return;
     }
+    if (isRailKey(event)) {
+      event.preventDefault();
+      this.sidebar.toggleSidebar();
+      return;
+    }
     if (event.key === "?" && isShortcutTarget(event)) {
       event.preventDefault();
       this.shortcutsOpen.set(true);
     }
+  }
+
+  /** Into the page itself: its heading, or the page while it has none yet. */
+  protected skipToContent(event: Event): void {
+    const main = this.doc.getElementById("main");
+    if (!main) return;
+    event.preventDefault();
+    const heading = main.querySelector<HTMLElement>("h1");
+    if (heading) {
+      heading.focus();
+      return;
+    }
+    main.setAttribute("tabindex", "-1");
+    main.focus();
   }
 
   protected onPaletteState(state: BrnDialogState): void {
@@ -778,6 +984,27 @@ export default class AdminLayout {
     this.paletteOpen.set(false);
     // Navigation still passes through canDeactivate, so unsaved work is guarded.
     void this.router.navigateByUrl(path);
+  }
+
+  protected openRecent(row: { entry: RecentEntry }): void {
+    const { path, action } = row.entry;
+    if (path) this.go(path);
+    else if (action) this.run(action);
+  }
+
+  protected run(id: ActionId): void {
+    this.recentEntries.update((list) => remember(list, { key: `action:${id}`, action: id }));
+    this.storeRecent();
+    const actions: Record<ActionId, () => void | Promise<void>> = {
+      publish: this.publish,
+      "preview-en": this.previewEn,
+      "preview-de": this.previewDe,
+      "new-project": this.newProject,
+      "new-post": this.newPost,
+      theme: this.toggleTheme,
+      keys: this.showShortcuts,
+    };
+    this.after(actions[id]);
   }
 
   /**
@@ -826,10 +1053,6 @@ export default class AdminLayout {
       toast.success(done, { description: "It is in the list for when you are done here." });
   }
 
-  protected readonly themeLabel = computed(() =>
-    this.theme.theme() === "dark" ? "Switch to the light theme" : "Switch to the dark theme",
-  );
-
   protected async logout(): Promise<void> {
     if (this.unsaved.hasAny()) {
       const leave = await this.confirm.ask({
@@ -848,5 +1071,137 @@ export default class AdminLayout {
     this.pulse.reset();
     this.session.clear();
     void this.router.navigate(["/admin/login"]);
+  }
+
+  /**
+   * After a navigation: the new page from its top, and its heading focused once it
+   * renders (an editor's waits for its data). Someone who presses a key or points
+   * first keeps their focus where they put it.
+   */
+  private arrive(): void {
+    this.stopArrival();
+    this.doc.defaultView?.scrollTo(0, 0);
+    const main = this.doc.getElementById("main");
+    if (!main) return;
+    let watch: MutationObserver | null = null;
+    const stop = (): void => {
+      watch?.disconnect();
+      this.doc.removeEventListener("keydown", stop, true);
+      this.doc.removeEventListener("pointerdown", stop, true);
+      this.stopArrival = () => undefined;
+    };
+    const land = (): boolean => {
+      const heading = main.querySelector<HTMLElement>("h1");
+      if (!heading) return false;
+      stop();
+      heading.focus({ preventScroll: true });
+      return true;
+    };
+    this.doc.addEventListener("keydown", stop, true);
+    this.doc.addEventListener("pointerdown", stop, true);
+    this.stopArrival = stop;
+    afterNextRender(
+      {
+        read: () => {
+          if (this.stopArrival !== stop || land()) return;
+          watch = new MutationObserver(() => land());
+          watch.observe(main, { childList: true, subtree: true });
+        },
+      },
+      { injector: this.injector },
+    );
+  }
+
+  /** A page in Find's recent list, under the words its breadcrumb uses. */
+  private rememberPage(path: string): void {
+    const crumbs = crumbsFor(path);
+    if (!crumbs.length) return;
+    const label = crumbs.map((crumb) => crumb.label).join(" › ");
+    this.recentEntries.update((list) => remember(list, { key: path, path, label }));
+    this.storeRecent();
+  }
+
+  private storeRecent(): void {
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(this.recentEntries()));
+    } catch {
+      // Storage blocked: the list holds for this visit.
+    }
+  }
+
+  /** Projects, posts, experience and media by name, loaded when Find first opens. */
+  private async loadFound(): Promise<void> {
+    const { state } = this.found();
+    if (state === "loading" || state === "ready") return;
+    this.found.set({ state: "loading", groups: [] });
+    const [projects, posts, experiences, media] = await Promise.all([
+      this.api.listProjects(),
+      this.api.listPosts(),
+      this.api.listExperiences(),
+      this.api.listMedia(),
+    ]);
+    if (this.destroyed) return;
+    const groups: FoundGroup[] = [];
+    if (projects.ok) {
+      groups.push({
+        label: "Work",
+        icon: "lucideBriefcase",
+        items: projects.data.projects.map((p) => {
+          const name = p.translations.en?.name || p.slug;
+          return {
+            key: p.id,
+            label: name,
+            search: [name, p.translations.de?.name, p.slug].filter(Boolean).join(" "),
+            path: `/admin/projects/${p.slug}`,
+          };
+        }),
+      });
+    }
+    if (posts.ok) {
+      groups.push({
+        label: "Writing",
+        icon: "lucideNewspaper",
+        items: posts.data.posts.map((p) => {
+          const title = p.translations.en?.title || p.translations.de?.title || p.slug;
+          return {
+            key: p.id,
+            label: title,
+            search: [title, p.translations.de?.title, p.slug].filter(Boolean).join(" "),
+            path: `/admin/writing/${p.slug}`,
+          };
+        }),
+      });
+    }
+    // shortcut: experience and media open their page, not the entry, until U14 and U15 give
+    // an entry an address (`?edit=<id>`).
+    if (experiences.ok) {
+      groups.push({
+        label: "Experience",
+        icon: "lucideSignpost",
+        items: experiences.data.experiences.map((e) => {
+          const label = [e.translations.en.title, e.orgName].filter(Boolean).join(", ");
+          return {
+            key: e.id,
+            label,
+            search: `${label} ${e.translations.de.title}`,
+            path: "/admin/experience",
+          };
+        }),
+      });
+    }
+    if (media.ok) {
+      groups.push({
+        label: "Media",
+        icon: "lucideImage",
+        items: media.data.media.map((m) => ({
+          key: m.id,
+          label: m.originalName,
+          search: m.originalName,
+          path: "/admin/media",
+        })),
+      });
+    }
+    const failed = !projects.ok || !posts.ok || !experiences.ok || !media.ok;
+    this.found.set({ state: failed ? "failed" : "ready", groups });
   }
 }

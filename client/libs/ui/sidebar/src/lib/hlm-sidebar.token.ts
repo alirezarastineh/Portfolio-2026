@@ -4,22 +4,26 @@ export interface HlmSidebarConfig {
   sidebarWidth: string;
   sidebarWidthMobile: string;
   sidebarWidthIcon: string;
-  sidebarCookieName: string;
-  sidebarCookieMaxAge: number;
-  sidebarKeyboardShortcut: string;
+  /** Where the open-or-collapsed choice made from `openBreakpoint` up is kept (localStorage). */
+  sidebarStorageKey: string;
+  /** Up to this width the sidebar is a sheet. */
   mobileBreakpoint: string;
+  /** From this width the sidebar starts open; below it, collapsed to icons. */
+  openBreakpoint: string;
   closeMobileSidebarOnMenuButtonClick: boolean;
 }
 
+// The admin's rail (plan 5, U8): 232 px, 56 px collapsed; a sheet below 768, collapsed to 1279.
+// Wider by a landscape notch, which the container pads. No keyboard shortcut here: the admin's
+// `[` is in its layout, and Ctrl+B stays the editor's bold.
 const defaultConfig: HlmSidebarConfig = {
-  sidebarWidth: "16rem",
+  sidebarWidth: "calc(14.5rem + env(safe-area-inset-left, 0px))",
   sidebarWidthMobile: "18rem",
-  sidebarWidthIcon: "3rem",
-  sidebarCookieName: "sidebar_state",
-  sidebarCookieMaxAge: 60 * 60 * 24 * 7, // 7 days in seconds
-  sidebarKeyboardShortcut: "b",
-  mobileBreakpoint: "768px",
-  closeMobileSidebarOnMenuButtonClick: false,
+  sidebarWidthIcon: "calc(3.5rem + env(safe-area-inset-left, 0px))",
+  sidebarStorageKey: "sidebar_state",
+  mobileBreakpoint: "767.98px",
+  openBreakpoint: "1280px",
+  closeMobileSidebarOnMenuButtonClick: true,
 };
 
 const HlmSidebarConfigToken = new InjectionToken<HlmSidebarConfig>("HlmSidebarConfig");

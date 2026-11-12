@@ -82,7 +82,7 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
   template: `
     <div class="mx-auto flex max-w-5xl flex-col gap-8 pb-12">
       <app-page-header
-        title="Agent"
+        title="Content agent"
         description="The content agent drafts translations, alt text and search descriptions into proposals. Nothing reaches your draft until you apply it, and nothing goes live until you publish."
       />
 

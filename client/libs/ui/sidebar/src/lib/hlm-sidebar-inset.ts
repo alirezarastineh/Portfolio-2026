@@ -1,8 +1,9 @@
 import { Directive } from "@angular/core";
 import { classes } from "@spartan-ng/helm/utils";
 
+// A `div` too: the admin's column holds its top bar (a banner) beside its `main`.
 @Directive({
-  selector: "main[hlmSidebarInset]",
+  selector: "main[hlmSidebarInset], div[hlmSidebarInset]",
   host: {
     "data-slot": "sidebar-inset",
   },

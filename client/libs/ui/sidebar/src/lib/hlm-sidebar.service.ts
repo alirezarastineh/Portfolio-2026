@@ -1,5 +1,4 @@
 import {
-  afterNextRender,
   computed,
   DestroyRef,
   DOCUMENT,
@@ -17,86 +16,55 @@ export class HlmSidebarService {
   private readonly _config = injectHlmSidebarConfig();
   private readonly _document = inject(DOCUMENT);
   private readonly _window = this._document.defaultView;
-  private readonly _open = signal<boolean>(true);
+  private readonly _phone = this._query(`(max-width: ${this._config.mobileBreakpoint})`);
+  private readonly _wide = this._query(`(min-width: ${this._config.openBreakpoint})`);
+  private readonly _isMobile = signal(this._phone?.matches ?? false);
+  private readonly _isWide = signal(this._wide?.matches ?? true);
+  /** Wide: open unless collapsed there, a choice kept between visits. */
+  private readonly _wideOpen = signal(this._read() !== "false");
+  /** Between a phone and wide: collapsed, unless opened during this visit. */
+  private readonly _narrowOpen = signal(false);
   private readonly _openMobile = signal<boolean>(false);
-  private readonly _isMobile = signal<boolean>(false);
   private readonly _variant = signal<SidebarVariant>("sidebar");
-  private _mediaQuery: MediaQueryList | null = null;
 
-  public readonly open: Signal<boolean> = this._open.asReadonly();
+  public readonly open: Signal<boolean> = computed(() =>
+    this._isWide() ? this._wideOpen() : this._narrowOpen(),
+  );
   public readonly openMobile: Signal<boolean> = this._openMobile.asReadonly();
   public readonly isMobile: Signal<boolean> = this._isMobile.asReadonly();
   public readonly variant: Signal<SidebarVariant> = this._variant.asReadonly();
 
   public readonly state = computed<"expanded" | "collapsed">(() =>
-    this._open() ? "expanded" : "collapsed",
+    this.open() ? "expanded" : "collapsed",
   );
 
   constructor() {
-    const destroyRef = inject(DestroyRef);
-    afterNextRender(() => {
-      if (!this._window) return;
-      // Initialize from cookie
-      const cookie = this._document.cookie
-        .split("; ")
-        .find((row) => row.startsWith(`${this._config.sidebarCookieName}=`));
-
-      if (cookie) {
-        const value = cookie.split("=")[1];
-        this._open.set(value === "true");
-      }
-
-      // Initialize MediaQueryList
-      this._mediaQuery = this._window.matchMedia(`(max-width: ${this._config.mobileBreakpoint})`);
-      this._isMobile.set(this._mediaQuery.matches);
-
-      // Add media query listener
-      const mediaQueryHandler = (e: MediaQueryListEvent) => {
-        this._isMobile.set(e.matches);
-        // If switching from mobile to desktop, close mobile sidebar
-        if (!e.matches) this._openMobile.set(false);
-      };
-      this._mediaQuery.addEventListener("change", mediaQueryHandler);
-
-      // Add keyboard shortcut listener
-      const keydownHandler = (event: KeyboardEvent) => {
-        if (
-          event.key === this._config.sidebarKeyboardShortcut &&
-          (event.ctrlKey || event.metaKey)
-        ) {
-          event.preventDefault();
-          this.toggleSidebar();
-        }
-      };
-      this._window.addEventListener("keydown", keydownHandler);
-
-      // Add resize listener with debounce
-      let resizeTimeout: number;
-      const resizeHandler = () => {
-        if (!this._window) return;
-
-        if (resizeTimeout) this._window.clearTimeout(resizeTimeout);
-        resizeTimeout = this._window.setTimeout(() => {
-          if (this._mediaQuery) this._isMobile.set(this._mediaQuery.matches);
-        }, 100);
-      };
-      this._window.addEventListener("resize", resizeHandler);
-
-      // Cleanup listeners on destroy
-      destroyRef.onDestroy(() => {
-        if (!this._window) return;
-
-        if (this._mediaQuery) this._mediaQuery.removeEventListener("change", mediaQueryHandler);
-        this._window.removeEventListener("keydown", keydownHandler);
-        this._window.removeEventListener("resize", resizeHandler);
-        if (resizeTimeout) this._window.clearTimeout(resizeTimeout);
-      });
+    // Read at once, not after the first render: the rail never shows a state it is about to leave.
+    const onPhone = (e: MediaQueryListEvent) => {
+      this._isMobile.set(e.matches);
+      // A phone's sheet does not stay open behind a wider layout.
+      if (!e.matches) this._openMobile.set(false);
+    };
+    const onWide = (e: MediaQueryListEvent) => this._isWide.set(e.matches);
+    this._phone?.addEventListener("change", onPhone);
+    this._wide?.addEventListener("change", onWide);
+    inject(DestroyRef).onDestroy(() => {
+      this._phone?.removeEventListener("change", onPhone);
+      this._wide?.removeEventListener("change", onWide);
     });
   }
 
   public setOpen(open: boolean): void {
-    this._open.set(open);
-    this._document.cookie = `${this._config.sidebarCookieName}=${open}; path=/; max-age=${this._config.sidebarCookieMaxAge}`;
+    if (!this._isWide()) {
+      this._narrowOpen.set(open);
+      return;
+    }
+    this._wideOpen.set(open);
+    try {
+      this._window?.localStorage.setItem(this._config.sidebarStorageKey, String(open));
+    } catch {
+      // Storage blocked: the choice holds for this visit.
+    }
   }
 
   public setOpenMobile(open: boolean): void {
@@ -113,7 +81,20 @@ export class HlmSidebarService {
     if (this._isMobile()) {
       this._openMobile.update((value) => !value);
     } else {
-      this.setOpen(!this._open());
+      this.setOpen(!this.open());
+    }
+  }
+
+  /** No window on the server: no query, and the defaults hold. */
+  private _query(query: string): MediaQueryList | null {
+    return typeof this._window?.matchMedia === "function" ? this._window.matchMedia(query) : null;
+  }
+
+  private _read(): string | null {
+    try {
+      return this._window?.localStorage.getItem(this._config.sidebarStorageKey) ?? null;
+    } catch {
+      return null;
     }
   }
 }

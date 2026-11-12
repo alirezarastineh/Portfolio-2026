@@ -11,7 +11,7 @@ import {
 } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideArrowRight } from "@ng-icons/lucide";
+import { lucideArrowRight, lucideTriangleAlert } from "@ng-icons/lucide";
 import { HlmAlert, HlmAlertDescription, HlmAlertTitle } from "@spartan-ng/helm/alert";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
@@ -32,6 +32,7 @@ import { KpiTileComponent } from "../../admin/components/kpi-tile.component";
 import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 import { ReadinessCardComponent } from "../../admin/components/readiness-card.component";
 import { editorLinkForI18n } from "../../admin/editor-links";
+import { AdminSessionService } from "../../admin/admin-session.service";
 import { AdminPulseService, type PulsePart } from "../../admin/pulse.service";
 import { RecoveryService, typedAt, type RecoveryCopy } from "../../admin/recovery.service";
 import { absoluteTime, relativeTime } from "../../admin/relative-time";
@@ -82,12 +83,12 @@ function usd(value: number): string {
     ReadinessCardComponent,
     RouterLink,
   ],
-  viewProviders: [provideIcons({ lucideArrowRight })],
+  viewProviders: [provideIcons({ lucideArrowRight, lucideTriangleAlert })],
   host: { class: "block" },
   template: `
     <div class="mx-auto flex max-w-5xl flex-col gap-6 pb-12">
       <app-page-header
-        title="Dashboard"
+        title="Today"
         description="Edits are saved as a draft. Publishing makes them live."
       >
         <span headerStatus>
@@ -115,6 +116,24 @@ function usd(value: number): string {
           Review &amp; publish
         </button>
       </app-page-header>
+
+      @if (needsTotp()) {
+        <!-- The sign and the sentence stay together; the button wraps under them on a phone. -->
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+          <p class="m-0 flex min-w-0 items-start gap-2">
+            <ng-icon
+              name="lucideTriangleAlert"
+              size="16"
+              class="mt-0.5 shrink-0 text-accent-orange"
+              aria-hidden="true"
+            />
+            <span
+              >Two-factor authentication is off: your password alone signs in to this admin.</span
+            >
+          </p>
+          <a hlmBtn variant="outline" size="sm" routerLink="/admin/account">Turn it on</a>
+        </div>
+      }
 
       @if (reconcile(); as r) {
         @if (r.missingFiles.length || r.orphanFiles.length) {
@@ -534,6 +553,10 @@ export default class AdminDashboardPage implements OnInit {
   private readonly doc = inject(DOCUMENT);
   protected readonly pulse = inject(AdminPulseService);
   private readonly recovery = inject(RecoveryService);
+  private readonly session = inject(AdminSessionService);
+
+  /** Two-factor is off: Today's first row until it is on (plan 5, U8; Part F puts it in Needs you). */
+  protected readonly needsTotp = computed(() => this.session.user()?.totpEnrolled === false);
 
   protected readonly preview = I18N_PREVIEW;
   /** Unsaved edits kept in this browser: one row a page, newest first. */

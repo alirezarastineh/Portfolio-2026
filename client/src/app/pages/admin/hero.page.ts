@@ -166,7 +166,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
     >
       <div class="flex flex-col gap-6 pb-24">
         <app-page-header
-          title="Hero & identity"
+          title="Profile"
           description="Who you are, where, whether you are available, plus the headline, button labels and navigation wording."
           preview="/admin/preview/en"
           [(view)]="view"

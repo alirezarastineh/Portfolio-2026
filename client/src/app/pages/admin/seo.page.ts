@@ -95,7 +95,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   template: `
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-24">
       <app-page-header
-        title="SEO & meta"
+        title="SEO & sharing"
         description="Title, description and social cards, per language."
         [(view)]="view"
       />

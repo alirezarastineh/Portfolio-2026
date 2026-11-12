@@ -5,6 +5,7 @@ import { HlmButton, provideBrnButtonConfig } from "@spartan-ng/helm/button";
 import { HlmIconImports } from "@spartan-ng/helm/icon";
 import { HlmSidebarService } from "./hlm-sidebar.service";
 
+// The icon button's own size: 32 px with a mouse, 44 on touch.
 @Component({
   selector: "button[hlmSidebarTrigger]",
   imports: [HlmIconImports],
@@ -26,12 +27,7 @@ import { HlmSidebarService } from "./hlm-sidebar.service";
   template: ` <ng-icon hlm name="lucidePanelLeft" size="sm"></ng-icon> `,
 })
 export class HlmSidebarTrigger {
-  private readonly _hlmBtn = inject(HlmButton);
   private readonly _sidebarService = inject(HlmSidebarService);
-
-  constructor() {
-    this._hlmBtn.setClass("size-7");
-  }
 
   protected _onClick(): void {
     this._sidebarService.toggleSidebar();

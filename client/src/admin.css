@@ -72,10 +72,11 @@
 @source "./app/pages/admin.page.ts";
 @source "../libs/ui";
 
-/* A page with the sticky header on top and the sticky save bar below: a
-   focused field, or a jump to an anchor, stops clear of both (WCAG 2.4.11). */
+/* A page with the top bar and its sticky header above and the sticky save bar
+   below: a focused field, or a jump to an anchor, stops clear of all three
+   (WCAG 2.4.11). The bar is 3rem and the header 52–68px at 1280. */
 :root:has(app-page-header) {
-  scroll-padding-block: 5rem 6rem;
+  scroll-padding-block: 8rem 6rem;
 }
 
 /* A toast stays above the save bar: Save is never under one. */
@@ -92,9 +93,9 @@
   font-family: var(--font-sans);
 }
 
-/* On a short window the sidebar's list scrolls: its edges fade where there is
-   more to scroll to, so the last entry in view does not read as the last one.
-   Driven by the list's own scroll; nothing fades when it all fits. */
+/* On a short window the rail's list scrolls, open or collapsed: its edges fade
+   where there is more to scroll to, so the last entry in view does not read as
+   the last one. Driven by the list's own scroll; nothing fades when it all fits. */
 /* eslint-disable css/use-baseline -- progressive: every browser with scroll timelines has @property */
 @property --sidebar-fade-top {
   syntax: "<length>";
@@ -137,11 +138,5 @@
     );
     animation: sidebar-fade linear both;
     animation-timeline: scroll(self);
-  }
-
-  /* Collapsed to icons the list does not scroll by hand: no fade to promise it. */
-  [data-collapsible="icon"] [data-slot="sidebar-content"] {
-    mask-image: none;
-    animation: none;
   }
 }

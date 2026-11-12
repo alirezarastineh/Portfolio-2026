@@ -10,12 +10,10 @@ import { classes } from "@spartan-ng/helm/utils";
 })
 export class HlmSidebarMenuBadge {
   constructor() {
+    // Centred on the entry at any height (32 px, or 44 on touch).
     classes(() => [
-      "text-sidebar-foreground pointer-events-none absolute right-1 flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-xs font-medium tabular-nums select-none",
-      "peer-hover/menu-button:text-sidebar-accent-foreground peer-data-[active=true]/menu-button:text-sidebar-accent-foreground",
-      "peer-data-[size=sm]/menu-button:top-1",
-      "peer-data-[size=default]/menu-button:top-1.5",
-      "peer-data-[size=lg]/menu-button:top-2.5",
+      "text-muted-foreground pointer-events-none absolute top-1/2 right-1 flex h-5 min-w-5 -translate-y-1/2 items-center justify-center gap-1.5 px-1 text-xs font-medium tabular-nums select-none",
+      "peer-hover/menu-button:text-foreground peer-data-[active=true]/menu-button:text-foreground",
       "group-data-[collapsible=icon]:hidden",
     ]);
   }

@@ -50,7 +50,7 @@ type DetailTab = "changes" | "json";
   template: `
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
       <app-page-header
-        title="Publications"
+        title="History"
         description="Every publish is kept, both languages together. Rolling back makes one live again as a new publication, so nothing is ever lost. “Restore into draft” loads it into the editors instead, to change before publishing again."
       />
 

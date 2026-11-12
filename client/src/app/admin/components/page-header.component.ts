@@ -41,7 +41,7 @@ import type { LocaleView } from "./field-pair.component";
   template: `
     <div
       #bar
-      class="sticky -top-px z-30 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3 before:pointer-events-none before:absolute before:inset-y-0 before:inset-x-[-100vw] before:-z-10 before:border-b before:border-transparent data-stuck:before:border-border data-stuck:before:bg-background/85 data-stuck:before:shadow-e1 data-stuck:before:backdrop-blur-md"
+      class="sticky top-11.75 z-30 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3 before:pointer-events-none before:absolute before:inset-y-0 before:inset-x-[-100vw] before:-z-10 before:border-b before:border-transparent data-stuck:before:border-border data-stuck:before:bg-background/85 data-stuck:before:shadow-e1 data-stuck:before:backdrop-blur-md"
       [attr.data-stuck]="stuck() ? '' : null"
     >
       <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
@@ -106,16 +106,19 @@ export class AdminPageHeaderComponent {
 
   constructor() {
     const destroyRef = inject(DestroyRef);
-    // Stuck at `top: -1px`, the row is one pixel out of the window: less than
-    // fully visible is the signal. At rest at the top of the page, it is whole.
+    // Stuck one pixel under the shell's top bar, the row is a pixel out of the area below
+    // the bar: less than fully visible there is the signal. At rest, it is whole.
     afterNextRender(() => {
       if (typeof IntersectionObserver === "undefined") return;
+      // The bar is 3rem: in pixels at the reader's text size.
+      const bar =
+        3 * (Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16);
       const observer = new IntersectionObserver(
         ([entry]) => {
           if (entry)
-            this.stuck.set(entry.intersectionRatio < 1 && entry.boundingClientRect.top < 1);
+            this.stuck.set(entry.intersectionRatio < 1 && entry.boundingClientRect.top < bar + 1);
         },
-        { threshold: [1] },
+        { threshold: [1], rootMargin: `-${bar}px 0px 0px 0px` },
       );
       observer.observe(this.bar().nativeElement);
       destroyRef.onDestroy(() => observer.disconnect());

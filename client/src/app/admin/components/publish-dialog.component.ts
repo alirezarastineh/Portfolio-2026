@@ -169,8 +169,8 @@ function toView(review: LocaleReview): LocaleView {
                     </ul>
                     @if (l.placeholders.length > placeholderPreview) {
                       <p class="m-0 mt-1 text-hint text-muted-foreground">
-                        and {{ l.placeholders.length - placeholderPreview }} more: the dashboard's
-                        launch checklist lists them all.
+                        and {{ l.placeholders.length - placeholderPreview }} more: the launch
+                        checklist on Today lists them all.
                       </p>
                     }
                   </div>

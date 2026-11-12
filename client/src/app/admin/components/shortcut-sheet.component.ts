@@ -15,7 +15,8 @@ export const SHORTCUTS: { where: string; items: Shortcut[] }[] = [
   {
     where: "Everywhere",
     items: [
-      { keys: [MOD, "K"], does: "Jump to a section, or run an action" },
+      { keys: [MOD, "K"], does: "Find a page, an action or content" },
+      { keys: ["["], does: "Collapse or open the navigation" },
       { keys: ["?"], does: "Show these shortcuts" },
       { keys: ["Esc"], does: "Close a dialog or the palette" },
     ],
@@ -95,9 +96,25 @@ export class ShortcutSheetComponent {
  */
 export function isShortcutTarget(event: KeyboardEvent): boolean {
   if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return false;
+  return !typingIn(event);
+}
+
+/**
+ * The rail's key, `[`: as typed, or with AltGr, where a layout puts it (German: AltGr+8, which
+ * Windows reports with Ctrl and Alt held). Never in a field or a dialog.
+ */
+export function isRailKey(event: KeyboardEvent): boolean {
+  if (event.key !== "[" || event.defaultPrevented || event.metaKey) return false;
+  const altGr = event.getModifierState?.("AltGraph") ?? false;
+  if (!altGr && (event.ctrlKey || event.altKey)) return false;
+  return !typingIn(event);
+}
+
+/** Focus is in something that takes text, or in a dialog: the key is its own. */
+function typingIn(event: KeyboardEvent): boolean {
   const target = event.target as HTMLElement | null;
-  if (!target || typeof target.closest !== "function") return true;
-  return !target.closest(
+  if (!target || typeof target.closest !== "function") return false;
+  return !!target.closest(
     "input, textarea, select, [contenteditable]:not([contenteditable='false']), [role=textbox], [role=combobox], [role=dialog], [role=alertdialog]",
   );
 }
