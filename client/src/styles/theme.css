@@ -37,10 +37,6 @@
   --color-accent-indigo: var(--accent-indigo);
   --color-accent-indigo-soft: var(--accent-indigo-soft);
   --color-available: var(--available);
-  --color-terminal-bar: var(--terminal-bar);
-  --color-term-red: var(--term-red);
-  --color-term-amber: var(--term-amber);
-  --color-term-green: var(--term-green);
 
   --shadow-e1: var(--shadow-e1);
   --shadow-e2: var(--shadow-e2);

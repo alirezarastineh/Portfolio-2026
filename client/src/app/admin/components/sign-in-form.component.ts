@@ -170,8 +170,6 @@ export class SignInFormComponent implements OnInit {
   /** The password was right, and a code is still wanted. */
   readonly codeNeeded = output<void>();
   readonly signedIn = output<AdminUser>();
-  /** A wrong password or code. */
-  readonly refused = output<void>();
   /** "Use a different account": back at the password step. */
   readonly startedOver = output<void>();
 
@@ -221,7 +219,6 @@ export class SignInFormComponent implements OnInit {
 
     if (!result.ok) {
       this.error.set(ERROR_COPY[result.error] ?? "Sign-in failed.");
-      this.refused.emit();
       return;
     }
 
@@ -246,7 +243,6 @@ export class SignInFormComponent implements OnInit {
 
     if (!result.ok) {
       this.error.set(ERROR_COPY[result.error] ?? "Verification failed.");
-      this.refused.emit();
       // Clear the slots: with auto-submit, a wrong code otherwise sits there
       // full and has to be deleted digit by digit before the next attempt.
       this.totp.reset();

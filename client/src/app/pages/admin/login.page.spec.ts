@@ -98,7 +98,7 @@ describe("AdminLoginPage", () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance["step"]()).toBe("totp");
-    expect(text(fixture)).toContain("two-factor");
+    expect(text(fixture)).toContain("Two-factor code");
     expect(fixture.nativeElement.querySelector("#code")).toBeTruthy();
   });
 
@@ -117,11 +117,12 @@ describe("AdminLoginPage", () => {
     expect(text(fixture)).not.toContain("invalid_credentials");
   });
 
-  it("is a terminal window named for the step it is on", async () => {
+  it("is one plain form under the wordmark, its heading named for the step it is on", async () => {
     const { fixture, api } = setup();
-    const title = () =>
-      fixture.nativeElement.querySelector("app-terminal-window header")?.textContent ?? "";
-    expect(title()).toContain("admin@portfolio — login");
+    const heading = () => fixture.nativeElement.querySelector("h1")?.textContent?.trim();
+    expect(heading()).toBe("Sign in");
+    expect(text(fixture)).toContain("Alireza Rastineh");
+    expect(fixture.nativeElement.querySelector("app-terminal-window")).toBeNull();
 
     api.loginResult = { ok: true, data: { ok: true, totpRequired: true, user: null } };
     form(fixture)["credentials"].setValue({
@@ -130,27 +131,7 @@ describe("AdminLoginPage", () => {
     });
     await form(fixture)["submitCredentials"]();
     fixture.detectChanges();
-    expect(title()).toContain("admin@portfolio — two-factor");
-  });
-
-  /** The CSS runs it only without reduced motion; the class is set either way. */
-  it("shakes on a refused attempt, and is still again once the shake ends", async () => {
-    const { fixture, api } = setup();
-    api.loginResult = { ok: false, error: "invalid_credentials", status: 401 };
-    form(fixture)["credentials"].setValue({
-      email: "admin@example.com",
-      password: "wrong-password",
-    });
-    await form(fixture)["submitCredentials"]();
-    fixture.detectChanges();
-
-    const frame: HTMLElement =
-      fixture.nativeElement.querySelector("app-terminal-window").parentElement;
-    expect(frame.classList).toContain("shake");
-
-    frame.dispatchEvent(new Event("animationend"));
-    fixture.detectChanges();
-    expect(frame.classList).not.toContain("shake");
+    expect(heading()).toBe("Two-factor code");
   });
 
   it("falls back to a generic message for an unrecognised error", async () => {

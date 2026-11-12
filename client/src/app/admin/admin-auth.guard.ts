@@ -14,15 +14,17 @@ import { AdminSessionService } from "./admin-session.service";
 export const adminAuthGuard: CanActivateChildFn = async (_route, state) => {
   if (!isPlatformBrowser(inject(PLATFORM_ID))) return true;
 
-  // The login route is a child of the admin layout, so without this the guard
-  // would redirect the login page to itself.
-  if (state.url.startsWith("/admin/login")) return true;
-
   const session = inject(AdminSessionService);
   const router = inject(Router);
 
   // The sign-in dialog is over a page that may hold unsaved text: nothing leaves it.
   if (session.lost()) return false;
+
+  // The login is a child of the admin layout: it shows to whoever is not signed in, and a
+  // signed-in visitor goes on to Today.
+  if (state.url.startsWith("/admin/login")) {
+    return (await session.ensure()) ? router.createUrlTree(["/admin"]) : true;
+  }
 
   if (await session.ensure()) return true;
 

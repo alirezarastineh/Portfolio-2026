@@ -74,13 +74,18 @@ describe("adminAuthGuard", () => {
     expect(session.ensureCalls).toBe(0);
   });
 
-  /**
-   * The login route is a child of the admin layout, so without an explicit
-   * bypass the guard would redirect the login page to itself.
-   */
-  it("lets the login route through without checking the session", async () => {
+  /** The login route is a child of the admin layout: it must not redirect to itself. */
+  it("shows the login to a visitor who is not signed in", async () => {
     expect(await run("/admin/login", "browser", session)).toBe(true);
-    expect(session.ensureCalls).toBe(0);
+    expect(session.ensureCalls).toBe(1);
+  });
+
+  it("sends a signed-in visitor from the login to Today", async () => {
+    session.authenticated = true;
+    const result = await run("/admin/login?r=%2Fadmin%2Fseo", "browser", session);
+
+    expect(result).toBeInstanceOf(UrlTree);
+    expect((result as UrlTree).toString()).toBe("/admin");
   });
 
   /** SSR cannot read a cookie scoped to the API origin; the browser decides. */

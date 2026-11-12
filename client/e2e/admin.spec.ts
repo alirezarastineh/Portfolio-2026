@@ -18,6 +18,8 @@ const content = (locale: "en" | "de") =>
   ) as Record<string, unknown>;
 
 const USER = { id: "u1", email: "admin@example.com", totpEnrolled: true };
+/** `GET /auth/me` for nobody signed in: the login's case, since a signed-in visitor leaves it. */
+const SIGNED_OUT = (): Reply => ({ status: 401, body: { error: "unauthenticated" } });
 /** A 1×1 GIF: an image the fake media library can show without a server. */
 const PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=";
 const NOW = new Date().toISOString();
@@ -1192,37 +1194,33 @@ test.describe("admin", () => {
     await expect(page.getByText("Page title", { exact: true })).toBeVisible();
   });
 
-  test("the sign-in is a terminal window that shakes at a wrong password", async ({
+  test("the sign-in is one plain form under the site's wordmark: no window, no prompt", async ({
     page,
     baseURL,
   }) => {
     await fakeApi(page, baseURL, {
+      "GET /auth/me": SIGNED_OUT,
       "POST /auth/login": () => ({ status: 401, body: { error: "invalid_credentials" } }),
     });
     await page.goto("/admin/login");
     await interactive(page);
 
-    const window = page.locator("app-terminal-window");
-    await expect(window.locator("header")).toContainText("admin@portfolio — login");
+    await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
+    await expect(page.getByText("Alireza Rastineh", { exact: true })).toBeVisible();
+    await expect(page.locator("app-terminal-window")).toHaveCount(0);
+    for (const costume of ["~$", "sudo login", ">_", "admin@portfolio"]) {
+      await expect(page.getByText(costume), costume).toHaveCount(0);
+    }
 
     await page.getByLabel("Email").fill("admin@example.com");
     await page.getByLabel("Password").fill("wrong-password");
-    const shook = page.evaluate(
-      () =>
-        new Promise<boolean>((resolve) => {
-          const frame = document.querySelector("app-terminal-window")!.parentElement!;
-          frame.addEventListener("animationstart", () => resolve(true), { once: true });
-          setTimeout(() => resolve(false), 3000);
-        }),
-    );
     await page.getByRole("button", { name: "Sign in" }).click();
-
     await expect(page.getByText("Incorrect email or password.")).toBeVisible();
-    expect(await shook).toBe(true);
   });
 
   test("the sign-in's code step takes six digits and sends them", async ({ page, baseURL }) => {
     await fakeApi(page, baseURL, {
+      "GET /auth/me": SIGNED_OUT,
       "POST /auth/login": { ok: true, totpRequired: true, user: null },
       "POST /auth/totp": { ok: true, user: USER },
     });
@@ -4097,25 +4095,6 @@ test.describe("admin", () => {
     await expect(page.getByRole("switch", { name: /^Show .+ on the site$/ })).toHaveCount(
       names.length,
     );
-  });
-
-  test("the sign-in stays still under reduced motion", async ({ page, baseURL }) => {
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await fakeApi(page, baseURL, {
-      "POST /auth/login": () => ({ status: 401, body: { error: "invalid_credentials" } }),
-    });
-    await page.goto("/admin/login");
-    await interactive(page);
-
-    await page.getByLabel("Email").fill("admin@example.com");
-    await page.getByLabel("Password").fill("wrong-password");
-    await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByText("Incorrect email or password.")).toBeVisible();
-
-    const animations = await page
-      .locator("app-terminal-window")
-      .evaluate((el) => el.parentElement!.getAnimations().length);
-    expect(animations).toBe(0);
   });
 
   /** A content agent's proposal (plan phases 29–30), as `GET /admin/assistant/proposals` lists it. */
@@ -7440,7 +7419,7 @@ test.describe("the admin's own look", () => {
     "/admin/assistant",
   ]) {
     test(`${path} has no label in capitals and no text under 12px`, async ({ page, baseURL }) => {
-      await fakeApi(page, baseURL);
+      await fakeApi(page, baseURL, path === "/admin/login" ? { "GET /auth/me": SIGNED_OUT } : {});
       if (path === "/admin/login") {
         await page.goto(path);
         await interactive(page);
@@ -7489,7 +7468,14 @@ test.describe("the admin's own theme (styles/admin-theme.css)", () => {
       await page.emulateMedia({ colorScheme });
       // Relative times ("an hour ago") hold still between the two shots.
       await page.clock.setFixedTime(new Date());
-      const unmocked = await fakeApi(page, baseURL, { "GET /admin/posts": { posts: [] } });
+      const unmocked = await fakeApi(page, baseURL, {
+        "GET /admin/posts": { posts: [] },
+        // Signed out on the login, which a signed-in visitor leaves; signed in everywhere else.
+        "GET /auth/me": () =>
+          page.url().includes("/admin/login")
+            ? SIGNED_OUT()
+            : { status: 200, body: { user: USER, pendingTotp: false, csrfToken: "x" } },
+      });
 
       for (const path of [
         "/admin/login",

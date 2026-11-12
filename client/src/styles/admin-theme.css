@@ -62,13 +62,9 @@
     --available: #5fd48a;
     --data-2: #8cb4d2;
 
-    /* Old names, on new values until their last reader goes: the terminal with the login's
-       costume, the indigo with the rich text, the sortable list and the media pickers. */
+    /* An old name, on a new value until its last reader goes: the rich text, the sortable list
+       and the media pickers. */
     --accent-indigo: var(--input-line);
-    --terminal-bar: var(--surface-2);
-    --term-red: var(--border-strong);
-    --term-amber: var(--border-strong);
-    --term-green: var(--border-strong);
 
     /* Only what floats has a shadow. */
     --shadow-e1: 0 0 #0000;
