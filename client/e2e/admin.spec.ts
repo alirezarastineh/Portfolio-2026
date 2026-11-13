@@ -8733,6 +8733,52 @@ test.describe("the field and the editor", () => {
     await expect(page.locator("body")).toHaveAttribute("data-opened", "/admin/preview/de#about");
   });
 
+  test("the rich text's toolbar is one Tab stop, with arrows, Home and End inside, and no indigo", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    const doc = {
+      en: { title: "Imprint", body: "<p>Text.</p>" },
+      de: { title: "Impressum", body: "<p>Text.</p>" },
+    };
+    await fakeApi(page, baseURL, {
+      "GET /admin/sections/imprint": { section: "imprint", updatedAt: HOUR_AGO, data: doc },
+      "GET /admin/sections/privacy": { section: "privacy", updatedAt: HOUR_AGO, data: doc },
+    });
+    await openAdmin(page, "/admin/legal");
+    const toolbar = page.getByRole("toolbar", { name: "Text (en) formatting" });
+    const tool = (name: string) => toolbar.getByRole("button", { name, exact: true });
+
+    await page.locator("#legal-title-en").focus();
+    await page.keyboard.press("Tab");
+    await expect(tool("Bold")).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(tool("Italic")).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(tool("Insert an image from the media library")).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(tool("Bold")).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(tool("Insert an image from the media library")).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await expect(tool("Italic")).toBeFocused();
+
+    // One stop: Tab leaves for the text, and Shift Tab comes back to the button last used.
+    await page.keyboard.press("Tab");
+    await expect(page.locator(".ProseMirror").first()).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(tool("Italic")).toBeFocused();
+
+    // Pressed, as the admin's toggles are: the foreground's fill, not indigo.
+    await page.locator(".ProseMirror").first().click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.press("Control+b");
+    await expect(tool("Bold")).toHaveAttribute("aria-pressed", "true");
+    await expect(tool("Bold")).toHaveCSS("background-color", "rgb(237, 237, 238)");
+  });
+
   for (const colorScheme of ["dark", "light"] as const) {
     test(`About with a field in each state and a note, in the ${colorScheme} theme, has no accessibility violations`, async ({
       page,

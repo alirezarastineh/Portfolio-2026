@@ -1,3 +1,4 @@
+import { FocusKeyManager } from "@angular/cdk/a11y";
 import { isPlatformBrowser } from "@angular/common";
 import {
   afterNextRender,
@@ -8,10 +9,12 @@ import {
   ElementRef,
   forwardRef,
   inject,
+  Injector,
   input,
   PLATFORM_ID,
   signal,
   viewChild,
+  viewChildren,
   ViewEncapsulation,
 } from "@angular/core";
 import { FormsModule, NG_VALUE_ACCESSOR, type ControlValueAccessor } from "@angular/forms";
@@ -226,41 +229,53 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
     <div
       class="overflow-hidden rounded-lg border border-input-line bg-card has-[.ProseMirror:focus-visible]:outline-2 has-[.ProseMirror:focus-visible]:outline-offset-2 has-[.ProseMirror:focus-visible]:outline-accent-orange"
     >
+      <!-- One Tab stop for the buttons: the arrows, Home and End move between them (APG's toolbar).
+           The code block's language is a stop of its own: a select's arrows change its value. -->
       <div
         class="flex flex-wrap items-center gap-0.5 border-b border-border bg-card/40 p-1"
         role="toolbar"
         [attr.aria-label]="label() + ' formatting'"
+        (keydown)="onToolbarKey($event)"
       >
         @for (action of actions(); track action.id) {
           <button
+            #tool
             type="button"
-            class="inline-flex size-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
-            [class.bg-accent-indigo]="activeMarks().includes(action.id)"
-            [class.text-foreground]="activeMarks().includes(action.id)"
+            class="inline-flex size-7 items-center justify-center rounded transition-colors"
+            [class]="toolClass(activeMarks().includes(action.id))"
+            [attr.tabindex]="$index === activeTool() ? 0 : -1"
             [attr.aria-label]="action.label"
             [attr.aria-pressed]="action.isActive ? activeMarks().includes(action.id) : null"
             [title]="action.label"
+            (focus)="toolFocused($index)"
             (click)="apply(action)"
           >
             <ng-icon [name]="action.icon" size="14" aria-hidden="true" />
           </button>
         }
         <button
+          #tool
           type="button"
-          class="inline-flex size-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
-          [class.bg-accent-indigo]="activeMarks().includes('link')"
+          class="inline-flex size-7 items-center justify-center rounded transition-colors"
+          [class]="toolClass(activeMarks().includes('link'))"
+          [attr.tabindex]="actions().length === activeTool() ? 0 : -1"
           aria-label="Add or edit link"
           title="Link"
+          (focus)="toolFocused(actions().length)"
           (click)="openLinkDialog()"
         >
           <ng-icon name="lucideLink" size="14" aria-hidden="true" />
         </button>
         @if (mode() === "long") {
           <button
+            #tool
             type="button"
-            class="inline-flex size-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+            class="inline-flex size-7 items-center justify-center rounded transition-colors"
+            [class]="toolClass(false)"
+            [attr.tabindex]="actions().length + 1 === activeTool() ? 0 : -1"
             aria-label="Insert an image from the media library"
             title="Image"
+            (focus)="toolFocused(actions().length + 1)"
             (click)="imagePickerOpen.set(true)"
           >
             <ng-icon name="lucideImagePlus" size="14" aria-hidden="true" />
@@ -428,7 +443,7 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
       border-radius: 0.5rem;
     }
     .admin-prose img.ProseMirror-selectednode {
-      outline: 2px solid var(--color-accent-indigo);
+      outline: 2px solid var(--input-line);
     }
     .admin-prose a {
       text-decoration: underline;
@@ -461,6 +476,20 @@ export class RichTextComponent implements ControlValueAccessor {
   protected readonly imagePickerOpen = signal(false);
 
   private readonly host = viewChild.required<ElementRef<HTMLElement>>("host");
+  /** The toolbar's buttons, in order: one Tab stop, the arrows between them. */
+  private readonly tools = viewChildren<string, ElementRef<HTMLButtonElement>>("tool", {
+    read: ElementRef,
+  });
+  protected readonly keys = new FocusKeyManager(
+    computed(() => this.tools().map((tool) => ({ focus: () => tool.nativeElement.focus() }))),
+    inject(Injector),
+  )
+    .withHorizontalOrientation("ltr")
+    .withVerticalOrientation(false)
+    .withHomeAndEnd()
+    .withWrap();
+  /** The button the toolbar's Tab stop is on: the first, then the one last used. */
+  protected readonly activeTool = signal(0);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly destroyRef = inject(DestroyRef);
   private editor?: Editor;
@@ -596,6 +625,24 @@ export class RichTextComponent implements ControlValueAccessor {
 
   protected apply(action: ToolbarAction): void {
     if (this.editor) action.run(this.editor);
+  }
+
+  /** The toolbar's arrows, Home and End; a focused select keeps its own. */
+  protected onToolbarKey(event: KeyboardEvent): void {
+    if (!(event.target instanceof HTMLSelectElement)) this.keys.onKeydown(event);
+  }
+
+  /** A button reached by the arrows, a click or Tab: the toolbar's stop moves to it. */
+  protected toolFocused(index: number): void {
+    this.keys.updateActiveItem(index);
+    this.activeTool.set(index);
+  }
+
+  /** Pressed as the admin's toggles are: the foreground's fill. */
+  protected toolClass(pressed: boolean): string {
+    return pressed
+      ? "bg-foreground text-background"
+      : "text-muted-foreground hover:bg-surface-2 hover:text-foreground";
   }
 
   protected setCodeLanguage(language: string): void {
