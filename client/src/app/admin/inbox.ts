@@ -1,7 +1,28 @@
-import type { MessageStatus } from "./admin-api.service";
+import type { MessageRow, MessageStatus } from "./admin-api.service";
 
 /** The inbox's filters: the inbox itself (new and read), or one status. */
 export type InboxFilter = "inbox" | MessageStatus;
+
+const FILTERS: readonly string[] = ["inbox", "new", "read", "archived", "spam"];
+
+/** The filter an address names (`?filter=spam`); the inbox when it names none it knows. */
+export const filterFrom = (value: string | null): InboxFilter =>
+  FILTERS.includes(value ?? "") ? (value as InboxFilter) : "inbox";
+
+/** A reply in the message's own language: the subject is the first thing the sender reads. */
+export function replyHref(message: Pick<MessageRow, "email" | "locale">): string {
+  const subject = message.locale === "de" ? "Re: Ihre Nachricht" : "Re: your message";
+  return `mailto:${encodeURIComponent(message.email)}?subject=${encodeURIComponent(subject)}`;
+}
+
+/** An answer as a person reads it: its citation marks (`[^project:atlas@en]`) left out. */
+export const withoutMarks = (answer: string): string => answer.replaceAll(/\s*\[\^[^\]]*\]/g, "");
+
+/** The status E (archive), U (unread) or # (spam) gives a message, or null where it does nothing. */
+export function statusForKey(key: string, status: MessageStatus): MessageStatus | null {
+  const next = key === "e" ? "archived" : key === "u" ? "new" : key === "#" ? "spam" : null;
+  return next && actionsFor(status).some((action) => action.status === next) ? next : null;
+}
 
 /** Whether a message with this status belongs in the list the filter shows. */
 export function inFilter(filter: InboxFilter, status: MessageStatus): boolean {

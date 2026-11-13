@@ -32,6 +32,8 @@ export const SHORTCUTS: { where: string; items: Shortcut[] }[] = [
       { keys: ["K"], does: "Previous message" },
       { keys: ["E"], does: "Archive the open message" },
       { keys: ["U"], does: "Mark the open message unread" },
+      { keys: ["R"], does: "Reply to the open message" },
+      { keys: ["#"], does: "Mark the open message as spam" },
     ],
   },
   {
@@ -55,7 +57,9 @@ export const SHORTCUTS: { where: string; items: Shortcut[] }[] = [
       <hlm-dialog-content *hlmDialogPortal="let ctx" class="sm:max-w-md">
         <hlm-dialog-header>
           <h2 hlmDialogTitle>Keyboard shortcuts</h2>
-          <p hlmDialogDescription>Letters work anywhere but in a field you are typing in.</p>
+          <p hlmDialogDescription>
+            Letters work anywhere but in a field you are typing in, a dialog or an open menu.
+          </p>
         </hlm-dialog-header>
         <div class="flex flex-col gap-4">
           @for (group of groups; track group.where) {
@@ -110,11 +114,11 @@ export function isRailKey(event: KeyboardEvent): boolean {
   return !typingIn(event);
 }
 
-/** Focus is in something that takes text, or in a dialog: the key is its own. */
+/** Focus is in something that takes text, in a dialog, or in a menu (it types ahead): the key is its own. */
 function typingIn(event: KeyboardEvent): boolean {
   const target = event.target as HTMLElement | null;
   if (!target || typeof target.closest !== "function") return false;
   return !!target.closest(
-    "input, textarea, select, [contenteditable]:not([contenteditable='false']), [role=textbox], [role=combobox], [role=dialog], [role=alertdialog]",
+    "input, textarea, select, [contenteditable]:not([contenteditable='false']), [role=textbox], [role=combobox], [role=dialog], [role=alertdialog], [role=menu], [role=menubar]",
   );
 }

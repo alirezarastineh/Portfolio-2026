@@ -1367,13 +1367,18 @@ test.describe("admin", () => {
     await expect(metrics).toHaveAttribute("aria-current", "location");
   });
 
-  test("the inbox shows a hand-off's attached conversation", async ({ page, baseURL }) => {
+  test("a hand-off reads as questions and answers, and a failed forward says so first", async ({
+    page,
+    baseURL,
+  }) => {
     const unmocked = await fakeApi(page, baseURL, {
       "GET /admin/messages": {
         messages: [
           {
             ...message("m9", "Ada Lovelace", "read"),
             message: "Wants to discuss a six-month contract for an AI platform.",
+            mailStatus: "failed",
+            mailError: "The domain is not verified",
             origin: "ask",
             askTranscript: {
               v: 1,
@@ -1400,12 +1405,28 @@ test.describe("admin", () => {
     await page.getByRole("region", { name: "Messages" }).getByRole("button").first().click();
 
     const reader = page.getByRole("region", { name: "Ada Lovelace" });
+    // In words, above the message: what failed, and the mail service's own reason.
+    const failed = reader.getByText(
+      "Not forwarded to your email. The mail service said: The domain is not verified.",
+    );
+    await expect(failed).toBeVisible();
+    const body = reader.getByText("Wants to discuss a six-month contract");
+    expect((await failed.boundingBox())!.y).toBeLessThan((await body.boundingBox())!.y);
+    await expect(reader.getByText("email failed")).toHaveCount(0);
+
     await expect(reader.getByText("via the assistant")).toBeVisible();
     await expect(
       reader.getByText("Their conversation with the assistant (2 answers)"),
     ).toBeVisible();
-    await expect(reader.getByText("Has he built RAG systems?")).toBeVisible();
-    await expect(reader.getByText("cited: project:atlas@en")).toBeVisible();
+    // Each turn a question and its answer, named so; the answer without its citation marks.
+    const turn = reader.getByRole("listitem").filter({ hasText: "Has he built RAG systems?" });
+    await expect(turn.getByRole("term")).toHaveText(["Question", "Answer"]);
+    await expect(turn.getByRole("definition")).toHaveText([
+      "Has he built RAG systems?",
+      "Yes: Atlas cut escalations by 38%.",
+    ]);
+    await expect(reader).not.toContainText("[^");
+    await expect(turn.getByText("Sources: project:atlas@en")).toBeVisible();
     expect(unmocked).toEqual([]);
   });
 
@@ -7887,6 +7908,183 @@ test.describe("Today", () => {
     await expect(edit).toHaveAttribute("href", "/admin/projects/p1");
     await show.click();
     await expect(edit).toHaveCount(0);
+  });
+});
+
+test.describe("Inbox", () => {
+  /** A German message, an English one and one already read, newest first. */
+  const INBOX = {
+    messages: [
+      { ...message("m1", "Ada Lovelace", "new"), locale: "de" },
+      message("m2", "Grace Hopper", "new"),
+      message("m4", "Alan Turing", "read"),
+    ],
+  };
+  const ok = () => ({ status: 200, body: { ok: true } });
+  const reader = (page: Page, name: string) => page.getByRole("region", { name });
+
+  /** Every mail link followed, kept instead of opening the mail app. */
+  async function catchMail(page: Page): Promise<() => Promise<string[]>> {
+    await page.addInitScript(() => {
+      const kept: string[] = [];
+      (window as unknown as { mailto: string[] }).mailto = kept;
+      document.addEventListener(
+        "click",
+        (event) => {
+          const link = (event.target as Element | null)?.closest?.("a[href^='mailto:']");
+          if (!link) return;
+          event.preventDefault();
+          kept.push(link.getAttribute("href") ?? "");
+        },
+        true,
+      );
+    });
+    return () => page.evaluate(() => (window as unknown as { mailto: string[] }).mailto);
+  }
+
+  /** "m1 archived": each status sent, in order. */
+  function statuses(page: Page): string[] {
+    const sent: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() !== "PATCH") return;
+      const id = new URL(request.url()).pathname.split("/").pop();
+      sent.push(`${id} ${(request.postDataJSON() as { status: string }).status}`);
+    });
+    return sent;
+  }
+
+  for (const width of [390, 1280]) {
+    test(`task 5 at ${width} px with keys alone: J opens, R replies in the message's language, E, U and # decide`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.setViewportSize({ width, height: 844 });
+      const mail = await catchMail(page);
+      const unmocked = await fakeApi(page, baseURL, {
+        "GET /admin/messages": INBOX,
+        "PATCH /admin/messages/m1": ok,
+        "PATCH /admin/messages/m2": ok,
+      });
+      const sent = statuses(page);
+      await openAdmin(page, "/admin/inbox");
+
+      await page.keyboard.press("j");
+      await expect(reader(page, "Ada Lovelace")).toBeVisible();
+      await expect(page).toHaveURL(/[?&]m=m1$/);
+      await page.keyboard.press("r");
+      await expect
+        .poll(mail)
+        .toEqual([`mailto:m1%40example.com?subject=${encodeURIComponent("Re: Ihre Nachricht")}`]);
+
+      // Archived: the next one opens in its place, at either width.
+      await page.keyboard.press("e");
+      await expect(reader(page, "Grace Hopper")).toBeVisible();
+      await page.keyboard.press("r");
+      await expect.poll(mail).toHaveLength(2);
+      expect((await mail())[1]).toBe(
+        `mailto:m2%40example.com?subject=${encodeURIComponent("Re: your message")}`,
+      );
+
+      await page.keyboard.press("u");
+      await expect.poll(() => sent).toEqual(["m1 read", "m1 archived", "m2 read", "m2 new"]);
+      await page.keyboard.press("#");
+      await expect(reader(page, "Alan Turing")).toBeVisible();
+      await expect
+        .poll(() => sent)
+        .toEqual(["m1 read", "m1 archived", "m2 read", "m2 new", "m2 spam"]);
+
+      // Each key's hint sits on its button.
+      const open = reader(page, "Alan Turing");
+      await expect(open.getByRole("link", { name: "Reply" }).locator("kbd")).toHaveText("R");
+      await expect(open.getByRole("button", { name: "Archive" }).locator("kbd")).toHaveText("E");
+      await expect(open.getByRole("button", { name: "Mark unread" }).locator("kbd")).toHaveText(
+        "U",
+      );
+      await expect(open.getByRole("button", { name: "Spam" }).locator("kbd")).toHaveText("#");
+      expect(unmocked).toEqual([]);
+    });
+  }
+
+  test("# marks spam on a German keyboard too; no key acts in a menu or a dialog", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "GET /admin/messages": INBOX,
+      "PATCH /admin/messages/m1": ok,
+    });
+    const sent = statuses(page);
+    await openAdmin(page, "/admin/inbox?m=m1");
+    await expect(reader(page, "Ada Lovelace")).toBeVisible();
+
+    // A menu (the top bar's Preview, opened from the keyboard) keeps its letters.
+    await page
+      .getByRole("banner")
+      .getByRole("button", { name: /^Preview/ })
+      .focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("menuitem").first()).toBeFocused();
+    await page.keyboard.press("j");
+    await page.keyboard.press("Escape");
+    // So does a dialog (Find).
+    await page.keyboard.press("Control+k");
+    await expect(page.getByRole("combobox")).toBeFocused();
+    await page.keyboard.press("j");
+    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL(/[?&]m=m1$/);
+
+    // On a German layout # is a key of its own, with no Shift.
+    await page.locator("body").dispatchEvent("keydown", { key: "#", code: "Backslash" });
+    await expect.poll(() => sent).toEqual(["m1 read", "m1 spam"]);
+  });
+
+  test("the filter and the open message live in the address; the rail's Inbox goes back to the inbox", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "GET /admin/messages": {
+        messages: [...INBOX.messages, message("m5", "Edsger Dijkstra", "archived")],
+      },
+    });
+    await openAdmin(page, "/admin/inbox?filter=archived&m=m5");
+    const filter = page.getByRole("group", { name: "Message filter" });
+    const list = page.getByRole("region", { name: "Messages" });
+    await expect(filter.getByRole("button", { name: "Archived" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(reader(page, "Edsger Dijkstra")).toBeVisible();
+
+    await filter.getByRole("button", { name: "New" }).click();
+    await expect(page).toHaveURL(/\/admin\/inbox\?filter=new$/);
+    await expect(list.getByRole("button")).toHaveCount(2);
+    await page.reload();
+    await interactive(page);
+    await expect(filter.getByRole("button", { name: "New" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await page
+      .locator("[data-slot=sidebar-inner]")
+      .getByRole("link", { name: /^Inbox/ })
+      .click();
+    await expect(page).toHaveURL(/\/admin\/inbox$/);
+    await expect(filter.getByRole("button", { name: "Inbox" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(list.getByRole("button")).toHaveCount(3);
+  });
+
+  test("an empty filter says so and offers the inbox", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL, { "GET /admin/messages": INBOX });
+    await openAdmin(page, "/admin/inbox?filter=spam");
+    await expect(page.getByText("No spam.", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Show the inbox" }).click();
+    await expect(page).toHaveURL(/\/admin\/inbox$/);
+    await expect(page.getByRole("region", { name: "Messages" }).getByRole("button")).toHaveCount(3);
   });
 });
 

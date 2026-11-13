@@ -33,4 +33,17 @@ describe("the admin's keys", () => {
     expect(isShortcutTarget(press(field, { key: "?" }))).toBe(false);
     expect(isShortcutTarget(press(page, { key: "j", ctrlKey: true }))).toBe(false);
   });
+
+  it("leaves the letters to an open menu, which types ahead with them", () => {
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    const item = menu.appendChild(document.createElement("button"));
+    item.setAttribute("role", "menuitem");
+    expect(isShortcutTarget(press(item, { key: "j" }))).toBe(false);
+  });
+
+  it("takes # as a German layout types it, a key of its own", () => {
+    expect(isShortcutTarget(press(page, { key: "#", code: "Backslash" }))).toBe(true);
+    expect(isShortcutTarget(press(page, { key: "#", code: "Digit3", shiftKey: true }))).toBe(true);
+  });
 });

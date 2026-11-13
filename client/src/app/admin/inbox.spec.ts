@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { actionsFor, afterLeaving, inFilter, stepFrom } from "./inbox";
+import {
+  actionsFor,
+  afterLeaving,
+  filterFrom,
+  inFilter,
+  replyHref,
+  statusForKey,
+  stepFrom,
+  withoutMarks,
+} from "./inbox";
 
 const list = [{ id: "a" }, { id: "b" }, { id: "c" }];
 
@@ -38,5 +47,41 @@ describe("inbox", () => {
     expect(stepFrom(list, "b", -1)).toEqual({ id: "a" });
     expect(stepFrom(list, "a", -1)).toEqual({ id: "a" });
     expect(stepFrom([], null, 1)).toBeNull();
+  });
+
+  it("replies in the message's language, English when it has none", () => {
+    expect(replyHref({ email: "ada@example.com", locale: "de" })).toBe(
+      "mailto:ada%40example.com?subject=Re%3A%20Ihre%20Nachricht",
+    );
+    expect(replyHref({ email: "grace@example.com", locale: "en" })).toBe(
+      "mailto:grace%40example.com?subject=Re%3A%20your%20message",
+    );
+    expect(replyHref({ email: "x@example.com", locale: null })).toBe(
+      "mailto:x%40example.com?subject=Re%3A%20your%20message",
+    );
+  });
+
+  it("reads an answer without its citation marks", () => {
+    expect(withoutMarks("Yes: Atlas cut escalations by 38% [^project:atlas@en].")).toBe(
+      "Yes: Atlas cut escalations by 38%.",
+    );
+    expect(withoutMarks("A[^a@en][^b@de] and B.")).toBe("A and B.");
+    expect(withoutMarks("No marks.")).toBe("No marks.");
+  });
+
+  it("reads the filter from the address, the inbox when it names none it knows", () => {
+    expect(filterFrom("spam")).toBe("spam");
+    expect(filterFrom(null)).toBe("inbox");
+    expect(filterFrom("constructor")).toBe("inbox");
+  });
+
+  it("gives E, U and # a status only where the message can take it", () => {
+    expect(statusForKey("e", "new")).toBe("archived");
+    expect(statusForKey("e", "archived")).toBeNull();
+    expect(statusForKey("u", "read")).toBe("new");
+    expect(statusForKey("u", "new")).toBeNull();
+    expect(statusForKey("#", "read")).toBe("spam");
+    expect(statusForKey("#", "spam")).toBeNull();
+    expect(statusForKey("x", "read")).toBeNull();
   });
 });
