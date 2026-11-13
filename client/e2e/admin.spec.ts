@@ -1205,9 +1205,10 @@ test.describe("admin", () => {
   }) => {
     await fakeApi(page, baseURL);
     await page.setViewportSize({ width: 1280, height: 720 });
-    await openAdmin(page, "/admin/about");
+    // Profile keeps the page header until its Part (About has the editor header, plan 5 U10).
+    await openAdmin(page, "/admin/hero");
 
-    const title = page.getByRole("heading", { level: 1, name: "About" });
+    const title = page.getByRole("heading", { level: 1, name: "Profile" });
     await expect(title).toBeVisible();
     const row = page.locator(".sticky", { has: title });
     await expect(row).not.toHaveAttribute("data-stuck");
@@ -5029,7 +5030,7 @@ test.describe("never losing work", () => {
     return bodies;
   }
 
-  const saveDraft = (page: Page) => page.getByRole("button", { name: "Save draft" });
+  const saveDraft = (page: Page) => page.getByRole("button", { name: /^Save( draft)?$/ });
   const aboutHeading = (page: Page) => page.locator("#about-heading-en");
   const signIn = (page: Page) => page.getByRole("dialog", { name: "Sign in to carry on" });
 
@@ -5085,7 +5086,7 @@ test.describe("never losing work", () => {
     await expect(page).toHaveURL(/\/admin\/about$/);
 
     await saveDraft(page).click();
-    await expect(page.getByText("Draft saved")).toBeVisible();
+    await expect(page.locator("app-editor-header [role=status]")).toHaveText(/^Saved/);
     expect(patches).toHaveLength(2);
     expect(patches[1]).toMatchObject({
       groups: { about: { en: { heading: TYPED } } },
@@ -5131,7 +5132,7 @@ test.describe("never losing work", () => {
     await expect(signIn(page)).toBeHidden();
     await expect(aboutHeading(page)).toHaveValue(TYPED);
     await saveDraft(page).click();
-    await expect(page.getByText("Draft saved")).toBeVisible();
+    await expect(page.locator("app-editor-header [role=status]")).toHaveText(/^Saved/);
   });
 
   test("while the session is lost, Escape and Back stay on the page", async ({ page, baseURL }) => {
@@ -5260,7 +5261,7 @@ test.describe("never losing work", () => {
     await aboutHeading(page).fill(TYPED);
     await saveDraft(page).click();
 
-    await expect(page.getByText("Draft saved")).toBeVisible();
+    await expect(page.locator("app-editor-header [role=status]")).toHaveText(/^Saved/);
     await expect(page.getByRole("alertdialog")).toHaveCount(0);
     expect(patches).toHaveLength(2);
     expect(patches[1]).toMatchObject({
@@ -5290,7 +5291,7 @@ test.describe("never losing work", () => {
 
     await ask.getByRole("button", { name: "Reload" }).click();
     await expect(aboutHeading(page)).toHaveValue("Changed in another tab");
-    await expect(page.locator("app-save-bar [role=status]")).toHaveText(/^saved/);
+    await expect(page.locator("app-editor-header [role=status]")).toHaveText("Live");
   });
 
   test("Keep my edits after a 409 stays on the form, and the next Save replaces that version", async ({
@@ -5312,7 +5313,7 @@ test.describe("never losing work", () => {
     await expect(aboutHeading(page)).toHaveValue(TYPED);
 
     await saveDraft(page).click();
-    await expect(page.getByText("Draft saved")).toBeVisible();
+    await expect(page.locator("app-editor-header [role=status]")).toHaveText(/^Saved/);
     expect(patches).toHaveLength(2);
     expect(patches[1]).toMatchObject({ updatedAt: NEWER });
   });
@@ -5805,7 +5806,7 @@ test.describe("the recovery copy", () => {
 
   const NEWER = new Date(Date.now() + 60_000).toISOString();
   const saved = (body: unknown = { ok: true, updatedAt: NEWER }) => ({ status: 200, body });
-  const saveDraft = (page: Page) => page.getByRole("button", { name: "Save draft" });
+  const saveDraft = (page: Page) => page.getByRole("button", { name: /^Save( draft)?$/ });
   const banner = (page: Page) => page.getByRole("status").filter({ hasText: "Unsaved edits from" });
   const aboutHeading = (page: Page) => page.locator("#about-heading-en");
   const undo = (page: Page) =>
@@ -6144,7 +6145,7 @@ test.describe("the recovery copy", () => {
     await stored(page, ["ui:about||en.heading"]);
 
     await saveDraft(page).click();
-    await expect(page.getByText("Draft saved")).toBeVisible();
+    await expect(page.locator("app-editor-header [role=status]")).toHaveText(/^Saved/);
     await stored(page, []);
   });
 
@@ -6155,7 +6156,9 @@ test.describe("the recovery copy", () => {
     await aboutHeading(page).fill("Thrown away");
     await stored(page, ["ui:about||en.heading"]);
 
-    await page.getByRole("button", { name: "Discard" }).click();
+    // About's Discard is in its header's ⋯ (plan 5, U10).
+    await page.getByRole("button", { name: "More actions for About" }).click();
+    await page.getByRole("menuitem", { name: "Discard 1 change" }).click();
     await expect(aboutHeading(page)).toHaveValue(original);
     await stored(page, []);
 
@@ -6263,7 +6266,7 @@ test.describe("the recovery copy", () => {
     await expect(aboutHeading(back)).toHaveValue("Back and kept");
 
     await saveDraft(back).click();
-    await expect(back.getByText("Draft saved")).toBeVisible();
+    await expect(back.locator("app-editor-header [role=status]")).toHaveText(/^Saved/);
     expect(patches[0]).toMatchObject({ groups: { about: { en: { heading: "Back and kept" } } } });
     await stored(back, []);
     expect(problems.pageErrors).toEqual([]);
@@ -6755,7 +6758,7 @@ test.describe("the recovery copy", () => {
 
 test.describe("telling the truth", () => {
   const saved = (body: unknown = { ok: true, updatedAt: NOW }) => ({ status: 200, body });
-  const saveDraft = (page: Page) => page.getByRole("button", { name: "Save draft" });
+  const saveDraft = (page: Page) => page.getByRole("button", { name: /^Save( draft)?$/ });
   const refused = { status: 500, body: { error: "server_error" } };
   const tab = (page: Page, name: string) => page.getByRole("tab", { name, exact: true }).click();
 
@@ -7065,7 +7068,7 @@ test.describe("telling the truth", () => {
 
     await page.locator("#about-heading-en").fill("About me");
     await saveDraft(page).click();
-    await expect(page.getByText("Draft saved")).toBeVisible();
+    await expect(page.locator("app-editor-header [role=status]")).toHaveText(/^Saved/);
     expect(patches[0]).toMatchObject({
       groups: {
         about: {
@@ -8353,6 +8356,410 @@ test.describe("the admin's own theme (styles/admin-theme.css)", () => {
     expect(html).toContain("<app-admin-layout");
     expect(html).toContain(":root:root:has(app-admin-layout):not(:has(app-admin-preview-frame))");
   });
+});
+
+/** The editor header, the bilingual field with its trace and its ⋯, the outline's dots: About (plan 5, U10). */
+test.describe("the field and the editor", () => {
+  const NEWER = new Date(Date.now() + 60_000).toISOString();
+  const saved = (body: unknown = { ok: true, updatedAt: NEWER }) => ({ status: 200, body });
+  const ui = (locale: "en" | "de") =>
+    content(locale)["ui"] as Record<string, Record<string, string>>;
+  type AboutText = Partial<Record<"en" | "de", Record<string, string>>>;
+
+  /** The review: the draft is the fixture (as the editor loads it) unless `draft` says more; live as `live` says. */
+  function review({ live = {}, draft = {} }: { live?: AboutText; draft?: AboutText } = {}) {
+    const side = (locale: "en" | "de") => {
+      const text = ui(locale);
+      const about = (over: Record<string, string> = {}) => ({
+        ...text,
+        about: { ...text["about"], ...over },
+      });
+      const sides = { draft: { ui: about(draft[locale]) }, live: { ui: about(live[locale]) } };
+      return {
+        locale,
+        issues: [],
+        changed: JSON.stringify(sides.draft) !== JSON.stringify(sides.live),
+        liveVersionId: 12,
+        docs: [],
+        ...sides,
+      };
+    };
+    return { canPublish: true, locales: [side("en"), side("de")] };
+  }
+
+  const field = (page: Page, key: string) =>
+    page.locator("app-bilingual-field").filter({ has: page.locator(`#about-${key}-label`) });
+  const header = (page: Page) => page.locator("app-editor-header");
+  const state = (page: Page) => header(page).getByRole("status").first();
+  const save = (page: Page) => header(page).getByRole("button", { name: "Save", exact: true });
+  /** The trace as drawn: the field's `::before`, its colour and its opacity. */
+  const trace = (locator: Locator) =>
+    locator.evaluate((el) => {
+      const line = getComputedStyle(el, "::before");
+      return `${line.backgroundColor} ${line.opacity}`;
+    });
+
+  /** The JSON of every request to this method and path, as they go. */
+  function sent(page: Page, method: string, path: string): Record<string, unknown>[] {
+    const bodies: Record<string, unknown>[] = [];
+    page.on("request", (request) => {
+      if (request.method() === method && new URL(request.url()).pathname === path) {
+        bodies.push(request.postDataJSON() as Record<string, unknown>);
+      }
+    });
+    return bodies;
+  }
+
+  for (const colorScheme of ["dark", "light"] as const) {
+    test(`About shows the trace's three states in the ${colorScheme} theme, with words for screen readers`, async ({
+      page,
+      baseURL,
+      problems,
+    }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await page.setViewportSize({ width: 1280, height: 900 });
+      const after = heldReply({
+        status: 200,
+        body: review({
+          live: { de: { philosophy: "Alter Text, der live ist." } },
+          draft: { en: { heading: "About me" } },
+        }),
+      });
+      await fakeApi(page, baseURL, {
+        "GET /admin/publish/review": (n: number) =>
+          n === 1
+            ? saved(review({ live: { de: { philosophy: "Alter Text, der live ist." } } }))
+            : after.answer(),
+        "PATCH /admin/sections/ui": saved(),
+      });
+      await openAdmin(page, "/admin/about");
+      const grey = colorScheme === "dark" ? "rgba(255, 255, 255, 0.42) 1" : "rgba(0, 0, 0, 0.5) 1";
+
+      // Live: no line, nothing said.
+      await expect(field(page, "heading")).not.toHaveAttribute("data-change");
+      expect(await trace(field(page, "heading"))).toMatch(/ 0$/);
+      await expect(page.locator("#about-heading-en")).toHaveAccessibleDescription("");
+
+      // In the draft, not live (the German differs from live): grey, said in both languages.
+      await expect(field(page, "philosophy")).toHaveAttribute("data-change", "draft");
+      expect(await trace(field(page, "philosophy"))).toBe(grey);
+      await expect(page.locator("#about-philosophy-en")).toHaveAccessibleDescription(/In draft/);
+      await expect(page.locator("#about-philosophy-de")).toHaveAccessibleDescription(/In draft/);
+      await expect(state(page)).toHaveText("1 field not live");
+
+      // Changed here, not saved: orange.
+      await page.locator("#about-heading-en").fill("About me");
+      await expect(field(page, "heading")).toHaveAttribute("data-change", "unsaved");
+      expect(await trace(field(page, "heading"))).toBe("rgb(255, 79, 0) 1");
+      await expect(page.locator("#about-heading-en")).toHaveAccessibleDescription(/Unsaved/);
+      await expect(state(page)).toHaveText("1 unsaved change");
+
+      // Saved: grey at once, while the next review is still on its way, and after it.
+      await page.keyboard.press("Control+s");
+      // The browser's own time format: "14:02", or "02:02 PM".
+      await expect(state(page)).toHaveText(/^Saved \d\d:\d\d/);
+      await expect(field(page, "heading")).toHaveAttribute("data-change", "draft");
+      await expect(page.locator("#about-heading-en")).toHaveAccessibleDescription(/In draft/);
+      after.release();
+      await expect(
+        page.getByRole("banner").getByRole("button", { name: /^Publish/ }),
+      ).toBeEnabled();
+      await expect(field(page, "heading")).toHaveAttribute("data-change", "draft");
+      expect(problems.pageErrors).toEqual([]);
+    });
+  }
+
+  for (const [width, height] of [
+    [1280, 720],
+    [390, 844],
+  ] as const) {
+    test(`at ${width} px the header keeps Save in view at every scroll, and Ctrl S right after typing saves every word`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.setViewportSize({ width, height });
+      await fakeApi(page, baseURL, { "PATCH /admin/sections/ui": saved() });
+      const patches = sent(page, "PATCH", "/admin/sections/ui");
+      await openAdmin(page, "/admin/about");
+      await expect(page.getByRole("heading", { level: 1, name: "About" })).toBeAttached();
+      for (const top of [0, 900, 99_999]) {
+        await page.evaluate((y) => window.scrollTo(0, y), top);
+        await expect(save(page)).toBeInViewport({ ratio: 1 });
+      }
+
+      // The last field, typed and saved in one breath.
+      const last = page.locator("#about-terminalOutputContact-en");
+      await last.fill("Typed and saved at once");
+      await page.keyboard.press("Control+s");
+      await expect(state(page)).toHaveText(/^Saved \d\d:\d\d/);
+      expect(patches).toHaveLength(1);
+      expect(patches[0]).toMatchObject({
+        groups: { about: { en: { terminalOutputContact: "Typed and saved at once" } } },
+      });
+    });
+  }
+
+  test("the German's notes come from the live site's text, and leave as the German is written", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await fakeApi(page, baseURL, {
+      "GET /admin/publish/review": review({
+        live: { en: { philosophy: "The English as it is live." } },
+      }),
+    });
+    await openAdmin(page, "/admin/about");
+    const note = (key: string) =>
+      field(page, key).getByText(/^(Missing in German|English changed, German not)$/);
+
+    // The English moved on from the live site's; the German did not.
+    await expect(note("philosophy")).toHaveText("English changed, German not");
+    await expect(page.locator("#about-philosophy-de")).toHaveAccessibleDescription(
+      /English changed, German not/,
+    );
+
+    // The bio is empty in both: nothing to say until the English has words.
+    await expect(note("bio")).toHaveCount(0);
+    await page.locator("#about-bio-en").fill("I build AI that answers with sources.");
+    await expect(note("bio")).toHaveText("Missing in German");
+    await expect(page.locator("#about-bio-de")).toHaveAccessibleDescription(/Missing in German/);
+    await page.locator("#about-bio-de").fill("Ich baue KI, die mit Quellen antwortet.");
+    await expect(note("bio")).toHaveCount(0);
+
+    await page.locator("#about-philosophy-de").fill("Neu geschrieben.");
+    await expect(note("philosophy")).toHaveCount(0);
+  });
+
+  test("a field's ⋯ holds copy, translate and tighten (paid), each taken back by Undo there", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await fakeApi(page, baseURL, {
+      "POST /admin/ai/copilot": (n: number) => saved({ text: `Draft ${n}`, model: "gemini-flash" }),
+    });
+    const asked = sent(page, "POST", "/admin/ai/copilot");
+    await openAdmin(page, "/admin/about");
+    const en = page.locator("#about-heading-en");
+    const de = page.locator("#about-heading-de");
+    const english = await en.inputValue();
+    const german = await de.inputValue();
+    const more = page.getByRole("button", { name: "More actions for Section heading" });
+    const pick = async (name: string) => {
+      await more.click();
+      await page.getByRole("menuitem", { name, exact: true }).click();
+    };
+
+    await pick("Copy English to German");
+    await expect(de).toHaveValue(english);
+    await pick("Undo");
+    await expect(de).toHaveValue(german);
+    await more.click();
+    await expect(page.getByRole("menuitem", { name: "Undo", exact: true })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(more).toBeFocused();
+
+    await pick("Translate to German with AI (paid)");
+    await expect(de).toHaveValue("Draft 1");
+    expect(asked[0]).toMatchObject({ task: "translate", from: "en", to: "de", text: english });
+    await pick("Undo");
+    await expect(de).toHaveValue(german);
+
+    await pick("Translate to English with AI (paid)");
+    await expect(en).toHaveValue("Draft 2");
+    expect(asked[1]).toMatchObject({ task: "translate", from: "de", to: "en", text: german });
+    await pick("Undo");
+    await expect(en).toHaveValue(english);
+
+    // Both languages in one step, and back in one.
+    await pick("Tighten with AI (paid)");
+    await expect(en).toHaveValue("Draft 3");
+    await expect(de).toHaveValue("Draft 4");
+    await pick("Undo");
+    await expect(en).toHaveValue(english);
+    await expect(de).toHaveValue(german);
+    expect(asked).toHaveLength(4);
+  });
+
+  test("the field from the keyboard at 1280: ⋯, English, German, and its menu by Enter, arrows and Escape", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await fakeApi(page, baseURL);
+    const patches = sent(page, "PATCH", "/admin/sections/ui");
+    await openAdmin(page, "/admin/about");
+    const more = page.getByRole("button", { name: "More actions for Bio" });
+
+    // The order you see: the field's ⋯ in its label row, then English, then German.
+    await page.locator("#about-heading-de").focus();
+    await page.keyboard.press("Tab");
+    await expect(more).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#about-bio-en")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#about-bio-de")).toBeFocused();
+    await expect(page.locator("#about-bio-de")).toHaveAttribute("lang", "de");
+
+    // The next field's menu (the philosophy has text in both, so every step is open).
+    const next = page.getByRole("button", { name: "More actions for Philosophy" });
+    await page.keyboard.press("Tab");
+    await expect(next).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("menuitem", { name: "Copy English to German" })).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(
+      page.getByRole("menuitem", { name: "Translate to German with AI (paid)" }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(next).toBeFocused();
+
+    // Ctrl S with nothing changed sends nothing.
+    await page.keyboard.press("Control+s");
+    await expect(save(page)).toBeDisabled();
+    expect(patches).toEqual([]);
+  });
+
+  test("the field from the keyboard at 390: one language, the switch in the header, the steps that land in it", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/about");
+    const languages = header(page).getByRole("group", { name: "Language view" });
+    await expect(languages.getByRole("button")).toHaveText(["EN", "DE"]);
+    await expect(page.locator("#about-heading-en")).toBeVisible();
+    await expect(page.locator("#about-heading-de")).toHaveCount(0);
+
+    await page.locator("#about-heading-en").focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "More actions for Bio" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#about-bio-en")).toBeFocused();
+
+    await languages.getByRole("button", { name: "DE" }).click();
+    await expect(page.locator("#about-heading-de")).toBeVisible();
+    await expect(page.locator("#about-heading-en")).toHaveCount(0);
+    await page.getByRole("button", { name: "More actions for Section heading" }).click();
+    await expect(page.getByRole("menuitem")).toHaveText([
+      "Copy English to German",
+      "Translate to German with AI (paid)",
+      "Tighten with AI (paid)",
+      "Undo",
+    ]);
+  });
+
+  test("the language view is About's own, remembered in this browser", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/about");
+    const languages = header(page).getByRole("group", { name: "Language view" });
+    await expect(languages.getByRole("button", { name: "Both" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await languages.getByRole("button", { name: "DE" }).click();
+    await expect(page.locator("#about-heading-en")).toHaveCount(0);
+
+    await page.reload();
+    await interactive(page);
+    await expect(languages.getByRole("button", { name: "DE" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.locator("#about-heading-de")).toBeVisible();
+    await expect(page.locator("#about-heading-en")).toHaveCount(0);
+  });
+
+  test("the rail's dot, the outline's dots and Publish's count follow the same marks", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await fakeApi(page, baseURL, {
+      "GET /admin/publish/review": review({ live: { de: { philosophy: "Alt." } } }),
+    });
+    await openAdmin(page, "/admin/about");
+    const rail = page.locator("[data-slot=sidebar-inner]");
+    const outline = page.getByRole("navigation", { name: "On this page" });
+
+    // One German field in the draft: the page, its section and the site's count say one.
+    await expect(rail.getByRole("link", { name: "About, changes not live" })).toBeVisible();
+    // Chrome puts a space before an `sr-only` span's comma.
+    const here = outline.getByRole("link", { name: /^About section ?, in draft$/ });
+    await expect(here).toBeVisible();
+    await expect(outline.getByRole("link", { name: /^Guided tour/ })).not.toHaveAccessibleName(
+      /in draft|unsaved/,
+    );
+    // The section in view is marked in the text's colour: an orange line is the unsaved trace's.
+    await expect(here).toHaveAttribute("aria-current", "location");
+    await expect(here).toHaveCSS("border-left-color", "rgb(10, 10, 11)");
+    await expect(
+      page.getByRole("banner").getByRole("button", { name: "Publish: 1 change unpublished" }),
+    ).toBeVisible();
+
+    // Typed in the tour's line: orange on its section and on the page.
+    await page.locator("#about-terminalOutputContact-en").fill("Write to me.");
+    await expect(rail.getByRole("link", { name: "About, unsaved changes" })).toBeVisible();
+    await expect(outline.getByRole("link", { name: /^Guided tour ?, unsaved$/ })).toBeVisible();
+  });
+
+  test("one Preview: the top bar's opens About's own section, and the editor has none", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/about");
+    await expect(page.locator("main").getByRole("link", { name: /Preview/ })).toHaveCount(0);
+    await expect(page.locator("main").getByRole("button", { name: /Save & preview/ })).toHaveCount(
+      0,
+    );
+
+    await page.evaluate(() => {
+      window.open = (url) => {
+        document.body.dataset["opened"] = String(url);
+        return null;
+      };
+    });
+    await page.getByRole("banner").getByRole("button", { name: "Preview" }).click();
+    await page.getByRole("menuitem", { name: /^German/ }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "/admin/preview/de#about");
+  });
+
+  for (const colorScheme of ["dark", "light"] as const) {
+    test(`About with a field in each state and a note, in the ${colorScheme} theme, has no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await fakeApi(page, baseURL, {
+        "GET /admin/publish/review": review({ live: { en: { philosophy: "Live English." } } }),
+      });
+      await openAdmin(page, "/admin/about");
+      await page.locator("#about-heading-en").fill("About me");
+      await expect(field(page, "heading")).toHaveAttribute("data-change", "unsaved");
+      await expect(field(page, "philosophy")).toHaveAttribute("data-change", "draft");
+
+      await settled(page);
+      const { violations } = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+        .analyze();
+      expect(
+        violations.map((v) => ({
+          rule: v.id,
+          targets: v.nodes.slice(0, 5).map((n) => n.target.join(" ")),
+        })),
+      ).toEqual([]);
+    });
+  }
 });
 
 test.describe("admin accessibility", () => {

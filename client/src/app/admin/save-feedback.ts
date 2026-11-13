@@ -54,7 +54,11 @@ export function toastUndo(message: string, undo: () => void, focusOn: string): v
   });
 }
 
-/** Discard's way back: the edits return, and Save is where the keyboard lands. */
+/** Discard's way back: the edits return, and Save (the bar's, or the editor header's) is where the keyboard lands. */
 export function toastDiscarded(undo: () => void): void {
-  toastUndo("Changes discarded", undo, "app-save-bar [aria-keyshortcuts]");
+  toastUndo(
+    "Changes discarded",
+    undo,
+    "app-save-bar [aria-keyshortcuts], app-editor-header [aria-keyshortcuts]",
+  );
 }

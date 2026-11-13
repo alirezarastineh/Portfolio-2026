@@ -79,6 +79,76 @@
   scroll-padding-block: 8rem 6rem;
 }
 
+/* The editor header (plan 5, U10) sticks under the 3rem top bar: a focused field or a jump
+   stops clear of both; no save bar below. The outline sticks under them too. */
+:root:has(app-editor-header) {
+  scroll-padding-block: 8rem 1rem;
+}
+
+:root:has(app-editor-header) app-editor-outline nav {
+  top: 8rem;
+}
+
+/* Beside the trace, an orange line means unsaved: the section in view is marked in the text's
+   colour. (The editors not yet on the header keep the orange bar until their Parts.) */
+:root:has(app-editor-header) app-editor-outline a[aria-current] {
+  border-color: var(--foreground);
+}
+
+/* At rest the header meets the top bar, as it does stuck (main's top padding is 1.25rem); under
+   a recovery banner it keeps the banner's gap. */
+:root:not(:has(app-recovery-banner > *)) app-editor-header {
+  margin-top: -1.25rem;
+}
+
+/* The change trace (plan 5): a 2px line on a field's left edge, hung 12px into the gutter, so
+   labels, hints and headings share one edge. Orange: changed here, not saved. The field's edge
+   colour: in the draft, not live. None: live. A pseudo-element: axe and the detector cannot see
+   it, so its pairs are in styles/contrast.spec.ts. */
+.change-trace {
+  position: relative;
+}
+
+.change-trace::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: -0.75rem;
+  width: 2px;
+  background-color: var(--input-line);
+  opacity: 0;
+  transition:
+    opacity var(--dur-2) var(--ease-out),
+    background-color var(--dur-2) var(--ease-out);
+}
+
+.change-trace[data-change]::before {
+  opacity: 1;
+}
+
+.change-trace[data-change="unsaved"]::before {
+  background-color: var(--signal);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .change-trace::before {
+    transition: none;
+  }
+}
+
+/* Fills disappear in forced colours: the line keeps a system colour of its own. */
+@media (forced-colors: active) {
+  .change-trace::before {
+    /* eslint-disable-next-line css/use-baseline -- forced colours only; without it the line takes the page's colour */
+    forced-color-adjust: none;
+    background-color: GrayText;
+  }
+
+  .change-trace[data-change="unsaved"]::before {
+    background-color: Highlight;
+  }
+}
+
 /* A toast stays above the save bar: Save is never under one. */
 :root:has(app-save-bar) [data-sonner-toaster][data-y-position="bottom"] {
   bottom: 6rem;

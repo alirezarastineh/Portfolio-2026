@@ -53,9 +53,11 @@ const WORDS: Record<OutlineState, string> = {
         <h2 id="outline-title" class="m-0 text-sm font-medium text-muted-foreground">
           On this page
         </h2>
-        <span class="text-xs text-muted-foreground tabular-nums"
-          >{{ done() }}/{{ items().length }}<span class="sr-only"> done</span></span
-        >
+        @if (tracked()) {
+          <span class="text-xs text-muted-foreground tabular-nums"
+            >{{ done() }}/{{ items().length }}<span class="sr-only"> done</span></span
+          >
+        }
       </div>
       <ol class="m-0 flex list-none flex-col border-l border-border p-0" role="list">
         @for (item of items(); track item.id) {
@@ -72,19 +74,37 @@ const WORDS: Record<OutlineState, string> = {
               [attr.aria-current]="here ? 'location' : null"
               (click)="go($event, item.id)"
             >
-              <ng-icon
-                [name]="icon(item.state)"
-                size="14"
-                class="shrink-0"
-                [class]="item.state === 'done' ? 'text-available' : 'text-muted-foreground'"
-                aria-hidden="true"
-              />
+              @if (item.state; as state) {
+                <ng-icon
+                  [name]="icon(state)"
+                  size="14"
+                  class="shrink-0"
+                  [class]="state === 'done' ? 'text-available' : 'text-muted-foreground'"
+                  aria-hidden="true"
+                />
+              }
               <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
-              <span class="sr-only">, {{ words(item.state) }}</span>
+              @if (item.state; as state) {
+                <span class="sr-only">, {{ words(state) }}</span>
+              }
               @if (item.problems) {
                 <span class="size-2 shrink-0 rounded-full bg-destructive" aria-hidden="true"></span>
                 <span class="sr-only"
                   >, {{ item.problems }} {{ item.problems === 1 ? "problem" : "problems" }}</span
+                >
+              }
+              @if (item.change) {
+                <span
+                  class="size-2 shrink-0 rounded-full forced-color-adjust-none"
+                  [class]="
+                    item.change === 'unsaved'
+                      ? 'bg-signal forced-colors:bg-[Highlight]'
+                      : 'bg-input-line forced-colors:bg-[GrayText]'
+                  "
+                  aria-hidden="true"
+                ></span>
+                <span class="sr-only"
+                  >, {{ item.change === "unsaved" ? "unsaved" : "in draft" }}</span
                 >
               }
             </a>
@@ -103,6 +123,8 @@ export class EditorOutlineComponent {
   /** The section at the top of the window. */
   protected readonly current = signal<string | null>(null);
   protected readonly done = computed(() => this.items().filter((i) => i.state === "done").length);
+  /** Whether the sections say how far along they are (About's only roll up the trace). */
+  protected readonly tracked = computed(() => this.items().some((i) => i.state));
   private readonly ids = computed(() =>
     this.items()
       .map((i) => i.id)

@@ -91,6 +91,7 @@ import {
 } from "../admin/components/shortcut-sheet.component";
 import { createBlankPost, createBlankProject } from "../admin/create-entities";
 import { MediaLibraryService } from "../admin/media-library.service";
+import { inDraft } from "../admin/change-trace";
 import { ACCOUNT, crumbsFor, navItemFor, PAGES, RAIL, remember, titleFor } from "../admin/nav";
 import { LivePreviewService } from "../admin/preview/live-preview.service";
 import { changesLabel } from "../admin/publish-summary";
@@ -352,6 +353,7 @@ function readRecent(): RecentEntry[] {
                         @let badge = badges()[item.path];
                         @let current = item === currentItem();
                         @let dirty = current && unsaved.hasAny();
+                        @let draft = !dirty && notLive().has(item.path);
                         <li hlmSidebarMenuItem>
                           <!-- Named in full, so it keeps a name collapsed to icons, where the words hide. -->
                           <a
@@ -361,32 +363,41 @@ function readRecent(): RecentEntry[] {
                             [routerLink]="item.path"
                             [isActive]="current"
                             [tooltip]="item.label"
-                            [attr.aria-label]="navName(item.label, badge, dirty)"
+                            [attr.aria-label]="navName(item.label, badge, dirty, draft)"
                             [attr.aria-current]="current ? 'true' : null"
                           >
                             <ng-icon [name]="item.icon" size="16" aria-hidden="true" />
                             <span>{{ item.label }}</span>
-                            @if (badge || dirty) {
+                            @if (badge || dirty || draft) {
                               <!-- Collapsed to icons: a dot on the icon. -->
                               <i
                                 class="absolute right-2.5 top-1 hidden size-2 rounded-full ring-2 ring-background forced-color-adjust-none forced-colors:bg-[Highlight] group-data-[collapsible=icon]:block"
                                 [class]="
                                   dirty
                                     ? 'bg-signal'
-                                    : badge?.alert
-                                      ? 'bg-destructive'
-                                      : 'bg-foreground'
+                                    : draft
+                                      ? 'bg-input-line forced-colors:bg-[GrayText]'
+                                      : badge?.alert
+                                        ? 'bg-destructive'
+                                        : 'bg-foreground'
                                 "
                                 aria-hidden="true"
                               ></i>
                             }
                           </a>
-                          @if (badge || dirty) {
+                          @if (badge || dirty || draft) {
                             <span hlmSidebarMenuBadge aria-hidden="true">
+                              <!-- Ringed in the page's colour: the signal on the current entry's
+                                   surface is 2.97:1 in light, on the ring 3.3. -->
                               @if (dirty) {
                                 <span
-                                  class="size-2 rounded-full bg-signal forced-color-adjust-none forced-colors:bg-[Highlight]"
+                                  class="size-2 rounded-full bg-signal ring-2 ring-background forced-color-adjust-none forced-colors:bg-[Highlight]"
                                   title="Unsaved changes"
+                                ></span>
+                              } @else if (draft) {
+                                <span
+                                  class="size-2 rounded-full bg-input-line ring-2 ring-background forced-color-adjust-none forced-colors:bg-[GrayText]"
+                                  title="Changes not live"
                                 ></span>
                               }
                               @if (badge?.alert) {
@@ -895,12 +906,26 @@ export default class AdminLayout {
       .slice(0, 5);
   });
 
-  protected navName(label: string, badge: NavBadge | undefined, dirty: boolean): string {
+  protected navName(
+    label: string,
+    badge: NavBadge | undefined,
+    dirty: boolean,
+    draft: boolean,
+  ): string {
     const parts = [label];
     if (badge) parts.push(badge.words);
     if (dirty) parts.push("unsaved changes");
+    if (draft) parts.push("changes not live");
     return parts.join(", ");
   }
+
+  /** The pages whose content the review says differs from live: their rail entry's grey dot. */
+  protected readonly notLive = computed(() => {
+    const marks = this.pulse.marks();
+    return new Set(
+      PAGES.filter((item) => item.content && inDraft(marks, item.content)).map((item) => item.path),
+    );
+  });
 
   /** `router.url` is not reactive, so re-read it whenever navigation settles. */
   private readonly navigated = toSignal(
@@ -1023,8 +1048,11 @@ export default class AdminLayout {
   }
 
   protected readonly publish = (): void => this.pulse.publishOpen.set(true);
-  protected readonly previewEn = (): void => openTab("/admin/preview/en");
-  protected readonly previewDe = (): void => openTab("/admin/preview/de");
+  /** The draft in a new tab, at the open editor's own section where it names one. */
+  protected readonly previewEn = (): void =>
+    openTab(`/admin/preview/en${this.currentItem()?.preview ?? ""}`);
+  protected readonly previewDe = (): void =>
+    openTab(`/admin/preview/de${this.currentItem()?.preview ?? ""}`);
   protected readonly toggleTheme = (): void => this.theme.toggle();
   protected readonly showShortcuts = (): void => this.shortcutsOpen.set(true);
 

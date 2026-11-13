@@ -10,6 +10,10 @@ export interface NavItem {
   icon: string;
   /** Under another entry: the breadcrumb leads with it, and the rail indents it. */
   parent?: string;
+  /** Where the top bar's Preview opens on this page: its section of the home draft (`#about`). */
+  preview?: string;
+  /** The content this page edits, as the review names it (`ui.about`): its rail dot follows it. */
+  content?: string;
 }
 
 export interface NavGroup {
@@ -31,7 +35,14 @@ export const RAIL: NavGroup[] = [
       { path: "/admin/hero", label: "Profile", icon: "lucideSquareUser" },
       // Until Profile takes the links (U11).
       { path: "/admin/socials", label: "Socials", icon: "lucideLink" },
-      { path: "/admin/about", label: "About", icon: "lucideFileText" },
+      // The redesigned editor's pages (plan 5, U10) name their section and content; the rest in their Parts.
+      {
+        path: "/admin/about",
+        label: "About",
+        icon: "lucideFileText",
+        preview: "#about",
+        content: "ui.about",
+      },
       { path: "/admin/projects", label: "Work", icon: "lucideBriefcase" },
       { path: "/admin/experience", label: "Experience", icon: "lucideSignpost" },
       { path: "/admin/skills", label: "Skills", icon: "lucideLayers" },

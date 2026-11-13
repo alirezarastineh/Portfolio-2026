@@ -10,9 +10,12 @@ export interface OutlineItem {
   /** The section element's id. */
   id: string;
   label: string;
-  state: OutlineState;
+  /** How far along it is; an editor whose sections only roll up the trace (About) leaves it out. */
+  state?: OutlineState;
   /** Fields in it the last save flagged, still unfixed. */
   problems: number;
+  /** The change trace rolled up (plan 5, U10): a field in it unsaved, or in the draft and not live. */
+  change?: "unsaved" | "draft";
 }
 
 const LOCALES: Locale[] = ["en", "de"];

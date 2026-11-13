@@ -143,6 +143,20 @@ describe("the admin's pairs", () => {
       expect(ratio(colour(admin, theme, "input-line", page), page)).toBeGreaterThanOrEqual(GRAPHIC);
     });
 
+    it("draws the trace in admin.css with those two tokens, as the page shows it", () => {
+      const css = read("../admin.css");
+      const token = (selector: string) =>
+        new RegExp(String.raw`${selector} \{[^}]*?background-color: var\(--([\w-]+)\);`).exec(
+          css,
+        )?.[1];
+      const draft = token(String.raw`\.change-trace::before`);
+      const unsaved = token(String.raw`\.change-trace\[data-change="unsaved"\]::before`);
+      expect([draft, unsaved]).toEqual(["input-line", "signal"]);
+      for (const name of [draft!, unsaved!]) {
+        expect(ratio(colour(admin, theme, name, page), page), name).toBeGreaterThanOrEqual(GRAPHIC);
+      }
+    });
+
     it.each(["background", "card"])(
       "reads a destructive badge on its own tint, on %s",
       (surface) => {

@@ -9,6 +9,7 @@ import {
   type MessageRow,
 } from "./admin-api.service";
 import type { AssistantHealth } from "./assistant-types";
+import { draftMarks, type DraftMarks } from "./change-trace";
 import { visibleI18n } from "./hidden-fields";
 import { trustAlert } from "./trust";
 import { summarizeReview, type PublishSummary } from "./publish-summary";
@@ -55,6 +56,8 @@ export class AdminPulseService {
 
   readonly status = signal<AdminStatus | null>(null);
   readonly review = signal<PublishSummary | null>(null);
+  /** The same review, path by path: the change trace and the rail's dots read it. */
+  readonly marks = signal<DraftMarks | null>(null);
   /** The inbox (spam left out), newest first. */
   readonly messages = signal<MessageRow[] | null>(null);
   readonly i18n = signal<I18nItem[] | null>(null);
@@ -146,6 +149,7 @@ export class AdminPulseService {
     for (const part of ALL) this.latest[part]++;
     this.status.set(null);
     this.review.set(null);
+    this.marks.set(null);
     this.messages.set(null);
     this.i18n.set(null);
     this.assistant.set(null);
@@ -168,12 +172,17 @@ export class AdminPulseService {
           () => this.api.status(),
           (d) => this.status.set(d),
         );
-      case "review":
+      case "review": {
+        const asked = Date.now();
         return this.fetchAndSet(
           "review",
           () => this.api.publishReview(),
-          (d) => this.review.set(summarizeReview(d)),
+          (d) => {
+            this.review.set(summarizeReview(d));
+            this.marks.set(draftMarks(d, asked));
+          },
         );
+      }
       case "messages":
         return this.fetchAndSet(
           "messages",

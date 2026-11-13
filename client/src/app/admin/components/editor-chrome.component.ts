@@ -38,7 +38,7 @@ import type { LocaleView } from "./field-pair.component";
       [value]="view()"
       (valueChange)="onChange($event)"
     >
-      @for (option of options; track option) {
+      @for (option of options(); track option) {
         <button hlmToggleGroupItem type="button" class="text-xs" [value]="option">
           {{ option === "both" ? "Both" : option.toUpperCase() }}
         </button>
@@ -48,7 +48,11 @@ import type { LocaleView } from "./field-pair.component";
 })
 export class LocaleToggleComponent {
   readonly view = model.required<LocaleView>();
-  protected readonly options: LocaleView[] = ["en", "de", "both"];
+  /** Off where the two cannot stand side by side (below 1024 px): one language at a time. */
+  readonly both = input(true);
+  protected readonly options = computed<LocaleView[]>(() =>
+    this.both() ? ["en", "de", "both"] : ["en", "de"],
+  );
 
   protected onChange(value: unknown): void {
     if (value === "en" || value === "de" || value === "both") this.view.set(value);

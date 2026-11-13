@@ -300,8 +300,14 @@ export class FieldPairComponent {
   private readonly editedEn = signal(0);
   private readonly editedDe = signal(0);
 
-  protected readonly lengthEn = signal(0);
-  protected readonly lengthDe = signal(0);
+  /** Each language's text as it is now. */
+  protected readonly textEn = signal("");
+  protected readonly textDe = signal("");
+  protected readonly lengthEn = computed(() => this.textEn().length);
+  protected readonly lengthDe = computed(() => this.textDe().length);
+
+  /** The newest step that replaced text here, until the next one, a save or a discard: Undo in a field's menu. */
+  protected readonly lastUndo = signal<(() => void) | null>(null);
 
   /** The last save's problem with each language's value, until it is edited. */
   protected readonly errorEn = signal<string | null>(null);
@@ -322,21 +328,21 @@ export class FieldPairComponent {
       const en = this.controlEn();
       const de = this.controlDe();
 
-      this.lengthEn.set(en.value?.length ?? 0);
-      this.lengthDe.set(de.value?.length ?? 0);
+      this.textEn.set(en.value ?? "");
+      this.textDe.set(de.value ?? "");
       // A freshly bound pair starts in sync; only edits made here count.
       this.editedEn.set(0);
       this.editedDe.set(0);
 
       const a = en.valueChanges.subscribe((v) => {
-        this.lengthEn.set(v?.length ?? 0);
+        this.textEn.set(v ?? "");
         // Programmatic resets (load, discard) leave the control pristine; only
         // real edits mark a locale as touched.
         if (en.dirty) this.editedEn.set(++this.tick);
         else this.editedEn.set(0);
       });
       const b = de.valueChanges.subscribe((v) => {
-        this.lengthDe.set(v?.length ?? 0);
+        this.textDe.set(v ?? "");
         if (de.dirty) this.editedDe.set(++this.tick);
         else this.editedDe.set(0);
       });
@@ -359,9 +365,11 @@ export class FieldPairComponent {
           if (event instanceof FormResetEvent) {
             this.ledger?.abandon(this.drafts + locale);
             this.clearOffer(locale);
+            this.lastUndo.set(null);
           } else if (event instanceof PristineChangeEvent && event.pristine) {
             queueMicrotask(() => this.ledger?.settle(this.drafts + locale));
             this.clearOffer(locale);
+            this.lastUndo.set(null);
           }
         });
       const e = settled(en, "en");
@@ -405,7 +413,8 @@ export class FieldPairComponent {
     }
     const undo = this.undoOf(to);
     this.apply(to, result.data);
-    if (undo && !this.gone) toastUndo(`${this.label()} translated`, undo, `#${this.id()}-${to}`);
+    if (undo && !this.gone)
+      this.offerUndo(`${this.label()} translated`, undo, `#${this.id()}-${to}`);
   }
 
   protected async aiTighten(): Promise<void> {
@@ -423,7 +432,7 @@ export class FieldPairComponent {
     this.aiBusy.set(null);
     // Over one Undo: both languages went with one press.
     if (undos.length && !this.gone) {
-      toastUndo(
+      this.offerUndo(
         `${this.label()} tightened`,
         () => undos.forEach((undo) => undo()),
         `#${this.id()}-${locales[0]}`,
@@ -537,6 +546,19 @@ export class FieldPairComponent {
     // so the save bar would not light up.
     this.controlDe().markAsDirty();
     this.editedDe.set(++this.tick);
-    if (undo) toastUndo(`${this.label()} copied to German`, undo, `#${this.id()}-de`);
+    if (undo) this.offerUndo(`${this.label()} copied to German`, undo, `#${this.id()}-de`);
+  }
+
+  /** The toast's Undo, as before; the newest step's is also the menu's, each taken once. */
+  private offerUndo(message: string, undo: () => void, focusOn: string): void {
+    let done = false;
+    const once = (): void => {
+      if (done) return;
+      done = true;
+      if (this.lastUndo() === once) this.lastUndo.set(null);
+      undo();
+    };
+    this.lastUndo.set(once);
+    toastUndo(message, once, focusOn);
   }
 }
