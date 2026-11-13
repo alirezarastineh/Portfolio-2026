@@ -6,32 +6,20 @@ import {
   OnInit,
   signal,
 } from "@angular/core";
-import { NgTemplateOutlet } from "@angular/common";
 import { RouterLink } from "@angular/router";
-import { HlmBadge } from "@spartan-ng/helm/badge";
-import { HlmButton } from "@spartan-ng/helm/button";
-import {
-  HlmCard,
-  HlmCardContent,
-  HlmCardDescription,
-  HlmCardHeader,
-  HlmCardTitle,
-} from "@spartan-ng/helm/card";
-import { HlmProgressImports } from "@spartan-ng/helm/progress";
 
 import { LOCALES } from "../../content/locale";
 import type { AppContent, Locale } from "../../content/schema";
-import { AdminApiService } from "../admin-api.service";
-import { FormSkeletonComponent } from "./load-state.component";
+import { AdminApiService, type I18nItem } from "../admin-api.service";
+import { editorLinkForI18n } from "../editor-links";
+import { AdminPulseService } from "../pulse.service";
 import {
   checkReadiness,
   type ReadinessCheck,
   type ReadinessReport,
   type ReadinessSeverity,
 } from "../readiness";
-
-/** Places listed per check before "show all". */
-const HIT_PREVIEW = 4;
+import { TODAY_ROW } from "../today";
 
 const SEVERITY_LABEL: Record<ReadinessSeverity, string> = {
   blocker: "fix before sharing",
@@ -39,225 +27,124 @@ const SEVERITY_LABEL: Record<ReadinessSeverity, string> = {
   tip: "nice to have",
 };
 
-const SEVERITY_DOT: Record<ReadinessSeverity, string> = {
-  blocker: "bg-destructive",
-  warn: "bg-accent-orange",
-  tip: "bg-muted-foreground",
-};
-
 const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
 
+const KIND_LABELS: Record<I18nItem["kind"], string> = {
+  project: "project",
+  experience: "experience",
+  post: "post",
+  skill: "skill card",
+  faq: "FAQ",
+  section: "page copy",
+};
+
 /**
- * The dashboard's launch checklist: what still makes the site look
- * unfinished, found in the draft of both languages (see `admin/readiness.ts`),
- * each with a link to the editor that fixes it. Advice only — the publish
- * review is what stops a broken draft.
+ * Today's "Before launch": what still makes the site look unfinished, found in the draft of
+ * both languages (`admin/readiness.ts`), a row per failing rule with its editor, worst first;
+ * then the translations to check, in the rail's words. Advice only: publishing never waits.
  */
 @Component({
   selector: "app-readiness-card",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    HlmBadge,
-    HlmButton,
-    HlmCard,
-    HlmCardContent,
-    HlmCardDescription,
-    HlmCardHeader,
-    HlmCardTitle,
-    HlmProgressImports,
-    FormSkeletonComponent,
-    NgTemplateOutlet,
-    RouterLink,
-  ],
+  imports: [RouterLink],
   host: { class: "block" },
   template: `
-    <section hlmCard aria-labelledby="readiness-title">
-      <div hlmCardHeader>
-        <h2 hlmCardTitle id="readiness-title" class="flex flex-wrap items-center gap-2">
-          Launch readiness
-          @if (report(); as r) {
-            <span hlmBadge [variant]="badgeVariant()"> {{ r.passed }} / {{ r.total }} ready </span>
-          }
-        </h2>
-        <p hlmCardDescription>
-          What still makes the site look unfinished to a visitor, checked in the draft of both
-          languages. Advice only: publishing never waits for it.
-        </p>
-      </div>
-
-      <div hlmCardContent class="flex flex-col gap-4">
-        @if (loading()) {
-          <app-form-skeleton kind="list" [rows]="3" label="Checking the draft…" />
-        } @else if (report(); as r) {
-          <hlm-progress [value]="percent()" aria-label="Readiness checks passed">
-            <hlm-progress-indicator />
-          </hlm-progress>
-
-          @if (skipped().length) {
-            <p class="m-0 text-hint text-muted-foreground">
-              The {{ skippedNames() }} draft does not build, so it was not checked. Review &amp;
-              publish lists what stops it.
-            </p>
-          }
-
-          @if (urgent().length) {
-            <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list">
-              @for (check of urgent(); track check.id) {
-                <ng-container *ngTemplateOutlet="row; context: { $implicit: check }" />
-              }
-            </ul>
-          }
-
-          <!-- Folded while anything more urgent is open, so the list leads with what matters. -->
-          @if (tips().length) {
-            <details [open]="!urgent().length">
-              <summary class="cursor-pointer text-xs text-muted-foreground">
-                {{ tips().length }} nice to have
-              </summary>
-              <ul class="m-0 mt-2 flex list-none flex-col gap-2 p-0" role="list">
-                @for (check of tips(); track check.id) {
-                  <ng-container *ngTemplateOutlet="row; context: { $implicit: check }" />
-                }
-              </ul>
-            </details>
-          }
-
-          @if (!failing().length) {
-            <p class="m-0 text-sm">
-              Nothing left: the site reads as finished in {{ checkedNames() }}.
-            </p>
-          }
-
-          <ng-template #row let-check>
-            <li
-              class="rounded-lg border px-3 py-2.5"
-              [class.border-destructive/50]="check.severity === 'blocker'"
-              [class.border-border]="check.severity !== 'blocker'"
-            >
-              <div class="flex flex-wrap items-start justify-between gap-3">
-                <div class="min-w-0 flex-1">
-                  <p class="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                    <span
-                      class="size-2 shrink-0 rounded-full"
-                      [class]="dotOf(check)"
-                      aria-hidden="true"
-                    ></span>
-                    <span class="font-medium">{{ check.title }}</span>
-                    @if (check.listsPlaces) {
-                      <span hlmBadge variant="outline">
-                        {{ check.hits.length }}
-                      </span>
-                    }
-                    <span class="text-hint text-muted-foreground">
-                      {{ severityOf(check) }}{{ onlyIn(check) }}
-                    </span>
-                  </p>
-                  <p class="m-0 mt-0.5 text-hint text-muted-foreground">
-                    {{ check.why }}
-                  </p>
-                </div>
-                <a hlmBtn variant="outline" size="sm" [routerLink]="fixLink(check)"
-                  >Fix<span class="sr-only">: {{ check.title }}</span></a
-                >
-              </div>
-
-              @if (check.listsPlaces) {
-                <ul
-                  class="m-0 mt-2 flex list-none flex-col gap-1.5 border-t border-border p-0 pt-2"
-                  role="list"
-                >
-                  @for (hit of shownHits(check); track hit.label) {
-                    <li class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
-                      <code class="font-mono text-xs break-all text-foreground">{{
-                        hit.label
-                      }}</code>
-                      <span class="text-xs font-medium text-muted-foreground">{{
-                        hit.locales.join(" · ").toUpperCase()
-                      }}</span>
-                      @if (hit.detail) {
-                        <span class="min-w-0 wrap-break-word text-muted-foreground">{{
-                          hit.detail
-                        }}</span>
-                      }
-                      @if (hit.link) {
-                        <a
-                          class="ml-auto inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center underline underline-offset-4 hover:text-accent-orange"
-                          [routerLink]="hit.link"
-                          >Edit<span class="sr-only"> {{ hit.label }}</span></a
-                        >
-                      }
-                    </li>
-                  }
-                </ul>
-                @if (check.hits.length > preview) {
-                  <button
-                    hlmBtn
-                    variant="ghost"
-                    size="sm"
-                    type="button"
-                    class="mt-1 h-7 px-2 text-xs"
-                    [attr.aria-expanded]="isExpanded(check)"
-                    (click)="toggle(check)"
-                  >
-                    {{ isExpanded(check) ? "Show fewer" : "Show all " + check.hits.length }}
-                  </button>
-                }
-              }
-            </li>
-          </ng-template>
-
-          @if (passing().length) {
-            <details>
-              <summary class="cursor-pointer text-xs text-muted-foreground">
-                {{ passing().length }} passing
-              </summary>
-              <ul class="m-0 mt-2 flex list-none flex-col gap-1 p-0" role="list">
-                @for (check of passing(); track check.id) {
-                  <li class="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span class="text-available" aria-hidden="true">✓</span>{{ check.title }}
-                  </li>
-                }
-              </ul>
-            </details>
-          }
-        } @else {
-          <div class="flex flex-wrap items-center gap-3">
-            <p class="m-0 text-sm text-muted-foreground">Could not check the draft.</p>
-            <button hlmBtn variant="outline" size="sm" type="button" (click)="load()">
-              Try again
-            </button>
-          </div>
+    <section class="flex flex-col gap-2" aria-labelledby="launch-title">
+      <div class="flex flex-wrap items-baseline justify-between gap-x-4">
+        <h2 id="launch-title" class="m-0 text-section-title">Before launch</h2>
+        @if (report(); as r) {
+          <p class="m-0 text-hint text-muted-foreground">{{ r.passed }} of {{ r.total }} ready</p>
+        } @else if (loading()) {
+          <p class="m-0 text-hint text-muted-foreground">Checking the draft…</p>
         }
       </div>
+      @if (skipped().length) {
+        <p class="m-0 text-hint text-muted-foreground">
+          The {{ skippedNames() }} draft does not build, so it was not checked. The publish review
+          lists what stops it.
+        </p>
+      }
+
+      <ul class="m-0 -ml-3 list-none border-t border-border p-0" role="list">
+        @if (!loading() && !report()) {
+          <li>
+            <button type="button" [class]="row" (click)="load()">
+              <span>Could not check the draft.</span>&ngsp;<span></span>&ngsp;<span
+                class="text-right font-medium max-sm:col-start-2 max-sm:row-start-1"
+                >Try again</span
+              >
+            </button>
+          </li>
+        }
+        @for (check of failing(); track check.id) {
+          <li>
+            <a [class]="row" [routerLink]="fixLink(check)">
+              <span class="min-w-0 wrap-anywhere">{{ words(check) }}</span
+              >&ngsp;<span
+                class="text-hint text-muted-foreground max-sm:col-start-1 max-sm:row-start-2"
+                >{{ severityOf(check) }}</span
+              >&ngsp;<span
+                class="text-right font-medium max-sm:col-start-2 max-sm:row-span-2 max-sm:row-start-1"
+                >Fix</span
+              >
+            </a>
+          </li>
+        }
+        @if (translations().length; as n) {
+          <li>
+            <button
+              type="button"
+              [class]="row"
+              aria-controls="launch-translations"
+              [attr.aria-expanded]="showTranslations()"
+              (click)="showTranslations.set(!showTranslations())"
+            >
+              <span>{{ n }} {{ n === 1 ? "translation" : "translations" }} to check</span
+              >&ngsp;<span></span>&ngsp;<span
+                class="text-right font-medium max-sm:col-start-2 max-sm:row-start-1"
+                >{{ showTranslations() ? "Hide" : "Show" }}</span
+              >
+            </button>
+            <ul id="launch-translations" class="m-0 list-none py-0 pr-0 pl-5" role="list">
+              @if (showTranslations()) {
+                @for (item of translations(); track item.kind + item.id) {
+                  <li>
+                    <a [class]="row" [routerLink]="link(item)">
+                      <span class="min-w-0 wrap-anywhere"
+                        >{{ item.label }}, {{ kindLabel(item) }}: {{ problemText(item) }}</span
+                      >&ngsp;<span></span>&ngsp;<span
+                        class="text-right font-medium max-sm:col-start-2 max-sm:row-start-1"
+                        >Edit</span
+                      >
+                    </a>
+                  </li>
+                }
+              }
+            </ul>
+          </li>
+        }
+      </ul>
+      @if (report() && !failing().length) {
+        <p class="m-0 text-sm">Nothing left: the site reads as finished in {{ checkedNames() }}.</p>
+      }
     </section>
   `,
 })
 export class ReadinessCardComponent implements OnInit {
   private readonly api = inject(AdminApiService);
+  private readonly pulse = inject(AdminPulseService);
 
-  protected readonly preview = HIT_PREVIEW;
-
+  protected readonly row = TODAY_ROW;
   protected readonly loading = signal(true);
   protected readonly report = signal<ReadinessReport | null>(null);
   /** Languages whose draft does not build, so were not checked. */
   protected readonly skipped = signal<Locale[]>([]);
-  private readonly expanded = signal<ReadonlySet<string>>(new Set());
+  protected readonly showTranslations = signal(false);
 
+  /** Worst first: `checkReadiness` sorts the failing ahead, by severity. */
   protected readonly failing = computed(() => this.report()?.checks.filter((c) => !c.passed) ?? []);
-  protected readonly urgent = computed(() => this.failing().filter((c) => c.severity !== "tip"));
-  protected readonly tips = computed(() => this.failing().filter((c) => c.severity === "tip"));
-  protected readonly passing = computed(() => this.report()?.checks.filter((c) => c.passed) ?? []);
-
-  protected readonly percent = computed(() => {
-    const r = this.report();
-    return r ? Math.round((r.passed / r.total) * 100) : 0;
-  });
-
-  protected readonly badgeVariant = computed(() => {
-    const failing = this.failing();
-    if (failing.some((c) => c.severity === "blocker")) return "destructive";
-    return failing.length ? "outline" : "secondary";
-  });
+  /** The rail counts the same list on Today: the two say one number. */
+  protected readonly translations = computed(() => this.pulse.i18n() ?? []);
 
   protected readonly skippedNames = computed(() => names(this.skipped()));
   protected readonly checkedNames = computed(() => names(this.report()?.locales ?? []));
@@ -287,43 +174,47 @@ export class ReadinessCardComponent implements OnInit {
     this.loading.set(false);
   }
 
-  protected shownHits(check: ReadinessCheck) {
-    return this.isExpanded(check) ? check.hits : check.hits.slice(0, HIT_PREVIEW);
-  }
-
-  protected isExpanded(check: ReadinessCheck): boolean {
-    return this.expanded().has(check.id);
-  }
-
-  protected toggle(check: ReadinessCheck): void {
-    const next = new Set(this.expanded());
-    if (next.has(check.id)) next.delete(check.id);
-    else next.add(check.id);
-    this.expanded.set(next);
-  }
-
-  // Methods rather than lookups in the template: a row's `check` comes from
-  // an ng-template context, which strict templates cannot type.
+  // Methods rather than lookups in the template, as each row's `check` is typed there.
   protected severityOf(check: ReadinessCheck): string {
     return SEVERITY_LABEL[check.severity];
   }
 
-  protected dotOf(check: ReadinessCheck): string {
-    return SEVERITY_DOT[check.severity];
+  /** "Placeholder text (5)", "No CV, German only". */
+  protected words(check: ReadinessCheck): string {
+    const places = check.listsPlaces ? ` (${check.hits.length})` : "";
+    return `${check.title}${places}${this.onlyIn(check)}`;
   }
 
-  /** The first place's editor: fixing starts there. */
+  /** The first place's editor: fixing starts there, and the next Fix goes to the next. */
   protected fixLink(check: ReadinessCheck): string {
     return check.hits[0]?.link ?? check.link;
   }
 
-  /** " · German only" when a check fails in one of the languages checked, not all. */
-  protected onlyIn(check: ReadinessCheck): string {
+  /** ", German only" when a check fails in one of the languages checked, not all. */
+  private onlyIn(check: ReadinessCheck): string {
     const checked = this.report()?.locales ?? [];
     const failing = new Set(check.hits.flatMap((hit) => hit.locales));
     if (checked.length < 2 || failing.size !== 1) return "";
     const [locale] = failing;
-    return ` · ${LANGUAGE[locale!]} only`;
+    return `, ${LANGUAGE[locale!]} only`;
+  }
+
+  protected kindLabel(item: I18nItem): string {
+    return KIND_LABELS[item.kind];
+  }
+
+  protected link(item: I18nItem): string {
+    return editorLinkForI18n(item);
+  }
+
+  /** "German empty: hook", "English changed after the German was last edited". */
+  protected problemText(item: I18nItem): string {
+    if (item.absent) return item.absent === "de" ? "English only" : "German only";
+    const parts: string[] = [];
+    if (item.missingDe.length) parts.push(`German empty: ${item.missingDe.join(", ")}`);
+    if (item.missingEn.length) parts.push(`English empty: ${item.missingEn.join(", ")}`);
+    if (item.stale) parts.push("English changed after the German was last edited");
+    return parts.join("; ");
   }
 }
 

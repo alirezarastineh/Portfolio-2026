@@ -840,6 +840,35 @@ function faqProposalRow(change: Record<string, unknown> = {}) {
   };
 }
 
+/** A content agent's proposal (plan phases 29–30), as `GET /admin/assistant/proposals` lists it. */
+function proposalRow(id: string, label: string, change: Record<string, unknown> = {}) {
+  return {
+    id,
+    createdAt: HOUR_AGO,
+    updatedAt: HOUR_AGO,
+    runId: "00000000-0000-4000-8000-000000000001",
+    goal: "translations",
+    kind: "project",
+    entityId: "p0",
+    field: "hook",
+    locale: "de",
+    label,
+    before: "",
+    after: `Entwurf für ${label}`,
+    skill: "translate",
+    version: "aaaaaaaaaaaa",
+    useId: null,
+    flags: [],
+    notes: [],
+    status: "proposed",
+    decidedAt: null,
+    appliedAt: null,
+    revertedAt: null,
+    changed: false,
+    ...change,
+  };
+}
+
 function defaults(): Record<string, Answer> {
   const en = content("en");
   const de = content("de");
@@ -983,6 +1012,7 @@ function defaults(): Record<string, Answer> {
     "GET /admin/assistant/trust": trustView(),
     "GET /admin/assistant/runs": { runs: [] },
     "GET /admin/assistant/proposals": { proposals: [] },
+    "GET /admin/assistant/faq": { faq: [] },
     "GET /admin/assistant/faq-proposals": { proposals: [] },
     "GET /admin/assistant/outcomes": outcomesView("helpfulRate", false),
     "GET /admin/assistant/perception": perceptionView({ promoted: [], demoted: [] }),
@@ -1122,28 +1152,32 @@ async function openAdmin(page: Page, path: string): Promise<void> {
 }
 
 test.describe("admin", () => {
-  test("the dashboard's tiles, the rail and the top bar agree on what needs a look", async ({
+  test("Today, the rail and the top bar say the same numbers in the same words", async ({
     page,
     baseURL,
   }) => {
     const unmocked = await fakeApi(page, baseURL);
     await openAdmin(page, "/admin");
 
-    const glance = page.getByRole("region", { name: "At a glance" });
-    await expect(glance.getByText("3 changes")).toBeVisible();
-    await expect(glance.getByText("EN 2 · DE 1")).toBeVisible();
-    await expect(glance.getByText("2 new")).toBeVisible();
-    await expect(glance.getByText("12 answers")).toBeVisible();
-    await expect(glance.getByText("$0.42 of $2.00 today")).toBeVisible();
-    await expect(glance.getByText("A model is failing: its breaker is open")).toBeVisible();
-    await expect(glance.getByText("1 to check")).toBeVisible();
-
-    // Spam stays out of the latest messages.
-    const latest = page.getByRole("region", { name: "Latest messages" });
-    await expect(latest.getByText("Ada Lovelace", { exact: true })).toBeVisible();
-    await expect(latest.getByText("Spam Bot", { exact: true })).toHaveCount(0);
+    // The status line: what is live, what is not, the assistant's day and the inbox.
+    const main = page.getByRole("main");
     await expect(
-      page.getByRole("region", { name: "Recent publications" }).getByText("New case study"),
+      main.getByText("Published 1 hour ago as #12. 3 changes are not live."),
+    ).toBeVisible();
+    await expect(
+      main.getByText("The assistant is answering: $0.42 of $2.00 spent today. Inbox: 2 new."),
+    ).toBeVisible();
+
+    // Spam is not new mail: two, as the rail says.
+    const needs = page.getByRole("region", { name: "Needs you" });
+    await expect(needs.getByRole("link", { name: /^2 new messages/ })).toBeVisible();
+    await expect(
+      needs.getByRole("link", { name: /^A model is failing: its breaker is open/ }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("region", { name: "Before launch" })
+        .getByRole("button", { name: /^1 translation to check/ }),
     ).toBeVisible();
 
     const rail = page.locator("[data-slot=sidebar-inner]");
@@ -1151,7 +1185,8 @@ test.describe("admin", () => {
     await expect(rail.getByRole("link", { name: "Today, 1 translation to check" })).toBeVisible();
     await expect(rail.getByRole("link", { name: /^Assistant, A model is failing/ })).toBeVisible();
 
-    // Publish is in reach from the top bar, and opens the one review.
+    // One Publish, the top bar's: Today has none of its own, and it opens the one review.
+    await expect(main.getByRole("button", { name: /publish/i })).toHaveCount(0);
     const publish = page
       .getByRole("banner")
       .getByRole("button", { name: "Publish: 3 changes unpublished" });
@@ -2332,7 +2367,7 @@ test.describe("admin", () => {
       .locator("[data-slot=sidebar-inner]")
       .getByRole("link", { name: /^Today/ })
       .click();
-    await expect(page.getByRole("region", { name: "At a glance" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Needs you" })).toBeVisible();
     late.release();
     await expect
       .poll(() => verdicts)
@@ -4117,35 +4152,6 @@ test.describe("admin", () => {
     );
   });
 
-  /** A content agent's proposal (plan phases 29–30), as `GET /admin/assistant/proposals` lists it. */
-  function proposalRow(id: string, label: string, change: Record<string, unknown> = {}) {
-    return {
-      id,
-      createdAt: HOUR_AGO,
-      updatedAt: HOUR_AGO,
-      runId: "00000000-0000-4000-8000-000000000001",
-      goal: "translations",
-      kind: "project",
-      entityId: "p0",
-      field: "hook",
-      locale: "de",
-      label,
-      before: "",
-      after: `Entwurf für ${label}`,
-      skill: "translate",
-      version: "aaaaaaaaaaaa",
-      useId: null,
-      flags: [],
-      notes: [],
-      status: "proposed",
-      decidedAt: null,
-      appliedAt: null,
-      revertedAt: null,
-      changed: false,
-      ...change,
-    };
-  }
-
   const contentRun = {
     id: "00000000-0000-4000-8000-000000000001",
     kind: "agent",
@@ -4384,7 +4390,7 @@ test.describe("admin", () => {
       .locator("[data-slot=sidebar-inner]")
       .getByRole("link", { name: /^Today/ })
       .click();
-    await expect(page.getByRole("region", { name: "At a glance" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Needs you" })).toBeVisible();
     await expect(runs).not.toBeAttached();
     const left = reads;
     expect(reads).toBe(left);
@@ -4563,7 +4569,7 @@ test.describe("admin", () => {
       .locator("[data-slot=sidebar-inner]")
       .getByRole("link", { name: /^Today/ })
       .click();
-    await expect(page.getByRole("region", { name: "At a glance" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Needs you" })).toBeVisible();
     const answered = page.waitForResponse((r) => r.url().endsWith("/e1/apply"));
     late.release();
     await answered;
@@ -6308,7 +6314,7 @@ test.describe("the recovery copy", () => {
     await expect(aboutHeading(back)).toHaveValue("Changed in another tab");
   });
 
-  test("the dashboard lists a copy, and its link opens the editor with it", async ({
+  test("Today lists a copy in Needs you, and its row opens the editor with it", async ({
     page,
     baseURL,
   }) => {
@@ -6320,19 +6326,22 @@ test.describe("the recovery copy", () => {
     page.on("dialog", (dialog) => void dialog.accept().catch(() => undefined));
     await page.goto("/admin");
     await interactive(page);
-    const list = page.getByRole("region", { name: "Unsaved edits" });
-    await expect(list).toContainText(/from .*\d\d:\d\d/);
-    await list.getByRole("link", { name: "About" }).click();
+    const row = page
+      .getByRole("region", { name: "Needs you" })
+      .getByRole("link", { name: /^Unsaved edits in About, kept in this browser/ });
+    await expect(row).toContainText(/\d\d:\d\d/);
+    await row.click();
     await expect(page).toHaveURL(/\/admin\/about$/);
     await expect(banner(page)).toBeVisible();
     await expect(aboutHeading(page)).toHaveValue("Waiting for me");
   });
 
-  test("the dashboard says nothing when there is no copy", async ({ page, baseURL }) => {
+  test("Today has no unsaved-edits row when there is no copy", async ({ page, baseURL }) => {
     await fakeApi(page, baseURL);
     await openAdmin(page, "/admin");
-    await expect(page.getByRole("heading", { level: 2, name: "At a glance" })).toBeAttached();
-    await expect(page.getByRole("region", { name: "Unsaved edits" })).toHaveCount(0);
+    const needs = page.getByRole("region", { name: "Needs you" });
+    await expect(needs.getByRole("link", { name: /^2 new messages/ })).toBeVisible();
+    await expect(needs.getByRole("link", { name: /^Unsaved edits/ })).toHaveCount(0);
   });
 
   for (const colorScheme of ["dark", "light"] as const) {
@@ -6364,7 +6373,11 @@ test.describe("the recovery copy", () => {
 
       await back.goto("/admin");
       await interactive(back);
-      await expect(back.getByRole("region", { name: "Unsaved edits" })).toBeVisible();
+      await expect(
+        back
+          .getByRole("region", { name: "Needs you" })
+          .getByRole("link", { name: /^Unsaved edits in About/ }),
+      ).toBeVisible();
       await expect(back.locator("[role=status] .sr-only")).toHaveCount(0);
       await scan(back);
     });
@@ -7006,12 +7019,13 @@ test.describe("telling the truth", () => {
       "GET /admin/content/preview/de": de,
     });
     await openAdmin(page, "/admin");
-    await expect(page.getByText("Covers without alt text", { exact: true })).toBeVisible();
-    await expect(page.getByText("Starter skill captions")).toHaveCount(0);
-    await expect(page.getByRole("link", { name: /Covers without alt text/ })).toHaveAttribute(
-      "href",
-      "/admin/media",
-    );
+    const launch = page.getByRole("region", { name: "Before launch" });
+    const altText = launch.getByRole("link", { name: /^Covers without alt text \(1\)/ });
+    await expect(altText).toBeVisible();
+    await expect(altText).toHaveAttribute("href", "/admin/media");
+    await expect(page.getByText(/skill caption/i)).toHaveCount(0);
+    // Every rule but the skill caption's: eleven.
+    await expect(launch.getByText(/^\d+ of 11 ready$/)).toBeVisible();
   });
 
   test("dead fields are hidden, and their values still go out with a save", async ({
@@ -7186,9 +7200,10 @@ test.describe("telling the truth", () => {
       },
     });
     await openAdmin(page, "/admin");
-    const rows = page.getByRole("region", { name: /Translations/ });
-    await expect(rows).toContainText("Site copy");
-    await expect(rows).toContainText("DE empty: about.heading");
+    // Backend's only gap is a hidden field: one translation is left to check, Site copy's heading.
+    const rows = page.getByRole("region", { name: "Before launch" });
+    await rows.getByRole("button", { name: /^1 translation to check/ }).click();
+    await expect(rows).toContainText("Site copy, page copy: German empty: about.heading");
     await expect(rows).not.toContainText("about.subtitle");
     await expect(rows).not.toContainText("Backend");
   });
@@ -7499,7 +7514,7 @@ test.describe("the shell", () => {
     expect(unmocked).toEqual([]);
   });
 
-  test("two-factor off is a row on Today, not a banner on every page", async ({
+  test("two-factor off leads Today's Needs you, and is not a banner on every page", async ({
     page,
     baseURL,
   }) => {
@@ -7514,11 +7529,17 @@ test.describe("the shell", () => {
     await expect(page.getByText(/two-factor/i)).toHaveCount(0);
 
     await openAdmin(page, "/admin");
-    await expect(page.getByText(/^Two-factor authentication is off/)).toBeVisible();
-    await expect(page.getByRole("link", { name: "Turn it on" })).toHaveAttribute(
-      "href",
-      "/admin/account",
+    const first = page.getByRole("region", { name: "Needs you" }).getByRole("link").first();
+    await expect(first).toHaveAccessibleName(
+      /^Two-factor authentication is off: your password alone signs in to this admin\. Turn it on/,
     );
+    await expect(first).toHaveAttribute("href", "/admin/account");
+    // Ahead of the failing model and the new messages, which wait in the default fixture too.
+    await expect(
+      page
+        .getByRole("region", { name: "Needs you" })
+        .getByRole("link", { name: /^2 new messages/ }),
+    ).toBeVisible();
     // A row of the page, read in its place: not announced on every visit.
     await expect(page.getByRole("alert").filter({ hasText: /two-factor/i })).toHaveCount(0);
   });
@@ -7627,6 +7648,245 @@ test.describe("the shell on a phone", () => {
     );
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/admin\/preview$/);
+  });
+});
+
+test.describe("Today", () => {
+  const health = () => defaults()["GET /admin/assistant/health"] as Record<string, unknown>;
+  /** The assistant answering with nothing failing: no row for it. */
+  const healthy = () => ({
+    ...health(),
+    breakers: [],
+    last24h: { answers: 12, failures: 0, fallbackRate: 0, models: [] },
+  });
+  const unset = () => Object.fromEntries(VERDICT_LABELS.map((l) => [l, null]));
+
+  /** Something waiting in every queue, as each queue's own screen lists it. */
+  function waiting(): Record<string, Answer> {
+    const alert = {
+      id: 7,
+      at: HOUR_AGO,
+      actor: "agent",
+      action: "answer",
+      target: "m_leak00000001",
+      decision: "allowed",
+      reason: "leak: the answer repeated a piece of the system prompt",
+      alternatives: [],
+      alert: true,
+      seenAt: null,
+    };
+    return {
+      "GET /admin/assistant/health": { ...healthy(), trust: { alerts: 1, demoted: [] } },
+      "GET /admin/assistant/trust": trustView({ alerts: [alert], audit: [alert] }),
+      "GET /admin/assistant/reviews": {
+        week: "2026-W40",
+        previous: "2026-W39",
+        next: null,
+        queue: [
+          {
+            message: answerRow("m_review0001", "Where is Alireza based?"),
+            reasons: ["thumbs down"],
+            sampled: false,
+            review: { labels: { ...unset(), correct: true }, note: null, reviewedAt: NOW },
+          },
+          {
+            message: answerRow("m_review0002", "Which stack does he use?"),
+            reasons: [],
+            sampled: true,
+            review: null,
+          },
+          {
+            message: answerRow("m_review0003", "Is he open to relocating?"),
+            reasons: [],
+            sampled: true,
+            review: null,
+          },
+        ],
+        stats: { answers: 12, queued: 3, reviewed: 1, labels: noVerdicts() },
+      },
+      "GET /admin/assistant/proposals": {
+        proposals: [
+          proposalRow("a1", "Project one · Hook (DE)"),
+          proposalRow("a2", "Project one · Role (DE)", {
+            field: "role",
+            status: "needs_you",
+            after: null,
+          }),
+          proposalRow("a3", "Project one · Name (DE)", {
+            field: "name",
+            status: "applied",
+            appliedAt: NOW,
+          }),
+        ],
+      },
+      "GET /admin/assistant/faq-proposals": {
+        proposals: [
+          faqProposalRow(),
+          faqProposalRow({
+            id: "f0000000-0000-4000-8000-000000000002",
+            status: "accepted",
+            decidedAt: NOW,
+          }),
+        ],
+      },
+      "GET /admin/assistant/journal": {
+        entries: [journalEntry()],
+        counts: { proposed: 1, accepted: 2, fixed: 0, retired: 0 },
+      },
+      "GET /admin/assistant/lessons": {
+        lessons: [
+          lessonRow(),
+          lessonRow({
+            id: "7a1c2a3b-0000-4000-8000-000000000002",
+            statement: "Name the notice period in the FAQ, in both languages.",
+            status: "active",
+            appliedAs: "faq",
+            appliedRef: "faq-1",
+            appliedAt: NOW,
+          }),
+        ],
+        counts: { proposed: 1, active: 1, retired: 0 },
+      },
+    };
+  }
+
+  test("every queue's count on Today matches its own screen, one click away", async ({
+    page,
+    baseURL,
+  }) => {
+    const unmocked = await fakeApi(page, baseURL, waiting());
+    await openAdmin(page, "/admin");
+    const needs = page.getByRole("region", { name: "Needs you" });
+    const rail = page.locator("[data-slot=sidebar-inner]");
+    /** Follows a row of Today's to its screen. */
+    const follow = async (name: RegExp, url: RegExp) => {
+      if (!page.url().endsWith("/admin")) await openAdmin(page, "/admin");
+      await needs.getByRole("link", { name }).click();
+      await expect(page).toHaveURL(url);
+    };
+
+    // The inbox: the row, the rail and the filtered list all say 2 (spam is not new).
+    await expect(rail.getByRole("link", { name: "Inbox, 2 new" })).toBeVisible();
+    await follow(/^2 new messages/, /\/admin\/inbox\?filter=new$/);
+    await expect(page.getByRole("region", { name: "Messages" }).getByRole("button")).toHaveCount(2);
+
+    // Reviews: 2 of the week's 3 still open; the tab says 1 of 3 reviewed.
+    await follow(/^2 of 3 answers still to review this week/, /\/admin\/assistant\?view=reviews$/);
+    await expect(page.getByRole("tab", { name: "Reviews" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.getByText("1 of 3 reviewed · 12 answers this week")).toBeVisible();
+
+    // The content agent: a drafted and an undrafted one wait; the applied one does not.
+    await follow(/^2 drafts from the content agent/, /\/admin\/agent$/);
+    await expect(
+      page.getByRole("region", { name: "Proposals" }).getByRole("checkbox", { name: /^Select / }),
+    ).toHaveCount(2);
+
+    // FAQ proposals: one open, one accepted.
+    await follow(/^1 FAQ proposal/, /\/admin\/assistant\?view=faq$/);
+    await expect(page.getByRole("region", { name: "Proposals" }).getByRole("article")).toHaveCount(
+      1,
+    );
+
+    // The journal and its lessons, each by the status the Journal tab names.
+    await follow(/^1 journal entry proposed/, /\/admin\/assistant\?view=journal$/);
+    await expect(
+      page
+        .getByRole("group", { name: "Journal filter" })
+        .getByRole("button", { name: "Proposed 1" }),
+    ).toBeVisible();
+    await follow(/^1 lesson proposed/, /\/admin\/assistant\?view=journal$/);
+    await expect(
+      page.getByRole("region", { name: "Lessons" }).getByText("Proposed", { exact: true }),
+    ).toHaveCount(1);
+
+    // A trust alert: the health route's count, the rail's words, and the Trust tab's list.
+    await openAdmin(page, "/admin");
+    await expect(
+      rail.getByRole("link", { name: "Assistant, 1 alert: see the Trust tab" }),
+    ).toBeVisible();
+    await follow(/^1 alert: see the Trust tab/, /\/admin\/assistant\?view=trust$/);
+    await expect(
+      page.getByRole("region", { name: "Alerts" }).getByRole("button", { name: "Seen" }),
+    ).toHaveCount(1);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("an empty Today says Nothing needs you., with the last publish", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "GET /admin/messages": { messages: [message("m4", "Alan Turing", "read")] },
+      "GET /admin/assistant/health": healthy(),
+    });
+    await openAdmin(page, "/admin");
+    const needs = page.getByRole("region", { name: "Needs you" });
+    await expect(needs.getByText("Nothing needs you.", { exact: true })).toBeVisible();
+    await expect(needs.getByText("Last published 1 hour ago as #12.")).toBeVisible();
+    await expect(needs.getByRole("link")).toHaveCount(0);
+    await expect(page.getByRole("main").getByText("Inbox: nothing new.")).toBeVisible();
+  });
+
+  test("a queue that did not load is a row with Try again, never Nothing needs you.", async ({
+    page,
+    baseURL,
+  }) => {
+    let down = true;
+    await fakeApi(page, baseURL, {
+      "GET /admin/messages": { messages: [message("m4", "Alan Turing", "read")] },
+      "GET /admin/assistant/health": healthy(),
+      "GET /admin/assistant/reviews": () =>
+        down
+          ? { status: 502, body: { error: "upstream_down" } }
+          : { status: 200, body: defaults()["GET /admin/assistant/reviews"] },
+    });
+    await openAdmin(page, "/admin");
+    const needs = page.getByRole("region", { name: "Needs you" });
+    const failed = needs.getByRole("button", { name: /^Could not check the answers to review/ });
+    await expect(failed).toBeVisible();
+    await expect(needs.getByText("Nothing needs you.")).toHaveCount(0);
+
+    down = false;
+    await failed.click();
+    await expect(needs.getByText("Nothing needs you.", { exact: true })).toBeVisible();
+    // The button went with its row: the focus waits on the list's heading.
+    await expect(needs.getByRole("heading", { name: "Needs you" })).toBeFocused();
+  });
+
+  test("the media out of step is a row in Needs you", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL, {
+      "GET /admin/media-reconcile": {
+        missingFiles: ["a.webp", "b.webp"],
+        orphanFiles: ["c.webp"],
+        totalAssets: 3,
+        totalBytes: 1,
+      },
+    });
+    await openAdmin(page, "/admin");
+    const row = page.getByRole("region", { name: "Needs you" }).getByRole("link", {
+      name: /^Media and database are out of step: 2 records without a file, 1 file without a record/,
+    });
+    await expect(row).toHaveAttribute("href", "/admin/media");
+  });
+
+  test("the translations to check unfold in place, each with its editor", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin");
+    const launch = page.getByRole("region", { name: "Before launch" });
+    const show = launch.getByRole("button", { name: /^1 translation to check/ });
+    await expect(show).toHaveAttribute("aria-expanded", "false");
+    await show.click();
+    await expect(show).toHaveAttribute("aria-expanded", "true");
+    const edit = launch.getByRole("link", { name: /^Project One, project: German empty: hook/ });
+    await expect(edit).toHaveAttribute("href", "/admin/projects/p1");
+    await show.click();
+    await expect(edit).toHaveCount(0);
   });
 });
 

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal, type OnInit } from "@angular/core";
+import { ActivatedRoute } from "@angular/router";
 import type { RouteMeta } from "@analogjs/router";
 import { BrnTabsContent } from "@spartan-ng/brain/tabs";
 import { HlmTabsImports } from "@spartan-ng/helm/tabs";
@@ -201,6 +202,7 @@ export default class AdminAssistantPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
   protected readonly pulse = inject(AdminPulseService);
   private readonly recovery = inject(RecoveryService);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly tabs = TABS;
   /** The section shown; the settings tab's edits die with it on a switch. */
@@ -214,6 +216,13 @@ export default class AdminAssistantPage implements OnInit {
   protected readonly journalFocus = signal<string | null>(null);
 
   ngOnInit(): void {
+    // Today's rows link a queue's tab (`?view=reviews`). shortcut: read once on arrival, and
+    // switching tabs does not write it back; U18 makes the views the address.
+    const linked = TABS.find((t) => t.id === this.route.snapshot.queryParamMap.get("view"))?.id;
+    if (linked) {
+      this.tab.set(linked);
+      this.strip.set(linked);
+    }
     void this.recovery.list().then((copies) => {
       const tab = copies.map((copy) => TAB_OF[copy.editor]).find(Boolean);
       if (tab && this.tab() === "overview") void this.select(tab);

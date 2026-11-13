@@ -1,9 +1,9 @@
-import { DOCUMENT, NgTemplateOutlet } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
   OnInit,
   signal,
@@ -11,44 +11,50 @@ import {
 } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideArrowRight, lucideTriangleAlert } from "@ng-icons/lucide";
-import { HlmAlert, HlmAlertDescription, HlmAlertTitle } from "@spartan-ng/helm/alert";
-import { HlmBadge } from "@spartan-ng/helm/badge";
+import { lucideTriangleAlert } from "@ng-icons/lucide";
 import { HlmButton } from "@spartan-ng/helm/button";
-import { HlmCardImports } from "@spartan-ng/helm/card";
-import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 
 import {
   AdminApiService,
-  type I18nItem,
+  type ApiResult,
   type MediaReconcile,
-  type PublicationRow,
 } from "../../admin/admin-api.service";
-import {
-  FormSkeletonComponent,
-  LoadErrorComponent,
-} from "../../admin/components/load-state.component";
-import { KpiTileComponent } from "../../admin/components/kpi-tile.component";
+import { filterStatuses, type Proposal } from "../../admin/agent";
+import type { ReviewQueue } from "../../admin/assistant-types";
+import { FormSkeletonComponent } from "../../admin/components/load-state.component";
 import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 import { ReadinessCardComponent } from "../../admin/components/readiness-card.component";
-import { editorLinkForI18n } from "../../admin/editor-links";
+import type { FaqProposal } from "../../admin/faq-proposals";
+import type { JournalView } from "../../admin/journal";
+import type { LessonsView } from "../../admin/lessons";
 import { AdminSessionService } from "../../admin/admin-session.service";
 import { AdminPulseService, type PulsePart } from "../../admin/pulse.service";
-import { RecoveryService, typedAt, type RecoveryCopy } from "../../admin/recovery.service";
+import { RecoveryService, type RecoveryCopy } from "../../admin/recovery.service";
 import { absoluteTime, relativeTime } from "../../admin/relative-time";
+import { needsYou, TODAY_ROW } from "../../admin/today";
+import { trustAlert } from "../../admin/trust";
 
-/** Shown before "show all": enough to act on without burying the rest of the page. */
-const I18N_PREVIEW = 6;
-/** The latest few of each, with a link to the rest. */
-const RECENT = 3;
+/** Today's own reads, beside the pulse's: the media check and each queue's count. */
+type Source = "reconcile" | "reviews" | "proposals" | "faq" | "journal" | "lessons";
+const SOURCES: readonly Source[] = [
+  "reconcile",
+  "reviews",
+  "proposals",
+  "faq",
+  "journal",
+  "lessons",
+];
 
-const KIND_LABELS: Record<I18nItem["kind"], string> = {
-  project: "project",
-  experience: "experience",
-  post: "post",
-  skill: "skill card",
-  faq: "FAQ",
-  section: "page copy",
+/** What could not be checked, in words. */
+const SOURCE_NAMES: Record<Source | "messages" | "assistant", string> = {
+  messages: "the inbox",
+  assistant: "the assistant",
+  reconcile: "the media",
+  reviews: "the answers to review",
+  proposals: "the content agent's drafts",
+  faq: "the FAQ proposals",
+  journal: "the journal",
+  lessons: "the lessons",
 };
 
 /** Dollars, to the cent; a sliver of a cent still shows as spent. */
@@ -57,11 +63,14 @@ function usd(value: number): string {
   return `$${value.toFixed(2)}`;
 }
 
+/** "the inbox", "the inbox and the journal", "a, b and c". */
+const sentence = (names: readonly string[]): string =>
+  names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? "");
+
 /**
- * The admin's cockpit: what is waiting to go live, new messages, how the
- * assistant is doing, translations to check (four tiles), then the launch
- * checklist, the latest publications and messages, and the translation list.
- * The numbers come from `AdminPulseService`, which the sidebar shares.
+ * Today: where the site stands in two sentences (what is live, the assistant's day, the inbox),
+ * then everything that waits for you, worst first, each a row that leads where it is settled,
+ * then what still makes the site look unfinished. The pulse's numbers are the rail's too.
  */
 @Component({
   selector: "app-admin-dashboard",
@@ -69,538 +78,235 @@ function usd(value: number): string {
   imports: [
     AdminPageHeaderComponent,
     FormSkeletonComponent,
-    HlmAlert,
-    HlmAlertDescription,
-    HlmAlertTitle,
-    HlmBadge,
     HlmButton,
-    HlmCardImports,
-    HlmSkeleton,
-    KpiTileComponent,
-    LoadErrorComponent,
     NgIcon,
-    NgTemplateOutlet,
     ReadinessCardComponent,
     RouterLink,
   ],
-  viewProviders: [provideIcons({ lucideArrowRight, lucideTriangleAlert })],
+  viewProviders: [provideIcons({ lucideTriangleAlert })],
   host: { class: "block" },
   template: `
-    <div class="mx-auto flex max-w-5xl flex-col gap-6 pb-12">
-      <app-page-header
-        title="Today"
-        description="Edits are saved as a draft. Publishing makes them live."
-      >
-        <span headerStatus>
-          @if (pulse.status(); as s) {
-            <span
-              id="draft-state"
-              hlmBadge
-              [variant]="s.hasUnpublishedChanges ? 'default' : 'secondary'"
-            >
-              {{ s.hasUnpublishedChanges ? "unpublished changes" : "all published" }}
-            </span>
-          }
-        </span>
-        <a headerActions hlmBtn variant="outline" size="sm" routerLink="/admin/preview"
-          >Preview draft</a
-        >
-        <button
-          headerActions
-          hlmBtn
-          size="sm"
-          [disabled]="!pulse.unpublished()"
-          aria-describedby="draft-state"
-          (click)="pulse.publishOpen.set(true)"
-        >
-          Review &amp; publish
-        </button>
-      </app-page-header>
+    <div class="flex max-w-4xl flex-col gap-6 pb-12">
+      <app-page-header title="Today" />
 
-      @if (needsTotp()) {
-        <!-- The sign and the sentence stay together; the button wraps under them on a phone. -->
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
-          <p class="m-0 flex min-w-0 items-start gap-2">
-            <ng-icon
-              name="lucideTriangleAlert"
-              size="16"
-              class="mt-0.5 shrink-0 text-accent-orange"
-              aria-hidden="true"
-            />
-            <span
-              >Two-factor authentication is off: your password alone signs in to this admin.</span
-            >
-          </p>
-          <a hlmBtn variant="outline" size="sm" routerLink="/admin/account">Turn it on</a>
-        </div>
-      }
-
-      @if (reconcile(); as r) {
-        @if (r.missingFiles.length || r.orphanFiles.length) {
-          <div hlmAlert variant="destructive">
-            <h2 hlmAlertTitle>Media and database are out of step</h2>
-            <p hlmAlertDescription>
-              {{ r.missingFiles.length }} record(s) without a file,
-              {{ r.orphanFiles.length }} file(s) without a record. Usually a database restore
-              without a matching media restore.
-              <a routerLink="/admin/media" class="underline underline-offset-4">Open media</a>
+      <!-- Where the site stands: what is live, the assistant's day, the inbox. -->
+      <div class="-mt-4 flex flex-col gap-0.5 text-sm">
+        @if (pulse.status(); as s) {
+          @if (!s.lastPublish) {
+            <p class="m-0">Nothing is live yet. {{ draftWords() }}</p>
+          } @else if (live(); as id) {
+            <p class="m-0">
+              Published
+              <time [attr.datetime]="s.lastPublish" [title]="absolute(s.lastPublish)">{{
+                relative(s.lastPublish)
+              }}</time>
+              as
+              <a class="font-data underline underline-offset-4" routerLink="/admin/publications"
+                >#{{ id }}</a
+              >. {{ draftWords() }}
             </p>
-          </div>
-        }
-      }
-
-      @if (copies().length) {
-        <section hlmCard aria-labelledby="copies-title">
-          <div hlmCardHeader>
-            <h2 hlmCardTitle id="copies-title">Unsaved edits</h2>
-            <p hlmCardDescription>
-              Kept in this browser when a page closed before you saved. Open one to keep or discard
-              it.
-            </p>
-          </div>
-          <div hlmCardContent>
-            <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list">
-              @for (copy of copies(); track copy.href) {
-                <li class="text-sm wrap-anywhere">
-                  <a class="underline underline-offset-4" [routerLink]="copy.href">{{
-                    copy.page
-                  }}</a
-                  >, from {{ when(copy.at) }}
-                </li>
-              }
-            </ul>
-          </div>
-        </section>
-      }
-
-      <section aria-labelledby="glance-title">
-        <h2 id="glance-title" class="sr-only">At a glance</h2>
-        <ul class="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 xl:grid-cols-4" role="list">
-          <!-- What publishing now would change. -->
-          <li appKpiTile="Unpublished">
-            @if (pulse.review(); as r) {
-              @if (r.issues) {
-                <p class="m-0 text-figure tabular-nums text-destructive">
-                  {{ r.issues }}
-                  <span class="text-sm font-normal">{{
-                    r.issues === 1 ? "problem to fix" : "problems to fix"
-                  }}</span>
-                </p>
-              } @else {
-                <p class="m-0 text-figure tabular-nums">
-                  {{ r.total }}
-                  <span class="text-sm font-normal text-muted-foreground">{{
-                    r.total === 1 ? "change" : "changes"
-                  }}</span>
-                </p>
-              }
-              <p class="m-0 text-hint text-muted-foreground">{{ localeLine() }}</p>
-            } @else if (isFailed("review")) {
-              <app-load-error compact title="Could not load" (retry)="retry('review')" />
-            } @else {
-              <ng-container *ngTemplateOutlet="tileLoading" />
-            }
-            @if (pulse.status(); as s) {
-              <p class="m-0 text-hint text-muted-foreground">
-                Last publish
-                @if (s.lastPublish; as at) {
-                  <time [attr.datetime]="at" [title]="absolute(at)">{{ relative(at) }}</time>
-                } @else {
-                  never
-                }
-              </p>
-            }
-            @if (pulse.unpublished()) {
-              <div class="mt-auto pt-1">
-                <button
-                  hlmBtn
-                  variant="link"
-                  size="sm"
-                  class="h-auto gap-1 p-0 text-foreground"
-                  type="button"
-                  (click)="pulse.publishOpen.set(true)"
-                >
-                  Review changes
-                  <ng-icon name="lucideArrowRight" size="14" aria-hidden="true" />
-                </button>
-              </div>
-            }
-          </li>
-
-          <li appKpiTile="Inbox">
-            @if (pulse.messages(); as messages) {
-              <p class="m-0 text-figure tabular-nums">
-                {{ pulse.newMessages() }}
-                <span class="text-sm font-normal text-muted-foreground">new</span>
-              </p>
-              <p class="m-0 text-hint text-muted-foreground">
-                {{ messages.length }} {{ messages.length === 1 ? "message" : "messages" }} in the
-                inbox
-              </p>
-            } @else if (isFailed("messages")) {
-              <app-load-error compact title="Could not load" (retry)="retry('messages')" />
-            } @else {
-              <ng-container *ngTemplateOutlet="tileLoading" />
-            }
-            <ng-container
-              *ngTemplateOutlet="
-                tileLink;
-                context: { $implicit: '/admin/inbox', label: 'Open inbox' }
-              "
-            />
-          </li>
-
-          <li appKpiTile="Assistant · 24 h">
-            @if (pulse.assistant(); as h) {
-              <p class="m-0 text-figure tabular-nums">
-                {{ h.last24h.answers }}
-                <span class="text-sm font-normal text-muted-foreground">{{
-                  h.last24h.answers === 1 ? "answer" : "answers"
-                }}</span>
-              </p>
-              @if (spend(); as s) {
-                <p class="m-0 font-data text-xs text-muted-foreground">
-                  {{ s.spent }} of {{ s.budget }} today{{ s.resting ? " · resting" : "" }}
-                </p>
-                <div class="h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-                  <div class="h-full rounded-full bg-accent-orange" [style.width.%]="s.share"></div>
-                </div>
-              } @else if (assistantOff(); as reason) {
-                <p class="m-0 text-hint text-muted-foreground">Off: {{ reason }}</p>
-              }
-              @if (pulse.assistantAlert(); as alert) {
-                <p class="m-0 text-xs text-destructive">{{ alert }}</p>
-              } @else {
-                <p class="m-0 text-hint text-muted-foreground">No failed answers</p>
-              }
-            } @else if (isFailed("assistant")) {
-              <app-load-error compact title="Could not load" (retry)="retry('assistant')" />
-            } @else {
-              <ng-container *ngTemplateOutlet="tileLoading" />
-            }
-            <ng-container
-              *ngTemplateOutlet="
-                tileLink;
-                context: { $implicit: '/admin/assistant', label: 'Open assistant' }
-              "
-            />
-          </li>
-
-          <li appKpiTile="Translations">
-            @if (pulse.i18n(); as items) {
-              <p class="m-0 text-figure tabular-nums">
-                {{ items.length }}
-                <span class="text-sm font-normal text-muted-foreground">to check</span>
-              </p>
-              <p class="m-0 text-hint text-muted-foreground">
-                {{ items.length ? "German and English out of step" : "Both languages in step" }}
-              </p>
-              @if (items.length) {
-                <div class="mt-auto pt-1">
-                  <button
-                    hlmBtn
-                    variant="link"
-                    size="sm"
-                    class="h-auto gap-1 p-0 text-foreground"
-                    type="button"
-                    (click)="showTranslations()"
-                  >
-                    See the list
-                    <ng-icon name="lucideArrowRight" size="14" aria-hidden="true" />
-                  </button>
-                </div>
-              }
-            } @else if (isFailed("i18n")) {
-              <app-load-error compact title="Could not load" (retry)="retry('i18n')" />
-            } @else {
-              <ng-container *ngTemplateOutlet="tileLoading" />
-            }
-          </li>
-        </ul>
-      </section>
-
-      <!-- While the site still shows placeholder content, nothing below matters as much. -->
-      <app-readiness-card />
-
-      <div class="grid gap-6 lg:grid-cols-2">
-        <section hlmCard aria-labelledby="publications-title">
-          <div hlmCardHeader>
-            <h2 hlmCardTitle id="publications-title">Recent publications</h2>
-            <p hlmCardDescription>
-              @if (pulse.status()?.pointers?.length) {
-                Live:
-                <span class="font-data">{{ liveVersions() }}</span>
-              } @else {
-                Nothing is live yet.
-              }
-            </p>
-            <a
-              hlmCardAction
-              hlmBtn
-              variant="ghost"
-              size="sm"
-              routerLink="/admin/publications"
-              class="gap-1"
-            >
-              All <span class="sr-only">publications</span>
-              <ng-icon name="lucideArrowRight" size="14" aria-hidden="true" />
-            </a>
-          </div>
-          <div hlmCardContent>
-            @if (publications(); as rows) {
-              @if (rows.length) {
-                <ol class="m-0 flex list-none flex-col divide-y divide-border p-0" role="list">
-                  @for (row of rows; track row.id) {
-                    <li class="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                      <span class="font-data text-xs text-muted-foreground">#{{ row.id }}</span>
-                      <span class="min-w-0 flex-1 truncate text-sm">{{ labelOf(row) }}</span>
-                      @if (row.live) {
-                        <span hlmBadge variant="secondary">live</span>
-                      }
-                      <time
-                        class="shrink-0 font-data text-xs text-muted-foreground"
-                        [attr.datetime]="row.createdAt"
-                        [title]="absolute(row.createdAt)"
-                        >{{ relative(row.createdAt) }}</time
-                      >
-                    </li>
-                  }
-                </ol>
-              } @else {
-                <p class="m-0 text-sm text-muted-foreground">Nothing published yet.</p>
-              }
-            } @else if (publicationsFailed()) {
-              <app-load-error
-                compact
-                title="Could not load the publications"
-                (retry)="loadPublications()"
-              />
-            } @else {
-              <app-form-skeleton kind="list" [rows]="3" label="Loading publications…" />
-            }
-          </div>
-        </section>
-
-        <section hlmCard aria-labelledby="messages-title">
-          <div hlmCardHeader>
-            <h2 hlmCardTitle id="messages-title">Latest messages</h2>
-            <p hlmCardDescription>From the contact form, newest first.</p>
-            <a
-              hlmCardAction
-              hlmBtn
-              variant="ghost"
-              size="sm"
-              routerLink="/admin/inbox"
-              class="gap-1"
-            >
-              Inbox
-              <ng-icon name="lucideArrowRight" size="14" aria-hidden="true" />
-            </a>
-          </div>
-          <div hlmCardContent>
-            @if (pulse.messages(); as messages) {
-              @if (messages.length) {
-                <ol class="m-0 flex list-none flex-col divide-y divide-border p-0" role="list">
-                  @for (m of latestMessages(); track m.id) {
-                    <li class="flex flex-col gap-0.5 py-2.5 first:pt-0 last:pb-0">
-                      <div class="flex items-center gap-2">
-                        @if (m.status === "new") {
-                          <span
-                            class="size-1.5 shrink-0 rounded-full bg-accent-orange"
-                            aria-hidden="true"
-                          ></span>
-                          <span class="sr-only">New:</span>
-                        }
-                        <a
-                          class="min-w-0 flex-1 truncate text-sm underline-offset-4 hover:underline"
-                          [class.font-medium]="m.status === 'new'"
-                          routerLink="/admin/inbox"
-                          [queryParams]="{ m: m.id }"
-                          >{{ m.name }}</a
-                        >
-                        <time
-                          class="shrink-0 font-data text-xs text-muted-foreground"
-                          [attr.datetime]="m.createdAt"
-                          [title]="absolute(m.createdAt)"
-                          >{{ relative(m.createdAt) }}</time
-                        >
-                      </div>
-                      <p class="m-0 line-clamp-1 text-hint text-muted-foreground">
-                        {{ m.message }}
-                      </p>
-                    </li>
-                  }
-                </ol>
-              } @else {
-                <p class="m-0 text-sm text-muted-foreground">No messages yet.</p>
-              }
-            } @else if (isFailed("messages")) {
-              <app-load-error
-                compact
-                title="Could not load the inbox"
-                (retry)="retry('messages')"
-              />
-            } @else {
-              <app-form-skeleton kind="list" [rows]="3" label="Loading messages…" />
-            }
-          </div>
-        </section>
-      </div>
-
-      <section hlmCard id="translations" aria-labelledby="i18n-title">
-        <div hlmCardHeader>
-          <h2
-            hlmCardTitle
-            id="i18n-title"
-            tabindex="-1"
-            class="flex items-center gap-2 outline-none"
-          >
-            Translations
-            @if (pulse.i18n(); as items) {
-              @if (items.length) {
-                <span hlmBadge variant="outline" class="border-accent-orange/50 text-accent-orange">
-                  {{ items.length }} to check
-                </span>
-              } @else {
-                <span hlmBadge variant="secondary">complete</span>
-              }
-            }
-          </h2>
-          <p hlmCardDescription>
-            German left empty where English has text (or the reverse), and German last edited before
-            the English changed.
-          </p>
-        </div>
-        <div hlmCardContent>
-          @if (pulse.i18n(); as items) {
-            @if (!items.length) {
-              <p class="m-0 text-sm text-muted-foreground">Both languages are in step.</p>
-            } @else {
-              <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list">
-                @for (item of shownI18n(); track item.kind + item.id) {
-                  <li
-                    class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
-                  >
-                    <div class="min-w-0">
-                      <p class="m-0 truncate text-sm">
-                        {{ item.label }}
-                        <span class="ml-1 text-hint text-muted-foreground">{{
-                          kindLabel(item)
-                        }}</span>
-                      </p>
-                      <p class="m-0 mt-0.5 text-hint text-muted-foreground">
-                        {{ problemText(item) }}
-                      </p>
-                    </div>
-                    <a hlmBtn variant="outline" size="sm" [routerLink]="link(item)"
-                      >Edit<span class="sr-only">: {{ item.label }}</span></a
-                    >
-                  </li>
-                }
-              </ul>
-              @if (items.length > preview) {
-                <button
-                  hlmBtn
-                  variant="ghost"
-                  size="sm"
-                  class="mt-2"
-                  [attr.aria-expanded]="showAllI18n()"
-                  (click)="showAllI18n.set(!showAllI18n())"
-                >
-                  {{ showAllI18n() ? "Show fewer" : "Show all " + items.length }}
-                </button>
-              }
-            }
-          } @else if (isFailed("i18n")) {
-            <app-load-error
-              compact
-              title="Could not load the translations"
-              (retry)="retry('i18n')"
-            />
           } @else {
-            <app-form-skeleton kind="list" [rows]="2" label="Loading translations…" />
+            <p class="m-0">
+              Published
+              <time [attr.datetime]="s.lastPublish" [title]="absolute(s.lastPublish)">{{
+                relative(s.lastPublish)
+              }}</time
+              >. {{ draftWords() }}
+            </p>
           }
-        </div>
+        } @else if (isFailed("status")) {
+          <p class="m-0">
+            Could not check what is live.
+            <button
+              hlmBtn
+              variant="link"
+              size="sm"
+              type="button"
+              class="h-auto p-0 text-sm text-foreground underline"
+              (click)="retryStatus()"
+            >
+              Try again
+            </button>
+          </p>
+        }
+        @if (spend(); as s) {
+          <p class="m-0">
+            The assistant is {{ s.word }}: <span class="font-data">{{ s.spent }}</span> of
+            <span class="font-data">{{ s.budget }}</span> spent today. {{ inboxWords() }}
+          </p>
+        } @else if (assistantOff(); as reason) {
+          <p class="m-0">The assistant is off: {{ reason }}. {{ inboxWords() }}</p>
+        } @else if (isFailed("assistant")) {
+          <p class="m-0">Could not check the assistant. {{ inboxWords() }}</p>
+        } @else if (inboxWords()) {
+          <p class="m-0">{{ inboxWords() }}</p>
+        }
+      </div>
+
+      <section class="flex flex-col gap-2" aria-labelledby="needs-title">
+        <!-- Focus waits here when a row's button goes. -->
+        <h2 id="needs-title" tabindex="-1" class="m-0 text-section-title outline-none">
+          Needs you
+        </h2>
+        @if (rows().length || failedNames()) {
+          <ul class="m-0 -ml-3 list-none border-t border-border p-0" role="list">
+            @if (failedNames(); as names) {
+              <li>
+                <button type="button" [class]="row" (click)="retry()">
+                  <span class="min-w-0">Could not check {{ names }}.</span>&ngsp;<span
+                  ></span>&ngsp;<span
+                    class="text-right font-medium max-sm:col-start-2 max-sm:row-start-1"
+                    >Try again</span
+                  >
+                </button>
+              </li>
+            }
+            @for (item of rows(); track item.words) {
+              <li>
+                <a [class]="row" [routerLink]="item.link" [queryParams]="item.query ?? null">
+                  <span class="min-w-0 wrap-anywhere">
+                    @if (item.sign) {
+                      <ng-icon
+                        name="lucideTriangleAlert"
+                        size="16"
+                        class="mr-1.5 inline-block align-[-3px]"
+                        [class]="item.sign === 'error' ? 'text-destructive' : 'text-accent-orange'"
+                        aria-hidden="true"
+                      />
+                    }
+                    {{ item.words }}</span
+                  >&ngsp;<span
+                    class="font-data text-xs text-faint-foreground max-sm:col-start-1 max-sm:row-start-2"
+                    >{{ item.when }}</span
+                  >&ngsp;<span
+                    class="text-right font-medium max-sm:col-start-2 max-sm:row-span-2 max-sm:row-start-1"
+                    >{{ item.action }}</span
+                  >
+                </a>
+              </li>
+            }
+          </ul>
+        } @else if (settled()) {
+          <div class="flex flex-col gap-0.5">
+            <p class="m-0 text-sm">Nothing needs you.</p>
+            @if (pulse.status()?.lastPublish; as at) {
+              @if (live(); as id) {
+                <p class="m-0 text-hint text-muted-foreground">
+                  Last published
+                  <time [attr.datetime]="at" [title]="absolute(at)">{{ relative(at) }}</time> as
+                  <span class="font-data">#{{ id }}</span
+                  >.
+                </p>
+              } @else {
+                <p class="m-0 text-hint text-muted-foreground">
+                  Last published
+                  <time [attr.datetime]="at" [title]="absolute(at)">{{ relative(at) }}</time
+                  >.
+                </p>
+              }
+            }
+          </div>
+        } @else {
+          <app-form-skeleton kind="list" [rows]="3" label="Checking what needs you…" />
+        }
       </section>
+
+      <!-- While the site still shows placeholder content, it says so here. -->
+      <app-readiness-card />
     </div>
-
-    <ng-template #tileLoading>
-      <div class="flex flex-col gap-2 py-1" role="status">
-        <span class="sr-only">Loading…</span>
-        <hlm-skeleton class="h-7 w-16" />
-        <hlm-skeleton class="h-3 w-28" />
-      </div>
-    </ng-template>
-
-    <ng-template #tileLink let-path let-label="label">
-      <div class="mt-auto pt-1">
-        <a
-          hlmBtn
-          variant="link"
-          size="sm"
-          class="h-auto gap-1 p-0 text-foreground"
-          [routerLink]="path"
-        >
-          {{ label }}
-          <ng-icon name="lucideArrowRight" size="14" aria-hidden="true" />
-        </a>
-      </div>
-    </ng-template>
   `,
 })
 export default class AdminDashboardPage implements OnInit {
   private readonly api = inject(AdminApiService);
-  private readonly doc = inject(DOCUMENT);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   protected readonly pulse = inject(AdminPulseService);
   private readonly recovery = inject(RecoveryService);
   private readonly session = inject(AdminSessionService);
 
-  /** Two-factor is off: Today's first row until it is on (plan 5, U8; Part F puts it in Needs you). */
-  protected readonly needsTotp = computed(() => this.session.user()?.totpEnrolled === false);
+  protected readonly row = TODAY_ROW;
 
-  protected readonly preview = I18N_PREVIEW;
-  /** Unsaved edits kept in this browser: one row a page, newest first. */
-  protected readonly copies = signal<RecoveryCopy[]>([]);
-  protected readonly when = typedAt;
-  protected readonly reconcile = signal<MediaReconcile | null>(null);
-  protected readonly publications = signal<PublicationRow[] | null>(null);
-  protected readonly publicationsFailed = signal(false);
-  protected readonly showAllI18n = signal(false);
+  /** The live publication's number: it links to History. */
+  protected readonly live = signal<number | null>(null);
+  /** Unsaved edits kept in this browser, the newest of each page; null until read. */
+  private readonly copies = signal<RecoveryCopy[] | null>(null);
+  private readonly reconcile = signal<MediaReconcile | null>(null);
+  private readonly reviews = signal<ReviewQueue | null>(null);
+  private readonly proposals = signal<Proposal[] | null>(null);
+  private readonly faq = signal<FaqProposal[] | null>(null);
+  private readonly journal = signal<JournalView | null>(null);
+  private readonly lessons = signal<LessonsView | null>(null);
+  /** Today's reads whose last answer failed. */
+  private readonly failed = signal<ReadonlySet<Source>>(new Set());
 
-  protected readonly shownI18n = computed(() => {
-    const items = this.pulse.i18n() ?? [];
-    return this.showAllI18n() ? items : items.slice(0, I18N_PREVIEW);
+  protected readonly rows = computed(() =>
+    needsYou({
+      totpOff: this.session.user()?.totpEnrolled === false,
+      reconcile: this.reconcile(),
+      alert: this.pulse.assistantAlert(),
+      trust: trustAlert(this.pulse.assistant()?.trust) !== null,
+      messages: this.pulse.messages(),
+      copies: (this.copies() ?? []).map(({ page, href, at }) => ({ page, href, at })),
+      reviews: this.reviews(),
+      proposals: this.proposals(),
+      faq: this.faq(),
+      journal: this.journal(),
+      lessons: this.lessons(),
+    }),
+  );
+
+  /** What could not be checked: a row says so, so an empty list is never a guess. */
+  protected readonly failedNames = computed(() =>
+    sentence(
+      [
+        ...(["messages", "assistant"] as const).filter((part) => this.pulse.failed().has(part)),
+        ...this.failed(),
+      ].map((source) => SOURCE_NAMES[source]),
+    ),
+  );
+
+  /** Every source has answered: only then may Today say that nothing needs you. */
+  protected readonly settled = computed(
+    () =>
+      this.copies() !== null &&
+      this.pulse.messages() !== null &&
+      this.pulse.assistant() !== null &&
+      [
+        this.reconcile(),
+        this.reviews(),
+        this.proposals(),
+        this.faq(),
+        this.journal(),
+        this.lessons(),
+      ].every((read) => read !== null),
+  );
+
+  /** What publishing now would change, as the top bar's Publish counts it. */
+  protected readonly draftWords = computed(() => {
+    if (!this.pulse.status()?.hasUnpublishedChanges) return "Everything is live.";
+    const review = this.pulse.review();
+    if (review?.issues) {
+      return `${review.issues} ${review.issues === 1 ? "problem stops" : "problems stop"} the next publish.`;
+    }
+    if (review?.total) {
+      return `${review.total} ${review.total === 1 ? "change is" : "changes are"} not live.`;
+    }
+    return "Changes are not live.";
   });
 
-  protected readonly latestMessages = computed(() =>
-    (this.pulse.messages() ?? []).slice(0, RECENT),
-  );
+  protected readonly inboxWords = computed(() => {
+    if (this.pulse.messages() === null) return "";
+    const fresh = this.pulse.newMessages();
+    return fresh ? `Inbox: ${fresh} new.` : "Inbox: nothing new.";
+  });
 
-  /** Per language: "EN 3 · DE 2 to fix". */
-  protected readonly localeLine = computed(() =>
-    (this.pulse.review()?.locales ?? [])
-      .map((l) => {
-        const detail = l.issues ? `${l.issues} to fix` : l.changes;
-        return `${l.locale.toUpperCase()} ${detail}`;
-      })
-      .join(" · "),
-  );
-
-  protected readonly liveVersions = computed(() =>
-    (this.pulse.status()?.pointers ?? [])
-      .map((p) => `${p.locale.toUpperCase()} v${p.versionId}`)
-      .join(" · "),
-  );
-
-  /** Today's spend against the cap, while the assistant is on. */
+  /** Today's spend against the budget, while the assistant is on. */
   protected readonly spend = computed(() => {
     const state = this.pulse.assistant()?.state;
     if (!state || state.state === "off") return null;
     return {
+      word: state.state === "resting" ? "resting" : "answering",
       spent: usd(state.spentUsd),
       budget: usd(state.budgetUsd),
-      share: state.budgetUsd ? Math.min(100, (state.spentUsd / state.budgetUsd) * 100) : 0,
-      resting: state.state === "resting",
     };
   });
 
@@ -610,17 +316,77 @@ export default class AdminDashboardPage implements OnInit {
   });
 
   constructor() {
-    // A publish from the dialog adds a row here.
+    // A publish from the dialog moves the live number.
     effect(() => {
-      if (this.pulse.publishes() > 0) untracked(() => void this.loadPublications());
+      if (this.pulse.publishes() > 0) untracked(() => void this.loadLive());
     });
   }
 
   ngOnInit(): void {
     void this.pulse.refreshIfStale();
-    void this.loadPublications();
-    void this.loadReconcile();
+    void this.loadLive();
     void this.loadCopies();
+    void this.load(SOURCES);
+  }
+
+  protected isFailed(part: PulsePart): boolean {
+    return this.pulse.failed().has(part);
+  }
+
+  protected retryStatus(): void {
+    void this.pulse.refresh(["status", "review"]);
+  }
+
+  /** Asks again for what failed; once nothing has, the button is gone and the heading has the focus. */
+  protected async retry(): Promise<void> {
+    const parts = (["messages", "assistant"] as const).filter((part) => this.isFailed(part));
+    await Promise.all([this.pulse.refresh(parts), this.load(Array.from(this.failed()))]);
+    if (!this.failedNames())
+      this.host.nativeElement.querySelector<HTMLElement>("#needs-title")?.focus();
+  }
+
+  private load(sources: readonly Source[]): Promise<unknown> {
+    return Promise.all(
+      sources.map((source) => {
+        switch (source) {
+          case "reconcile":
+            return this.read(source, this.api.mediaReconcile(), (d) => this.reconcile.set(d));
+          case "reviews":
+            return this.read(source, this.api.assistantReviews(), (d) => this.reviews.set(d));
+          case "proposals":
+            // The Agent page's own question: its "Open" filter.
+            return this.read(source, this.api.proposals(filterStatuses("open")), (d) =>
+              this.proposals.set(d.proposals),
+            );
+          case "faq":
+            return this.read(source, this.api.faqProposals(["proposed", "needs_you"]), (d) =>
+              this.faq.set(d.proposals),
+            );
+          case "journal":
+            return this.read(source, this.api.assistantJournal("proposed"), (d) =>
+              this.journal.set(d),
+            );
+          case "lessons":
+            return this.read(source, this.api.assistantLessons(), (d) => this.lessons.set(d));
+        }
+      }),
+    );
+  }
+
+  /** A failed read keeps what was there, and says so in the list. */
+  private async read<T>(
+    source: Source,
+    request: Promise<ApiResult<T>>,
+    apply: (data: T) => void,
+  ): Promise<void> {
+    const result = await request;
+    if (result.ok) apply(result.data);
+    this.failed.update((failed) => {
+      const next = new Set(failed);
+      if (result.ok) next.delete(source);
+      else next.add(source);
+      return next;
+    });
   }
 
   private async loadCopies(): Promise<void> {
@@ -632,33 +398,9 @@ export default class AdminDashboardPage implements OnInit {
     this.copies.set([...newest.values()].sort((a, b) => b.at - a.at));
   }
 
-  protected isFailed(part: PulsePart): boolean {
-    return this.pulse.failed().has(part);
-  }
-
-  protected retry(part: PulsePart): void {
-    void this.pulse.refresh([part]);
-  }
-
-  protected async loadPublications(): Promise<void> {
-    this.publicationsFailed.set(false);
+  private async loadLive(): Promise<void> {
     const result = await this.api.publications();
-    if (result.ok) this.publications.set(result.data.publications.slice(0, RECENT));
-    else this.publicationsFailed.set(this.publications() === null);
-  }
-
-  /** Surfaced here because a restore mismatch is invisible until an image 404s. */
-  private async loadReconcile(): Promise<void> {
-    const result = await this.api.mediaReconcile();
-    if (result.ok) this.reconcile.set(result.data);
-  }
-
-  protected showTranslations(): void {
-    const heading = this.doc.getElementById("i18n-title");
-    const still =
-      this.doc.defaultView?.matchMedia("(prefers-reduced-motion: reduce)").matches ?? true;
-    heading?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
-    heading?.focus({ preventScroll: true });
+    if (result.ok) this.live.set(result.data.publications.find((p) => p.live)?.id ?? null);
   }
 
   protected relative(iso: string): string {
@@ -667,26 +409,5 @@ export default class AdminDashboardPage implements OnInit {
 
   protected absolute(iso: string): string {
     return absoluteTime(iso);
-  }
-
-  protected labelOf(row: PublicationRow): string {
-    return row.label || (row.kind === "rollback" ? "Rollback" : "Unlabelled");
-  }
-
-  protected kindLabel(item: I18nItem): string {
-    return KIND_LABELS[item.kind];
-  }
-
-  protected link(item: I18nItem): string {
-    return editorLinkForI18n(item);
-  }
-
-  protected problemText(item: I18nItem): string {
-    if (item.absent) return item.absent === "de" ? "English only" : "German only";
-    const parts: string[] = [];
-    if (item.missingDe.length) parts.push(`DE empty: ${item.missingDe.join(", ")}`);
-    if (item.missingEn.length) parts.push(`EN empty: ${item.missingEn.join(", ")}`);
-    if (item.stale) parts.push("English changed after the German was last edited");
-    return parts.join(" · ");
   }
 }
