@@ -8208,7 +8208,8 @@ test.describe("Inbox", () => {
 
     // On a German layout # is a key of its own, with no Shift.
     await page.locator("body").dispatchEvent("keydown", { key: "#", code: "Backslash" });
-    await expect.poll(() => sent).toEqual(["m1 read", "m1 spam"]);
+    // The next message then opens and is marked read: only the first two requests are this test's.
+    await expect.poll(() => sent.slice(0, 2)).toEqual(["m1 read", "m1 spam"]);
   });
 
   test("the filter and the open message live in the address; the rail's Inbox goes back to the inbox", async ({
@@ -9452,6 +9453,8 @@ test.describe("Profile and SEO & sharing", () => {
     await tab(links.getByRole("button", { name: "Delete GitHub" }));
     await tab(page.getByRole("button", { name: "Show 10 labels" }));
     await page.keyboard.press("Enter");
+    // The labels render on a later tick: a Tab sent sooner leaves the button for what came after it.
+    await expect(page.getByRole("button", { name: "Hide the labels" })).toBeFocused();
     await tab(page.getByRole("button", { name: /^More actions for Availability line/ }).first());
 
     // SEO: Change takes the focus into its field.
