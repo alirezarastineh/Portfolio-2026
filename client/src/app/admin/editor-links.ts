@@ -20,7 +20,8 @@ const UI_GROUP_PAGES: Record<string, string> = {
 
 const SECTION_PAGES: Record<string, string> = {
   identity: "/admin/hero",
-  socials: "/admin/socials",
+  // Profile holds the links (plan 5, U11).
+  socials: "/admin/hero",
   skills: "/admin/skills",
   experiences: "/admin/experience",
   legal: "/admin/legal",

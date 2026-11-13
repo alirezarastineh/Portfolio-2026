@@ -761,6 +761,20 @@ export default class AdminLayout {
       });
     });
 
+    // Content shows from the first search, and as its loads arrive: brain picks the active entry
+    // before those render, so a hidden one would take Enter. The first one found is chosen after.
+    effect(() => {
+      this.paletteSearch();
+      this.found();
+      afterNextRender(
+        () => {
+          const keys = this.command()?.keyManager;
+          if (keys && !keys.activeItem?.visible()) keys.setFirstItemActive();
+        },
+        { injector: this.injector },
+      );
+    });
+
     // The counts load once the admin shows, and are dropped at the sign-in screen.
     effect(() => {
       const login = this.isLogin();
@@ -923,7 +937,9 @@ export default class AdminLayout {
   protected readonly notLive = computed(() => {
     const marks = this.pulse.marks();
     return new Set(
-      PAGES.filter((item) => item.content && inDraft(marks, item.content)).map((item) => item.path),
+      PAGES.filter((item) => item.content?.some((path) => inDraft(marks, path))).map(
+        (item) => item.path,
+      ),
     );
   });
 
@@ -1157,15 +1173,16 @@ export default class AdminLayout {
     }
   }
 
-  /** Projects, posts, experience and media by name, loaded when Find first opens. */
+  /** Projects, posts, experience, Profile's links and media by name, loaded when Find first opens. */
   private async loadFound(): Promise<void> {
     const { state } = this.found();
     if (state === "loading" || state === "ready") return;
     this.found.set({ state: "loading", groups: [] });
-    const [projects, posts, experiences, media] = await Promise.all([
+    const [projects, posts, experiences, links, media] = await Promise.all([
       this.api.listProjects(),
       this.api.listPosts(),
       this.api.listExperiences(),
+      this.api.listSocials(),
       this.api.listMedia(),
     ]);
     if (this.destroyed) return;
@@ -1200,8 +1217,8 @@ export default class AdminLayout {
         }),
       });
     }
-    // shortcut: experience and media open their page, not the entry, until U14 and U15 give
-    // an entry an address (`?edit=<id>`).
+    // shortcut: experience, the links and media open their page, not the entry, until U14 and U15
+    // give an entry an address (`?edit=<id>`).
     if (experiences.ok) {
       groups.push({
         label: "Experience",
@@ -1217,6 +1234,19 @@ export default class AdminLayout {
         }),
       });
     }
+    // The Socials page went (plan 5, U11): its links are found here, and edited on Profile.
+    if (links.ok) {
+      groups.push({
+        label: "Links",
+        icon: "lucideLink",
+        items: links.data.socials.map((s) => ({
+          key: s.id,
+          label: s.label,
+          search: `${s.label} ${s.href}`,
+          path: "/admin/hero",
+        })),
+      });
+    }
     if (media.ok) {
       groups.push({
         label: "Media",
@@ -1229,7 +1259,7 @@ export default class AdminLayout {
         })),
       });
     }
-    const failed = !projects.ok || !posts.ok || !experiences.ok || !media.ok;
+    const failed = !projects.ok || !posts.ok || !experiences.ok || !links.ok || !media.ok;
     this.found.set({ state: failed ? "failed" : "ready", groups });
   }
 }

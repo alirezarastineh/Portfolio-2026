@@ -25,7 +25,6 @@ const RAIL = [
   ["Today", "/admin"],
   ["Inbox", "/admin/inbox"],
   ["Profile", "/admin/hero"],
-  ["Socials", "/admin/socials"],
   ["About", "/admin/about"],
   ["Work", "/admin/projects"],
   ["Experience", "/admin/experience"],
@@ -78,6 +77,11 @@ interface FixtureProject {
   tags: string[];
   featured: boolean;
   metrics: unknown[];
+}
+
+/** A link as `GET /admin/socials` lists it. */
+function socialRow(id: string, label: string, href: string, position = 0) {
+  return { id, label, href, icon: "github", isVisible: true, position, updatedAt: HOUR_AGO };
 }
 
 /** A fixture project as the editor loads it. */
@@ -1080,6 +1084,8 @@ function defaults(): Record<string, Answer> {
       },
     },
     "GET /admin/resumes": { resumes: { en: null, de: null } },
+    // Profile's links (plan 5, U11), and Find's.
+    "GET /admin/socials": { socials: [socialRow("s1", "GitHub", "https://github.com/someone")] },
     "GET /admin/projects": { projects },
     "GET /admin/projects/p0": { project: projects[0] },
     "GET /admin/media": {
@@ -1205,10 +1211,11 @@ test.describe("admin", () => {
   }) => {
     await fakeApi(page, baseURL);
     await page.setViewportSize({ width: 1280, height: 720 });
-    // Profile keeps the page header until its Part (About has the editor header, plan 5 U10).
-    await openAdmin(page, "/admin/hero");
+    // The project editor keeps the page header until its Part (Profile has the editor header, plan 5 U11).
+    await openAdmin(page, "/admin/projects/project-one");
 
-    const title = page.getByRole("heading", { level: 1, name: "Profile" });
+    const name = (content("en")["projects"] as FixtureProject[])[0]!.name;
+    const title = page.getByRole("heading", { level: 1, name });
     await expect(title).toBeVisible();
     const row = page.locator(".sticky", { has: title });
     await expect(row).not.toHaveAttribute("data-stuck");
@@ -1314,10 +1321,10 @@ test.describe("admin", () => {
     const headline = preview.locator("#hero-heading");
     await expect(headline).toContainText(en.ui.profile.heroHeadline);
 
-    // Typed, not saved: the page follows, and the save bar counts it.
+    // Typed, not saved: the page follows, and the editor header counts it.
     await page.locator("#profile-heroHeadline-en").fill("Ships AI that answers with sources.");
     await expect(headline).toContainText("Ships AI that answers with sources.");
-    await expect(page.locator("app-save-bar [role=status]")).toHaveText("1 field changed");
+    await expect(page.locator("app-editor-header [role=status]")).toHaveText("1 unsaved change");
 
     // A picture, not a second site: nothing in it takes focus or clicks.
     expect(
@@ -1827,12 +1834,21 @@ test.describe("admin", () => {
         verdicts.push(r.postDataJSON());
     });
     await openAdmin(page, "/admin/seo");
+    // The field's steps are in its ⋯ (plan 5, U11).
+    const tighten = async () => {
+      await page.getByRole("button", { name: "More actions for Page title" }).click();
+      await page.getByRole("menuitem", { name: "Tighten with AI (paid)" }).click();
+    };
 
     // Both languages tightened, then saved as they came.
-    await page.getByRole("button", { name: "Tighten the Page title with AI" }).click();
-    await expect(page.getByRole("textbox", { name: "Page title DE" })).toHaveValue("Tight title 2");
-    await expect(page.getByRole("textbox", { name: "Page title EN" })).toHaveValue("Tight title 1");
-    await page.getByRole("button", { name: "Save draft" }).click();
+    await tighten();
+    await expect(page.getByRole("textbox", { name: "Page title German" })).toHaveValue(
+      "Tight title 2",
+    );
+    await expect(page.getByRole("textbox", { name: "Page title English" })).toHaveValue(
+      "Tight title 1",
+    );
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect
       .poll(() => verdicts)
       .toEqual([
@@ -1845,10 +1861,15 @@ test.describe("admin", () => {
       ]);
 
     // Tightened again, then discarded: the fields go back, and the drafts with them.
-    await page.getByRole("button", { name: "Tighten the Page title with AI" }).click();
-    await expect(page.getByRole("textbox", { name: "Page title DE" })).toHaveValue("Tight title 4");
-    await page.getByRole("button", { name: "Discard" }).click();
-    await expect(page.getByRole("textbox", { name: "Page title EN" })).toHaveValue("Tight title 1");
+    await tighten();
+    await expect(page.getByRole("textbox", { name: "Page title German" })).toHaveValue(
+      "Tight title 4",
+    );
+    await page.getByRole("button", { name: "More actions for SEO & sharing" }).click();
+    await page.getByRole("menuitem", { name: "Discard 2 changes" }).click();
+    await expect(page.getByRole("textbox", { name: "Page title English" })).toHaveValue(
+      "Tight title 1",
+    );
     await expect.poll(() => verdicts).toHaveLength(2);
     expect(verdicts[1]).toEqual({
       outcomes: [
@@ -1893,14 +1914,16 @@ test.describe("admin", () => {
     });
     await openAdmin(page, "/admin/seo");
 
-    await page.getByRole("button", { name: "Tighten the Page title with AI" }).click();
-    const english = page.getByRole("textbox", { name: "Page title EN" });
+    await page.getByRole("button", { name: "More actions for Page title" }).click();
+    await page.getByRole("menuitem", { name: "Tighten with AI (paid)" }).click();
+    const english = page.getByRole("textbox", { name: "Page title English" });
     // Never cut: the whole draft, and why it needs a look, read with the field.
     await expect(english).toHaveValue("A page title that runs on and on past its limit 1");
     await expect(page.locator("#seo-title-en-draft")).toHaveText(
       "Needs your eye: 4 characters over the limit of 60.",
     );
-    await expect(english).toHaveAttribute("aria-describedby", "seo-title-en-draft");
+    // First in the field's description, before the trace's words and the hint.
+    await expect(english).toHaveAttribute("aria-describedby", /^seo-title-en-draft /);
     // A polite live region holds the notes, so they are read out as the draft lands.
     await expect(
       page.locator("[aria-live=polite]").filter({ has: page.locator("#seo-title-en-draft") }),
@@ -1908,7 +1931,7 @@ test.describe("admin", () => {
     const others = page.getByRole("list", { name: "Other drafts for Page title EN" });
     await expect(others.getByRole("listitem")).toHaveCount(2);
     await settled(page);
-    const { violations } = await new AxeBuilder({ page }).include("app-field-pair").analyze();
+    const { violations } = await new AxeBuilder({ page }).include("app-bilingual-field").analyze();
     expect(violations).toEqual([]);
 
     await others
@@ -1918,8 +1941,8 @@ test.describe("admin", () => {
     // The button went with the choice: the field it filled has the focus.
     await expect(english).toBeFocused();
     await expect(page.locator("#seo-title-en-draft")).toHaveText("");
-    await expect(english).not.toHaveAttribute("aria-describedby");
-    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect(english).not.toHaveAttribute("aria-describedby", /seo-title-en-draft/);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect
       .poll(() => verdicts)
       .toEqual([
@@ -5237,12 +5260,14 @@ test.describe("never losing work", () => {
 
     // A toast stays clear of it: the Undo after Discard does not cover Save.
     await page.locator("#profile-role-en").fill("Staff engineer");
-    await page.getByRole("button", { name: "Discard" }).click();
+    // Discard is in the editor header's ⋯ (plan 5, U11), and Save sits at the top: clear means apart.
+    await page.getByRole("button", { name: "More actions for Profile" }).click();
+    await page.getByRole("menuitem", { name: "Discard 1 change" }).click();
     const toast = page.locator("[data-sonner-toast]").first();
     await expect(toast).toBeVisible();
     await settled(page);
-    const [above, below] = await Promise.all([toast.boundingBox(), saveDraft(page).boundingBox()]);
-    expect(above!.y + above!.height).toBeLessThanOrEqual(below!.y);
+    const [one, two] = await Promise.all([toast.boundingBox(), saveDraft(page).boundingBox()]);
+    expect(one!.y >= two!.y + two!.height || one!.y + one!.height <= two!.y).toBe(true);
   });
 
   test("a 409 from another group saves again on the new version, without asking", async ({
@@ -5335,10 +5360,45 @@ test.describe("never losing work", () => {
     await page.locator("#profile-role-en").fill("Staff engineer");
     await saveDraft(page).click();
 
-    await expect(page.getByText("Draft saved")).toBeVisible();
+    await expect(page.locator("app-editor-header [role=status]")).toHaveText(/^Saved/);
     await expect(page.getByRole("alertdialog")).toHaveCount(0);
     expect(puts).toHaveLength(2);
     expect(puts[1]).toMatchObject({ updatedAt: NEWER, profileUpdatedAt: HOUR_AGO });
+  });
+
+  test("a 409 on Profile whose identity row moved asks with the edits kept, and the next Save sends its version", async ({
+    page,
+    baseURL,
+  }) => {
+    const { profile } = defaults()["GET /admin/profile"] as { profile: Record<string, unknown> };
+    await fakeApi(page, baseURL, {
+      // Opened at its version, read again after the 409 at a newer one: saved in another tab.
+      "GET /admin/profile": (n: number) =>
+        saved({ profile: { ...profile, updatedAt: n === 1 ? HOUR_AGO : NEWER } }),
+      "PUT /admin/hero": (n: number) =>
+        n === 1 ? STALE : saved({ ok: true, updatedAt: NEWER, profileUpdatedAt: NEWER }),
+    });
+    const puts = sent(page, "PUT", "/admin/hero");
+    await openAdmin(page, "/admin/hero");
+    // By id: under a dialog the page is hidden from the accessibility tree.
+    const name = page.locator("#name");
+
+    await name.fill(TYPED);
+    await saveDraft(page).click();
+    const ask = page.getByRole("alertdialog");
+    await expect(ask).toContainText("Saved elsewhere");
+    await expect(name).toHaveValue(TYPED);
+
+    await ask.getByRole("button", { name: "Keep my edits" }).click();
+    await expect(name).toHaveValue(TYPED);
+    await saveDraft(page).click();
+    await expect(page.locator("app-editor-header [role=status]")).toHaveText(/^Saved/);
+    expect(puts).toHaveLength(2);
+    expect(puts[1]).toMatchObject({
+      profile: { name: TYPED },
+      updatedAt: HOUR_AGO,
+      profileUpdatedAt: NEWER,
+    });
   });
 
   test("a 409 on the SEO section asks with the edits kept", async ({ page, baseURL }) => {
@@ -5366,7 +5426,7 @@ test.describe("never losing work", () => {
     await ask.getByRole("button", { name: "Keep my edits" }).click();
     await expect(title).toHaveValue("Mine");
     await saveDraft(page).click();
-    await expect(page.getByText("Draft saved")).toBeVisible();
+    await expect(page.locator("app-editor-header [role=status]")).toHaveText(/^Saved/);
     expect(puts[1]).toMatchObject({ updatedAt: NEWER });
   });
 
@@ -5516,26 +5576,31 @@ test.describe("never losing work", () => {
       "POST /admin/ai/copilot": (n: number) => saved({ text: `Draft ${n}`, model: "gemini-flash" }),
     });
     await openAdmin(page, "/admin/seo");
-    const en = page.getByRole("textbox", { name: "Page title EN" });
-    const de = page.getByRole("textbox", { name: "Page title DE" });
+    const en = page.getByRole("textbox", { name: "Page title English" });
+    const de = page.getByRole("textbox", { name: "Page title German" });
     const undo = page.locator("[data-sonner-toast]").getByRole("button", { name: "Undo" });
     const english = await en.inputValue();
+    // Each step is in the field's ⋯, and Discard in the editor header's (plan 5, U11).
+    const step = async (more: string, name: string) => {
+      await page.getByRole("button", { name: more }).click();
+      await page.getByRole("menuitem", { name, exact: true }).click();
+    };
 
     await de.fill("Mein Titel");
-    await page.getByRole("button", { name: /^EN → DE: copy the English Page title/ }).click();
+    await step("More actions for Page title", "Copy English to German");
     await expect(de).toHaveValue(english);
     await undo.click();
     await expect(de).toHaveValue("Mein Titel");
     await expect(de).toBeFocused();
     await expect(undo).toHaveCount(0);
 
-    await page.getByRole("button", { name: /^Translate → DE: the English Page title/ }).click();
+    await step("More actions for Page title", "Translate to German with AI (paid)");
     await expect(de).toHaveValue("Draft 1");
     await undo.click();
     await expect(de).toHaveValue("Mein Titel");
     await expect(undo).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Tighten the Page title with AI" }).click();
+    await step("More actions for Page title", "Tighten with AI (paid)");
     await expect(en).toHaveValue("Draft 2");
     await expect(de).toHaveValue("Draft 3");
     await undo.click();
@@ -5544,11 +5609,11 @@ test.describe("never losing work", () => {
     await expect(undo).toHaveCount(0);
 
     // Discard puts the saved text back; its Undo puts the edits back, and Save takes the focus.
-    await page.getByRole("button", { name: "Discard" }).click();
+    await step("More actions for SEO & sharing", "Discard 1 change");
     await expect(de).toHaveValue((seo.de as { title: string }).title);
     await undo.click();
     await expect(de).toHaveValue("Mein Titel");
-    await expect(page.locator("app-save-bar [role=status]")).toHaveText("1 field changed");
+    await expect(page.locator("app-editor-header [role=status]")).toHaveText("1 unsaved change");
     await expect(saveDraft(page)).toBeFocused();
   });
 
@@ -5711,8 +5776,9 @@ test.describe("never losing work", () => {
       save: saveDraft,
     },
     {
+      // Profile's links (plan 5, U11; the Socials page went).
       name: "a social link",
-      path: "/admin/socials",
+      path: "/admin/hero",
       put: "/admin/socials/s1",
       answers: (updatedAt) => ({
         "GET /admin/socials": (n: number) => saved(row.socials(updatedAt(n))),
@@ -5997,8 +6063,31 @@ test.describe("the recovery copy", () => {
     richText("Body (en)", " One more week."),
     byId("#post-seo-title-en", "A search title"),
   ];
+  // Profile (plan 5, U11): the identity row, the profile group, a label behind its closed section, a link.
+  const profileFields = [
+    byId("#name", "Someone Else"),
+    byId("#locationCity", "Hamburg"),
+    byId("#profile-role-en", "Staff engineer"),
+    byId("#profile-heroHeadline-de", "Eine neue Überschrift"),
+    byName("Link label", "Mastodon"),
+    byName("Link URL", "https://example.social/@someone"),
+  ];
+  const profileLabel = byId("#hero-downloadCv-de", "Lebenslauf laden");
+  const seoFields = [
+    byId("#seo-title-en", "A new page title"),
+    byId("#seo-description-de", "Eine neue Beschreibung."),
+    byId("#seo-ogTitle-en", "A new card title"),
+  ];
+  const seoAuthor = byId("#seo-author-de", "A. Rastineh");
+  const SEO_API = {
+    "GET /admin/sections/seo": {
+      section: "seo",
+      updatedAt: HOUR_AGO,
+      data: { en: content("en")["seo"], de: content("de")["seo"] },
+    },
+  };
 
-  /** The Done-when's three editors: edit, the fields that must be stored, and the check after. */
+  /** The Done-when's three editors, and Profile and SEO (plan 5, U11): edit, the fields that must be stored, and the check after. */
   const THE_THREE: {
     name: string;
     path: string;
@@ -6087,6 +6176,48 @@ test.describe("the recovery copy", () => {
         for (const field of legalFirst) await isBack(page, field);
         await privacyTab(page).click();
         for (const field of legalSecond) await isBack(page, field);
+      },
+    },
+    {
+      name: "Profile",
+      path: "/admin/hero",
+      answers: {},
+      keys: [
+        "hero||identity.name",
+        "hero||identity.locationCity",
+        "hero||copy.profileEn.role",
+        "hero||copy.profileDe.heroHeadline",
+        "hero||copy.heroDe.downloadCv",
+        "socials|s1|label",
+        "socials|s1|href",
+      ],
+      words: [...profileFields, profileLabel].map((field) => field.text),
+      edit: async (page) => {
+        for (const field of profileFields) await type(page, field);
+        await page.getByRole("button", { name: "Show 10 labels" }).click();
+        await type(page, profileLabel);
+      },
+      check: async (page) => {
+        for (const field of profileFields) await isBack(page, field);
+        // Its closed section opened by itself: the label that came back is in sight.
+        await isBack(page, profileLabel);
+      },
+    },
+    {
+      name: "SEO & sharing",
+      path: "/admin/seo",
+      answers: SEO_API,
+      keys: ["seo||en.title", "seo||de.description", "seo||en.ogTitle", "seo||de.author"],
+      words: [...seoFields, seoAuthor].map((field) => field.text),
+      edit: async (page) => {
+        for (const field of seoFields) await type(page, field);
+        await page.getByRole("button", { name: "Change Author" }).click();
+        await type(page, seoAuthor);
+      },
+      check: async (page) => {
+        for (const field of seoFields) await isBack(page, field);
+        // The set-once value came back as its field, not as text.
+        await isBack(page, seoAuthor);
       },
     },
   ];
@@ -6461,6 +6592,44 @@ test.describe("the recovery copy", () => {
     await expect(after.nth(1)).toHaveValue("Alpha, edited");
   });
 
+  test("Profile's links keep their copy by row id, through a delete and a reorder", async ({
+    page,
+    baseURL,
+  }) => {
+    let rows = [
+      socialRow("alpha", "Alpha", "https://example.com/a", 0),
+      socialRow("beta", "Beta", "https://example.com/b", 1),
+      socialRow("gamma", "Gamma", "https://example.com/c", 2),
+    ];
+    await fakeApi(page, baseURL, {
+      "GET /admin/socials": () => saved({ socials: rows }),
+      "DELETE /admin/socials/beta": { ok: true },
+    });
+    await openAdmin(page, "/admin/hero");
+    const labels = page.getByRole("textbox", { name: "Link label" });
+    await labels.nth(0).fill("Alpha, edited");
+    await labels.nth(1).fill("Beta, edited");
+    await labels.nth(2).fill("Gamma, edited");
+    await stored(page, ["socials|alpha|label", "socials|beta|label", "socials|gamma|label"]);
+
+    // Deleted on the server at once: that row's copy goes, the others stay.
+    await page.getByRole("button", { name: "Delete Beta, edited" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete link" }).click();
+    rows = [rows[0]!, { ...rows[2]!, position: 1 }];
+    await stored(page, ["socials|alpha|label", "socials|gamma|label"]);
+
+    // Back with the rows in another order: each edit lands on its own row.
+    rows = [
+      { ...rows[1]!, position: 0 },
+      { ...rows[0]!, position: 1 },
+    ];
+    const back = await LOSSES[0]!.lose(page, baseURL, "/admin/hero", {});
+    await expect(banner(back)).toBeVisible();
+    const after = back.getByRole("textbox", { name: "Link label" });
+    await expect(after.nth(0)).toHaveValue("Gamma, edited");
+    await expect(after.nth(1)).toHaveValue("Alpha, edited");
+  });
+
   test("deleting a project takes its copy with it", async ({ page, baseURL }) => {
     await fakeApi(page, baseURL, { "DELETE /admin/projects/p0": { ok: true } });
     await openAdmin(page, "/admin/projects/project-one");
@@ -6585,7 +6754,7 @@ test.describe("the recovery copy", () => {
       name: "SEO",
       path: "/admin/seo",
       answers: { "GET /admin/sections/seo": { section: "seo", updatedAt: HOUR_AGO, data: seo } },
-      typed: [byName("Page title EN", "A new page title")],
+      typed: [byName("Page title English", "A new page title")],
       keys: ["seo||en.title"],
     },
     {
@@ -6615,7 +6784,7 @@ test.describe("the recovery copy", () => {
     },
     {
       name: "socials",
-      path: "/admin/socials",
+      path: "/admin/hero",
       answers: { "GET /admin/socials": { socials: [socialsRow("s1")] } },
       typed: [byName("Link label", "Mastodon")],
       keys: ["socials|s1|label"],
@@ -7164,7 +7333,8 @@ test.describe("telling the truth", () => {
     });
     const puts = sent(page, "PUT", "/admin/socials/s1");
     const posts = sent(page, "POST", "/admin/socials");
-    await openAdmin(page, "/admin/socials");
+    // Profile's links (plan 5, U11).
+    await openAdmin(page, "/admin/hero");
 
     await expect(page.getByRole("combobox", { name: "Icon" })).toHaveCount(0);
     await page.getByRole("textbox", { name: "Link label" }).fill("Code");
@@ -7190,7 +7360,7 @@ test.describe("telling the truth", () => {
     await openAdmin(page, "/admin/seo");
 
     await expect(page.locator("#seo-ogUrl-en")).toHaveCount(0);
-    await page.getByRole("textbox", { name: "Page title EN" }).fill("A title");
+    await page.getByRole("textbox", { name: "Page title English" }).fill("A title");
     await saveDraft(page).click();
     await expect.poll(() => puts).toHaveLength(1);
     expect(puts[0]).toMatchObject({
@@ -8154,7 +8324,8 @@ test.describe("the admin's own look", () => {
       await fakeApi(page, baseURL);
       await openAdmin(page, "/admin/hero");
       await page.locator("#profile-role-en").fill("Staff engineer");
-      await page.getByRole("button", { name: "Discard" }).click();
+      await page.getByRole("button", { name: "More actions for Profile" }).click();
+      await page.getByRole("menuitem", { name: "Discard 1 change" }).click();
       await expect(page.locator("[data-sonner-toast]").first()).toBeVisible();
       await expect(page.locator("[data-sonner-toaster]").first()).toHaveAttribute(
         "data-theme",
@@ -8805,6 +8976,591 @@ test.describe("the field and the editor", () => {
         })),
       ).toEqual([]);
     });
+  }
+});
+
+/** Profile and SEO & sharing on the editor header and the field; Socials folded into Profile (plan 5, U11). */
+test.describe("Profile and SEO & sharing", () => {
+  const NEWER = new Date(Date.now() + 60_000).toISOString();
+  const TYPED = "Typed before the session ended";
+  const saved = (body: unknown = { ok: true, updatedAt: NEWER }) => ({ status: 200, body });
+  const HERO_SAVED = { ok: true, updatedAt: NEWER, profileUpdatedAt: NEWER };
+  const SEO = { en: content("en")["seo"], de: content("de")["seo"] } as Record<
+    "en" | "de",
+    Record<string, string>
+  >;
+  const SEO_API = { "GET /admin/sections/seo": { section: "seo", updatedAt: HOUR_AGO, data: SEO } };
+  const header = (page: Page) => page.locator("app-editor-header");
+  const state = (page: Page) => header(page).getByRole("status").first();
+  const save = (page: Page) => header(page).getByRole("button", { name: "Save", exact: true });
+  /** The field, link row or CV slot whose edge carries the trace, by what it holds. */
+  const traced = (page: Page, inner: Locator) =>
+    page.locator(".change-trace").filter({ has: inner });
+
+  /** The JSON of every request to this method and path, as they go. */
+  function sent(page: Page, method: string, path: string): Record<string, unknown>[] {
+    const bodies: Record<string, unknown>[] = [];
+    page.on("request", (request) => {
+      if (request.method() === method && new URL(request.url()).pathname === path) {
+        bodies.push(request.postDataJSON() as Record<string, unknown>);
+      }
+    });
+    return bodies;
+  }
+
+  /** The review, the same draft and live in both languages. */
+  function review(draft: Record<string, unknown>, live: Record<string, unknown>) {
+    const side = (locale: "en" | "de") => ({
+      locale,
+      issues: [],
+      changed: JSON.stringify(draft) !== JSON.stringify(live),
+      liveVersionId: 12,
+      docs: [],
+      draft,
+      live,
+    });
+    return { canPublish: true, locales: [side("en"), side("de")] };
+  }
+
+  /** Each page, where its Save goes, and a field to type in. */
+  const EDITORS = [
+    {
+      name: "Profile",
+      path: "/admin/hero",
+      put: "/admin/hero",
+      ok: HERO_SAVED,
+      answers: {},
+      field: "#name",
+      body: (text: string) => ({ profile: { name: text } }),
+    },
+    {
+      name: "SEO & sharing",
+      path: "/admin/seo",
+      put: "/admin/sections/seo",
+      ok: { ok: true, updatedAt: NEWER },
+      answers: SEO_API,
+      field: "#seo-title-en",
+      body: (text: string) => ({ data: { en: { title: text } } }),
+    },
+  ];
+
+  for (const editor of EDITORS) {
+    test(`a 401 mid-edit on ${editor.name} opens the sign-in over the page, and the text saves after it`, async ({
+      page,
+      baseURL,
+      problems,
+    }) => {
+      let signedIn = false;
+      const unmocked = await fakeApi(page, baseURL, {
+        ...editor.answers,
+        [`PUT ${editor.put}`]: () =>
+          signedIn ? saved(editor.ok) : { status: 401, body: { error: "unauthenticated" } },
+        "POST /auth/login": () => {
+          signedIn = true;
+          return saved({ ok: true, totpRequired: false, user: USER });
+        },
+      });
+      const puts = sent(page, "PUT", editor.put);
+      await openAdmin(page, editor.path);
+      const field = page.locator(editor.field);
+      const signIn = page.getByRole("dialog", { name: "Sign in to carry on" });
+
+      await field.fill(TYPED);
+      await save(page).click();
+      await expect(signIn).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`${editor.path}$`));
+      await expect(
+        page.getByText("Not saved: you were signed out. Sign in, then save again."),
+      ).toBeVisible();
+      await expect(field).toHaveValue(TYPED);
+
+      await signIn.getByLabel("Password").fill("hunter2hunter2");
+      await signIn.getByRole("button", { name: "Sign in" }).click();
+      await expect(signIn).toBeHidden();
+      await expect(field).toHaveValue(TYPED);
+      await save(page).click();
+      await expect(state(page)).toHaveText(/^Saved/);
+      expect(puts).toHaveLength(2);
+      expect(puts[1]).toMatchObject(editor.body(TYPED));
+      expect(problems.pageErrors).toEqual([]);
+      expect(unmocked).toEqual([]);
+    });
+
+    for (const [width, height] of [
+      [1280, 720],
+      [390, 844],
+    ] as const) {
+      test(`${editor.name} at ${width} px keeps Save in view at every scroll, and Ctrl S right after typing saves every word`, async ({
+        page,
+        baseURL,
+      }) => {
+        await page.setViewportSize({ width, height });
+        await fakeApi(page, baseURL, {
+          ...editor.answers,
+          [`PUT ${editor.put}`]: saved(editor.ok),
+        });
+        const puts = sent(page, "PUT", editor.put);
+        await openAdmin(page, editor.path);
+        await expect(page.locator(editor.field)).toBeVisible();
+        for (const top of [0, 900, 99_999]) {
+          await page.evaluate((y) => window.scrollTo(0, y), top);
+          await expect(save(page)).toBeInViewport({ ratio: 1 });
+        }
+
+        await page.locator(editor.field).fill("Typed and saved at once");
+        await page.keyboard.press("Control+s");
+        await expect(state(page)).toHaveText(/^Saved \d\d:\d\d/);
+        expect(puts).toHaveLength(1);
+        expect(puts[0]).toMatchObject(editor.body("Typed and saved at once"));
+      });
+    }
+  }
+
+  test("Profile's Discard, in the header's ⋯, puts the saved text back, and its Undo the edits", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/hero");
+    const name = page.locator("#name");
+    const role = page.locator("#profile-role-en");
+    const label = page.getByRole("textbox", { name: "Link label" });
+    const [savedName, savedRole] = [await name.inputValue(), await role.inputValue()];
+
+    await name.fill("Someone Else");
+    await role.fill("Staff engineer");
+    await label.fill("Code");
+    await expect(state(page)).toHaveText("3 unsaved changes");
+    await page.getByRole("button", { name: "More actions for Profile" }).click();
+    await page.getByRole("menuitem", { name: "Discard 3 changes" }).click();
+    await expect(name).toHaveValue(savedName);
+    await expect(role).toHaveValue(savedRole);
+    await expect(label).toHaveValue("GitHub");
+
+    await page.locator("[data-sonner-toast]").getByRole("button", { name: "Undo" }).click();
+    await expect(name).toHaveValue("Someone Else");
+    await expect(role).toHaveValue("Staff engineer");
+    await expect(label).toHaveValue("Code");
+    await expect(state(page)).toHaveText("3 unsaved changes");
+    await expect(save(page)).toBeFocused();
+  });
+
+  test("Profile's links: add, label and URL, reorder by keys and delete, each saved as it says", async ({
+    page,
+    baseURL,
+  }) => {
+    const rows = [
+      socialRow("s1", "GitHub", "https://github.com/someone", 0),
+      socialRow("s2", "LinkedIn", "https://linkedin.com/in/someone", 1),
+    ];
+    await fakeApi(page, baseURL, {
+      "GET /admin/socials": { socials: rows },
+      "POST /admin/socials": {
+        ok: true,
+        social: socialRow("s3", "New link", "https://example.com", 2),
+      },
+      "PUT /admin/socials/s1": { ok: true },
+      "PATCH /admin/socials/reorder": { ok: true },
+      "DELETE /admin/socials/s2": { ok: true },
+    });
+    const posts = sent(page, "POST", "/admin/socials");
+    const puts = sent(page, "PUT", "/admin/socials/s1");
+    const reorders = sent(page, "PATCH", "/admin/socials/reorder");
+    const deletes: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "DELETE") deletes.push(new URL(r.url()).pathname);
+    });
+    await openAdmin(page, "/admin/hero");
+    const links = page.getByRole("region", { name: "Links" });
+    const labels = links.getByRole("textbox", { name: "Link label" });
+
+    // Add saves at once, and the new row's label takes the focus.
+    await links.getByRole("button", { name: "Add link" }).click();
+    await expect.poll(() => posts).toHaveLength(1);
+    await expect(labels).toHaveCount(3);
+    await expect(labels.nth(2)).toBeFocused();
+    await expect(state(page)).not.toHaveText(/unsaved/);
+
+    // A label and a URL wait for Save, and the header counts them.
+    await labels.nth(0).fill("Code");
+    await links.getByRole("textbox", { name: "Link URL" }).nth(0).fill("https://github.com/me");
+    await expect(state(page)).toHaveText("2 unsaved changes");
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved/);
+    expect(puts).toEqual([
+      expect.objectContaining({ label: "Code", href: "https://github.com/me", icon: "github" }),
+    ]);
+
+    // Alt+↓ on a grip moves the row, saved at once; the focus stays on the grip it moved.
+    await links.getByRole("button", { name: /^Reorder link 1\b/ }).focus();
+    await page.keyboard.press("Alt+ArrowDown");
+    await expect.poll(() => reorders).toEqual([{ ids: ["s2", "s1", "s3"] }]);
+    await expect(links.getByRole("button", { name: /^Reorder link 2\b/ })).toBeFocused();
+    await expect(labels.nth(1)).toHaveValue("Code");
+
+    // Delete asks by name, deletes at once, and leaves the focus on the section's heading.
+    await links.getByRole("button", { name: "Delete LinkedIn" }).click();
+    const ask = page.getByRole("alertdialog");
+    await expect(ask).toContainText("Delete LinkedIn?");
+    await ask.getByRole("button", { name: "Delete link" }).click();
+    await expect.poll(() => deletes).toEqual(["/admin/socials/s2"]);
+    await expect(labels).toHaveCount(2);
+    await expect(page.getByRole("heading", { level: 2, name: "Links" })).toBeFocused();
+  });
+
+  test("Profile shows the trace's three states on a field and a link, with words, up to the rail", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const github = { label: "GitHub", icon: "github" };
+    const draft = {
+      identity: { handle: "@alirezarastineh", location: { city: "Berlin" } },
+      socials: [{ ...github, href: "https://github.com/someone" }],
+    };
+    const live = {
+      identity: { handle: "@alirezarastineh", location: { city: "Hamburg" } },
+      socials: [{ ...github, href: "https://github.com/old" }],
+    };
+    const after = heldReply({
+      status: 200,
+      body: review({ ...draft, identity: { ...draft.identity, handle: "@someone" } }, live),
+    });
+    await fakeApi(page, baseURL, {
+      "GET /admin/publish/review": (n: number) =>
+        n === 1 ? saved(review(draft, live)) : after.answer(),
+      "PUT /admin/hero": saved(HERO_SAVED),
+    });
+    await openAdmin(page, "/admin/hero");
+    const rail = page.locator("[data-slot=sidebar-inner]");
+    const handle = page.locator("#handle");
+    const city = page.locator("#locationCity");
+    const link = page.getByRole("textbox", { name: "Link label" });
+
+    // Live: no line, nothing said.
+    await expect(traced(page, handle)).not.toHaveAttribute("data-change");
+    await expect(handle).not.toHaveAccessibleDescription(/In draft|Unsaved/);
+    // In the draft, not live: the city and the link, in words too.
+    await expect(traced(page, city)).toHaveAttribute("data-change", "draft");
+    await expect(city).toHaveAccessibleDescription(/In draft/);
+    await expect(traced(page, link)).toHaveAttribute("data-change", "draft");
+    await expect(link).toHaveAccessibleDescription(/In draft/);
+    await expect(state(page)).toHaveText("2 fields not live");
+    await expect(rail.getByRole("link", { name: "Profile, changes not live" })).toBeVisible();
+
+    // Changed here, not saved: orange, on the field and on the page.
+    await handle.fill("@someone");
+    await expect(traced(page, handle)).toHaveAttribute("data-change", "unsaved");
+    await expect(handle).toHaveAccessibleDescription(/Unsaved/);
+    await expect(state(page)).toHaveText("1 unsaved change");
+    await expect(rail.getByRole("link", { name: "Profile, unsaved changes" })).toBeVisible();
+
+    // Saved: grey at once, while the next review is on its way, and after it.
+    await page.keyboard.press("Control+s");
+    await expect(state(page)).toHaveText(/^Saved \d\d:\d\d/);
+    await expect(traced(page, handle)).toHaveAttribute("data-change", "draft");
+    after.release();
+    await expect(page.getByRole("banner").getByRole("button", { name: /^Publish/ })).toBeEnabled();
+    await expect(traced(page, handle)).toHaveAttribute("data-change", "draft");
+  });
+
+  test("SEO & sharing shows the trace's three states, with words, up to the rail", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const draft = { seo: { ...SEO.en, title: "A newer title" } };
+    const live = { seo: { ...SEO.en } };
+    const after = heldReply({
+      status: 200,
+      body: review({ seo: { ...draft.seo, description: "Typed here." } }, live),
+    });
+    await fakeApi(page, baseURL, {
+      ...SEO_API,
+      "GET /admin/publish/review": (n: number) =>
+        n === 1 ? saved(review(draft, live)) : after.answer(),
+      "PUT /admin/sections/seo": saved(),
+    });
+    await openAdmin(page, "/admin/seo");
+    const rail = page.locator("[data-slot=sidebar-inner]");
+    const title = page.locator("#seo-title-en");
+    const description = page.locator("#seo-description-en");
+
+    await expect(traced(page, description)).not.toHaveAttribute("data-change");
+    await expect(traced(page, title)).toHaveAttribute("data-change", "draft");
+    await expect(page.locator("#seo-title-de")).toHaveAccessibleDescription(/In draft/);
+    await expect(state(page)).toHaveText("1 field not live");
+    await expect(rail.getByRole("link", { name: "SEO & sharing, changes not live" })).toBeVisible();
+
+    await description.fill("Typed here.");
+    await expect(traced(page, description)).toHaveAttribute("data-change", "unsaved");
+    await expect(description).toHaveAccessibleDescription(/Unsaved/);
+    await expect(state(page)).toHaveText("1 unsaved change");
+
+    await page.keyboard.press("Control+s");
+    await expect(state(page)).toHaveText(/^Saved \d\d:\d\d/);
+    await expect(traced(page, description)).toHaveAttribute("data-change", "draft");
+    after.release();
+    await expect(page.getByRole("banner").getByRole("button", { name: /^Publish/ })).toBeEnabled();
+    await expect(traced(page, description)).toHaveAttribute("data-change", "draft");
+  });
+
+  test("Profile's labels wait closed, open on a click, and open by themselves for a save's problem", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "PUT /admin/hero": () => ({
+        status: 400,
+        body: {
+          error: "invalid",
+          issues: [{ path: ["ui", "hero", "en", "downloadCv"], message: "Keep it shorter." }],
+        },
+      }),
+    });
+    await openAdmin(page, "/admin/hero");
+    const show = page.getByRole("button", { name: "Show 10 labels" });
+    await expect(show).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("#hero-downloadCv-en")).toHaveCount(0);
+
+    await show.click();
+    const hide = page.getByRole("button", { name: "Hide the labels" });
+    await expect(hide).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator("#hero-downloadCv-en")).toBeVisible();
+    await hide.click();
+    await expect(page.locator("#hero-downloadCv-en")).toHaveCount(0);
+
+    // A save refused for a label: its section opens, and the label takes the focus.
+    await page.locator("#name").fill("Someone");
+    await save(page).click();
+    await expect(page.locator("#hero-downloadCv-en")).toBeFocused();
+    await expect(page.locator("#hero-downloadCv-en")).toHaveAccessibleDescription(
+      /Keep it shorter/,
+    );
+    await expect(state(page)).toHaveText("1 field needs attention");
+  });
+
+  test("SEO's set-once values read as text with their source, and Change opens one", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { ...SEO_API, "PUT /admin/sections/seo": saved() });
+    const puts = sent(page, "PUT", "/admin/sections/seo");
+    await openAdmin(page, "/admin/seo");
+    const setOnce = page.getByRole("region", { name: "Set once" });
+    await expect(setOnce).toContainText("not taken from Profile");
+    await expect(setOnce).toContainText(SEO.en["author"]!);
+    await expect(setOnce).toContainText(SEO.de["ogLocale"]!);
+    await expect(page.locator("#seo-author-en")).toHaveCount(0);
+
+    await setOnce.getByRole("button", { name: "Change Author" }).click();
+    await expect(page.locator("#seo-author-en")).toBeFocused();
+    await page.locator("#seo-author-en").fill("A. Rastineh");
+    await save(page).click();
+    await expect.poll(() => puts).toHaveLength(1);
+    expect(puts[0]).toMatchObject({
+      data: {
+        en: { author: "A. Rastineh", siteName: SEO.en["siteName"], ogLocale: SEO.en["ogLocale"] },
+        de: { author: SEO.de["author"] },
+      },
+    });
+  });
+
+  test("a set-once value a save refuses opens as its field, with the focus in it", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      ...SEO_API,
+      "PUT /admin/sections/seo": () => ({
+        status: 400,
+        body: { error: "invalid", issues: [{ path: ["de", "ogLocale"], message: "As de_DE." }] },
+      }),
+    });
+    await openAdmin(page, "/admin/seo");
+    await page.locator("#seo-title-en").fill("A title");
+    await save(page).click();
+    await expect(page.locator("#seo-ogLocale-de")).toBeFocused();
+    await expect(page.locator("#seo-ogLocale-de")).toHaveAccessibleDescription(/As de_DE/);
+    await expect(state(page)).toHaveText("1 field needs attention");
+  });
+
+  test("a CV saves at once, and its Undo puts the one before back", async ({ page, baseURL }) => {
+    const resume = {
+      mediaId: "a3",
+      path: "/media/a3.pdf",
+      originalName: "cv-english.pdf",
+      byteSize: 10_000,
+      updatedAt: HOUR_AGO,
+    };
+    let current: typeof resume | null = resume;
+    await fakeApi(page, baseURL, {
+      "GET /admin/resumes": () => saved({ resumes: { en: current, de: null } }),
+      "DELETE /admin/resumes/en": () => {
+        current = null;
+        return saved({ ok: true });
+      },
+      "PUT /admin/resumes/en": () => {
+        current = resume;
+        return saved({ ok: true });
+      },
+    });
+    const puts = sent(page, "PUT", "/admin/resumes/en");
+    await openAdmin(page, "/admin/hero");
+
+    await page.getByRole("button", { name: "Remove CV (EN)" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
+    await expect(page.getByText("CV (EN) removed")).toBeVisible();
+    // Saved at once: nothing waits for the header's Save.
+    await expect(state(page)).not.toHaveText(/unsaved/);
+    await expect(page.getByText("cv-english.pdf")).toHaveCount(0);
+
+    await page.locator("[data-sonner-toast]").getByRole("button", { name: "Undo" }).click();
+    await expect.poll(() => puts).toEqual([{ mediaId: "a3" }]);
+    await expect(page.getByText("cv-english.pdf")).toBeVisible();
+  });
+
+  test("Profile and SEO from the keyboard at 1280: the order you see, a link's grip, the labels, Change", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await fakeApi(page, baseURL, SEO_API);
+    await openAdmin(page, "/admin/hero");
+    const tab = async (target: Locator) => {
+      await page.keyboard.press("Tab");
+      await expect(target).toBeFocused();
+    };
+
+    // One-language fields two to a row, read across; then the role's ⋯, English, German.
+    await page.locator("#name").focus();
+    await tab(page.locator("#handle"));
+    await page.locator("#locationCountry").focus();
+    await tab(page.getByRole("button", { name: "More actions for Role" }));
+    await tab(page.locator("#profile-role-en"));
+    await tab(page.locator("#profile-role-de"));
+    await expect(page.locator("#profile-role-de")).toHaveAttribute("lang", "de");
+    await expect(page.locator("#name")).not.toHaveAttribute("lang");
+
+    // Add link in the section's heading row; then a link: its grip, label, URL, Shown and Delete.
+    const links = page.getByRole("region", { name: "Links" });
+    await links.getByRole("button", { name: "Add link" }).focus();
+    await tab(links.getByRole("button", { name: /^Reorder link 1\b/ }));
+    await tab(links.getByRole("textbox", { name: "Link label" }));
+    await tab(links.getByRole("textbox", { name: "Link URL" }));
+    await tab(links.getByRole("switch", { name: "Show GitHub on the site" }));
+    await tab(links.getByRole("button", { name: "Delete GitHub" }));
+    await tab(page.getByRole("button", { name: "Show 10 labels" }));
+    await page.keyboard.press("Enter");
+    await tab(page.getByRole("button", { name: /^More actions for Availability line/ }).first());
+
+    // SEO: Change takes the focus into its field.
+    await openAdmin(page, "/admin/seo");
+    await page.getByRole("button", { name: "Change Site name" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#seo-siteName-en")).toBeFocused();
+  });
+
+  test("Profile and SEO at 390: one language, the switch in the header, nothing off the side", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await fakeApi(page, baseURL, SEO_API);
+    for (const [path, en, de] of [
+      ["/admin/hero", "#profile-role-en", "#profile-role-de"],
+      ["/admin/seo", "#seo-title-en", "#seo-title-de"],
+    ] as const) {
+      await openAdmin(page, path);
+      const languages = header(page).getByRole("group", { name: "Language view" });
+      await expect(languages.getByRole("button")).toHaveText(["EN", "DE"]);
+      await expect(page.locator(en)).toBeVisible();
+      await expect(page.locator(de)).toHaveCount(0);
+      await languages.getByRole("button", { name: "DE" }).click();
+      await expect(page.locator(de)).toBeVisible();
+      await expect(page.locator(en)).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth), path).toBe(390);
+    }
+
+    // The one-language fields stay whatever the switch says, and read down.
+    await openAdmin(page, "/admin/hero");
+    await expect(page.locator("#name")).toBeVisible();
+    await page.locator("#name").focus();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#handle")).toBeFocused();
+  });
+
+  test("the links have no page of their own: Find opens them on Profile, whose Preview aims at the hero", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    const response = await page.goto("/admin/socials");
+    expect(response?.status()).toBe(404);
+
+    await openAdmin(page, "/admin/about");
+    const rail = page.locator("[data-slot=sidebar-inner]");
+    await expect(rail.getByRole("link", { name: /^Socials/ })).toHaveCount(0);
+    await page.keyboard.press("Control+k");
+    const search = page.getByRole("dialog").getByRole("combobox");
+    await expect(search).toBeFocused();
+    // The first search shows the content; its first entry is the one Enter opens.
+    await search.fill("github");
+    await expect(page.getByRole("option", { selected: true })).toHaveAccessibleName(/^GitHub/);
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/admin\/hero$/);
+    await expect(page.getByRole("region", { name: "Links" })).toBeVisible();
+
+    await page.evaluate(() => {
+      window.open = (url) => {
+        document.body.dataset["opened"] = String(url);
+        return null;
+      };
+    });
+    await page.getByRole("banner").getByRole("button", { name: "Preview" }).click();
+    await page.getByRole("menuitem", { name: /^English/ }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "/admin/preview/en#hero");
+  });
+
+  for (const editor of EDITORS) {
+    for (const colorScheme of ["dark", "light"] as const) {
+      test(`${editor.name} with a field in each state, in the ${colorScheme} theme, has no accessibility violations`, async ({
+        page,
+        baseURL,
+      }) => {
+        await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+        await page.setViewportSize({ width: 1280, height: 900 });
+        const profile = editor.path === "/admin/hero";
+        await fakeApi(page, baseURL, {
+          ...editor.answers,
+          "GET /admin/publish/review": profile
+            ? review({ identity: { location: { city: "Berlin" } } }, {})
+            : review(
+                { seo: { title: "New", description: "New" } },
+                { seo: { title: "Old", description: "Old" } },
+              ),
+        });
+        await openAdmin(page, editor.path);
+        await page.locator(editor.field).fill("Being typed");
+        if (profile) await page.getByRole("button", { name: "Show 10 labels" }).click();
+        else await page.getByRole("button", { name: "Change Author" }).click();
+        await expect(page.locator(".change-trace[data-change=draft]").first()).toBeVisible();
+        await expect(page.locator(".change-trace[data-change=unsaved]").first()).toBeVisible();
+        // At the top, as the page scans: scrolled, a target under the sticky header counts as covered.
+        await page.evaluate(() => window.scrollTo(0, 0));
+
+        await settled(page);
+        const { violations } = await new AxeBuilder({ page })
+          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+          .analyze();
+        expect(
+          violations.map((v) => ({
+            rule: v.id,
+            targets: v.nodes.slice(0, 5).map((n) => n.target.join(" ")),
+          })),
+        ).toEqual([]);
+      });
+    }
   }
 });
 

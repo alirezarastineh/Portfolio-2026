@@ -13,7 +13,7 @@ export interface NavItem {
   /** Where the top bar's Preview opens on this page: its section of the home draft (`#about`). */
   preview?: string;
   /** The content this page edits, as the review names it (`ui.about`): its rail dot follows it. */
-  content?: string;
+  content?: readonly string[];
 }
 
 export interface NavGroup {
@@ -32,16 +32,21 @@ export const RAIL: NavGroup[] = [
   {
     label: "Content",
     items: [
-      { path: "/admin/hero", label: "Profile", icon: "lucideSquareUser" },
-      // Until Profile takes the links (U11).
-      { path: "/admin/socials", label: "Socials", icon: "lucideLink" },
-      // The redesigned editor's pages (plan 5, U10) name their section and content; the rest in their Parts.
+      // The redesigned editor's pages (plan 5, U10–U11) name their section and content; the rest in their Parts.
+      {
+        path: "/admin/hero",
+        label: "Profile",
+        icon: "lucideSquareUser",
+        preview: "#hero",
+        // The labels until Words takes them (U12); the links since Socials folded in (U11).
+        content: ["identity", "ui.profile", "ui.hero", "ui.nav", "socials"],
+      },
       {
         path: "/admin/about",
         label: "About",
         icon: "lucideFileText",
         preview: "#about",
-        content: "ui.about",
+        content: ["ui.about"],
       },
       { path: "/admin/projects", label: "Work", icon: "lucideBriefcase" },
       { path: "/admin/experience", label: "Experience", icon: "lucideSignpost" },
@@ -51,7 +56,7 @@ export const RAIL: NavGroup[] = [
       { path: "/admin/contact", label: "Contact copy", icon: "lucideSend" },
       { path: "/admin/copy", label: "Page copy", icon: "lucidePenLine" },
       { path: "/admin/legal", label: "Legal", icon: "lucideScale" },
-      { path: "/admin/seo", label: "SEO & sharing", icon: "lucideShare2" },
+      { path: "/admin/seo", label: "SEO & sharing", icon: "lucideShare2", content: ["seo"] },
       { path: "/admin/media", label: "Media", icon: "lucideImages" },
     ],
   },
