@@ -9,13 +9,10 @@ import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
 import type { Locale } from "../../content/schema";
-import { languageNote, type TraceState } from "../change-trace";
+import { languageNote, TRACE_WORDS, type TraceState } from "../change-trace";
 import { DraftOfferComponent } from "./draft-offer.component";
 import { FieldIssueComponent } from "./editor-chrome.component";
 import { FieldPairComponent } from "./field-pair.component";
-
-/** The trace in words, for screen readers: the line itself is drawn by `admin.css`. */
-const WORDS: Record<TraceState, string> = { unsaved: "Unsaved", draft: "In draft", live: "" };
 
 /**
  * The bilingual field (plan 5, U10): one label, English and German side by side (the editor
@@ -203,7 +200,7 @@ export class BilingualFieldComponent extends FieldPairComponent {
     const view = this.view();
     return view === "both" ? ["en", "de"] : [view];
   });
-  protected readonly words = computed(() => WORDS[this.state()]);
+  protected readonly words = computed(() => TRACE_WORDS[this.state()]);
   protected readonly note = computed(() => languageNote(this.textEn(), this.textDe(), this.live()));
   /** Under the German, or under the English while only the English shows. */
   protected readonly noteIn = computed<Locale>(() => (this.view() === "en" ? "en" : "de"));

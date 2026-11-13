@@ -17,7 +17,8 @@ import { HlmSeparator } from "@spartan-ng/helm/separator";
 import { ConfirmService } from "./confirm-dialog.component";
 
 import { countChangedFields } from "../changed-fields";
-import { inDraft, liveText, type TraceState } from "../change-trace";
+import { liveText, rollUp, traceOf, type TraceState } from "../change-trace";
+import { storedView, storeView } from "../language-view";
 import type { OutlineItem } from "../editor-outline";
 import { withUi, type LiveCompose } from "../preview/live-content";
 import { LivePreviewService } from "../preview/live-preview.service";
@@ -62,9 +63,6 @@ interface UiSection {
   title: string;
   fields: UiFieldDef[];
 }
-
-/** The editor look's language view, per group, in this browser. */
-const VIEW_KEY = "admin.lang.";
 
 /**
  * Drives any editor over a single group of the `ui` translation document.
@@ -363,10 +361,7 @@ export class UiGroupEditorComponent implements OnInit {
     const unsaved = new Set(this.baseline ? this.changedKeys(raw) : []);
     const trace: Record<string, TraceState> = {};
     for (const { key } of this.shown()) {
-      const draft =
-        inDraft(marks, `ui.${this.group()}.${key}`) || (saved.get(key) ?? 0) > (marks?.asked ?? 0);
-      trace[key] = draft ? "draft" : "live";
-      if (unsaved.has(key)) trace[key] = "unsaved";
+      trace[key] = traceOf(unsaved.has(key), marks, `ui.${this.group()}.${key}`, saved.get(key));
     }
     return trace;
   });
@@ -392,17 +387,12 @@ export class UiGroupEditorComponent implements OnInit {
     const flagged = (key: string) =>
       (["en", "de"] as const).filter((l) => this.form.controls[l].controls[key]?.hasError("server"))
         .length;
-    return this.sections().map((section) => {
-      const states = section.fields.map((f) => trace[f.key]);
-      const item: OutlineItem = {
-        id: section.id,
-        label: section.title,
-        problems: section.fields.reduce((sum, f) => sum + flagged(f.key), 0),
-      };
-      if (states.includes("draft")) item.change = "draft";
-      if (states.includes("unsaved")) item.change = "unsaved";
-      return item;
-    });
+    return this.sections().map((section) => ({
+      id: section.id,
+      label: section.title,
+      problems: section.fields.reduce((sum, f) => sum + flagged(f.key), 0),
+      change: rollUp(section.fields.map((f) => trace[f.key] ?? "live")),
+    }));
   });
 
   constructor() {
@@ -433,15 +423,8 @@ export class UiGroupEditorComponent implements OnInit {
   // and a quick answer (a background tab delays that frame) read `fields` before it had a value
   // (NG0950). By ngOnInit every input is bound.
   ngOnInit(): void {
-    if (this.look() === "editor") {
-      let stored: string | null = null;
-      try {
-        stored = localStorage.getItem(VIEW_KEY + this.group());
-      } catch {
-        // Blocked storage: both languages, as at first.
-      }
-      if (stored === "en" || stored === "de" || stored === "both") this.view.set(stored);
-    }
+    const stored = this.look() === "editor" ? storedView(this.group()) : null;
+    if (stored) this.view.set(stored);
     void this.load();
   }
 
@@ -569,11 +552,7 @@ export class UiGroupEditorComponent implements OnInit {
   /** The editor look's language view, remembered for this group in this browser. */
   protected choose(view: LocaleView): void {
     this.view.set(view);
-    try {
-      localStorage.setItem(VIEW_KEY + this.group(), view);
-    } catch {
-      // Storage may be blocked: the choice then lasts for this visit.
-    }
+    storeView(this.group(), view);
   }
 
   /** A problem in a language the view hides would otherwise go unseen. */

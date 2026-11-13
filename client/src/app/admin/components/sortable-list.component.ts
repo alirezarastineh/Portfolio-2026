@@ -39,13 +39,19 @@ export class SortableRowDirective {}
     <ul
       cdkDropList
       (cdkDropListDropped)="onDrop($event)"
-      class="m-0 flex list-none flex-col gap-2 p-0"
+      class="m-0 flex list-none flex-col p-0"
+      [class.gap-2]="!ruled()"
       role="list"
     >
       @for (item of items(); track trackBy()(item); let i = $index) {
         <li
           cdkDrag
-          class="flex items-start gap-2 rounded-lg border border-border bg-card/50 p-3"
+          [class]="
+            ruled()
+              ? 'change-trace flex items-start gap-2 border-b border-border py-2 sm:items-center'
+              : 'flex items-start gap-2 rounded-lg border border-border bg-card/50 p-3'
+          "
+          [attr.data-change]="change()(item)"
           [attr.aria-label]="label() + ' ' + (i + 1) + ' of ' + items().length"
         >
           <button
@@ -67,7 +73,11 @@ export class SortableRowDirective {}
         </li>
       } @empty {
         <li
-          class="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground"
+          [class]="
+            ruled()
+              ? 'py-2 text-hint text-muted-foreground'
+              : 'rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground'
+          "
         >
           {{ emptyText() }}
         </li>
@@ -80,6 +90,10 @@ export class SortableListComponent<T> {
   readonly trackBy = input.required<(item: T) => string>();
   readonly label = input("item");
   readonly emptyText = input("Nothing here yet.");
+  /** Rows on rules, the change trace on each (plan 5's editors), instead of boxes. */
+  readonly ruled = input(false);
+  /** A row's trace (`unsaved`, `draft`), or null when it is live. */
+  readonly change = input<(item: T) => string | null>(() => null);
 
   /** Emits the reordered array; the caller persists it. */
   readonly reordered = output<T[]>();

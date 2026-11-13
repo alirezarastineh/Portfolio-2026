@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AppContent } from "../content/schema";
 import type { LocaleReview, PublishReview } from "./admin-api.service";
-import { draftMarks, inDraft, languageNote, liveText } from "./change-trace";
+import { draftMarks, inDraft, languageNote, liveText, rollUp, traceOf } from "./change-trace";
 
 const content = (value: unknown) => value as AppContent;
 
@@ -95,6 +95,43 @@ describe("inDraft", () => {
 
   it("knows nothing without a review", () => {
     expect(inDraft(null, "ui.about.bio")).toBe(false);
+  });
+
+  it("asked for one language, marks only that one's paths (a CV is per language)", () => {
+    expect(inDraft(marks, "ui.about.bio", "en")).toBe(true);
+    expect(inDraft(marks, "ui.about.bio", "de")).toBe(false);
+    expect(inDraft(marks, "ui.about.heading", "de")).toBe(true);
+  });
+});
+
+describe("traceOf", () => {
+  const marks = draftMarks(
+    review(side("en", about("Live"), about("Draft")), side("de", about("x"), about("x"))),
+    1_000,
+  );
+
+  it("is unsaved first, whatever the review says", () => {
+    expect(traceOf(true, marks, "ui.about.bio")).toBe("unsaved");
+  });
+
+  it("is in the draft when the review says so, or when it was saved here after the review was asked", () => {
+    expect(traceOf(false, marks, "ui.about.bio")).toBe("draft");
+    expect(traceOf(false, marks, "ui.about.heading", 2_000)).toBe("draft");
+    expect(traceOf(false, null, "ui.about.heading", 2_000)).toBe("draft");
+  });
+
+  it("is live otherwise: a save the review already saw is in it", () => {
+    expect(traceOf(false, marks, "ui.about.heading", 500)).toBe("live");
+    expect(traceOf(false, marks, "ui.about.bio", 0, "de")).toBe("live");
+  });
+});
+
+describe("rollUp", () => {
+  it("is unsaved if any is, else in the draft if any is, else nothing", () => {
+    expect(rollUp(["live", "draft", "unsaved"])).toBe("unsaved");
+    expect(rollUp(["live", "draft"])).toBe("draft");
+    expect(rollUp(["live"])).toBeUndefined();
+    expect(rollUp([])).toBeUndefined();
   });
 });
 

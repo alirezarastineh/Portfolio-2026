@@ -7,6 +7,13 @@ import { contentDiff } from "./publish-summary";
 /** The change trace (plan 5): changed here and not saved, saved to the draft and not live, or live. */
 export type TraceState = "unsaved" | "draft" | "live";
 
+/** The trace in words, for screen readers: the line itself is drawn by `admin.css`. */
+export const TRACE_WORDS: Record<TraceState, string> = {
+  unsaved: "Unsaved",
+  draft: "In draft",
+  live: "",
+};
+
 /** What the review says about the draft against the live site, for the trace and the language notes. */
 export interface DraftMarks {
   /** Per language, the paths publishing now would change (`ui.about.bio`, `projects[atlas].name`). */
@@ -38,13 +45,38 @@ export function draftMarks(review: PublishReview, asked: number): DraftMarks {
 }
 
 /**
- * A field (`ui.about.bio`) is in the draft when its path changed in either language; an item
- * (`projects[atlas]`) when anything under it did. One rule: the path itself, or one below it.
+ * A field (`ui.about.bio`) is in the draft when its path changed in either language, or in the one
+ * asked for; an item (`projects[atlas]`) when anything under it did. One rule: the path itself, or
+ * one below it.
  */
-export function inDraft(marks: DraftMarks | null, path: string): boolean {
+export function inDraft(marks: DraftMarks | null, path: string, locale?: Locale): boolean {
   if (!marks) return false;
   const under = (p: string) => p === path || p.startsWith(`${path}.`) || p.startsWith(`${path}[`);
-  return marks.paths.en.some(under) || marks.paths.de.some(under);
+  return (locale ? [marks.paths[locale]] : [marks.paths.en, marks.paths.de]).some((paths) =>
+    paths.some(under),
+  );
+}
+
+/**
+ * A field's trace: unsaved when it differs from what is saved; else in the draft when the review
+ * says so, or when this editor saved it after that review was asked (so Save never shows "live" for
+ * a moment); else live.
+ */
+export function traceOf(
+  unsaved: boolean,
+  marks: DraftMarks | null,
+  path: string,
+  savedAt = 0,
+  locale?: Locale,
+): TraceState {
+  if (unsaved) return "unsaved";
+  return inDraft(marks, path, locale) || savedAt > (marks?.asked ?? 0) ? "draft" : "live";
+}
+
+/** A section's or a page's mark: unsaved if any field is, else in the draft if any is. */
+export function rollUp(states: readonly TraceState[]): "unsaved" | "draft" | undefined {
+  if (states.includes("unsaved")) return "unsaved";
+  return states.includes("draft") ? "draft" : undefined;
 }
 
 /** The live site's text at a path, in both languages; null where either has none. */
