@@ -4,7 +4,8 @@
 // - That version is checked against GitHub's latest release. A newer one fails
 //   the step once it has been out for two weeks, the age this repo waits for
 //   before taking a release, so the weekly email says an upgrade is due.
-// GitHub's weekly runs it too (the GitHub Actions plan, Phase 8). It sends
+// GitHub's weekly ran it too (the GitHub Actions plan, Phase 8) until 2026-11-16,
+// when it stopped: Woodpecker runs no longer. On again, run it first. It sends
 // GITHUB_TOKEN when that is set: GitHub's runners get 1,000 requests an hour with
 // it, against 60 an address. On GitHub Actions, the result also goes on the
 // run's page, which reads without a login, and in the job's summary.

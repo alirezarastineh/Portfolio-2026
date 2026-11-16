@@ -18,7 +18,9 @@ const root = process.argv[2] ?? ".";
 const ONLY = {
   // owner: hands the root-owned clone to the CI image's user; wait-pg: GitHub's service
   // health check waits instead; pw-version: GitHub installs the lockfile's browsers;
-  // reports, untag, email: artifacts, a discarded VM and GitHub's own notifications.
+  // reports, untag, email: artifacts, a discarded VM and GitHub's own notifications;
+  // woodpecker: Woodpecker's own version, which GitHub stopped checking on 2026-11-16,
+  // since Woodpecker runs no longer.
   woodpecker: new Set([
     "owner",
     "wait-pg",
@@ -26,6 +28,7 @@ const ONLY = {
     "reports",
     "untag",
     "email",
+    "woodpecker",
   ]),
   // inactivity: GitHub switches schedules off after 60 days without activity.
   github: new Set(["inactivity"]),

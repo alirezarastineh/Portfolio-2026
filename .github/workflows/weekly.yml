@@ -3,7 +3,8 @@
 # by hand: Actions → weekly → Run workflow.
 # - gitleaks over the whole history, from Woodpecker's image;
 # - `pnpm outdated` in both packages, a report only;
-# - Woodpecker's version, and each action's pin, against their latest releases;
+# - each action's pin, against its latest release (Woodpecker's version is its
+#   own weekly's alone: Woodpecker runs no longer, so its releases fail nothing);
 # - `inactivity`, on GitHub alone: GitHub switches the schedules off after 60
 #   days without activity, so it fails at 45, while they still run.
 # Steps that hold a value run ci/weekly.sh or a ci/ script, as Woodpecker's do
@@ -68,11 +69,6 @@ jobs:
         continue-on-error: true
         run: sh ci/weekly.sh outdated
 
-      - name: woodpecker
-        if: ${{ !cancelled() }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node ci/woodpecker-version.mjs
 
       # A SHA that isn't its version's commit fails, and so does a newer release
       # once two weeks old.

@@ -26,7 +26,7 @@ One-liners (`eslint .`, the typechecks) stay inline in both.
 | `images.yaml` | `images.yml` | `images`: both images, their SBOMs, Trivy, the stack smoke test | push to `main`, PRs on its paths, the nightly |
 | `security.yaml` | `security.yml` | `security`: audit, licences, osv-scanner, semgrep | lockfile or check changes, the nightly |
 | the `nightly` cron | `nightly.yml` | calls the five above with `nightly: true` | daily |
-| `weekly.yaml` | `weekly.yml` | `weekly`: gitleaks over the history, `pnpm outdated`, Woodpecker's version, the action pins, `inactivity` (GitHub) | Mondays |
+| `weekly.yaml` | `weekly.yml` | `weekly`: gitleaks over the history, `pnpm outdated`, Woodpecker's version (Woodpecker), the action pins, `inactivity` (GitHub) | Mondays |
 | `prod-smoke.yaml` | `prod-smoke.yml` | `live`: read-only requests to the live site | daily |
 | `deploy.yaml` | `deploy.yml` | `deploy`: `guard`, `images`, `rollout`, `latest` | by hand |
 | `ci-image.yaml` | none | Woodpecker's CI image; GitHub's jobs install their own tools | |
@@ -45,8 +45,8 @@ emailed. It only reported before, and five failures went unseen for six nights.
 **The parity check.** `ci/ci-parity.mjs` runs in both CIs' `repo` workflow and fails when the two
 definitions drift:
 - a check step (a lower-case step name) is in one twin only, apart from each CI's short list of its
-  own: Woodpecker's `owner`, `wait-pg`, `pw-version`, `reports`, `untag` and `email`, GitHub's
-  `inactivity`. `ci-image` is Woodpecker's alone, by design;
+  own: Woodpecker's `owner`, `wait-pg`, `pw-version`, `reports`, `untag`, `email` and `woodpecker`
+  (its own version), GitHub's `inactivity`. `ci-image` is Woodpecker's alone, by design;
 - an image both CIs name is pinned to a different tag or digest;
 - a GitHub action isn't pinned to a full commit SHA with its version in a comment;
 - the twins' pull request path filters differ, each CI's own files aside.
@@ -157,9 +157,10 @@ check keeps both definitions in step, so Woodpecker can come back.
   woodpecker-agent start`, **Enable repository**, the crons ticked again: each must show its next
   run, not "Disabled"). Woodpecker's deploy then needs a push to `main` first, since its guard
   wants Woodpecker's own checks on `main`'s tip.
-- **While it's off,** GitHub's weekly still checks Woodpecker's version (`woodpecker`): it fails once
-  a newer release is two weeks old, until the three pins move (`deploy/woodpecker/README.md`,
-  "Upgrade").
+- **While it's off,** its files stay, and GitHub's `repo` still lints them and keeps them in step,
+  but nothing checks Woodpecker's version: GitHub's weekly stopped on 2026-11-16, so a Woodpecker
+  release fails nothing. **On again,** run `node ci/woodpecker-version.mjs` first, and if it fails,
+  move the three pins (`deploy/woodpecker/README.md`, "Upgrade").
 
 ## Action pins
 
