@@ -72,14 +72,23 @@ describe("projectOutline", () => {
     const states = Object.fromEntries(
       projectOutline(project(true), []).map((i) => [i.id, i.state]),
     );
+    // The plan's order (plan 5, U13): stack and tags in Details, outcomes in Story, metrics in Results.
+    expect(Object.keys(states)).toEqual([
+      "details",
+      "card",
+      "cover",
+      "results",
+      "story",
+      "case-study",
+      "search",
+      "gallery",
+    ]);
     expect(states).toEqual({
       details: "done",
-      cover: "done",
-      stack: "done",
       card: "done",
+      cover: "done",
+      results: "done",
       story: "done",
-      outcomes: "done",
-      metrics: "done",
       "case-study": "optional",
       search: "optional",
       gallery: "optional",
@@ -89,7 +98,7 @@ describe("projectOutline", () => {
   it("marks what a visitor will miss, and the seed's stub cover and TODO names as not done", () => {
     const items = projectOutline(project(false), []);
     const todo = items.filter((i) => i.state === "todo").map((i) => i.id);
-    expect(todo).toEqual(["details", "cover", "stack", "card", "story", "outcomes"]);
+    expect(todo).toEqual(["details", "card", "cover", "story"]);
   });
 
   it("puts each problem in its section", () => {

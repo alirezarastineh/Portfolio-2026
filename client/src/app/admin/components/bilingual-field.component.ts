@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, input } from "@angular/core";
+import { NgTemplateOutlet } from "@angular/common";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  input,
+  type TemplateRef,
+} from "@angular/core";
 import { ReactiveFormsModule } from "@angular/forms";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideCircleAlert, lucideCopy, lucideEllipsis, lucideSparkles } from "@ng-icons/lucide";
@@ -33,6 +40,7 @@ import { FieldPairComponent } from "./field-pair.component";
     HlmInput,
     HlmTextarea,
     NgIcon,
+    NgTemplateOutlet,
     ReactiveFormsModule,
   ],
   viewProviders: [provideIcons({ lucideCircleAlert, lucideCopy, lucideEllipsis, lucideSparkles })],
@@ -121,7 +129,10 @@ import { FieldPairComponent } from "./field-pair.component";
       </div>
 
       @if (hint()) {
-        <p [id]="id() + '-hint'" class="field-row-hint m-0 text-hint text-muted-foreground">
+        <p
+          [id]="id() + '-hint'"
+          class="field-row-hint m-0 max-w-prose text-hint text-muted-foreground"
+        >
           {{ hint() }}
         </p>
       }
@@ -192,12 +203,17 @@ import { FieldPairComponent } from "./field-pair.component";
                 }
               </div>
             }
-            <app-draft-offer
-              [offer]="offers()[locale]"
-              [field]="label() + (locale === 'en' ? ' EN' : ' DE')"
-              [fieldId]="id() + '-' + locale"
-              (use)="useDraft(locale, $event)"
-            />
+            <!-- Its notes are <id>-<locale>-draft: one draft-offer per field, the field's own or the slot's. -->
+            @if (below(); as slot) {
+              <ng-container *ngTemplateOutlet="slot; context: { $implicit: locale }" />
+            } @else if (copilot()) {
+              <app-draft-offer
+                [offer]="offers()[locale]"
+                [field]="label() + (locale === 'en' ? ' EN' : ' DE')"
+                [fieldId]="id() + '-' + locale"
+                (use)="useDraft(locale, $event)"
+              />
+            }
           </div>
         }
       </div>
@@ -211,6 +227,11 @@ export class BilingualFieldComponent extends FieldPairComponent {
   readonly state = input<TraceState>("live");
   /** The live site's text in both languages (the review's), for "English changed, German not". */
   readonly live = input<Record<Locale, string> | null>(null);
+  /**
+   * Under each language's field, given that language: the project's Suggest (U13), whose notes are
+   * `<id>-<locale>-draft`. With it, pass `[ai]="false"`: the field's own drafts have no place then.
+   */
+  readonly below = input<TemplateRef<{ $implicit: Locale }> | null>(null);
 
   protected readonly locales = computed<Locale[]>(() => {
     const view = this.view();
@@ -240,6 +261,7 @@ export class BilingualFieldComponent extends FieldPairComponent {
       this.state() === "live" ? null : `${this.id()}-state`,
       this.note() && this.noteIn() === locale ? `${this.id()}-note` : null,
       this.hint() ? `${this.id()}-hint` : null,
+      this.below() ? `${this.id()}-${locale}-draft` : null,
     ].filter(Boolean);
     return ids.length ? ids.join(" ") : null;
   }

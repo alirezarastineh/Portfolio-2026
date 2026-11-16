@@ -193,6 +193,50 @@
   }
 }
 
+/* The metrics table (plan 5, U13): a row per metric, value, label and context in each language
+   shown, then Remove; a value is short, the label takes the most and the context the rest, each
+   wrapping. On a phone value and label share a line and the context sits under them. */
+.metrics-row {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 3fr) minmax(0, 2fr) 2.25rem;
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.metrics-row[data-languages="2"] {
+  grid-template-columns:
+    5rem minmax(0, 3fr) minmax(0, 2fr) 5rem minmax(0, 3fr) minmax(0, 2fr)
+    2.25rem;
+}
+
+@media (width < 40rem) {
+  /* The placeholders name the cells there: the heads would stand over the wrong ones. */
+  .metrics-heads {
+    display: none;
+  }
+
+  .metrics-row[data-languages="1"] {
+    grid-template-columns: 5rem minmax(0, 1fr) 2.75rem;
+    grid-template-areas: "value label remove" "context context context";
+  }
+
+  .metrics-row [data-part="value"] {
+    grid-area: value;
+  }
+
+  .metrics-row [data-part="label"] {
+    grid-area: label;
+  }
+
+  .metrics-row [data-part="context"] {
+    grid-area: context;
+  }
+
+  .metrics-row [data-part="remove"] {
+    grid-area: remove;
+  }
+}
+
 /* A toast stays above the save bar: Save is never under one. */
 :root:has(app-save-bar) [data-sonner-toaster][data-y-position="bottom"] {
   bottom: 6rem;

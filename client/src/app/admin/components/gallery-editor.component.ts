@@ -1,7 +1,10 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   inject,
+  Injector,
   input,
   model,
   OnInit,
@@ -12,11 +15,12 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucidePlus, lucideTrash2 } from "@ng-icons/lucide";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmButton } from "@spartan-ng/helm/button";
-import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmSheetImports } from "@spartan-ng/helm/sheet";
+import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
 import type { MediaAsset } from "../admin-api.service";
 import { MediaLibraryService } from "../media-library.service";
+import type { LocaleView } from "./field-pair.component";
 import { MediaPickerComponent } from "./media-picker.component";
 import { SortableListComponent, SortableRowDirective } from "./sortable-list.component";
 
@@ -36,8 +40,8 @@ const MAX = 30;
   imports: [
     FormsModule,
     HlmButton,
-    HlmInput,
     HlmSheetImports,
+    HlmTextarea,
     MediaPickerComponent,
     NgIcon,
     SortableListComponent,
@@ -59,6 +63,7 @@ const MAX = 30;
         [trackBy]="track"
         label="image"
         emptyText="No gallery images yet."
+        [ruled]="true"
         (reordered)="value.set($event)"
       >
         <ng-template appSortableRow let-item let-i="index">
@@ -68,23 +73,42 @@ const MAX = 30;
               alt=""
               class="h-14 w-24 shrink-0 rounded border border-border object-cover"
             />
-            <div class="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
-              <input
-                hlmInput
-                class="h-8"
-                placeholder="Caption (EN)"
-                [ngModel]="item.caption.en"
-                (ngModelChange)="caption(i, 'en', $event)"
-                [attr.aria-label]="'Caption in English for image ' + (i + 1)"
-              />
-              <input
-                hlmInput
-                class="h-8"
-                placeholder="Bildunterschrift (DE)"
-                [ngModel]="item.caption.de"
-                (ngModelChange)="caption(i, 'de', $event)"
-                [attr.aria-label]="'Caption in German for image ' + (i + 1)"
-              />
+            <!-- The captions of the languages shown, each growing with its text. -->
+            <div
+              [class]="
+                view() === 'both'
+                  ? 'grid min-w-0 flex-1 gap-2 sm:grid-cols-2'
+                  : 'grid min-w-0 flex-1 gap-2'
+              "
+            >
+              @if (view() !== "de") {
+                <textarea
+                  hlmTextarea
+                  rows="1"
+                  lang="en"
+                  autocomplete="off"
+                  class="min-h-9 py-1.5"
+                  placeholder="Caption (EN)"
+                  [ngModel]="item.caption.en"
+                  [ngModelOptions]="{ standalone: true }"
+                  (ngModelChange)="caption(i, 'en', $event)"
+                  [attr.aria-label]="'Caption in English for image ' + (i + 1)"
+                ></textarea>
+              }
+              @if (view() !== "en") {
+                <textarea
+                  hlmTextarea
+                  rows="1"
+                  lang="de"
+                  autocomplete="off"
+                  class="min-h-9 py-1.5"
+                  placeholder="Bildunterschrift (DE)"
+                  [ngModel]="item.caption.de"
+                  [ngModelOptions]="{ standalone: true }"
+                  (ngModelChange)="caption(i, 'de', $event)"
+                  [attr.aria-label]="'Caption in German for image ' + (i + 1)"
+                ></textarea>
+              }
             </div>
             <button
               hlmBtn
@@ -92,6 +116,7 @@ const MAX = 30;
               size="sm"
               type="button"
               class="h-8 px-2 text-muted-foreground hover:text-destructive"
+              data-remove
               (click)="remove(i)"
               [attr.aria-label]="'Remove image ' + (i + 1)"
             >
@@ -107,6 +132,7 @@ const MAX = 30;
         size="sm"
         type="button"
         class="self-start"
+        data-add
         [disabled]="value().length >= max"
         (click)="open.set(true)"
       >
@@ -137,6 +163,10 @@ export class GalleryEditorComponent implements OnInit {
 
   readonly value = model.required<GalleryItem[]>();
   readonly label = input("Gallery");
+  /** The editor's language view: the captions shown. */
+  readonly view = input<LocaleView>("both");
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
   protected readonly max = MAX;
   protected readonly open = signal(false);
 
@@ -177,5 +207,17 @@ export class GalleryEditorComponent implements OnInit {
 
   protected remove(index: number): void {
     this.value.update((list) => list.filter((_, i) => i !== index));
+    // The button went with its row: the next image's Remove takes the focus, else Add image.
+    afterNextRender(
+      () => {
+        const root = this.host.nativeElement;
+        const removes = root.querySelectorAll<HTMLElement>("[data-remove]");
+        (
+          removes[Math.min(index, removes.length - 1)] ??
+          root.querySelector<HTMLElement>("[data-add]")
+        )?.focus();
+      },
+      { injector: this.injector },
+    );
   }
 }

@@ -1208,13 +1208,28 @@ test.describe("admin", () => {
     page,
     baseURL,
   }) => {
-    await fakeApi(page, baseURL);
+    // Six skill cards: a page long enough to scroll.
+    const card = (i: number) => ({
+      id: `card-${i}`,
+      icon: "cpu",
+      span: "sm",
+      items: ["TypeScript", "Postgres", "Hono", "Angular"],
+      position: i,
+      isVisible: true,
+      updatedAt: HOUR_AGO,
+      translations: {
+        en: { title: `Area ${i}`, caption: "", narrative: "What I do here." },
+        de: { title: `Bereich ${i}`, caption: "", narrative: "Was ich hier mache." },
+      },
+    });
+    await fakeApi(page, baseURL, {
+      "GET /admin/skills": { skills: [0, 1, 2, 3, 4, 5].map(card) },
+    });
     await page.setViewportSize({ width: 1280, height: 720 });
-    // The project editor keeps the page header until its Part (Profile has the editor header, plan 5 U11).
-    await openAdmin(page, "/admin/projects/project-one");
+    // Skills keeps the page header until its Part (the project editor has the editor header, plan 5 U13).
+    await openAdmin(page, "/admin/skills");
 
-    const name = (content("en")["projects"] as FixtureProject[])[0]!.name;
-    const title = page.getByRole("heading", { level: 1, name });
+    const title = page.getByRole("heading", { level: 1, name: "Skills" });
     await expect(title).toBeVisible();
     const row = page.locator(".sticky", { has: title });
     await expect(row).not.toHaveAttribute("data-stuck");
@@ -1358,20 +1373,27 @@ test.describe("admin", () => {
     page,
     baseURL,
   }) => {
-    await fakeApi(page, baseURL);
+    const projects = (content("en")["projects"] as FixtureProject[]).map((p, i) =>
+      projectRow(p, (content("de")["projects"] as FixtureProject[])[i]!, i),
+    );
+    await fakeApi(page, baseURL, {
+      "GET /admin/projects/p0": {
+        project: { ...projects[0], category: "ai-platform", periodStart: "2024-03-01" },
+      },
+    });
     await page.setViewportSize({ width: 1440, height: 900 });
     await openAdmin(page, "/admin/projects/project-one");
 
     const rail = page.getByRole("navigation", { name: "On this page" });
-    await expect(rail.getByRole("link")).toHaveCount(10);
-    // The fixture's stack is filled in; its card still says TODO.
-    await expect(rail.getByRole("link", { name: /^Stack and tags\W+done/ })).toBeVisible();
+    await expect(rail.getByRole("link")).toHaveCount(8);
+    // Its details and stack are filled in; its card still says TODO.
+    await expect(rail.getByRole("link", { name: /^Details\W+done/ })).toBeVisible();
     await expect(rail.getByRole("link", { name: /^On the card\W+to do/ })).toBeVisible();
 
-    const metrics = rail.getByRole("link", { name: /^Metrics/ });
-    await metrics.click();
-    await expect(page.getByRole("heading", { level: 2, name: "Metrics" })).toBeFocused();
-    await expect(metrics).toHaveAttribute("aria-current", "location");
+    const results = rail.getByRole("link", { name: /^Results/ });
+    await results.click();
+    await expect(page.getByRole("heading", { level: 2, name: "Results" })).toBeFocused();
+    await expect(results).toHaveAttribute("aria-current", "location");
   });
 
   test("a hand-off reads as questions and answers, and a failed forward says so first", async ({
@@ -1979,18 +2001,22 @@ test.describe("admin", () => {
     });
     await openAdmin(page, "/admin/projects/project-one");
 
-    const field = page.getByRole("textbox", { name: "Search description (en)" });
+    const field = page.locator("#seoDescription-en");
     const suggest = page.getByRole("button", {
       name: "Suggest a search description in EN with AI",
     });
     await suggest.click();
     await expect(field).toHaveValue("Project one, a portfolio project: draft 1.");
-    await page.getByRole("button", { name: "Save draft" }).click();
+    await page
+      .locator("app-editor-header")
+      .getByRole("button", { name: "Save", exact: true })
+      .click();
     await expect.poll(() => verdicts).toEqual([{ outcomes: [{ id: id(1), outcome: "kept" }] }]);
 
     await suggest.click();
     await expect(field).toHaveValue("Project one, a portfolio project: draft 2.");
-    await page.getByRole("button", { name: "Discard" }).click();
+    await page.getByRole("button", { name: "More actions for TODO: Project One" }).click();
+    await page.getByRole("menuitem", { name: /^Discard/ }).click();
     await expect(field).toHaveValue("Project one, a portfolio project: draft 1.");
     await expect.poll(() => verdicts).toHaveLength(2);
     expect(verdicts[1]).toEqual({
@@ -2030,7 +2056,7 @@ test.describe("admin", () => {
     });
     await openAdmin(page, "/admin/projects/project-one");
 
-    const field = page.getByRole("textbox", { name: "Search description (en)" });
+    const field = page.locator("#seoDescription-en");
     await page.getByRole("button", { name: "Suggest a search description in EN with AI" }).click();
     await expect(field).toHaveValue("Project one made search fast for support teams: draft 1.");
     const others = page.getByRole("list", { name: "Other drafts for Search description EN" });
@@ -2051,7 +2077,7 @@ test.describe("admin", () => {
     await expect(page.locator("#seoDescription-en-draft")).toHaveText(
       "Needs your eye: 10 characters; at least 50.",
     );
-    await expect(field).toHaveAttribute("aria-describedby", "seoDescription-en-draft");
+    await expect(field).toHaveAttribute("aria-describedby", /(^| )seoDescription-en-draft$/);
 
     await others
       .getByRole("button", { name: "Use this draft (problem first) for Search description EN" })
@@ -2059,7 +2085,10 @@ test.describe("admin", () => {
     await expect(field).toHaveValue("Support teams waited on search until project one: draft 1.");
     await expect(field).toBeFocused();
     await expect(page.locator("#seoDescription-en-draft")).toHaveText("");
-    await page.getByRole("button", { name: "Save draft" }).click();
+    await page
+      .locator("app-editor-header")
+      .getByRole("button", { name: "Save", exact: true })
+      .click();
     await expect
       .poll(() => verdicts)
       .toEqual([{ outcomes: [{ id: id(1), outcome: "kept", pick: 1 }] }]);
@@ -2096,8 +2125,8 @@ test.describe("admin", () => {
     await openAdmin(page, "/admin/projects/project-one");
 
     await page.getByRole("button", { name: "Suggest a plain summary in EN with AI" }).click();
-    await expect(page.getByRole("textbox", { name: "Plain summary (en)" })).toHaveValue(drafts[0]!);
-    const glossary = page.getByRole("textbox", { name: "Glossary (en)" });
+    await expect(page.locator("#summaryPlain-en")).toHaveValue(drafts[0]!);
+    const glossary = page.locator("#glossary-en");
     await page.getByRole("button", { name: "Suggest a glossary in EN with AI" }).click();
     await expect(glossary).toHaveValue(drafts[1]!);
     expect(sent).toEqual([
@@ -2114,7 +2143,10 @@ test.describe("admin", () => {
     await expect(glossary).toHaveValue(
       "RAG: Answers drawn from documents a model is given.\npgvector: A Postgres extension.\n",
     );
-    await page.getByRole("button", { name: "Save draft" }).click();
+    await page
+      .locator("app-editor-header")
+      .getByRole("button", { name: "Save", exact: true })
+      .click();
     await expect.poll(() => saved.length).toBe(1);
     expect(saved[0]!.translations["en"]).toMatchObject({
       summaryPlain: drafts[0],
@@ -5977,6 +6009,8 @@ test.describe("the recovery copy", () => {
     at: (page: Page) => ReturnType<Page["locator"]>;
     text: string;
     rich?: boolean;
+    /** A token field (plan 5, U13): typed and added with Enter, back as a token. */
+    token?: boolean;
   }
   const byId = (selector: string, text: string): Typed => ({
     at: (page) => page.locator(selector),
@@ -5991,8 +6025,17 @@ test.describe("the recovery copy", () => {
     text,
     rich: true,
   });
+  const token = (name: string, text: string): Typed => ({
+    at: (page) => page.getByRole("textbox", { name, exact: true }),
+    text,
+    token: true,
+  });
 
   async function type(page: Page, field: Typed): Promise<void> {
+    if (field.token) {
+      await field.at(page).fill(field.text);
+      return field.at(page).press("Enter");
+    }
     if (!field.rich) return field.at(page).fill(field.text);
     await field.at(page).click();
     await page.keyboard.press("Control+End");
@@ -6000,10 +6043,14 @@ test.describe("the recovery copy", () => {
     await expect(field.at(page)).toContainText(field.text);
   }
 
-  const isBack = (page: Page, field: Typed) =>
-    field.rich
+  const isBack = (page: Page, field: Typed) => {
+    if (field.token) {
+      return expect(page.getByRole("button", { name: field.text, exact: true })).toBeVisible();
+    }
+    return field.rich
       ? expect(field.at(page)).toContainText(field.text)
       : expect(field.at(page)).toHaveValue(field.text);
+  };
 
   const post = postRow();
   const POST_API = {
@@ -6046,13 +6093,13 @@ test.describe("the recovery copy", () => {
     byId("#periodStart", "2026-01-15"),
     byId("#linkLive", "https://example.com/live"),
     byId("#hook-en", "A new hook, in English."),
-    byName("Name (de)", "Ein neuer Name"),
+    byId("#name-de", "Ein neuer Name"),
     byId("#summaryPlain-de", "Kurz gesagt, etwas Neues."),
     byId("#glossary-en", "Eval: a test of answers\na line with no colon yet"),
-    byName("Tech stack 1", "Rust"),
-    richText("Case study (en)", " The English case study goes on."),
-    richText("Case study (de)", " Die deutsche Fallstudie."),
-    richText("Problem (de)", " Das Problem, auf Deutsch."),
+    token("Tech stack", "Rust"),
+    richText("Case study English", " The English case study goes on."),
+    richText("Case study German", " Die deutsche Fallstudie."),
+    richText("Problem German", " Das Problem, auf Deutsch."),
   ];
   const postFields = [
     byId("#post-canonical", "https://example.com/first"),
@@ -6658,7 +6705,7 @@ test.describe("the recovery copy", () => {
     await interactive(page);
     expect(await keysOf(page)).toEqual(["project|p0|category"]);
 
-    await page.getByRole("button", { name: "More actions for project-one" }).click();
+    await page.getByRole("button", { name: "More actions for TODO: Project One" }).click();
     await page.getByRole("menuitem", { name: "Delete" }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Delete project" }).click();
     await stored(page, []);
@@ -6923,7 +6970,7 @@ test.describe("the recovery copy", () => {
       } as PerformanceObserverInit);
     });
 
-    const field = page.getByRole("textbox", { name: "Case study (en)" });
+    const field = page.getByRole("textbox", { name: "Case study English" });
     await field.click();
     await page.keyboard.type("A sentence typed at a steady pace, into a long editor. ", {
       delay: 40,
@@ -8368,7 +8415,7 @@ test.describe("the admin's own look", () => {
     await add.focus();
     await expect(add).toHaveCSS("outline", RING);
 
-    await page.getByRole("button", { name: "More actions for project-one" }).click();
+    await page.getByRole("button", { name: "More actions for TODO: Project One" }).click();
     expect(await measures(page.getByRole("menu"))).toMatchObject({ radius: "8px" });
     await page.keyboard.press("Escape");
 
@@ -10270,6 +10317,696 @@ test.describe("Words", () => {
       ).toEqual([]);
     });
   }
+});
+
+test.describe("Work and the project editor", () => {
+  const TYPED = "Typed before the session ended";
+  const LOST = { status: 401, body: { error: "unauthenticated" } };
+  const saved = (body: unknown = { ok: true }) => ({ status: 200, body });
+  const header = (page: Page) => page.locator("app-editor-header");
+  const state = (page: Page) => header(page).getByRole("status").first();
+  const save = (page: Page) => header(page).getByRole("button", { name: "Save", exact: true });
+  const EDITOR = "/admin/projects/project-one";
+  const EN = content("en")["projects"] as FixtureProject[];
+  const DE = content("de")["projects"] as FixtureProject[];
+  const rows = () => EN.map((p, i) => projectRow(p, DE[i]!, i));
+  const LONG =
+    "Answers stayed grounded while the corpus grew fourfold, measured on every release by the same eval set";
+  /** project-one with a metric whose label runs long, in both languages. */
+  const withMetrics = () => {
+    const row = rows()[0]!;
+    row.translations.en.metrics = [{ value: "40%", label: LONG, context: "p95, after the cache" }];
+    row.translations.de.metrics = [
+      { value: "40 %", label: "weniger Latenz", context: "p95, mit Cache" },
+    ];
+    return row;
+  };
+  const tokens = (page: Page, name = "Tech stack") =>
+    page.getByRole("list", { name }).getByRole("listitem");
+  const token = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
+
+  /** The JSON of every request to this method and path, as they go. */
+  function sent(page: Page, method: string, path: string): Record<string, unknown>[] {
+    const bodies: Record<string, unknown>[] = [];
+    page.on("request", (request) => {
+      if (request.method() === method && new URL(request.url()).pathname === path) {
+        bodies.push(request.postDataJSON() as Record<string, unknown>);
+      }
+    });
+    return bodies;
+  }
+
+  async function openEditor(page: Page, path = EDITOR): Promise<void> {
+    await openAdmin(page, path);
+    await expect(page.locator("#name-en")).toBeVisible();
+  }
+
+  /** Each visible one-line field whose text runs past it: none may be (plan 5, U13). */
+  const cut = (page: Page) =>
+    page.evaluate(() =>
+      [
+        ...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+          "main input, main textarea",
+        ),
+      ]
+        .filter((f) => f.getClientRects().length && f.type !== "checkbox" && f.type !== "file")
+        .filter((f) => f.scrollWidth > f.clientWidth + 2 || f.scrollHeight > f.clientHeight + 2)
+        .map((f) => f.id || f.getAttribute("aria-label") || f.name),
+    );
+
+  test("the list is a table in the home page's order, each name opening its editor", async ({
+    page,
+    baseURL,
+  }) => {
+    const list = rows().map((row, i) => ({
+      ...row,
+      featured: i === 1,
+      updatedAt: HOUR_AGO,
+      translations: {
+        en: { name: row.translations.en.name, hasCaseStudy: i === 0 },
+        de: { name: row.translations.de.name, hasCaseStudy: i === 0 },
+      },
+    }));
+    const unmocked = await fakeApi(page, baseURL, { "GET /admin/projects": { projects: list } });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openAdmin(page, "/admin/projects");
+
+    const table = page.getByRole("table", { name: "Projects in the home page's order" });
+    await expect(table.getByRole("columnheader")).toHaveText([
+      "Order",
+      "Name",
+      "Case study",
+      "Featured",
+      "Shown",
+      "Updated",
+      "Actions",
+    ]);
+    const body = table.locator("tbody tr");
+    await expect(body.getByRole("link")).toHaveText(EN.map((p) => p.name));
+    await expect(body.first()).toContainText("/project-one");
+    await expect(body.first().getByRole("cell").nth(2)).toHaveText("EN, DE");
+    await expect(body.nth(1).getByRole("cell").nth(2)).toHaveText("None");
+    await expect(body.nth(1).getByRole("cell").nth(3)).toHaveText("Yes");
+    await expect(body.first().getByRole("cell").nth(5)).toHaveText("1 hour ago");
+    await expect(
+      body.first().getByRole("switch", { name: `Show ${EN[0]!.name} on the site` }),
+    ).toBeChecked();
+
+    await body.first().getByRole("link").click();
+    await expect(page).toHaveURL(/\/admin\/projects\/project-one$/);
+    await expect(header(page).getByRole("heading", { level: 1 })).toHaveText(EN[0]!.name);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("Add opens the new project's editor (task 3)", async ({ page, baseURL }) => {
+    let created: Record<string, unknown> | null = null;
+    page.on("request", (r) => {
+      if (r.method() === "POST" && new URL(r.url()).pathname === "/admin/projects") {
+        created = r.postDataJSON() as Record<string, unknown>;
+      }
+    });
+    const stored = () => ({
+      ...created,
+      id: "p9",
+      position: 3,
+      coverPath: null,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    const unmocked = await fakeApi(page, baseURL, {
+      "POST /admin/projects": { ok: true, id: "p9" },
+      "GET /admin/projects": () => saved({ projects: [...rows(), ...(created ? [stored()] : [])] }),
+      "GET /admin/projects/p9": () => saved({ project: stored() }),
+    });
+    await openAdmin(page, "/admin/projects");
+
+    await page.getByRole("button", { name: "Add project" }).click();
+    await expect(page).toHaveURL(/\/admin\/projects\/project-[a-z0-9]+$/);
+    await expect(page.locator("#name-en")).toHaveValue("New project");
+    await expect(header(page).getByRole("heading", { level: 1 })).toHaveText("New project");
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the list reorders by Alt+arrows on a grip, and by Move down in ⋯ for a single pointer", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { "PATCH /admin/projects/reorder": { ok: true } });
+    const reorders = sent(page, "PATCH", "/admin/projects/reorder");
+    await openAdmin(page, "/admin/projects");
+    const names = page.locator("tbody tr").getByRole("link");
+
+    const grip = page.getByRole("button", { name: `Reorder ${EN[0]!.name}`, exact: false });
+    await grip.focus();
+    await page.keyboard.press("Alt+ArrowDown");
+    await expect.poll(() => reorders).toEqual([{ ids: ["p1", "p0", "p2"] }]);
+    await expect(names).toHaveText([EN[1]!.name, EN[0]!.name, EN[2]!.name]);
+    await expect(grip).toBeFocused();
+
+    await page.getByRole("button", { name: `More actions for ${EN[1]!.name}` }).click();
+    await expect(page.getByRole("menuitem", { name: "Move up" })).toBeDisabled();
+    await page.getByRole("menuitem", { name: "Move down" }).click();
+    await expect.poll(() => reorders).toHaveLength(2);
+    expect(reorders[1]).toEqual({ ids: ["p0", "p1", "p2"] });
+    await expect(names).toHaveText(EN.map((p) => p.name));
+  });
+
+  test("task 2: both case studies side by side at 1280, Save in view, Ctrl S sends both", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await fakeApi(page, baseURL, { "PUT /admin/projects/p0": { ok: true } });
+    const puts = sent(page, "PUT", "/admin/projects/p0");
+    await openEditor(page);
+
+    const en = page.getByRole("textbox", { name: "Case study English" });
+    const de = page.getByRole("textbox", { name: "Case study German" });
+    await en.click();
+    await page.keyboard.type("The English case study.");
+    await de.click();
+    await page.keyboard.type("Die deutsche Fallstudie.");
+    await expect(en).toBeInViewport();
+    await expect(de).toBeInViewport();
+    const [a, b] = [await en.boundingBox(), await de.boundingBox()];
+    expect(Math.abs(a!.y - b!.y), "side by side").toBeLessThan(2);
+    expect(b!.x).toBeGreaterThan(a!.x + a!.width);
+    expect(a!.width, "each column wide enough to write in").toBeGreaterThan(340);
+    await expect(save(page)).toBeInViewport({ ratio: 1 });
+
+    await page.keyboard.press("Control+s");
+    await expect.poll(() => puts).toHaveLength(1);
+    const sentBody = puts[0] as { translations: Record<"en" | "de", { body: string }> };
+    expect(sentBody.translations.en.body).toContain("The English case study.");
+    expect(sentBody.translations.de.body).toContain("Die deutsche Fallstudie.");
+    await expect(state(page)).toHaveText(/^Saved/);
+  });
+
+  test("the token field: Enter and a comma add, Backspace goes to the last token, Delete removes, Alt+arrows move; the save sends that order", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { "PUT /admin/projects/p0": { ok: true } });
+    const puts = sent(page, "PUT", "/admin/projects/p0");
+    await openEditor(page);
+    const input = page.getByRole("textbox", { name: "Tech stack" });
+    await expect(tokens(page)).toHaveText(["TypeScript", "Python", "FastAPI", "Postgres"]);
+
+    await input.fill("Rust");
+    await input.press("Enter");
+    await input.fill("Go");
+    await input.press(",");
+    await expect(input).toHaveValue("");
+    // Pasted with commas: each part is a token.
+    await input.fill("Deno, Bun ,  ");
+    await input.press("Enter");
+    await expect(tokens(page)).toHaveText([
+      "TypeScript",
+      "Python",
+      "FastAPI",
+      "Postgres",
+      "Rust",
+      "Go",
+      "Deno",
+      "Bun",
+    ]);
+
+    // Backspace in the empty field goes to the last token and removes nothing.
+    await input.press("Backspace");
+    await expect(token(page, "Bun")).toBeFocused();
+    await expect(tokens(page)).toHaveCount(8);
+    await page.keyboard.press("Delete");
+    await expect(tokens(page)).toHaveCount(7);
+    await expect(token(page, "Deno")).toBeFocused();
+    await page.keyboard.press("Alt+ArrowLeft");
+    await expect(tokens(page)).toHaveText([
+      "TypeScript",
+      "Python",
+      "FastAPI",
+      "Postgres",
+      "Rust",
+      "Deno",
+      "Go",
+    ]);
+    await expect(token(page, "Deno")).toBeFocused();
+    await page.keyboard.press("Alt+ArrowUp");
+    await expect(tokens(page).nth(4)).toHaveText("Deno");
+
+    await page.getByRole("button", { name: "Remove Python" }).click();
+    await expect(tokens(page)).toHaveText([
+      "TypeScript",
+      "FastAPI",
+      "Postgres",
+      "Deno",
+      "Rust",
+      "Go",
+    ]);
+    // Twice is refused, and says so.
+    await input.fill("rust");
+    await input.press("Enter");
+    await expect(tokens(page)).toHaveCount(6);
+    await expect(input).toHaveValue("rust");
+    await expect(page.locator("#stack-refused")).toHaveText("Rust is already in the list.");
+    await expect(input).toHaveAccessibleDescription(/Rust is already in the list./);
+    await input.press("Backspace");
+    await expect(page.locator("#stack-refused")).toHaveCount(0);
+    await input.fill("");
+
+    await save(page).click();
+    await expect.poll(() => puts).toHaveLength(1);
+    expect(puts[0]!["stack"]).toEqual(["TypeScript", "FastAPI", "Postgres", "Deno", "Rust", "Go"]);
+  });
+
+  test("the token field names its keys and says what each did; a click on a token offers Move and Remove", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await openEditor(page);
+    const input = page.getByRole("textbox", { name: "Tech stack" });
+    await expect(input).toHaveAccessibleDescription(
+      "Enter or a comma adds. On a token, Delete removes it and Alt with an arrow key moves it.",
+    );
+    const said = page.locator("#stack-said");
+    await expect(said).toHaveAttribute("aria-live", "polite");
+
+    await input.fill("Rust");
+    await input.press("Enter");
+    await expect(said).toHaveText("Rust added, 5 of 5.");
+    await input.fill("python");
+    await input.press("Enter");
+    await expect(said).toHaveText("Python is already in the list.");
+    await token(page, "Python").focus();
+    await page.keyboard.press("Alt+ArrowRight");
+    await expect(said).toHaveText("Python moved to 3 of 5.");
+    await page.keyboard.press("Backspace");
+    await expect(said).toHaveText("Python removed.");
+    await expect(page.getByRole("button", { name: "Remove Rust" })).toHaveAttribute(
+      "tabindex",
+      "-1",
+    );
+
+    // A single pointer's way to move: the token's menu.
+    await token(page, "TypeScript").click();
+    await expect(page.getByRole("menuitem", { name: "Move left" })).toBeDisabled();
+    await page.getByRole("menuitem", { name: "Move right" }).click();
+    await expect(tokens(page)).toHaveText(["FastAPI", "TypeScript", "Postgres", "Rust"]);
+    await expect(said).toHaveText("TypeScript moved to 2 of 4.");
+  });
+
+  test("metrics: a row per metric in both languages, a long label wraps, Add and Remove act on the row", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await fakeApi(page, baseURL, {
+      "GET /admin/projects/p0": { project: withMetrics() },
+      "PUT /admin/projects/p0": { ok: true },
+    });
+    const puts = sent(page, "PUT", "/admin/projects/p0");
+    await openEditor(page);
+    const cell = (n: number, part: string, language: string) =>
+      page.getByRole("textbox", { name: `Metric ${n} ${part}, ${language}` });
+
+    await expect(cell(1, "label", "English")).toHaveValue(LONG);
+    const boxes = await Promise.all(
+      ["value", "label", "context"].flatMap((part) =>
+        ["English", "German"].map((language) => cell(1, part, language).boundingBox()),
+      ),
+    );
+    expect(new Set(boxes.map((box) => Math.round(box!.y))).size, "six cells on one line").toBe(1);
+    expect(await cut(page)).toEqual([]);
+
+    await page.getByRole("button", { name: "Add metric" }).click();
+    await expect(cell(2, "value", "English")).toBeFocused();
+    await cell(2, "value", "English").fill("3x");
+    await cell(2, "label", "English").fill("faster");
+    await cell(2, "value", "German").fill("3x");
+    await cell(2, "label", "German").fill("schneller");
+    await page.getByRole("button", { name: "Remove metric 1" }).click();
+    await expect(cell(1, "value", "English")).toHaveValue("3x");
+    await expect(page.getByRole("button", { name: "Remove metric 1" })).toBeFocused();
+
+    await save(page).click();
+    await expect.poll(() => puts).toHaveLength(1);
+    const sentBody = puts[0] as { translations: Record<"en" | "de", { metrics: unknown[] }> };
+    expect(sentBody.translations.en.metrics).toEqual([{ value: "3x", label: "faster" }]);
+    expect(sentBody.translations.de.metrics).toEqual([{ value: "3x", label: "schneller" }]);
+  });
+
+  test("nothing typed is cut: outcomes and captions grow, at 1280 and at 390", async ({
+    page,
+    baseURL,
+  }) => {
+    const project = withMetrics();
+    project.translations.en.outcomes = [LONG, `${LONG}, and then again`];
+    await fakeApi(page, baseURL, { "GET /admin/projects/p0": { project } });
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 800 });
+      await openEditor(page);
+      await page.locator("#descriptor-en").fill(LONG);
+      await page.locator("#role-en").fill(`${LONG} as the lead engineer`);
+      const outcome = page.getByRole("textbox", { name: "English outcomes 1" });
+      await expect(outcome).toHaveValue(LONG);
+      expect(await cut(page), `at ${width}`).toEqual([]);
+    }
+  });
+
+  test("the trace: an edit marks its field, its section and the header; Save turns them to the draft", async ({
+    page,
+    baseURL,
+  }) => {
+    // The case study is a doc: its body differs from the live one in English, its summaries do not.
+    const doc = (body: string) => ({
+      kind: "project",
+      slug: "project-one",
+      body,
+      toc: [],
+      gallery: [],
+      seo: { title: "", description: "" },
+      alternates: {},
+      updatedAt: HOUR_AGO,
+    });
+    await fakeApi(page, baseURL, {
+      "PUT /admin/projects/p0": { ok: true },
+      "GET /admin/publish/review": {
+        canPublish: true,
+        locales: (["en", "de"] as const).map((locale) => ({
+          locale,
+          issues: [],
+          changed: true,
+          liveVersionId: 12,
+          draft: content(locale),
+          live: content(locale),
+          docs:
+            locale === "en"
+              ? [
+                  {
+                    key: "project:project-one",
+                    change: "changed",
+                    draft: doc("<p>New</p>"),
+                    live: doc("<p>Old</p>"),
+                  },
+                ]
+              : [],
+        })),
+      },
+    });
+    await openEditor(page);
+    const body = page
+      .locator(".change-trace")
+      .filter({ has: page.getByRole("textbox", { name: "Case study English" }) });
+    await expect(body).toHaveAttribute("data-change", "draft");
+    await expect(
+      page.locator("app-bilingual-field").filter({ has: page.locator("#summaryPlain-en") }),
+    ).not.toHaveAttribute("data-change");
+
+    const field = page.locator("app-bilingual-field").filter({ has: page.locator("#hook-en") });
+    const stack = page.locator(".change-trace").filter({ has: page.locator("#stack") });
+    const card = page.getByRole("link", { name: /^On the card ?,/ });
+
+    await page.locator("#hook-en").fill("A new hook.");
+    await expect(field).toHaveAttribute("data-change", "unsaved");
+    await expect(page.locator("#hook-en")).toHaveAccessibleDescription(/Unsaved/);
+    await expect(state(page)).toHaveText("1 unsaved change");
+    await page.getByRole("textbox", { name: "Tech stack" }).fill("Rust");
+    await page.getByRole("textbox", { name: "Tech stack" }).press("Enter");
+    await expect(stack).toHaveAttribute("data-change", "unsaved");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(card).toContainText("unsaved");
+
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved/);
+    await expect(field).toHaveAttribute("data-change", "draft");
+    await expect(stack).toHaveAttribute("data-change", "draft");
+    await expect(card).toContainText("in draft");
+  });
+
+  test("what the editor does not show goes back in every save as it was loaded", async ({
+    page,
+    baseURL,
+  }) => {
+    const project = {
+      ...rows()[0]!,
+      isVisible: false,
+      linkRepo: "https://example.com/repo",
+      category: "ai-platform",
+      periodStart: "2024-03-01",
+    };
+    await fakeApi(page, baseURL, {
+      "GET /admin/projects/p0": { project },
+      "PUT /admin/projects/p0": { ok: true },
+    });
+    const puts = sent(page, "PUT", "/admin/projects/p0");
+    await openEditor(page);
+    await expect(header(page)).toContainText("Hidden");
+
+    await page.locator("#hook-de").fill("Ein neuer Aufhänger.");
+    await save(page).click();
+    await expect.poll(() => puts).toHaveLength(1);
+    const { id, position, coverPath, createdAt, updatedAt, ...input } = project;
+    void [id, position, coverPath, createdAt, updatedAt];
+    expect(puts[0]).toEqual({
+      ...input,
+      translations: {
+        en: project.translations.en,
+        de: { ...project.translations.de, hook: "Ein neuer Aufhänger." },
+      },
+    });
+  });
+
+  test("a 401 mid-edit opens the sign-in over the page; the text stays and saves after it", async ({
+    page,
+    baseURL,
+    problems,
+  }) => {
+    let signedIn = false;
+    const unmocked = await fakeApi(page, baseURL, {
+      "PUT /admin/projects/p0": () => (signedIn ? saved() : LOST),
+      "POST /auth/login": () => {
+        signedIn = true;
+        return saved({ ok: true, totpRequired: false, user: USER });
+      },
+    });
+    const puts = sent(page, "PUT", "/admin/projects/p0");
+    await openEditor(page);
+
+    await page.locator("#hook-en").fill(TYPED);
+    await save(page).click();
+    const signIn = page.getByRole("dialog", { name: "Sign in to carry on" });
+    await expect(signIn).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/projects\/project-one$/);
+    await expect(page.locator("#hook-en")).toHaveValue(TYPED);
+    await signIn.getByLabel("Password").fill("hunter2hunter2");
+    await signIn.getByRole("button", { name: "Sign in" }).click();
+    await expect(signIn).toBeHidden();
+    await expect(page.locator("#hook-en")).toHaveValue(TYPED);
+
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved/);
+    expect(puts).toHaveLength(2);
+    expect(puts[1]).toMatchObject({ translations: { en: { hook: TYPED } } });
+    expect(problems.pageErrors).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("copies typed in the old editor come back into the new fields", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { "PUT /admin/projects/p0": { ok: true } });
+    const puts = sent(page, "PUT", "/admin/projects/p0");
+    await openAdmin(page, "/admin/inbox");
+    const loaded = rows()[0]!;
+    const at = Date.now() - 60_000;
+    const outcomes = [...loaded.translations.en.outcomes, LONG];
+    const glossary = "Eval: a test of answers\na line with no colon yet";
+    // As the old editor wrote them: the store's own shape, keyed by editor, item and field.
+    const left = [
+      ["translations.en.outcomes", outcomes, loaded.translations.en.outcomes],
+      ["stack", [...loaded.stack, "Rust"], loaded.stack],
+      ["translations.de.name", "Projekt Eins, alt getippt", loaded.translations.de.name],
+      ["typedGlossary.en", glossary, ""],
+      ["translations.en.glossary", [{ term: "Eval", definition: "a test of answers" }], []],
+    ].map(([field, value, base]) => ({ editor: "project", item: "p0", field, value, base, at }));
+    await page.evaluate(
+      (copies) =>
+        new Promise<void>((resolve, reject) => {
+          const open = indexedDB.open("admin-recovery", 1);
+          open.onupgradeneeded = () =>
+            open.result.createObjectStore("copies", { keyPath: ["editor", "item", "field"] });
+          open.onerror = () => reject(open.error);
+          open.onsuccess = () => {
+            const write = open.result.transaction("copies", "readwrite");
+            for (const copy of copies) write.objectStore("copies").put(copy);
+            write.oncomplete = () => {
+              open.result.close();
+              resolve();
+            };
+            write.onerror = () => reject(write.error);
+          };
+        }),
+      left,
+    );
+
+    await openEditor(page);
+    await expect(page.getByRole("status").filter({ hasText: "Unsaved edits from" })).toBeVisible();
+    await expect(page.locator("#name-de")).toHaveValue("Projekt Eins, alt getippt");
+    await expect(page.getByRole("textbox", { name: "English outcomes 4" })).toHaveValue(LONG);
+    await expect(token(page, "Rust")).toBeVisible();
+    await expect(page.locator("#glossary-en")).toHaveValue(glossary);
+    expect(await cut(page)).toEqual([]);
+
+    await save(page).click();
+    await expect.poll(() => puts).toHaveLength(1);
+    expect(puts[0]).toMatchObject({
+      stack: [...loaded.stack, "Rust"],
+      translations: { en: { outcomes }, de: { name: "Projekt Eins, alt getippt" } },
+    });
+  });
+
+  test("from the keyboard at 1280: the header, then each field in the order you see", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await fakeApi(page, baseURL, { "GET /admin/projects/p0": { project: withMetrics() } });
+    await openEditor(page);
+    const tab = async (target: Locator) => {
+      await page.keyboard.press("Tab");
+      await expect(target).toBeFocused();
+    };
+    await header(page).getByRole("heading", { level: 1 }).focus();
+    await tab(header(page).getByRole("button", { name: "EN" }));
+    // Save waits disabled with nothing to save: no stop until there is.
+    await header(page).getByRole("button", { name: "Live preview" }).focus();
+    await tab(header(page).getByRole("button", { name: `More actions for ${EN[0]!.name}` }));
+    await tab(page.locator("#slug"));
+
+    await page.locator("#linkCaseStudy").focus();
+    await tab(page.getByRole("switch", { name: "Featured on the home page" }));
+    await tab(page.getByRole("button", { name: "More actions for Category label" }));
+    await tab(page.locator("#categoryLabel-en"));
+    await tab(page.locator("#categoryLabel-de"));
+    await tab(token(page, "TypeScript"));
+    await tab(token(page, "Python"));
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await tab(page.getByRole("textbox", { name: "Tech stack" }));
+    await tab(page.getByRole("textbox", { name: "Tags" }));
+    await tab(page.getByRole("button", { name: "More actions for Name" }));
+    await tab(page.locator("#name-en"));
+    await tab(page.locator("#name-de"));
+
+    await page.getByRole("textbox", { name: "Metric 1 value, English" }).focus();
+    for (const name of [
+      "Metric 1 label, English",
+      "Metric 1 context, English",
+      "Metric 1 value, German",
+      "Metric 1 label, German",
+      "Metric 1 context, German",
+    ]) {
+      await tab(page.getByRole("textbox", { name }));
+    }
+    await tab(page.getByRole("button", { name: "Remove metric 1" }));
+    // A rich text is its toolbar (one stop, arrows inside) and then its text.
+    await page.getByRole("textbox", { name: "Case study English" }).focus();
+    await tab(
+      page
+        .getByRole("toolbar", { name: "Case study German formatting" })
+        .getByRole("button")
+        .first(),
+    );
+    await tab(page.getByRole("textbox", { name: "Case study German" }));
+    await expect(page.locator("#name-de")).toHaveAttribute("lang", "de");
+  });
+
+  test("at 390: one language with the switch first, Save in the sticky header, a metric's context under it", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await fakeApi(page, baseURL, { "GET /admin/projects/p0": { project: withMetrics() } });
+    await openEditor(page);
+    const languages = header(page).getByRole("group", { name: "Language view" });
+    await expect(languages.getByRole("button")).toHaveText(["EN", "DE"]);
+    await expect(page.locator("#name-de")).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Case study German" })).toHaveCount(0);
+    await languages.getByRole("button", { name: "DE" }).click();
+    await expect(page.locator("#name-de")).toBeVisible();
+    await expect(page.locator("#name-en")).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Case study German" })).toBeVisible();
+
+    const box = (part: string) =>
+      page.getByRole("textbox", { name: `Metric 1 ${part}, German` }).boundingBox();
+    const [value, label, context] = [await box("value"), await box("label"), await box("context")];
+    expect(Math.abs(value!.y - label!.y), "value and label on one line").toBeLessThan(2);
+    expect(context!.y, "the context under them").toBeGreaterThan(value!.y + value!.height - 1);
+
+    await page.evaluate(() => window.scrollTo(0, 2500));
+    await expect(save(page)).toBeInViewport({ ratio: 1 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  });
+
+  test("an outcome moves down from its grip's menu, a single pointer's way, and its grip keeps the focus", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { "PUT /admin/projects/p0": { ok: true } });
+    const puts = sent(page, "PUT", "/admin/projects/p0");
+    await openEditor(page);
+    const outcomes = EN[0]!.outcomes;
+    const grip = (n: number) =>
+      page.getByRole("button", { name: `Reorder English outcomes ${n}. Use Alt with arrow keys.` });
+
+    await grip(1).click();
+    await expect(page.getByRole("menuitem", { name: "Move up" })).toBeDisabled();
+    await page.getByRole("menuitem", { name: "Move down" }).click();
+    await expect(page.getByRole("textbox", { name: "English outcomes 1" })).toHaveValue(
+      outcomes[1]!,
+    );
+    await expect(page.getByRole("textbox", { name: "English outcomes 2" })).toHaveValue(
+      outcomes[0]!,
+    );
+    await expect(grip(2)).toBeFocused();
+
+    await save(page).click();
+    await expect.poll(() => puts).toHaveLength(1);
+    expect(puts[0]).toMatchObject({
+      translations: { en: { outcomes: [outcomes[1], outcomes[0], ...outcomes.slice(2)] } },
+    });
+  });
+
+  test("passing through an empty case study changes nothing", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL);
+    await openEditor(page);
+    const body = page.getByRole("textbox", { name: "Case study German" });
+    await body.click();
+    await page.keyboard.press("Tab");
+    await expect(state(page)).not.toHaveText(/unsaved/);
+    await expect(save(page)).toBeDisabled();
+  });
+
+  test("Words: no row cuts its text, at 1280 and on a phone in either language", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await openAdmin(page, "/admin/words");
+      await expect(page.locator("#contact-submit-en")).toBeVisible({ timeout: 15_000 });
+      expect(await cut(page), `at ${width}`).toEqual([]);
+    }
+    await header(page)
+      .getByRole("group", { name: "Language view" })
+      .getByRole("button", {
+        name: "DE",
+      })
+      .click();
+    await expect(page.locator("#contact-submit-de")).toBeVisible();
+    expect(await cut(page), "German at 390").toEqual([]);
+  });
 });
 
 test.describe("admin accessibility", () => {

@@ -6,10 +6,14 @@ import {
   moveItemInArray,
 } from "@angular/cdk/drag-drop";
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   contentChild,
   Directive,
+  ElementRef,
+  inject,
+  Injector,
   input,
   output,
   TemplateRef,
@@ -17,6 +21,7 @@ import {
 import { NgTemplateOutlet } from "@angular/common";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideGripVertical } from "@ng-icons/lucide";
+import { HlmDropdownMenuImports } from "@spartan-ng/helm/dropdown-menu";
 
 /** Marks the caller's row template: `<ng-template appSortableRow let-item let-i="index">`. */
 @Directive({ selector: "[appSortableRow]" })
@@ -32,7 +37,7 @@ export class SortableRowDirective {}
 @Component({
   selector: "app-sortable-list",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CdkDrag, CdkDragHandle, CdkDropList, NgIcon, NgTemplateOutlet],
+  imports: [CdkDrag, CdkDragHandle, CdkDropList, HlmDropdownMenuImports, NgIcon, NgTemplateOutlet],
   viewProviders: [provideIcons({ lucideGripVertical })],
   host: { class: "block" },
   template: `
@@ -54,10 +59,14 @@ export class SortableRowDirective {}
           [attr.data-change]="change()(item)"
           [attr.aria-label]="label() + ' ' + (i + 1) + ' of ' + items().length"
         >
+          <!-- Drag it, Alt with an arrow key, or a click for Move up and Move down (a single pointer). -->
           <button
             cdkDragHandle
             type="button"
             class="mt-0.5 cursor-grab rounded p-1 text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
+            data-grip
+            [hlmDropdownMenuTrigger]="moves"
+            [hlmDropdownMenuTriggerData]="{ $implicit: i }"
             [attr.aria-label]="'Reorder ' + label() + ' ' + (i + 1) + '. Use Alt with arrow keys.'"
             (keydown)="onHandleKey($event, i)"
           >
@@ -83,6 +92,15 @@ export class SortableRowDirective {}
         </li>
       }
     </ul>
+
+    <ng-template #moves let-i>
+      <hlm-dropdown-menu class="w-40">
+        <button hlmDropdownMenuItem [disabled]="i === 0" (triggered)="move(i, -1)">Move up</button>
+        <button hlmDropdownMenuItem [disabled]="i === items().length - 1" (triggered)="move(i, 1)">
+          Move down
+        </button>
+      </hlm-dropdown-menu>
+    </ng-template>
   `,
 })
 export class SortableListComponent<T> {
@@ -99,6 +117,8 @@ export class SortableListComponent<T> {
   readonly reordered = output<T[]>();
 
   protected readonly row = contentChild(SortableRowDirective, { read: TemplateRef });
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
 
   protected onDrop(event: CdkDragDrop<unknown>): void {
     if (event.previousIndex === event.currentIndex) return;
@@ -111,14 +131,23 @@ export class SortableListComponent<T> {
   protected onHandleKey(event: KeyboardEvent, index: number): void {
     if (!event.altKey) return;
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    this.move(index, event.key === "ArrowUp" ? -1 : 1);
+  }
 
-    const delta = event.key === "ArrowUp" ? -1 : 1;
+  protected move(index: number, delta: -1 | 1): void {
     const target = index + delta;
     if (target < 0 || target >= this.items().length) return;
-
-    event.preventDefault();
     const next = [...this.items()];
     moveItemInArray(next, index, target);
     this.reordered.emit(next);
+    // A moved row is a node moved, which loses the focus: its grip takes it back where it lands.
+    afterNextRender(
+      () => {
+        const grips = this.host.nativeElement.querySelectorAll<HTMLElement>("button[data-grip]");
+        grips[target]?.focus();
+      },
+      { injector: this.injector },
+    );
   }
 }

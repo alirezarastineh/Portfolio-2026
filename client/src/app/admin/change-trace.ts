@@ -1,5 +1,5 @@
 import type { AppContent, Locale } from "../content/schema";
-import type { PublishReview } from "./admin-api.service";
+import type { DocChange, PublishReview } from "./admin-api.service";
 import { hasText } from "./editor-outline";
 import { isHidden } from "./hidden-fields";
 import { contentDiff } from "./publish-summary";
@@ -22,6 +22,8 @@ export interface DraftMarks {
   live: Record<Locale, AppContent | null>;
   /** When the review was asked for: a save after that is not in it yet. */
   asked: number;
+  /** Per language, each doc publishing would change, its draft and live (a case study's body, U13). */
+  docs?: Record<Locale, readonly DocChange[]>;
 }
 
 /** A path an editor shows: hidden fields (`ui.about.subtitle`) keep their value and no mark. */
@@ -32,9 +34,15 @@ function shown(path: string): boolean {
 
 /** The same diff as the publish review's count, so the trace and Publish's number agree. */
 export function draftMarks(review: PublishReview, asked: number): DraftMarks {
-  const marks: DraftMarks = { paths: { en: [], de: [] }, live: { en: null, de: null }, asked };
+  const marks: DraftMarks = {
+    paths: { en: [], de: [] },
+    live: { en: null, de: null },
+    asked,
+    docs: { en: [], de: [] },
+  };
   for (const side of review.locales) {
     marks.live[side.locale] = side.live;
+    marks.docs![side.locale] = side.docs ?? [];
     if (side.draft) {
       marks.paths[side.locale] = contentDiff(side.live, side.draft)
         .map((e) => e.path)

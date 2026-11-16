@@ -70,23 +70,25 @@ export function projectOutline(p: ProjectRow, problems: readonly string[]): Outl
     problems: problemsUnder(problems, prefixes),
   });
 
+  // The plan's order (plan 5, U13): the facts, the card, the cover, the numbers, the story, the long read.
   return [
-    item("details", "Details", !!p.slug.trim() && !!p.category.trim() && !!p.periodStart, [
-      "slug",
-      "category",
-      "periodStart",
-      "periodEnd",
-      "linkLive",
-      "linkRepo",
-      "linkCaseStudy",
-      "featured",
-    ]),
-    item("cover", "Cover", !!p.coverPath && !isStandInCover(p.coverPath), ["coverId"]),
     item(
-      "stack",
-      "Stack and tags",
-      p.stack.some((s) => s.trim()),
-      ["stack", "tags"],
+      "details",
+      "Details",
+      !!p.slug.trim() && !!p.category.trim() && !!p.periodStart && p.stack.some((s) => s.trim()),
+      [
+        "slug",
+        "category",
+        "periodStart",
+        "periodEnd",
+        "linkLive",
+        "linkRepo",
+        "linkCaseStudy",
+        "featured",
+        "stack",
+        "tags",
+        ...translated(["categoryLabel"]),
+      ],
     ),
     item(
       "card",
@@ -94,34 +96,33 @@ export function projectOutline(p: ProjectRow, problems: readonly string[]): Outl
       every(
         (tr) => hasText(tr.name) && hasText(tr.descriptor) && hasText(tr.hook) && hasText(tr.role),
       ),
-      translated(["name", "descriptor", "hook", "role", "categoryLabel"]),
+      translated(["name", "descriptor", "hook", "role"]),
     ),
+    item("cover", "Cover", !!p.coverPath && !isStandInCover(p.coverPath), ["coverId"]),
     item(
-      "story",
-      "Problem and approach",
-      every(
-        (tr) => hasText(tr.problem) && hasText(tr.aiArchitecture) && hasText(tr.fullStackInfra),
-      ),
-      translated(["problem", "aiArchitecture", "fullStackInfra"]),
-    ),
-    item(
-      "outcomes",
-      "Outcomes",
-      every((tr) => tr.outcomes.some(hasText)),
-      translated(["outcomes"]),
-    ),
-    item(
-      "metrics",
-      "Metrics",
+      "results",
+      "Results",
       every((tr) => tr.metrics.some((m) => hasText(m.value) && hasText(m.label))),
       translated(["metrics"]),
       "optional",
     ),
     item(
+      "story",
+      "Story",
+      every(
+        (tr) =>
+          hasText(tr.problem) &&
+          hasText(tr.aiArchitecture) &&
+          hasText(tr.fullStackInfra) &&
+          tr.outcomes.some(hasText),
+      ),
+      translated(["problem", "aiArchitecture", "fullStackInfra", "outcomes"]),
+    ),
+    item(
       "case-study",
       "Case study",
       every((tr) => hasText(tr.body)),
-      translated(["body"]),
+      translated(["body", "summaryPlain", "summaryExpert", "glossary"]),
       "optional",
     ),
     item(
