@@ -31,7 +31,7 @@ import { AdminSessionService } from "../../admin/admin-session.service";
 import { AdminPulseService, type PulsePart } from "../../admin/pulse.service";
 import { RecoveryService, type RecoveryCopy } from "../../admin/recovery.service";
 import { absoluteTime, relativeTime } from "../../admin/relative-time";
-import { needsYou, TODAY_ROW } from "../../admin/today";
+import { copyHome, needsYou, TODAY_ROW } from "../../admin/today";
 import { trustAlert } from "../../admin/trust";
 
 /** Today's own reads, beside the pulse's: the media check and each queue's count. */
@@ -391,7 +391,7 @@ export default class AdminDashboardPage implements OnInit {
 
   private async loadCopies(): Promise<void> {
     const newest = new Map<string, RecoveryCopy>();
-    for (const copy of await this.recovery.list()) {
+    for (const copy of (await this.recovery.list()).map((found) => copyHome(found))) {
       const seen = newest.get(copy.href);
       if (!seen || copy.at > seen.at) newest.set(copy.href, copy);
     }

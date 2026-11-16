@@ -43,7 +43,7 @@ describe("usagePlace", () => {
       link: "/admin/experience",
     });
     expect(usagePlace("privacy:en")).toEqual({ label: "Privacy (EN)", link: "/admin/legal" });
-    expect(usagePlace("ui:de")).toEqual({ label: "Page copy (DE)", link: "/admin/copy" });
+    expect(usagePlace("ui:de")).toEqual({ label: "Words (DE)", link: "/admin/words" });
     expect(usagePlace("something:else")).toEqual({ label: "something:else", link: null });
   });
 });

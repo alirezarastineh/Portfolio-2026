@@ -8,7 +8,6 @@ import {
   inject,
   OnInit,
   signal,
-  viewChild,
 } from "@angular/core";
 import type { RouteMeta } from "@analogjs/router";
 import { FormsModule } from "@angular/forms";
@@ -18,7 +17,6 @@ import { lucidePlus, lucideTrash2 } from "@ng-icons/lucide";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmInput } from "@spartan-ng/helm/input";
-import { HlmSeparator } from "@spartan-ng/helm/separator";
 import { HlmSwitch } from "@spartan-ng/helm/switch";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
@@ -32,7 +30,7 @@ import {
 } from "../../admin/admin-api.service";
 import { countChangedFields } from "../../admin/changed-fields";
 import { EditorLayoutComponent } from "../../admin/components/editor-layout.component";
-import { withSkills, withUi, type LiveCompose } from "../../admin/preview/live-content";
+import { withSkills, type LiveCompose } from "../../admin/preview/live-content";
 import { LivePreviewToggleComponent } from "../../admin/preview/live-preview-toggle.component";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import {
@@ -51,20 +49,11 @@ import {
   SortableRowDirective,
 } from "../../admin/components/sortable-list.component";
 import { StringListComponent } from "../../admin/components/string-list.component";
-import {
-  UiGroupEditorComponent,
-  type UiFieldDef,
-} from "../../admin/components/ui-group-editor.component";
 import { ChangedElsewhere } from "../../admin/changed-elsewhere";
 import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
 import { RecoveryService } from "../../admin/recovery.service";
 import { toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
 import type { Locale } from "../../content/schema";
-
-const HEADING_FIELDS: UiFieldDef[] = [
-  { key: "heading", label: "Section heading" },
-  { key: "subtitle", label: "Section subtitle" },
-];
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
@@ -88,7 +77,6 @@ function toInput(row: SkillRow): SkillInput {
     HlmBadge,
     HlmButton,
     HlmInput,
-    HlmSeparator,
     AdminPageHeaderComponent,
     EditorLayoutComponent,
     FormSkeletonComponent,
@@ -102,7 +90,6 @@ function toInput(row: SkillRow): SkillInput {
     SortableListComponent,
     SortableRowDirective,
     StringListComponent,
-    UiGroupEditorComponent,
   ],
   viewProviders: [provideIcons({ lucidePlus, lucideTrash2 })],
   host: { class: "block" },
@@ -111,22 +98,11 @@ function toInput(row: SkillRow): SkillInput {
       <div class="flex flex-col gap-6 pb-28">
         <app-page-header
           title="Skills"
-          description="The Skills section's heading, and its groups in the order the home page shows them, two columns wide. One Save covers both."
+          description="The Skills section's groups in the order the home page shows them, two columns wide. The section's heading is in Words."
           preview="/admin/preview/en#skills"
         >
           <app-live-preview-toggle headerActions />
         </app-page-header>
-
-        <app-ui-group-editor
-          group="skills"
-          title="Heading"
-          description="The Skills section's heading on the home page; the search palette, the console and the assistant name the section by it."
-          [fields]="headingFields"
-          [saveBar]="false"
-          [level]="2"
-        />
-
-        <hlm-separator />
 
         <header class="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -263,13 +239,11 @@ export default class AdminSkillsPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly unsaved = inject(UnsavedChangesService);
   private readonly host = inject(ElementRef<HTMLElement>);
-  private readonly heading = viewChild.required(UiGroupEditorComponent);
   private readonly versions = new ChangedElsewhere(this.confirm, async () => {
     const list = await this.api.listSkills();
     return list.ok ? list.data.skills : null;
   });
 
-  protected readonly headingFields = HEADING_FIELDS;
   protected readonly view = signal<LocaleView>("both");
 
   protected readonly rows = signal<SkillRow[]>([]);
@@ -278,7 +252,7 @@ export default class AdminSkillsPage implements OnInit {
   protected readonly loading = signal(true);
   /** The API's reason when the cards did not arrive. */
   protected readonly loadError = signal<string | null>(null);
-  private readonly savingCards = signal(false);
+  protected readonly saving = signal(false);
   /** Keyed `<card id>.<path of the skill input>`. */
   private readonly issues = new FieldIssues();
 
@@ -292,28 +266,24 @@ export default class AdminSkillsPage implements OnInit {
       .map((row) => row.id);
   });
 
-  protected readonly dirty = computed(() => this.changedIds().length > 0 || this.heading().dirty());
+  protected readonly dirty = computed(() => this.changedIds().length > 0);
 
-  /** The section as it would be published: these cards, in this order, under this heading. */
+  /** The section as it would be published: these cards, in this order. */
   protected readonly livePreview = computed<LiveCompose | null>(() => {
     if (this.loading() || this.loadError()) return null;
     const rows = this.rows();
-    const heading = this.heading().value();
-    return (base, locale) =>
-      withUi(withSkills(base, locale, rows), locale, heading ? { skills: heading } : {});
+    return (base, locale) => withSkills(base, locale, rows);
   });
 
-  /** Changed fields across the cards, plus the heading's. */
+  /** Changed fields across the cards. */
   protected readonly changes = computed(() => {
     const saved = this.saved();
-    const cards = this.rows().reduce((sum, row) => {
+    return this.rows().reduce((sum, row) => {
       const before = saved.get(row.id);
       return sum + (before ? countChangedFields(toInput(before), toInput(row)) : 0);
     }, 0);
-    return cards + this.heading().changes();
   });
-  protected readonly saving = computed(() => this.savingCards() || this.heading().saving());
-  protected readonly problems = computed(() => this.issues.count() + this.heading().problems());
+  protected readonly problems = computed(() => this.issues.count());
 
   constructor() {
     effect(() => this.unsaved.set("skills", this.changedIds().length > 0));
@@ -406,17 +376,13 @@ export default class AdminSkillsPage implements OnInit {
     const saved = this.saved();
     this.rows.update((list) => list.map((row) => structuredClone(saved.get(row.id) ?? row)));
     this.issues.clear();
-    const undoHeading = this.heading().discard();
-    toastDiscarded(() => {
-      this.rows.set(edits);
-      undoHeading();
-    });
+    toastDiscarded(() => this.rows.set(edits));
   }
 
-  /** Every changed card, then the heading. A card that fails keeps its edits. */
+  /** Every changed card. A card that fails keeps its edits. */
   protected async save(): Promise<void> {
     if (this.saving()) return;
-    this.savingCards.set(true);
+    this.saving.set(true);
 
     const changedRows = this.changedIds()
       .map((id) => this.rows().find((r) => r.id === id))
@@ -424,7 +390,7 @@ export default class AdminSkillsPage implements OnInit {
 
     const ids = changedRows.map((row) => row.id);
     if (!(await this.versions.mayOverwrite(ids, "A card on this page"))) {
-      this.savingCards.set(false);
+      this.saving.set(false);
       return;
     }
     const results = await Promise.all(
@@ -451,7 +417,7 @@ export default class AdminSkillsPage implements OnInit {
       }
       return next;
     });
-    this.savingCards.set(false);
+    this.saving.set(false);
 
     if (failed.length > 0) {
       this.issues.set(
@@ -467,7 +433,7 @@ export default class AdminSkillsPage implements OnInit {
       return;
     }
     this.issues.clear();
-    if (await this.heading().save()) toast.success("Draft saved");
+    toast.success("Draft saved");
   }
 
   protected async add(): Promise<void> {

@@ -165,6 +165,18 @@ export function needsYou(facts: TodayFacts, now = Date.now()): TodayRow[] {
 }
 
 /**
+ * Where a copy comes back now: its editor's page, which moved for some since they were typed (the
+ * label sections, Contact copy and Page copy to Words, U12; Socials to Profile, U11).
+ */
+export function copyHome<T extends { editor: string; page: string; href: string }>(copy: T): T {
+  if (copy.editor === "socials") return { ...copy, page: "Profile", href: "/admin/hero" };
+  if (copy.editor.startsWith("ui:") && copy.editor !== "ui:about") {
+    return { ...copy, page: "Words", href: "/admin/words" };
+  }
+  return copy;
+}
+
+/**
  * A row of Today's lists: words, when, the action; two lines on a phone. One link or button,
  * so the whole row is the target. Shared by Needs you and Before launch.
  */

@@ -38,8 +38,8 @@ export const RAIL: NavGroup[] = [
         label: "Profile",
         icon: "lucideSquareUser",
         preview: "#hero",
-        // The labels until Words takes them (U12); the links since Socials folded in (U11).
-        content: ["identity", "ui.profile", "ui.hero", "ui.nav", "socials"],
+        // The links since Socials folded in (U11).
+        content: ["identity", "ui.profile", "socials"],
       },
       {
         path: "/admin/about",
@@ -52,9 +52,26 @@ export const RAIL: NavGroup[] = [
       { path: "/admin/experience", label: "Experience", icon: "lucideSignpost" },
       { path: "/admin/skills", label: "Skills", icon: "lucideLayers" },
       { path: "/admin/writing", label: "Writing", icon: "lucideNewspaper" },
-      // Both until Words holds their fields (U12).
-      { path: "/admin/contact", label: "Contact copy", icon: "lucideSend" },
-      { path: "/admin/copy", label: "Page copy", icon: "lucidePenLine" },
+      // Every `ui` group but Profile's and About's (U12): Contact copy, Page copy and the labels.
+      {
+        path: "/admin/words",
+        label: "Words",
+        icon: "lucidePenLine",
+        content: [
+          "ui.nav",
+          "ui.hero",
+          "ui.contact",
+          "ui.projects",
+          "ui.projectCard",
+          "ui.caseStudy",
+          "ui.skills",
+          "ui.experience",
+          "ui.writing",
+          "ui.legal",
+          "ui.notFound",
+          "ui.ask",
+        ],
+      },
       { path: "/admin/legal", label: "Legal", icon: "lucideScale" },
       { path: "/admin/seo", label: "SEO & sharing", icon: "lucideShare2", content: ["seo"] },
       { path: "/admin/media", label: "Media", icon: "lucideImages" },

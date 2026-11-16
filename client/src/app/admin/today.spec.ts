@@ -6,7 +6,7 @@ import type { ReviewQueue } from "./assistant-types";
 import type { FaqProposal } from "./faq-proposals";
 import type { JournalView } from "./journal";
 import type { LessonsView } from "./lessons";
-import { needsYou, type TodayFacts } from "./today";
+import { copyHome, needsYou, type TodayFacts } from "./today";
 
 const HOUR_AGO = new Date(Date.now() - 3_600_000).toISOString();
 
@@ -132,5 +132,30 @@ describe("Today's Needs you", () => {
     expect(
       needsYou({ ...NONE, messages: null, reviews: null, journal: null, lessons: null }),
     ).toEqual([]);
+  });
+});
+
+describe("a recovery copy's page", () => {
+  const copy = (editor: string, page: string, href: string) => ({ editor, page, href, at: 1 });
+
+  it("follows its editor to where it moved: the old label pages to Words, Socials to Profile", () => {
+    expect(copyHome(copy("ui:contact", "Contact copy", "/admin/contact"))).toMatchObject({
+      page: "Words",
+      href: "/admin/words",
+    });
+    expect(copyHome(copy("ui:caseStudy", "Page copy", "/admin/copy")).href).toBe("/admin/words");
+    // A label section of a page that stays: its words come back on Words, not there.
+    expect(copyHome(copy("ui:skills", "Skills", "/admin/skills")).href).toBe("/admin/words");
+    expect(copyHome(copy("socials", "Socials", "/admin/socials"))).toMatchObject({
+      page: "Profile",
+      href: "/admin/hero",
+    });
+  });
+
+  it("stays on its own page otherwise", () => {
+    const about = copy("ui:about", "About", "/admin/about");
+    expect(copyHome(about)).toBe(about);
+    const project = copy("project", "project-one · Work", "/admin/projects/project-one");
+    expect(copyHome(project)).toBe(project);
   });
 });

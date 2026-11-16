@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@angular/core";
-import type { RouteMeta } from "@analogjs/router";
 import { Router, RouterLink } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucidePencil, lucidePlus, lucideTrash2 } from "@ng-icons/lucide";
@@ -8,7 +7,6 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { RecoveryService } from "../../../admin/recovery.service";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
-import { HlmSeparator } from "@spartan-ng/helm/separator";
 
 import { AdminApiService, type PostListRow } from "../../../admin/admin-api.service";
 import { createBlankPost } from "../../../admin/create-entities";
@@ -18,25 +16,6 @@ import {
   LoadErrorComponent,
 } from "../../../admin/components/load-state.component";
 import { AdminPageHeaderComponent } from "../../../admin/components/page-header.component";
-import {
-  UiGroupEditorComponent,
-  type UiFieldDef,
-} from "../../../admin/components/ui-group-editor.component";
-import { unsavedChangesGuard } from "../../../admin/unsaved-changes.service";
-
-const COPY_FIELDS: UiFieldDef[] = [
-  { key: "heading", label: "Section heading" },
-  { key: "subtitle", label: "Section subtitle" },
-  { key: "readingTime", label: "Reading time (keep {n})" },
-  { key: "allPosts", label: "“All posts” link" },
-  { key: "empty", label: "When nothing is published" },
-  { key: "rss", label: "RSS link label" },
-  { key: "published", label: "“Published” label" },
-  { key: "updated", label: "“Updated” label" },
-  { key: "tags", label: "“Tags” label" },
-];
-
-export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
 @Component({
   selector: "app-admin-writing",
@@ -46,16 +25,14 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
     FormSkeletonComponent,
     HlmBadge,
     HlmButton,
-    HlmSeparator,
     LoadErrorComponent,
     NgIcon,
     RouterLink,
-    UiGroupEditorComponent,
   ],
   viewProviders: [provideIcons({ lucidePencil, lucidePlus, lucideTrash2 })],
   host: { class: "block" },
   template: `
-    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
+    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
       <app-page-header
         title="Writing"
         description="Posts appear once they are published, their date has passed, and the site has been published after that."
@@ -109,16 +86,6 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           }
         </ul>
       }
-
-      <hlm-separator />
-
-      <app-ui-group-editor
-        group="writing"
-        title="Writing copy"
-        description="Labels on the writing index and around each post."
-        [fields]="copyFields"
-        [level]="2"
-      />
     </div>
   `,
 })
@@ -128,7 +95,6 @@ export default class AdminWritingPage implements OnInit {
   private readonly recovery = inject(RecoveryService);
   private readonly router = inject(Router);
 
-  protected readonly copyFields = COPY_FIELDS;
   protected readonly rows = signal<PostListRow[]>([]);
   protected readonly loading = signal(true);
   /** The API's reason when the list did not arrive. */

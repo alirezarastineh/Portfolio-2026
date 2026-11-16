@@ -40,7 +40,7 @@ export function usagePlace(raw: string): UsagePlace {
     case "seo":
       return { label: `Search and sharing (${name.toUpperCase()})`, link: "/admin/seo" };
     case "ui":
-      return { label: `Page copy (${name.toUpperCase()})`, link: "/admin/copy" };
+      return { label: `Words (${name.toUpperCase()})`, link: "/admin/words" };
     default:
       return { label: raw, link: null };
   }

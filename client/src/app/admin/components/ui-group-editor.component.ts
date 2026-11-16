@@ -1,4 +1,3 @@
-import { NgTemplateOutlet } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
@@ -11,8 +10,6 @@ import {
   signal,
 } from "@angular/core";
 import { FormBuilder, FormControl, ReactiveFormsModule } from "@angular/forms";
-import { toast } from "@spartan-ng/brain/sonner";
-import { HlmSeparator } from "@spartan-ng/helm/separator";
 
 import { ConfirmService } from "./confirm-dialog.component";
 
@@ -34,11 +31,10 @@ import { UnsavedChangesService } from "../unsaved-changes.service";
 import { isLocale } from "../../content/locale";
 import type { Locale } from "../../content/schema";
 import { BilingualFieldComponent } from "./bilingual-field.component";
-import { LocaleToggleComponent, SaveBarComponent } from "./editor-chrome.component";
+import { LocaleToggleComponent } from "./editor-chrome.component";
 import { EditorHeaderComponent } from "./editor-header.component";
-import { FieldPairComponent, type LocaleView } from "./field-pair.component";
+import type { LocaleView } from "./field-pair.component";
 import { FormSkeletonComponent, LoadErrorComponent } from "./load-state.component";
-import { AdminPageHeaderComponent } from "./page-header.component";
 
 export interface UiFieldDef {
   key: string;
@@ -52,7 +48,7 @@ export interface UiFieldDef {
   softMax?: number;
   /** Offer the AI copilot (default on); off for codes and tokens. */
   ai?: boolean;
-  /** In the editor look: the section the field sits in, by its heading; fields in a row share one. */
+  /** The section the field sits in, by its heading; fields in a row share one. */
   section?: string;
 }
 
@@ -65,207 +61,107 @@ interface UiSection {
 }
 
 /**
- * Drives any editor over a single group of the `ui` translation document.
- *
- * About, Contact and the section headings differ only by which fields they
- * show, so they are configuration rather than three near-identical pages.
- *
- * With `[saveBar]="false"` it leaves saving to the page that holds it (which
- * calls `save()` / `discard()` and reads `dirty()`), so a page editing a `ui`
- * group next to something else still has one save bar.
- *
- * `look="editor"` is the redesigned editor (plan 5, U10): the editor header, the bilingual
- * fields with the change trace in sections, the outline with its dots. About's; the other groups
- * keep the page header and the save bar until their Parts move them.
+ * The editor over one group of the `ui` translation document (plan 5, U10): the editor header,
+ * the bilingual fields with the change trace in sections, the outline with its dots. About's; Words
+ * holds every other group but Profile's (U12).
  */
 @Component({
   selector: "app-ui-group-editor",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    AdminPageHeaderComponent,
     BilingualFieldComponent,
     EditorHeaderComponent,
     EditorLayoutComponent,
-    FieldPairComponent,
     FormSkeletonComponent,
-    HlmSeparator,
     LivePreviewToggleComponent,
     LoadErrorComponent,
     LocaleToggleComponent,
-    NgTemplateOutlet,
     ReactiveFormsModule,
-    SaveBarComponent,
   ],
   host: { class: "block" },
   template: `
-    @if (look() === "editor") {
-      <app-editor-layout
-        [anchor]="live() ?? 'hero'"
-        [compose]="livePreview()"
-        [view]="shownView()"
-        [outline]="outline()"
-      >
-        <div class="flex flex-col gap-6">
-          <app-editor-header
-            [title]="title()"
-            [changes]="changes()"
-            [saving]="saving()"
-            [problems]="problems()"
-            [notLive]="notLive()"
-            (save)="save()"
-            (discard)="discard()"
-          >
-            <app-locale-toggle
-              class="max-md:order-first"
-              [view]="shownView()"
-              [both]="wide()"
-              (viewChange)="choose($event)"
-            />
-            @if (live()) {
-              <app-live-preview-toggle />
-            }
-          </app-editor-header>
-
-          @if (loading()) {
-            <app-form-skeleton [rows]="skeletonRows()" />
-          } @else if (!loaded()) {
-            <app-load-error (retry)="reload()" />
-          } @else {
-            <form [formGroup]="form" class="flex flex-col gap-10">
-              @for (section of sections(); track section.id) {
-                <section
-                  class="flex flex-col gap-6"
-                  [id]="section.id"
-                  [attr.aria-labelledby]="section.id + '-title'"
-                >
-                  <h2 class="m-0 text-section-title" [id]="section.id + '-title'">
-                    {{ section.title }}
-                  </h2>
-                  @if (shownView() === "both") {
-                    <div
-                      class="-mb-4 grid grid-cols-2 gap-3 text-hint text-muted-foreground"
-                      aria-hidden="true"
-                    >
-                      <span>English</span><span>German</span>
-                    </div>
-                  }
-                  @for (field of section.fields; track field.key) {
-                    <app-bilingual-field
-                      [id]="group() + '-' + field.key"
-                      [label]="field.label"
-                      [hint]="field.hint ?? ''"
-                      [multiline]="field.multiline ?? false"
-                      [rows]="field.rows ?? 3"
-                      [maxLength]="field.maxLength ?? 0"
-                      [softMax]="field.softMax ?? 0"
-                      [ai]="field.ai ?? true"
-                      [view]="shownView()"
-                      [state]="trace()[field.key] ?? 'live'"
-                      [live]="liveTexts()[field.key] ?? null"
-                      [controlEn]="control('en', field.key)"
-                      [controlDe]="control('de', field.key)"
-                    />
-                  }
-                </section>
-              }
-            </form>
+    <app-editor-layout
+      [anchor]="live() ?? 'hero'"
+      [compose]="livePreview()"
+      [view]="shownView()"
+      [outline]="outline()"
+    >
+      <div class="flex flex-col gap-6">
+        <app-editor-header
+          [title]="title()"
+          [changes]="changes()"
+          [saving]="saving()"
+          [problems]="problems()"
+          [notLive]="notLive()"
+          [savedAt]="savedAt()"
+          (save)="save()"
+          (discard)="discard()"
+        >
+          <app-locale-toggle
+            class="max-md:order-first"
+            [view]="shownView()"
+            [both]="wide()"
+            (viewChange)="choose($event)"
+          />
+          @if (live()) {
+            <app-live-preview-toggle />
           }
-        </div>
-      </app-editor-layout>
-    } @else if (level() === 1) {
-      <!-- As the page: in the editor frame, with its live preview when it has one. -->
-      <app-editor-layout [anchor]="live() ?? 'hero'" [compose]="livePreview()" [view]="view()">
-        <ng-container *ngTemplateOutlet="body" />
-      </app-editor-layout>
-    } @else {
-      <ng-container *ngTemplateOutlet="body" />
-    }
-
-    <ng-template #body>
-      <div
-        class="flex flex-col gap-6"
-        [class]="level() === 1 ? (saveBar() ? 'pb-24' : '') : 'mx-auto max-w-4xl'"
-      >
-        @if (level() === 1) {
-          <app-page-header
-            [title]="title()"
-            [description]="description()"
-            [preview]="preview()"
-            [(view)]="view"
-          >
-            @if (live()) {
-              <app-live-preview-toggle headerActions />
-            }
-          </app-page-header>
-        } @else {
-          <header class="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2 class="m-0 text-section-title">{{ title() }}</h2>
-              @if (description()) {
-                <p class="m-0 mt-1 text-sm text-muted-foreground">{{ description() }}</p>
-              }
-            </div>
-            <app-locale-toggle [(view)]="view" />
-          </header>
-        }
+        </app-editor-header>
 
         @if (loading()) {
           <app-form-skeleton [rows]="skeletonRows()" />
         } @else if (!loaded()) {
           <app-load-error (retry)="reload()" />
         } @else {
-          <form [formGroup]="form" class="flex flex-col gap-6">
-            @for (field of shown(); track field.key; let last = $last) {
-              <app-field-pair
-                [id]="group() + '-' + field.key"
-                [label]="field.label"
-                [hint]="field.hint ?? ''"
-                [multiline]="field.multiline ?? false"
-                [rows]="field.rows ?? 3"
-                [maxLength]="field.maxLength ?? 0"
-                [softMax]="field.softMax ?? 0"
-                [ai]="field.ai ?? true"
-                [view]="view()"
-                [controlEn]="control('en', field.key)"
-                [controlDe]="control('de', field.key)"
-              />
-              @if (!last) {
-                <hlm-separator />
-              }
+          <form [formGroup]="form" class="flex flex-col gap-10">
+            @for (section of sections(); track section.id) {
+              <section
+                class="flex flex-col gap-6"
+                [id]="section.id"
+                [attr.aria-labelledby]="section.id + '-title'"
+              >
+                <h2 class="m-0 text-section-title" [id]="section.id + '-title'">
+                  {{ section.title }}
+                </h2>
+                @if (shownView() === "both") {
+                  <div
+                    class="-mb-4 grid grid-cols-2 gap-3 text-hint text-muted-foreground"
+                    aria-hidden="true"
+                  >
+                    <span>English</span><span>German</span>
+                  </div>
+                }
+                @for (field of section.fields; track field.key) {
+                  <app-bilingual-field
+                    [id]="group() + '-' + field.key"
+                    [label]="field.label"
+                    [hint]="field.hint ?? ''"
+                    [multiline]="field.multiline ?? false"
+                    [rows]="field.rows ?? 3"
+                    [maxLength]="field.maxLength ?? 0"
+                    [softMax]="field.softMax ?? 0"
+                    [ai]="field.ai ?? true"
+                    [view]="shownView()"
+                    [state]="trace()[field.key] ?? 'live'"
+                    [live]="liveTexts()[field.key] ?? null"
+                    [controlEn]="control('en', field.key)"
+                    [controlDe]="control('de', field.key)"
+                  />
+                }
+              </section>
             }
           </form>
-
-          @if (saveBar()) {
-            <app-save-bar
-              [dirty]="dirty()"
-              [saving]="saving()"
-              [problems]="problems()"
-              [changes]="changes()"
-              [previewHref]="preview()"
-              (save)="save()"
-              (discard)="discard()"
-            />
-          }
         }
       </div>
-    </ng-template>
+    </app-editor-layout>
   `,
 })
 export class UiGroupEditorComponent implements OnInit {
   readonly group = input.required<UiGroup>();
   readonly title = input.required<string>();
-  readonly description = input("");
   readonly fields = input.required<UiFieldDef[]>();
-  /** Off when the page holding this editor saves it along with its own. */
-  readonly saveBar = input(true);
-  /** 1 when this editor is the page (or tops it); 2 below the page's own heading. */
-  readonly level = input<1 | 2>(1);
-  /** At level 1: where the page header's Preview opens the draft. */
-  readonly preview = input<string | null>(null);
-  /** At level 1: the home page section the group fills, for the live preview; none, no preview. */
+  /** The home page section the group fills, for the live preview; none, no preview. */
   readonly live = input<string | null>(null);
-  /** "editor": the redesigned editor (plan 5, U10); "page": the page header and the save bar. */
-  readonly look = input<"page" | "editor">("page");
 
   /** The section with the unsaved copy over the draft's. */
   protected readonly livePreview = computed<LiveCompose | null>(() => {
@@ -303,6 +199,8 @@ export class UiGroupEditorComponent implements OnInit {
   protected readonly loading = signal(true);
   protected readonly loaded = signal(false);
   readonly saving = signal(false);
+  /** When this editor last saved, for the header's "Saved 14:02". */
+  protected readonly savedAt = signal<number | null>(null);
   private readonly revision = signal(0);
 
   private updatedAt: string | null = null;
@@ -340,7 +238,7 @@ export class UiGroupEditorComponent implements OnInit {
     return countServerErrors(this.form);
   });
 
-  /** The editor look's sections, in field order: consecutive fields with one heading share one. */
+  /** The sections, in field order: consecutive fields with one heading share one. */
   protected readonly sections = computed(() => {
     const sections: UiSection[] = [];
     for (const field of this.shown()) {
@@ -423,7 +321,7 @@ export class UiGroupEditorComponent implements OnInit {
   // and a quick answer (a background tab delays that frame) read `fields` before it had a value
   // (NG0950). By ngOnInit every input is bound.
   ngOnInit(): void {
-    const stored = this.look() === "editor" ? storedView(this.group()) : null;
+    const stored = storedView(this.group());
     if (stored) this.view.set(stored);
     void this.load();
   }
@@ -470,7 +368,7 @@ export class UiGroupEditorComponent implements OnInit {
     this.loaded.set(true);
   }
 
-  /** Returns the way back; with its own save bar, the toast offers it too. */
+  /** Back to what is saved; the toast's Undo brings the edits back. */
   discard(): () => void {
     if (!this.pristine || !this.baseline) return () => undefined;
     const edits = this.form.getRawValue();
@@ -482,7 +380,7 @@ export class UiGroupEditorComponent implements OnInit {
       this.form.setValue(edits);
       this.form.markAsDirty();
     };
-    if (this.saveBar()) toastDiscarded(undo);
+    toastDiscarded(undo);
     return undo;
   }
 
@@ -531,13 +429,12 @@ export class UiGroupEditorComponent implements OnInit {
     this.form.markAsPristine();
     this.baseline = raw;
     const now = Date.now();
+    this.savedAt.set(now);
     this.savedHere.update(
       (saved) => new Map([...saved, ...changed.map((key) => [key, now] as const)]),
     );
     this.revision.update((v) => v + 1);
     this.unsaved.clear(`ui:${this.group()}`);
-    // The editor look says so in its header, where Save is.
-    if (this.saveBar() && this.look() === "page") toast.success("Draft saved");
     return true;
   }
 
@@ -549,7 +446,7 @@ export class UiGroupEditorComponent implements OnInit {
       .filter((key) => raw.en[key] !== before?.en[key] || raw.de[key] !== before?.de[key]);
   }
 
-  /** The editor look's language view, remembered for this group in this browser. */
+  /** The language view, remembered for this group in this browser. */
   protected choose(view: LocaleView): void {
     this.view.set(view);
     storeView(this.group(), view);
@@ -560,6 +457,6 @@ export class UiGroupEditorComponent implements OnInit {
     const shown = this.shownView();
     const hidden = locales.find((l): l is Locale => isLocale(l) && shown !== "both" && l !== shown);
     // One language at a time on a narrow editor: the one with the problem.
-    if (hidden) this.view.set(this.look() === "editor" && !this.wide() ? hidden : "both");
+    if (hidden) this.view.set(this.wide() ? "both" : hidden);
   }
 }

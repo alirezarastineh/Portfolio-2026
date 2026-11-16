@@ -7,7 +7,6 @@ import {
   inject,
   OnInit,
   signal,
-  viewChild,
 } from "@angular/core";
 import type { RouteMeta } from "@analogjs/router";
 import { FormsModule } from "@angular/forms";
@@ -45,14 +44,10 @@ import {
   SortableRowDirective,
 } from "../../admin/components/sortable-list.component";
 import { StringListComponent } from "../../admin/components/string-list.component";
-import {
-  UiGroupEditorComponent,
-  type UiFieldDef,
-} from "../../admin/components/ui-group-editor.component";
 import { EditorLayoutComponent } from "../../admin/components/editor-layout.component";
 import { ChangedElsewhere } from "../../admin/changed-elsewhere";
 import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
-import { withExperiences, withUi, type LiveCompose } from "../../admin/preview/live-content";
+import { withExperiences, type LiveCompose } from "../../admin/preview/live-content";
 import { LivePreviewComponent } from "../../admin/preview/live-preview.component";
 import { LivePreviewToggleComponent } from "../../admin/preview/live-preview-toggle.component";
 import { LivePreviewService } from "../../admin/preview/live-preview.service";
@@ -63,23 +58,6 @@ import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-
 import type { Locale } from "../../content/schema";
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
-
-const COPY_FIELDS: UiFieldDef[] = [
-  { key: "heading", label: "Section heading" },
-  { key: "subtitle", label: "Section subtitle" },
-  { key: "work", label: "Group — work" },
-  { key: "education", label: "Group — education" },
-  { key: "certifications", label: "Group — certifications" },
-  { key: "present", label: "“Present” (an open end date)" },
-  { key: "credential", label: "Credential link label" },
-  { key: "years", label: "Years (keep {n})" },
-  { key: "months", label: "Months (keep {n})" },
-  { key: "fullTime", label: "Full-time" },
-  { key: "partTime", label: "Part-time" },
-  { key: "contract", label: "Contract" },
-  { key: "freelance", label: "Freelance" },
-  { key: "internship", label: "Internship" },
-];
 
 const KINDS: { value: ExperienceInput["kind"]; label: string }[] = [
   { value: "work", label: "Work" },
@@ -148,7 +126,6 @@ function blankDraft(): Draft {
     SortableListComponent,
     SortableRowDirective,
     StringListComponent,
-    UiGroupEditorComponent,
   ],
   viewProviders: [provideIcons({ lucidePencil, lucidePlus, lucideTrash2 })],
   host: { class: "block" },
@@ -223,16 +200,6 @@ function blankDraft(): Draft {
             </ng-template>
           </app-sortable-list>
         }
-
-        <hlm-separator />
-
-        <app-ui-group-editor
-          group="experience"
-          title="Timeline copy"
-          description="The section's heading and the labels around each entry."
-          [fields]="copyFields"
-          [level]="2"
-        />
       </div>
     </app-editor-layout>
 
@@ -510,7 +477,6 @@ export default class AdminExperiencePage implements OnInit {
     return list.ok ? list.data.experiences : null;
   });
 
-  protected readonly copyFields = COPY_FIELDS;
   protected readonly kinds = KINDS;
   protected readonly employment = EMPLOYMENT;
   protected readonly locales: Locale[] = ["en", "de"];
@@ -544,23 +510,16 @@ export default class AdminExperiencePage implements OnInit {
   });
 
   private readonly preview = inject(LivePreviewService);
-  private readonly copy = viewChild(UiGroupEditorComponent);
   protected readonly hiddenNote = "Hidden on the site: shown here so you can check it.";
 
   /** The entry sheet carries its own preview while the preview is on (the sheet covers the page's). */
   protected readonly sheetPreview = computed(() => this.preview.open() && this.preview.wide());
 
-  /** The timeline as it would be published: the list, the timeline copy and the open entry. */
+  /** The timeline as it would be published: the list and the open entry. */
   private compose(open: Draft | null): LiveCompose | null {
     if (this.loading() || this.loadError()) return null;
     const rows = this.rows();
-    const copy = this.copy()?.value() ?? null;
-    return (base, locale, media) =>
-      withUi(
-        withExperiences(base, locale, rows, open, media),
-        locale,
-        copy ? { experience: copy } : {},
-      );
+    return (base, locale, media) => withExperiences(base, locale, rows, open, media);
   }
 
   protected readonly livePreview = computed(() => this.compose(this.draft()));

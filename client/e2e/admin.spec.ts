@@ -30,8 +30,7 @@ const RAIL = [
   ["Experience", "/admin/experience"],
   ["Skills", "/admin/skills"],
   ["Writing", "/admin/writing"],
-  ["Contact copy", "/admin/contact"],
-  ["Page copy", "/admin/copy"],
+  ["Words", "/admin/words"],
   ["Legal", "/admin/legal"],
   ["SEO & sharing", "/admin/seo"],
   ["Media", "/admin/media"],
@@ -5348,9 +5347,9 @@ test.describe("never losing work", () => {
     baseURL,
   }) => {
     await fakeApi(page, baseURL, {
-      // Three groups load on opening; the fourth read is the check after the 409.
+      // Profile's one group loads on opening; the second read is the check after the 409.
       "GET /admin/sections/ui": (n: number) =>
-        n <= 3 ? uiAsLoaded() : uiChanged("about", "heading", "Elsewhere"),
+        n <= 1 ? uiAsLoaded() : uiChanged("about", "heading", "Elsewhere"),
       "PUT /admin/hero": (n: number) =>
         n === 1 ? STALE : saved({ ok: true, updatedAt: NEWER, profileUpdatedAt: NEWER }),
     });
@@ -6037,7 +6036,6 @@ test.describe("the recovery copy", () => {
     richText("Text (en)", " Now with an address."),
     byId("#legal-title-de", "Anbieterkennung"),
     richText("Text (de)", " Jetzt mit Anschrift."),
-    byId("#legal-nav-en", "Legal notes"),
   ];
   const legalSecond = [
     byId("#legal-title-en", "Your data"),
@@ -6063,7 +6061,7 @@ test.describe("the recovery copy", () => {
     richText("Body (en)", " One more week."),
     byId("#post-seo-title-en", "A search title"),
   ];
-  // Profile (plan 5, U11): the identity row, the profile group, a label behind its closed section, a link.
+  // Profile (plan 5, U11): the identity row, the profile group, a link.
   const profileFields = [
     byId("#name", "Someone Else"),
     byId("#locationCity", "Hamburg"),
@@ -6072,7 +6070,13 @@ test.describe("the recovery copy", () => {
     byName("Link label", "Mastodon"),
     byName("Link URL", "https://example.social/@someone"),
   ];
-  const profileLabel = byId("#hero-downloadCv-de", "Lebenslauf laden");
+  // Words (plan 5, U12): a contact label, Legal's and Profile's labels that moved here, and a long text.
+  const wordsFields = [
+    byId("#contact-submit-de", "Absenden"),
+    byId("#legal-nav-en", "Legal notes"),
+    byId("#hero-downloadCv-de", "Lebenslauf laden"),
+    byId("#caseStudy-ctaBody-en", "Tell me about the project, and I reply within a day."),
+  ];
   const seoFields = [
     byId("#seo-title-en", "A new page title"),
     byId("#seo-description-de", "Eine neue Beschreibung."),
@@ -6164,7 +6168,6 @@ test.describe("the recovery copy", () => {
         "legal||imprint.de.body",
         "legal||privacy.en.title",
         "legal||privacy.en.body",
-        "ui:legal||en.nav",
       ],
       words: [...legalFirst, ...legalSecond].map((field) => field.text),
       edit: async (page) => {
@@ -6187,20 +6190,34 @@ test.describe("the recovery copy", () => {
         "hero||identity.locationCity",
         "hero||copy.profileEn.role",
         "hero||copy.profileDe.heroHeadline",
-        "hero||copy.heroDe.downloadCv",
         "socials|s1|label",
         "socials|s1|href",
       ],
-      words: [...profileFields, profileLabel].map((field) => field.text),
+      words: profileFields.map((field) => field.text),
       edit: async (page) => {
         for (const field of profileFields) await type(page, field);
-        await page.getByRole("button", { name: "Show 10 labels" }).click();
-        await type(page, profileLabel);
       },
       check: async (page) => {
         for (const field of profileFields) await isBack(page, field);
-        // Its closed section opened by itself: the label that came back is in sight.
-        await isBack(page, profileLabel);
+      },
+    },
+    {
+      name: "Words",
+      path: "/admin/words",
+      answers: {},
+      // Under the editor names the old pages used, so their copies come back here.
+      keys: [
+        "ui:contact||de.submit",
+        "ui:legal||en.nav",
+        "ui:hero||de.downloadCv",
+        "ui:caseStudy||en.ctaBody",
+      ],
+      words: wordsFields.map((field) => field.text),
+      edit: async (page) => {
+        for (const field of wordsFields) await type(page, field);
+      },
+      check: async (page) => {
+        for (const field of wordsFields) await isBack(page, field);
       },
     },
     {
@@ -6746,7 +6763,7 @@ test.describe("the recovery copy", () => {
     },
     {
       name: "a ui group",
-      path: "/admin/contact",
+      path: "/admin/words",
       typed: [byId("#contact-heading-de", "Kontakt, neu")],
       keys: ["ui:contact||de.heading"],
     },
@@ -7452,6 +7469,8 @@ test.describe("telling the truth", () => {
     page,
     baseURL,
   }) => {
+    // Seven pages, Words among them: more than one page's time.
+    test.slow();
     await fakeApi(page, baseURL, {
       "GET /admin/skills": { skills: [] },
     });
@@ -7472,12 +7491,10 @@ test.describe("telling the truth", () => {
       }
     }
 
-    // Page copy's groups are tabs: each is read where it shows.
-    await openAdmin(page, "/admin/copy");
-    await page.getByRole("tab", { name: "Project cards" }).click();
+    // Page copy's groups are on Words now, each read where it shows.
+    await openAdmin(page, "/admin/words");
     await expect(page.locator("#projectCard-problem-label")).toBeVisible();
     await expect(page.locator("#projectCard-caseLabel-en")).toHaveCount(0);
-    await page.getByRole("tab", { name: "Assistant" }).click();
     await expect(page.locator("#ask-hint-label")).toHaveText("Hint above the prompt");
     await expect(page.getByText("terminal")).toHaveCount(0);
 
@@ -9309,39 +9326,22 @@ test.describe("Profile and SEO & sharing", () => {
     await expect(traced(page, description)).toHaveAttribute("data-change", "draft");
   });
 
-  test("Profile's labels wait closed, open on a click, and open by themselves for a save's problem", async ({
+  test("Profile's labels went to Words: none here, and its save sends the profile group alone", async ({
     page,
     baseURL,
   }) => {
-    await fakeApi(page, baseURL, {
-      "PUT /admin/hero": () => ({
-        status: 400,
-        body: {
-          error: "invalid",
-          issues: [{ path: ["ui", "hero", "en", "downloadCv"], message: "Keep it shorter." }],
-        },
-      }),
-    });
+    await fakeApi(page, baseURL, { "PUT /admin/hero": saved(HERO_SAVED) });
+    const puts = sent(page, "PUT", "/admin/hero");
     await openAdmin(page, "/admin/hero");
-    const show = page.getByRole("button", { name: "Show 10 labels" });
-    await expect(show).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("#name")).toBeVisible();
+    await expect(page.getByRole("button", { name: /labels/ })).toHaveCount(0);
     await expect(page.locator("#hero-downloadCv-en")).toHaveCount(0);
+    await expect(page.locator("#nav-about-en")).toHaveCount(0);
 
-    await show.click();
-    const hide = page.getByRole("button", { name: "Hide the labels" });
-    await expect(hide).toHaveAttribute("aria-expanded", "true");
-    await expect(page.locator("#hero-downloadCv-en")).toBeVisible();
-    await hide.click();
-    await expect(page.locator("#hero-downloadCv-en")).toHaveCount(0);
-
-    // A save refused for a label: its section opens, and the label takes the focus.
     await page.locator("#name").fill("Someone");
     await save(page).click();
-    await expect(page.locator("#hero-downloadCv-en")).toBeFocused();
-    await expect(page.locator("#hero-downloadCv-en")).toHaveAccessibleDescription(
-      /Keep it shorter/,
-    );
-    await expect(state(page)).toHaveText("1 field needs attention");
+    await expect(state(page)).toHaveText(/^Saved/);
+    expect(Object.keys(puts[0]!["ui"] as object)).toEqual(["profile"]);
   });
 
   test("SEO's set-once values read as text with their source, and Change opens one", async ({
@@ -9424,7 +9424,7 @@ test.describe("Profile and SEO & sharing", () => {
     await expect(page.getByText("cv-english.pdf")).toBeVisible();
   });
 
-  test("Profile and SEO from the keyboard at 1280: the order you see, a link's grip, the labels, Change", async ({
+  test("Profile and SEO from the keyboard at 1280: the order you see, a link's grip, Change", async ({
     page,
     baseURL,
   }) => {
@@ -9454,11 +9454,6 @@ test.describe("Profile and SEO & sharing", () => {
     await tab(links.getByRole("textbox", { name: "Link URL" }));
     await tab(links.getByRole("switch", { name: "Show GitHub on the site" }));
     await tab(links.getByRole("button", { name: "Delete GitHub" }));
-    await tab(page.getByRole("button", { name: "Show 10 labels" }));
-    await page.keyboard.press("Enter");
-    // The labels render on a later tick: a Tab sent sooner leaves the button for what came after it.
-    await expect(page.getByRole("button", { name: "Hide the labels" })).toBeFocused();
-    await tab(page.getByRole("button", { name: /^More actions for Availability line/ }).first());
 
     // SEO: Change takes the focus into its field.
     await openAdmin(page, "/admin/seo");
@@ -9548,8 +9543,7 @@ test.describe("Profile and SEO & sharing", () => {
         });
         await openAdmin(page, editor.path);
         await page.locator(editor.field).fill("Being typed");
-        if (profile) await page.getByRole("button", { name: "Show 10 labels" }).click();
-        else await page.getByRole("button", { name: "Change Author" }).click();
+        if (!profile) await page.getByRole("button", { name: "Change Author" }).click();
         await expect(page.locator(".change-trace[data-change=draft]").first()).toBeVisible();
         await expect(page.locator(".change-trace[data-change=unsaved]").first()).toBeVisible();
         // At the top, as the page scans: scrolled, a target under the sticky header counts as covered.
@@ -9570,6 +9564,714 @@ test.describe("Profile and SEO & sharing", () => {
   }
 });
 
+/** Words (plan 5, U12): every `ui` group but Profile's and About's, in one table with one Save. */
+test.describe("Words", () => {
+  const NEWER = new Date(Date.now() + 60_000).toISOString();
+  const TYPED = "Typed before the session ended";
+  const STALE = { status: 409, body: { error: "stale" } };
+  const saved = (body: unknown = { ok: true, updatedAt: NEWER }) => ({ status: 200, body });
+  const header = (page: Page) => page.locator("app-editor-header");
+  const state = (page: Page) => header(page).getByRole("status").first();
+  const save = (page: Page) => header(page).getByRole("button", { name: "Save", exact: true });
+  const search = (page: Page) => page.getByRole("searchbox", { name: "Find a word" });
+  const group = (page: Page) => page.getByRole("combobox", { name: "Group" });
+  const toggle = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
+  const count = (page: Page) => page.getByText(/^(\d+ of )?\d+ words?$/);
+  const EN = content("en")["ui"] as Record<string, Record<string, string>>;
+  const DE = content("de")["ui"] as Record<string, Record<string, string>>;
+  /** Its twelve groups, and the keys nothing on the site reads: no row, their values in every save. */
+  const GROUPS = [
+    "nav",
+    "hero",
+    "contact",
+    "projects",
+    "projectCard",
+    "caseStudy",
+    "skills",
+    "experience",
+    "writing",
+    "legal",
+    "notFound",
+    "ask",
+  ];
+  const HIDDEN = [
+    "nav.skills",
+    "nav.contact",
+    "projects.subtitle",
+    "skills.subtitle",
+    "experience.subtitle",
+    "projectCard.caseLabel",
+  ];
+  const ROWS = GROUPS.flatMap((g) => Object.keys(EN[g]!).map((k) => `${g}.${k}`)).filter(
+    (row) => !HIDDEN.includes(row),
+  );
+
+  /** The JSON of every request to this method and path, as they go. */
+  function sent(page: Page, method: string, path: string): Record<string, unknown>[] {
+    const bodies: Record<string, unknown>[] = [];
+    page.on("request", (request) => {
+      if (request.method() === method && new URL(request.url()).pathname === path) {
+        bodies.push(request.postDataJSON() as Record<string, unknown>);
+      }
+    });
+    return bodies;
+  }
+
+  /** The `ui` document at a version, with one field changed in English. */
+  const uiAt = (updatedAt: string, change?: [string, string, string]) => {
+    const en = structuredClone(EN);
+    if (change) en[change[0]]![change[1]] = change[2];
+    return saved({ section: "ui", updatedAt, data: { en, de: DE } });
+  };
+
+  /** The review, the same draft and live in both languages. */
+  function review(draft: Record<string, unknown>, live: Record<string, unknown>) {
+    const side = (locale: "en" | "de") => ({
+      locale,
+      issues: [],
+      changed: true,
+      liveVersionId: 12,
+      docs: [],
+      draft,
+      live,
+    });
+    return { canPublish: true, locales: [side("en"), side("de")] };
+  }
+
+  /** Words with its rows in: its chunk, one read and 91 rows, which Firefox under load takes longer than 5 s to show. */
+  async function openWords(page: Page, path = "/admin/words"): Promise<void> {
+    await openAdmin(page, path);
+    await expect(page.locator("#contact-heading-en")).toBeAttached({ timeout: 15_000 });
+  }
+
+  /** Each row's `group.key`, from its label's id; `shown` leaves out what the filters hide. */
+  const rowsOf = (page: Page, shown = false) =>
+    page
+      .locator("app-bilingual-field")
+      .evaluateAll(
+        (fields, only) =>
+          fields
+            .filter((field) => !only || !(field as HTMLElement).hidden)
+            .map((field) => field.querySelector("label")!.id.replace(/-label$/, "")),
+        shown,
+      );
+  const dotted = (ids: string[]) => ids.map((id) => id.replace("-", ".")).sort();
+
+  test("every key of its twelve groups once, the hidden ones out of the table and in the save", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { "PATCH /admin/sections/ui": saved() });
+    const patches = sent(page, "PATCH", "/admin/sections/ui");
+    await openWords(page);
+    await expect(page.locator("#contact-submit-en")).toBeVisible();
+
+    const rows = await rowsOf(page);
+    expect(rows.length, "each row once").toBe(new Set(rows).size);
+    expect(dotted(rows)).toEqual([...ROWS].sort());
+    for (const hidden of HIDDEN) {
+      await expect(page.locator(`#${hidden.replace(".", "-")}-en`)).toHaveCount(0);
+    }
+    await expect(count(page)).toHaveText(`${ROWS.length} words`);
+
+    // Two groups changed: one request, at the version loaded, each group whole with its hidden keys.
+    await page.locator("#nav-about-en").fill("About me");
+    await page.locator("#projectCard-problem-de").fill("Aufgabe");
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved/);
+    expect(patches).toHaveLength(1);
+    expect(Object.keys(patches[0]!["groups"] as object).sort()).toEqual(["nav", "projectCard"]);
+    expect(patches[0]).toMatchObject({
+      updatedAt: HOUR_AGO,
+      groups: {
+        nav: {
+          en: { about: "About me", skills: EN["nav"]!["skills"], contact: EN["nav"]!["contact"] },
+        },
+        projectCard: {
+          de: { problem: "Aufgabe", caseLabel: DE["projectCard"]!["caseLabel"] },
+        },
+      },
+    });
+  });
+
+  test("task 1: Ctrl K, send, Enter lands in the Send button's German, typed over, Ctrl S: four actions under 15 s", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { "PATCH /admin/sections/ui": saved() });
+    const patches = sent(page, "PATCH", "/admin/sections/ui");
+    await openAdmin(page, "/admin");
+    const started = Date.now();
+
+    await page.keyboard.press("Control+k"); // 1
+    const find = page.getByRole("dialog").getByRole("combobox");
+    await expect(find).toBeFocused();
+    await find.fill("send"); // 2: the search, and Enter on its first match
+    await expect(page.getByRole("option", { selected: true })).toHaveAccessibleName(
+      "Contact › Send message",
+    );
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/admin\/words$/);
+    const german = page.locator("#contact-submit-de");
+    await expect(german).toBeFocused();
+    await page.keyboard.type("Absenden"); // 3: the text was selected, so this replaces it
+    await expect(german).toHaveValue("Absenden");
+    await page.keyboard.press("Control+s"); // 4
+    await expect(state(page)).toHaveText(/^Saved \d\d:\d\d/);
+
+    expect(Date.now() - started).toBeLessThan(15_000);
+    expect(patches).toHaveLength(1);
+    expect(patches[0]).toMatchObject({ groups: { contact: { de: { submit: "Absenden" } } } });
+  });
+
+  test("a missing {n} blocks the save and names its row, even under a filter that hides it", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { "PATCH /admin/sections/ui": saved() });
+    const patches = sent(page, "PATCH", "/admin/sections/ui");
+    await openWords(page);
+    const years = page.locator("#experience-years-de");
+
+    await years.fill("Jahre");
+    await group(page).selectOption({ label: "Contact" });
+    await expect(years).toBeHidden();
+    await page.keyboard.press("Control+s");
+
+    await expect(years).toBeFocused();
+    await expect(years).toHaveAccessibleDescription(/Keep \{n\}/);
+    await expect(state(page)).toHaveText("1 field needs attention");
+    await expect(page.locator("[data-sonner-toast]")).toContainText("Experience › Years (German)");
+    await expect(page).not.toHaveURL(/group=/);
+    expect(patches).toHaveLength(0);
+
+    await years.fill("{n} Jahre");
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved/);
+    expect(patches[0]).toMatchObject({ groups: { experience: { de: { years: "{n} Jahre" } } } });
+  });
+
+  test("a label the server refuses takes the focus, with its reason", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL, {
+      "PATCH /admin/sections/ui": () => ({
+        status: 400,
+        body: {
+          error: "invalid",
+          issues: [{ path: ["groups", "hero", "en", "downloadCv"], message: "Keep it shorter." }],
+        },
+      }),
+    });
+    await openWords(page);
+    await page.locator("#hero-downloadCv-en").fill("Download my curriculum vitae as a PDF file");
+    await save(page).click();
+    await expect(page.locator("#hero-downloadCv-en")).toBeFocused();
+    await expect(page.locator("#hero-downloadCv-en")).toHaveAccessibleDescription(
+      /Keep it shorter/,
+    );
+    await expect(state(page)).toHaveText("1 field needs attention");
+  });
+
+  test("filters live in the address: a word, a group, Missing in German, Changed, not saved", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await openWords(page, "/admin/words?q=send");
+    await expect(search(page)).toHaveValue("send");
+    // Its name or a value in either language: the Send button, Sending…, Sent, Send failed.
+    await expect
+      .poll(async () => dotted(await rowsOf(page, true)))
+      .toEqual(
+        [
+          "contact.errorSendFailed",
+          "contact.sending",
+          "contact.submit",
+          "contact.successLine1",
+        ].sort(),
+      );
+    await expect(count(page)).toHaveText(`4 of ${ROWS.length} words`);
+
+    // Read from the address on arrival; a German equal to its English counts as missing.
+    await openWords(page, "/admin/words?group=contact&missing");
+    await expect(group(page)).toHaveValue("contact");
+    await expect(toggle(page, "Missing in German")).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(async () => dotted(await rowsOf(page, true))).toEqual(["contact.labelName"]);
+
+    // Each choice goes into the address.
+    await toggle(page, "Missing in German").click();
+    await expect(toggle(page, "Missing in German")).toHaveAttribute("aria-pressed", "false");
+    await group(page).selectOption({ label: "Footer and legal" });
+    await expect(page).toHaveURL(/[?&]group=footer-and-legal/);
+    await expect(page).not.toHaveURL(/missing/);
+    await expect
+      .poll(async () => dotted(await rowsOf(page, true)))
+      .toEqual(["legal.imprint", "legal.nav", "legal.privacy", "legal.updated"]);
+
+    await group(page).selectOption({ label: "All" });
+    await toggle(page, "Missing in German").click();
+    await expect(page).toHaveURL(/[?&]missing/);
+    const missing = [
+      "contact.labelName",
+      "projectCard.live",
+      "projectCard.problem",
+      "projectCard.repo",
+    ];
+    await expect.poll(async () => dotted(await rowsOf(page, true))).toEqual(missing);
+    // A row being fixed stays until the filters change again.
+    await page.locator("#projectCard-live-de").fill("Live-Demo");
+    expect(dotted(await rowsOf(page, true))).toEqual(missing);
+
+    await toggle(page, "Missing in German").click();
+    await page.locator("#nav-about-en").fill("About me");
+    await toggle(page, "Changed, not saved").click();
+    await expect(page).toHaveURL(/[?&]unsaved/);
+    await expect
+      .poll(async () => dotted(await rowsOf(page, true)))
+      .toEqual(["nav.about", "projectCard.live"]);
+
+    await search(page).fill("zzzz");
+    await expect(page.getByText("No words match these filters.")).toBeVisible();
+    await page.getByRole("button", { name: "Show every word" }).click();
+    await expect(search(page)).toBeFocused();
+    await expect(search(page)).toHaveValue("");
+    await expect(count(page)).toHaveText(`${ROWS.length} words`);
+    await expect(page).toHaveURL(/\/admin\/words$/);
+  });
+
+  test("a filter changed with edits unsaved keeps them, and Save sends them", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { "PATCH /admin/sections/ui": saved() });
+    const patches = sent(page, "PATCH", "/admin/sections/ui");
+    await openWords(page);
+    await page.locator("#contact-submit-de").fill(TYPED);
+    await group(page).selectOption({ label: "Navigation" });
+    await toggle(page, "Missing in German").click();
+    await search(page).fill("about");
+    await expect(page.locator("#contact-submit-de")).toBeHidden();
+    await expect(state(page)).toHaveText("1 unsaved change");
+    // A filter is no navigation away: nothing asks.
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+
+    await search(page).fill("");
+    await toggle(page, "Missing in German").click();
+    await group(page).selectOption({ label: "All" });
+    await expect(page.locator("#contact-submit-de")).toBeVisible();
+    await expect(page.locator("#contact-submit-de")).toHaveValue(TYPED);
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved/);
+    expect(patches[0]).toMatchObject({ groups: { contact: { de: { submit: TYPED } } } });
+  });
+
+  test("a 401 mid-edit opens the sign-in over Words, and the text saves after it", async ({
+    page,
+    baseURL,
+    problems,
+  }) => {
+    let signedIn = false;
+    const unmocked = await fakeApi(page, baseURL, {
+      "PATCH /admin/sections/ui": () =>
+        signedIn ? saved() : { status: 401, body: { error: "unauthenticated" } },
+      "POST /auth/login": () => {
+        signedIn = true;
+        return saved({ ok: true, totpRequired: false, user: USER });
+      },
+    });
+    const patches = sent(page, "PATCH", "/admin/sections/ui");
+    await openWords(page);
+    const field = page.locator("#contact-submit-de");
+    const signIn = page.getByRole("dialog", { name: "Sign in to carry on" });
+
+    await field.fill(TYPED);
+    await save(page).click();
+    await expect(signIn).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/words$/);
+    await expect(
+      page.getByText("Not saved: you were signed out. Sign in, then save again."),
+    ).toBeVisible();
+    await expect(field).toHaveValue(TYPED);
+
+    await signIn.getByLabel("Password").fill("hunter2hunter2");
+    await signIn.getByRole("button", { name: "Sign in" }).click();
+    await expect(signIn).toBeHidden();
+    await expect(field).toHaveValue(TYPED);
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved/);
+    expect(patches).toHaveLength(2);
+    expect(patches[1]).toMatchObject({ groups: { contact: { de: { submit: TYPED } } } });
+    expect(problems.pageErrors).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  for (const [width, height] of [
+    [1280, 720],
+    [390, 844],
+  ] as const) {
+    test(`Words at ${width} px keeps Save and Find a word in view at every scroll, and Ctrl S right after typing saves every word`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.setViewportSize({ width, height });
+      await fakeApi(page, baseURL, { "PATCH /admin/sections/ui": saved() });
+      const patches = sent(page, "PATCH", "/admin/sections/ui");
+      await openWords(page);
+      await expect(page.locator("#contact-submit-en")).toBeVisible();
+      for (const top of [0, 2000, 99_999]) {
+        await page.evaluate((y) => window.scrollTo(0, y), top);
+        await expect(save(page)).toBeInViewport({ ratio: 1 });
+        await expect(search(page)).toBeInViewport({ ratio: 1 });
+      }
+      // The filters scroll away with the page; Find a word and Save stay.
+      await expect(group(page)).not.toBeInViewport();
+
+      await page.locator("#contact-submit-en").fill("Typed and saved at once");
+      await page.keyboard.press("Control+s");
+      await expect(state(page)).toHaveText(/^Saved \d\d:\d\d/);
+      expect(patches).toHaveLength(1);
+      expect(patches[0]).toMatchObject({
+        groups: { contact: { en: { submit: "Typed and saved at once" } } },
+      });
+    });
+  }
+
+  test("Discard, in the header's ⋯, puts the saved words back, and its Undo the edits", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await openWords(page);
+    const send = page.locator("#contact-submit-de");
+    const legal = page.locator("#legal-nav-en");
+    await send.fill("Absenden");
+    await legal.fill("Legal notes");
+    await expect(state(page)).toHaveText("2 unsaved changes");
+
+    await page.getByRole("button", { name: "More actions for Words" }).click();
+    await page.getByRole("menuitem", { name: "Discard 2 changes" }).click();
+    await expect(send).toHaveValue(DE["contact"]!["submit"]!);
+    await expect(legal).toHaveValue(EN["legal"]!["nav"]!);
+
+    await page.locator("[data-sonner-toast]").getByRole("button", { name: "Undo" }).click();
+    await expect(send).toHaveValue("Absenden");
+    await expect(legal).toHaveValue("Legal notes");
+    await expect(state(page)).toHaveText("2 unsaved changes");
+    await expect(save(page)).toBeFocused();
+  });
+
+  test("a 409 from About or Profile saves again on the new version, without asking", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      // About's heading changed in another tab: none of Words' groups did.
+      "GET /admin/sections/ui": (n: number) =>
+        n === 1 ? uiAt(HOUR_AGO) : uiAt(NEWER, ["about", "heading", "Elsewhere"]),
+      "PATCH /admin/sections/ui": (n: number) => (n === 1 ? STALE : saved()),
+    });
+    const patches = sent(page, "PATCH", "/admin/sections/ui");
+    await openWords(page);
+
+    await page.locator("#contact-submit-de").fill(TYPED);
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved/);
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    expect(patches).toHaveLength(2);
+    expect(patches[1]).toMatchObject({
+      updatedAt: NEWER,
+      groups: { contact: { de: { submit: TYPED } } },
+    });
+  });
+
+  test("a 409 on a group of Words asks by its name with the edits kept, and Reload brings that version", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "GET /admin/sections/ui": (n: number) =>
+        n === 1 ? uiAt(HOUR_AGO) : uiAt(NEWER, ["contact", "submit", "Changed in another tab"]),
+      "PATCH /admin/sections/ui": () => STALE,
+    });
+    await openWords(page);
+    await page.locator("#legal-nav-en").fill(TYPED);
+    await save(page).click();
+
+    const ask = page.getByRole("alertdialog");
+    await expect(ask).toContainText("Saved elsewhere");
+    await expect(ask).toContainText("Words in Contact changed in another tab or session.");
+    await expect(page.locator("#legal-nav-en")).toHaveValue(TYPED);
+
+    await ask.getByRole("button", { name: "Reload" }).click();
+    await expect(page.locator("#contact-submit-en")).toHaveValue("Changed in another tab");
+    await expect(page.locator("#legal-nav-en")).toHaveValue(EN["legal"]!["nav"]!);
+  });
+
+  test("Keep my edits after a 409 stays on the table, and the next Save replaces that version", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "GET /admin/sections/ui": (n: number) =>
+        n === 1 ? uiAt(HOUR_AGO) : uiAt(NEWER, ["contact", "submit", "Changed in another tab"]),
+      "PATCH /admin/sections/ui": (n: number) => (n === 1 ? STALE : saved()),
+    });
+    const patches = sent(page, "PATCH", "/admin/sections/ui");
+    await openWords(page);
+
+    await page.locator("#contact-submit-de").fill(TYPED);
+    await save(page).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Keep my edits" }).click();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(page.locator("#contact-submit-de")).toHaveValue(TYPED);
+
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved/);
+    expect(patches).toHaveLength(2);
+    expect(patches[1]).toMatchObject({ updatedAt: NEWER });
+  });
+
+  test("the copies Contact copy, Page copy and a label section left come back on Words, which Today links", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { "PATCH /admin/sections/ui": saved() });
+    const patches = sent(page, "PATCH", "/admin/sections/ui");
+    await openAdmin(page, "/admin/inbox");
+    const at = Date.now() - 60_000;
+    const left = [
+      [
+        "ui:contact",
+        "de.heading",
+        "Kontakt, alt getippt",
+        DE["contact"]!["heading"],
+        "Contact copy",
+        "/admin/contact",
+      ],
+      [
+        "ui:caseStudy",
+        "en.ctaButton",
+        "Talk about it",
+        EN["caseStudy"]!["ctaButton"],
+        "Page copy",
+        "/admin/copy",
+      ],
+      [
+        "ui:skills",
+        "en.heading",
+        "What I use",
+        EN["skills"]!["heading"],
+        "Skills",
+        "/admin/skills",
+      ],
+    ].map(([editor, field, value, base, page, href]) => ({
+      editor,
+      item: "",
+      field,
+      value,
+      base,
+      at,
+      page,
+      href,
+    }));
+    // As the old pages wrote them: the recovery store's own shape, its key the editor, item and field.
+    await page.evaluate(
+      (rows) =>
+        new Promise<void>((resolve, reject) => {
+          const open = indexedDB.open("admin-recovery", 1);
+          open.onupgradeneeded = () =>
+            open.result.createObjectStore("copies", { keyPath: ["editor", "item", "field"] });
+          open.onerror = () => reject(open.error);
+          open.onsuccess = () => {
+            const write = open.result.transaction("copies", "readwrite");
+            for (const row of rows) write.objectStore("copies").put(row);
+            write.oncomplete = () => {
+              open.result.close();
+              resolve();
+            };
+            write.onerror = () => reject(write.error);
+          };
+        }),
+      left,
+    );
+
+    await openAdmin(page, "/admin");
+    const row = page.getByRole("link", { name: /Unsaved edits in Words/ });
+    await expect(row).toHaveAttribute("href", "/admin/words");
+    await expect(page.locator('a[href="/admin/contact"], a[href="/admin/copy"]')).toHaveCount(0);
+    await row.click();
+
+    // Words' chunk, its read and twelve looks into the store come first: under load, Firefox needs more
+    // than a field's usual 5 s (the local cross-browser run, 2026-11-16).
+    await expect(page.locator("#contact-heading-de")).toHaveValue("Kontakt, alt getippt", {
+      timeout: 15_000,
+    });
+    await expect(page.getByRole("status").filter({ hasText: "Unsaved edits from" })).toBeVisible();
+    await expect(page.locator("#caseStudy-ctaButton-en")).toHaveValue("Talk about it");
+    await expect(page.locator("#skills-heading-en")).toHaveValue("What I use");
+    await expect(state(page)).toHaveText("3 unsaved changes");
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved/);
+    expect(Object.keys(patches[0]!["groups"] as object).sort()).toEqual([
+      "caseStudy",
+      "contact",
+      "skills",
+    ]);
+  });
+
+  test("the label sections left five editors and Profile; Contact copy and Page copy are gone", async ({
+    page,
+    baseURL,
+  }) => {
+    // Nine pages: more than one page's time.
+    test.slow();
+    await fakeApi(page, baseURL, { "GET /admin/skills": { skills: [] } });
+    for (const path of ["/admin/contact", "/admin/copy"]) {
+      expect((await page.goto(path))?.status(), path).toBe(404);
+    }
+    for (const [path, id] of [
+      ["/admin/skills", "skills-heading"],
+      ["/admin/projects", "projects-heading"],
+      ["/admin/experience", "experience-years"],
+      ["/admin/writing", "writing-readingTime"],
+      ["/admin/legal", "legal-nav"],
+      ["/admin/hero", "hero-downloadCv"],
+    ] as const) {
+      await openAdmin(page, path);
+      await expect(page.getByRole("heading", { level: 1 })).toBeAttached();
+      await expect(page.locator(`#${id}-en`), path).toHaveCount(0);
+    }
+    // A page that went drops out of Find's recent pages.
+    await page.evaluate(() =>
+      localStorage.setItem(
+        "admin.find.recent",
+        JSON.stringify([{ key: "/admin/contact", path: "/admin/contact", label: "Contact copy" }]),
+      ),
+    );
+    await openWords(page);
+    for (const id of [
+      "skills-heading",
+      "projects-heading",
+      "experience-years",
+      "writing-readingTime",
+      "legal-nav",
+      "hero-downloadCv",
+    ]) {
+      await expect(page.locator(`#${id}-en`)).toBeAttached();
+    }
+    await page.keyboard.press("Control+k");
+    await expect(page.getByRole("dialog").getByRole("combobox")).toBeFocused();
+    await expect(page.getByRole("option", { name: "Contact copy" })).toHaveCount(0);
+  });
+
+  test("the trace's three states on a row, with words, up to the rail", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "GET /admin/publish/review": review(
+        { ui: { contact: { submit: "Send it" } } },
+        { ui: { contact: { submit: "Send message" } } },
+      ),
+    });
+    await openAdmin(page, "/admin/about");
+    const rail = page.locator("[data-slot=sidebar-inner]");
+    await expect(rail.getByRole("link", { name: /^Words, changes not live$/ })).toBeVisible();
+
+    await openWords(page);
+    const traced = (id: string) => page.locator(".change-trace").filter({ has: page.locator(id) });
+    await expect(traced("#contact-submit-en")).toHaveAttribute("data-change", "draft");
+    await expect(page.locator("#contact-submit-en")).toHaveAccessibleDescription(/In draft/);
+    await expect(traced("#contact-sending-en")).not.toHaveAttribute("data-change");
+    await page.locator("#contact-sending-en").fill("Sending now");
+    await expect(traced("#contact-sending-en")).toHaveAttribute("data-change", "unsaved");
+    await expect(page.locator("#contact-sending-en")).toHaveAccessibleDescription(/Unsaved/);
+    await expect(rail.getByRole("link", { name: /^Words, unsaved changes/ })).toBeVisible();
+    await expect(state(page)).toHaveText("1 unsaved change");
+  });
+
+  test("from the keyboard at 1280: the filters, then each row's ⋯, English and German, in the order you see", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await fakeApi(page, baseURL);
+    await openWords(page);
+    const tab = async (target: Locator) => {
+      await page.keyboard.press("Tab");
+      await expect(target).toBeFocused();
+    };
+    await search(page).focus();
+    await tab(header(page).getByRole("button", { name: "EN" }));
+    await page.getByRole("button", { name: "More actions for Words" }).focus();
+    await tab(group(page));
+    await tab(toggle(page, "Missing in German"));
+    await tab(toggle(page, "Changed, not saved"));
+    await tab(page.getByRole("button", { name: "More actions for Work link" }));
+    await tab(page.locator("#nav-projects-en"));
+    await tab(page.locator("#nav-projects-de"));
+    await tab(page.getByRole("button", { name: "More actions for About link" }));
+    await expect(page.locator("#nav-projects-de")).toHaveAttribute("lang", "de");
+  });
+
+  test("at 390: one language with the switch, the row's name beside its field, nothing off the side", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await fakeApi(page, baseURL);
+    await openWords(page);
+    const languages = header(page).getByRole("group", { name: "Language view" });
+    await expect(languages.getByRole("button")).toHaveText(["EN", "DE"]);
+    await expect(page.locator("#contact-submit-en")).toBeVisible();
+    await expect(page.locator("#contact-submit-de")).toHaveCount(0);
+    await languages.getByRole("button", { name: "DE" }).click();
+    await expect(page.locator("#contact-submit-de")).toBeVisible();
+    await expect(page.locator("#contact-submit-en")).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+
+    // Find a word first, then the switch and Save: the Tab order is the order you see.
+    await search(page).focus();
+    await page.keyboard.press("Tab");
+    await expect(languages.getByRole("button", { name: "EN" })).toBeFocused();
+    const name = await page.locator("#contact-submit-label").boundingBox();
+    const field = await page.locator("#contact-submit-de").boundingBox();
+    expect(Math.abs(name!.y - field!.y), "the name beside its field").toBeLessThan(field!.height);
+  });
+
+  for (const colorScheme of ["dark", "light"] as const) {
+    test(`Words with a row in each state and a filter, in the ${colorScheme} theme, has no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await fakeApi(page, baseURL, {
+        "GET /admin/publish/review": review(
+          { ui: { contact: { submit: "Send it" } } },
+          { ui: { contact: { submit: "Send message" } } },
+        ),
+      });
+      await openWords(page, "/admin/words?group=contact");
+      await page.locator("#contact-sending-en").fill("Being typed");
+      await page.locator("#contact-labelEmail-de").fill("");
+      await expect(page.locator(".change-trace[data-change=draft]").first()).toBeVisible();
+      await expect(page.locator(".change-trace[data-change=unsaved]").first()).toBeVisible();
+      await page.evaluate(() => window.scrollTo(0, 0));
+
+      await settled(page);
+      const { violations } = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+        .analyze();
+      expect(
+        violations.map((v) => ({
+          rule: v.id,
+          targets: v.nodes.slice(0, 5).map((n) => n.target.join(" ")),
+        })),
+      ).toEqual([]);
+    });
+  }
+});
+
 test.describe("admin accessibility", () => {
   test.use({ reducedMotion: "reduce" });
 
@@ -9582,6 +10284,7 @@ test.describe("admin accessibility", () => {
       "/admin/inbox",
       "/admin/media",
       "/admin/agent",
+      "/admin/words",
     ]) {
       test(`${path} in the ${colorScheme} theme has no accessibility violations`, async ({
         page,

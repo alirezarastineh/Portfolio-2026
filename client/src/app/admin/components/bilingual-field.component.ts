@@ -41,8 +41,11 @@ import { FieldPairComponent } from "./field-pair.component";
     "[attr.data-change]": "state() === 'live' ? null : state()",
   },
   template: `
-    <div class="flex flex-col gap-1.5">
-      <div class="flex min-h-6 items-center justify-between gap-3">
+    <div
+      [class]="look() === 'row' ? 'field-row' : 'flex flex-col gap-1.5'"
+      [attr.data-view]="look() === 'row' ? view() : null"
+    >
+      <div class="field-row-label flex min-h-6 items-center justify-between gap-3">
         <label
           hlmFieldLabel
           [id]="id() + '-label'"
@@ -118,13 +121,24 @@ import { FieldPairComponent } from "./field-pair.component";
       </div>
 
       @if (hint()) {
-        <p [id]="id() + '-hint'" class="m-0 text-hint text-muted-foreground">{{ hint() }}</p>
+        <p [id]="id() + '-hint'" class="field-row-hint m-0 text-hint text-muted-foreground">
+          {{ hint() }}
+        </p>
       }
       <span [id]="id() + '-state'" class="sr-only">{{ words() }}</span>
 
-      <div [class]="view() === 'both' ? 'grid gap-3 lg:grid-cols-2' : 'grid gap-3'">
+      <!-- In a row, each language is a cell of the row's own grid. -->
+      <div
+        [class]="
+          look() === 'row'
+            ? 'contents'
+            : view() === 'both'
+              ? 'grid gap-3 lg:grid-cols-2'
+              : 'grid gap-3'
+        "
+      >
         @for (locale of locales(); track locale) {
-          <div class="flex min-w-0 flex-col gap-1">
+          <div class="flex min-w-0 flex-col gap-1" [attr.data-locale]="locale">
             <span [id]="id() + '-' + locale + '-tag'" class="sr-only">{{
               locale === "en" ? "English" : "German"
             }}</span>
@@ -191,6 +205,8 @@ import { FieldPairComponent } from "./field-pair.component";
   `,
 })
 export class BilingualFieldComponent extends FieldPairComponent {
+  /** "row": Words' table, the name and its ⋯ beside the fields, the hint under them (`admin.css`). */
+  readonly look = input<"field" | "row">("field");
   /** The trace, from the editor: it knows what is saved, and the review what is live. */
   readonly state = input<TraceState>("live");
   /** The live site's text in both languages (the review's), for "English changed, German not". */

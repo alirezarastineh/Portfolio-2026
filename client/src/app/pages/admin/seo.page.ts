@@ -196,6 +196,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           [saving]="saving()"
           [problems]="problems()"
           [notLive]="notLive()"
+          [savedAt]="savedAt()"
           (save)="save()"
           (discard)="reset()"
         >
@@ -332,6 +333,8 @@ export default class AdminSeoPage implements OnInit {
   /** The API's reason when the first load failed. */
   protected readonly loadError = signal<string | null>(null);
   protected readonly saving = signal(false);
+  /** When this page last saved, for the header's "Saved 14:02". */
+  protected readonly savedAt = signal<number | null>(null);
   private readonly formVersion = signal(0);
   /** Set-once values opened by their Change. */
   private readonly changing = signal<ReadonlySet<keyof Seo>>(new Set());
@@ -539,6 +542,7 @@ export default class AdminSeoPage implements OnInit {
     this.form.markAsPristine();
     this.baseline = raw;
     const now = Date.now();
+    this.savedAt.set(now);
     this.savedHere.update(
       (saved) => new Map([...saved, ...changed.map((key) => [key, now] as const)]),
     );

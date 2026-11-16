@@ -1,13 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  effect,
-  inject,
-  input,
-  output,
-  signal,
-} from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from "@angular/core";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideEllipsis } from "@ng-icons/lucide";
 import { HlmButton } from "@spartan-ng/helm/button";
@@ -105,6 +96,11 @@ export class EditorHeaderComponent {
   readonly problems = input(0);
   /** Fields saved to the draft and not live; null while the review is unknown. */
   readonly notLive = input<number | null>(null);
+  /**
+   * When this editor last saved, in this visit: "Saved 14:02" once nothing waits. Told by the editor: a
+   * quick answer turns `saving` on and off between two renders, where no effect here would see it.
+   */
+  readonly savedAt = input<number | null>(null);
 
   readonly save = output<void>();
   readonly discard = output<void>();
@@ -115,10 +111,6 @@ export class EditorHeaderComponent {
     typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform ?? "");
   protected readonly shortcut = this.isMac ? "⌘S" : "Ctrl S";
   protected readonly ariaShortcut = this.isMac ? "Meta+S" : "Control+S";
-
-  /** When the last save that left nothing unsaved finished, in this visit. */
-  private readonly savedAt = signal<number | null>(null);
-  private wasSaving = false;
 
   protected readonly status = computed(() => {
     const quiet = "text-muted-foreground";
@@ -148,16 +140,6 @@ export class EditorHeaderComponent {
     const n = this.changes();
     return n ? `Discard ${count(n, "change")}` : "Nothing to discard";
   });
-
-  constructor() {
-    effect(() => {
-      const saving = this.saving();
-      if (this.wasSaving && !saving && !this.changes() && !this.problems()) {
-        this.savedAt.set(Date.now());
-      }
-      this.wasSaving = saving;
-    });
-  }
 
   protected onKeydown(event: KeyboardEvent): void {
     if (!isSaveShortcut(event)) return;

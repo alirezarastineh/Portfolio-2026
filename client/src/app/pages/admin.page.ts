@@ -55,7 +55,6 @@ import {
   lucideRocket,
   lucideScale,
   lucideSearch,
-  lucideSend,
   lucideShare2,
   lucideSquareUser,
   lucideSunMoon,
@@ -99,6 +98,8 @@ import { AdminPulseService } from "../admin/pulse.service";
 import { RecoveryService } from "../admin/recovery.service";
 import { UiSectionService } from "../admin/ui-section.service";
 import { UnsavedChangesService } from "../admin/unsaved-changes.service";
+import { foundWords } from "../admin/words";
+import type { AppTranslations } from "../content/schema";
 import { ThemeService } from "../services/theme.service";
 
 export const routeMeta: RouteMeta = {
@@ -226,10 +227,11 @@ function readRecent(): RecentEntry[] {
   try {
     const stored: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
     if (!Array.isArray(stored)) return [];
+    // A page that went since (Contact copy, Page copy, Socials) drops out: it would open the 404.
     return stored.filter(
       (entry: RecentEntry) =>
         typeof entry?.key === "string" &&
-        (entry.path?.startsWith("/admin") === true ||
+        ((typeof entry.path === "string" && navItemFor(entry.path) !== null) ||
           (entry.action !== undefined && ACTION_IDS.has(entry.action))),
     );
   } catch {
@@ -282,7 +284,6 @@ function readRecent(): RecentEntry[] {
       lucideRocket,
       lucideScale,
       lucideSearch,
-      lucideSend,
       lucideShare2,
       lucideSquareUser,
       lucideSunMoon,
@@ -584,7 +585,7 @@ function readRecent(): RecentEntry[] {
         [state]="paletteOpen() ? 'open' : 'closed'"
         (stateChange)="onPaletteState($event)"
         title="Find"
-        description="Pages, actions, and projects, posts, experience and media files by name"
+        description="Pages, actions, the site's words, and projects, posts, experience and media files by name"
       >
         <!-- Each opening starts from an empty search. -->
         <hlm-command [(search)]="paletteSearch">
@@ -593,10 +594,10 @@ function readRecent(): RecentEntry[] {
             <!-- Only when a search finds nothing: at rest the list is full. -->
             <div *hlmCommandEmptyState hlmCommandEmpty>
               @if (found().state === "loading") {
-                Looking through projects, posts, experience and media…
+                Looking through projects, posts, experience, media and the site's words…
               } @else {
-                No matches. Find looks through pages, actions, projects, posts, experience and media
-                file names.
+                No matches. Find looks through pages, actions, the site's words, projects, posts,
+                experience and media file names.
               }
             </div>
 
@@ -1173,17 +1174,18 @@ export default class AdminLayout {
     }
   }
 
-  /** Projects, posts, experience, Profile's links and media by name, loaded when Find first opens. */
+  /** Projects, posts, experience, Profile's links, media and Words' rows, loaded when Find first opens. */
   private async loadFound(): Promise<void> {
     const { state } = this.found();
     if (state === "loading" || state === "ready") return;
     this.found.set({ state: "loading", groups: [] });
-    const [projects, posts, experiences, links, media] = await Promise.all([
+    const [projects, posts, experiences, links, media, ui] = await Promise.all([
       this.api.listProjects(),
       this.api.listPosts(),
       this.api.listExperiences(),
       this.api.listSocials(),
       this.api.listMedia(),
+      this.api.getSection<AppTranslations>("ui"),
     ]);
     if (this.destroyed) return;
     const groups: FoundGroup[] = [];
@@ -1259,7 +1261,10 @@ export default class AdminLayout {
         })),
       });
     }
-    const failed = !projects.ok || !posts.ok || !experiences.ok || !links.ok || !media.ok;
+    // Each label by its English; Enter lands on its row in Words.
+    if (ui.ok)
+      groups.push({ label: "Words", icon: "lucidePenLine", items: foundWords(ui.data.data) });
+    const failed = !projects.ok || !posts.ok || !experiences.ok || !links.ok || !media.ok || !ui.ok;
     this.found.set({ state: failed ? "failed" : "ready", groups });
   }
 }

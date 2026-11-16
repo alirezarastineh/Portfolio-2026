@@ -1,22 +1,11 @@
 import type { ApiIssue, I18nItem } from "./admin-api.service";
 
-/** Where each group of the `ui` document is edited. */
+/** Where the `ui` document is edited: Profile's and About's groups there, every other in Words (U12). */
 const UI_GROUP_PAGES: Record<string, string> = {
   profile: "/admin/hero",
-  hero: "/admin/hero",
-  nav: "/admin/hero",
   about: "/admin/about",
-  skills: "/admin/skills",
-  contact: "/admin/contact",
-  projects: "/admin/projects",
-  experience: "/admin/experience",
-  writing: "/admin/writing",
-  legal: "/admin/legal",
-  caseStudy: "/admin/copy",
-  projectCard: "/admin/copy",
-  notFound: "/admin/copy",
-  ask: "/admin/copy",
 };
+const WORDS = "/admin/words";
 
 const SECTION_PAGES: Record<string, string> = {
   identity: "/admin/hero",
@@ -64,7 +53,7 @@ function docLink(key: string): string | null {
 export function editorLinkFor(issue: Pick<ApiIssue, "path" | "label">): string | null {
   const [root, second] = issue.path;
   if (typeof root !== "string") return null;
-  if (root === "ui") return UI_GROUP_PAGES[String(second)] ?? "/admin/copy";
+  if (root === "ui") return UI_GROUP_PAGES[String(second)] ?? WORDS;
   if (root === "docs") return docLink(String(second));
 
   const pages = LIST_PAGES[root];
@@ -95,7 +84,7 @@ export function editorLinkForI18n(
       if (item.id === "imprint" || item.id === "privacy") return "/admin/legal";
       // `ui` fields are `group.key`: the first one's group decides the page.
       const field = [...(item.missingDe ?? []), ...(item.missingEn ?? [])][0];
-      return UI_GROUP_PAGES[field?.split(".")[0] ?? ""] ?? "/admin/copy";
+      return UI_GROUP_PAGES[field?.split(".")[0] ?? ""] ?? WORDS;
     }
   }
 }

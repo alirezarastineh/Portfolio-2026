@@ -149,6 +149,50 @@
   }
 }
 
+/* Words' rows (plan 5, U12): the name and its ⋯ beside the field shown, the hint under them; from
+   1024px the hint goes under the name, with both languages beside it. Each language is a cell of
+   this grid (the field's wrapper is `display: contents`). The name's line is as tall as a field. */
+.field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  grid-template-areas: "label value" "hint hint";
+  column-gap: 0.75rem;
+  align-items: start;
+}
+
+.field-row > .field-row-label {
+  grid-area: label;
+  min-height: 2.25rem;
+}
+
+.field-row > .field-row-hint {
+  grid-area: hint;
+  margin-top: 0.25rem;
+}
+
+.field-row [data-locale] {
+  grid-area: value;
+}
+
+@media (width >= 64rem) {
+  .field-row {
+    grid-template-areas: "label value" "hint value";
+  }
+
+  .field-row[data-view="both"] {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) minmax(0, 3fr);
+    grid-template-areas: "label en de" "hint en de";
+  }
+
+  .field-row[data-view="both"] [data-locale="en"] {
+    grid-area: en;
+  }
+
+  .field-row[data-view="both"] [data-locale="de"] {
+    grid-area: de;
+  }
+}
+
 /* A toast stays above the save bar: Save is never under one. */
 :root:has(app-save-bar) [data-sonner-toaster][data-y-position="bottom"] {
   bottom: 6rem;

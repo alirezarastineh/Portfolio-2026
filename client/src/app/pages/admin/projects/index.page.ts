@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@angular/core";
-import type { RouteMeta } from "@analogjs/router";
 import { RouterLink } from "@angular/router";
 import { toast } from "@spartan-ng/brain/sonner";
 import { NgIcon, provideIcons } from "@ng-icons/core";
@@ -14,10 +13,7 @@ import {
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmDropdownMenuImports } from "@spartan-ng/helm/dropdown-menu";
-import { HlmSeparator } from "@spartan-ng/helm/separator";
 import { HlmSwitch } from "@spartan-ng/helm/switch";
-
-import { unsavedChangesGuard } from "../../../admin/unsaved-changes.service";
 
 import { AdminApiService, type ProjectListRow } from "../../../admin/admin-api.service";
 import { ConfirmService } from "../../../admin/components/confirm-dialog.component";
@@ -33,17 +29,6 @@ import {
   SortableListComponent,
   SortableRowDirective,
 } from "../../../admin/components/sortable-list.component";
-import {
-  UiGroupEditorComponent,
-  type UiFieldDef,
-} from "../../../admin/components/ui-group-editor.component";
-
-const HEADING_FIELDS: UiFieldDef[] = [
-  { key: "heading", label: "Section heading" },
-  { key: "subtitle", label: "Section subtitle" },
-];
-
-export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
 @Component({
   selector: "app-admin-projects",
@@ -54,14 +39,12 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
     HlmBadge,
     HlmButton,
     HlmDropdownMenuImports,
-    HlmSeparator,
     HlmSwitch,
     LoadErrorComponent,
     NgIcon,
     RouterLink,
     SortableListComponent,
     SortableRowDirective,
-    UiGroupEditorComponent,
   ],
   viewProviders: [
     provideIcons({
@@ -78,19 +61,9 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
       <app-page-header
         title="Work"
-        description="The Work section's heading, and the projects in the home page's order: a featured one spans the row, the rest go two across."
+        description="The projects in the home page's order: a featured one spans the row, the rest go two across. The section's heading is in Words."
         preview="/admin/preview/en#projects"
       />
-
-      <app-ui-group-editor
-        group="projects"
-        title="Heading"
-        description="The Work section's heading on the home page; the search palette and the console name the section by it."
-        [fields]="headingFields"
-        [level]="2"
-      />
-
-      <hlm-separator />
 
       <header class="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -206,7 +179,6 @@ export default class AdminProjectsPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly recovery = inject(RecoveryService);
 
-  protected readonly headingFields = HEADING_FIELDS;
   protected readonly rows = signal<ProjectListRow[]>([]);
   protected readonly loading = signal(true);
   /** The API's reason when the list did not arrive. */

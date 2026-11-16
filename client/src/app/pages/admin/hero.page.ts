@@ -1,6 +1,5 @@
 import { NgTemplateOutlet } from "@angular/common";
 import {
-  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -8,7 +7,6 @@ import {
   effect,
   ElementRef,
   inject,
-  Injector,
   OnInit,
   signal,
 } from "@angular/core";
@@ -80,9 +78,7 @@ import { isLocale } from "../../content/locale";
 import type { AppTranslations, Availability, Locale } from "../../content/schema";
 
 type ProfileGroup = AppTranslations["profile"];
-type NavGroup = AppTranslations["nav"];
-type HeroGroup = AppTranslations["hero"];
-type CopyGroup = "profile" | "hero" | "nav";
+type CopyGroup = "profile";
 
 /** A field in two languages, by the `ui` group it is saved in. */
 interface CopyField {
@@ -208,67 +204,6 @@ const HERO_COPY: CopyField[] = [
   { group: "profile", key: "secondaryCta", label: "Second button label", hint: "" },
 ];
 
-/** Labels until Words takes them (plan 5, U12): closed at rest. */
-const LABELS: CopyField[] = [
-  {
-    group: "hero",
-    key: "availabilityOpen",
-    label: "Availability line when open",
-    hint: "Beside the hero's dot and in the console, while Availability is open.",
-  },
-  {
-    group: "hero",
-    key: "availabilityLimited",
-    label: "Availability line when limited",
-    hint: "Beside the hero's dot and in the console, while Availability is limited.",
-  },
-  {
-    group: "hero",
-    key: "availabilityClosed",
-    label: "Availability line when closed",
-    hint: "Beside the hero's dot and in the console, while Availability is closed.",
-  },
-  {
-    group: "hero",
-    key: "downloadCv",
-    label: "CV button",
-    hint: "The hero's and the header's CV button, and its entry in the search palette.",
-  },
-  {
-    group: "hero",
-    key: "askCta",
-    label: "Ask button",
-    hint: "The title over the assistant's stage on home, and the 404 page's button to ask.",
-  },
-  { group: "nav", key: "skills", label: "Skills link", hint: "" },
-  {
-    group: "nav",
-    key: "projects",
-    label: "Work link",
-    hint: "The header's link to the work section.",
-  },
-  { group: "nav", key: "about", label: "About link", hint: "The header's link to About." },
-  { group: "nav", key: "contact", label: "Contact link", hint: "" },
-  {
-    group: "nav",
-    key: "work",
-    label: "Work heading",
-    hint: "Over the project links in the footer, in the case study's breadcrumb, and on the share image of a project without a descriptor.",
-  },
-  {
-    group: "nav",
-    key: "experience",
-    label: "Experience link",
-    hint: "The header's link to Experience.",
-  },
-  {
-    group: "nav",
-    key: "writing",
-    label: "Writing link",
-    hint: "The header's link to Writing; also over the posts in the footer and in the search palette, the 404 page's link to the posts, and on a post's share image.",
-  },
-];
-
 const AVAILABILITY: { value: Availability; label: string }[] = [
   { value: "open", label: "Open to new roles" },
   { value: "limited", label: "Limited availability" },
@@ -346,6 +281,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           [saving]="saving()"
           [problems]="problems()"
           [notLive]="notLive()"
+          [savedAt]="savedAt()"
           (save)="save()"
           (discard)="discard()"
         >
@@ -548,41 +484,6 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                 </app-sortable-list>
               }
             </section>
-
-            <section
-              id="profile-labels"
-              aria-labelledby="profile-labels-title"
-              class="flex flex-col gap-6"
-            >
-              <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                <div class="flex flex-col gap-1">
-                  <h2 id="profile-labels-title" class="m-0 text-section-title">Labels</h2>
-                  <p class="m-0 text-hint text-muted-foreground">
-                    The words of the hero's availability line, its CV and Ask buttons, and the
-                    navigation.
-                  </p>
-                </div>
-                <button
-                  hlmBtn
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  aria-controls="profile-labels-fields"
-                  [attr.aria-expanded]="labelsOpen()"
-                  (click)="labelsOpen.set(!labelsOpen())"
-                >
-                  {{ labelsOpen() ? "Hide the labels" : "Show " + labelFields.length + " labels" }}
-                </button>
-              </div>
-              <div id="profile-labels-fields" class="flex flex-col gap-6">
-                @if (labelsOpen()) {
-                  <ng-container *ngTemplateOutlet="heads" />
-                  @for (field of labelFields; track field.key) {
-                    <ng-container *ngTemplateOutlet="copy; context: { $implicit: field }" />
-                  }
-                }
-              </div>
-            </section>
           </div>
         }
       </div>
@@ -663,9 +564,6 @@ export default class AdminHeroPage implements OnInit {
   private readonly unsaved = inject(UnsavedChangesService);
   private readonly confirm = inject(ConfirmService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly injector = inject(Injector);
-  /** Destroyed: a save that answers after that focuses nothing. */
-  private gone = false;
   /** The review, for the trace's draft state; absent in unit tests. */
   private readonly pulse = inject(AdminPulseService, { optional: true });
   private readonly previewPanel = inject(LivePreviewService, { optional: true });
@@ -678,7 +576,6 @@ export default class AdminHeroPage implements OnInit {
   protected readonly buttonLinks = shownPlain(BUTTON_LINKS);
   protected readonly aboutYou = shownCopy(ABOUT_YOU);
   protected readonly heroCopy = shownCopy(HERO_COPY);
-  protected readonly labelFields = shownCopy(LABELS);
   protected readonly availability = AVAILABILITY;
   protected readonly locales: Locale[] = ["en", "de"];
 
@@ -692,11 +589,11 @@ export default class AdminHeroPage implements OnInit {
   protected readonly loading = signal(true);
   protected readonly loaded = signal(false);
   protected readonly saving = signal(false);
+  /** When this page last saved with nothing left waiting, for the header's "Saved 14:02". */
+  protected readonly savedAt = signal<number | null>(null);
   /** A save in progress, from Save to its last write: a second Ctrl S waits for it. */
   private busy = false;
   private readonly revision = signal(0);
-  /** The labels, closed at rest: they open by themselves for a change or a problem (below). */
-  protected readonly labelsOpen = signal(false);
 
   protected readonly avatarId = signal<string | null>(null);
   protected readonly avatarPath = signal<string | null>(null);
@@ -721,8 +618,6 @@ export default class AdminHeroPage implements OnInit {
     identity: Omit<ProfileInput, "avatarId">;
     avatar: { id: string | null; path: string | null };
     profile: Record<Locale, ProfileGroup>;
-    hero: Record<Locale, HeroGroup>;
-    nav: Record<Locale, NavGroup>;
   } | null = null;
 
   protected readonly identity = this.fb.nonNullable.group({
@@ -741,10 +636,6 @@ export default class AdminHeroPage implements OnInit {
   protected readonly form = this.fb.nonNullable.group({
     profileEn: this.fb.nonNullable.group(blank("profile")),
     profileDe: this.fb.nonNullable.group(blank("profile")),
-    heroEn: this.fb.nonNullable.group(blank("hero")),
-    heroDe: this.fb.nonNullable.group(blank("hero")),
-    navEn: this.fb.nonNullable.group(blank("nav")),
-    navDe: this.fb.nonNullable.group(blank("nav")),
   });
 
   /** The fields as loaded or last saved, in the forms' own shape: what "changed" compares with. */
@@ -810,7 +701,7 @@ export default class AdminHeroPage implements OnInit {
       of(key, identityPath(key), !!base && base.identity[key] !== now.identity[key]);
     }
     of("avatarId", identityPath("avatarId"), !!base && base.avatarId !== now.avatarId);
-    for (const { group, key } of [...this.aboutYou, ...this.heroCopy, ...this.labelFields]) {
+    for (const { group, key } of [...this.aboutYou, ...this.heroCopy]) {
       const [en, de] = [`${group}En`, `${group}De`] as const;
       const copy = (side: typeof en | typeof de) =>
         (now.copy[side] as Record<string, string>)[key] !==
@@ -854,7 +745,7 @@ export default class AdminHeroPage implements OnInit {
   protected readonly liveCopy = computed(() => {
     const marks = this.pulse?.marks() ?? null;
     return Object.fromEntries(
-      [...this.aboutYou, ...this.heroCopy, ...this.labelFields].map(({ group, key }) => [
+      [...this.aboutYou, ...this.heroCopy].map(({ group, key }) => [
         `${group}.${key}`,
         liveText(marks, `ui.${group}.${key}`),
       ]),
@@ -868,7 +759,7 @@ export default class AdminHeroPage implements OnInit {
     return states.filter((state) => state === "draft").length;
   });
 
-  /** The page's five sections, each with its trace rolled up and the last save's problems. */
+  /** The page's four sections, each with its trace rolled up and the last save's problems. */
   protected readonly outline = computed<OutlineItem[]>(() => {
     this.revision();
     if (!this.loaded()) return [];
@@ -915,12 +806,6 @@ export default class AdminHeroPage implements OnInit {
         problems: this.issues.count(),
         change: rollUp([...this.linkTrace().values()]),
       },
-      {
-        id: "profile-labels",
-        label: "Labels",
-        problems: flagged(this.labelFields),
-        change: rollUp(states(copyKeys(this.labelFields))),
-      },
     ];
   });
 
@@ -934,8 +819,6 @@ export default class AdminHeroPage implements OnInit {
     return (base, locale, media) =>
       withUi(withIdentity(base, locale, identity, savedAvatar, media), locale, {
         profile: { en: copy.profileEn, de: copy.profileDe },
-        hero: { en: copy.heroEn, de: copy.heroDe },
-        nav: { en: copy.navEn, de: copy.navDe },
       });
   });
 
@@ -944,21 +827,7 @@ export default class AdminHeroPage implements OnInit {
     this.form.valueChanges.subscribe(bump);
     this.identity.valueChanges.subscribe(bump);
     effect(() => this.unsaved.set("hero", this.changes() > 0));
-    // A label that comes back unsaved (a recovery copy, an Undo) opens the labels; closed again by
-    // hand, they stay closed until the next one. A refused one opens them too (`showIssues`).
-    let waiting = false;
-    effect(() => {
-      const trace = this.trace();
-      const changed = this.labelFields.some(
-        ({ group, key }) => trace[`${group}.${key}`] === "unsaved",
-      );
-      if (changed && !waiting) this.labelsOpen.set(true);
-      waiting = changed;
-    });
-    inject(DestroyRef).onDestroy(() => {
-      this.gone = true;
-      this.unsaved.clear("hero");
-    });
+    inject(DestroyRef).onDestroy(() => this.unsaved.clear("hero"));
     const recovery = inject(RecoveryService);
     recovery.track({
       editor: "hero",
@@ -1048,17 +917,15 @@ export default class AdminHeroPage implements OnInit {
   }
 
   private async load(): Promise<void> {
-    const [profileResult, resumes, profileGroup, heroGroup, navGroup] = await Promise.all([
+    const [profileResult, resumes, profileGroup] = await Promise.all([
       this.api.getProfile(),
       this.api.getResumes(),
       this.ui.loadGroup("profile"),
-      this.ui.loadGroup("hero"),
-      this.ui.loadGroup("nav"),
     ]);
     this.loading.set(false);
 
     // The page says so, with a retry; `loaded` stays false.
-    if (!profileResult.ok || !profileGroup || !heroGroup || !navGroup) return;
+    if (!profileResult.ok || !profileGroup) return;
     if (resumes.ok) this.resumes.set(resumes.data.resumes);
 
     const p = profileResult.data.profile;
@@ -1079,8 +946,6 @@ export default class AdminHeroPage implements OnInit {
       },
       avatar: { id: p.avatarId, path: p.avatarPath },
       profile: profileGroup.value,
-      hero: heroGroup.value,
-      nav: navGroup.value,
     };
 
     this.applyPristine();
@@ -1096,10 +961,6 @@ export default class AdminHeroPage implements OnInit {
     this.form.reset({
       profileEn: this.pristine.profile.en,
       profileDe: this.pristine.profile.de,
-      heroEn: this.pristine.hero.en,
-      heroDe: this.pristine.hero.de,
-      navEn: this.pristine.nav.en,
-      navDe: this.pristine.nav.de,
     });
     this.form.markAsPristine();
     this.identity.markAsPristine();
@@ -1202,6 +1063,7 @@ export default class AdminHeroPage implements OnInit {
     try {
       if (this.heroChanges()) await this.saveHero();
       if (this.linkChanges()) await this.saveLinks();
+      if (!this.changes() && !this.problems()) this.savedAt.set(Date.now());
     } finally {
       this.busy = false;
     }
@@ -1216,8 +1078,6 @@ export default class AdminHeroPage implements OnInit {
     const identity = { ...typed, locationCountry: typed.locationCountry.trim().toUpperCase() };
     const value = {
       profile: { en: raw.profileEn as ProfileGroup, de: raw.profileDe as ProfileGroup },
-      hero: { en: raw.heroEn as HeroGroup, de: raw.heroDe as HeroGroup },
-      nav: { en: raw.navEn as NavGroup, de: raw.navDe as NavGroup },
     };
     const changed = Object.entries(this.trace())
       .filter(([, state]) => state === "unsaved")
@@ -1266,7 +1126,7 @@ export default class AdminHeroPage implements OnInit {
     const saved = this.pristine;
     if (!saved) return;
     const [latest, profile] = await Promise.all([
-      this.ui.latest({ profile: saved.profile, hero: saved.hero, nav: saved.nav }),
+      this.ui.latest({ profile: saved.profile }),
       this.api.getProfile(),
     ]);
     const identityAt = profile.ok ? profile.data.profile.updatedAt : null;
@@ -1281,14 +1141,6 @@ export default class AdminHeroPage implements OnInit {
 
   /** `profile.<field>` → an identity control; `ui.<group>.<locale>.<field>` → a copy control. */
   private showIssues(issues: ApiIssue[]): void {
-    // A refused label opens the labels first: helm's input marks a field invalid from the status
-    // changes it sees, so the problems go on once the fields exist.
-    const label = issues.some(({ path: [part, group] }) => part === "ui" && group !== "profile");
-    if (label && !this.labelsOpen()) {
-      this.labelsOpen.set(true);
-      if (!this.gone) afterNextRender(() => this.showIssues(issues), { injector: this.injector });
-      return;
-    }
     const unplaced = applyIssues(issues, (path) => {
       const [part, group, locale, key] = path;
       if (part === "profile" && typeof group === "string") {
@@ -1452,6 +1304,6 @@ export default class AdminHeroPage implements OnInit {
 
 /** A group's keys, every one (hidden ones too): the form holds them all, and saves them. */
 function blank(group: CopyGroup): Record<string, string> {
-  const fields = [...ABOUT_YOU, ...HERO_COPY, ...LABELS].filter((f) => f.group === group);
+  const fields = [...ABOUT_YOU, ...HERO_COPY].filter((f) => f.group === group);
   return Object.fromEntries(fields.map((f) => [f.key, ""]));
 }

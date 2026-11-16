@@ -22,8 +22,11 @@ describe("editorLinkFor", () => {
     );
     expect(editorLinkFor({ path: ["docs", "post:hello", "title"] })).toBe("/admin/writing/hello");
     expect(editorLinkFor({ path: ["docs", "legal:imprint", "title"] })).toBe("/admin/legal");
-    expect(editorLinkFor({ path: ["ui", "nav", "work"] })).toBe("/admin/hero");
-    expect(editorLinkFor({ path: ["ui", "notFound", "title"] })).toBe("/admin/copy");
+    // Profile's and About's groups on their pages; every other in Words (plan 5, U12).
+    expect(editorLinkFor({ path: ["ui", "profile", "role"] })).toBe("/admin/hero");
+    expect(editorLinkFor({ path: ["ui", "nav", "work"] })).toBe("/admin/words");
+    expect(editorLinkFor({ path: ["ui", "notFound", "title"] })).toBe("/admin/words");
+    expect(editorLinkFor({ path: ["ui", "skills", "heading"] })).toBe("/admin/words");
     expect(editorLinkFor({ path: ["identity", "contactEmail"] })).toBe("/admin/hero");
     expect(editorLinkFor({ path: ["seo", "title"] })).toBe("/admin/seo");
     expect(editorLinkFor({ path: ["version"] })).toBeNull();
@@ -37,6 +40,9 @@ describe("editorLinkForI18n", () => {
     expect(editorLinkForI18n({ kind: "section", id: "privacy" })).toBe("/admin/legal");
     expect(editorLinkForI18n({ kind: "section", id: "ui", missingDe: ["about.philosophy"] })).toBe(
       "/admin/about",
+    );
+    expect(editorLinkForI18n({ kind: "section", id: "ui", missingDe: ["contact.submit"] })).toBe(
+      "/admin/words",
     );
   });
 });

@@ -62,9 +62,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [UiGroupEditorComponent],
   host: { class: "block" },
-  template: `
-    <app-ui-group-editor group="about" title="About" look="editor" live="about" [fields]="fields" />
-  `,
+  template: ` <app-ui-group-editor group="about" title="About" live="about" [fields]="fields" /> `,
 })
 export default class AdminAboutPage {
   protected readonly fields = FIELDS;

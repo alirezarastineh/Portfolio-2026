@@ -16,8 +16,11 @@ export type OwnedGroups = Partial<Record<UiGroup, Record<Locale, unknown>>>;
 
 export type SaveOutcome =
   | { ok: true; updatedAt: string }
-  /** `version` is the document's newest, when it could be read: a save that keeps its edits goes on it. */
-  | { ok: false; reason: "stale"; error: string; version: string | null }
+  /**
+   * `version` is the document's newest, when it could be read: a save that keeps its edits goes on
+   * it. `changed` names the owned groups that moved there.
+   */
+  | { ok: false; reason: "stale"; error: string; version: string | null; changed: UiGroup[] }
   | { ok: false; reason: "failed"; error: string }
   | { ok: false; reason: "invalid"; error: string; issues: ApiIssue[] };
 
@@ -47,6 +50,23 @@ export class UiSectionService {
     };
   }
 
+  /** Several groups from one read, at one version (Words). */
+  async loadGroups<K extends UiGroup>(
+    groups: readonly K[],
+  ): Promise<{ value: Record<Locale, Pick<AppTranslations, K>>; updatedAt: string | null } | null> {
+    const result = await this.api.getSection<AppTranslations>("ui");
+    if (!result.ok) return null;
+    const pick = (doc: AppTranslations) =>
+      Object.fromEntries(groups.map((g) => [g, structuredClone(doc[g])])) as Pick<
+        AppTranslations,
+        K
+      >;
+    return {
+      value: { en: pick(result.data.data.en), de: pick(result.data.data.de) },
+      updatedAt: result.data.updatedAt,
+    };
+  }
+
   saveGroup<K extends UiGroup>(
     group: K,
     value: Record<Locale, AppTranslations[K]>,
@@ -57,19 +77,19 @@ export class UiSectionService {
   }
 
   /**
-   * The `ui` document as it stands now: its version, and whether these groups
-   * still read as the editor holds them. Null when it could not be read.
+   * The `ui` document as it stands now: its version, and which of these groups no longer read as
+   * the editor holds them. Null when it could not be read.
    */
   async latest(
     owned: OwnedGroups,
-  ): Promise<{ updatedAt: string | null; unchanged: boolean } | null> {
+  ): Promise<{ updatedAt: string | null; unchanged: boolean; changed: UiGroup[] } | null> {
     const fresh = await this.api.getSection<AppTranslations>("ui");
     if (!fresh.ok) return null;
     const { en, de } = fresh.data.data;
-    const now = Object.fromEntries(
-      (Object.keys(owned) as UiGroup[]).map((group) => [group, { en: en[group], de: de[group] }]),
+    const changed = (Object.keys(owned) as UiGroup[]).filter(
+      (group) => countChangedFields(owned[group], { en: en[group], de: de[group] }) > 0,
     );
-    return { updatedAt: fresh.data.updatedAt, unchanged: countChangedFields(owned, now) === 0 };
+    return { updatedAt: fresh.data.updatedAt, unchanged: changed.length === 0, changed };
   }
 
   /**
@@ -85,14 +105,17 @@ export class UiSectionService {
   ): Promise<SaveOutcome> {
     let saved = await this.api.patchUiGroups(groups, updatedAt);
     let version: string | null = null;
+    let changed: UiGroup[] = [];
     if (!saved.ok && saved.status === 409) {
       const latest = await this.latest(owned);
       version = latest?.updatedAt ?? null;
+      changed = latest?.changed ?? [];
       if (latest?.unchanged) saved = await this.api.patchUiGroups(groups, latest.updatedAt);
     }
     if (saved.ok) return { ok: true, updatedAt: saved.data.updatedAt };
 
-    if (saved.status === 409) return { ok: false, reason: "stale", error: "stale", version };
+    if (saved.status === 409)
+      return { ok: false, reason: "stale", error: "stale", version, changed };
     if (saved.status === 400) {
       return {
         ok: false,

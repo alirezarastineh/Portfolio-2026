@@ -7,7 +7,6 @@ import {
   inject,
   OnInit,
   signal,
-  viewChild,
 } from "@angular/core";
 import type { RouteMeta } from "@analogjs/router";
 import { FormsModule } from "@angular/forms";
@@ -35,10 +34,6 @@ import {
 } from "../../admin/components/load-state.component";
 import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
 import { RichTextComponent } from "../../admin/components/rich-text.component";
-import {
-  UiGroupEditorComponent,
-  type UiFieldDef,
-} from "../../admin/components/ui-group-editor.component";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import { FieldIssues, focusFirstInvalid } from "../../admin/issues";
 import { askStale, toastDiscarded, toastIssues, toastNotSaved } from "../../admin/save-feedback";
@@ -51,13 +46,6 @@ type Docs = Record<LegalDoc, Record<Locale, LegalSectionInput>>;
 const DOCS: { id: LegalDoc; label: string }[] = [
   { id: "imprint", label: "Imprint / Impressum" },
   { id: "privacy", label: "Privacy / Datenschutz" },
-];
-
-const LABEL_FIELDS: UiFieldDef[] = [
-  { key: "nav", label: "Footer group label" },
-  { key: "imprint", label: "Imprint link" },
-  { key: "privacy", label: "Privacy link" },
-  { key: "updated", label: "“Last updated” label" },
 ];
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
@@ -87,7 +75,6 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
     LoadErrorComponent,
     RichTextComponent,
     SaveBarComponent,
-    UiGroupEditorComponent,
   ],
   host: { class: "block" },
   template: `
@@ -168,16 +155,6 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
           }
         </div>
       }
-
-      <app-ui-group-editor
-        #labels
-        group="legal"
-        title="Legal labels"
-        description="The footer links and the “last updated” label."
-        [fields]="labelFields"
-        [saveBar]="false"
-        [level]="2"
-      />
     </div>
 
     @if (!loading() && docs()) {
@@ -198,16 +175,14 @@ export default class AdminLegalPage implements OnInit {
   private readonly unsaved = inject(UnsavedChangesService);
   private readonly confirm = inject(ConfirmService);
   private readonly host = inject(ElementRef<HTMLElement>);
-  private readonly labels = viewChild.required(UiGroupEditorComponent);
 
   protected readonly docList = DOCS;
-  protected readonly labelFields = LABEL_FIELDS;
   protected readonly locales: Locale[] = ["en", "de"];
   protected readonly active = signal<LegalDoc>("imprint");
   protected readonly loading = signal(true);
   /** The API's reason when the pages did not arrive. */
   protected readonly loadError = signal<string | null>(null);
-  private readonly savingDocs = signal(false);
+  protected readonly saving = signal(false);
   protected readonly docs = signal<Docs | null>(null);
   private readonly pristine = signal<Docs | null>(null);
   /** Keyed `<doc>.<locale>.<field>`. */
@@ -218,12 +193,9 @@ export default class AdminLegalPage implements OnInit {
   private readonly docsDirty = computed(
     () => JSON.stringify(this.docs()) !== JSON.stringify(this.pristine()),
   );
-  protected readonly dirty = computed(() => this.docsDirty() || this.labels().dirty());
-  protected readonly changes = computed(
-    () => countChangedFields(this.pristine(), this.docs()) + this.labels().changes(),
-  );
-  protected readonly saving = computed(() => this.savingDocs() || this.labels().saving());
-  protected readonly problems = computed(() => this.issues.count() + this.labels().problems());
+  protected readonly dirty = this.docsDirty;
+  protected readonly changes = computed(() => countChangedFields(this.pristine(), this.docs()));
+  protected readonly problems = computed(() => this.issues.count());
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.unsaved.clear("legal"));
@@ -295,33 +267,30 @@ export default class AdminLegalPage implements OnInit {
     this.docs.set(pristine ? structuredClone(pristine) : null);
     this.issues.clear();
     this.unsaved.clear("legal");
-    const undoLabels = this.labels().discard();
     toastDiscarded(() => {
       this.docs.set(edits);
       this.unsaved.set("legal", this.docsDirty());
-      undoLabels();
     });
   }
 
-  /** The documents that changed, then the labels: one save bar, one Ctrl+S. */
+  /** The documents that changed: one save bar, one Ctrl+S. */
   protected async save(): Promise<void> {
     const docs = this.docs();
     const pristine = this.pristine();
     if (!docs || !pristine || this.saving()) return;
-    this.savingDocs.set(true);
+    this.saving.set(true);
 
     for (const { id } of DOCS) {
       if (JSON.stringify(docs[id]) === JSON.stringify(pristine[id])) continue;
       const ok = await this.saveDoc(id, docs[id]);
       if (!ok) {
-        this.savingDocs.set(false);
+        this.saving.set(false);
         return;
       }
     }
-    this.savingDocs.set(false);
+    this.saving.set(false);
     this.unsaved.clear("legal");
-
-    if (await this.labels().save()) toast.success("Draft saved");
+    toast.success("Draft saved");
   }
 
   private async saveDoc(id: LegalDoc, doc: Record<Locale, LegalSectionInput>): Promise<boolean> {
