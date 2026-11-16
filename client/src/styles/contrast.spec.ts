@@ -167,6 +167,17 @@ describe("the admin's pairs", () => {
       },
     );
 
+    it("reads a token on its chip (plan 5, U13): its text, and its × at 3:1", () => {
+      const field = read("../app/admin/components/token-field.component.ts");
+      const chip = /<li[^>]*?class="[^"]*\bbg-([\w-]+)/.exec(field)?.[1];
+      const button = /class="([^"]*)"\s*\[attr\.aria-label\]="'Remove '/.exec(field)?.[1] ?? "";
+      const remove = /\btext-([\w-]+)/.exec(button)?.[1];
+      expect([chip, remove]).toEqual(["surface-2", "muted-foreground"]);
+      const surface = colour(admin, theme, chip!);
+      expect(ratio(colour(admin, theme, "foreground"), surface)).toBeGreaterThanOrEqual(AA);
+      expect(ratio(colour(admin, theme, remove!), surface)).toBeGreaterThanOrEqual(GRAPHIC);
+    });
+
     it("reads the rich text's code block: its surface is a token, under the page's text", () => {
       const editor = read("../app/admin/components/rich-text.component.ts");
       const block = /\.admin-prose pre \{[^}]*?background: ([^;]+);/.exec(editor)?.[1];
