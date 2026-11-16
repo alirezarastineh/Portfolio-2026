@@ -6,6 +6,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   ElementRef,
   forwardRef,
   inject,
@@ -460,6 +461,8 @@ export class RichTextComponent implements ControlValueAccessor {
   readonly mode = input<"inline" | "long">("inline");
   /** Debounce for pushing HTML into the form; flushed early on blur. */
   readonly debounceMs = input(250);
+  /** Ids that describe the text (its trace's words, a save's problem): `aria-describedby`. */
+  readonly describedBy = input<string | null>(null);
 
   protected readonly actions = computed(() =>
     this.mode() === "long" ? ACTIONS : ACTIONS.filter((a) => !a.block),
@@ -507,6 +510,8 @@ export class RichTextComponent implements ControlValueAccessor {
     // Tiptap touches `document` at construction, so it must never run during
     // SSR. The admin is browser-only anyway; this makes that explicit.
     afterNextRender(() => this.create());
+    // The textbox is Tiptap's element: its description (the trace's words, a save's problem) is set on it.
+    effect(() => this.describe(this.describedBy()));
 
     this.destroyRef.onDestroy(() => {
       // Deliver any keystrokes still waiting in the debounce before teardown.
@@ -587,6 +592,14 @@ export class RichTextComponent implements ControlValueAccessor {
     });
 
     this.refreshActive(this.editor);
+    this.describe(this.describedBy());
+  }
+
+  private describe(ids: string | null): void {
+    const dom = this.editor?.view.dom;
+    if (!dom) return;
+    if (ids) dom.setAttribute("aria-describedby", ids);
+    else dom.removeAttribute("aria-describedby");
   }
 
   private schedule(html: string): void {
@@ -599,7 +612,8 @@ export class RichTextComponent implements ControlValueAccessor {
     clearTimeout(this.timer);
     this.timer = undefined;
 
-    const html = this.editor?.getHTML() ?? this.pending;
+    // An empty document is an empty field: "<p></p>" read as a change when the text was only passed through.
+    const html = this.editor ? (this.editor.isEmpty ? "" : this.editor.getHTML()) : this.pending;
     if (html === this.lastEmitted) return;
 
     this.lastEmitted = html;
