@@ -37,9 +37,10 @@ nightly call as `cron` and a manual run as `manual`. Paths that differ between t
 the environment, with Woodpecker's as the default (`PNPM_STORE`, `TRIVY_CACHE`, `VISUAL_ROOT`).
 
 **Blocking and report only.** These only report, in both: knip, cycles, osv-scanner, semgrep,
-bundle-size, visual, cross-browser and `pnpm outdated`. A report-only step is marked on its own and
-leaves the workflow green (`failure: ignore` on Woodpecker, `continue-on-error` on GitHub).
-Everything else blocks.
+bundle-size, visual and `pnpm outdated`. A report-only step is marked on its own and leaves the
+workflow green (`failure: ignore` on Woodpecker, `continue-on-error` on GitHub). Everything else
+blocks, cross-browser too since 2026-11-16: it runs in the nightly alone, and a failure there is
+emailed. It only reported before, and five failures went unseen for six nights.
 
 **The parity check.** `ci/ci-parity.mjs` runs in both CIs' `repo` workflow and fails when the two
 definitions drift:

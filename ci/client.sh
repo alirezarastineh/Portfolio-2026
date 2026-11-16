@@ -77,8 +77,8 @@ case "${1:-}" in
       node_modules/.bin/playwright test "$@" --workers=2 --output=test-results/cross-browser ||
       status=$?
     if [ "$status" -ne 0 ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-      echo "::warning title=cross-browser::$browsers exited $status (report only): the failed tests are annotated, and the report is an artifact"
-      echo "- **cross-browser** ($browsers) exited $status (report only)" >> "$GITHUB_STEP_SUMMARY"
+      echo "::error title=cross-browser::$browsers exited $status: the failed tests are annotated, and the report is an artifact"
+      echo "- **cross-browser** ($browsers) exited $status" >> "$GITHUB_STEP_SUMMARY"
     fi
     exit "$status"
     ;;

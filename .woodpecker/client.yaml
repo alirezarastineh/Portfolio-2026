@@ -201,13 +201,13 @@ steps:
 
   # Nightly, on cron runs only (plan Phase 10): the desktop suite in Firefox
   # and WebKit, Playwright's own builds of them, which the CI image carries.
-  # Advisory. After `visual`, whose screenshots a busy machine can slow.
+  # A failure fails the pipeline, so `email` sends it, as on GitHub. After
+  # `visual`, whose screenshots a busy machine can slow.
   - name: cross-browser
     <<: *check
     depends_on: [visual]
     when:
       - event: cron
-    failure: ignore
     environment: *api
     commands:
       - sh ../ci/client.sh cross-browser

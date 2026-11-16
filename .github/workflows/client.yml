@@ -5,8 +5,9 @@
 # warnings, no prerendered index.html), then bundle-size, which only reports.
 # On that build, beside each other: `e2e` (with axe), `lighthouse`, `visual`
 # (screenshots against GitHub's own baselines, report only) and, nightly,
-# `cross-browser` (Firefox and WebKit, report only). Woodpecker runs them one
-# after another, since one busy PC skews the scores and slows the screenshots.
+# `cross-browser` (Firefox and WebKit; a failure fails the nightly, so GitHub
+# emails it). Woodpecker runs them one after another, since one busy PC skews
+# the scores and slows the screenshots.
 # Steps that hold a value run ci/client.sh, ci/code-health.sh or ci/visual.sh,
 # as Woodpecker's do (ci/ci-parity.mjs keeps the two in step).
 name: client
@@ -495,7 +496,8 @@ jobs:
 
   # Nightly calls only (Woodpecker plan, Phase 10): the desktop suite in
   # Firefox and WebKit, Playwright's own builds of them, each on its own
-  # runner. Report only, and one browser's failure never cancels the other.
+  # runner. A failure fails the nightly, so GitHub emails it (report only, five
+  # once went unseen for six nights); one browser's never cancels the other.
   cross-browser:
     name: cross-browser
     needs: build
@@ -563,7 +565,6 @@ jobs:
 
       - name: cross-browser
         id: cross-browser
-        continue-on-error: true
         env:
           BROWSER: ${{ matrix.browser }}
         run: sh ../ci/client.sh cross-browser "$BROWSER"
