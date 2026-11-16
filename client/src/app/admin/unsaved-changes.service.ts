@@ -82,11 +82,14 @@ function beforeUnloadHandler(event: BeforeUnloadEvent): void {
  * Attached to every editor route's `canDeactivate`. Checks the service rather
  * than the component, so one guard covers editors with very different shapes.
  */
-export const unsavedChangesGuard: CanDeactivateFn<unknown> = async () => {
+export const unsavedChangesGuard: CanDeactivateFn<unknown> = async (_page, _route, from, to) => {
   const unsaved = inject(UnsavedChangesService);
   // Under the sign-in dialog the page cannot be left: no second question over it.
   if (inject(AdminSessionService, { optional: true })?.lost()) return false;
   if (!unsaved.hasAny()) return true;
+  // Its query or fragment changing keeps the page and its edits (Words' filters, Find's row); the
+  // router asks this guard then too.
+  if (to?.url && from?.url && pathOf(to.url) === pathOf(from.url)) return true;
 
   const leave = await inject(ConfirmService).ask({
     title: "Discard unsaved changes?",
@@ -100,3 +103,5 @@ export const unsavedChangesGuard: CanDeactivateFn<unknown> = async () => {
   if (leave) unsaved.clearAll();
   return leave;
 };
+
+const pathOf = (url: string): string => url.split(/[?#]/)[0] ?? "";

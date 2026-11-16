@@ -28,9 +28,15 @@ function setup(lost = false) {
   return { service: TestBed.inject(UnsavedChangesService), confirm };
 }
 
-const runGuard = () =>
+/** From one address to the next, as the router hands them over; none, as a test of the rest. */
+const runGuard = (from?: string, to?: string) =>
   TestBed.runInInjectionContext(() =>
-    unsavedChangesGuard({} as never, {} as never, {} as never, {} as never),
+    unsavedChangesGuard(
+      {} as never,
+      {} as never,
+      (from ? { url: from } : {}) as never,
+      (to ? { url: to } : {}) as never,
+    ),
   ) as Promise<boolean>;
 
 describe("UnsavedChangesService", () => {
@@ -124,6 +130,20 @@ describe("unsavedChangesGuard", () => {
     expect(await runGuard()).toBe(true);
     // Otherwise the next page would warn about edits that were just discarded.
     expect(service.hasAny()).toBe(false);
+  });
+
+  it("lets a navigation that stays on the page through without asking: a filter, a row", async () => {
+    const { service, confirm } = setup();
+    service.set("words", true);
+
+    expect(await runGuard("/admin/words", "/admin/words?group=contact")).toBe(true);
+    expect(await runGuard("/admin/words?missing=", "/admin/words?row=contact.submit")).toBe(true);
+    expect(confirm.asked).toBe(0);
+    // The edits are still there, and still guarded.
+    expect(service.hasAny()).toBe(true);
+
+    expect(await runGuard("/admin/words?group=contact", "/admin/about")).toBe(false);
+    expect(confirm.asked).toBe(1);
   });
 
   it("stays put under the sign-in dialog, without a second question", async () => {
