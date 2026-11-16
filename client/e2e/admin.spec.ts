@@ -8293,6 +8293,9 @@ function measures(locator: Locator) {
 
 test.describe("the admin's own look", () => {
   test.use({ reducedMotion: "reduce" });
+  // Engines write computed values differently: WebKit puts the outline's width first and leaves
+  // font names unquoted, Firefox quotes a one-word one.
+  const RING = /^(rgb\(255, 138, 82\) solid 2px|2px solid rgb\(255, 138, 82\))$/;
 
   for (const [colorScheme, paper, ink] of [
     ["dark", "rgb(0, 0, 0)", "rgb(237, 237, 238)"],
@@ -8309,7 +8312,7 @@ test.describe("the admin's own look", () => {
       const body = page.locator("body");
       await expect(body).toHaveCSS("background-color", paper);
       await expect(body).toHaveCSS("color", ink);
-      await expect(body).toHaveCSS("font-family", /^"Instrument Sans Variable"/);
+      await expect(body).toHaveCSS("font-family", /^"?Instrument Sans Variable"?,/);
       await expect(body).toHaveCSS("font-size", "14px");
       await expect(body).toHaveCSS("line-height", "20px");
       // Geist left with its faces, and the mark's caret no longer blinks.
@@ -8346,7 +8349,7 @@ test.describe("the admin's own look", () => {
     // One ring, the site's: a 2px outline in the accent, from the keyboard.
     await page.keyboard.press("Tab");
     await add.focus();
-    await expect(add).toHaveCSS("outline", "rgb(255, 138, 82) solid 2px");
+    await expect(add).toHaveCSS("outline", RING);
 
     await page.getByRole("button", { name: "More actions for project-one" }).click();
     expect(await measures(page.getByRole("menu"))).toMatchObject({ radius: "8px" });
@@ -8377,10 +8380,7 @@ test.describe("the admin's own look", () => {
     });
     await openAdmin(page, "/admin/legal");
     await page.locator(".ProseMirror").first().focus();
-    await expect(page.locator("app-rich-text > div").first()).toHaveCSS(
-      "outline",
-      "rgb(255, 138, 82) solid 2px",
-    );
+    await expect(page.locator("app-rich-text > div").first()).toHaveCSS("outline", RING);
   });
 
   test.describe("on a touch screen", () => {
@@ -8404,7 +8404,10 @@ test.describe("the admin's own look", () => {
   test("values are set in B612", async ({ page, baseURL }) => {
     await fakeApi(page, baseURL);
     await openAdmin(page, "/admin/publications");
-    await expect(page.getByText("#12", { exact: true }).first()).toHaveCSS("font-family", /^B612/);
+    await expect(page.getByText("#12", { exact: true }).first()).toHaveCSS(
+      "font-family",
+      /^"?B612"?,/,
+    );
   });
 
   // Each screen where the old look set labels in capitals or under 12px; the Assistant with its tabs.
