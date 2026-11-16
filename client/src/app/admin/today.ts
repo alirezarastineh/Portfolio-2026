@@ -47,6 +47,19 @@ const newest = (items: readonly { createdAt: string }[], now: number) =>
 
 const assistant = (view: string) => ({ link: "/admin/assistant", query: { view } });
 
+/** What the media check found, in words: "2 records without a file, 1 file without a record". */
+const mediaGaps = ({ missingFiles, orphanFiles }: MediaReconcile) =>
+  [
+    missingFiles.length
+      ? count(missingFiles.length, "record without a file", "records without a file")
+      : "",
+    orphanFiles.length
+      ? count(orphanFiles.length, "file without a record", "files without a record")
+      : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
 /**
  * Today's "Needs you", ordered by what ignoring a row costs: your account, then what a
  * visitor meets now (broken images, failing answers), a person waiting for a reply, your own
@@ -65,17 +78,10 @@ export function needsYou(facts: TodayFacts, now = Date.now()): TodayRow[] {
       sign: "warn",
     });
   }
-  if (reconcile && (reconcile.missingFiles.length || reconcile.orphanFiles.length)) {
-    const parts = [
-      reconcile.missingFiles.length
-        ? count(reconcile.missingFiles.length, "record without a file", "records without a file")
-        : "",
-      reconcile.orphanFiles.length
-        ? count(reconcile.orphanFiles.length, "file without a record", "files without a record")
-        : "",
-    ].filter(Boolean);
+  const outOfStep = reconcile ? mediaGaps(reconcile) : "";
+  if (outOfStep) {
     rows.push({
-      words: `Media and database are out of step: ${parts.join(", ")}.`,
+      words: `Media and database are out of step: ${outOfStep}.`,
       when: "",
       action: "Media",
       link: "/admin/media",
