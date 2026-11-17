@@ -27,19 +27,24 @@ const count = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" :
     <div
       class="relative flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 py-2 before:absolute before:inset-y-0 before:inset-x-[-100vw] before:-z-10 before:border-b before:border-border before:bg-card"
     >
-      <h1
-        tabindex="-1"
-        class="m-0 min-w-0 text-page-title wrap-break-word text-foreground outline-none max-md:sr-only"
-      >
-        {{ title() }}
-      </h1>
-      @let shown = status();
-      <p class="m-0 min-w-0 flex-1 text-hint" [class]="shown.tone" role="status">
-        <span [textContent]="shown.words"></span>
-        @if (shown.time) {
-          &ngsp;<span class="text-data" [textContent]="shown.time"></span>
-        }
-      </p>
+      <!-- One line: a long title (an entry, a post) ends in "…" before the controls would wrap, so the
+           header keeps its height, which the outline's top and the scroll padding count on. -->
+      <div class="flex min-w-0 flex-1 items-center gap-x-3">
+        <h1
+          tabindex="-1"
+          class="m-0 min-w-0 truncate text-page-title text-foreground outline-none max-md:sr-only"
+          [title]="title()"
+        >
+          {{ title() }}
+        </h1>
+        @let shown = status();
+        <p class="m-0 shrink-0 text-hint" [class]="shown.tone" role="status">
+          <span [textContent]="shown.words"></span>
+          @if (shown.time) {
+            &ngsp;<span class="text-data" [textContent]="shown.time"></span>
+          }
+        </p>
+      </div>
       <ng-content />
       <button
         hlmBtn

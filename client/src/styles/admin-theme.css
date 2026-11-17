@@ -157,7 +157,9 @@
     text-wrap: pretty;
   }
 
-  :root:root:has(app-admin-layout):not(:has(app-admin-preview-frame)) :is(h1, h2, h3, h4) {
+  /* Not a heading kept to one line (the editor header's title): `text-wrap` would undo its `nowrap`. */
+  :root:root:has(app-admin-layout):not(:has(app-admin-preview-frame))
+    :is(h1, h2, h3, h4):not(.truncate) {
     text-wrap: balance;
   }
   /* eslint-enable css/use-baseline */
