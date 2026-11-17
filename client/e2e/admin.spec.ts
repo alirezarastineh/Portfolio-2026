@@ -1208,28 +1208,21 @@ test.describe("admin", () => {
     page,
     baseURL,
   }) => {
-    // Six skill cards: a page long enough to scroll.
-    const card = (i: number) => ({
-      id: `card-${i}`,
-      icon: "cpu",
-      span: "sm",
-      items: ["TypeScript", "Postgres", "Hono", "Angular"],
-      position: i,
-      isVisible: true,
-      updatedAt: HOUR_AGO,
-      translations: {
-        en: { title: `Area ${i}`, caption: "", narrative: "What I do here." },
-        de: { title: `Bereich ${i}`, caption: "", narrative: "Was ich hier mache." },
-      },
+    // Thirty posts: a list long enough to scroll. The lists keep the page header (the editors have
+    // the editor header since plan 5's U10–U14).
+    const post = (i: number) => ({
+      ...postRow(),
+      id: `w${i}`,
+      slug: `post-${i}`,
+      translations: { en: { title: `Post ${i}` } },
     });
     await fakeApi(page, baseURL, {
-      "GET /admin/skills": { skills: [0, 1, 2, 3, 4, 5].map(card) },
+      "GET /admin/posts": { posts: Array.from({ length: 30 }, (_, i) => post(i)) },
     });
     await page.setViewportSize({ width: 1280, height: 720 });
-    // Skills keeps the page header until its Part (the project editor has the editor header, plan 5 U13).
-    await openAdmin(page, "/admin/skills");
+    await openAdmin(page, "/admin/writing");
 
-    const title = page.getByRole("heading", { level: 1, name: "Skills" });
+    const title = page.getByRole("heading", { level: 1, name: "Writing" });
     await expect(title).toBeVisible();
     const row = page.locator(".sticky", { has: title });
     await expect(row).not.toHaveAttribute("data-stuck");
@@ -5827,7 +5820,7 @@ test.describe("never losing work", () => {
       answers: (updatedAt) => ({
         "GET /admin/skills": (n: number) => saved(row.skills(updatedAt(n))),
       }),
-      field: (page) => page.getByRole("textbox", { name: "Title (en)" }),
+      field: (page) => page.locator("#skill-card-title-en"),
       save: saveDraft,
     },
     {
@@ -6092,6 +6085,45 @@ test.describe("the recovery copy", () => {
     byId("#legal-title-en", "Your data"),
     richText("Text (en)", " Nothing else is kept."),
   ];
+  const SKILLS_API = {
+    "GET /admin/skills": {
+      skills: [
+        {
+          id: "backend",
+          icon: "cpu",
+          span: "lg",
+          items: ["TypeScript"],
+          position: 0,
+          isVisible: true,
+          updatedAt: HOUR_AGO,
+          translations: {
+            en: { title: "Backend", caption: "// kept", narrative: "What I build." },
+            de: { title: "Backend", caption: "// behalten", narrative: "Was ich baue." },
+          },
+        },
+        {
+          id: "ops",
+          icon: "server",
+          span: "sm",
+          items: [],
+          position: 1,
+          isVisible: false,
+          updatedAt: HOUR_AGO,
+          translations: {
+            en: { title: "Operations", caption: "", narrative: "" },
+            de: { title: "Betrieb", caption: "", narrative: "" },
+          },
+        },
+      ],
+    },
+  };
+  const skillsFields = [
+    byId("#skill-backend-title-en", "Backend and APIs"),
+    byId("#skill-backend-summary-de", "Was ich auf dem Server baue."),
+    // Each group has a "Skills" field: this one by its id.
+    { at: (page: Page) => page.locator("#skill-backend-items"), text: "Go", token: true },
+    byId("#skill-ops-title-de", "Betrieb und Infrastruktur"),
+  ];
   const projectFields = [
     byId("#category", "ai-infra"),
     byId("#periodStart", "2026-01-15"),
@@ -6280,6 +6312,27 @@ test.describe("the recovery copy", () => {
         for (const field of legalFirst) await isBack(page, field);
         await privacyTab(page).click();
         for (const field of legalSecond) await isBack(page, field);
+      },
+    },
+    {
+      name: "Skills",
+      path: "/admin/skills",
+      answers: SKILLS_API,
+      keys: [
+        "skills|backend|translations.en.title",
+        "skills|backend|translations.de.narrative",
+        "skills|backend|items",
+        "skills|ops|translations.de.title",
+        "skills|ops|isVisible",
+      ],
+      words: [...skillsFields.map((field) => field.text)],
+      edit: async (page) => {
+        for (const field of skillsFields) await type(page, field);
+        await page.getByRole("switch", { name: "Show Operations on the site" }).click();
+      },
+      check: async (page) => {
+        for (const field of skillsFields) await isBack(page, field);
+        await expect(page.getByRole("switch", { name: /^Show Operations/ })).toBeChecked();
       },
     },
     {
@@ -6679,18 +6732,18 @@ test.describe("the recovery copy", () => {
       "DELETE /admin/skills/beta": { ok: true },
     });
     await openAdmin(page, "/admin/skills");
-    const titles = page.getByRole("textbox", { name: "Title (en)" });
-    await titles.nth(0).fill("Alpha, edited");
-    await titles.nth(1).fill("Beta, edited");
-    await titles.nth(2).fill("Gamma, edited");
+    const title = (p: Page, id: string) => p.locator(`#skill-${id}-title-en`);
+    await title(page, "alpha").fill("Alpha, edited");
+    await title(page, "beta").fill("Beta, edited");
+    await title(page, "gamma").fill("Gamma, edited");
     await stored(page, [
       "skills|alpha|translations.en.title",
       "skills|beta|translations.en.title",
       "skills|gamma|translations.en.title",
     ]);
 
-    // Deleted on the server at once: that row's copy goes, the others stay.
-    await page.getByRole("button", { name: "Delete beta" }).click();
+    // Deleted on the server at once: that row's copy goes, the others stay. Named by its title as typed.
+    await page.getByRole("button", { name: "Delete Beta, edited" }).click();
     await page
       .getByRole("alertdialog")
       .getByRole("button", { name: /^Delete/ })
@@ -6705,9 +6758,12 @@ test.describe("the recovery copy", () => {
     rows = [card("gamma", 0), card("alpha", 1)];
     const back = await LOSSES[0]!.lose(page, baseURL, "/admin/skills", {});
     await expect(banner(back)).toBeVisible();
-    const after = back.getByRole("textbox", { name: "Title (en)" });
-    await expect(after.nth(0)).toHaveValue("Gamma, edited");
-    await expect(after.nth(1)).toHaveValue("Alpha, edited");
+    await expect(back.getByRole("heading", { level: 3 })).toHaveText([
+      "Gamma, edited",
+      "Alpha, edited",
+    ]);
+    await expect(title(back, "gamma")).toHaveValue("Gamma, edited");
+    await expect(title(back, "alpha")).toHaveValue("Alpha, edited");
   });
 
   test("Profile's links keep their copy by row id, through a delete and a reorder", async ({
@@ -6874,7 +6930,7 @@ test.describe("the recovery copy", () => {
           ],
         },
       },
-      typed: [byName("Title (de)", "Server")],
+      typed: [byId("#skill-card-title-de", "Server")],
       keys: ["skills|card|translations.de.title"],
     },
     {
@@ -7385,7 +7441,7 @@ test.describe("telling the truth", () => {
     await expect(page.getByRole("combobox", { name: "Card size" })).toHaveCount(0);
     await expect(page.getByRole("textbox", { name: "Caption (en)" })).toHaveCount(0);
 
-    await page.getByRole("textbox", { name: "Title (en)" }).fill("Server");
+    await page.locator("#skill-card-title-en").fill("Server");
     await saveDraft(page).click();
     await expect.poll(() => puts).toHaveLength(1);
     expect(puts[0]).toMatchObject({
@@ -7394,7 +7450,7 @@ test.describe("telling the truth", () => {
       translations: { en: { caption: "// kept", title: "Server" } },
     });
 
-    await page.getByRole("button", { name: "Add card" }).click();
+    await page.getByRole("button", { name: "Add group" }).click();
     await expect.poll(() => posts).toHaveLength(1);
     expect(typeof posts[0]!["icon"]).toBe("string");
     expect(typeof posts[0]!["span"]).toBe("string");
@@ -11965,6 +12021,411 @@ test.describe("Writing: the table and the post editor", () => {
       await expect(page.getByText("Missing in German")).toBeVisible();
       expect(await axeViolations(page)).toEqual([]);
     });
+  }
+});
+
+/** Skills and Legal (plan 5, U14 K2): groups with token items; the two documents as tabs in the address. */
+test.describe("Skills and Legal", () => {
+  const NEWER = new Date(Date.now() + 60_000).toISOString();
+  const TYPED = "Typed before the session ended";
+  const LOST = { status: 401, body: { error: "unauthenticated" } };
+  const saved = (body: unknown = { ok: true }) => ({ status: 200, body });
+  const header = (page: Page) => page.locator("app-editor-header");
+  const state = (page: Page) => header(page).getByRole("status").first();
+  const save = (page: Page) => header(page).getByRole("button", { name: "Save", exact: true });
+  const ask = (page: Page) => page.getByRole("alertdialog");
+  const banner = (page: Page) => page.getByRole("status").filter({ hasText: "Unsaved edits from" });
+  const groupHeads = (page: Page) => page.getByRole("heading", { level: 3 });
+  const tokens = (page: Page, id: string) =>
+    page.locator("app-token-field", { has: page.locator(`#skill-${id}-items`) });
+
+  const group = (
+    id: string,
+    position: number,
+    [en, de]: [string, string],
+    items: string[],
+    isVisible = true,
+  ) => ({
+    id,
+    icon: "cpu",
+    span: "lg",
+    items,
+    position,
+    isVisible,
+    updatedAt: HOUR_AGO,
+    translations: {
+      en: { title: en, caption: "// kept", narrative: `What ${en} covers.` },
+      de: { title: de, caption: "// behalten", narrative: `Was ${de} abdeckt.` },
+    },
+  });
+  /** Two groups shown, a third hidden. */
+  const GROUPS = () => [
+    group("backend", 0, ["Backend", "Backend"], ["TypeScript", "Postgres", "Hono"]),
+    group("frontend", 1, ["Frontend", "Frontend"], ["Angular", "Tailwind"]),
+    group("ops", 2, ["Operations", "Betrieb"], ["Docker"], false),
+  ];
+  const SKILLS = () => ({ "GET /admin/skills": { skills: GROUPS() } });
+
+  /** Each page, where its Save goes, and a field to type in. */
+  const EDITORS = [
+    {
+      name: "Skills",
+      path: "/admin/skills",
+      answers: SKILLS,
+      put: "/admin/skills/backend",
+      ok: { ok: true },
+      field: "#skill-backend-title-en",
+      body: (text: string) => ({ icon: "cpu", translations: { en: { title: text } } }),
+    },
+  ];
+
+  for (const editor of EDITORS) {
+    test(`a 401 mid-edit opens the sign-in over ${editor.name}; the text stays and saves after it`, async ({
+      page,
+      baseURL,
+      problems,
+    }) => {
+      let signedIn = false;
+      const unmocked = await fakeApi(page, baseURL, {
+        ...editor.answers(),
+        [`PUT ${editor.put}`]: () => (signedIn ? saved(editor.ok) : LOST),
+        "POST /auth/login": () => {
+          signedIn = true;
+          return saved({ ok: true, totpRequired: false, user: USER });
+        },
+      });
+      const puts = sentTo(page, "PUT", editor.put);
+      await openAdmin(page, editor.path);
+      const field = page.locator(editor.field);
+      const signIn = page.getByRole("dialog", { name: "Sign in to carry on" });
+
+      await field.fill(TYPED);
+      await save(page).click();
+      await expect(signIn).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`${editor.path}$`));
+      await expect(
+        page.getByText("Not saved: you were signed out. Sign in, then save again."),
+      ).toBeVisible();
+      await expect(field).toHaveValue(TYPED);
+
+      await signIn.getByLabel("Password").fill("hunter2hunter2");
+      await signIn.getByRole("button", { name: "Sign in" }).click();
+      await expect(signIn).toBeHidden();
+      await expect(field).toHaveValue(TYPED);
+      await save(page).click();
+      await expect(state(page)).toHaveText(/^Saved \d\d:\d\d/);
+      expect(puts).toHaveLength(2);
+      expect(puts[1]).toMatchObject(editor.body(TYPED));
+      expect(problems.pageErrors).toEqual([]);
+      expect(unmocked).toEqual([]);
+    });
+  }
+
+  test("Skills: a row per group with its title, skills, summary and Shown; Ctrl S sends the changed group whole, the hidden fields as loaded", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await fakeApi(page, baseURL, { ...SKILLS(), "PUT /admin/skills/backend": { ok: true } });
+    const puts = sentTo(page, "PUT", "/admin/skills/backend");
+    const others = [
+      sentTo(page, "PUT", "/admin/skills/frontend"),
+      sentTo(page, "PUT", "/admin/skills/ops"),
+    ];
+    await openAdmin(page, "/admin/skills");
+
+    await expect(header(page).getByRole("heading", { level: 1, name: "Skills" })).toBeVisible();
+    await expect(groupHeads(page)).toHaveText(["Backend", "Frontend", "Operations"]);
+    await expect(page.locator("#skill-ops-title-de")).toHaveValue("Betrieb");
+    await expect(page.locator("#skill-frontend-summary-en")).toHaveValue("What Frontend covers.");
+    await expect(
+      tokens(page, "backend").getByRole("button", { name: "Postgres", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("switch", { name: "Show Backend on the site" })).toBeChecked();
+    await expect(
+      page.getByRole("switch", { name: "Show Operations on the site" }),
+    ).not.toBeChecked();
+    for (const gone of ["Add card", "Tech tags", "Narrative", "unsaved", "backend"]) {
+      await expect(page.locator("main").getByText(gone, { exact: true })).toHaveCount(0);
+    }
+    await expect(page.locator("app-save-bar")).toHaveCount(0);
+    // The default review carries no list of skills: nothing claims to be waiting for a publish.
+    await expect(page.locator("[id^=group-] .change-trace[data-change]")).toHaveCount(0);
+
+    await page.locator("#skill-backend-title-en").fill("Backend and APIs");
+    await expect(
+      page.locator("app-bilingual-field", { has: page.locator("#skill-backend-title-en") }),
+    ).toHaveAttribute("data-change", "unsaved");
+    await expect(groupHeads(page).first()).toHaveText("Backend and APIs");
+    await expect(state(page)).toHaveText("1 unsaved change");
+    await expect(page.getByRole("link", { name: /^Backend and APIs ?, unsaved$/ })).toBeVisible();
+
+    await page.keyboard.press("Control+s");
+    await expect(state(page)).toHaveText(/^Saved \d\d:\d\d/);
+    expect(puts).toHaveLength(1);
+    expect(puts[0]).toEqual({
+      id: "backend",
+      icon: "cpu",
+      span: "lg",
+      items: ["TypeScript", "Postgres", "Hono"],
+      isVisible: true,
+      translations: {
+        en: { title: "Backend and APIs", caption: "// kept", narrative: "What Backend covers." },
+        de: { title: "Backend", caption: "// behalten", narrative: "Was Backend abdeckt." },
+      },
+    });
+    expect(others.flat()).toEqual([]);
+  });
+
+  test("Skills' Shown waits in the draft while the live site disagrees: a group hidden since the last publish, another shown since", async ({
+    page,
+    baseURL,
+  }) => {
+    // Live lists Backend and Operations; the saved rows hide Operations and show Frontend.
+    const live = {
+      skills: GROUPS()
+        .filter((g) => g.id !== "frontend")
+        .map((g) => ({ id: g.id, items: g.items, title: g.translations.en.title })),
+    };
+    const side = (locale: "en" | "de") => ({
+      locale,
+      issues: [],
+      changed: true,
+      liveVersionId: 12,
+      docs: [],
+      draft: live,
+      live,
+    });
+    await fakeApi(page, baseURL, {
+      ...SKILLS(),
+      "GET /admin/publish/review": { canPublish: true, locales: [side("en"), side("de")] },
+    });
+    await openAdmin(page, "/admin/skills");
+    const head = (id: string) => page.locator(`#group-${id} > div.change-trace`);
+    await expect(head("ops")).toHaveAttribute("data-change", "draft");
+    await expect(head("frontend")).toHaveAttribute("data-change", "draft");
+    await expect(head("backend")).not.toHaveAttribute("data-change");
+    await expect(
+      page.getByRole("switch", { name: "Show Operations on the site" }),
+    ).toHaveAccessibleDescription("In draft");
+    await expect(page.getByRole("link", { name: /^Operations ?, in draft$/ })).toBeVisible();
+  });
+
+  test("Skills: the skills are tokens; Enter and a comma add, a twin is refused, Alt+arrows move, Delete removes, and the save keeps their order", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { ...SKILLS(), "PUT /admin/skills/backend": { ok: true } });
+    const puts = sentTo(page, "PUT", "/admin/skills/backend");
+    await openAdmin(page, "/admin/skills");
+    const field = page.locator("#skill-backend-items");
+    const tokenOf = (name: string) =>
+      tokens(page, "backend").getByRole("button", { name, exact: true });
+
+    await field.fill("Go");
+    await field.press("Enter");
+    await field.fill("Rust");
+    await field.press(",");
+    await expect(tokenOf("Rust")).toBeVisible();
+    await field.fill("Go");
+    await field.press("Enter");
+    await expect(page.locator("#skill-backend-items-refused")).toHaveText(
+      "Go is already in the list.",
+    );
+    await tokenOf("Rust").press("Alt+ArrowLeft");
+    await expect(tokenOf("Rust")).toBeFocused();
+    await tokenOf("TypeScript").press("Delete");
+    await expect(tokenOf("TypeScript")).toHaveCount(0);
+    await expect(tokens(page, "backend")).toHaveAttribute("data-change", "unsaved");
+
+    await save(page).click();
+    await expect.poll(() => puts).toHaveLength(1);
+    expect(puts[0]).toMatchObject({
+      items: ["Postgres", "Hono", "Rust", "Go"],
+      icon: "cpu",
+      span: "lg",
+      translations: { en: { caption: "// kept" } },
+    });
+  });
+
+  test("Skills: Add group saves one with the server's defaults and puts the focus in its title; Delete asks by name and hands the focus to Add group", async ({
+    page,
+    baseURL,
+  }) => {
+    const posts = sentTo(page, "POST", "/admin/skills");
+    await fakeApi(page, baseURL, {
+      "GET /admin/skills": () =>
+        saved({
+          skills: posts.length
+            ? [...GROUPS(), { ...posts[0], position: 3, updatedAt: NOW }]
+            : GROUPS(),
+        }),
+      "POST /admin/skills": { ok: true },
+      "DELETE /admin/skills/frontend": { ok: true },
+    });
+    await openAdmin(page, "/admin/skills");
+
+    await page.getByRole("button", { name: "Add group" }).click();
+    await expect.poll(() => posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({
+      icon: "cpu",
+      span: "sm",
+      items: [],
+      isVisible: true,
+      translations: {
+        en: { title: "New group", caption: "// caption", narrative: "" },
+        de: { title: "New group", caption: "// caption", narrative: "" },
+      },
+    });
+    const title = page.locator(`#skill-${String(posts[0]!["id"])}-title-en`);
+    await expect(title).toBeFocused();
+    await page.keyboard.type("Data");
+    await expect(title).toHaveValue("Data");
+
+    await page.getByRole("button", { name: "Delete Frontend" }).click();
+    await expect(ask(page)).toContainText("Delete Frontend?");
+    await ask(page).getByRole("button", { name: "Delete group" }).click();
+    await expect(groupHeads(page)).toHaveText(["Backend", "Operations", "Data"]);
+    await expect(page.getByRole("button", { name: "Add group" })).toBeFocused();
+  });
+
+  test("Skills: copies typed in the old cards come back into their groups", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      ...SKILLS(),
+      "PUT /admin/skills/backend": { ok: true },
+      "PUT /admin/skills/ops": { ok: true },
+    });
+    const puts = sentTo(page, "PUT", "/admin/skills/backend");
+    const opsPuts = sentTo(page, "PUT", "/admin/skills/ops");
+    await openAdmin(page, "/admin/inbox");
+    const at = Date.now() - 60_000;
+    await plantCopies(
+      page,
+      [
+        ["backend", "translations.en.title", "Server side", "Backend"],
+        [
+          "backend",
+          "items",
+          ["TypeScript", "Postgres", "Hono", "Go"],
+          ["TypeScript", "Postgres", "Hono"],
+        ],
+        [
+          "backend",
+          "translations.de.narrative",
+          "Was ich auf dem Server baue.",
+          "Was Backend abdeckt.",
+        ],
+        ["ops", "isVisible", true, false],
+      ].map(([item, field, value, base]) => ({ editor: "skills", item, field, value, base, at })),
+    );
+
+    await openAdmin(page, "/admin/skills");
+    await expect(banner(page)).toBeVisible();
+    await expect(page.locator("#skill-backend-title-en")).toHaveValue("Server side");
+    await expect(page.locator("#skill-backend-summary-de")).toHaveValue(
+      "Was ich auf dem Server baue.",
+    );
+    await expect(
+      tokens(page, "backend").getByRole("button", { name: "Go", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("switch", { name: "Show Operations on the site" })).toBeChecked();
+
+    await save(page).click();
+    await expect.poll(() => [puts.length, opsPuts.length]).toEqual([1, 1]);
+    expect(puts[0]).toMatchObject({
+      items: ["TypeScript", "Postgres", "Hono", "Go"],
+      translations: {
+        en: { title: "Server side", caption: "// kept" },
+        de: { narrative: "Was ich auf dem Server baue." },
+      },
+    });
+    expect(opsPuts[0]).toMatchObject({ isVisible: true, icon: "cpu", span: "lg" });
+  });
+
+  test("Skills from the keyboard at 1280: Add group, then each group's grip, Shown, Delete, its title, skills and summary; Alt+arrows and the grip's menu move it", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await fakeApi(page, baseURL, { ...SKILLS(), "PATCH /admin/skills/reorder": { ok: true } });
+    const reorders = sentTo(page, "PATCH", "/admin/skills/reorder");
+    await openAdmin(page, "/admin/skills");
+    const tab = async (target: Locator) => {
+      await page.keyboard.press("Tab");
+      await expect(target).toBeFocused();
+    };
+    const grips = page.locator("button[data-grip]");
+
+    await page.getByRole("button", { name: "Add group" }).focus();
+    await tab(grips.first());
+    await tab(page.getByRole("switch", { name: "Show Backend on the site" }));
+    await tab(page.getByRole("button", { name: "Delete Backend" }));
+    await tab(page.getByRole("button", { name: "More actions for Title" }).first());
+    await tab(page.locator("#skill-backend-title-en"));
+    await tab(page.locator("#skill-backend-title-de"));
+    await expect(page.locator("#skill-backend-title-de")).toHaveAttribute("lang", "de");
+    await tab(tokens(page, "backend").getByRole("button", { name: "TypeScript", exact: true }));
+    await page.locator("#skill-backend-items").focus();
+    await tab(page.getByRole("button", { name: "More actions for Summary" }).first());
+    await tab(page.locator("#skill-backend-summary-en"));
+    await tab(page.locator("#skill-backend-summary-de"));
+    await tab(grips.nth(1));
+
+    await grips.first().focus();
+    await page.keyboard.press("Alt+ArrowDown");
+    await expect.poll(() => reorders).toHaveLength(1);
+    expect(reorders[0]).toEqual({ ids: ["frontend", "backend", "ops"] });
+    await expect(grips.nth(1)).toBeFocused();
+    await expect(groupHeads(page)).toHaveText(["Frontend", "Backend", "Operations"]);
+
+    await page.keyboard.press("Enter");
+    await page.getByRole("menuitem", { name: "Move up" }).click();
+    await expect.poll(() => reorders).toHaveLength(2);
+    expect(reorders[1]).toEqual({ ids: ["backend", "frontend", "ops"] });
+    await expect(grips.first()).toBeFocused();
+  });
+
+  test("Skills at 390: one language with its switch first, the head line whole, the tokens wrapping, nothing sideways", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await fakeApi(page, baseURL, SKILLS());
+    await openAdmin(page, "/admin/skills");
+    const width = () => page.evaluate(() => document.documentElement.scrollWidth);
+    await expect(page.locator("#skill-backend-title-en")).toBeVisible();
+    await expect(page.locator("#skill-backend-title-de")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Delete Backend" })).toBeInViewport();
+    expect(await width()).toBe(390);
+
+    const languages = header(page).getByRole("group", { name: "Language view" });
+    await expect(languages.getByRole("button")).toHaveText(["EN", "DE"]);
+    await languages.getByRole("button", { name: "DE" }).click();
+    await expect(page.locator("#skill-backend-title-de")).toBeVisible();
+    await expect(page.locator("#skill-backend-title-en")).toHaveCount(0);
+    await page.evaluate(() => window.scrollTo(0, 2000));
+    await expect(save(page)).toBeInViewport({ ratio: 1 });
+    expect(await width()).toBe(390);
+    expect(await cutFields(page)).toEqual([]);
+  });
+
+  for (const colorScheme of ["dark", "light"] as const) {
+    test(`Skills with a field in each state, in the ${colorScheme} theme, has no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await fakeApi(page, baseURL, SKILLS());
+      await openAdmin(page, "/admin/skills");
+      await page.locator("#skill-backend-title-en").fill("Backend and APIs");
+      await expect(state(page)).toHaveText("1 unsaved change");
+      expect(await axeViolations(page)).toEqual([]);
+    });
+
   }
 });
 

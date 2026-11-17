@@ -53,7 +53,8 @@ export class SortableRowDirective {}
           cdkDrag
           [class]="
             ruled()
-              ? 'change-trace flex items-start gap-2 border-b border-border py-2 sm:items-center'
+              ? 'change-trace flex items-start gap-2 border-b border-border' +
+                (tall() ? ' py-3' : ' py-2 sm:items-center')
               : 'flex items-start gap-2 rounded-lg border border-border bg-card/50 p-3'
           "
           [attr.data-change]="change()(item)"
@@ -110,6 +111,8 @@ export class SortableListComponent<T> {
   readonly emptyText = input("Nothing here yet.");
   /** Rows on rules, the change trace on each (plan 5's editors), instead of boxes. */
   readonly ruled = input(false);
+  /** Ruled rows of several lines (Skills' groups): the grip at the row's top, not its middle. */
+  readonly tall = input(false);
   /** A row's trace (`unsaved`, `draft`), or null when it is live. */
   readonly change = input<(item: T) => string | null>(() => null);
 

@@ -67,7 +67,10 @@ const plural = (noun: string): string =>
           >{{ entries().length }} / {{ max() }}</span
         >
       </div>
-      <p [id]="id() + '-hint'" class="m-0 text-hint text-muted-foreground">
+      <p
+        [id]="id() + '-hint'"
+        [class]="quietHint() ? 'sr-only' : 'm-0 text-hint text-muted-foreground'"
+      >
         Enter or a comma adds. On a token, Delete removes it and Alt with an arrow key moves it.
       </p>
       <span [id]="id() + '-state'" class="sr-only">{{ words() }}</span>
@@ -160,6 +163,8 @@ export class TokenFieldComponent {
   readonly issue = input<string | null>(null);
   /** The trace, from the editor. */
   readonly state = input<TraceState>("live");
+  /** The keys' hint for screen readers only: a page that repeats the field shows it once (Skills' groups). */
+  readonly quietHint = input(false);
 
   protected readonly entries = signal<Token[]>([]);
   /** What the last key did, for screen readers. */
@@ -248,7 +253,7 @@ export class TokenFieldComponent {
     const added = list.length - this.entries().length;
     if (added) {
       this.set(list);
-      const last = list[list.length - 1]!;
+      const last = list.at(-1)!;
       this.said.set(
         added === 1 ? `${last.value} added, ${list.length} of ${list.length}.` : `${added} added.`,
       );
