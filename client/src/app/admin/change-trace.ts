@@ -81,6 +81,12 @@ export function traceOf(
   return inDraft(marks, path, locale) || savedAt > (marks?.asked ?? 0) ? "draft" : "live";
 }
 
+/** A field's state from what the editor knows: unsaved first, then in the draft, else live. */
+export function stateOf(unsaved: boolean, draft: boolean): TraceState {
+  if (unsaved) return "unsaved";
+  return draft ? "draft" : "live";
+}
+
 /** A section's or a page's mark: unsaved if any field is, else in the draft if any is. */
 export function rollUp(states: readonly TraceState[]): "unsaved" | "draft" | undefined {
   if (states.includes("unsaved")) return "unsaved";

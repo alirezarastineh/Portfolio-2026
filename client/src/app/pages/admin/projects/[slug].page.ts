@@ -36,6 +36,7 @@ import { countChangedFields } from "../../../admin/changed-fields";
 import {
   inDraft,
   rollUp,
+  stateOf,
   TRACE_WORDS,
   type DraftMarks,
   type TraceState,
@@ -312,11 +313,6 @@ const TRACED: Traced[] = [
     doc: (d) => d.gallery,
   },
 ];
-
-function stateOf(unsaved: boolean, draft: boolean): TraceState {
-  if (unsaved) return "unsaved";
-  return draft ? "draft" : "live";
-}
 
 function filledMetrics(metrics: MetricInput[]): MetricInput[] {
   return metrics.filter((m) => m.value.trim() !== "" && m.label.trim() !== "");
