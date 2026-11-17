@@ -1,4 +1,5 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -6,56 +7,75 @@ import {
   effect,
   ElementRef,
   inject,
+  Injector,
   OnInit,
   signal,
 } from "@angular/core";
 import type { RouteMeta } from "@analogjs/router";
-import { FormsModule } from "@angular/forms";
-import { ActivatedRoute, Router, RouterLink } from "@angular/router";
+import { NgTemplateOutlet } from "@angular/common";
+import { FormControl, FormsModule } from "@angular/forms";
+import { ActivatedRoute, Router } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
-import { lucideArrowLeft } from "@ng-icons/lucide";
-import { toast } from "@spartan-ng/brain/sonner";
+import { lucideExternalLink } from "@ng-icons/lucide";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
-import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
+import { HlmFieldLabel } from "@spartan-ng/helm/field";
 import { HlmInput } from "@spartan-ng/helm/input";
-import { HlmSeparator } from "@spartan-ng/helm/separator";
 import { HlmSwitch } from "@spartan-ng/helm/switch";
-import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
 import {
   AdminApiService,
+  type ApiIssue,
   type MediaAsset,
   type PostRow,
   type PostTranslationInput,
 } from "../../../admin/admin-api.service";
+import { ChangedElsewhere } from "../../../admin/changed-elsewhere";
 import { countChangedFields } from "../../../admin/changed-fields";
-import { EditorLayoutComponent } from "../../../admin/components/editor-layout.component";
-import { postOutline, type OutlineItem } from "../../../admin/editor-outline";
+import {
+  inDraft,
+  rollUp,
+  stateOf,
+  TRACE_WORDS,
+  type DraftMarks,
+  type TraceState,
+} from "../../../admin/change-trace";
+import { BilingualFieldComponent } from "../../../admin/components/bilingual-field.component";
+import { ConfirmService } from "../../../admin/components/confirm-dialog.component";
 import { CopilotSuggestComponent } from "../../../admin/components/copilot-suggest.component";
-import { CopilotLedger } from "../../../admin/copilot-ledger";
 import {
   FieldIssueComponent,
-  SaveBarComponent,
+  LocaleToggleComponent,
 } from "../../../admin/components/editor-chrome.component";
+import { EditorHeaderComponent } from "../../../admin/components/editor-header.component";
+import { EditorLayoutComponent } from "../../../admin/components/editor-layout.component";
+import type { LocaleView } from "../../../admin/components/field-pair.component";
 import {
   FormSkeletonComponent,
   LoadErrorComponent,
   NotFoundStateComponent,
 } from "../../../admin/components/load-state.component";
-import { AdminPageHeaderComponent } from "../../../admin/components/page-header.component";
-import { ChangedElsewhere } from "../../../admin/changed-elsewhere";
-import { ConfirmService } from "../../../admin/components/confirm-dialog.component";
-import { FieldIssues, focusFirstInvalid } from "../../../admin/issues";
-import { toastDiscarded, toastIssues, toastNotSaved } from "../../../admin/save-feedback";
 import { MediaFieldComponent } from "../../../admin/components/media-field.component";
 import { RichTextComponent } from "../../../admin/components/rich-text.component";
-import { StringListComponent } from "../../../admin/components/string-list.component";
+import { TokenFieldComponent } from "../../../admin/components/token-field.component";
+import { CopilotLedger } from "../../../admin/copilot-ledger";
+import { postOutline, type OutlineItem } from "../../../admin/editor-outline";
+import { FieldIssues, focusFirstInvalid } from "../../../admin/issues";
+import { storedView, storeView } from "../../../admin/language-view";
+import { LivePreviewService } from "../../../admin/preview/live-preview.service";
+import { AdminPulseService } from "../../../admin/pulse.service";
 import { RecoveryService } from "../../../admin/recovery.service";
+import { toastDiscarded, toastIssues, toastNotSaved } from "../../../admin/save-feedback";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../../admin/unsaved-changes.service";
-import type { Locale } from "../../../content/schema";
+import { isLocale } from "../../../content/locale";
+import type { Doc, Locale, PostDoc } from "../../../content/schema";
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
+
+const LOCALES: Locale[] = ["en", "de"];
+const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
+
+const DAY_MONTH = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
 
 function blankTranslation(): PostTranslationInput {
   return { title: "", excerpt: "", body: "", seoTitle: "", seoDescription: "" };
@@ -69,44 +89,197 @@ function toLocalInput(iso: string | null): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-type PostDraft = PostRow;
+/** A post on the site: published, its date passed. Only such a post has fields live or in the draft. */
+function onSite(p: PostRow): boolean {
+  return p.status === "published" && (!p.publishedAt || Date.parse(p.publishedAt) <= Date.now());
+}
 
+/** "Draft", "Scheduled for 3 Dec", "Published": the list's words. */
+function statusOf(p: PostRow): string {
+  if (p.status === "draft") return "Draft";
+  return onSite(p) ? "Published" : `Scheduled for ${DAY_MONTH.format(Date.parse(p.publishedAt!))}`;
+}
+
+/** The texts edited in the bilingual field, one control per language. */
+type PlainKey = "title" | "excerpt" | "seoTitle" | "seoDescription";
+
+interface PlainField {
+  key: PlainKey;
+  /** The field's id: its inputs are `<id>-en` and `<id>-de`, as the old editor's were. */
+  id: string;
+  label: string;
+  multiline?: boolean;
+  rows?: number;
+  hint?: string;
+  maxLength: number;
+  /** A Suggest under each language: the copilot drafts it, so the field's own paid steps stay off. */
+  suggest?: boolean;
+}
+
+const TEXT_FIELDS: PlainField[] = [
+  { key: "title", id: "post-title", label: "Title", maxLength: 200 },
+  {
+    key: "excerpt",
+    id: "post-excerpt",
+    label: "Excerpt",
+    multiline: true,
+    rows: 2,
+    hint: "Under the title on the post's page and in the list of posts.",
+    maxLength: 600,
+  },
+];
+
+const SEARCH_FIELDS: PlainField[] = [
+  {
+    key: "seoTitle",
+    id: "post-seo-title",
+    label: "Search title",
+    hint: "Empty: the title is used.",
+    maxLength: 120,
+  },
+  {
+    key: "seoDescription",
+    id: "post-seo-description",
+    label: "Search description",
+    multiline: true,
+    rows: 2,
+    hint: "Empty: the excerpt is used. About 150 characters.",
+    maxLength: 300,
+    suggest: true,
+  },
+];
+
+const PLAIN_FIELDS = [...TEXT_FIELDS, ...SEARCH_FIELDS];
+
+type Section = "post-details" | "post-cover" | "post-tags" | "post-text" | "post-search";
+
+/**
+ * Each traced field (plan 5, U14): how to read it, and where the review shows it in the draft: its
+ * path under `posts[slug]` in the core content, or its value in the post's doc.
+ */
+interface Traced {
+  key: string;
+  section: Section;
+  read: (p: PostRow) => unknown;
+  path?: string;
+  doc?: (d: PostDoc) => unknown;
+}
+
+const text =
+  (key: keyof PostTranslationInput) =>
+  (p: PostRow): unknown =>
+    LOCALES.map((locale) => p.translations[locale]?.[key] ?? null);
+
+const TRACED: Traced[] = [
+  { key: "slug", section: "post-details", read: (p) => p.slug, path: "slug" },
+  { key: "publishedAt", section: "post-details", read: (p) => p.publishedAt, path: "publishedAt" },
+  // Draft or published: no field of the site, so never "in draft" on its own.
+  { key: "status", section: "post-details", read: (p) => p.status },
+  {
+    key: "canonicalUrl",
+    section: "post-details",
+    read: (p) => p.canonicalUrl,
+    doc: (d) => d.canonicalUrl,
+  },
+  { key: "coverId", section: "post-cover", read: (p) => p.coverId, path: "cover" },
+  { key: "tags", section: "post-tags", read: (p) => p.tags, path: "tags" },
+  {
+    key: "versions",
+    section: "post-text",
+    read: (p) => LOCALES.map((locale) => p.translations[locale] !== null),
+  },
+  { key: "title", section: "post-text", read: text("title"), path: "title" },
+  { key: "excerpt", section: "post-text", read: text("excerpt"), path: "excerpt" },
+  { key: "body", section: "post-text", read: text("body"), doc: (d) => d.body },
+  { key: "seoTitle", section: "post-search", read: text("seoTitle"), doc: (d) => d.seo.title },
+  {
+    key: "seoDescription",
+    section: "post-search",
+    read: text("seoDescription"),
+    doc: (d) => d.seo.description,
+  },
+];
+
+/** A post's field is in the draft when its doc's value differs from the live one, in either language. */
+function docInDraft(marks: DraftMarks | null, slug: string, read: (d: PostDoc) => unknown) {
+  const pick = (doc: Doc | null) => (doc?.kind === "post" ? read(doc) : undefined);
+  return LOCALES.some((locale) => {
+    const change = marks?.docs?.[locale]?.find((d) => d.key === `post:${slug}`);
+    return !!change && JSON.stringify(pick(change.draft)) !== JSON.stringify(pick(change.live));
+  });
+}
+
+/**
+ * The post editor (plan 5, U14) on Part G's pieces: the sticky header (Save, Ctrl/⌘ S, ⋯ with
+ * Discard), the bilingual field with its trace, the outline with a dot per section, the language
+ * view remembered per editor. Each language's switch says whether the post exists in it: off keeps
+ * the text aside until Save and asks once, on brings it back.
+ */
 @Component({
   selector: "app-admin-post-editor",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    AdminPageHeaderComponent,
+    BilingualFieldComponent,
     CopilotSuggestComponent,
+    EditorHeaderComponent,
     EditorLayoutComponent,
     FieldIssueComponent,
     FormSkeletonComponent,
     FormsModule,
     HlmBadge,
     HlmButton,
-    HlmField,
     HlmFieldLabel,
     HlmInput,
-    HlmSeparator,
     HlmSwitch,
-    HlmTextarea,
     LoadErrorComponent,
+    LocaleToggleComponent,
     MediaFieldComponent,
     NgIcon,
+    NgTemplateOutlet,
     NotFoundStateComponent,
     RichTextComponent,
-    RouterLink,
-    SaveBarComponent,
-    StringListComponent,
+    TokenFieldComponent,
   ],
-  viewProviders: [provideIcons({ lucideArrowLeft })],
+  viewProviders: [provideIcons({ lucideExternalLink })],
   host: { class: "block" },
   template: `
-    <app-editor-layout [outline]="outline()">
-      <div class="flex flex-col gap-6 pb-28">
-        <a hlmBtn variant="ghost" size="sm" class="self-start" routerLink="/admin/writing">
-          <ng-icon name="lucideArrowLeft" size="14" aria-hidden="true" />
-          <span class="ml-1.5">All posts</span>
-        </a>
+    <app-editor-layout [outline]="outline()" [view]="shownView()">
+      <div class="flex flex-col gap-6 pb-12">
+        <app-editor-header
+          [title]="title()"
+          [changes]="changes()"
+          [saving]="saving()"
+          [problems]="issues.count()"
+          [notLive]="notLive()"
+          [savedAt]="savedAt()"
+          (save)="save()"
+          (discard)="discard()"
+        >
+          @if (status(); as words) {
+            <span hlmBadge variant="outline">{{ words }}</span>
+          }
+          @if (bothOn()) {
+            <app-locale-toggle
+              class="max-md:order-first"
+              [view]="shownView()"
+              [both]="wide()"
+              (viewChange)="choose($event)"
+            />
+          }
+          @if (previewPath(); as href) {
+            <a
+              hlmBtn
+              variant="ghost"
+              size="sm"
+              class="max-md:hidden"
+              target="_blank"
+              rel="noopener"
+              [href]="href"
+              >Post draft
+              <ng-icon name="lucideExternalLink" size="14" class="ml-1.5" aria-hidden="true"
+            /></a>
+          }
+        </app-editor-header>
 
         @if (loading()) {
           <app-form-skeleton [rows]="7" />
@@ -115,236 +288,256 @@ type PostDraft = PostRow;
         } @else if (!post()) {
           <app-not-found-state what="post" back="/admin/writing" backLabel="All posts" />
         } @else if (post(); as p) {
-          <app-page-header
-            [title]="p.translations.en?.title || p.translations.de?.title || p.slug"
-            [meta]="'/writing/' + p.slug"
-            [preview]="previewPath()"
-          >
-            <span headerStatus class="flex flex-wrap gap-1.5">
-              <span hlmBadge [variant]="statusVariant()">{{ statusLabel() }}</span>
-              @if (dirty()) {
-                <span hlmBadge variant="outline" class="border-accent-orange/50 text-accent-orange"
-                  >unsaved</span
-                >
-              }
-            </span>
-          </app-page-header>
-
-          <section
-            id="post-details"
-            aria-labelledby="post-details-title"
-            class="flex flex-col gap-4"
-          >
-            <h2 id="post-details-title" class="m-0 text-section-title">Details</h2>
-            <div class="grid gap-4 sm:grid-cols-2">
-              <div hlmField>
-                <label hlmFieldLabel for="post-slug">Slug</label>
-                <input
-                  hlmInput
-                  id="post-slug"
-                  maxlength="80"
-                  [ngModel]="p.slug"
-                  (ngModelChange)="patch({ slug: $event })"
-                  [attr.aria-invalid]="issues.get('slug') ? true : null"
-                  [aria-describedby]="issues.get('slug') ? 'post-slug-issue' : null"
-                />
-                <app-field-issue id="post-slug-issue" [message]="issues.get('slug')" />
-              </div>
-              <div hlmField>
-                <label hlmFieldLabel for="post-date">Publish date</label>
-                <input
-                  hlmInput
-                  id="post-date"
-                  type="datetime-local"
-                  [ngModel]="localDate()"
-                  (ngModelChange)="setDate($event)"
-                  [attr.aria-invalid]="issues.get('publishedAt') ? true : null"
-                  [aria-describedby]="
-                    issues.get('publishedAt') ? 'post-date-issue post-date-hint' : 'post-date-hint'
-                  "
-                />
-                <span id="post-date-hint" class="text-hint text-muted-foreground">
-                  In the future = scheduled: it appears with the first publish after this time.
-                </span>
-                <app-field-issue id="post-date-issue" [message]="issues.get('publishedAt')" />
-              </div>
-              <label class="flex items-center gap-3 text-sm font-medium">
-                <hlm-switch
-                  [checked]="p.status === 'published'"
-                  (checkedChange)="setPublished($event)"
-                />
-                <!-- A name that stays put: the switch's own state says on or off. -->
-                <span aria-hidden="true">{{
-                  p.status === "published" ? "Published" : "Draft — not on the site"
-                }}</span>
-                <span class="sr-only">Published</span>
-              </label>
-              <div hlmField>
-                <label hlmFieldLabel for="post-canonical"
-                  >Canonical URL (if first published elsewhere)</label
-                >
-                <input
-                  hlmInput
-                  id="post-canonical"
-                  maxlength="500"
-                  [ngModel]="p.canonicalUrl"
-                  (ngModelChange)="patch({ canonicalUrl: $event })"
-                  [attr.aria-invalid]="issues.get('canonicalUrl') ? true : null"
-                  [aria-describedby]="issues.get('canonicalUrl') ? 'post-canonical-issue' : null"
-                />
-                <app-field-issue id="post-canonical-issue" [message]="issues.get('canonicalUrl')" />
-              </div>
-            </div>
-            <app-field-issue id="post-translations-issue" [message]="issues.get('translations')" />
-          </section>
-
-          <hlm-separator />
-
-          <section id="post-cover" aria-labelledby="post-cover-title" class="flex flex-col gap-4">
-            <h2 id="post-cover-title" class="m-0 text-section-title">Cover</h2>
-            <app-media-field
-              id="post-cover-image"
-              label="Cover image"
-              [path]="p.coverPath"
-              (chosen)="chooseCover($event)"
-            />
-          </section>
-
-          <hlm-separator />
-
-          <section id="post-tags" aria-labelledby="post-tags-title" class="flex flex-col gap-4">
-            <h2 id="post-tags-title" class="m-0 text-section-title">Tags</h2>
-            <app-string-list
-              label="Tags"
-              singular="tag"
-              emptyText="No tags yet."
-              [max]="20"
-              [value]="p.tags"
-              (valueChange)="patch({ tags: $event })"
-            />
-            <app-field-issue id="post-tags-issue" [message]="issues.under('tags')" />
-          </section>
-
-          @for (locale of locales; track locale) {
-            <hlm-separator />
+          <div class="flex flex-col gap-10">
             <section
-              [id]="'post-' + locale"
-              [attr.aria-labelledby]="'post-' + locale + '-title'"
-              class="flex flex-col gap-4"
+              id="post-details"
+              aria-labelledby="post-details-title"
+              class="flex flex-col gap-6"
             >
-              <!-- The switch is the section's heading: whether this language exists at all. -->
-              <h2 [id]="'post-' + locale + '-title'" class="m-0">
-                <label class="flex items-center gap-3 text-section-title">
-                  <hlm-switch
-                    [checked]="p.translations[locale] !== null"
-                    (checkedChange)="setLocale(locale, $event)"
-                  />
-                  <span>{{ locale === "en" ? "English" : "German" }} version</span>
-                </label>
-              </h2>
-
-              @if (p.translations[locale]; as t) {
-                <div hlmField>
-                  <label hlmFieldLabel [for]="'post-title-' + locale">Title</label>
+              <h2 id="post-details-title" class="m-0 text-section-title">Details</h2>
+              <div class="grid gap-x-4 gap-y-6 sm:grid-cols-2">
+                <div
+                  class="change-trace flex min-w-0 flex-col gap-1.5"
+                  [attr.data-change]="mark('slug')"
+                >
+                  <label hlmFieldLabel for="post-slug">Slug</label>
                   <input
                     hlmInput
-                    [id]="'post-title-' + locale"
-                    maxlength="200"
-                    [ngModel]="t.title"
-                    (ngModelChange)="patchText(locale, { title: $event })"
-                    [attr.aria-invalid]="textIssue(locale, 'title') ? true : null"
-                    [aria-describedby]="
-                      textIssue(locale, 'title') ? 'post-title-' + locale + '-issue' : null
-                    "
+                    id="post-slug"
+                    autocomplete="off"
+                    spellcheck="false"
+                    translate="no"
+                    maxlength="80"
+                    [ngModel]="p.slug"
+                    (ngModelChange)="patch({ slug: $event })"
+                    [attr.aria-invalid]="issues.get('slug') ? true : null"
+                    [aria-describedby]="describedBy('slug', 'post-slug')"
                   />
+                  <span id="post-slug-state" class="sr-only">{{ words("slug") }}</span>
+                  <app-field-issue id="post-slug-issue" [message]="issues.get('slug')" />
+                </div>
+                <div
+                  class="change-trace flex min-w-0 flex-col gap-1.5"
+                  [attr.data-change]="mark('publishedAt')"
+                >
+                  <label hlmFieldLabel for="post-date">Publish date</label>
+                  <p id="post-date-hint" class="m-0 text-hint text-muted-foreground">
+                    In the future: on the site with the first publish after it.
+                  </p>
+                  <input
+                    hlmInput
+                    id="post-date"
+                    type="datetime-local"
+                    [ngModel]="localDate()"
+                    (ngModelChange)="setDate($event)"
+                    [attr.aria-invalid]="issues.get('publishedAt') ? true : null"
+                    [aria-describedby]="describedBy('publishedAt', 'post-date', true)"
+                  />
+                  <span id="post-date-state" class="sr-only">{{ words("publishedAt") }}</span>
+                  <app-field-issue id="post-date-issue" [message]="issues.get('publishedAt')" />
+                </div>
+                <div
+                  class="change-trace flex min-w-0 flex-col gap-1.5"
+                  [attr.data-change]="mark('status')"
+                >
+                  <label class="flex min-h-9 items-center gap-3 text-sm font-medium">
+                    <hlm-switch
+                      [checked]="p.status === 'published'"
+                      (checkedChange)="setPublished($event)"
+                      [aria-describedby]="
+                        mark('status') ? 'post-status-state post-status-hint' : 'post-status-hint'
+                      "
+                    />
+                    <span>Published</span>
+                  </label>
+                  <p id="post-status-hint" class="m-0 text-hint text-muted-foreground">
+                    Off: a draft, not on the site.
+                  </p>
+                  <span id="post-status-state" class="sr-only">{{ words("status") }}</span>
+                </div>
+                <div
+                  class="change-trace flex min-w-0 flex-col gap-1.5"
+                  [attr.data-change]="mark('canonicalUrl')"
+                >
+                  <label hlmFieldLabel for="post-canonical">Canonical URL</label>
+                  <p id="post-canonical-hint" class="m-0 text-hint text-muted-foreground">
+                    Where it first appeared, if elsewhere.
+                  </p>
+                  <input
+                    hlmInput
+                    id="post-canonical"
+                    type="url"
+                    autocomplete="off"
+                    maxlength="500"
+                    [ngModel]="p.canonicalUrl"
+                    (ngModelChange)="patch({ canonicalUrl: $event })"
+                    [attr.aria-invalid]="issues.get('canonicalUrl') ? true : null"
+                    [aria-describedby]="describedBy('canonicalUrl', 'post-canonical', true)"
+                  />
+                  <span id="post-canonical-state" class="sr-only">{{ words("canonicalUrl") }}</span>
                   <app-field-issue
-                    [id]="'post-title-' + locale + '-issue'"
-                    [message]="textIssue(locale, 'title')"
+                    id="post-canonical-issue"
+                    [message]="issues.get('canonicalUrl')"
                   />
                 </div>
-                <div hlmField>
-                  <label hlmFieldLabel [for]="'post-excerpt-' + locale">Excerpt</label>
-                  <textarea
-                    hlmTextarea
-                    rows="2"
-                    maxlength="600"
-                    [id]="'post-excerpt-' + locale"
-                    [ngModel]="t.excerpt"
-                    (ngModelChange)="patchText(locale, { excerpt: $event })"
-                  ></textarea>
-                </div>
-                <app-rich-text
-                  mode="long"
-                  [label]="'Body (' + locale + ')'"
-                  [ngModel]="t.body"
-                  (ngModelChange)="patchText(locale, { body: $event })"
+              </div>
+            </section>
+
+            <section id="post-cover" aria-labelledby="post-cover-title" class="flex flex-col gap-4">
+              <h2 id="post-cover-title" class="m-0 text-section-title">Cover</h2>
+              <div class="change-trace" [attr.data-change]="mark('coverId')">
+                <app-media-field
+                  id="post-cover-image"
+                  label="Cover image"
+                  [hint]="coverHint()"
+                  [path]="p.coverPath"
+                  (chosen)="chooseCover($event)"
                 />
-                <app-field-issue
-                  [id]="'post-body-' + locale + '-issue'"
-                  [message]="textIssue(locale, 'body')"
-                />
-                <div class="grid gap-4 sm:grid-cols-2">
-                  <div hlmField>
-                    <label hlmFieldLabel [for]="'post-seo-title-' + locale"
-                      >Search title (optional)</label
-                    >
-                    <input
-                      hlmInput
-                      maxlength="120"
-                      [id]="'post-seo-title-' + locale"
-                      [ngModel]="t.seoTitle"
-                      (ngModelChange)="patchText(locale, { seoTitle: $event })"
-                    />
-                  </div>
-                  <div hlmField>
-                    <label hlmFieldLabel [for]="'post-seo-description-' + locale"
-                      >Search description</label
-                    >
-                    <input
-                      hlmInput
-                      maxlength="300"
-                      [id]="'post-seo-description-' + locale"
-                      [aria-describedby]="'post-seo-description-' + locale + '-draft'"
-                      [ngModel]="t.seoDescription"
-                      (ngModelChange)="patchText(locale, { seoDescription: $event })"
-                    />
-                    <app-copilot-suggest
-                      class="self-end"
-                      [locale]="locale"
-                      [fieldId]="'post-seo-description-' + locale"
-                      [source]="seoSources[locale]"
-                      [target]="seoTarget(locale)"
-                      [current]="seoValues[locale]"
-                      (suggested)="patchText(locale, { seoDescription: $event })"
-                    />
-                  </div>
-                </div>
-              } @else {
-                <p class="m-0 text-sm text-muted-foreground">
-                  @if (setAside()[locale]) {
-                    The {{ locale.toUpperCase() }} version goes when you save. Turn the switch back
-                    on to keep it.
-                  } @else {
-                    This post does not exist in {{ locale.toUpperCase() }}; its alternate link stays
-                    empty.
+              </div>
+            </section>
+
+            <section id="post-tags" aria-labelledby="post-tags-title" class="flex flex-col gap-4">
+              <h2 id="post-tags-title" class="m-0 text-section-title">Tags</h2>
+              <app-token-field
+                [id]="'tags'"
+                label="Tags"
+                singular="tag"
+                [max]="20"
+                [value]="p.tags"
+                [issue]="issues.under('tags')"
+                [state]="trace()['tags'] ?? 'live'"
+                (valueChange)="patch({ tags: $event })"
+              />
+            </section>
+
+            <section id="post-text" aria-labelledby="post-text-title" class="flex flex-col gap-6">
+              <h2 id="post-text-title" class="m-0 text-section-title">Text</h2>
+              <div class="change-trace flex flex-col gap-1.5" [attr.data-change]="mark('versions')">
+                <div class="flex flex-wrap items-center gap-x-8 gap-y-2">
+                  @for (locale of allLocales; track locale) {
+                    <label class="flex min-h-9 items-center gap-3 text-sm font-medium">
+                      <hlm-switch
+                        [checked]="p.translations[locale] !== null"
+                        (checkedChange)="setLocale(locale, $event)"
+                        [aria-describedby]="versionsDescribedBy(locale)"
+                      />
+                      <span>{{ language[locale] }} version</span>
+                    </label>
                   }
-                </p>
+                </div>
+                <span id="post-versions-state" class="sr-only">{{ words("versions") }}</span>
+                @for (locale of allLocales; track locale) {
+                  @if (p.translations[locale] === null) {
+                    <p
+                      [id]="'post-' + locale + '-off'"
+                      class="m-0 text-hint text-muted-foreground"
+                      [textContent]="offLine(locale)"
+                    ></p>
+                  }
+                }
+                <app-field-issue
+                  id="post-translations-issue"
+                  [message]="issues.get('translations')"
+                />
+              </div>
+
+              @if (versions().length) {
+                <ng-container *ngTemplateOutlet="heads" />
+                @for (field of textFields; track field.key) {
+                  <ng-container *ngTemplateOutlet="plain; context: { $implicit: field }" />
+                }
+                <div class="change-trace flex flex-col gap-1.5" [attr.data-change]="mark('body')">
+                  <span class="text-sm font-medium">Body</span>
+                  <span id="post-body-state" class="sr-only">{{ words("body") }}</span>
+                  <!-- Side by side from 1280 px, each about half the column; one above the other below it. -->
+                  <div
+                    [class]="shownView() === 'both' ? 'grid gap-4 xl:grid-cols-2' : 'grid gap-4'"
+                  >
+                    @for (locale of locales(); track locale) {
+                      <div class="flex min-w-0 flex-col gap-1">
+                        @if (shownView() === "both") {
+                          <span class="text-hint text-muted-foreground" aria-hidden="true">{{
+                            language[locale]
+                          }}</span>
+                        }
+                        <app-rich-text
+                          mode="long"
+                          [attr.lang]="locale"
+                          [ngModel]="bodyOf(locale)"
+                          (ngModelChange)="patchText(locale, { body: $event })"
+                          [label]="'Body ' + language[locale]"
+                          [describedBy]="bodyDescribedBy(locale)"
+                        />
+                        <app-field-issue
+                          [id]="'post-body-' + locale + '-issue'"
+                          [message]="textIssue(locale, 'body')"
+                        />
+                      </div>
+                    }
+                  </div>
+                </div>
               }
             </section>
-          }
 
-          <app-save-bar
-            [dirty]="dirty()"
-            [saving]="saving()"
-            [problems]="issues.count()"
-            [changes]="changes()"
-            [previewHref]="previewPath()"
-            (save)="save()"
-            (discard)="discard()"
-          />
+            @if (versions().length) {
+              <section
+                id="post-search"
+                aria-labelledby="post-search-title"
+                class="flex flex-col gap-6"
+              >
+                <h2 id="post-search-title" class="m-0 text-section-title">Search</h2>
+                <ng-container *ngTemplateOutlet="heads" />
+                @for (field of searchFields; track field.key) {
+                  <ng-container *ngTemplateOutlet="plain; context: { $implicit: field }" />
+                }
+              </section>
+            }
+          </div>
         }
       </div>
     </app-editor-layout>
+
+    <!-- English and German over the two-language fields below them, once a section. -->
+    <ng-template #heads>
+      @if (shownView() === "both") {
+        <div
+          class="-mb-4 grid grid-cols-2 gap-3 text-hint text-muted-foreground max-lg:hidden"
+          aria-hidden="true"
+        >
+          <span>English</span><span>German</span>
+        </div>
+      }
+    </ng-template>
+
+    <ng-template #plain let-field>
+      <app-bilingual-field
+        [id]="field.id"
+        [label]="field.label"
+        [hint]="field.hint ?? ''"
+        [multiline]="field.multiline ?? false"
+        [rows]="field.rows ?? 2"
+        [maxLength]="field.maxLength"
+        [ai]="!field.suggest"
+        [notes]="bothOn()"
+        [view]="shownView()"
+        [state]="trace()[field.key] ?? 'live'"
+        [live]="liveCopy()[field.key] ?? null"
+        [controlEn]="control(field.key, 'en')"
+        [controlDe]="control(field.key, 'de')"
+        [below]="field.suggest ? suggest : null"
+      />
+      <ng-template #suggest let-locale>
+        <app-copilot-suggest
+          class="self-end"
+          [locale]="locale"
+          [fieldId]="field.id + '-' + locale"
+          [source]="sourceFor(locale)"
+          [target]="seoTarget(locale)"
+          [current]="seoValueFor(locale)"
+          (suggested)="control(field.key, locale).setValue($event)"
+        />
+      </ng-template>
+    </ng-template>
   `,
 })
 export default class AdminPostEditorPage implements OnInit {
@@ -354,35 +547,87 @@ export default class AdminPostEditorPage implements OnInit {
   private readonly unsaved = inject(UnsavedChangesService);
   private readonly ledger = inject(CopilotLedger);
   private readonly confirm = inject(ConfirmService);
-  private readonly versions = new ChangedElsewhere(this.confirm, async () => {
+  private readonly injector = inject(Injector);
+  /** The review, for the trace's draft state; absent in unit tests. */
+  private readonly pulse = inject(AdminPulseService, { optional: true });
+  private readonly previewPanel = inject(LivePreviewService, { optional: true });
+  private readonly versionsCheck = new ChangedElsewhere(this.confirm, async () => {
     const id = this.post()?.id;
     const found = id ? await this.api.getPost(id) : null;
     return found?.ok ? [found.data.post] : null;
   });
 
   private readonly host = inject(ElementRef<HTMLElement>);
+  private gone = false;
 
-  protected readonly locales: Locale[] = ["en", "de"];
+  protected readonly allLocales = LOCALES;
+  protected readonly language = LANGUAGE;
+  protected readonly textFields = TEXT_FIELDS;
+  protected readonly searchFields = SEARCH_FIELDS;
+
   protected readonly loading = signal(true);
   /** The API's reason when the post did not arrive. */
   protected readonly loadError = signal<string | null>(null);
   protected readonly saving = signal(false);
-  protected readonly post = signal<PostDraft | null>(null);
+  /** When this editor last saved, for the header's "Saved 14:02". */
+  protected readonly savedAt = signal<number | null>(null);
+  /** Per trace key, when this editor saved it: in the draft until a review asked after that arrives. */
+  private readonly savedHere = signal<ReadonlyMap<string, number>>(new Map());
+  protected readonly post = signal<PostRow | null>(null);
+  private pristine: PostRow | null = null;
+  private readonly revision = signal(0);
+  /** A language switched off: its text, kept here until Save. */
+  private readonly setAside = signal<Partial<Record<Locale, PostTranslationInput>>>({});
+  /** Languages whose removal was asked about and agreed, since the last save or discard. */
+  private readonly asked = new Set<Locale>();
+  /** The last save's problems, by the input's path (`translations.de.title`). */
+  protected readonly issues = new FieldIssues();
 
-  /** As saved: a draft, scheduled for later, or published. */
-  protected readonly statusLabel = computed(() => {
-    this.revision();
-    const saved = this.pristine;
-    if (!saved || saved.status === "draft") return "draft";
-    return saved.publishedAt && Date.parse(saved.publishedAt) > Date.now()
-      ? "scheduled"
-      : "published";
+  protected readonly view = signal<LocaleView>(storedView("post") ?? "both");
+  /** English and German side by side from 1024 px; one language below it. */
+  protected readonly wide = computed(() => this.previewPanel?.wide() ?? true);
+  /** The languages the post exists in now. */
+  protected readonly versions = computed<Locale[]>(() =>
+    LOCALES.filter((locale) => (this.post()?.translations[locale] ?? null) !== null),
+  );
+  protected readonly bothOn = computed(() => this.versions().length === 2);
+  /** The view, within the languages the post has: one on, that one. */
+  protected readonly shownView = computed<LocaleView>(() => {
+    const on = this.versions();
+    if (on.length < 2) return on[0] ?? "en";
+    return this.view() === "both" && !this.wide() ? "en" : this.view();
+  });
+  protected readonly locales = computed<Locale[]>(() => {
+    const view = this.shownView();
+    return view === "both" ? LOCALES : [view];
   });
 
-  protected readonly statusVariant = computed(() => {
-    const label = this.statusLabel();
-    if (label === "published") return "default";
-    return label === "scheduled" ? "secondary" : "outline";
+  /** One control per plain text and language, mirroring the post: the bilingual field's. */
+  private readonly controls = Object.fromEntries(
+    PLAIN_FIELDS.map(({ key }) => [
+      key,
+      {
+        en: new FormControl("", { nonNullable: true }),
+        de: new FormControl("", { nonNullable: true }),
+      },
+    ]),
+  ) as Record<PlainKey, Record<Locale, FormControl<string>>>;
+
+  protected readonly title = computed(() => {
+    const p = this.post();
+    return (
+      p?.translations.en?.title ||
+      p?.translations.de?.title ||
+      p?.slug ||
+      this.route.snapshot.paramMap.get("slug") ||
+      "Post"
+    );
+  });
+
+  /** As saved, while it is on no page: a draft, or scheduled. Published, the header's "Live" says it. */
+  protected readonly status = computed(() => {
+    this.revision();
+    return this.pristine && !onSite(this.pristine) ? statusOf(this.pristine) : null;
   });
 
   /** The saved post's draft page, in English when it has one. */
@@ -393,42 +638,18 @@ export default class AdminPostEditorPage implements OnInit {
     const locale = saved.translations.en ? "en" : "de";
     return `/admin/preview/${locale}/writing/${encodeURIComponent(saved.slug)}`;
   });
-  /** The last save's problems, by the input's path (`translations.de.title`). */
-  protected readonly issues = new FieldIssues();
-
-  protected textIssue(locale: Locale, key: string): string | null {
-    return this.issues.get(`translations.${locale}.${key}`);
-  }
 
   /** What the copilot describes when asked for a search description. */
-  protected readonly seoSources: Record<Locale, () => string> = {
+  private readonly seoSources: Record<Locale, () => string> = {
     en: () => this.postText("en"),
     de: () => this.postText("de"),
   };
 
-  /** A search description's name in the copilot's ledger, with its post. */
-  protected seoTarget(locale: Locale, id = this.post()?.id ?? ""): string {
-    return `post:${id}:seo:${locale}`;
-  }
-
   /** The search description as it reads now: what a draft is judged by when the post is saved. */
-  protected readonly seoValues: Record<Locale, () => string> = {
+  private readonly seoValues: Record<Locale, () => string> = {
     en: () => this.post()?.translations.en?.seoDescription ?? "",
     de: () => this.post()?.translations.de?.seoDescription ?? "",
   };
-
-  private postText(locale: Locale): string {
-    const t = this.post()?.translations[locale];
-    if (!t) return "";
-    return [t.title, t.excerpt, t.body].filter(Boolean).join("\n");
-  }
-
-  private pristine: PostDraft | null = null;
-  private readonly revision = signal(0);
-  /** A language switched off: its text, kept here until Save. */
-  private readonly setAside = signal<Partial<Record<Locale, PostTranslationInput>>>({});
-  /** Languages whose removal was asked about and agreed, since the last save or discard. */
-  private readonly asked = new Set<Locale>();
 
   protected readonly dirty = computed(() => {
     this.revision();
@@ -442,29 +663,93 @@ export default class AdminPostEditorPage implements OnInit {
     return countChangedFields(this.pristine, this.post(), ["coverPath"]);
   });
 
-  /** The sections for the rail: how far along each is, and the last save's problems in it. */
+  /** Each traced field's state, by its key: unsaved here, in the draft, or live. */
+  protected readonly trace = computed<Record<string, TraceState>>(() => {
+    this.revision();
+    const now = this.post();
+    const base = this.pristine;
+    if (!now || !base) return {};
+    const marks = this.pulse?.marks() ?? null;
+    const saved = this.savedHere();
+    const live = onSite(base);
+    const out: Record<string, TraceState> = {};
+    for (const { key, read, path, doc } of TRACED) {
+      const unsaved = JSON.stringify(read(now)) !== JSON.stringify(read(base));
+      // A draft or a scheduled post is on no page: nothing of it is live, or in the draft against it.
+      const inReview = path
+        ? inDraft(marks, `posts[${base.slug}].${path}`)
+        : !!doc && docInDraft(marks, base.slug, doc);
+      const draft = live && (inReview || (saved.get(key) ?? 0) > (marks?.asked ?? 0));
+      out[key] = stateOf(unsaved, draft);
+    }
+    return out;
+  });
+
+  /** The live site's title and excerpt in both languages, for "English changed, German not". */
+  protected readonly liveCopy = computed(() => {
+    const marks = this.pulse?.marks() ?? null;
+    this.revision();
+    const slug = this.pristine?.slug;
+    const at = (locale: Locale, key: "title" | "excerpt") =>
+      marks?.live[locale]?.posts?.find((p) => p.slug === slug)?.[key];
+    return Object.fromEntries(
+      (["title", "excerpt"] as const).map((key) => {
+        const [en, de] = [at("en", key), at("de", key)];
+        return [key, typeof en === "string" && typeof de === "string" ? { en, de } : null];
+      }),
+    ) as Record<string, Record<Locale, string> | null>;
+  });
+
+  /** Fields saved to the draft and not live; null for a post not on the site, or while unknown. */
+  protected readonly notLive = computed(() => {
+    this.revision();
+    if (!this.pristine || !onSite(this.pristine)) return null;
+    if (!this.pulse?.marks() && this.savedHere().size === 0) return null;
+    return Object.values(this.trace()).filter((state) => state === "draft").length;
+  });
+
+  /** The sections for the rail: how far along each is, its trace, and the last save's problems in it. */
   protected readonly outline = computed<OutlineItem[]>(() => {
     const p = this.post();
-    return p
-      ? postOutline(
-          p,
-          this.issues.entries().map(([path]) => path),
-        )
-      : [];
+    if (!p) return [];
+    const trace = this.trace();
+    const problems = this.issues.entries().map(([path]) => path);
+    return postOutline(p, problems).map((item) => ({
+      ...item,
+      change: rollUp(
+        TRACED.filter((t) => t.section === item.id).map((t) => trace[t.key] ?? "live"),
+      ),
+    }));
   });
 
   protected readonly localDate = computed(() => toLocalInput(this.post()?.publishedAt ?? null));
 
+  /** The cover's hint, with its trace's words: a media slot has no description of its own. */
+  protected readonly coverHint = computed(() => {
+    const words = this.words("coverId");
+    return ["Under the title on the post's page.", words && `${words}.`].filter(Boolean).join(" ");
+  });
+
   constructor() {
     effect(() => this.unsaved.set("post", this.dirty()));
     inject(DestroyRef).onDestroy(() => {
+      this.gone = true;
       this.unsaved.clear("post");
       // Leaving unsaved: the copilot's drafts were not kept.
       this.ledger.abandonPrefix("post:");
     });
+    // A field's text, typed or put there by its ⋯ or its Suggest, goes into the post like any edit.
+    for (const { key } of PLAIN_FIELDS) {
+      for (const locale of LOCALES) {
+        this.controls[key][locale].valueChanges.subscribe((value) => {
+          const translation = this.post()?.translations[locale];
+          if (translation && value !== translation[key]) this.patchText(locale, { [key]: value });
+        });
+      }
+    }
     // A language switched off keeps its text aside: that goes too.
     inject(RecoveryService).track<
-      PostDraft & { setAside: Partial<Record<Locale, PostTranslationInput>> }
+      PostRow & { setAside: Partial<Record<Locale, PostTranslationInput>> }
     >({
       editor: "post",
       item: () => this.post()?.id ?? null,
@@ -480,12 +765,42 @@ export default class AdminPostEditorPage implements OnInit {
         this.post.set(row);
         this.setAside.set(setAside);
         this.revision.update((v) => v + 1);
+        this.fill();
       },
     });
   }
 
   ngOnInit(): void {
     void this.load();
+  }
+
+  protected choose(view: LocaleView): void {
+    this.view.set(view);
+    storeView("post", view);
+  }
+
+  protected control(key: PlainKey, locale: Locale): FormControl<string> {
+    return this.controls[key][locale];
+  }
+
+  /** For the Suggest's template, whose `let-locale` is untyped. */
+  protected sourceFor(locale: Locale): () => string {
+    return this.seoSources[locale];
+  }
+
+  protected seoValueFor(locale: Locale): () => string {
+    return this.seoValues[locale];
+  }
+
+  /** A search description's name in the copilot's ledger, with its post. */
+  protected seoTarget(locale: Locale, id = this.post()?.id ?? ""): string {
+    return `post:${id}:seo:${locale}`;
+  }
+
+  private postText(locale: Locale): string {
+    const t = this.post()?.translations[locale];
+    if (!t) return "";
+    return [t.title, t.excerpt, t.body].filter(Boolean).join("\n");
   }
 
   protected reload(): void {
@@ -514,11 +829,77 @@ export default class AdminPostEditorPage implements OnInit {
     const found = result?.ok ? result.data.post : null;
     this.post.set(found ? structuredClone(found) : null);
     this.pristine = found ? structuredClone(found) : null;
-    if (found) this.versions.remember([found]);
+    if (found) this.versionsCheck.remember([found]);
     this.revision.update((v) => v + 1);
+    this.fill(true);
   }
 
-  protected patch(change: Partial<PostDraft>): void {
+  /** The controls take the post's text: after a load, a discard, a language back, or a recovery copy. */
+  private fill(fresh = false): void {
+    for (const { key } of PLAIN_FIELDS) {
+      for (const locale of LOCALES) {
+        const control = this.controls[key][locale];
+        const value = this.post()?.translations[locale]?.[key] ?? "";
+        // A reset abandons the field's own drafts and its Undo: only where the text moved, or on a load.
+        if (fresh || control.value !== value) control.reset(value);
+      }
+    }
+  }
+
+  protected mark(key: string): TraceState | null {
+    const state = this.trace()[key] ?? "live";
+    return state === "live" ? null : state;
+  }
+
+  protected words(key: string): string {
+    return TRACE_WORDS[this.trace()[key] ?? "live"];
+  }
+
+  /** A one-language field's description: its save problem, its trace's words, its hint. */
+  protected describedBy(key: string, id: string, hint = false): string | null {
+    const ids = [
+      this.issues.get(key) ? `${id}-issue` : null,
+      this.mark(key) ? `${id}-state` : null,
+      hint ? `${id}-hint` : null,
+    ].filter(Boolean);
+    return ids.length ? ids.join(" ") : null;
+  }
+
+  /** A language's switch: its trace's words, and the line under it while it is off. */
+  protected versionsDescribedBy(locale: Locale): string | null {
+    const ids = [
+      this.mark("versions") ? "post-versions-state" : null,
+      this.post()?.translations[locale] === null ? `post-${locale}-off` : null,
+    ].filter(Boolean);
+    return ids.length ? ids.join(" ") : null;
+  }
+
+  /** A body's description: its save problem, then its trace's words. */
+  protected bodyDescribedBy(locale: Locale): string | null {
+    const ids = [
+      this.textIssue(locale, "body") ? `post-body-${locale}-issue` : null,
+      this.mark("body") ? "post-body-state" : null,
+    ].filter(Boolean);
+    return ids.length ? ids.join(" ") : null;
+  }
+
+  /** What a language switched off means: gone on Save, or never there. */
+  protected offLine(locale: Locale): string {
+    const language = LANGUAGE[locale];
+    return this.setAside()[locale]
+      ? `The ${language} version goes when you save. Turn its switch back on to keep it.`
+      : `No ${language} version: the ${language} site leaves this post out.`;
+  }
+
+  protected bodyOf(locale: Locale): string {
+    return this.post()?.translations[locale]?.body ?? "";
+  }
+
+  protected textIssue(locale: Locale, key: string): string | null {
+    return this.issues.get(`translations.${locale}.${key}`);
+  }
+
+  protected patch(change: Partial<PostRow>): void {
     this.post.update((p) => (p ? { ...p, ...change } : p));
     this.revision.update((v) => v + 1);
     // `translations` is patched whole; its per-field messages clear in patchText.
@@ -562,9 +943,8 @@ export default class AdminPostEditorPage implements OnInit {
     this.putTranslation(locale, null);
     if (!typed || this.asked.has(locale)) return;
 
-    const language = locale === "en" ? "English" : "German";
     const remove = await this.confirm.ask({
-      title: `Remove the ${language} version when you save?`,
+      title: `Remove the ${LANGUAGE[locale]} version when you save?`,
       description: "The text stays here until you save. Turn the switch back on to keep it.",
       confirmLabel: "Remove when I save",
       cancelLabel: "Keep it",
@@ -578,11 +958,12 @@ export default class AdminPostEditorPage implements OnInit {
     this.setAside.update((kept) => ({ ...kept, [locale]: undefined }));
   }
 
-  private putTranslation(locale: Locale, text: PostTranslationInput | null): void {
+  private putTranslation(locale: Locale, translation: PostTranslationInput | null): void {
     this.post.update((p) =>
-      p ? { ...p, translations: { ...p.translations, [locale]: text } } : p,
+      p ? { ...p, translations: { ...p.translations, [locale]: translation } } : p,
     );
     this.revision.update((v) => v + 1);
+    this.fill();
   }
 
   protected patchText(locale: Locale, change: Partial<PostTranslationInput>): void {
@@ -606,12 +987,14 @@ export default class AdminPostEditorPage implements OnInit {
       this.post.set(edits);
       this.setAside.set(setAside);
       this.revision.update((v) => v + 1);
+      this.fill();
     });
     this.post.set(this.pristine ? structuredClone(this.pristine) : null);
     this.setAside.set({});
     this.asked.clear();
     this.revision.update((v) => v + 1);
     this.issues.clear();
+    this.fill();
     // Thrown away with the other unsaved edits: the copilot's drafts were not kept.
     this.ledger.abandonPrefix("post:");
   }
@@ -621,8 +1004,7 @@ export default class AdminPostEditorPage implements OnInit {
     if (!current || this.saving()) return;
 
     this.saving.set(true);
-    const title = current.translations.en?.title || current.translations.de?.title || current.slug;
-    if (!(await this.versions.mayOverwrite([current.id], title))) {
+    if (!(await this.versionsCheck.mayOverwrite([current.id], this.title()))) {
       this.saving.set(false);
       return;
     }
@@ -640,32 +1022,70 @@ export default class AdminPostEditorPage implements OnInit {
       canonicalUrl: current.canonicalUrl.trim(),
       translations: current.translations,
     });
-    if (result.ok) await this.versions.refresh();
+    if (result.ok) await this.versionsCheck.refresh();
     this.saving.set(false);
     ended(result.ok);
+    if (this.gone) return;
+    if (result.ok) this.saved(current);
+    else this.refused(result.error, result.issues ?? []);
+  }
 
-    if (!result.ok) {
-      if (result.error === "duplicate_slug") {
-        this.issues.add("slug", "Another post already uses this slug");
-        focusFirstInvalid(this.host.nativeElement);
-      } else if (result.issues?.length) {
-        this.issues.set(result.issues);
-        toastIssues(result.issues);
-        focusFirstInvalid(this.host.nativeElement);
-      } else {
-        toastNotSaved(result.error, "Save failed");
-      }
+  /** A refused save: its problems on their fields, the first focused, in the language that shows them. */
+  private refused(error: string, issues: readonly ApiIssue[]): void {
+    if (error === "duplicate_slug") {
+      this.issues.add("slug", "Another post already uses this slug");
+      focusFirstInvalid(this.host.nativeElement);
       return;
     }
+    if (!issues.length) {
+      toastNotSaved(error, "Save failed");
+      return;
+    }
+    this.issues.set(issues);
+    toastIssues(issues);
+    const shown = this.shownView();
+    const other = issues.find((i) => isLocale(i.path[1]) && shown !== "both" && i.path[1] !== shown)
+      ?.path[1] as Locale | undefined;
+    // A problem in the language not shown: show it (both where both fit), then place the problems.
+    if (other) this.view.set(this.wide() ? "both" : other);
+    afterNextRender(
+      () => {
+        if (this.gone) return;
+        for (const { key } of PLAIN_FIELDS) {
+          for (const locale of LOCALES) {
+            const message = this.textIssue(locale, key);
+            if (message) this.controls[key][locale].setErrors({ server: message });
+          }
+        }
+        focusFirstInvalid(this.host.nativeElement);
+      },
+      { injector: this.injector },
+    );
+  }
 
+  /** A save that landed: the new saved state, its fields marked saved here, the header told when. */
+  private saved(current: PostRow): void {
     const slugChanged = this.pristine?.slug !== current.slug;
+    const before = this.trace();
     this.pristine = structuredClone(current);
     this.setAside.set({});
     this.asked.clear();
+    const at = Date.now();
+    this.savedHere.update((marks) => {
+      const next = new Map(marks);
+      for (const [key, state] of Object.entries(before)) if (state === "unsaved") next.set(key, at);
+      return next;
+    });
     this.revision.update((v) => v + 1);
     this.issues.clear();
-    toast.success("Draft saved");
-    if (slugChanged)
+    for (const { key } of PLAIN_FIELDS) {
+      for (const locale of LOCALES) this.controls[key][locale].markAsPristine();
+    }
+    this.savedAt.set(at);
+    // The route is keyed by slug, so keep the URL in step after a rename (saved: the guard lets it by).
+    if (slugChanged) {
+      this.unsaved.set("post", false);
       void this.router.navigate(["/admin/writing", current.slug], { replaceUrl: true });
+    }
   }
 }

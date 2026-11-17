@@ -136,17 +136,9 @@ export function projectOutline(p: ProjectRow, problems: readonly string[]): Outl
   ];
 }
 
-/** The post editor's sections, in page order. A language left out is fine. */
+/** The post editor's sections, in page order (plan 5, U14). A language left out is fine. */
 export function postOutline(p: PostRow, problems: readonly string[]): OutlineItem[] {
-  const version = (locale: Locale, label: string): OutlineItem => {
-    const t = p.translations[locale];
-    return {
-      id: `post-${locale}`,
-      label,
-      state: t === null ? "optional" : state(hasText(t.title) && hasText(t.body)),
-      problems: problemsUnder(problems, [`translations.${locale}`]),
-    };
-  };
+  const versions = LOCALES.map((locale) => p.translations[locale]).filter((t) => t !== null);
   return [
     {
       id: "post-details",
@@ -172,7 +164,22 @@ export function postOutline(p: PostRow, problems: readonly string[]): OutlineIte
       ),
       problems: problemsUnder(problems, ["tags"]),
     },
-    version("en", "English version"),
-    version("de", "German version"),
+    {
+      id: "post-text",
+      label: "Text",
+      state: state(
+        versions.length > 0 && versions.every((t) => hasText(t.title) && hasText(t.body)),
+      ),
+      problems: problemsUnder(problems, translated(["title", "excerpt", "body"])),
+    },
+    {
+      id: "post-search",
+      label: "Search",
+      state: state(
+        versions.length > 0 && versions.every((t) => hasText(t.seoDescription)),
+        "optional",
+      ),
+      problems: problemsUnder(problems, translated(["seoTitle", "seoDescription"])),
+    },
   ];
 }

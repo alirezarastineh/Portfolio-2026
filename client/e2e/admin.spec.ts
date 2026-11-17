@@ -2326,8 +2326,9 @@ test.describe("admin", () => {
     await expect(page.locator("#post-seo-description-en-draft")).toHaveText(
       "Needs your eye: 3 characters over the limit of 155.",
     );
-    await expect(field).toHaveAttribute("aria-describedby", "post-seo-description-en-draft");
-    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect(field).toHaveAttribute("aria-describedby", /post-seo-description-en-draft$/);
+    const header = page.locator("app-editor-header");
+    await header.getByRole("button", { name: "Save", exact: true }).click();
     await expect.poll(() => verdicts).toEqual([{ outcomes: [{ id: id(1), outcome: "kept" }] }]);
     expect(saved).toEqual([
       expect.objectContaining({
@@ -2341,7 +2342,8 @@ test.describe("admin", () => {
 
     await suggest.click();
     await expect(field).toHaveValue("Shipping language models to real users: draft 2.");
-    await page.getByRole("button", { name: "Discard" }).click();
+    await header.getByRole("button", { name: "More actions for Shipping language models" }).click();
+    await page.getByRole("menuitem", { name: "Discard 1 change" }).click();
     await expect(field).toHaveValue("Shipping language models to real users: draft 1.");
     await expect.poll(() => verdicts).toHaveLength(2);
     expect(verdicts[1]).toEqual({
@@ -5258,7 +5260,7 @@ test.describe("never losing work", () => {
       });
       await openAdmin(page, "/admin/writing/shipping-llms");
 
-      const editor = page.getByRole("textbox", { name: "Body (en)" });
+      const editor = page.getByRole("textbox", { name: "Body English" });
       await editor.click();
       await page.keyboard.press("Control+End");
       await page.keyboard.type(" Right to the last word.");
@@ -5547,14 +5549,15 @@ test.describe("never losing work", () => {
     await expect(toggle).toBeChecked();
     await expect(ask).toHaveCount(0);
     await expect(title).toHaveValue("Sprachmodelle ausliefern");
-    await expect(page.locator("app-save-bar [role=status]")).toHaveText(/^saved/);
+    const state = page.locator("app-editor-header [role=status]");
+    await expect(state).not.toHaveText(/unsaved/);
 
     // Asked once: off again goes without the question, and Save removes it.
     await toggle.click();
     await expect(toggle).not.toBeChecked();
     await expect(ask).toHaveCount(0);
     await saveDraft(page).click();
-    await expect(page.getByText("Draft saved")).toBeVisible();
+    await expect(state).toHaveText(/^Saved/);
     expect(puts).toHaveLength(1);
     expect(puts[0]).toMatchObject({ translations: { de: null } });
   });
@@ -6104,9 +6107,10 @@ test.describe("the recovery copy", () => {
   ];
   const postFields = [
     byId("#post-canonical", "https://example.com/first"),
+    token("Tags", "evals"),
     byId("#post-title-en", "A new title"),
     byId("#post-excerpt-en", "A new excerpt."),
-    richText("Body (en)", " One more week."),
+    richText("Body English", " One more week."),
     byId("#post-seo-title-en", "A search title"),
   ];
   // The experience entry (plan 5, U14): opened from its title, back at `?edit=<id>` after a loss.
@@ -6214,6 +6218,7 @@ test.describe("the recovery copy", () => {
       answers: POST_API,
       keys: [
         "canonicalUrl",
+        "tags",
         "translations.en.title",
         "translations.en.excerpt",
         "translations.en.body",
@@ -6226,13 +6231,13 @@ test.describe("the recovery copy", () => {
         for (const field of postFields) await type(page, field);
         await page.getByRole("switch", { name: "German version" }).click();
         await type(page, byId("#post-title-de", "Ein neuer Titel"));
-        await type(page, richText("Body (de)", "Eine weitere Woche."));
+        await type(page, richText("Body German", "Eine weitere Woche."));
       },
       check: async (page) => {
         for (const field of postFields) await isBack(page, field);
         await expect(page.getByRole("switch", { name: "German version" })).toBeChecked();
         await isBack(page, byId("#post-title-de", "Ein neuer Titel"));
-        await isBack(page, richText("Body (de)", "Eine weitere Woche."));
+        await isBack(page, richText("Body German", "Eine weitere Woche."));
       },
     },
     {
@@ -11555,6 +11560,409 @@ test.describe("Experience: the table and the entry's editor in place", () => {
       await titles(page).first().click();
       await page.locator("#exp-org").fill("Globex");
       await expect(state(page)).toHaveText("1 unsaved change");
+      expect(await axeViolations(page)).toEqual([]);
+    });
+  }
+});
+
+/** Writing (plan 5, U14): a table, and the post editor on the editor header and the bilingual field. */
+test.describe("Writing: the table and the post editor", () => {
+  const TYPED = "Typed before the session ended";
+  const LOST = { status: 401, body: { error: "unauthenticated" } };
+  const saved = (body: unknown = { ok: true }) => ({ status: 200, body });
+  const header = (page: Page) => page.locator("app-editor-header");
+  const state = (page: Page) => header(page).getByRole("status").first();
+  const save = (page: Page) => header(page).getByRole("button", { name: "Save", exact: true });
+  const table = (page: Page) => page.getByRole("table", { name: "Posts, newest first" });
+  const banner = (page: Page) => page.getByRole("status").filter({ hasText: "Unsaved edits from" });
+  const EDITOR = "/admin/writing/shipping-llms";
+  const DAY = 24 * 3600_000;
+  const SOON = new Date(Date.now() + 10 * DAY).toISOString();
+  const PAST = "2026-09-22T10:30:00.000Z";
+  const dayMonth = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+  const fullDate = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
+  const post = postRow();
+  const german = {
+    title: "Sprachmodelle ausliefern",
+    excerpt: "Was es braucht.",
+    body: "<p>Eine Woche Evals.</p>",
+    seoTitle: "",
+    seoDescription: "",
+  };
+  /** A post as the list shows it: its titles only. */
+  const listed = (p: ReturnType<typeof postRow>) => ({
+    ...p,
+    translations: Object.fromEntries(
+      Object.entries(p.translations)
+        .filter(([, t]) => t)
+        .map(([locale, t]) => [locale, { title: t!.title }]),
+    ),
+  });
+  /** As the server orders them: undated drafts first, then the newest date. */
+  const LIST = () => [
+    listed(post),
+    listed({
+      ...post,
+      id: "w2",
+      slug: "evals-in-practice",
+      status: "published",
+      publishedAt: SOON as unknown as null,
+      translations: {
+        en: { ...post.translations.en, title: "Evals in practice" },
+        de: { ...german, title: "Evals in der Praxis" } as unknown as null,
+      },
+    }),
+    listed({
+      ...post,
+      id: "w3",
+      slug: "a-week-of-evals",
+      status: "published",
+      publishedAt: PAST as unknown as null,
+      translations: { en: { ...post.translations.en, title: "A week of evals" }, de: null },
+    }),
+  ];
+  const API = (row: unknown = post) => ({
+    "GET /admin/posts": { posts: LIST() },
+    "GET /admin/posts/w1": { post: row },
+  });
+
+  async function openPost(page: Page): Promise<void> {
+    await openAdmin(page, EDITOR);
+    await expect(page.locator("#post-title-en")).toBeVisible();
+  }
+
+  test("the list is a table: title, languages, status in words, date; a title opens its editor", async ({
+    page,
+    baseURL,
+  }) => {
+    const unmocked = await fakeApi(page, baseURL, API());
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openAdmin(page, "/admin/writing");
+
+    await expect(table(page).getByRole("columnheader")).toHaveText([
+      "Title",
+      "Languages",
+      "Status",
+      "Date",
+      "Actions",
+    ]);
+    const rows = table(page).locator("tbody tr");
+    await expect(rows.getByRole("link")).toHaveText([
+      "Shipping language models",
+      "Evals in practice",
+      "A week of evals",
+    ]);
+    const cells = (n: number) => rows.nth(n).getByRole("cell");
+    await expect(cells(0).nth(0)).toContainText("/shipping-llms");
+    await expect(cells(0).nth(1)).toHaveText("EN");
+    await expect(cells(0).nth(2)).toHaveText("Draft");
+    await expect(cells(0).nth(3)).toHaveText("No date");
+    await expect(cells(1).nth(1)).toHaveText("EN, DE");
+    await expect(cells(1).nth(2)).toHaveText(`Scheduled for ${dayMonth.format(new Date(SOON))}`);
+    await expect(cells(1).nth(3)).toHaveText(fullDate.format(new Date(SOON)));
+    await expect(cells(2).nth(2)).toHaveText("Published");
+    await expect(cells(2).nth(3)).toHaveText(fullDate.format(new Date(PAST)));
+
+    await rows.first().getByRole("link").click();
+    await expect(page).toHaveURL(/\/admin\/writing\/shipping-llms$/);
+    await expect(header(page).getByRole("heading", { level: 1 })).toHaveText(
+      "Shipping language models",
+    );
+    expect(unmocked).toEqual([]);
+  });
+
+  test("Add post creates a draft and opens its editor", async ({ page, baseURL }) => {
+    let created: Record<string, unknown> | null = null;
+    page.on("request", (r) => {
+      if (r.method() === "POST" && new URL(r.url()).pathname === "/admin/posts") {
+        created = r.postDataJSON() as Record<string, unknown>;
+      }
+    });
+    const stored = () =>
+      ({
+        ...created,
+        id: "w9",
+        coverPath: null,
+        createdAt: NOW,
+        updatedAt: NOW,
+      }) as unknown as ReturnType<typeof postRow>;
+    const unmocked = await fakeApi(page, baseURL, {
+      "POST /admin/posts": { ok: true, id: "w9" },
+      "GET /admin/posts": () =>
+        saved({ posts: [...(created ? [listed(stored())] : []), ...LIST()] }),
+      "GET /admin/posts/w9": () => saved({ post: stored() }),
+    });
+    await openAdmin(page, "/admin/writing");
+
+    await page.getByRole("button", { name: "Add post" }).click();
+    await expect(page).toHaveURL(/\/admin\/writing\/post-[a-z0-9]+$/);
+    await expect(page.locator("#post-title-en")).toHaveValue("New post");
+    await expect(header(page).getByRole("heading", { level: 1 })).toHaveText("New post");
+    await expect(header(page)).toContainText("Draft");
+    expect(unmocked).toEqual([]);
+  });
+
+  test("an edit marks its field, the Text section and the header; Ctrl S saves and sends the rest as loaded", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await fakeApi(page, baseURL, { ...API(), "PUT /admin/posts/w1": { ok: true } });
+    const puts = sentTo(page, "PUT", "/admin/posts/w1");
+    await openPost(page);
+    await expect(header(page)).toContainText("Draft");
+    await expect(header(page).getByRole("link", { name: /^Post draft/ })).toHaveAttribute(
+      "href",
+      "/admin/preview/en/writing/shipping-llms",
+    );
+
+    const field = page
+      .locator("app-bilingual-field")
+      .filter({ has: page.locator("#post-title-en") });
+    await page.locator("#post-title-en").fill("Shipping models");
+    await expect(field).toHaveAttribute("data-change", "unsaved");
+    await expect(page.locator("#post-title-en")).toHaveAccessibleDescription(/Unsaved/);
+    await expect(state(page)).toHaveText("1 unsaved change");
+    await expect(page.getByRole("link", { name: /^Text ?,/ })).toContainText("unsaved");
+
+    await page.keyboard.press("Control+s");
+    await expect.poll(() => puts).toHaveLength(1);
+    const { id, coverPath, createdAt, updatedAt, ...input } = post;
+    void [id, coverPath, createdAt, updatedAt];
+    expect(puts[0]).toEqual({
+      ...input,
+      translations: { en: { ...post.translations.en, title: "Shipping models" }, de: null },
+    });
+    await expect(state(page)).toHaveText(/^Saved/);
+    // A draft is not on the site: nothing claims to be in the draft or live.
+    await expect(field).not.toHaveAttribute("data-change");
+  });
+
+  test("tags are tokens: Enter adds one, Backspace on a token removes it; the save sends them", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { ...API(), "PUT /admin/posts/w1": { ok: true } });
+    const puts = sentTo(page, "PUT", "/admin/posts/w1");
+    await openPost(page);
+
+    const tags = page.getByRole("textbox", { name: "Tags" });
+    await tags.fill("evals");
+    await tags.press("Enter");
+    await expect(page.getByRole("list", { name: "Tags" }).getByRole("listitem")).toHaveCount(2);
+    await page.getByRole("button", { name: "llm", exact: true }).press("Backspace");
+    await expect(page.getByRole("button", { name: "llm", exact: true })).toHaveCount(0);
+    await save(page).click();
+    await expect.poll(() => puts).toHaveLength(1);
+    expect(puts[0]).toMatchObject({ tags: ["evals"] });
+  });
+
+  test("a language switched off leaves every field and the body, with no 'Missing in German'; on again, it comes back", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await fakeApi(page, baseURL, API());
+    await openPost(page);
+
+    await expect(page.locator("#post-title-de")).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Body German" })).toHaveCount(0);
+    await expect(page.getByText("Missing in German")).toHaveCount(0);
+    await expect(header(page).getByRole("group", { name: "Language view" })).toHaveCount(0);
+    await expect(
+      page.getByText("No German version: the German site leaves this post out."),
+    ).toBeVisible();
+
+    await page.getByRole("switch", { name: "German version" }).click();
+    await expect(page.locator("#post-title-de")).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Body German" })).toBeVisible();
+    await expect(header(page).getByRole("group", { name: "Language view" })).toBeVisible();
+    await expect(page.locator("#post-title-de")).toHaveAttribute("lang", "de");
+  });
+
+  test("both bodies stand side by side at 1280 with Save in view, and Ctrl S sends both; at 390 one language", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const both = { ...post, translations: { ...post.translations, de: german } };
+    await fakeApi(page, baseURL, { ...API(both), "PUT /admin/posts/w1": { ok: true } });
+    const puts = sentTo(page, "PUT", "/admin/posts/w1");
+    await openPost(page);
+
+    const en = page.getByRole("textbox", { name: "Body English" });
+    const de = page.getByRole("textbox", { name: "Body German" });
+    await en.click();
+    await page.keyboard.press("Control+End");
+    await page.keyboard.type(" And a week of reviews.");
+    await de.click();
+    await page.keyboard.press("Control+End");
+    await page.keyboard.type(" Und eine Woche Reviews.");
+    const [a, b] = [await en.boundingBox(), await de.boundingBox()];
+    expect(Math.abs(a!.y - b!.y), "side by side").toBeLessThan(2);
+    expect(b!.x).toBeGreaterThan(a!.x + a!.width);
+    await expect(save(page)).toBeInViewport({ ratio: 1 });
+    await page.keyboard.press("Control+s");
+    await expect.poll(() => puts).toHaveLength(1);
+    const body = puts[0] as { translations: Record<"en" | "de", { body: string }> };
+    expect(body.translations.en.body).toContain("And a week of reviews.");
+    expect(body.translations.de.body).toContain("Und eine Woche Reviews.");
+    await expect(state(page)).toHaveText(/^Saved/);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const languages = header(page).getByRole("group", { name: "Language view" });
+    await expect(languages.getByRole("button")).toHaveText(["EN", "DE"]);
+    await expect(de).toHaveCount(0);
+    await languages.getByRole("button", { name: "DE" }).click();
+    await expect(de).toBeVisible();
+    await expect(page.locator("#post-title-en")).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+    expect(await cutFields(page)).toEqual([]);
+  });
+
+  test("a 401 mid-edit opens the sign-in over the post; the text stays and saves after it", async ({
+    page,
+    baseURL,
+    problems,
+  }) => {
+    let signedIn = false;
+    const unmocked = await fakeApi(page, baseURL, {
+      ...API(),
+      "PUT /admin/posts/w1": () => (signedIn ? saved() : LOST),
+      "POST /auth/login": () => {
+        signedIn = true;
+        return saved({ ok: true, totpRequired: false, user: USER });
+      },
+    });
+    const puts = sentTo(page, "PUT", "/admin/posts/w1");
+    await openPost(page);
+
+    await page.locator("#post-excerpt-en").fill(TYPED);
+    await save(page).click();
+    const signIn = page.getByRole("dialog", { name: "Sign in to carry on" });
+    await expect(signIn).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/writing\/shipping-llms$/);
+    await signIn.getByLabel("Password").fill("hunter2hunter2");
+    await signIn.getByRole("button", { name: "Sign in" }).click();
+    await expect(signIn).toBeHidden();
+    await expect(page.locator("#post-excerpt-en")).toHaveValue(TYPED);
+
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved/);
+    expect(puts).toHaveLength(2);
+    expect(puts[1]).toMatchObject({ translations: { en: { excerpt: TYPED } } });
+    expect(problems.pageErrors).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a 409, the slug taken, keeps every edit and says so on Slug", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL, {
+      ...API(),
+      "PUT /admin/posts/w1": () => ({ status: 409, body: { error: "duplicate_slug" } }),
+    });
+    await openPost(page);
+
+    await page.locator("#post-slug").fill("taken-elsewhere");
+    await page.locator("#post-excerpt-en").fill(TYPED);
+    await save(page).click();
+    const slug = page.locator("#post-slug");
+    await expect(slug).toBeFocused();
+    await expect(slug).toHaveAccessibleDescription(/Another post already uses this slug/);
+    await expect(state(page)).toHaveText("1 field needs attention");
+    await expect(slug).toHaveValue("taken-elsewhere");
+    await expect(page.locator("#post-excerpt-en")).toHaveValue(TYPED);
+  });
+
+  test("copies typed in the old post editor come back into the new fields", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { ...API(), "PUT /admin/posts/w1": { ok: true } });
+    const puts = sentTo(page, "PUT", "/admin/posts/w1");
+    await openAdmin(page, "/admin/inbox");
+    const at = Date.now() - 60_000;
+    // German switched on in the old editor: the whole language as one field.
+    await plantCopies(
+      page,
+      [
+        ["translations.en.title", "Typed in the old editor", post.translations.en.title],
+        ["translations.de", german, null],
+        ["tags", ["llm", "old"], ["llm"]],
+      ].map(([field, value, base]) => ({ editor: "post", item: "w1", field, value, base, at })),
+    );
+
+    await openPost(page);
+    await expect(banner(page)).toBeVisible();
+    await expect(page.locator("#post-title-en")).toHaveValue("Typed in the old editor");
+    await expect(page.getByRole("switch", { name: "German version" })).toBeChecked();
+    await expect(page.locator("#post-title-de")).toHaveValue(german.title);
+    await expect(page.getByRole("textbox", { name: "Body German" })).toContainText(
+      "Eine Woche Evals.",
+    );
+    await expect(page.getByRole("button", { name: "old", exact: true })).toBeVisible();
+
+    await save(page).click();
+    await expect.poll(() => puts).toHaveLength(1);
+    expect(puts[0]).toMatchObject({
+      tags: ["llm", "old"],
+      translations: { en: { title: "Typed in the old editor" }, de: german },
+    });
+  });
+
+  test("from the keyboard at 1280: the header, then the details, the tags, the language switches and the text", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await fakeApi(page, baseURL, API());
+    await openPost(page);
+    const tab = async (target: Locator) => {
+      await page.keyboard.press("Tab");
+      await expect(target).toBeFocused();
+    };
+    await header(page).getByRole("heading", { level: 1 }).focus();
+    await tab(header(page).getByRole("link", { name: /^Post draft/ }));
+    // Save waits disabled with nothing to save: no stop until there is.
+    await tab(
+      header(page).getByRole("button", { name: "More actions for Shipping language models" }),
+    );
+    await tab(page.locator("#post-slug"));
+    await tab(page.locator("#post-date"));
+    // A date and time is several stops in Chrome, one per part: on from the switch after it.
+    await page.getByRole("switch", { name: "Published" }).focus();
+    await tab(page.locator("#post-canonical"));
+    await page.getByRole("button", { name: "llm", exact: true }).focus();
+    await tab(page.getByRole("textbox", { name: "Tags" }));
+    await tab(page.getByRole("switch", { name: "English version" }));
+    await tab(page.getByRole("switch", { name: "German version" }));
+    await tab(page.getByRole("button", { name: "More actions for Title" }));
+    await tab(page.locator("#post-title-en"));
+  });
+
+  for (const colorScheme of ["dark", "light"] as const) {
+    test(`the table and a post with an unsaved field, in the ${colorScheme} theme, have no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await fakeApi(
+        page,
+        baseURL,
+        API({ ...post, translations: { ...post.translations, de: german } }),
+      );
+      await openAdmin(page, "/admin/writing");
+      await expect(table(page).locator("tbody tr")).toHaveCount(3);
+      expect(await axeViolations(page)).toEqual([]);
+
+      await openPost(page);
+      await page.locator("#post-title-de").fill("");
+      await expect(page.getByText("Missing in German")).toBeVisible();
       expect(await axeViolations(page)).toEqual([]);
     });
   }

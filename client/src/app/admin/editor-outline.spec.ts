@@ -114,7 +114,7 @@ describe("projectOutline", () => {
 });
 
 describe("postOutline", () => {
-  it("treats a language left out as optional, and one without a body as to do", () => {
+  it("asks for a body in each language there is, a language left out being fine", () => {
     const post = {
       id: "x",
       slug: "hello",
@@ -131,9 +131,15 @@ describe("postOutline", () => {
       createdAt: "",
       updatedAt: "",
     } as unknown as PostRow;
-    const states = Object.fromEntries(postOutline(post, ["translations"]).map((i) => [i.id, i]));
-    expect(states["post-en"]?.state).toBe("todo");
-    expect(states["post-de"]?.state).toBe("optional");
+    const outline = postOutline(post, ["translations", "translations.en.seoTitle"]);
+    expect(outline.map((i) => i.label)).toEqual(["Details", "Cover", "Tags", "Text", "Search"]);
+    const states = Object.fromEntries(outline.map((i) => [i.id, i]));
+    expect(states["post-text"]?.state).toBe("todo");
+    expect(states["post-search"]).toMatchObject({ state: "optional", problems: 1 });
     expect(states["post-details"]).toMatchObject({ state: "done", problems: 1 });
+
+    const written = { ...post.translations.en!, body: "<p>Hi.</p>" };
+    const done = postOutline({ ...post, translations: { en: written, de: null } }, []);
+    expect(done.find((i) => i.id === "post-text")?.state).toBe("done");
   });
 });

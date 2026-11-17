@@ -232,13 +232,17 @@ export class BilingualFieldComponent extends FieldPairComponent {
    * `<id>-<locale>-draft`. With it, pass `[ai]="false"`: the field's own drafts have no place then.
    */
   readonly below = input<TemplateRef<{ $implicit: Locale }> | null>(null);
+  /** "Missing in German" and its kin; off while the item has no German at all (a post's switch). */
+  readonly notes = input(true);
 
   protected readonly locales = computed<Locale[]>(() => {
     const view = this.view();
     return view === "both" ? ["en", "de"] : [view];
   });
   protected readonly words = computed(() => TRACE_WORDS[this.state()]);
-  protected readonly note = computed(() => languageNote(this.textEn(), this.textDe(), this.live()));
+  protected readonly note = computed(() =>
+    this.notes() ? languageNote(this.textEn(), this.textDe(), this.live()) : null,
+  );
   /** Under the German, or under the English while only the English shows. */
   protected readonly noteIn = computed<Locale>(() => (this.view() === "en" ? "en" : "de"));
 
