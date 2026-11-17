@@ -79,8 +79,7 @@ const KIND_LABELS: Record<I18nItem["kind"], string> = {
         @for (check of failing(); track check.id) {
           <li>
             <a [class]="row" [routerLink]="fixLink(check)">
-              <span class="min-w-0 wrap-anywhere">{{ words(check) }}</span
-              >&ngsp;<span
+              <span class="min-w-0 wrap-anywhere">{{ words(check) }}</span>&ngsp;<span
                 class="text-hint text-muted-foreground max-sm:col-start-1 max-sm:row-start-2"
                 >{{ severityOf(check) }}</span
               >&ngsp;<span

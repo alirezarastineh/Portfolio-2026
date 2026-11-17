@@ -110,8 +110,7 @@ const sentence = (names: readonly string[]): string =>
               Published
               <time [attr.datetime]="s.lastPublish" [title]="absolute(s.lastPublish)">{{
                 relative(s.lastPublish)
-              }}</time
-              >. {{ draftWords() }}
+              }}</time>. {{ draftWords() }}
             </p>
           }
         } @else if (isFailed("status")) {
@@ -200,8 +199,7 @@ const sentence = (names: readonly string[]): string =>
               } @else {
                 <p class="m-0 text-hint text-muted-foreground">
                   Last published
-                  <time [attr.datetime]="at" [title]="absolute(at)">{{ relative(at) }}</time
-                  >.
+                  <time [attr.datetime]="at" [title]="absolute(at)">{{ relative(at) }}</time>.
                 </p>
               }
             }

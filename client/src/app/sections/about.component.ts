@@ -95,8 +95,9 @@ const ANSWER_STEPS = {
             <ol class="answer-steps">
               @for (step of answer().steps; track step[0]) {
                 <li>
-                  <span class="text-data text-foreground">{{ step[0] }}</span
-                  ><span>{{ step[1] }}</span>
+                  <span class="text-data text-foreground">{{ step[0] }}</span><span>{{
+                    step[1]
+                  }}</span>
                 </li>
               }
             </ol>

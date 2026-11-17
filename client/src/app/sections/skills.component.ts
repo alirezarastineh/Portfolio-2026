@@ -51,8 +51,7 @@ const USED_IN: Record<Locale, string> = { en: "Used in:", de: "Eingesetzt in:" }
                       class="link-underline"
                       [routerLink]="project.hasCaseStudy ? caseStudy(project.slug) : home()"
                       [fragment]="project.hasCaseStudy ? undefined : 'work-' + project.slug"
-                      >{{ project.name }}</a
-                    >{{ $last ? "" : ", " }}
+                      >{{ project.name }}</a>{{ $last ? "" : ", " }}
                   }
                 </p>
               }

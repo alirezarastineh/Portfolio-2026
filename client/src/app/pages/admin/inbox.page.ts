@@ -39,6 +39,7 @@ import {
   type InboxFilter,
 } from "../../admin/inbox";
 import { absoluteTime, relativeTime } from "../../admin/relative-time";
+import type { Locale } from "../../content/schema";
 
 type Filter = InboxFilter;
 
@@ -58,6 +59,11 @@ const MOVED: Partial<Record<MessageStatus, string>> = {
 
 /** Each action's key, shown on its button. */
 const KEYS: Partial<Record<MessageStatus, string>> = { archived: "E", new: "U", spam: "#" };
+
+const LANGUAGES: Record<Locale, string> = {
+  en: ", in English",
+  de: ", in German",
+};
 
 /**
  * Messages from the contact form. Every one is stored before its email is
@@ -236,8 +242,7 @@ const KEYS: Partial<Record<MessageStatus, string>> = { archived: "E", new: "U", 
                     <time
                       [attr.datetime]="message.createdAt"
                       [title]="absolute(message.createdAt)"
-                      >{{ relative(message.createdAt) }}</time
-                    >{{ sentIn(message) }}
+                      >{{ relative(message.createdAt) }}</time>{{ sentIn(message) }}
                   </p>
                 </header>
 
@@ -510,8 +515,10 @@ export default class AdminInboxPage implements OnInit {
 
   /** ", in German, via the assistant": what the reader needs before answering. */
   protected sentIn(message: MessageRow): string {
-    const language = message.locale === "de" ? ", in German" : message.locale ? ", in English" : "";
-    return `${language}${message.origin === "ask" ? ", via the assistant" : ""}.`;
+    let language = "";
+    if (message.locale) language = LANGUAGES[message.locale] ?? ", in English";
+    const origin = message.origin === "ask" ? ", via the assistant" : "";
+    return `${language}${origin}.`;
   }
 
   /** The mail service's reason, when it gave one beyond the fallback code. */

@@ -188,6 +188,8 @@ test.describe("home", () => {
     await page.locator('header a[hreflang="de"]').click();
     await expect(page).toHaveURL(/\/de$/);
     await expect(page.locator("#projects-heading")).toHaveText("Ausgewählte Projekte");
+    // Skills hydrates on viewport: since the 2026-11-17 package upgrade it keeps the server's text until then.
+    await page.locator("#skills").scrollIntoViewIfNeeded();
     await expect(page.locator("#skills-heading")).toHaveText("Fähigkeiten");
   });
 

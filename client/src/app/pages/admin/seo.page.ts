@@ -277,8 +277,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                           >
                             <span class="sr-only">{{
                               locale === "en" ? "English: " : "German: "
-                            }}</span
-                            ><span translate="no" [attr.lang]="locale">{{
+                            }}</span><span translate="no" [attr.lang]="locale">{{
                               controlFor(locale, field.key).value
                             }}</span>
                           </p>

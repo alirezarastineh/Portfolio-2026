@@ -82,8 +82,9 @@ function knownPages(locale: Locale, content: AppContent): PageSuggestion[] {
               <p class="m-0 wrap-anywhere">
                 {{ entry.didYouMean }}:
                 @for (page of entry.suggestions; track page.path; let last = $last) {
-                  <a class="link-underline" [routerLink]="page.path">{{ page.label }}</a
-                  >{{ last ? "?" : ", " }}
+                  <a class="link-underline" [routerLink]="page.path">{{ page.label }}</a>{{
+                    last ? "?" : ", "
+                  }}
                 }
               </p>
             }
