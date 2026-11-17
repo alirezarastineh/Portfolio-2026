@@ -6074,16 +6074,18 @@ test.describe("the recovery copy", () => {
       },
     },
   };
-  const privacyTab = (page: Page) => page.getByRole("tab", { name: "Privacy / Datenschutz" });
+  // A tab's name gains ", unsaved" while its document has edits (plan 5, U14).
+  const legalTab = (page: Page, name: "Imprint" | "Privacy") =>
+    page.getByRole("tab", { name: new RegExp(`^${name}`) });
   const legalFirst = [
     byId("#legal-title-en", "Site notice"),
-    richText("Text (en)", " Now with an address."),
+    richText("Text English", " Now with an address."),
     byId("#legal-title-de", "Anbieterkennung"),
-    richText("Text (de)", " Jetzt mit Anschrift."),
+    richText("Text German", " Jetzt mit Anschrift."),
   ];
   const legalSecond = [
     byId("#legal-title-en", "Your data"),
-    richText("Text (en)", " Nothing else is kept."),
+    richText("Text English", " Nothing else is kept."),
   ];
   const SKILLS_API = {
     "GET /admin/skills": {
@@ -6305,12 +6307,17 @@ test.describe("the recovery copy", () => {
       words: [...legalFirst, ...legalSecond].map((field) => field.text),
       edit: async (page) => {
         for (const field of legalFirst) await type(page, field);
-        await privacyTab(page).click();
+        await legalTab(page, "Privacy").click();
+        await expect(page).toHaveURL(/\/admin\/legal\?doc=privacy$/);
         for (const field of legalSecond) await type(page, field);
       },
+      // A reload comes back on the tab in the address; a new tab on the imprint. Both tabs say they have edits.
       check: async (page) => {
+        await expect(legalTab(page, "Imprint")).toHaveAccessibleName(/^Imprint ?, unsaved$/);
+        await expect(legalTab(page, "Privacy")).toHaveAccessibleName(/^Privacy ?, unsaved$/);
+        await legalTab(page, "Imprint").click();
         for (const field of legalFirst) await isBack(page, field);
-        await privacyTab(page).click();
+        await legalTab(page, "Privacy").click();
         for (const field of legalSecond) await isBack(page, field);
       },
     },
@@ -6325,7 +6332,7 @@ test.describe("the recovery copy", () => {
         "skills|ops|translations.de.title",
         "skills|ops|isVisible",
       ],
-      words: [...skillsFields.map((field) => field.text)],
+      words: skillsFields.map((field) => field.text),
       edit: async (page) => {
         for (const field of skillsFields) await type(page, field);
         await page.getByRole("switch", { name: "Show Operations on the site" }).click();
@@ -9065,10 +9072,11 @@ test.describe("the field and the editor", () => {
       "GET /admin/sections/privacy": { section: "privacy", updatedAt: HOUR_AGO, data: doc },
     });
     await openAdmin(page, "/admin/legal");
-    const toolbar = page.getByRole("toolbar", { name: "Text (en) formatting" });
+    const toolbar = page.getByRole("toolbar", { name: "Text English formatting" });
     const tool = (name: string) => toolbar.getByRole("button", { name, exact: true });
 
-    await page.locator("#legal-title-en").focus();
+    // Both languages at 1280: the German title comes before the English text.
+    await page.locator("#legal-title-de").focus();
     await page.keyboard.press("Tab");
     await expect(tool("Bold")).toBeFocused();
     await page.keyboard.press("ArrowRight");
@@ -12038,6 +12046,8 @@ test.describe("Skills and Legal", () => {
   const groupHeads = (page: Page) => page.getByRole("heading", { level: 3 });
   const tokens = (page: Page, id: string) =>
     page.locator("app-token-field", { has: page.locator(`#skill-${id}-items`) });
+  const legalTab = (page: Page, name: "Imprint" | "Privacy") =>
+    page.getByRole("tab", { name: new RegExp(`^${name}`) });
 
   const group = (
     id: string,
@@ -12066,6 +12076,37 @@ test.describe("Skills and Legal", () => {
   ];
   const SKILLS = () => ({ "GET /admin/skills": { skills: GROUPS() } });
 
+  const legalDoc = ([en, de]: [string, string], extra = "") => ({
+    en: { title: en, body: `<p>Who runs this site.</p>${extra}` },
+    de: { title: de, body: `<p>Wer diese Seite betreibt.</p>${extra}` },
+  });
+  const LEGAL = (
+    imprint = legalDoc(["Imprint", "Impressum"]),
+    privacy = legalDoc(["Privacy", "Datenschutz"]),
+  ) => ({
+    "GET /admin/sections/imprint": { section: "imprint", updatedAt: HOUR_AGO, data: imprint },
+    "GET /admin/sections/privacy": { section: "privacy", updatedAt: HOUR_AGO, data: privacy },
+  });
+
+  /** The recovery store's keys (`editor|item|field`), as the page wrote them. */
+  const copyKeys = (page: Page) =>
+    page.evaluate(async () => {
+      if (!(await indexedDB.databases()).some((db) => db.name === "admin-recovery")) return [];
+      return new Promise<string[]>((resolve, reject) => {
+        const open = indexedDB.open("admin-recovery");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const all = open.result.transaction("copies").objectStore("copies").getAll();
+          all.onerror = () => reject(all.error);
+          all.onsuccess = () => {
+            open.result.close();
+            const rows = all.result as { editor: string; item: string; field: string }[];
+            resolve(rows.map((c) => `${c.editor}|${c.item}|${c.field}`).sort());
+          };
+        };
+      });
+    });
+
   /** Each page, where its Save goes, and a field to type in. */
   const EDITORS = [
     {
@@ -12076,6 +12117,15 @@ test.describe("Skills and Legal", () => {
       ok: { ok: true },
       field: "#skill-backend-title-en",
       body: (text: string) => ({ icon: "cpu", translations: { en: { title: text } } }),
+    },
+    {
+      name: "Legal",
+      path: "/admin/legal",
+      answers: () => LEGAL(),
+      put: "/admin/sections/imprint",
+      ok: { ok: true, updatedAt: NEWER },
+      field: "#legal-title-en",
+      body: (text: string) => ({ data: { en: { title: text } } }),
     },
   ];
 
@@ -12120,6 +12170,237 @@ test.describe("Skills and Legal", () => {
       expect(unmocked).toEqual([]);
     });
   }
+
+  test("Legal's 409 asks by the document's name; Reload replaces that one, and the other's edits stay for the next Save", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      ...LEGAL(),
+      "GET /admin/sections/imprint": (n: number) =>
+        saved({
+          section: "imprint",
+          updatedAt: n === 1 ? HOUR_AGO : NEWER,
+          data: legalDoc([n === 1 ? "Imprint" : "Theirs", "Impressum"]),
+        }),
+      "PUT /admin/sections/imprint": () => ({ status: 409, body: { error: "stale" } }),
+      "PUT /admin/sections/privacy": { ok: true, updatedAt: NEWER },
+    });
+    const privacyPuts = sentTo(page, "PUT", "/admin/sections/privacy");
+    await openAdmin(page, "/admin/legal");
+    await page.locator("#legal-title-en").fill("Mine");
+    await legalTab(page, "Privacy").click();
+    await page.locator("#legal-title-en").fill("Mine too");
+
+    await save(page).click();
+    await expect(ask(page)).toContainText("Saved elsewhere");
+    await expect(ask(page)).toContainText("The imprint changed in another tab or session");
+    await ask(page).getByRole("button", { name: "Reload" }).click();
+    await expect(ask(page)).toHaveCount(0);
+    // The privacy policy's edit was never stale: it stays, and is the one change left.
+    await expect(page.locator("#legal-title-en")).toHaveValue("Mine too");
+    await expect(state(page)).toHaveText("1 unsaved change");
+    await legalTab(page, "Imprint").click();
+    await expect(page.locator("#legal-title-en")).toHaveValue("Theirs");
+    await expect(legalTab(page, "Imprint")).toHaveAccessibleName("Imprint");
+
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved \d\d:\d\d/);
+    expect(privacyPuts).toHaveLength(1);
+    expect(privacyPuts[0]).toMatchObject({ data: { en: { title: "Mine too" } } });
+  });
+
+  test("Legal's 409, Keep my edits: they stay, and the next Save replaces that version", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      ...LEGAL(),
+      "GET /admin/sections/imprint": (n: number) =>
+        saved({
+          section: "imprint",
+          updatedAt: n === 1 ? HOUR_AGO : NEWER,
+          data: legalDoc(["Imprint", "Impressum"]),
+        }),
+      "PUT /admin/sections/imprint": (n: number) =>
+        n === 1
+          ? { status: 409, body: { error: "stale" } }
+          : saved({ ok: true, updatedAt: new Date(Date.now() + 120_000).toISOString() }),
+    });
+    const puts = sentTo(page, "PUT", "/admin/sections/imprint");
+    await openAdmin(page, "/admin/legal");
+    await page.locator("#legal-title-en").fill("Mine");
+    await save(page).click();
+    await ask(page).getByRole("button", { name: "Keep my edits" }).click();
+    await expect(page.locator("#legal-title-en")).toHaveValue("Mine");
+
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved \d\d:\d\d/);
+    expect(puts).toHaveLength(2);
+    expect(puts[1]).toMatchObject({ updatedAt: NEWER, data: { en: { title: "Mine" } } });
+  });
+
+  test("Legal: the shown document lives in the address; a tab with edits says so, switching never asks, a reload keeps both, and Back asks", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, LEGAL());
+    await openAdmin(page, "/admin/inbox");
+    await page
+      .locator("[data-slot=sidebar]")
+      .getByRole("link", { name: /^Legal/ })
+      .click();
+    await expect(page).toHaveURL(/\/admin\/legal$/);
+    await expect(legalTab(page, "Imprint")).toHaveAttribute("aria-selected", "true");
+
+    await page.locator("#legal-title-en").fill("Site notice");
+    await expect(legalTab(page, "Imprint")).toHaveAccessibleName(/^Imprint ?, unsaved$/);
+    await legalTab(page, "Privacy").click();
+    await expect(page).toHaveURL(/\/admin\/legal\?doc=privacy$/);
+    await expect(ask(page)).toHaveCount(0);
+    await expect(page.locator("#legal-title-en")).toHaveValue("Privacy");
+    await expect(legalTab(page, "Privacy")).toHaveAccessibleName("Privacy");
+    await page.locator("#legal-title-de").fill("Datenschutzerklärung");
+    await expect
+      .poll(() => copyKeys(page), { timeout: 8_000 })
+      .toEqual(["legal||imprint.en.title", "legal||privacy.de.title"]);
+
+    page.on("dialog", (dialog) => void dialog.accept().catch(() => undefined));
+    await page.reload();
+    await interactive(page);
+    await expect(page).toHaveURL(/\/admin\/legal\?doc=privacy$/);
+    await expect(legalTab(page, "Privacy")).toHaveAttribute("aria-selected", "true");
+    await expect(banner(page)).toBeVisible();
+    await expect(page.locator("#legal-title-de")).toHaveValue("Datenschutzerklärung");
+    await expect(legalTab(page, "Imprint")).toHaveAccessibleName(/^Imprint ?, unsaved$/);
+
+    // Back leaves Legal: the guard asks, and Stay keeps the text and the address.
+    await page.goBack();
+    await expect(ask(page)).toContainText("Discard unsaved changes?");
+    await ask(page).getByRole("button", { name: "Stay" }).click();
+    await expect(page).toHaveURL(/\/admin\/legal\?doc=privacy$/);
+    await expect(page.locator("#legal-title-de")).toHaveValue("Datenschutzerklärung");
+  });
+
+  test("Legal: text typed just before a tab change stays in its own document", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { ...LEGAL(), "PUT /admin/sections/imprint": { ok: true } });
+    const puts = sentTo(page, "PUT", "/admin/sections/imprint");
+    const privacyPuts = sentTo(page, "PUT", "/admin/sections/privacy");
+    await openAdmin(page, "/admin/legal");
+    const text = page.getByRole("textbox", { name: "Text English" });
+    await text.click();
+    await page.keyboard.press("Control+End");
+    // Within the rich text's 250 ms wait: the blur writes it, to its own document.
+    await page.keyboard.type(" Typed on the imprint.");
+    await legalTab(page, "Privacy").click();
+    await expect(page.locator("#legal-title-en")).toHaveValue("Privacy");
+    await expect(text).not.toContainText("Typed on the imprint.");
+    await expect(legalTab(page, "Imprint")).toHaveAccessibleName(/^Imprint ?, unsaved$/);
+    await expect(legalTab(page, "Privacy")).toHaveAccessibleName("Privacy");
+
+    await save(page).click();
+    await expect.poll(() => puts).toHaveLength(1);
+    expect(puts[0]).toMatchObject({
+      data: { en: { body: expect.stringContaining("Typed on the imprint.") } },
+    });
+    expect(privacyPuts).toEqual([]);
+  });
+
+  test("Legal: copies typed in the old editor come back, on the tab they were typed on", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { ...LEGAL(), "PUT /admin/sections/privacy": { ok: true } });
+    const puts = sentTo(page, "PUT", "/admin/sections/privacy");
+    await openAdmin(page, "/admin/inbox");
+    const at = Date.now() - 60_000;
+    await plantCopies(page, [
+      {
+        editor: "legal",
+        item: "",
+        field: "privacy.de.title",
+        value: "Datenschutzerklärung",
+        base: "Datenschutz",
+        at,
+      },
+      {
+        editor: "legal",
+        item: "",
+        field: "privacy.en.body",
+        value: "<p>Who runs this site.</p><p>Nothing else is kept.</p>",
+        base: "<p>Who runs this site.</p>",
+        at,
+      },
+    ]);
+
+    await openAdmin(page, "/admin/legal");
+    await expect(banner(page)).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/legal\?doc=privacy$/);
+    await expect(page.locator("#legal-title-de")).toHaveValue("Datenschutzerklärung");
+    await expect(page.getByRole("textbox", { name: "Text English" })).toContainText(
+      "Nothing else is kept.",
+    );
+    await save(page).click();
+    await expect.poll(() => puts).toHaveLength(1);
+    expect(puts[0]).toMatchObject({
+      data: {
+        en: { body: "<p>Who runs this site.</p><p>Nothing else is kept.</p>" },
+        de: { title: "Datenschutzerklärung" },
+      },
+    });
+  });
+
+  test("Legal: the languages side by side from 1024 px under Both, one below it; the header opens the shown document's draft", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1024, height: 800 });
+    await fakeApi(page, baseURL, LEGAL());
+    await openAdmin(page, "/admin/legal");
+    const [en, de] = [
+      page.getByRole("textbox", { name: "Text English" }),
+      page.getByRole("textbox", { name: "Text German" }),
+    ];
+    await expect(de).toBeVisible();
+    const [a, b] = [await en.boundingBox(), await de.boundingBox()];
+    expect(Math.abs(a!.y - b!.y)).toBeLessThanOrEqual(1);
+    expect(b!.x).toBeGreaterThan(a!.x + a!.width);
+    // The host carries the language; the editable area inherits it.
+    await expect(page.locator("app-rich-text", { has: de })).toHaveAttribute("lang", "de");
+    const draft = header(page).getByRole("link", { name: /^Imprint draft/ });
+    await expect(draft).toHaveAttribute("href", "/admin/preview/en/legal/imprint");
+    await expect(draft).toHaveAttribute("target", "_blank");
+    await legalTab(page, "Privacy").click();
+    await expect(header(page).getByRole("link", { name: /^Privacy draft/ })).toHaveAttribute(
+      "href",
+      "/admin/preview/en/legal/privacy",
+    );
+
+    await page.setViewportSize({ width: 1023, height: 800 });
+    await expect(de).toHaveCount(0);
+    await expect(en).toBeVisible();
+    const languages = header(page).getByRole("group", { name: "Language view" });
+    await expect(languages.getByRole("button")).toHaveText(["EN", "DE"]);
+  });
+
+  test("Legal's note asks for a postal address while neither imprint has one, and stops once one is typed", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, LEGAL());
+    await openAdmin(page, "/admin/legal");
+    const note = page.getByRole("alert").filter({ hasText: "Your responsibility" });
+    await expect(note).toContainText("it is not legal advice");
+    await expect(note).toContainText("No postal address found in the imprint.");
+
+    await page.getByRole("textbox", { name: "Text German" }).click();
+    await page.keyboard.press("Control+End");
+    await page.keyboard.type(" Musterstraße 1, 10115 Berlin");
+    await expect(note).not.toContainText("No postal address found");
+  });
 
   test("Skills: a row per group with its title, skills, summary and Shown; Ctrl S sends the changed group whole, the hidden fields as loaded", async ({
     page,
@@ -12412,6 +12693,59 @@ test.describe("Skills and Legal", () => {
     expect(await cutFields(page)).toEqual([]);
   });
 
+  test("Legal from the keyboard at 1280: the tabs by arrows, each in the address; then the title, its languages and the text's one toolbar stop", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await fakeApi(page, baseURL, LEGAL());
+    await openAdmin(page, "/admin/legal");
+    const tab = async (target: Locator) => {
+      await page.keyboard.press("Tab");
+      await expect(target).toBeFocused();
+    };
+
+    await legalTab(page, "Imprint").focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(legalTab(page, "Privacy")).toBeFocused();
+    await expect(page).toHaveURL(/\/admin\/legal\?doc=privacy$/);
+    await expect(page.locator("#legal-title-en")).toHaveValue("Privacy");
+    // Brain's panel is a stop of its own (`tabindex="0"`), as APG allows.
+    await tab(page.getByRole("tabpanel"));
+    await tab(page.getByRole("button", { name: "More actions for Title" }));
+    await tab(page.locator("#legal-title-en"));
+    await tab(page.locator("#legal-title-de"));
+    await tab(
+      page
+        .getByRole("toolbar", { name: "Text English formatting" })
+        .getByRole("button", { name: "Bold" }),
+    );
+    await tab(page.getByRole("textbox", { name: "Text English" }));
+
+    await legalTab(page, "Privacy").focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(page).toHaveURL(/\/admin\/legal$/);
+    await expect(page.locator("#legal-title-en")).toHaveValue("Imprint");
+  });
+
+  test("Legal at 390: one language with its switch first, the tabs and the text whole, nothing sideways", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await fakeApi(page, baseURL, LEGAL());
+    await openAdmin(page, "/admin/legal");
+    const width = () => page.evaluate(() => document.documentElement.scrollWidth);
+    await expect(page.getByRole("textbox", { name: "Text English" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Text German" })).toHaveCount(0);
+    await expect(legalTab(page, "Privacy")).toBeInViewport();
+    expect(await width()).toBe(390);
+    await legalTab(page, "Privacy").click();
+    await expect(page).toHaveURL(/\?doc=privacy$/);
+    expect(await width()).toBe(390);
+    expect(await cutFields(page)).toEqual([]);
+  });
+
   for (const colorScheme of ["dark", "light"] as const) {
     test(`Skills with a field in each state, in the ${colorScheme} theme, has no accessibility violations`, async ({
       page,
@@ -12426,6 +12760,19 @@ test.describe("Skills and Legal", () => {
       expect(await axeViolations(page)).toEqual([]);
     });
 
+    test(`Legal with an unsaved tab, in the ${colorScheme} theme, has no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await fakeApi(page, baseURL, LEGAL());
+      await openAdmin(page, "/admin/legal");
+      await page.locator("#legal-title-en").fill("Site notice");
+      await legalTab(page, "Privacy").click();
+      await expect(legalTab(page, "Imprint")).toHaveAccessibleName(/^Imprint ?, unsaved$/);
+      expect(await axeViolations(page)).toEqual([]);
+    });
   }
 });
 
