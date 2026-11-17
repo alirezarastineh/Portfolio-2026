@@ -146,6 +146,18 @@ describe("unsavedChangesGuard", () => {
     expect(confirm.asked).toBe(1);
   });
 
+  it("asks when the entry edited in place changes or closes: `edit` is a place (Experience)", async () => {
+    const { service, confirm } = setup();
+    service.set("experience-entry", true);
+    confirm.answer = false;
+
+    expect(await runGuard("/admin/experience?edit=e1", "/admin/experience")).toBe(false);
+    expect(await runGuard("/admin/experience?edit=e1", "/admin/experience?edit=e2")).toBe(false);
+    expect(confirm.asked).toBe(2);
+    expect(await runGuard("/admin/experience?edit=e1", "/admin/experience?edit=e1#top")).toBe(true);
+    expect(confirm.asked).toBe(2);
+  });
+
   it("stays put under the sign-in dialog, without a second question", async () => {
     const { service, confirm } = setup(true);
     service.set("seo", true);

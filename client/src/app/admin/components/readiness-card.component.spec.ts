@@ -87,10 +87,11 @@ describe("ReadinessCardComponent (Today's Before launch)", () => {
     const fixture = await render(both(), [
       item("p1", "Atlas", ["hook"]),
       item("p2", "Release gate", ["hook", "role"]),
+      { ...item("e1", "Staff engineer · Acme", ["summary"]), kind: "experience" },
     ]);
     const root: HTMLElement = fixture.nativeElement;
     const show = [...root.querySelectorAll("button")].find((b) =>
-      text(b).startsWith("2 translations to check"),
+      text(b).startsWith("3 translations to check"),
     )!;
     expect(show.getAttribute("aria-expanded")).toBe("false");
     expect(root.querySelector('a[href="/admin/projects/p2"]')).toBeNull();
@@ -101,6 +102,8 @@ describe("ReadinessCardComponent (Today's Before launch)", () => {
     expect(text(root.querySelector('a[href="/admin/projects/p2"]'))).toBe(
       "Release gate, project: German empty: hook, role Edit",
     );
+    // An Experience entry opens in its place, the query intact (plan 5, U14).
+    expect(root.querySelector('a[href="/admin/experience?edit=e1"]')).not.toBeNull();
   });
 
   it("checks the language that builds, and says which one it could not", async () => {

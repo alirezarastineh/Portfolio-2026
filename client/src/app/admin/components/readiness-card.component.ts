@@ -6,7 +6,7 @@ import {
   OnInit,
   signal,
 } from "@angular/core";
-import { RouterLink } from "@angular/router";
+import { Router, RouterLink, type UrlTree } from "@angular/router";
 
 import { LOCALES } from "../../content/locale";
 import type { AppContent, Locale } from "../../content/schema";
@@ -133,6 +133,7 @@ const KIND_LABELS: Record<I18nItem["kind"], string> = {
 export class ReadinessCardComponent implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly pulse = inject(AdminPulseService);
+  private readonly router = inject(Router);
 
   protected readonly row = TODAY_ROW;
   protected readonly loading = signal(true);
@@ -203,8 +204,9 @@ export class ReadinessCardComponent implements OnInit {
     return KIND_LABELS[item.kind];
   }
 
-  protected link(item: I18nItem): string {
-    return editorLinkForI18n(item);
+  /** A tree, not a string: an Experience entry's link has a query (`?edit=`), which a string link encodes. */
+  protected link(item: I18nItem): UrlTree {
+    return this.router.parseUrl(editorLinkForI18n(item));
   }
 
   /** "German empty: hook", "English changed after the German was last edited". */

@@ -88,8 +88,8 @@ export const unsavedChangesGuard: CanDeactivateFn<unknown> = async (_page, _rout
   if (inject(AdminSessionService, { optional: true })?.lost()) return false;
   if (!unsaved.hasAny()) return true;
   // Its query or fragment changing keeps the page and its edits (Words' filters, Find's row); the
-  // router asks this guard then too.
-  if (to?.url && from?.url && pathOf(to.url) === pathOf(from.url)) return true;
+  // router asks this guard then too. An entry edited in place (`?edit=<id>`, Experience) is a place.
+  if (to?.url && from?.url && placeOf(to.url) === placeOf(from.url)) return true;
 
   const leave = await inject(ConfirmService).ask({
     title: "Discard unsaved changes?",
@@ -104,4 +104,8 @@ export const unsavedChangesGuard: CanDeactivateFn<unknown> = async (_page, _rout
   return leave;
 };
 
-const pathOf = (url: string): string => url.split(/[?#]/)[0] ?? "";
+/** The page, and the entry open in it: the path and its `edit`. */
+function placeOf(url: string): string {
+  const [path = "", query = ""] = url.split("#")[0]!.split("?");
+  return `${path}?${new URLSearchParams(query).get("edit") ?? ""}`;
+}

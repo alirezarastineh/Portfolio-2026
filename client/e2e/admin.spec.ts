@@ -5834,9 +5834,10 @@ test.describe("never losing work", () => {
       answers: (updatedAt) => ({
         "GET /admin/experiences": (n: number) => saved(row.experiences(updatedAt(n))),
       }),
-      open: (page) => page.getByRole("button", { name: "Edit" }).click(),
+      // The entry opens in place of the list (plan 5, U14).
+      open: (page) => page.getByRole("link", { name: "Engineer", exact: true }).click(),
       field: (page) => page.locator("#exp-org"),
-      save: (page) => page.getByRole("button", { name: "Save entry" }),
+      save: saveDraft,
     },
   ];
 
@@ -6108,6 +6109,36 @@ test.describe("the recovery copy", () => {
     richText("Body (en)", " One more week."),
     byId("#post-seo-title-en", "A search title"),
   ];
+  // The experience entry (plan 5, U14): opened from its title, back at `?edit=<id>` after a loss.
+  const experienceRow = {
+    id: "e1",
+    position: 0,
+    kind: "work",
+    orgName: "Acme",
+    orgUrl: "",
+    logoId: null,
+    logoPath: null,
+    location: "",
+    employmentType: "full_time",
+    startDate: "2024-01-01",
+    endDate: null,
+    datePrecision: "month",
+    credentialId: "",
+    credentialUrl: "",
+    skills: [],
+    isVisible: true,
+    updatedAt: HOUR_AGO,
+    translations: {
+      en: { title: "Engineer", summary: "", highlights: [] },
+      de: { title: "Ingenieur", summary: "", highlights: [] },
+    },
+  };
+  const experienceFields = [
+    byId("#exp-org", "Globex"),
+    token("Skills", "Rust"),
+    byId("#exp-title-de", "Leitender Ingenieur"),
+    byId("#exp-summary-en", "Led the platform team through two rewrites."),
+  ];
   // Profile (plan 5, U11): the identity row, the profile group, a link.
   const profileFields = [
     byId("#name", "Someone Else"),
@@ -6202,6 +6233,24 @@ test.describe("the recovery copy", () => {
         await expect(page.getByRole("switch", { name: "German version" })).toBeChecked();
         await isBack(page, byId("#post-title-de", "Ein neuer Titel"));
         await isBack(page, richText("Body (de)", "Eine weitere Woche."));
+      },
+    },
+    {
+      // Opened from the list, it comes back where it was left: the entry, at its address.
+      name: "an experience entry",
+      path: "/admin/experience",
+      answers: { "GET /admin/experiences": { experiences: [experienceRow] } },
+      keys: ["orgName", "skills", "translations.de.title", "translations.en.summary"].map(
+        (field) => `experience-entry|e1|${field}`,
+      ),
+      words: experienceFields.map((field) => field.text),
+      edit: async (page) => {
+        await page.getByRole("link", { name: "Engineer", exact: true }).click();
+        for (const field of experienceFields) await type(page, field);
+      },
+      check: async (page) => {
+        await expect(page).toHaveURL(/\/admin\/experience\?edit=e1$/);
+        for (const field of experienceFields) await isBack(page, field);
       },
     },
     {
@@ -6761,29 +6810,6 @@ test.describe("the recovery copy", () => {
     position: 0,
     updatedAt: HOUR_AGO,
   });
-  const experienceRow = {
-    id: "e1",
-    position: 0,
-    kind: "work",
-    orgName: "Acme",
-    orgUrl: "",
-    logoId: null,
-    logoPath: null,
-    location: "",
-    employmentType: "full_time",
-    startDate: "2024-01-01",
-    endDate: null,
-    datePrecision: "month",
-    credentialId: "",
-    credentialUrl: "",
-    skills: [],
-    isVisible: true,
-    updatedAt: HOUR_AGO,
-    translations: {
-      en: { title: "Engineer", summary: "", highlights: [] },
-      de: { title: "Ingenieur", summary: "", highlights: [] },
-    },
-  };
   const seo = { en: content("en")["seo"], de: content("de")["seo"] };
   const tab = (name: string) => (page: Page) =>
     page.getByRole("tab", { name, exact: true }).click();
@@ -6852,14 +6878,6 @@ test.describe("the recovery copy", () => {
       answers: { "GET /admin/socials": { socials: [socialsRow("s1")] } },
       typed: [byName("Link label", "Mastodon")],
       keys: ["socials|s1|label"],
-    },
-    {
-      name: "an experience entry",
-      path: "/admin/experience",
-      answers: { "GET /admin/experiences": { experiences: [experienceRow] } },
-      open: (page) => page.getByRole("button", { name: "Edit" }).click(),
-      typed: [byId("#exp-org", "Globex")],
-      keys: ["experience-entry|e1|orgName"],
     },
     {
       name: "Media's alt text and description",
@@ -11007,6 +11025,539 @@ test.describe("Work and the project editor", () => {
     await expect(page.locator("#contact-submit-de")).toBeVisible();
     expect(await cut(page), "German at 390").toEqual([]);
   });
+});
+
+/** Copies as an older editor wrote them: the store's own shape, keyed by editor, item and field. */
+function plantCopies(page: Page, copies: Record<string, unknown>[]): Promise<void> {
+  return page.evaluate(
+    (all) =>
+      new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open("admin-recovery", 1);
+        open.onupgradeneeded = () =>
+          open.result.createObjectStore("copies", { keyPath: ["editor", "item", "field"] });
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const write = open.result.transaction("copies", "readwrite");
+          for (const copy of all) write.objectStore("copies").put(copy);
+          write.oncomplete = () => {
+            open.result.close();
+            resolve();
+          };
+          write.onerror = () => reject(write.error);
+        };
+      }),
+    copies,
+  );
+}
+
+/** The whole page against WCAG 2.2 AA and best practice. */
+async function axeViolations(page: Page) {
+  await settled(page);
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+    .analyze();
+  return violations.map((v) => ({
+    rule: v.id,
+    targets: v.nodes.slice(0, 5).map((n) => n.target.join(" ")),
+  }));
+}
+
+/** The JSON of every request to this method and path, as they go. */
+function sentTo(page: Page, method: string, path: string): Record<string, unknown>[] {
+  const bodies: Record<string, unknown>[] = [];
+  page.on("request", (request) => {
+    if (request.method() === method && new URL(request.url()).pathname === path) {
+      bodies.push(request.postDataJSON() as Record<string, unknown>);
+    }
+  });
+  return bodies;
+}
+
+/** Each visible field whose text runs past it: none may (plan 5, U13). */
+const cutFields = (page: Page) =>
+  page.evaluate(() =>
+    [
+      ...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+        "main input, main textarea",
+      ),
+    ]
+      .filter((f) => f.getClientRects().length && f.type !== "checkbox" && f.type !== "file")
+      .filter((f) => f.scrollWidth > f.clientWidth + 2 || f.scrollHeight > f.clientHeight + 2)
+      .map((f) => f.id || f.getAttribute("aria-label") || f.name),
+  );
+
+/** Experience (plan 5, U14): a table, and an entry's editor in its place at `?edit=<id>`. */
+test.describe("Experience: the table and the entry's editor in place", () => {
+  const TYPED = "Typed before the session ended";
+  const LOST = { status: 401, body: { error: "unauthenticated" } };
+  const LONG =
+    "Moved the platform team from weekly releases to several a day, with every change behind an eval gate";
+  const saved = (body: unknown = { ok: true }) => ({ status: 200, body });
+  const header = (page: Page) => page.locator("app-editor-header");
+  const state = (page: Page) => header(page).getByRole("status").first();
+  const save = (page: Page) => header(page).getByRole("button", { name: "Save", exact: true });
+  const table = (page: Page) =>
+    page.getByRole("table", { name: "Entries in the timeline's order" });
+  const titles = (page: Page) => table(page).locator("tbody tr").getByRole("link");
+  const ask = (page: Page) => page.getByRole("alertdialog");
+  const banner = (page: Page) => page.getByRole("status").filter({ hasText: "Unsaved edits from" });
+
+  const entry = (id: string, position: number) => ({
+    id,
+    position,
+    kind: "work",
+    orgName: "Acme",
+    orgUrl: "https://acme.example",
+    logoId: null as string | null,
+    logoPath: null as string | null,
+    location: "Berlin",
+    employmentType: "full-time",
+    startDate: "2024-03-01",
+    endDate: null as string | null,
+    datePrecision: "month",
+    credentialId: "",
+    credentialUrl: "",
+    skills: ["TypeScript"],
+    isVisible: true,
+    updatedAt: HOUR_AGO,
+    translations: {
+      en: {
+        title: "Staff engineer",
+        summary: "Led the platform team.",
+        highlights: ["Cut p95 latency by 40%."],
+      },
+      de: {
+        title: "Staff Engineer",
+        summary: "Leitete das Plattformteam.",
+        highlights: ["Die p95-Latenz um 40 % gesenkt."],
+      },
+    },
+  });
+  /** Work, then a degree in years, then a hidden certificate of one month. */
+  const ENTRIES = () => [
+    entry("e1", 0),
+    {
+      ...entry("e2", 1),
+      kind: "education",
+      orgName: "TU Berlin",
+      orgUrl: "",
+      employmentType: "",
+      startDate: "2017-10-01",
+      endDate: "2019-09-30",
+      datePrecision: "year",
+      skills: [],
+      translations: {
+        en: { title: "M.Sc. Computer Science", summary: "", highlights: [] },
+        de: { title: "M.Sc. Informatik", summary: "", highlights: [] },
+      },
+    },
+    {
+      ...entry("e3", 2),
+      kind: "certification",
+      orgName: "CNCF",
+      orgUrl: "",
+      employmentType: "",
+      startDate: "2023-05-01",
+      endDate: "2023-05-01",
+      skills: ["Kubernetes"],
+      isVisible: false,
+      translations: {
+        en: { title: "CKA", summary: "", highlights: [] },
+        de: { title: "CKA", summary: "", highlights: [] },
+      },
+    },
+  ];
+  const API = () => ({ "GET /admin/experiences": { experiences: ENTRIES() } });
+
+  async function openEntry(page: Page, id = "e1"): Promise<void> {
+    await openAdmin(page, `/admin/experience?edit=${id}`);
+    await expect(page.locator("#exp-org")).toBeVisible();
+  }
+
+  test("the list is a table in the timeline's order: title and organisation, kind, dates in words, shown", async ({
+    page,
+    baseURL,
+  }) => {
+    const unmocked = await fakeApi(page, baseURL, {
+      ...API(),
+      "PATCH /admin/experiences/e3/visibility": { ok: true },
+    });
+    const shown = sentTo(page, "PATCH", "/admin/experiences/e3/visibility");
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openAdmin(page, "/admin/experience");
+
+    await expect(table(page).getByRole("columnheader")).toHaveText([
+      "Order",
+      "Title and organisation",
+      "Kind",
+      "Dates",
+      "Shown",
+      "Actions",
+    ]);
+    await expect(titles(page)).toHaveText(["Staff engineer", "M.Sc. Computer Science", "CKA"]);
+    const cells = (n: number) => table(page).locator("tbody tr").nth(n).getByRole("cell");
+    await expect(cells(0).nth(1)).toContainText("Acme");
+    await expect(cells(0).nth(2)).toHaveText("Work");
+    await expect(cells(0).nth(3)).toHaveText("Mar 2024 – now");
+    await expect(cells(1).nth(2)).toHaveText("Education");
+    await expect(cells(1).nth(3)).toHaveText("2017 – 2019");
+    await expect(cells(2).nth(3)).toHaveText("May 2023");
+    await expect(
+      table(page).getByRole("switch", { name: "Show Staff engineer at Acme on the site" }),
+    ).toBeChecked();
+    const hidden = table(page).getByRole("switch", { name: "Show CKA at CNCF on the site" });
+    await expect(hidden).not.toBeChecked();
+    await hidden.click();
+    await expect.poll(() => shown).toEqual([{ isVisible: true }]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a title opens the entry's editor in place at ?edit=<id>; Back returns to the list and to that title; Find opens an entry", async ({
+    page,
+    baseURL,
+  }) => {
+    const unmocked = await fakeApi(page, baseURL, { ...API(), "GET /admin/posts": { posts: [] } });
+    await openAdmin(page, "/admin/experience");
+
+    await titles(page).first().click();
+    await expect(page).toHaveURL(/\/admin\/experience\?edit=e1$/);
+    const title = header(page).getByRole("heading", { level: 1 });
+    await expect(title).toHaveText("Staff engineer at Acme");
+    await expect(title).toBeFocused();
+    await expect(page.locator("#exp-org")).toHaveValue("Acme");
+    await expect(page.locator("#exp-title-de")).toHaveValue("Staff Engineer");
+    await expect(table(page)).toHaveCount(0);
+    const crumbs = page.getByRole("navigation", { name: "Breadcrumb" });
+    await expect(crumbs.getByRole("link", { name: "Experience" })).toBeVisible();
+    await expect(crumbs.locator("[aria-current=page]")).toHaveText("Entry");
+
+    await page.evaluate(() => history.back());
+    await expect(page).toHaveURL(/\/admin\/experience$/);
+    await expect(titles(page).first()).toBeFocused();
+
+    // Find opens an entry where it is edited, not the page.
+    await page.keyboard.press("Control+k");
+    const palette = page.getByRole("dialog");
+    await palette.getByRole("combobox").fill("tu berlin");
+    await expect(palette.getByRole("option", { name: /TU Berlin/, selected: true })).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/admin\/experience\?edit=e2$/);
+    await expect(page.locator("#exp-org")).toHaveValue("TU Berlin");
+    expect(unmocked).toEqual([]);
+  });
+
+  test("leaving an entry with unsaved edits asks first, by Back and by the rail; Stay keeps the text and the address", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, API());
+    await openAdmin(page, "/admin/experience");
+    await titles(page).first().click();
+    await page.locator("#exp-org").fill("Globex");
+
+    await page.evaluate(() => history.back());
+    await expect(ask(page)).toContainText("Discard unsaved changes?");
+    await ask(page).getByRole("button", { name: "Stay" }).click();
+    await expect(ask(page)).toHaveCount(0);
+    await expect(page).toHaveURL(/\/admin\/experience\?edit=e1$/);
+    await expect(page.locator("#exp-org")).toHaveValue("Globex");
+
+    await page
+      .locator("[data-slot=sidebar-inner]")
+      .getByRole("link", { name: /^Experience/ })
+      .click();
+    await expect(ask(page)).toContainText("Discard unsaved changes?");
+    await ask(page).getByRole("button", { name: "Discard and leave" }).click();
+    await expect(page).toHaveURL(/\/admin\/experience$/);
+    await expect(titles(page).first()).toHaveText("Staff engineer");
+  });
+
+  test("Add entry opens a new entry at ?edit=new; its first save adds it, and the address takes its id", async ({
+    page,
+    baseURL,
+  }) => {
+    let created: Record<string, unknown> | null = null;
+    page.on("request", (r) => {
+      if (r.method() === "POST" && new URL(r.url()).pathname === "/admin/experiences") {
+        created = r.postDataJSON() as Record<string, unknown>;
+      }
+    });
+    const stored = () => ({ ...created, id: "e9", position: 3, logoPath: null, updatedAt: NOW });
+    const unmocked = await fakeApi(page, baseURL, {
+      "POST /admin/experiences": { ok: true, id: "e9" },
+      "GET /admin/experiences": () =>
+        saved({ experiences: [...ENTRIES(), ...(created ? [stored()] : [])] }),
+    });
+    await openAdmin(page, "/admin/experience");
+
+    await page.getByRole("button", { name: "Add entry" }).click();
+    await expect(page).toHaveURL(/\/admin\/experience\?edit=new$/);
+    await expect(header(page).getByRole("heading", { level: 1 })).toHaveText("New entry");
+    await page.locator("#exp-org").fill("Globex");
+    await page.locator("#exp-title-en").fill("Platform lead");
+    await page.locator("#exp-title-de").fill("Plattformleiter");
+    await save(page).click();
+    await expect(page).toHaveURL(/\/admin\/experience\?edit=e9$/);
+    await expect(state(page)).toHaveText(/^Saved/);
+    expect(created).toMatchObject({
+      orgName: "Globex",
+      translations: { en: { title: "Platform lead" }, de: { title: "Plattformleiter" } },
+    });
+
+    await page.evaluate(() => history.back());
+    await expect(page).toHaveURL(/\/admin\/experience$/);
+    await expect(titles(page)).toHaveText([
+      "Staff engineer",
+      "M.Sc. Computer Science",
+      "CKA",
+      "Platform lead",
+    ]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a row moves by Alt+arrows on its grip, and by Move down in ⋯ for a single pointer", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { ...API(), "PATCH /admin/experiences/reorder": { ok: true } });
+    const reorders = sentTo(page, "PATCH", "/admin/experiences/reorder");
+    await openAdmin(page, "/admin/experience");
+
+    const grip = page.getByRole("button", {
+      name: "Reorder Staff engineer at Acme. Use Alt with arrow keys.",
+    });
+    await grip.focus();
+    await page.keyboard.press("Alt+ArrowDown");
+    await expect.poll(() => reorders).toEqual([{ ids: ["e2", "e1", "e3"] }]);
+    await expect(titles(page)).toHaveText(["M.Sc. Computer Science", "Staff engineer", "CKA"]);
+    await expect(grip).toBeFocused();
+
+    await page
+      .getByRole("button", { name: "More actions for M.Sc. Computer Science at TU Berlin" })
+      .click();
+    await expect(page.getByRole("menuitem", { name: "Move up" })).toBeDisabled();
+    await page.getByRole("menuitem", { name: "Move down" }).click();
+    await expect.poll(() => reorders).toHaveLength(2);
+    expect(reorders[1]).toEqual({ ids: ["e1", "e2", "e3"] });
+  });
+
+  test("the entry: title and summary in both languages, highlights grow, skills are tokens; the rest is sent as loaded", async ({
+    page,
+    baseURL,
+  }) => {
+    const [first, ...rest] = ENTRIES();
+    const loaded = {
+      ...first!,
+      logoId: "00000000-0000-4000-8000-0000000000aa",
+      isVisible: false,
+      credentialId: "ABC-123",
+    };
+    await fakeApi(page, baseURL, {
+      "GET /admin/experiences": { experiences: [loaded, ...rest] },
+      "PUT /admin/experiences/e1": { ok: true },
+    });
+    const puts = sentTo(page, "PUT", "/admin/experiences/e1");
+    await openEntry(page);
+    await expect(header(page)).toContainText("Hidden");
+
+    const skills = page.getByRole("textbox", { name: "Skills" });
+    await skills.fill("Rust");
+    await skills.press("Enter");
+    await expect(page.getByRole("button", { name: "Rust", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Add highlight" }).first().click();
+    const highlight = page.getByRole("textbox", { name: "English highlights 2" });
+    await highlight.fill(LONG);
+    await expect(page.locator(".change-trace").filter({ has: highlight }).first()).toHaveAttribute(
+      "data-change",
+      "unsaved",
+    );
+    await expect(state(page)).toHaveText("2 unsaved changes");
+    expect(await cutFields(page)).toEqual([]);
+
+    await page.keyboard.press("Control+s");
+    await expect.poll(() => puts).toHaveLength(1);
+    const { id, position, logoPath, updatedAt, ...input } = loaded;
+    void [id, position, logoPath, updatedAt];
+    expect(puts[0]).toEqual({
+      ...input,
+      skills: ["TypeScript", "Rust"],
+      translations: {
+        en: { ...loaded.translations.en, highlights: [...loaded.translations.en.highlights, LONG] },
+        de: loaded.translations.de,
+      },
+    });
+    await expect(state(page)).toHaveText(/^Saved/);
+  });
+
+  test("a 401 mid-edit opens the sign-in over the entry; the text stays and saves after it", async ({
+    page,
+    baseURL,
+    problems,
+  }) => {
+    let signedIn = false;
+    const unmocked = await fakeApi(page, baseURL, {
+      ...API(),
+      "PUT /admin/experiences/e1": () => (signedIn ? saved() : LOST),
+      "POST /auth/login": () => {
+        signedIn = true;
+        return saved({ ok: true, totpRequired: false, user: USER });
+      },
+    });
+    const puts = sentTo(page, "PUT", "/admin/experiences/e1");
+    await openEntry(page);
+
+    await page.locator("#exp-summary-en").fill(TYPED);
+    await save(page).click();
+    const signIn = page.getByRole("dialog", { name: "Sign in to carry on" });
+    await expect(signIn).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/experience\?edit=e1$/);
+    await expect(page.locator("#exp-summary-en")).toHaveValue(TYPED);
+    await signIn.getByLabel("Password").fill("hunter2hunter2");
+    await signIn.getByRole("button", { name: "Sign in" }).click();
+    await expect(signIn).toBeHidden();
+    await expect(page.locator("#exp-summary-en")).toHaveValue(TYPED);
+
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved/);
+    expect(puts).toHaveLength(2);
+    expect(puts[1]).toMatchObject({ translations: { en: { summary: TYPED } } });
+    expect(problems.pageErrors).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("copies typed in the old sheet come back into the entry's editor, which opens by itself", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { ...API(), "PUT /admin/experiences/e1": { ok: true } });
+    const puts = sentTo(page, "PUT", "/admin/experiences/e1");
+    await openAdmin(page, "/admin/inbox");
+    const loaded = ENTRIES()[0]!;
+    const at = Date.now() - 60_000;
+    const highlights = [...loaded.translations.en.highlights, LONG];
+    await plantCopies(
+      page,
+      [
+        ["orgName", "Acme Labs", loaded.orgName],
+        ["skills", [...loaded.skills, "Go"], loaded.skills],
+        ["translations.en.highlights", highlights, loaded.translations.en.highlights],
+        ["translations.de.title", "Leitender Ingenieur", loaded.translations.de.title],
+      ].map(([field, value, base]) => ({
+        editor: "experience-entry",
+        item: "e1",
+        field,
+        value,
+        base,
+        at,
+      })),
+    );
+
+    await openAdmin(page, "/admin/experience");
+    await expect(page).toHaveURL(/\/admin\/experience\?edit=e1$/);
+    await expect(banner(page)).toBeVisible();
+    await expect(page.locator("#exp-org")).toHaveValue("Acme Labs");
+    await expect(page.locator("#exp-title-de")).toHaveValue("Leitender Ingenieur");
+    await expect(page.getByRole("textbox", { name: "English highlights 2" })).toHaveValue(LONG);
+    await expect(page.getByRole("button", { name: "Go", exact: true })).toBeVisible();
+    expect(await cutFields(page)).toEqual([]);
+
+    await save(page).click();
+    await expect.poll(() => puts).toHaveLength(1);
+    expect(puts[0]).toMatchObject({
+      orgName: "Acme Labs",
+      skills: ["TypeScript", "Go"],
+      translations: { en: { highlights }, de: { title: "Leitender Ingenieur" } },
+    });
+  });
+
+  test("from the keyboard at 1280: a row's grip, title, switch and ⋯; Edit from ⋯; then the header and the fields in the order you see", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await fakeApi(page, baseURL, API());
+    await openAdmin(page, "/admin/experience");
+    const tab = async (target: Locator) => {
+      await page.keyboard.press("Tab");
+      await expect(target).toBeFocused();
+    };
+    await page
+      .getByRole("button", { name: "Reorder Staff engineer at Acme. Use Alt with arrow keys." })
+      .focus();
+    await tab(titles(page).first());
+    await tab(table(page).getByRole("switch", { name: "Show Staff engineer at Acme on the site" }));
+    await tab(page.getByRole("button", { name: "More actions for Staff engineer at Acme" }));
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("menuitem", { name: "Edit" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/admin\/experience\?edit=e1$/);
+
+    await expect(header(page).getByRole("heading", { level: 1 })).toBeFocused();
+    await tab(header(page).getByRole("button", { name: "EN", exact: true }));
+    // Save waits disabled with nothing to save: no stop until there is.
+    await header(page).getByRole("button", { name: "Live preview" }).focus();
+    await tab(
+      header(page).getByRole("button", { name: "More actions for Staff engineer at Acme" }),
+    );
+    await tab(page.locator("#exp-kind"));
+    await page.locator("#exp-cred-url").focus();
+    await tab(page.getByRole("button", { name: "TypeScript", exact: true }));
+    await tab(page.getByRole("textbox", { name: "Skills" }));
+    await page.getByRole("button", { name: "More actions for Title" }).focus();
+    await tab(page.locator("#exp-title-en"));
+    await tab(page.locator("#exp-title-de"));
+    await expect(page.locator("#exp-title-de")).toHaveAttribute("lang", "de");
+    await expect(page.getByRole("textbox", { name: "German highlights 1" })).toHaveAttribute(
+      "lang",
+      "de",
+    );
+  });
+
+  test("at 390: the table keeps the title with its dates, Shown and ⋯; the entry shows one language with its switch first", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await fakeApi(page, baseURL, API());
+    await openAdmin(page, "/admin/experience");
+    const width = () => page.evaluate(() => document.documentElement.scrollWidth);
+    await expect(titles(page)).toHaveCount(3);
+    await expect(table(page).getByRole("columnheader", { name: "Kind" })).toBeHidden();
+    await expect(table(page).getByRole("columnheader", { name: "Dates" })).toBeHidden();
+    await expect(table(page).locator("tbody tr").first()).toContainText("Mar 2024 – now");
+    expect(await width()).toBe(390);
+
+    await titles(page).first().click();
+    const languages = header(page).getByRole("group", { name: "Language view" });
+    await expect(languages.getByRole("button")).toHaveText(["EN", "DE"]);
+    await expect(page.locator("#exp-title-de")).toHaveCount(0);
+    await languages.getByRole("button", { name: "DE" }).click();
+    await expect(page.locator("#exp-title-de")).toBeVisible();
+    await expect(page.locator("#exp-title-en")).toHaveCount(0);
+    await page.evaluate(() => window.scrollTo(0, 2000));
+    await expect(save(page)).toBeInViewport({ ratio: 1 });
+    expect(await width()).toBe(390);
+    expect(await cutFields(page)).toEqual([]);
+  });
+
+  for (const colorScheme of ["dark", "light"] as const) {
+    test(`the table and an entry with an unsaved field, in the ${colorScheme} theme, have no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await fakeApi(page, baseURL, API());
+      await openAdmin(page, "/admin/experience");
+      await expect(titles(page)).toHaveCount(3);
+      expect(await axeViolations(page)).toEqual([]);
+
+      await titles(page).first().click();
+      await page.locator("#exp-org").fill("Globex");
+      await expect(state(page)).toHaveText("1 unsaved change");
+      expect(await axeViolations(page)).toEqual([]);
+    });
+  }
 });
 
 test.describe("admin accessibility", () => {

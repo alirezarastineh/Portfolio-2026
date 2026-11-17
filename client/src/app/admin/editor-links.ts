@@ -74,7 +74,8 @@ export function editorLinkForI18n(
     case "post":
       return `/admin/writing/${encoded(item.id)}`;
     case "experience":
-      return "/admin/experience";
+      // The entry's own editor, in Experience's place (plan 5, U14).
+      return `/admin/experience?edit=${encoded(item.id)}`;
     case "skill":
       return "/admin/skills";
     case "faq":

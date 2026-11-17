@@ -36,6 +36,7 @@ describe("editorLinkFor", () => {
 describe("editorLinkForI18n", () => {
   it("links each kind of item, and a ui field to its group's page", () => {
     expect(editorLinkForI18n({ kind: "project", id: "atlas" })).toBe("/admin/projects/atlas");
+    expect(editorLinkForI18n({ kind: "experience", id: "e1" })).toBe("/admin/experience?edit=e1");
     expect(editorLinkForI18n({ kind: "faq", id: "x" })).toBe("/admin/assistant");
     expect(editorLinkForI18n({ kind: "section", id: "privacy" })).toBe("/admin/legal");
     expect(editorLinkForI18n({ kind: "section", id: "ui", missingDe: ["about.philosophy"] })).toBe(

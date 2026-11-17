@@ -958,7 +958,11 @@ export default class AdminLayout {
   /** The page the URL is on, for the rail's current entry. */
   protected readonly currentItem = computed(() => navItemFor(this.url()));
   protected readonly accountCurrent = computed(() => this.currentItem() === ACCOUNT);
-  protected readonly crumbs = computed(() => crumbsFor(this.url()));
+  protected readonly crumbs = computed(() => {
+    this.navigated();
+    const edit = this.router.parseUrl(this.router.url).queryParamMap.get("edit");
+    return crumbsFor(this.url(), edit);
+  });
 
   protected readonly isLogin = computed(() => this.url().startsWith("/admin/login"));
 
@@ -1219,8 +1223,8 @@ export default class AdminLayout {
         }),
       });
     }
-    // shortcut: experience, the links and media open their page, not the entry, until U14 and U15
-    // give an entry an address (`?edit=<id>`).
+    // shortcut: the links and media open their page, not the entry, until U15 gives a media item an
+    // address; an experience entry has its own (`?edit=<id>`, U14).
     if (experiences.ok) {
       groups.push({
         label: "Experience",
@@ -1231,7 +1235,7 @@ export default class AdminLayout {
             key: e.id,
             label,
             search: `${label} ${e.translations.de.title}`,
-            path: "/admin/experience",
+            path: `/admin/experience?edit=${encodeURIComponent(e.id)}`,
           };
         }),
       });

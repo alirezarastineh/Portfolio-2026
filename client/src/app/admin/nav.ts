@@ -120,16 +120,23 @@ export interface Crumb {
   value?: boolean;
 }
 
-/** Where a path is, from the top: the last crumb is the page itself. */
-export function crumbsFor(path: string): Crumb[] {
+/**
+ * Where a path is, from the top: the last crumb is the page itself, or the entry edited in its
+ * place (`edit`, Experience's `?edit=<id>`).
+ */
+export function crumbsFor(path: string, edit: string | null = null): Crumb[] {
   const item = navItemFor(path);
   if (!item) return [];
   const parent = item.parent ? navItemFor(item.parent) : null;
   const slug = /^\/admin\/(?:projects|writing)\/([^/]+)$/.exec(path)?.[1];
+  const entry = edit && path === "/admin/experience" ? edit : null;
   return [
     ...(parent ? [{ label: parent.label, path: parent.path }] : []),
     { label: item.label, path: item.path },
     ...(slug ? [{ label: decodeURIComponent(slug), path, value: true }] : []),
+    ...(entry
+      ? [{ label: entry === "new" ? "New entry" : "Entry", path: `${path}?edit=${entry}` }]
+      : []),
   ];
 }
 

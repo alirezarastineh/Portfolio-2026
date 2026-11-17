@@ -23,6 +23,15 @@ describe("the shell's pages", () => {
     expect(crumbsFor("/admin")).toEqual([{ label: "Today", path: "/admin" }]);
   });
 
+  it("ends with the entry edited in place, so the page above it is a link (Experience)", () => {
+    expect(crumbsFor("/admin/experience", "e1")).toEqual([
+      { label: "Experience", path: "/admin/experience" },
+      { label: "Entry", path: "/admin/experience?edit=e1" },
+    ]);
+    expect(crumbsFor("/admin/experience", "new").at(-1)?.label).toBe("New entry");
+    expect(crumbsFor("/admin/words", "e1")).toEqual([{ label: "Words", path: "/admin/words" }]);
+  });
+
   it("titles a tab with the page first", () => {
     expect(titleFor("/admin/projects/project-one")).toBe("project-one · Work · Admin");
     expect(titleFor("/admin/agent")).toBe("Content agent · Assistant · Admin");
