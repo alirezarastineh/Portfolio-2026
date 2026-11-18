@@ -6,6 +6,14 @@ import { AdminSessionService } from "./admin-session.service";
 import { ConfirmService } from "./components/confirm-dialog.component";
 import { RecoveryService } from "./recovery.service";
 
+/** What an editor's header lends the review: its title, its unsaved count and its own Save. */
+export interface EditorHandle {
+  title: () => string;
+  changes: () => number;
+  saving: () => boolean;
+  save: () => void;
+}
+
 /**
  * Tracks which editors hold unsaved work.
  *
@@ -21,6 +29,8 @@ export class UnsavedChangesService {
   private listening = false;
 
   readonly hasAny = computed(() => this.dirty().size > 0);
+  /** The open editor's header (plan 5, U16): the review names its unsaved edits and runs its Save. */
+  readonly editor = signal<EditorHandle | null>(null);
 
   isDirty(id: string): boolean {
     return this.dirty().has(id);

@@ -1,57 +1,80 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  computed,
+  effect,
   inject,
   OnInit,
   signal,
+  untracked,
 } from "@angular/core";
+import { NgIcon, provideIcons } from "@ng-icons/core";
+import { lucideEllipsis } from "@ng-icons/lucide";
 import { toast } from "@spartan-ng/brain/sonner";
-import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmDialogImports } from "@spartan-ng/helm/dialog";
-import { HlmSpinner } from "@spartan-ng/helm/spinner";
-import { HlmTabsImports } from "@spartan-ng/helm/tabs";
+import { HlmDropdownMenuImports } from "@spartan-ng/helm/dropdown-menu";
+import { HlmTableImports } from "@spartan-ng/helm/table";
 
-import {
-  AdminApiService,
-  type PublicationRow,
-  type RevisionDetail,
-} from "../../admin/admin-api.service";
+import { AdminApiService, type PublicationRow } from "../../admin/admin-api.service";
+import { ChangeListComponent } from "../../admin/components/change-list.component";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import {
   FormSkeletonComponent,
   LoadErrorComponent,
 } from "../../admin/components/load-state.component";
 import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
-import { diffJson } from "../../admin/json-diff";
+import { changeRows, changesLabel, summarizeReview } from "../../admin/publish-summary";
+import { AdminPulseService } from "../../admin/pulse.service";
+import { absoluteTime, relativeTime } from "../../admin/relative-time";
+import {
+  LANGUAGE,
+  publicationProblem,
+  wordChanges,
+  type ChangeGroup,
+} from "../../admin/review-words";
+import type { Locale } from "../../content/schema";
 
-type DetailTab = "changes" | "json";
+/** A publication against the live site, both languages: what rolling back to it would change. */
+interface Detail {
+  id: number;
+  groups: ChangeGroup[];
+  data: { locale: Locale; language: string; json: string }[];
+}
+
+/** Restore's question: what it replaces, counted just before asking. */
+function replaced(n: number | null): string {
+  if (n === null) {
+    return "The draft's changes could not be counted: any that are not live yet are replaced.";
+  }
+  if (n === 0) return "The draft matches what is live, so nothing waiting is replaced.";
+  return `It replaces the draft's ${changesLabel(n)} that ${n === 1 ? "is" : "are"} not live yet.`;
+}
 
 /**
- * Every publish and rollback, each holding both languages. Rolling back makes
- * a whole publication live again (as a new one, so nothing is lost); restoring
- * into the draft loads it into the editors instead.
+ * Every publish and roll back, both languages together (plan 5, U16): a table, newest first. Roll
+ * back makes one live again as a new publication; Restore into draft puts one into the editors.
  */
 @Component({
   selector: "app-admin-publications",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     AdminPageHeaderComponent,
+    ChangeListComponent,
     FormSkeletonComponent,
-    HlmBadge,
     HlmButton,
     HlmDialogImports,
-    HlmSpinner,
-    HlmTabsImports,
+    HlmDropdownMenuImports,
+    HlmTableImports,
     LoadErrorComponent,
+    NgIcon,
   ],
+  viewProviders: [provideIcons({ lucideEllipsis })],
   host: { class: "block" },
   template: `
     <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
       <app-page-header
         title="History"
-        description="Every publish is kept, both languages together. Rolling back makes one live again as a new publication, so nothing is ever lost. “Restore into draft” loads it into the editors instead, to change before publishing again."
+        description="Each publish, in both languages: roll back to one or restore it into the draft."
       />
 
       @if (loading()) {
@@ -62,156 +85,115 @@ type DetailTab = "changes" | "json";
           [reason]="reason"
           (retry)="reload()"
         />
-      } @else if (!rows().length) {
-        <p class="m-0 text-sm text-muted-foreground">Nothing published yet.</p>
       } @else {
-        <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list">
-          @for (row of rows(); track row.id) {
-            <li class="flex flex-wrap items-center gap-3 rounded-lg border border-border px-4 py-3">
-              <div class="min-w-0 flex-1">
-                <p class="m-0 truncate text-sm">
-                  <span class="text-data text-muted-foreground">#{{ row.id }}</span>
-                  <span class="ml-2 font-medium">{{
-                    row.label || (row.kind === "rollback" ? "Rollback" : "Unlabelled")
-                  }}</span>
-                </p>
-                <p class="m-0 mt-0.5 font-data text-xs text-muted-foreground">
-                  {{ formatDate(row.createdAt) }} · schema v{{ row.schemaVersion }}
-                  @if (row.restoredFrom) {
-                    · from #{{ row.restoredFrom }}
-                  }
-                </p>
-              </div>
-              @if (row.live) {
-                <span hlmBadge variant="secondary">live</span>
+        <div hlmTableContainer>
+          <table hlmTable>
+            <caption class="sr-only">
+              Publications, newest first
+            </caption>
+            <thead hlmTHead>
+              <tr hlmTr>
+                <th hlmTh scope="col">Number</th>
+                <th hlmTh scope="col">Label</th>
+                <th hlmTh scope="col" class="max-sm:hidden">When</th>
+                <th hlmTh scope="col" class="max-sm:hidden">What changed</th>
+                <th hlmTh scope="col">Live</th>
+                <th hlmTh scope="col" class="w-12"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody hlmTBody>
+              @for (row of rows(); track row.id) {
+                <tr hlmTr class="h-9 pointer-coarse:h-11">
+                  <td hlmTd class="text-data">#{{ row.id }}</td>
+                  <td
+                    hlmTd
+                    class="whitespace-normal wrap-anywhere"
+                    [class.text-muted-foreground]="!row.label"
+                  >
+                    {{ row.label || "No label" }}
+                  </td>
+                  <td hlmTd class="text-data whitespace-nowrap text-muted-foreground max-sm:hidden">
+                    <time [attr.datetime]="row.createdAt" [title]="absolute(row.createdAt)">{{
+                      relative(row.createdAt)
+                    }}</time>
+                  </td>
+                  <td hlmTd class="max-sm:hidden">{{ whatChanged(row) }}</td>
+                  <td hlmTd>{{ liveWords(row) }}</td>
+                  <td hlmTd class="text-right">
+                    <button
+                      hlmBtn
+                      variant="ghost"
+                      size="icon-sm"
+                      type="button"
+                      class="text-muted-foreground pointer-coarse:size-11"
+                      [hlmDropdownMenuTrigger]="rowMenu"
+                      [hlmDropdownMenuTriggerData]="{ $implicit: row }"
+                      [attr.aria-label]="'More actions for #' + row.id"
+                    >
+                      <ng-icon name="lucideEllipsis" size="16" aria-hidden="true" />
+                    </button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr hlmTr>
+                  <td hlmTd colspan="6" class="py-6 text-hint text-muted-foreground">
+                    Nothing published yet.
+                  </td>
+                </tr>
               }
-              @for (version of row.versions; track version.id) {
-                <button
-                  hlmBtn
-                  variant="ghost"
-                  size="sm"
-                  class="text-xs"
-                  [disabled]="viewing() !== null"
-                  [attr.aria-label]="'View ' + version.locale + ' of publication ' + row.id"
-                  (click)="view(row, version.id)"
-                >
-                  @if (viewing() === version.id) {
-                    <hlm-spinner class="size-4" />
-                  } @else {
-                    {{ version.locale.toUpperCase() }}
-                  }
-                </button>
-              }
-              <button
-                hlmBtn
-                variant="outline"
-                size="sm"
-                [disabled]="busy() !== null"
-                (click)="restoreDraft(row)"
-              >
-                Restore into draft
+            </tbody>
+          </table>
+        </div>
+
+        <ng-template #rowMenu let-row>
+          <hlm-dropdown-menu class="w-56">
+            <!-- The live one has nothing to compare with and nothing to roll back to. -->
+            @if (!row.live) {
+              <button hlmDropdownMenuItem (triggered)="view(row)">View changes</button>
+              <button hlmDropdownMenuItem (triggered)="rollback(row)">
+                Roll back to #{{ row.id }}
               </button>
-              @if (!row.live) {
-                <button hlmBtn size="sm" [disabled]="busy() !== null" (click)="rollback(row)">
-                  Roll back
-                </button>
-              }
-            </li>
-          }
-        </ul>
+            }
+            <button hlmDropdownMenuItem (triggered)="restoreDraft(row)">Restore into draft</button>
+          </hlm-dropdown-menu>
+        </ng-template>
       }
     </div>
 
-    <hlm-dialog
-      [state]="detail() ? 'open' : 'closed'"
-      (stateChanged)="$event === 'closed' && detail.set(null)"
-    >
+    <hlm-dialog [state]="detail() ? 'open' : 'closed'" (stateChanged)="onDetailState($event)">
       <hlm-dialog-content *hlmDialogPortal="let ctx" class="sm:max-w-3xl">
         @if (detail(); as d) {
           <hlm-dialog-header>
-            <h2 hlmDialogTitle class="font-data">
-              #{{ detailPublication()?.id }} · {{ d.revision.locale.toUpperCase() }}
-            </h2>
+            <h2 hlmDialogTitle>#{{ d.id }} against the live site</h2>
             <p hlmDialogDescription>
-              {{ d.revision.label || "unlabelled" }} — published
-              {{ formatDate(d.revision.createdAt) }}
+              What rolling back to #{{ d.id }} would change, in both languages. Case-study and post
+              pages are compared when you publish.
             </p>
           </hlm-dialog-header>
-
           <div
-            hlmTabs
-            [tab]="tab()"
-            (tabActivated)="tab.set($event === 'json' ? 'json' : 'changes')"
-            class="min-w-0"
+            class="flex max-h-[60vh] min-w-0 flex-col gap-4 overflow-y-auto overscroll-contain pr-1"
           >
-            <div hlmTabsList aria-label="Publication view">
-              <button hlmTabsTrigger="changes">Changes vs live</button>
-              <button hlmTabsTrigger="json">Full JSON</button>
-            </div>
-
-            <div hlmTabsContent="changes" class="min-w-0">
-              @if (d.revision.live) {
-                <p class="m-0 text-sm text-muted-foreground">
-                  This is live, so there is nothing to compare it with.
-                </p>
-              } @else if (!d.live) {
-                <p class="m-0 text-sm text-muted-foreground">
-                  Nothing is live in this language yet.
-                </p>
-              } @else if (!changes().length) {
-                <p class="m-0 text-sm text-muted-foreground">
-                  The same content as what is live. (Case-study and post bodies are compared on
-                  publish, not here.)
-                </p>
-              } @else {
-                <p class="m-0 mb-3 text-sm text-muted-foreground">
-                  Rolling back would change {{ changes().length }}
-                  {{ changes().length === 1 ? "field" : "fields" }} in this language:
-                </p>
-                <ol class="m-0 flex max-h-[60vh] list-none flex-col gap-3 overflow-y-auto p-0 pr-1">
-                  @for (entry of changes(); track entry.path) {
-                    <li class="rounded-lg border border-border p-3">
-                      <div class="mb-2 flex items-start justify-between gap-2">
-                        <code class="font-mono text-xs break-all text-foreground">{{
-                          entry.path
-                        }}</code>
-                        <span hlmBadge variant="outline" class="shrink-0">{{ entry.kind }}</span>
-                      </div>
-                      <dl class="m-0 grid gap-1.5 text-hint leading-relaxed">
-                        @if (entry.before !== undefined) {
-                          <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2">
-                            <dt class="text-xs font-medium text-destructive">Live</dt>
-                            <dd
-                              class="m-0 whitespace-pre-wrap wrap-break-word text-muted-foreground"
-                            >
-                              {{ entry.before }}
-                            </dd>
-                          </div>
-                        }
-                        @if (entry.after !== undefined) {
-                          <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2">
-                            <dt class="font-data text-xs text-accent-orange">
-                              #{{ detailPublication()?.id }}
-                            </dt>
-                            <dd class="m-0 whitespace-pre-wrap wrap-break-word text-foreground">
-                              {{ entry.after }}
-                            </dd>
-                          </div>
-                        }
-                      </dl>
-                    </li>
-                  }
-                </ol>
+            @if (d.groups.length) {
+              <app-change-list [groups]="d.groups" [links]="false" />
+            } @else {
+              <p class="m-0 text-sm text-muted-foreground">The same content as what is live.</p>
+            }
+            <details class="text-sm">
+              <summary
+                class="min-h-6 cursor-pointer touch-manipulation text-muted-foreground hover:text-foreground pointer-coarse:min-h-11"
+              >
+                Show the data
+              </summary>
+              @for (side of d.data; track side.locale) {
+                <p class="m-0 mt-3 text-sm font-medium" [textContent]="side.language"></p>
+                <pre
+                  class="m-0 mt-1 rounded-lg border border-border bg-card/40 p-3 font-data text-xs leading-relaxed whitespace-pre-wrap wrap-anywhere"
+                  translate="no"
+                  [textContent]="side.json"
+                ></pre>
               }
-            </div>
-
-            <div hlmTabsContent="json" class="min-w-0">
-              <pre
-                class="m-0 max-h-[60vh] overflow-auto rounded-lg border border-border bg-card/40 p-3 font-mono text-xs leading-relaxed"
-                >{{ json() }}</pre>
-            </div>
+            </details>
           </div>
-
           <hlm-dialog-footer>
             <button hlmBtn variant="ghost" type="button" (click)="detail.set(null)">Close</button>
           </hlm-dialog-footer>
@@ -223,35 +205,29 @@ type DetailTab = "changes" | "json";
 export default class AdminPublicationsPage implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly confirm = inject(ConfirmService);
+  private readonly pulse = inject(AdminPulseService);
 
   protected readonly rows = signal<PublicationRow[]>([]);
   protected readonly loading = signal(true);
   /** The API's reason when the list did not arrive. */
   protected readonly loadError = signal<string | null>(null);
-  protected readonly busy = signal<number | null>(null);
-  protected readonly viewing = signal<number | null>(null);
-  protected readonly detail = signal<RevisionDetail | null>(null);
-  protected readonly detailPublication = signal<PublicationRow | null>(null);
-  protected readonly tab = signal<DetailTab>("changes");
+  /** The publication an action is under way for: a second action waits. */
+  private readonly busy = signal<number | null>(null);
+  protected readonly detail = signal<Detail | null>(null);
 
-  /** Live → this publication, i.e. exactly what a rollback would change (upcast to v2 by the API). */
-  protected readonly changes = computed(() => {
-    const d = this.detail();
-    if (!d?.live || d.revision.live) return [];
-    return diffJson(d.live.payload, d.revision.payload);
-  });
+  protected readonly relative = relativeTime;
+  protected readonly absolute = absoluteTime;
 
-  protected readonly json = computed(() => {
-    const d = this.detail();
-    return d ? JSON.stringify(d.revision.payload, null, 2) : "";
-  });
+  constructor() {
+    // A publish or a roll back from the top bar's review puts a new one on top: read the list again.
+    const seen = this.pulse.publishes();
+    effect(() => {
+      if (this.pulse.publishes() !== seen) untracked(() => void this.load());
+    });
+  }
 
   ngOnInit(): void {
     void this.load();
-  }
-
-  protected formatDate(value: string): string {
-    return new Date(value).toLocaleString();
   }
 
   protected reload(): void {
@@ -266,24 +242,65 @@ export default class AdminPublicationsPage implements OnInit {
     if (result.ok) this.rows.set(result.data.publications);
   }
 
-  protected async view(row: PublicationRow, versionId: number): Promise<void> {
-    this.viewing.set(versionId);
-    const result = await this.api.revision(versionId);
-    this.viewing.set(null);
-    if (!result.ok) {
-      toast.error("Could not load it", { description: result.error });
+  /** What the list knows without the revisions: published, or rolled back to which one. */
+  protected whatChanged(row: PublicationRow): string {
+    if (row.kind === "rollback") {
+      return row.restoredFrom ? `Rolled back to #${row.restoredFrom}` : "Rolled back";
+    }
+    const only = row.versions.length === 1 ? row.versions[0] : undefined;
+    return only ? `Published, ${LANGUAGE[only.locale]} only` : "Published";
+  }
+
+  protected liveWords(row: PublicationRow): string {
+    if (row.live) return "Live";
+    const live = row.versions.find((version) => version.live);
+    return live ? `${LANGUAGE[live.locale]} live` : "";
+  }
+
+  protected onDetailState(state: string): void {
+    if (state === "closed") this.detail.set(null);
+  }
+
+  /** Both languages' revisions, on demand, against what is live: what a roll back would change. */
+  protected async view(row: PublicationRow): Promise<void> {
+    if (this.busy() !== null) return;
+    this.busy.set(row.id);
+    const englishFirst = [...row.versions].sort(
+      (a, b) => Number(a.locale !== "en") - Number(b.locale !== "en"),
+    );
+    const results = await Promise.all(englishFirst.map((version) => this.api.revision(version.id)));
+    this.busy.set(null);
+    const failed = results.find((result) => !result.ok);
+    if (failed && !failed.ok) {
+      toast.error("Could not load the changes", { description: publicationProblem(failed.error) });
       return;
     }
-    this.tab.set("changes");
-    this.detailPublication.set(row);
-    this.detail.set(result.data);
+    const details = results.flatMap((result) => (result.ok ? [result.data] : []));
+    this.detail.set({
+      id: row.id,
+      groups: wordChanges(
+        details
+          .filter((d) => d.live)
+          .map((d) => ({
+            locale: d.revision.locale,
+            before: d.live!.payload,
+            after: d.revision.payload,
+            rows: changeRows(d.live!.payload, d.revision.payload),
+          })),
+      ),
+      data: details.map((d) => ({
+        locale: d.revision.locale,
+        language: LANGUAGE[d.revision.locale],
+        json: JSON.stringify(d.revision.payload, null, 2),
+      })),
+    });
   }
 
   protected async rollback(row: PublicationRow): Promise<void> {
+    if (this.busy() !== null) return;
     const confirmed = await this.confirm.ask({
-      title: `Roll back to publication #${row.id}?`,
-      description:
-        "Both languages go back to how they were in it, live immediately, as a new publication. Nothing is deleted.",
+      title: `Roll back to #${row.id}?`,
+      description: `Both languages go back to #${row.id}'s content, live at once, as a new publication. Nothing is deleted.`,
       confirmLabel: "Roll back",
     });
     if (!confirmed) return;
@@ -292,21 +309,25 @@ export default class AdminPublicationsPage implements OnInit {
     const result = await this.api.rollbackPublication(row.id);
     this.busy.set(null);
     if (!result.ok) {
-      toast.error("Rollback failed", { description: describePublicationError(result.error) });
+      toast.error("Not rolled back", { description: publicationProblem(result.error) });
       return;
     }
-    toast.success("Rolled back", {
-      description: `Publication #${result.data.publicationId} is live.`,
-    });
-    await this.load();
+    toast.success(`Rolled back: #${result.data.publicationId} is live.`);
+    // Lists of publications read again (this one among them).
+    this.pulse.published();
   }
 
   protected async restoreDraft(row: PublicationRow): Promise<void> {
+    if (this.busy() !== null) return;
+    // No editor is open here: what Restore replaces is the draft's changes not yet live, counted
+    // now, from a review of its own (the pulse may still be reading an older one).
+    const review = await this.api.publishReview();
+    const counted = review.ok ? summarizeReview(review.data).total : null;
     const confirmed = await this.confirm.ask({
-      title: `Restore publication #${row.id} into the draft?`,
-      description:
-        "The editors will show both languages as they were in it, replacing your current draft. Anything added since is hidden (posts: unpublished), not deleted. Nothing goes live until you publish.",
+      title: `Restore #${row.id} into the draft?`,
+      description: `${replaced(counted)} Anything added since #${row.id} is hidden, not deleted. Nothing goes live until you publish.`,
       confirmLabel: "Restore into draft",
+      destructive: counted !== 0,
     });
     if (!confirmed) return;
 
@@ -314,25 +335,11 @@ export default class AdminPublicationsPage implements OnInit {
     const result = await this.api.restoreDraft(row.id);
     this.busy.set(null);
     if (!result.ok) {
-      toast.error("Restore failed", { description: describePublicationError(result.error) });
+      toast.error("Not restored", { description: publicationProblem(result.error) });
       return;
     }
-    toast.success("Draft restored", {
+    toast.success(`Draft restored from #${row.id}`, {
       description: "Review it in the editors, then publish.",
     });
-  }
-}
-
-/** Plain-language versions of the API's publication error codes. */
-function describePublicationError(code: string): string {
-  switch (code) {
-    case "media_missing":
-      return "A file this publication shows has since been deleted from the media library.";
-    case "invalid_payload":
-      return "This publication no longer matches the current content format.";
-    case "incomplete_publication":
-      return "This older publication holds only one language, so it cannot be restored into the draft.";
-    default:
-      return code;
   }
 }

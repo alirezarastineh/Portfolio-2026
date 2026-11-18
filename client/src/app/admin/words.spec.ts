@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { uiSchema, type AppTranslations } from "../content/schema";
-import { ROWS } from "../pages/admin/words.page";
 import { isHidden } from "./hidden-fields";
+import { ROWS } from "./word-rows";
 import {
   foundWords,
   matchesWord,

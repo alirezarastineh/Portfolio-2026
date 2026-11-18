@@ -1,10 +1,19 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  inject,
+  input,
+  output,
+} from "@angular/core";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideEllipsis } from "@ng-icons/lucide";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmDropdownMenuImports } from "@spartan-ng/helm/dropdown-menu";
 
 import { RecoveryService, typedAt } from "../recovery.service";
+import { UnsavedChangesService, type EditorHandle } from "../unsaved-changes.service";
 import { isSaveShortcut } from "./editor-chrome.component";
 
 /** "1 field", "3 fields". */
@@ -111,6 +120,21 @@ export class EditorHeaderComponent {
   readonly discard = output<void>();
 
   protected readonly recovery = inject(RecoveryService);
+
+  constructor() {
+    // The review (the top bar's Publish) names this editor's unsaved edits and saves them from there.
+    const unsaved = inject(UnsavedChangesService);
+    const handle: EditorHandle = {
+      title: this.title,
+      changes: this.changes,
+      saving: this.saving,
+      save: () => this.save.emit(),
+    };
+    unsaved.editor.set(handle);
+    inject(DestroyRef).onDestroy(() => {
+      if (unsaved.editor() === handle) unsaved.editor.set(null);
+    });
+  }
 
   private readonly isMac =
     typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform ?? "");

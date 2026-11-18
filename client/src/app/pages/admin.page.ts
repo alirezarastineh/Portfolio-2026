@@ -679,12 +679,16 @@ function readRecent(): RecentEntry[] {
         </hlm-command>
       </hlm-command-dialog>
 
-      <!-- The one review dialog: the top bar's Publish, Today and Find open it. -->
-      <app-publish-dialog
-        [open]="pulse.publishOpen()"
-        (openChange)="pulse.publishOpen.set($event)"
-        (published)="pulse.published()"
-      />
+      <!-- The one review dialog: the top bar's Publish, Today and Find open it. Its code loads when
+           first opened (the layout's chunk has no room for it); no idle prefetch, whose runtime
+           would join Angular's core chunk, which every visitor loads. -->
+      @defer (when pulse.publishOpen()) {
+        <app-publish-dialog
+          [open]="pulse.publishOpen()"
+          (openChange)="pulse.publishOpen.set($event)"
+          (published)="pulse.published()"
+        />
+      }
 
       <app-shortcut-sheet [(open)]="shortcutsOpen" />
     }

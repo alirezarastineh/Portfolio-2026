@@ -1210,7 +1210,14 @@ test.describe("admin", () => {
     await publish.click();
     const review = page.getByRole("dialog", { name: "Review and publish" });
     await expect(review).toBeVisible();
-    await expect(review.getByText("2 changes")).toBeVisible();
+    // The fixture's two keys have no row in Words: grouped there, shown as themselves.
+    await expect(review.getByRole("heading", { level: 3 })).toHaveText(["Words"]);
+    await expect(review.getByRole("listitem")).toHaveCount(3);
+    await expect(review.getByRole("listitem")).toContainText([
+      "ui.a (English): changed",
+      "ui.a (German): changed",
+      "ui.b (English): added",
+    ]);
 
     expect(unmocked).toEqual([]);
   });
@@ -13345,6 +13352,746 @@ test.describe("Media and the draft tab", () => {
     await bar.getByRole("link", { name: "Close" }).click();
     await expect(page).toHaveURL(/\/admin\/preview$/);
   });
+
+});
+
+test.describe("the review and History", () => {
+  const DAY_AGO = new Date(Date.now() - 24 * 3600_000).toISOString();
+  const WEEK_AGO = new Date(Date.now() - 7 * 24 * 3600_000).toISOString();
+  const LIVE = { en: content("en"), de: content("de") };
+  /** About's bio in both languages; a project's hook and case study in English; Send and a cover's alt text in German. */
+  function draftOf(locale: "en" | "de"): Record<string, unknown> {
+    const draft = structuredClone(LIVE[locale]) as {
+      ui: { about: Record<string, string>; contact: Record<string, string> };
+      projects: { hook: string; cover: { alt: string } }[];
+    };
+    draft.ui.about["bio"] =
+      locale === "en"
+        ? "I build reliable systems for people who ship."
+        : "Ich baue verlässliche Systeme für Menschen, die liefern.";
+    if (locale === "en") {
+      draft.projects[0]!.hook = "One sentence: what it does, for whom.";
+    } else {
+      draft.ui.contact["submit"] = "Senden";
+      draft.projects[0]!.cover.alt = "Titelbild von Projekt eins";
+    }
+    return draft;
+  }
+  const CASE_STUDY = {
+    key: "project:project-one",
+    change: "changed",
+    live: { kind: "project", body: "<p>The old story.</p>" },
+    draft: {
+      kind: "project",
+      body: "<h2>Goal</h2><p>A new story about project one, long enough to run over two lines in the review: what it set out to do, for whom, and how it ended up working for the people who use it.</p>",
+    },
+  };
+  /** Six changes: three in each language. A language with problems has no draft, as the server sends it. */
+  function review(problems: { en?: unknown[]; de?: unknown[] } = {}) {
+    return {
+      canPublish: !problems.en && !problems.de,
+      locales: (["en", "de"] as const).map((locale) => ({
+        locale,
+        issues: problems[locale] ?? [],
+        changed: true,
+        draft: problems[locale] ? null : draftOf(locale),
+        live: LIVE[locale],
+        liveVersionId: 12,
+        docs: locale === "en" && !problems[locale] ? [CASE_STUDY] : [],
+      })),
+    };
+  }
+  const versions = (en: number, live: boolean) => [
+    { id: en, locale: "en", live },
+    { id: en + 1, locale: "de", live },
+  ];
+  const PUBLICATIONS = {
+    publications: [
+      {
+        id: 12,
+        kind: "publish",
+        label: "New case study",
+        schemaVersion: 2,
+        restoredFrom: null,
+        createdAt: HOUR_AGO,
+        versions: versions(23, true),
+        live: true,
+      },
+      {
+        id: 11,
+        kind: "publish",
+        label: null,
+        schemaVersion: 2,
+        restoredFrom: null,
+        createdAt: DAY_AGO,
+        versions: versions(21, false),
+        live: false,
+      },
+      {
+        id: 10,
+        kind: "rollback",
+        label: null,
+        schemaVersion: 2,
+        restoredFrom: 8,
+        createdAt: WEEK_AGO,
+        versions: versions(19, false),
+        live: false,
+      },
+    ],
+  };
+  /** The list once a new publication went live on top of it, made as it is asked for ("just now"). */
+  const after = (id: number, change: Record<string, unknown>) => ({
+    publications: [
+      {
+        id,
+        kind: "publish",
+        label: null,
+        schemaVersion: 2,
+        restoredFrom: null,
+        createdAt: new Date().toISOString(),
+        versions: versions(25, true),
+        live: true,
+        ...change,
+      },
+      ...PUBLICATIONS.publications.map((p) => ({
+        ...p,
+        live: false,
+        versions: versions(p.versions[0]!.id, false),
+      })),
+    ],
+  });
+  const PUBLISHED = {
+    ok: true,
+    unchanged: false,
+    publicationId: 13,
+    published: [
+      { locale: "en", versionId: 25 },
+      { locale: "de", versionId: 26 },
+    ],
+  };
+  const ROLLED_BACK = { ok: true, publicationId: 14, restoredFrom: 12, results: [] };
+  const top = (page: Page) => page.getByRole("banner").getByRole("button", { name: /^Publish/ });
+  const dialog = (page: Page) => page.getByRole("dialog", { name: "Review and publish" });
+  const publish = (page: Page) =>
+    dialog(page).getByRole("button", { name: "Publish", exact: true });
+  const label = (page: Page) => dialog(page).getByRole("textbox", { name: "Label" });
+  const more = (page: Page, id: number) =>
+    page.getByRole("button", { name: `More actions for #${id}`, exact: true });
+  /** Whether a request goes within a second: a short wait, never a long one. */
+  const goes = (page: Page, method: string, path: string) =>
+    page
+      .waitForRequest((r) => r.method() === method && new URL(r.url()).pathname === path, {
+        timeout: 1000,
+      })
+      .then(
+        () => true,
+        () => false,
+      );
+
+  test("Restore into draft counts the draft's changes, asks, and sends nothing until you agree", async ({
+    page,
+    baseURL,
+  }) => {
+    let reviews = 0;
+    let pending = true;
+    await fakeApi(page, baseURL, {
+      "GET /admin/publications": PUBLICATIONS,
+      "GET /admin/publish/review": () => {
+        reviews++;
+        if (pending) return { status: 200, body: review() };
+        const same = (locale: "en" | "de") => ({
+          ...review().locales.find((l) => l.locale === locale)!,
+          changed: false,
+          draft: LIVE[locale],
+          docs: [],
+        });
+        return { status: 200, body: { canPublish: true, locales: [same("en"), same("de")] } };
+      },
+      "POST /admin/publications/11/restore-draft": { ok: true, restored: ["en", "de"] },
+    });
+    const restores = sentTo(page, "POST", "/admin/publications/11/restore-draft");
+    await openAdmin(page, "/admin/publications");
+    await expect(top(page)).toHaveAccessibleName("Publish: 6 changes unpublished");
+
+    // Asked fresh, then counted in the question; Cancel sends nothing.
+    const counted = reviews;
+    await more(page, 11).click();
+    await page.getByRole("menuitem", { name: "Restore into draft" }).click();
+    const question = page.getByRole("alertdialog");
+    await expect(question).toContainText("Restore #11 into the draft?");
+    await expect(question).toContainText(
+      "It replaces the draft's 6 changes that are not live yet. Anything added since #11 is hidden, not deleted. Nothing goes live until you publish.",
+    );
+    expect(reviews).toBeGreaterThan(counted);
+    await question.getByRole("button", { name: "Cancel" }).click();
+    await expect(question).toHaveCount(0);
+    expect(restores).toEqual([]);
+
+    // Agreed: one request.
+    await more(page, 11).click();
+    await page.getByRole("menuitem", { name: "Restore into draft" }).click();
+    await question.getByRole("button", { name: "Restore into draft" }).click();
+    await expect.poll(() => restores.length).toBe(1);
+    await expect(page.getByText("Draft restored from #11")).toBeVisible();
+
+    // Nothing waiting: it says so, and still asks.
+    pending = false;
+    await more(page, 11).click();
+    await page.getByRole("menuitem", { name: "Restore into draft" }).click();
+    await expect(question).toContainText(
+      "The draft matches what is live, so nothing waiting is replaced.",
+    );
+    await page.keyboard.press("Escape");
+    await expect(question).toHaveCount(0);
+    expect(restores).toHaveLength(1);
+  });
+
+  test("after a publish the review says Published #13, and Roll back to #12 is one click away", async ({
+    page,
+    baseURL,
+  }) => {
+    let live = 12;
+    await fakeApi(page, baseURL, {
+      "GET /admin/publish/review": review(),
+      "GET /admin/publications": () => ({
+        status: 200,
+        body:
+          live === 12
+            ? PUBLICATIONS
+            : after(live, live === 14 ? { kind: "rollback", restoredFrom: 12 } : {}),
+      }),
+      "POST /admin/publish": () => {
+        live = 13;
+        return { status: 200, body: PUBLISHED };
+      },
+      "POST /admin/publications/12/rollback": () => {
+        live = 14;
+        return { status: 200, body: ROLLED_BACK };
+      },
+    });
+    const published = sentTo(page, "POST", "/admin/publish");
+    const rollbacks = sentTo(page, "POST", "/admin/publications/12/rollback");
+    await openAdmin(page, "/admin/publications");
+    await top(page).click();
+    await label(page).fill("Bio in both languages");
+    await publish(page).click();
+
+    const result = dialog(page).getByRole("heading", { name: "Published #13" });
+    await expect(result).toBeFocused();
+    await expect(dialog(page)).toContainText("Both languages are live.");
+    expect(published).toEqual([{ label: "Bio in both languages" }]);
+    // History behind it has the new one on top already.
+    await expect(page.locator("tbody tr").first().locator("td").first()).toHaveText("#13");
+
+    // The way back, one click, where the publish happened.
+    await dialog(page).getByRole("button", { name: "Roll back to #12" }).click();
+    await expect(dialog(page).getByRole("heading", { name: "Rolled back" })).toBeFocused();
+    await expect(dialog(page)).toContainText("#14 is live, with #12's content.");
+    expect(rollbacks).toHaveLength(1);
+    await expect(dialog(page).getByRole("button", { name: /^Roll back/ })).toHaveCount(0);
+    await expect(page.locator("tbody tr").first().locator("td").first()).toHaveText("#14");
+    await dialog(page).getByRole("button", { name: "Close", exact: true }).click();
+    await expect(dialog(page)).toHaveCount(0);
+  });
+
+  test("a first publish has nothing to roll back to; closed, the keyboard lands on the page", async ({
+    page,
+    baseURL,
+  }) => {
+    let published = false;
+    await fakeApi(page, baseURL, {
+      "GET /admin/status": () => ({
+        status: 200,
+        body: {
+          ...(defaults()["GET /admin/status"] as Record<string, unknown>),
+          hasUnpublishedChanges: !published,
+        },
+      }),
+      "GET /admin/publish/review": review(),
+      "GET /admin/publications": { publications: [] },
+      "POST /admin/publish": () => {
+        published = true;
+        return { status: 200, body: { ...PUBLISHED, publicationId: 1 } };
+      },
+    });
+    await openAdmin(page, "/admin");
+    await top(page).click();
+    await publish(page).click();
+    await expect(dialog(page).getByRole("heading", { name: "Published #1" })).toBeFocused();
+    await expect(dialog(page).getByRole("button", { name: /^Roll back/ })).toHaveCount(0);
+
+    // Publish behind it turned into "All live", which cannot take the focus back: the page's heading does.
+    await expect(page.getByText("All live", { exact: true })).toBeVisible();
+    await dialog(page).getByRole("button", { name: "Close", exact: true }).click();
+    await expect(dialog(page)).toHaveCount(0);
+    await expect(page.locator("main h1")).toBeFocused();
+  });
+
+  test("nothing publishes by accident: one Publish, and Enter in the label only when the review allows it", async ({
+    page,
+    baseURL,
+  }) => {
+    const problem = {
+      path: ["projects", 0, "name"],
+      message: "Required",
+      label: "projects[project-one].name",
+    };
+    let allowed = false;
+    await fakeApi(page, baseURL, {
+      "GET /admin/publish/review": () => ({
+        status: 200,
+        body: allowed ? review() : review({ en: [problem] }),
+      }),
+      "POST /admin/publish": PUBLISHED,
+    });
+    const published = sentTo(page, "POST", "/admin/publish");
+    await openAdmin(page, "/admin");
+    await top(page).click();
+
+    // The one Publish in reach (the top bar's is behind the review), off while a problem stands.
+    await expect(dialog(page).getByRole("button", { name: /publish/i })).toHaveCount(1);
+    await expect(publish(page)).toBeDisabled();
+    await expect(dialog(page)).toContainText("TODO: Project One › Name (English): Required");
+    await expect(
+      dialog(page).getByRole("link", { name: "Fix TODO: Project One › Name (English)" }),
+    ).toHaveAttribute("href", "/admin/projects/project-one");
+    await label(page).fill("Too soon");
+    const early = goes(page, "POST", "/admin/publish");
+    await label(page).press("Enter");
+    expect(await early).toBe(false);
+    await expect(dialog(page)).toBeVisible();
+
+    // Allowed: Enter publishes, once.
+    allowed = true;
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toHaveCount(0);
+    await top(page).click();
+    await expect(publish(page)).toBeEnabled();
+    await label(page).fill("On time");
+    await label(page).press("Enter");
+    await expect(dialog(page).getByRole("heading", { name: "Published #13" })).toBeFocused();
+    expect(published).toEqual([{ label: "On time" }]);
+  });
+
+  test("a refused publish says why in words and keeps the label", async ({ page, baseURL }) => {
+    const token = {
+      path: ["ui", "contact"],
+      message: "Keep {n}: the number goes there.",
+      label: "ui.contact.submit",
+    };
+    await fakeApi(page, baseURL, {
+      "GET /admin/publish/review": review(),
+      "POST /admin/publish": (n: number) =>
+        n === 1
+          ? { status: 422, body: { error: "publish_failed", detail: "boom" } }
+          : {
+              status: 422,
+              body: {
+                error: "invalid_draft",
+                detail: { locales: [{ locale: "de", issues: [token] }] },
+              },
+            },
+    });
+    await openAdmin(page, "/admin");
+    await top(page).click();
+    await label(page).fill("The Send button");
+    await publish(page).click();
+    await expect(dialog(page).getByRole("alert")).toHaveText(
+      "Not published: the server could not build the site, so nothing went live. Try again.",
+    );
+    await expect(label(page)).toHaveValue("The Send button");
+
+    await publish(page).click();
+    await expect(dialog(page).getByRole("alert")).toHaveText(
+      "Not published: the draft has problems. Fix them, then publish again.",
+    );
+    await expect(dialog(page)).toContainText(
+      "Contact › Send button (German): Keep {n}: the number goes there.",
+    );
+    await expect(publish(page)).toBeDisabled();
+    await expect(label(page)).toHaveValue("The Send button");
+  });
+
+  test("the review names each change in words, grouped by page, each with Open; a body in two lines; the data on request", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { "GET /admin/publish/review": review() });
+    await openAdmin(page, "/admin");
+    await expect(top(page)).toHaveAccessibleName("Publish: 6 changes unpublished");
+    await top(page).click();
+    const box = dialog(page);
+
+    await expect(box.getByRole("heading", { level: 3 })).toHaveText([
+      "About",
+      "Work",
+      "Words",
+      "Media",
+    ]);
+    const lines = (page: string) =>
+      box.getByRole("region", { name: page }).getByRole("listitem").locator("p").first();
+    await expect(box.getByRole("region", { name: "About" }).getByRole("listitem")).toHaveCount(2);
+    await expect(box.getByRole("region", { name: "About" }).getByRole("listitem")).toContainText([
+      "Bio (English): changed",
+      "Bio (German): changed",
+    ]);
+    await expect(box.getByRole("region", { name: "Work" }).getByRole("listitem")).toContainText([
+      "TODO: Project One › Hook (English): changed",
+      "TODO: Project One › Case study page (English): changed",
+    ]);
+    await expect(lines("Words")).toHaveText("Contact › Send button (German): changed");
+    await expect(lines("Media")).toHaveText(
+      "TODO: Project One › Cover image, alt text (German): changed",
+    );
+
+    // Each with Open, to where it is changed.
+    await expect(box.getByRole("link", { name: /^Open / })).toHaveCount(6);
+    await expect(
+      box.getByRole("link", { name: "Open Contact › Send button (German)" }),
+    ).toHaveAttribute("href", "/admin/words?row=contact.submit");
+    await expect(
+      box.getByRole("link", { name: "Open TODO: Project One › Hook (English)" }),
+    ).toHaveAttribute("href", "/admin/projects/project-one");
+
+    // The new text in two lines, in its own language; a body without its tags.
+    const work = box.getByRole("region", { name: "Work" });
+    await expect(work.getByText(/^Goal A new story about project one/)).toHaveCSS(
+      "-webkit-line-clamp",
+      "2",
+    );
+    await expect(
+      box
+        .getByRole("region", { name: "About" })
+        .getByText("Ich baue verlässliche Systeme für Menschen, die liefern."),
+    ).toHaveAttribute("lang", "de");
+
+    // The raw paths wait behind Show the data.
+    await expect(box.getByText("ui.contact.submit", { exact: true })).toBeHidden();
+    await box.getByText("Show the data").click();
+    await expect(box.getByText("ui.contact.submit", { exact: true })).toBeVisible();
+
+    // Open goes there and closes the review.
+    await box.getByRole("link", { name: "Open Bio (English)" }).click();
+    await expect(page).toHaveURL(/\/admin\/about$/);
+    await expect(box).toHaveCount(0);
+  });
+
+  test("unsaved edits are named in the review with a Save that puts them in this publish", async ({
+    page,
+    baseURL,
+  }) => {
+    let reviews = 0;
+    await fakeApi(page, baseURL, {
+      "GET /admin/publish/review": () => {
+        reviews++;
+        return { status: 200, body: review() };
+      },
+      "PATCH /admin/sections/ui": { ok: true, updatedAt: NOW },
+    });
+    const saves = sentTo(page, "PATCH", "/admin/sections/ui");
+    await openAdmin(page, "/admin/about");
+    await page.locator("#about-heading-en").fill("About me, again");
+    await top(page).click();
+
+    const note = dialog(page).getByRole("note").filter({ hasText: "unsaved" });
+    await expect(note).toContainText("About has 1 unsaved change: it is not in this publish.");
+    const asked = reviews;
+    await note.getByRole("button", { name: "Save" }).click();
+    await expect.poll(() => saves.length).toBe(1);
+    await expect(note).toHaveCount(0);
+    expect(reviews).toBeGreaterThan(asked);
+    // Its Save went with it: the keyboard is on the review's title.
+    await expect(dialog(page).getByRole("heading", { name: "Review and publish" })).toBeFocused();
+  });
+
+  test("History: a table of number, label, when, what changed and live; View changes in words, both languages", async ({
+    page,
+    baseURL,
+  }) => {
+    const revision = (id: number, locale: "en" | "de") => ({
+      revision: {
+        id,
+        locale,
+        checksum: "x",
+        label: null,
+        publicationId: 11,
+        createdAt: DAY_AGO,
+        live: false,
+        payload: draftOf(locale),
+      },
+      live: { id: locale === "en" ? 23 : 24, payload: LIVE[locale] },
+    });
+    await fakeApi(page, baseURL, {
+      "GET /admin/publications": PUBLICATIONS,
+      "GET /admin/revisions/21": revision(21, "en"),
+      "GET /admin/revisions/22": revision(22, "de"),
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openAdmin(page, "/admin/publications");
+    const table = page.getByRole("table", { name: "Publications, newest first" });
+    await expect(table.getByRole("columnheader")).toHaveText([
+      "Number",
+      "Label",
+      "When",
+      "What changed",
+      "Live",
+      "Actions",
+    ]);
+    const cells = (n: number) => table.locator("tbody tr").nth(n).getByRole("cell");
+    await expect(cells(0)).toHaveText([
+      "#12",
+      "New case study",
+      "1 hour ago",
+      "Published",
+      "Live",
+      "",
+    ]);
+    await expect(cells(1)).toHaveText(["#11", "No label", "yesterday", "Published", "", ""]);
+    await expect(cells(2)).toHaveText([
+      "#10",
+      "No label",
+      "last week",
+      "Rolled back to #8",
+      "",
+      "",
+    ]);
+    await expect(cells(0).nth(2).locator("time")).toHaveAttribute("datetime", HOUR_AGO);
+
+    // The live one: nothing to compare or roll back to.
+    await more(page, 12).click();
+    await expect(page.getByRole("menuitem")).toHaveText(["Restore into draft"]);
+    await page.keyboard.press("Escape");
+
+    await more(page, 11).click();
+    await expect(page.getByRole("menuitem")).toHaveText([
+      "View changes",
+      "Roll back to #11",
+      "Restore into draft",
+    ]);
+    await page.getByRole("menuitem", { name: "View changes" }).click();
+    const changes = page.getByRole("dialog", { name: "#11 against the live site" });
+    await expect(changes.getByRole("heading", { level: 3 })).toHaveText([
+      "About",
+      "Work",
+      "Words",
+      "Media",
+    ]);
+    await expect(
+      changes.getByRole("region", { name: "About" }).getByRole("listitem"),
+    ).toContainText(["Bio (English): changed", "Bio (German): changed"]);
+    // What rolling back would do, not where to edit: no Open.
+    await expect(changes.getByRole("link")).toHaveCount(0);
+    await changes.getByText("Show the data").click();
+    await expect(changes.getByText(/"bio": "Ich baue verlässliche Systeme/)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(changes).toHaveCount(0);
+  });
+
+  test("History's Roll back asks by name and puts a new publication on top", async ({
+    page,
+    baseURL,
+  }) => {
+    let rolled = false;
+    await fakeApi(page, baseURL, {
+      "GET /admin/publications": () => ({
+        status: 200,
+        body: rolled ? after(13, { kind: "rollback", restoredFrom: 11 }) : PUBLICATIONS,
+      }),
+      "POST /admin/publications/11/rollback": () => {
+        rolled = true;
+        return { status: 200, body: { ...ROLLED_BACK, publicationId: 13, restoredFrom: 11 } };
+      },
+    });
+    const rollbacks = sentTo(page, "POST", "/admin/publications/11/rollback");
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openAdmin(page, "/admin/publications");
+    await more(page, 11).click();
+    await page.getByRole("menuitem", { name: "Roll back to #11" }).click();
+    const question = page.getByRole("alertdialog");
+    await expect(question).toContainText("Roll back to #11?");
+    await expect(question).toContainText(
+      "Both languages go back to #11's content, live at once, as a new publication. Nothing is deleted.",
+    );
+    await question.getByRole("button", { name: "Roll back" }).click();
+    await expect.poll(() => rollbacks.length).toBe(1);
+    await expect(page.getByText("Rolled back: #13 is live.")).toBeVisible();
+    const first = page.locator("tbody tr").first().getByRole("cell");
+    await expect(first).toHaveText([
+      "#13",
+      "No label",
+      "just now",
+      "Rolled back to #11",
+      "Live",
+      "",
+    ]);
+  });
+
+  for (const width of [1280, 390]) {
+    test(`the review from the keyboard at ${width}: Open, Show the data, the label, Publish by Enter, Roll back, Escape back to Publish`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await fakeApi(page, baseURL, {
+        "GET /admin/publish/review": review(),
+        "GET /admin/publications": PUBLICATIONS,
+        "POST /admin/publish": PUBLISHED,
+        "POST /admin/publications/12/rollback": ROLLED_BACK,
+      });
+      await openAdmin(page, "/admin");
+      await top(page).focus();
+      await page.keyboard.press("Enter");
+      await expect(dialog(page).getByRole("link", { name: "Open Bio (English)" })).toBeVisible();
+
+      // Tab goes through the review in the order you see it: each Open, then the data, the label.
+      // Starting where the review put the focus.
+      const focused = () =>
+        page.evaluate(() =>
+          (document.activeElement as HTMLElement).innerText.trim().replace(/\s+/g, " "),
+        );
+      const seen: string[] = [await focused()];
+      for (
+        let i = 0;
+        i < 20 && !(await label(page).evaluate((el) => el === document.activeElement));
+        i++
+      ) {
+        await page.keyboard.press("Tab");
+        seen.push(await focused());
+      }
+      const at = (name: string) => seen.findIndex((s) => s.startsWith(name));
+      expect(at("Open Bio (English)")).toBeGreaterThan(-1);
+      expect(at("Open Bio (English)")).toBeLessThan(at("Open Contact › Send button (German)"));
+      expect(at("Open Contact › Send button (German)")).toBeLessThan(at("Show the data"));
+      await expect(label(page)).toBeFocused();
+
+      // Enter in the label publishes; the result takes the focus; Roll back is the next stop.
+      await page.keyboard.type("From the keyboard");
+      await page.keyboard.press("Enter");
+      await expect(dialog(page).getByRole("heading", { name: "Published #13" })).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(dialog(page).getByRole("button", { name: "Roll back to #12" })).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(dialog(page).getByRole("heading", { name: "Rolled back" })).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(dialog(page)).toHaveCount(0);
+      await expect(top(page)).toBeFocused();
+    });
+
+    test(`History from the keyboard at ${width}: a row's ⋯, View changes, Restore asked, Escape back to ⋯`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const revision = (id: number, locale: "en" | "de") => ({
+        revision: {
+          id,
+          locale,
+          checksum: "x",
+          label: null,
+          publicationId: 11,
+          createdAt: DAY_AGO,
+          live: false,
+          payload: draftOf(locale),
+        },
+        live: { id: locale === "en" ? 23 : 24, payload: LIVE[locale] },
+      });
+      await fakeApi(page, baseURL, {
+        "GET /admin/publications": PUBLICATIONS,
+        "GET /admin/revisions/21": revision(21, "en"),
+        "GET /admin/revisions/22": revision(22, "de"),
+      });
+      const restores = sentTo(page, "POST", "/admin/publications/11/restore-draft");
+      await openAdmin(page, "/admin/publications");
+      await page.getByRole("heading", { level: 1, name: "History" }).focus();
+      for (
+        let i = 0;
+        i < 10 && !(await more(page, 11).evaluate((el) => el === document.activeElement));
+        i++
+      ) {
+        await page.keyboard.press("Tab");
+      }
+      await expect(more(page, 11)).toBeFocused();
+
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("menuitem", { name: "View changes" })).toBeFocused();
+      await page.keyboard.press("Enter");
+      const changes = page.getByRole("dialog", { name: "#11 against the live site" });
+      await expect(changes.getByRole("heading", { level: 3 }).first()).toHaveText("About");
+      await page.keyboard.press("Escape");
+      await expect(changes).toHaveCount(0);
+      await expect(more(page, 11)).toBeFocused();
+
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowDown");
+      await expect(page.getByRole("menuitem", { name: "Restore into draft" })).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("alertdialog")).toContainText("Restore #11 into the draft?");
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("alertdialog")).toHaveCount(0);
+      await expect(more(page, 11)).toBeFocused();
+      expect(restores).toEqual([]);
+    });
+  }
+
+  for (const colorScheme of ["dark", "light"] as const) {
+    test(`the review, open, in the ${colorScheme} theme has no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await fakeApi(page, baseURL, { "GET /admin/publish/review": review() });
+      await openAdmin(page, "/admin/about");
+      await page.locator("#about-heading-en").fill("About me, again");
+      await top(page).click();
+      await expect(dialog(page).getByRole("note").filter({ hasText: "unsaved" })).toBeVisible();
+      await dialog(page).getByText("Show the data").click();
+      expect(await axeViolations(page)).toEqual([]);
+    });
+
+    test(`History with a publication's changes open, in the ${colorScheme} theme, has no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await fakeApi(page, baseURL, {
+        "GET /admin/publications": PUBLICATIONS,
+        "GET /admin/revisions/21": {
+          revision: {
+            id: 21,
+            locale: "en",
+            checksum: "x",
+            label: null,
+            publicationId: 11,
+            createdAt: DAY_AGO,
+            live: false,
+            payload: draftOf("en"),
+          },
+          live: { id: 23, payload: LIVE.en },
+        },
+        "GET /admin/revisions/22": {
+          revision: {
+            id: 22,
+            locale: "de",
+            checksum: "x",
+            label: null,
+            publicationId: 11,
+            createdAt: DAY_AGO,
+            live: false,
+            payload: draftOf("de"),
+          },
+          live: { id: 24, payload: LIVE.de },
+        },
+      });
+      await openAdmin(page, "/admin/publications");
+      await more(page, 11).click();
+      await page.getByRole("menuitem", { name: "View changes" }).click();
+      const changes = page.getByRole("dialog", { name: "#11 against the live site" });
+      await changes.getByText("Show the data").click();
+      await expect(changes.getByText(/"bio": "Ich baue/)).toBeVisible();
+      expect(await axeViolations(page)).toEqual([]);
+    });
+  }
 });
 
 test.describe("admin accessibility", () => {
@@ -13360,6 +14107,7 @@ test.describe("admin accessibility", () => {
       "/admin/media",
       "/admin/agent",
       "/admin/words",
+      "/admin/publications",
     ]) {
       test(`${path} in the ${colorScheme} theme has no accessibility violations`, async ({
         page,
