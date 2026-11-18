@@ -14,9 +14,6 @@ export const UPLOAD_ERRORS: Record<string, string> = {
   unsupported_media_type: "Only PNG, JPEG, WebP, AVIF, GIF and PDF are accepted.",
   missing_file: "No file was received.",
   invalid_upload: "The upload could not be read.",
-  media_in_use:
-    "Still used by the draft (a project, gallery, post, experience, CV, photo or a text) — change that first.",
-  media_in_use_live: "Shown on the live site right now — publish without it first.",
 };
 
 export type Uploaded =

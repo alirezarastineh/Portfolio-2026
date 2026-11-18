@@ -1223,8 +1223,8 @@ export default class AdminLayout {
         }),
       });
     }
-    // shortcut: the links and media open their page, not the entry, until U15 gives a media item an
-    // address; an experience entry has its own (`?edit=<id>`, U14).
+    // shortcut: a link opens Profile, not its row, until a link has an address of its own; an
+    // experience entry (`?edit=<id>`, U14) and a file (`?file=<id>`, U15) have theirs.
     if (experiences.ok) {
       groups.push({
         label: "Experience",
@@ -1257,11 +1257,12 @@ export default class AdminLayout {
       groups.push({
         label: "Media",
         icon: "lucideImage",
+        // Each opens its file's panel, at its address (plan 5, U15).
         items: media.data.media.map((m) => ({
           key: m.id,
           label: m.originalName,
           search: m.originalName,
-          path: "/admin/media",
+          path: `/admin/media?file=${encodeURIComponent(m.id)}`,
         })),
       });
     }

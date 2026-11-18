@@ -68,4 +68,11 @@ describe("the palette", () => {
   it("has no indigo left, and no colour the build must write a fallback for", () => {
     expect(tokens).not.toMatch(/indigo|oklch\(/);
   });
+
+  // Plan 5, U15: its last readers (Media and the picker) went, and its variables with them.
+  it("has no indigo in the theme's names or the admin's sheets either", () => {
+    for (const sheet of ["./theme.css", "./admin-theme.css", "../admin.css"]) {
+      expect(read(sheet), sheet).not.toMatch(/indigo/);
+    }
+  });
 });

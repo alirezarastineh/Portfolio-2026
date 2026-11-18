@@ -4,12 +4,15 @@ import {
   computed,
   DestroyRef,
   effect,
+  ElementRef,
   inject,
   OnInit,
   signal,
+  untracked,
 } from "@angular/core";
-import { FormsModule } from "@angular/forms";
-import { RouterLink } from "@angular/router";
+import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
+import { FormControl } from "@angular/forms";
+import { ActivatedRoute, Router, RouterLink, type Params } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import {
   lucideCopy,
@@ -24,8 +27,6 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmAlert, HlmAlertDescription, HlmAlertTitle } from "@spartan-ng/helm/alert";
 import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmEmptyImports } from "@spartan-ng/helm/empty";
-import { HlmInput } from "@spartan-ng/helm/input";
-import { HlmTextarea } from "@spartan-ng/helm/textarea";
 import { HlmProgressImports } from "@spartan-ng/helm/progress";
 import { HlmSheetImports } from "@spartan-ng/helm/sheet";
 import { HlmSpinner } from "@spartan-ng/helm/spinner";
@@ -38,7 +39,10 @@ import {
 } from "../../admin/admin-api.service";
 import type { RouteMeta } from "@analogjs/router";
 
+import { ChangedElsewhere } from "../../admin/changed-elsewhere";
+import { BilingualFieldComponent } from "../../admin/components/bilingual-field.component";
 import { ConfirmService } from "../../admin/components/confirm-dialog.component";
+import { isSaveShortcut } from "../../admin/components/editor-chrome.component";
 import { MediaTileComponent } from "../../admin/components/media-tile.component";
 import { DraftOfferComponent } from "../../admin/components/draft-offer.component";
 import { CopilotLedger } from "../../admin/copilot-ledger";
@@ -50,18 +54,19 @@ import {
   MediaLibraryService,
   UPLOAD_ACCEPT,
 } from "../../admin/media-library.service";
-import { deleteBlocker, missingAlt, usagePlace } from "../../admin/media-usage";
+import { deleteBlocker, usagePlace, missingAlt } from "../../admin/media-usage";
 import { absoluteTime } from "../../admin/relative-time";
 import { toastNotSaved } from "../../admin/save-feedback";
 import { LoadErrorComponent } from "../../admin/components/load-state.component";
 import { RecoveryBannerComponent } from "../../admin/components/recovery-banner.component";
-import { RecoveryService, type RecoveryHandle } from "../../admin/recovery.service";
+import { RecoveryService, typedAt, type RecoveryHandle } from "../../admin/recovery.service";
 import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
 import type { Locale } from "../../content/schema";
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
 type Filter = "all" | "images" | "documents" | "unused" | "alt";
+type Text = "alt" | "description";
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
@@ -79,37 +84,53 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
   alt: (a) => missingAlt(a).length > 0,
 };
 
+const LOCALES: readonly Locale[] = ["en", "de"];
+
+/** A delete the server refused, in words; any other code passes through as it came. */
+const NOT_DELETED: Record<string, string> = {
+  media_in_use: "The draft uses it now: change those places first.",
+  media_in_use_live: "The live site shows it now: publish without it first.",
+};
+
+function filterFrom(value: string | null): Filter {
+  return FILTERS.find((f) => f.id === value)?.id ?? "all";
+}
+
+/** The server keeps no version for a file: its four texts stand in for one (`ChangedElsewhere`). */
+function textsOf(asset: MediaAsset): { id: string; updatedAt: string } {
+  const texts = [asset.altEn, asset.altDe, asset.descriptionEn, asset.descriptionDe];
+  return { id: asset.id, updatedAt: JSON.stringify(texts.map((t) => t ?? "")) };
+}
+
 /**
- * The media library: every upload at its own shape, what needs a look (no alt
- * text, nothing uses it), and each file's details in a side sheet: a large
- * preview, where it is used (with the way there), its alt text in both
- * languages with an AI suggestion drawn from the picture, and delete.
+ * The media library: every upload as a tile, what needs a look (no alt text, nothing uses it),
+ * and each file's panel: its alt text and the assistant's description in both languages, where
+ * it is used, and delete. The filter and the open file live in the address (`?filter=`,
+ * `?file=<id>`), replaced in place as the Inbox's, so Back leaves the page.
  *
- * Files dropped anywhere on the page upload, several at a time. Files nothing
- * uses can be selected and deleted together.
+ * Files dropped anywhere on the page upload, several at a time. Files nothing uses can be selected
+ * and deleted together.
  */
 @Component({
   selector: "app-admin-media",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    DraftOfferComponent,
-    LoadErrorComponent,
-    RecoveryBannerComponent,
     AdminPageHeaderComponent,
-    FormsModule,
+    BilingualFieldComponent,
+    DraftOfferComponent,
     HlmAlert,
     HlmAlertDescription,
     HlmAlertTitle,
     HlmButton,
     HlmEmptyImports,
-    HlmInput,
-    HlmTextarea,
     HlmProgressImports,
     HlmSheetImports,
     HlmSpinner,
     HlmToggleGroupImports,
+    LoadErrorComponent,
     MediaTileComponent,
     NgIcon,
+    RecoveryBannerComponent,
     RouterLink,
   ],
   viewProviders: [
@@ -134,7 +155,7 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
     <div class="mx-auto flex max-w-6xl flex-col gap-6 pb-12">
       <app-page-header
         title="Media"
-        description="Images for projects, posts and your photo, and PDFs such as your CV. Uploaded photos are straightened, stripped of location data and resized automatically. Drop files anywhere on this page to upload them."
+        description="Images and PDFs for the site. Photos are straightened, stripped of location data and resized as they upload. Drop files anywhere on this page to upload them."
       >
         <button
           headerActions
@@ -165,25 +186,31 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
             <div hlmAlertDescription>
               @if (r.missingFiles.length) {
                 <p class="m-0">
-                  {{ r.missingFiles.length }} record(s) point at a file that is not on disk —
-                  usually a database restore without a matching media restore.
+                  {{ r.missingFiles.length }}
+                  {{ r.missingFiles.length === 1 ? "record" : "records" }} without a file: usually a
+                  database restored without its media.
                 </p>
               }
               @if (r.orphanFiles.length) {
-                <p class="m-0">{{ r.orphanFiles.length }} file(s) on disk have no record.</p>
+                <p class="m-0">{{ files(r.orphanFiles.length) }} without a record.</p>
               }
             </div>
           </div>
         }
         <p class="m-0 -mt-3 text-hint text-muted-foreground">
-          {{ r.totalAssets }} file(s) · {{ size(r.totalBytes) }} in originals
+          {{ files(r.totalAssets) }}, {{ size(r.totalBytes) }} of originals
         </p>
       }
 
+      <!-- Said once when files start up; the file, the count and the percent show, never spoken. -->
+      <p class="sr-only" role="status">{{ uploadSaid() }}</p>
       @if (uploading(); as u) {
-        <div class="flex flex-col gap-2 rounded-lg border border-border p-3" role="status">
-          <p class="m-0 text-xs tabular-nums text-muted-foreground">
-            uploading {{ u.name }} ({{ u.index }} of {{ u.total }})… {{ u.percent }}%
+        <div class="flex flex-col gap-2 rounded-lg border border-border p-3">
+          <p class="m-0 text-hint text-muted-foreground" aria-hidden="true">
+            Uploading <span class="wrap-anywhere">{{ u.name }}</span>,
+            <span class="font-data">{{ u.index }}</span> of
+            <span class="font-data">{{ u.total }}</span>:
+            <span class="font-data">{{ u.percent }}%</span>
           </p>
           <hlm-progress [value]="u.percent" aria-label="Upload progress">
             <hlm-progress-indicator />
@@ -205,14 +232,14 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
           @for (option of filters; track option.id) {
             <button hlmToggleGroupItem type="button" [value]="option.id">
               {{ option.label }}
-              <span class="ml-1 text-xs tabular-nums">{{ counts()[option.id] }}</span>
+              <span class="ml-1 font-data text-xs">{{ counts()[option.id] }}</span>
             </button>
           }
         </div>
         <div class="flex flex-wrap items-center gap-2">
           @if (selected().size) {
-            <span class="text-xs tabular-nums text-muted-foreground" role="status">
-              {{ selected().size }} selected · {{ size(selectedBytes()) }}
+            <span class="text-hint text-muted-foreground" role="status">
+              {{ selected().size }} selected, {{ size(selectedBytes()) }}
             </span>
             <button hlmBtn variant="ghost" size="sm" type="button" (click)="clearSelection()">
               Clear
@@ -278,7 +305,8 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
                 type="button"
                 class="block w-full overflow-hidden rounded-lg border text-left transition-colors hover:border-border-strong"
                 [class]="picked ? 'border-destructive' : 'border-border'"
-                (click)="open(asset)"
+                [attr.data-file]="asset.id"
+                (click)="choose(asset)"
               >
                 <!-- Named by its content, the tile's text included (axe's label-in-name). -->
                 <span class="sr-only">Details of </span>
@@ -306,7 +334,7 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
     <!-- Files dragged over the page: anywhere drops them in. -->
     @if (dragging()) {
       <div
-        class="pointer-events-none fixed inset-4 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-accent-indigo bg-background/85 backdrop-blur-sm"
+        class="pointer-events-none fixed inset-4 z-50 flex items-center justify-center rounded-overlay border-2 border-dashed border-foreground bg-background/85 backdrop-blur-sm"
         aria-hidden="true"
       >
         <p class="m-0 flex items-center gap-2 text-section-title text-foreground">
@@ -316,22 +344,57 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
       </div>
     }
 
-    <hlm-sheet side="right" [state]="active() ? 'open' : 'closed'" (stateChanged)="onSheet($event)">
-      <hlm-sheet-content *hlmSheetPortal="let ctx" class="w-full overflow-y-auto sm:max-w-xl">
+    <!-- With a mouse the panel opens on the alt text; on touch, no keyboard jumps up over it. -->
+    <hlm-sheet
+      side="right"
+      [autoFocus]="active()?.kind === 'image' && !coarse ? '#alt-en' : 'first-tabbable'"
+      [state]="active() ? 'open' : 'closed'"
+      (stateChanged)="onSheet($event)"
+    >
+      <hlm-sheet-content
+        *hlmSheetPortal="let ctx"
+        class="w-full gap-0 sm:max-w-xl lg:max-w-2xl"
+        (keydown)="onPanelKey($event)"
+      >
         @if (active(); as asset) {
-          <hlm-sheet-header>
-            <h2 hlmSheetTitle class="wrap-anywhere">{{ asset.originalName }}</h2>
-            <p hlmSheetDescription>
-              {{ asset.kind === "document" ? "PDF" : "Image" }} · {{ size(asset.byteSize) }} ·
+          <!-- The head stays while the rest scrolls: the name, the state in words, and Save. -->
+          <div class="flex shrink-0 flex-col gap-1 border-b border-border py-4 pl-4 pr-14">
+            <h2 hlmSheetTitle class="m-0 wrap-anywhere text-section-title" translate="no">
+              {{ asset.originalName }}
+            </h2>
+            <p hlmSheetDescription class="m-0 text-hint text-muted-foreground">
+              {{ asset.kind === "document" ? "PDF" : "Image" }}, {{ size(asset.byteSize) }},
               uploaded {{ when(asset.createdAt) }}
             </p>
-          </hlm-sheet-header>
+            @if (asset.kind === "image") {
+              <div class="mt-2 flex min-h-8 items-center justify-between gap-3">
+                <p
+                  id="media-state"
+                  role="status"
+                  class="m-0 text-hint"
+                  [class]="changed().length ? 'text-accent-orange' : 'text-muted-foreground'"
+                  [textContent]="stateText()"
+                ></p>
+                <button
+                  hlmBtn
+                  size="sm"
+                  type="button"
+                  [disabled]="!changed().length || saving()"
+                  (click)="save()"
+                >
+                  Save
+                </button>
+              </div>
+            }
+          </div>
 
-          <div class="flex flex-col gap-6 px-4 pb-6">
+          <div
+            class="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain px-4 pt-4 pb-6"
+          >
             <!-- The page's own banner sits under this sheet, out of reach. -->
             <app-recovery-banner />
             <div
-              class="flex max-h-[50svh] min-h-40 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted p-2"
+              class="flex max-h-[40svh] min-h-32 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted p-2"
             >
               @if (asset.kind === "document") {
                 <ng-icon
@@ -344,38 +407,92 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
                 <img
                   [src]="asset.url"
                   alt=""
-                  class="max-h-[calc(50svh-1rem)] max-w-full object-contain"
+                  class="max-h-[calc(40svh-1rem)] max-w-full object-contain"
                   [attr.width]="asset.width"
                   [attr.height]="asset.height"
                 />
               }
             </div>
 
-            <dl class="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
-              @if (asset.width && asset.height) {
-                <dt class="text-xs font-medium text-muted-foreground">Size</dt>
-                <dd class="m-0 font-data text-xs">
-                  {{ asset.width }}×{{ asset.height }} · {{ asset.variants.length }} resized
-                  {{ asset.variants.length === 1 ? "copy" : "copies" }}
-                </dd>
-              }
-              <dt class="text-xs font-medium text-muted-foreground">Type</dt>
-              <dd class="m-0 font-data text-xs">{{ asset.mime }}</dd>
-              <dt class="text-xs font-medium text-muted-foreground">Path</dt>
-              <dd class="m-0 flex min-w-0 items-center gap-1">
-                <code class="min-w-0 truncate font-data text-xs">{{ asset.path }}</code>
-                <button
-                  hlmBtn
-                  variant="ghost"
-                  size="icon-xs"
-                  type="button"
-                  aria-label="Copy the path"
-                  (click)="copyPath(asset)"
-                >
-                  <ng-icon name="lucideCopy" size="12" aria-hidden="true" />
-                </button>
-              </dd>
-            </dl>
+            @if (asset.kind === "image") {
+              <app-bilingual-field
+                [id]="'alt'"
+                label="Alt text"
+                hint="What the picture shows, for screen readers and when it does not load. Goes live with the next publish."
+                [maxLength]="300"
+                [ai]="false"
+                [state]="altChanged() ? 'unsaved' : 'live'"
+                [controlEn]="control.alt.en"
+                [controlDe]="control.alt.de"
+                [below]="suggestAlt"
+              />
+              <ng-template #suggestAlt let-locale>
+                <div class="flex flex-col items-end gap-1">
+                  <button
+                    hlmBtn
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    class="h-6 px-2 text-xs text-muted-foreground"
+                    [disabled]="suggesting() !== null"
+                    [attr.aria-label]="
+                      'Suggest alt text in ' + (locale === 'en' ? 'English' : 'German') + ' with AI'
+                    "
+                    (click)="suggest(asset, locale)"
+                  >
+                    <ng-icon name="lucideSparkles" size="12" aria-hidden="true" />
+                    <span class="ml-1">{{ suggesting() === locale ? "…" : "suggest" }}</span>
+                  </button>
+                  <app-draft-offer
+                    class="self-stretch"
+                    [offer]="offerFor('alt', asset.id, locale)"
+                    [field]="'Alt text ' + locale.toUpperCase()"
+                    [fieldId]="'alt-' + locale"
+                  />
+                </div>
+              </ng-template>
+
+              <app-bilingual-field
+                [id]="'description'"
+                label="Description for the assistant"
+                hint="What a diagram or screenshot shows: its parts and how they connect. Only the assistant reads it, from the next question on; no page shows it."
+                [multiline]="true"
+                [rows]="4"
+                [maxLength]="2000"
+                [ai]="false"
+                [state]="descriptionChanged() ? 'unsaved' : 'live'"
+                [controlEn]="control.description.en"
+                [controlDe]="control.description.de"
+                [below]="describeBelow"
+              />
+              <ng-template #describeBelow let-locale>
+                <div class="flex flex-col items-end gap-1">
+                  <button
+                    hlmBtn
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    class="h-6 px-2 text-xs text-muted-foreground"
+                    [disabled]="describing() !== null"
+                    [attr.aria-label]="
+                      'Describe the image in ' +
+                      (locale === 'en' ? 'English' : 'German') +
+                      ' with AI'
+                    "
+                    (click)="describe(asset, locale)"
+                  >
+                    <ng-icon name="lucideSparkles" size="12" aria-hidden="true" />
+                    <span class="ml-1">{{ describing() === locale ? "…" : "describe" }}</span>
+                  </button>
+                  <app-draft-offer
+                    class="self-stretch"
+                    [offer]="offerFor('describe', asset.id, locale)"
+                    [field]="'Assistant description ' + locale.toUpperCase()"
+                    [fieldId]="'description-' + locale"
+                  />
+                </div>
+              </ng-template>
+            }
 
             <section class="flex flex-col gap-2" aria-labelledby="usage-title">
               <h3 id="usage-title" class="m-0 text-sm font-medium">Used by</h3>
@@ -406,143 +523,33 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
               }
             </section>
 
-            @if (asset.kind === "image") {
-              <section class="flex flex-col gap-3" aria-labelledby="alt-title">
-                <div>
-                  <h3 id="alt-title" class="m-0 text-sm font-medium">Alt text</h3>
-                  <p class="m-0 mt-1 text-hint text-muted-foreground">
-                    What the picture shows, for screen readers and for when it does not load.
-                    Suggestions are drawn from the picture; nothing is saved until you save.
-                  </p>
-                </div>
-                @for (locale of locales; track locale) {
-                  <div class="flex flex-col gap-1">
-                    <div class="flex items-center justify-between gap-2">
-                      <label
-                        [for]="'alt-' + locale"
-                        class="text-xs font-medium text-muted-foreground"
-                        >{{ locale.toUpperCase() }}</label
-                      >
-                      <button
-                        hlmBtn
-                        variant="ghost"
-                        size="sm"
-                        type="button"
-                        class="h-6 px-2 text-xs text-muted-foreground"
-                        [disabled]="suggesting() !== null"
-                        [attr.aria-label]="
-                          'Suggest alt text in ' +
-                          (locale === 'en' ? 'English' : 'German') +
-                          ' with AI'
-                        "
-                        (click)="suggest(asset, locale)"
-                      >
-                        <ng-icon name="lucideSparkles" size="12" aria-hidden="true" />
-                        <span class="ml-1">{{ suggesting() === locale ? "…" : "suggest" }}</span>
-                      </button>
-                    </div>
-                    <input
-                      hlmInput
-                      maxlength="300"
-                      [id]="'alt-' + locale"
-                      [aria-describedby]="
-                        offerFor('alt', asset.id, locale) ? 'alt-' + locale + '-draft' : null
-                      "
-                      [ngModel]="alt()[locale]"
-                      (ngModelChange)="setAlt(locale, $event)"
-                    />
-                    <app-draft-offer
-                      [offer]="offerFor('alt', asset.id, locale)"
-                      [field]="'Alt text ' + locale.toUpperCase()"
-                      [fieldId]="'alt-' + locale"
-                    />
-                  </div>
-                }
-                <div class="flex justify-end">
-                  <button
-                    hlmBtn
-                    size="sm"
-                    type="button"
-                    [disabled]="!altChanged() || savingAlt()"
-                    (click)="saveAlt(asset)"
-                  >
-                    Save alt text
-                  </button>
-                </div>
-              </section>
-
-              <section class="flex flex-col gap-3" aria-labelledby="description-title">
-                <div>
-                  <h3 id="description-title" class="m-0 text-sm font-medium">
-                    Description for the assistant
-                  </h3>
-                  <p class="m-0 mt-1 text-hint text-muted-foreground">
-                    What a diagram or screenshot shows: its parts and how they connect. Only the
-                    assistant reads it, from the next question on; no page shows it. Drafts are
-                    drawn from the picture; nothing is saved until you save.
-                  </p>
-                </div>
-                @for (locale of locales; track locale) {
-                  <div class="flex flex-col gap-1">
-                    <div class="flex items-center justify-between gap-2">
-                      <label
-                        [for]="'description-' + locale"
-                        class="text-xs font-medium text-muted-foreground"
-                        ><span class="sr-only">Assistant description, </span
-                        >{{ locale.toUpperCase() }}</label
-                      >
-                      <button
-                        hlmBtn
-                        variant="ghost"
-                        size="sm"
-                        type="button"
-                        class="h-6 px-2 text-xs text-muted-foreground"
-                        [disabled]="describing() !== null"
-                        [attr.aria-label]="
-                          'Describe the image in ' +
-                          (locale === 'en' ? 'English' : 'German') +
-                          ' with AI'
-                        "
-                        (click)="describe(asset, locale)"
-                      >
-                        <ng-icon name="lucideSparkles" size="12" aria-hidden="true" />
-                        <span class="ml-1">{{ describing() === locale ? "…" : "describe" }}</span>
-                      </button>
-                    </div>
-                    <textarea
-                      hlmTextarea
-                      rows="5"
-                      maxlength="2000"
-                      [id]="'description-' + locale"
-                      [aria-describedby]="
-                        offerFor('describe', asset.id, locale)
-                          ? 'description-' + locale + '-draft'
-                          : null
-                      "
-                      [ngModel]="description()[locale]"
-                      [ngModelOptions]="{ standalone: true }"
-                      (ngModelChange)="setDescription(locale, $event)"
-                    ></textarea>
-                    <app-draft-offer
-                      [offer]="offerFor('describe', asset.id, locale)"
-                      [field]="'Assistant description ' + locale.toUpperCase()"
-                      [fieldId]="'description-' + locale"
-                    />
-                  </div>
-                }
-                <div class="flex justify-end">
-                  <button
-                    hlmBtn
-                    size="sm"
-                    type="button"
-                    [disabled]="!descriptionChanged() || savingDescription()"
-                    (click)="saveDescription(asset)"
-                  >
-                    Save description
-                  </button>
-                </div>
-              </section>
-            }
+            <dl class="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+              @if (asset.width && asset.height) {
+                <dt class="text-hint text-muted-foreground">Size</dt>
+                <dd class="m-0 font-data text-xs">
+                  {{ asset.width }} × {{ asset.height }}, {{ asset.variants.length }} resized
+                  {{ asset.variants.length === 1 ? "copy" : "copies" }}
+                </dd>
+              }
+              <dt class="text-hint text-muted-foreground">Type</dt>
+              <dd class="m-0 font-data text-xs">{{ asset.mime }}</dd>
+              <dt class="text-hint text-muted-foreground">Path</dt>
+              <dd class="m-0 flex min-w-0 items-center gap-1">
+                <code class="min-w-0 truncate font-data text-xs" translate="no">{{
+                  asset.path
+                }}</code>
+                <button
+                  hlmBtn
+                  variant="ghost"
+                  size="icon-xs"
+                  type="button"
+                  aria-label="Copy the path"
+                  (click)="copyPath(asset)"
+                >
+                  <ng-icon name="lucideCopy" size="12" aria-hidden="true" />
+                </button>
+              </dd>
+            </dl>
 
             <div class="flex flex-wrap items-center gap-2 border-t border-border pt-4">
               <a
@@ -555,15 +562,15 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
               >
                 <ng-icon name="lucideExternalLink" size="14" aria-hidden="true" />
                 <span class="ml-1.5">Open the original</span>
-                <span class="sr-only">(opens in a new tab)</span>
               </a>
+              <!-- Blocked, it stays a stop: the reason is heard, not only seen. -->
               <button
                 hlmBtn
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 type="button"
-                class="ml-auto text-destructive"
-                [disabled]="!!blocker()"
+                class="ml-auto text-destructive aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                [attr.aria-disabled]="blocker() ? 'true' : null"
                 [attr.aria-describedby]="blocker() ? 'delete-blocker' : null"
                 (click)="remove(asset)"
               >
@@ -589,16 +596,30 @@ export default class AdminMediaPage implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly confirm = inject(ConfirmService);
   private readonly unsaved = inject(UnsavedChangesService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   protected readonly library = inject(MediaLibraryService);
   /** The copilot's drafts (alt text, descriptions), judged when saved (plan phase 27). */
   private readonly ledger = inject(CopilotLedger);
+  private readonly recovery = inject(RecoveryService);
+  /** Before a save: the file's texts read again, against what the panel opened with. */
+  private readonly elsewhere = new ChangedElsewhere(this.confirm, async () => {
+    const result = await this.api.listMedia();
+    return result.ok ? result.data.media.map(textsOf) : null;
+  });
 
   protected readonly filters = FILTERS;
-  protected readonly locales: Locale[] = ["en", "de"];
   protected readonly accept = UPLOAD_ACCEPT;
   protected readonly isUnused = isUnused;
+  protected readonly coarse =
+    typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
-  protected readonly filter = signal<Filter>("all");
+  protected readonly filter = signal<Filter>(
+    filterFrom(this.route.snapshot.queryParamMap.get("filter")),
+  );
+  /** The file the address names (`?file=<id>`), opened once the library is in. */
+  private readonly wanted = signal<string | null>(this.route.snapshot.queryParamMap.get("file"));
   protected readonly reconcile = signal<MediaReconcile | null>(null);
   protected readonly selected = signal<ReadonlySet<string>>(new Set());
   protected readonly deleting = signal(false);
@@ -609,19 +630,27 @@ export default class AdminMediaPage implements OnInit {
     total: number;
     percent: number;
   } | null>(null);
+  /** The upload's one line for screen readers: set as the files start, emptied when they end. */
+  protected readonly uploadSaid = signal("");
 
-  /** The file whose details are open, by id: it follows the library as it reloads. */
+  /** The file whose panel is open, by id: it follows the library as it reloads. */
   private readonly activeId = signal<string | null>(null);
   protected readonly active = computed(
     () => this.library.assets().find((a) => a.id === this.activeId()) ?? null,
   );
   protected readonly alt = signal<Record<Locale, string>>({ en: "", de: "" });
-  protected readonly suggesting = signal<Locale | null>(null);
-  protected readonly savingAlt = signal(false);
   /** The description for the assistant (plan phase 17), as being edited. */
   protected readonly description = signal<Record<Locale, string>>({ en: "", de: "" });
+  /** The bilingual fields' controls; the signals above follow them and are the truth. */
+  protected readonly control: Record<Text, Record<Locale, FormControl<string>>> = {
+    alt: { en: this.text(), de: this.text() },
+    description: { en: this.text(), de: this.text() },
+  };
+  protected readonly suggesting = signal<Locale | null>(null);
   protected readonly describing = signal<Locale | null>(null);
-  protected readonly savingDescription = signal(false);
+  protected readonly saving = signal(false);
+  /** When this panel last saved, for "Saved 14:02"; a new file starts without. */
+  private readonly savedAt = signal<number | null>(null);
 
   protected readonly counts = computed(() => {
     const assets = this.library.assets();
@@ -648,7 +677,9 @@ export default class AdminMediaPage implements OnInit {
       case "alt":
         return { title: "Every image is described", text: "Each has alt text in both languages." };
       case "documents":
-        return { title: "No PDFs yet", text: "Upload your CV as a PDF, then set it under Hero." };
+        return { title: "No PDFs yet", text: "Upload your CV as a PDF, then set it on Profile." };
+      case "images":
+        return { title: "No images yet", text: "Upload one, or drop some on this page." };
       default:
         return { title: "Nothing uploaded yet", text: "Upload a file, or drop some on this page." };
     }
@@ -663,19 +694,30 @@ export default class AdminMediaPage implements OnInit {
     const asset = this.active();
     return asset ? deleteBlocker(asset) : null;
   });
-  protected readonly altChanged = computed(() => {
+  /** The texts that differ from what is saved, by field: the head's count and the traces. */
+  protected readonly changed = computed(() => {
     const asset = this.active();
-    if (!asset) return false;
-    const now = this.alt();
-    return now.en !== (asset.altEn ?? "") || now.de !== (asset.altDe ?? "");
+    const alt = this.alt();
+    const description = this.description();
+    if (!asset) return [];
+    const fields: [string, boolean][] = [
+      ["alt.en", alt.en !== (asset.altEn ?? "")],
+      ["alt.de", alt.de !== (asset.altDe ?? "")],
+      ["description.en", description.en.trim() !== (asset.descriptionEn ?? "")],
+      ["description.de", description.de.trim() !== (asset.descriptionDe ?? "")],
+    ];
+    return fields.filter(([, differs]) => differs).map(([field]) => field);
   });
-  protected readonly descriptionChanged = computed(() => {
-    const asset = this.active();
-    if (!asset) return false;
-    const now = this.description();
-    return (
-      now.en.trim() !== (asset.descriptionEn ?? "") || now.de.trim() !== (asset.descriptionDe ?? "")
-    );
+  protected readonly altChanged = computed(() => this.changed().some((f) => f.startsWith("alt")));
+  protected readonly descriptionChanged = computed(() =>
+    this.changed().some((f) => f.startsWith("description")),
+  );
+  protected readonly stateText = computed(() => {
+    if (this.saving()) return "Saving…";
+    const n = this.changed().length;
+    if (n) return n === 1 ? "1 unsaved change" : `${n} unsaved changes`;
+    const at = this.savedAt();
+    return at ? `Saved ${typedAt(at)}` : "";
   });
 
   /** Destroyed: a draft that comes back after that never lands. */
@@ -700,8 +742,17 @@ export default class AdminMediaPage implements OnInit {
     });
   }
 
+  private readonly backup: RecoveryHandle;
+
   constructor() {
-    effect(() => this.unsaved.set("media", this.altChanged() || this.descriptionChanged()));
+    for (const text of ["alt", "description"] as const) {
+      for (const locale of LOCALES) {
+        this.control[text][locale].valueChanges
+          .pipe(takeUntilDestroyed())
+          .subscribe((value) => this.texts(text).update((all) => ({ ...all, [locale]: value })));
+      }
+    }
+    effect(() => this.unsaved.set("media", this.changed().length > 0));
     this.backup = this.recovery.track({
       editor: "media",
       item: this.activeId,
@@ -717,7 +768,17 @@ export default class AdminMediaPage implements OnInit {
       restore: ({ alt, description }) => {
         this.alt.set(alt);
         this.description.set(description);
+        this.fill();
       },
+    });
+    // The address is the truth: Find, a reload or a link can change it under the page.
+    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
+      this.filter.set(filterFrom(params.get("filter")));
+      this.wanted.set(params.get("file"));
+    });
+    effect(() => {
+      const wanted = this.wanted();
+      if (this.library.loaded()) untracked(() => this.follow(wanted));
     });
     // Leaving the page: a draft not saved was not kept.
     inject(DestroyRef).onDestroy(() => {
@@ -727,24 +788,54 @@ export default class AdminMediaPage implements OnInit {
     });
   }
 
-  /** The file's details still open, and the page still here, when a draft comes back. */
+  private text(): FormControl<string> {
+    return new FormControl("", { nonNullable: true });
+  }
+
+  private texts(text: Text) {
+    return text === "alt" ? this.alt : this.description;
+  }
+
+  /** The fields from the signals: after an open, a copy, a draft or a save. */
+  private fill(): void {
+    for (const locale of LOCALES) {
+      this.control.alt[locale].setValue(this.alt()[locale], { emitEvent: false });
+      this.control.description[locale].setValue(this.description()[locale], { emitEvent: false });
+    }
+  }
+
+  /** The file still open, and the page still here, when a draft comes back. */
   private landsOn(asset: MediaAsset): boolean {
     return !this.gone && this.activeId() === asset.id;
   }
-
-  private readonly recovery = inject(RecoveryService);
-  private readonly backup: RecoveryHandle;
 
   ngOnInit(): void {
     void this.library.load(true).then(() => this.reopen());
     void this.loadReconcile();
   }
 
-  /** A copy kept in this browser: its file's details open again, and the copy comes back. */
+  /** A copy kept in this browser, and no file in the address: its file's panel opens again. */
   private async reopen(): Promise<void> {
     const ids = await this.recovery.items("media");
     const asset = this.library.assets().find((a) => ids.includes(a.id));
-    if (asset && !this.activeId() && !this.gone) this.open(asset);
+    if (asset && !this.activeId() && !this.wanted() && !this.gone) this.choose(asset);
+  }
+
+  /** The panel follows the address: opens the file it names, closes when it names none. */
+  private follow(wanted: string | null): void {
+    if (wanted === this.activeId()) return;
+    if (!wanted) {
+      this.dropDetails();
+      return;
+    }
+    const asset = this.library.assets().find((a) => a.id === wanted);
+    if (asset) {
+      this.open(asset);
+      return;
+    }
+    toast.info("That file is no longer in the library.");
+    this.wanted.set(null);
+    this.go({ file: null });
   }
 
   /** After a failed load: asks again. */
@@ -756,13 +847,29 @@ export default class AdminMediaPage implements OnInit {
     return formatBytes(bytes);
   }
 
+  protected files(n: number): string {
+    return n === 1 ? "1 file" : `${n} files`;
+  }
+
   protected when(iso: string): string {
     return absoluteTime(iso);
   }
 
   protected onFilter(value: unknown): void {
     const filter = FILTERS.find((f) => f.id === value)?.id;
-    if (filter) this.filter.set(filter);
+    if (!filter) return;
+    this.filter.set(filter);
+    this.go({ filter: filter === "all" ? null : filter });
+  }
+
+  /** The filter and the open file into the address, in place: Back leaves Media. */
+  private go(params: Params): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: params,
+      queryParamsHandling: "merge",
+      replaceUrl: true,
+    });
   }
 
   protected async loadReconcile(): Promise<void> {
@@ -770,24 +877,34 @@ export default class AdminMediaPage implements OnInit {
     if (result.ok) this.reconcile.set(result.data);
   }
 
-  /* ---- details ---- */
+  /* ---- the panel ---- */
 
-  protected open(asset: MediaAsset): void {
+  /** A tile, or a copy waiting: the file's panel, at its address. */
+  protected choose(asset: MediaAsset): void {
+    this.open(asset);
+    this.wanted.set(asset.id);
+    this.go({ file: asset.id });
+  }
+
+  private open(asset: MediaAsset): void {
     // The fields start again from what is saved: drafts of another file are gone unsaved.
     this.ledger.abandonPrefix("media:");
     this.offers.set({});
+    this.savedAt.set(null);
     this.activeId.set(asset.id);
+    this.elsewhere.remember([textsOf(asset)]);
     this.alt.set({ en: asset.altEn ?? "", de: asset.altDe ?? "" });
     this.description.set({ en: asset.descriptionEn ?? "", de: asset.descriptionDe ?? "" });
+    this.fill();
   }
 
-  /** Closing with unsaved text asks first; keeping it opens the details again, with the text. */
+  /** Closing with unsaved text asks first; keeping it opens the panel again, with the text. */
   protected async onSheet(state: string): Promise<void> {
     const id = this.activeId();
     // The sheet reports "closed" again once its state input follows: only the
     // first report, while a file is still open here, is a request to close.
     if (state !== "closed" || !id || this.gone) return;
-    const unsaved = this.altChanged() || this.descriptionChanged();
+    const unsaved = this.changed().length > 0;
     this.activeId.set(null);
     if (unsaved) {
       const discard = await this.confirm.ask({
@@ -803,22 +920,86 @@ export default class AdminMediaPage implements OnInit {
       }
     }
     this.backup.drop(id);
-    this.ledger.abandonPrefix("media:");
-  }
-
-  /** A link out of the details. With unsaved text the route's guard asks, and they stay open. */
-  protected close(): void {
-    if (this.altChanged() || this.descriptionChanged()) return;
     this.dropDetails();
   }
 
-  private dropDetails(): void {
+  /** A link out of the panel. With unsaved text the route's guard asks, and it stays open. */
+  protected close(): void {
+    if (this.changed().length) return;
+    // The link's own navigation leaves the page: a second one here, to the address, would cancel it.
     this.ledger.abandonPrefix("media:");
     this.activeId.set(null);
   }
 
-  protected setAlt(locale: Locale, text: string): void {
-    this.alt.update((alt) => ({ ...alt, [locale]: text }));
+  /** The panel gone, said to the guard at once, and the address without its file. */
+  private dropDetails(): void {
+    this.ledger.abandonPrefix("media:");
+    this.activeId.set(null);
+    this.unsaved.clear("media");
+    if (this.wanted()) {
+      this.wanted.set(null);
+      this.go({ file: null });
+    }
+  }
+
+  protected onPanelKey(event: KeyboardEvent): void {
+    if (!isSaveShortcut(event)) return;
+    // Never the browser's "Save page as…" in the panel.
+    event.preventDefault();
+    void this.save();
+  }
+
+  /** Alt text and description in one write, only the texts that changed; the panel stays. */
+  protected async save(): Promise<void> {
+    const asset = this.active();
+    if (!asset || this.saving() || !this.changed().length) return;
+    const id = asset.id;
+    this.saving.set(true);
+    const goOn = await this.elsewhere.mayOverwrite([id], "This file's alt text or description");
+    if (!goOn || this.activeId() !== id) {
+      this.saving.set(false);
+      return;
+    }
+    const sent = {
+      alt: { en: this.alt().en.trim(), de: this.alt().de.trim() },
+      description: { en: this.description().en.trim(), de: this.description().de.trim() },
+    };
+    const alt = this.altChanged();
+    const description = this.descriptionChanged();
+    // The copilot's drafts are judged by what this save sends, even if the panel closes meanwhile.
+    const ended = this.ledger.beginSave({
+      ...(alt ? { [`media:alt:${id}:en`]: sent.alt.en, [`media:alt:${id}:de`]: sent.alt.de } : {}),
+      ...(description
+        ? {
+            [`media:describe:${id}:en`]: sent.description.en,
+            [`media:describe:${id}:de`]: sent.description.de,
+          }
+        : {}),
+    });
+    const result = await this.api.updateMediaAlt(id, {
+      ...(alt ? { altEn: sent.alt.en || null, altDe: sent.alt.de || null } : {}),
+      ...(description
+        ? {
+            descriptionEn: sent.description.en || null,
+            descriptionDe: sent.description.de || null,
+          }
+        : {}),
+    });
+    ended(result.ok);
+    if (!result.ok) {
+      this.saving.set(false);
+      toastNotSaved(result.error);
+      return;
+    }
+    await this.library.load(true);
+    this.saving.set(false);
+    const now = this.library.assets().find((a) => a.id === id);
+    if (now) this.elsewhere.remember([textsOf(now)]);
+    if (this.activeId() !== id) return;
+    this.alt.set(sent.alt);
+    this.description.set(sent.description);
+    this.fill();
+    this.savedAt.set(Date.now());
   }
 
   protected async suggest(asset: MediaAsset, locale: Locale): Promise<void> {
@@ -835,40 +1016,12 @@ export default class AdminMediaPage implements OnInit {
       return;
     }
     const before = this.alt()[locale];
-    this.setAlt(locale, result.data.text);
+    this.control.alt[locale].setValue(result.data.text);
     this.ledger.propose(`media:alt:${asset.id}:${locale}`, result.data, {
       read: () => this.alt()[locale],
       before,
     });
     this.offerDraft(`media:alt:${asset.id}:${locale}`, result.data);
-  }
-
-  protected async saveAlt(asset: MediaAsset): Promise<void> {
-    const alt = this.alt();
-    const sent = { en: alt.en.trim(), de: alt.de.trim() };
-    this.savingAlt.set(true);
-    // The copilot's drafts are judged by what this save sends, even if the details close meanwhile.
-    const ended = this.ledger.beginSave({
-      [`media:alt:${asset.id}:en`]: sent.en,
-      [`media:alt:${asset.id}:de`]: sent.de,
-    });
-    const result = await this.api.updateMediaAlt(asset.id, {
-      altEn: sent.en || null,
-      altDe: sent.de || null,
-    });
-    this.savingAlt.set(false);
-    ended(result.ok);
-    if (!result.ok) {
-      toastNotSaved(result.error);
-      return;
-    }
-    toast.success("Alt text saved", { description: "Live after the next publish." });
-    await this.library.load(true);
-    this.alt.set(sent);
-  }
-
-  protected setDescription(locale: Locale, text: string): void {
-    this.description.update((d) => ({ ...d, [locale]: text }));
   }
 
   /** A draft of what the picture shows, from the picture itself (the copilot, paid). */
@@ -885,35 +1038,12 @@ export default class AdminMediaPage implements OnInit {
       return;
     }
     const before = this.description()[locale];
-    this.setDescription(locale, result.data.text);
+    this.control.description[locale].setValue(result.data.text);
     this.ledger.propose(`media:describe:${asset.id}:${locale}`, result.data, {
       read: () => this.description()[locale],
       before,
     });
     this.offerDraft(`media:describe:${asset.id}:${locale}`, result.data);
-  }
-
-  protected async saveDescription(asset: MediaAsset): Promise<void> {
-    const d = this.description();
-    const sent = { en: d.en.trim(), de: d.de.trim() };
-    this.savingDescription.set(true);
-    const ended = this.ledger.beginSave({
-      [`media:describe:${asset.id}:en`]: sent.en,
-      [`media:describe:${asset.id}:de`]: sent.de,
-    });
-    const result = await this.api.updateMediaAlt(asset.id, {
-      descriptionEn: sent.en || null,
-      descriptionDe: sent.de || null,
-    });
-    this.savingDescription.set(false);
-    ended(result.ok);
-    if (!result.ok) {
-      toastNotSaved(result.error);
-      return;
-    }
-    toast.success("Description saved", { description: "The assistant reads it from now on." });
-    await this.library.load(true);
-    this.description.set(sent);
   }
 
   protected async copyPath(asset: MediaAsset): Promise<void> {
@@ -926,6 +1056,8 @@ export default class AdminMediaPage implements OnInit {
   }
 
   protected async remove(asset: MediaAsset): Promise<void> {
+    // In use: the button stays a stop with its reason, and does nothing.
+    if (this.blocker()) return;
     const go = await this.confirm.ask({
       title: `Delete ${asset.originalName}?`,
       description: "This removes the file and its resized copies from disk. It cannot be undone.",
@@ -947,13 +1079,20 @@ export default class AdminMediaPage implements OnInit {
       result = await this.api.deleteMedia(asset.id, true);
     }
     if (!result.ok) {
-      toast.error("Not deleted", { description: result.error });
+      // The panel and its text stay: the file is still here.
+      toast.error("Not deleted", { description: NOT_DELETED[result.error] ?? result.error });
       return;
     }
     this.backup.drop(asset.id);
     this.dropDetails();
     await this.afterChange();
+    this.focusHeading();
     toast.success("Deleted");
+  }
+
+  /** The file's tile, or the bulk Delete, went with what was deleted: the focus goes to the heading. */
+  private focusHeading(): void {
+    if (!this.gone) this.host.nativeElement.querySelector<HTMLElement>("h1")?.focus();
   }
 
   /* ---- selection ---- */
@@ -1015,11 +1154,12 @@ export default class AdminMediaPage implements OnInit {
     const result = await this.api.cleanupMedia(ids, includeHistory);
     this.deleting.set(false);
     if (!result.ok) {
-      toast.error("Not deleted", { description: result.error });
+      toast.error("Not deleted", { description: NOT_DELETED[result.error] ?? result.error });
       return;
     }
     this.selected.set(new Set());
     await this.afterChange();
+    this.focusHeading();
     const { deleted, skipped, freedBytes } = result.data;
     for (const id of deleted) this.recovery.forget("media", id);
     toast.success(`Deleted ${deleted.length} ${deleted.length === 1 ? "file" : "files"}`, {
@@ -1066,8 +1206,12 @@ export default class AdminMediaPage implements OnInit {
   /** One after the other, so the progress reads as one file's, and a failure names its file. */
   private async uploadAll(files: File[]): Promise<void> {
     if (!files.length || this.uploading()) return;
+    this.uploadSaid.set(
+      files.length === 1 ? `Uploading ${files[0]!.name}…` : `Uploading ${files.length} files…`,
+    );
     const done = await this.uploadNext(files, 0, 0);
     this.uploading.set(null);
+    this.uploadSaid.set("");
     await this.loadReconcile();
     if (done) toast.success(done === 1 ? "Uploaded" : `Uploaded ${done} files`);
   }

@@ -62,10 +62,6 @@
     --available: #5fd48a;
     --data-2: #8cb4d2;
 
-    /* An old name, on a new value until its last reader goes: the rich text, the sortable list
-       and the media pickers. */
-    --accent-indigo: var(--input-line);
-
     /* Only what floats has a shadow. */
     --shadow-e1: 0 0 #0000;
     --shadow-e2: 0 0 #0000;

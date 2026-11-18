@@ -88,8 +88,9 @@ export const unsavedChangesGuard: CanDeactivateFn<unknown> = async (_page, _rout
   if (inject(AdminSessionService, { optional: true })?.lost()) return false;
   if (!unsaved.hasAny()) return true;
   // Its query or fragment changing keeps the page and its edits (Words' filters, Find's row); the
-  // router asks this guard then too. An entry edited in place (`?edit=<id>`, Experience) is a place.
-  if (to?.url && from?.url && placeOf(to.url) === placeOf(from.url)) return true;
+  // router asks this guard then too. An entry edited in place (`?edit=<id>`, Experience) is a place,
+  // and so is a file's panel (`?file=<id>`, Media), once open: opening one leaves nothing behind.
+  if (to?.url && from?.url && samePlace(from.url, to.url)) return true;
 
   const leave = await inject(ConfirmService).ask({
     title: "Discard unsaved changes?",
@@ -104,8 +105,15 @@ export const unsavedChangesGuard: CanDeactivateFn<unknown> = async (_page, _rout
   return leave;
 };
 
-/** The page, and the entry open in it: the path and its `edit`. */
-function placeOf(url: string): string {
+/** The page, the entry open in it (`edit`) and the file whose panel is open (`file`). */
+function placeOf(url: string): { path: string; edit: string; file: string } {
   const [path = "", query = ""] = url.split("#")[0]!.split("?");
-  return `${path}?${new URLSearchParams(query).get("edit") ?? ""}`;
+  const params = new URLSearchParams(query);
+  return { path, edit: params.get("edit") ?? "", file: params.get("file") ?? "" };
+}
+
+function samePlace(fromUrl: string, toUrl: string): boolean {
+  const from = placeOf(fromUrl);
+  const to = placeOf(toUrl);
+  return from.path === to.path && from.edit === to.edit && (!from.file || from.file === to.file);
 }

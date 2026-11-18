@@ -74,6 +74,6 @@ export function usageState(asset: MediaAsset): UsageState {
 export function deleteBlocker(asset: MediaAsset): string | null {
   const state = usageState(asset);
   if (state === "live") return "The live site shows it. Publish without it first.";
-  if (state === "draft") return "The draft uses it. Change the places below first.";
+  if (state === "draft") return "The draft uses it: change those places first.";
   return null;
 }

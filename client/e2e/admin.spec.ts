@@ -59,8 +59,11 @@ function message(id: string, name: string, status: string) {
 
 /** What each admin endpoint answers; a function may vary its answer per call. */
 type Reply = { status: number; body: unknown };
-/** A fixed body, or a reply per call (a promise, to hold it back until the test lets it go). */
-type Answer = unknown | ((call: number) => Reply | Promise<Reply>);
+/**
+ * A fixed body, or a reply per call (a promise, to hold it back until the test lets it go), given
+ * the request's JSON body when it has one.
+ */
+type Answer = unknown | ((call: number, sent: unknown) => Reply | Promise<Reply>);
 
 interface FixtureProject {
   slug: string;
@@ -1128,9 +1131,17 @@ async function fakeApi(
       unmocked.push(key);
       return route.fulfill({ status: 404, headers, json: { error: "not_found" } });
     }
+    // An answer may read what was sent (a fake that keeps a PATCH, Media's panel).
+    const sent = (): unknown => {
+      try {
+        return request.postDataJSON();
+      } catch {
+        return null;
+      }
+    };
     const { status, body } =
       typeof answer === "function"
-        ? await (answer as (n: number) => Reply | Promise<Reply>)(call)
+        ? await (answer as (n: number, sent: unknown) => Reply | Promise<Reply>)(call, sent())
         : { status: 200, body: answer };
     return route.fulfill({ status, headers, json: body });
   };
@@ -2191,22 +2202,21 @@ test.describe("admin", () => {
     const open = page.getByRole("button", { name: "Details of architecture.png" });
     await open.click();
     const details = page.locator("hlm-sheet-content");
+    // The panel's alt text is a bilingual field (plan 5, U15): its German by id, its one Save.
+    const german = details.locator("#alt-de");
     await details.getByRole("button", { name: "Suggest alt text in German with AI" }).click();
-    await expect(details.getByLabel("DE", { exact: true })).toHaveValue("Architekturdiagramm 1");
+    await expect(german).toHaveValue("Architekturdiagramm 1");
     await expect(details.locator("#alt-de-draft")).toHaveText(
       'Needs your eye: starts with "image of": say what it shows instead.',
     );
-    await expect(details.getByLabel("DE", { exact: true })).toHaveAttribute(
-      "aria-describedby",
-      "alt-de-draft",
-    );
-    await details.getByRole("button", { name: "Save alt text" }).click();
+    await expect(german).toHaveAttribute("aria-describedby", /(^| )alt-de-draft$/);
+    await details.getByRole("button", { name: "Save", exact: true }).click();
     await expect.poll(() => verdicts).toEqual([{ outcomes: [{ id: id(1), outcome: "kept" }] }]);
     // Saved: the note goes with the draft.
     await expect(details.locator("#alt-de-draft")).toHaveText("");
 
     await details.getByRole("button", { name: "Suggest alt text in German with AI" }).click();
-    await expect(details.getByLabel("DE", { exact: true })).toHaveValue("Architekturdiagramm 2");
+    await expect(german).toHaveValue("Architekturdiagramm 2");
     await page.keyboard.press("Escape");
     await page.getByRole("alertdialog").getByRole("button", { name: "Discard" }).click();
     await expect.poll(() => verdicts).toHaveLength(2);
@@ -2415,7 +2425,7 @@ test.describe("admin", () => {
           ],
         },
       ]);
-    await expect(details.getByLabel("DE", { exact: true })).not.toHaveValue("Architekturdiagramm");
+    await expect(details.locator("#alt-de")).not.toHaveValue("Architekturdiagramm");
     expect(unmocked).toEqual([]);
   });
 
@@ -4141,12 +4151,13 @@ test.describe("admin", () => {
       "href",
       "/admin/projects/project-one",
     );
-    // Live files cannot be deleted; the reason is given.
-    await expect(details.getByRole("button", { name: "Delete" })).toBeDisabled();
-    await details.getByRole("button", { name: "Suggest alt text in German with AI" }).click();
-    await expect(details.getByLabel("DE", { exact: true })).toHaveValue(
-      "Architekturdiagramm der Suchpipeline",
+    // Live files cannot be deleted; the reason is given (a stop that says it, plan 5, U15).
+    await expect(details.getByRole("button", { name: "Delete" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
     );
+    await details.getByRole("button", { name: "Suggest alt text in German with AI" }).click();
+    await expect(details.locator("#alt-de")).toHaveValue("Architekturdiagramm der Suchpipeline");
     await page.keyboard.press("Escape");
     await page.getByRole("alertdialog").getByRole("button", { name: "Discard" }).click();
 
@@ -4185,14 +4196,15 @@ test.describe("admin", () => {
 
     await page.getByRole("button", { name: "Details of architecture.png" }).click();
     const details = page.locator("hlm-sheet-content");
-    const section = details.getByRole("region", { name: "Description for the assistant" });
-    await expect(section.getByRole("button", { name: "Save description" })).toBeDisabled();
-    await section.getByRole("button", { name: "Describe the image in English with AI" }).click();
-    await expect(section.getByLabel("Assistant description, EN")).toHaveValue(
-      "OCR → LLM: page text\nLLM → review queue: low-confidence fields",
-    );
+    // One Save for the panel, in its head (plan 5, U15); the description is a bilingual field.
+    const save = details.getByRole("button", { name: "Save", exact: true });
+    await expect(save).toBeDisabled();
+    await details.getByRole("button", { name: "Describe the image in English with AI" }).click();
+    await expect(
+      details.getByRole("textbox", { name: "Description for the assistant English" }),
+    ).toHaveValue("OCR → LLM: page text\nLLM → review queue: low-confidence fields");
     expect(asked).toEqual([{ task: "describe", mediaId: "a1", locale: "en" }]);
-    await section.getByRole("button", { name: "Save description" }).click();
+    await save.click();
     await expect
       .poll(() => saved)
       .toEqual([
@@ -5565,7 +5577,8 @@ test.describe("never losing work", () => {
     const open = page.getByRole("button", { name: "Details of architecture.png" });
     const details = page.locator("hlm-sheet-content");
     const ask = page.getByRole("alertdialog");
-    const alt = details.getByLabel("EN", { exact: true });
+    // The bilingual field (plan 5, U15): "Alt text English", by its id.
+    const alt = details.locator("#alt-en");
 
     await open.click();
     await alt.fill("Boxes and arrows");
@@ -5575,10 +5588,12 @@ test.describe("never losing work", () => {
     await ask.getByRole("button", { name: "Keep editing" }).click();
     await expect(ask).toHaveCount(0);
     await expect(alt).toHaveValue("Boxes and arrows");
+    await expect(page).toHaveURL(/\/admin\/media\?file=a1$/);
 
     await page.keyboard.press("Escape");
     await ask.getByRole("button", { name: "Discard" }).click();
     await expect(details).toHaveCount(0);
+    await expect(page).toHaveURL(/\/admin\/media$/);
 
     // The description is guarded the same way; the panel opens on what is saved.
     await open.click();
@@ -6199,6 +6214,13 @@ test.describe("the recovery copy", () => {
     byId("#seo-ogTitle-en", "A new card title"),
   ];
   const seoAuthor = byId("#seo-author-de", "A. Rastineh");
+  // Media's panel (plan 5, U15): both texts in both languages, the file at its address.
+  const mediaFields = [
+    byId("#alt-en", "The old admin's list of projects"),
+    byId("#alt-de", "Die alte Projektliste im Admin"),
+    byId("#description-en", "A list of three projects with Edit links."),
+    byId("#description-de", "Eine Liste mit drei Projekten."),
+  ];
   const SEO_API = {
     "GET /admin/sections/seo": {
       section: "seo",
@@ -6396,6 +6418,25 @@ test.describe("the recovery copy", () => {
         for (const field of seoFields) await isBack(page, field);
         // The set-once value came back as its field, not as text.
         await isBack(page, seoAuthor);
+      },
+    },
+    {
+      // Opened from the grid, it comes back where it was left: the file's panel, at its address.
+      name: "Media's panel",
+      path: "/admin/media",
+      answers: {},
+      keys: ["alt.en", "alt.de", "description.en", "description.de"].map(
+        (field) => `media|a2|${field}`,
+      ),
+      words: mediaFields.map((field) => field.text),
+      edit: async (page) => {
+        await page.getByRole("button", { name: "Details of old-screenshot.png" }).click();
+        await expect(page).toHaveURL(/\/admin\/media\?file=a2$/);
+        for (const field of mediaFields) await type(page, field);
+      },
+      check: async (page) => {
+        await expect(page).toHaveURL(/\/admin\/media\?file=a2$/);
+        for (const field of mediaFields) await isBack(page, field);
       },
     },
   ];
@@ -12771,6 +12812,441 @@ test.describe("Skills and Legal", () => {
       await page.locator("#legal-title-en").fill("Site notice");
       await legalTab(page, "Privacy").click();
       await expect(legalTab(page, "Imprint")).toHaveAccessibleName(/^Imprint ?, unsaved$/);
+      expect(await axeViolations(page)).toEqual([]);
+    });
+  }
+});
+
+/** Media (plan 5, U15). */
+test.describe("Media", () => {
+  const TYPED = "Typed before the session ended";
+  const LOST = { status: 401, body: { error: "unauthenticated" } };
+  const saved = (body: unknown = { ok: true }) => ({ status: 200, body });
+  const panel = (page: Page) => page.locator("hlm-sheet-content");
+  const state = (page: Page) => page.locator("#media-state");
+  const save = (page: Page) => panel(page).getByRole("button", { name: "Save", exact: true });
+  const ask = (page: Page) => page.getByRole("alertdialog");
+  const tile = (page: Page, name: string) =>
+    page.getByRole("button", { name: `Details of ${name}` });
+  const banner = (page: Page) => page.getByRole("status").filter({ hasText: "Unsaved edits from" });
+  const USED = { usage: { draft: ["project:project-one"], live: true, recent: true } };
+  /** The library: a file the site shows, and one nothing uses (with `a2`'s changes). */
+  const MEDIA = (a2: Record<string, unknown> = {}) => ({
+    media: [mediaAsset("a1", "architecture.png", USED), mediaAsset("a2", "old-screenshot.png", a2)],
+  });
+  /** The library as a server keeps it: a PATCH to `a2` that `takes` lands in the next GET. */
+  const LIBRARY = (takes: () => boolean = () => true) => {
+    const kept: Record<string, unknown> = {};
+    return {
+      "GET /admin/media": () => saved(MEDIA(kept)),
+      "PATCH /admin/media/a2": (_n: number, body: unknown) => {
+        if (!takes()) return LOST;
+        Object.assign(kept, body);
+        return saved();
+      },
+    };
+  };
+
+  test("alt text in both languages is written and saved without leaving the panel", async ({
+    page,
+    baseURL,
+    browserName,
+  }) => {
+    await fakeApi(page, baseURL, LIBRARY());
+    const patches = sentTo(page, "PATCH", "/admin/media/a2");
+    await openAdmin(page, "/admin/media");
+
+    // Opened from its tile, the panel starts on the first thing to write.
+    await tile(page, "old-screenshot.png").click();
+    await expect(page.locator("#alt-en")).toBeFocused();
+    await page.locator("#alt-en").fill("A list of projects");
+    await page.locator("#alt-de").fill("Eine Projektliste");
+    await expect(page.locator("#alt-de")).toHaveAttribute("lang", "de");
+    await expect(state(page)).toHaveText("2 unsaved changes");
+
+    await page.keyboard.press("Control+s");
+    await expect(state(page)).toHaveText(/^Saved \d\d:\d\d/);
+    // Only what changed: the description, never loaded into a field, is not sent.
+    expect(patches).toEqual([{ altEn: "A list of projects", altDe: "Eine Projektliste" }]);
+    await expect(panel(page)).toBeVisible();
+    await expect(page.locator("#alt-de")).toHaveValue("Eine Projektliste");
+    await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+
+    // Saved, so it closes without a question, and the focus goes back to the tile (WebKit never
+    // focuses a clicked button, so there it has none to go back to: the keyboard cases cover it).
+    await page.keyboard.press("Escape");
+    await expect(panel(page)).toHaveCount(0);
+    await expect(ask(page)).toHaveCount(0);
+    if (browserName !== "webkit") await expect(tile(page, "old-screenshot.png")).toBeFocused();
+  });
+
+  test("the filter and the open file live in the address, unsaved text too; another file asks first", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/media");
+    const unused = page.getByRole("button", { name: /^Unused/ });
+
+    await unused.click();
+    await expect(page).toHaveURL(/\/admin\/media\?filter=unused$/);
+    await tile(page, "old-screenshot.png").click();
+    await expect(page).toHaveURL(/\/admin\/media\?filter=unused&file=a2$/);
+    await page.locator("#alt-de").fill("Noch nicht gespeichert");
+    await expect(state(page)).toHaveText("1 unsaved change");
+
+    // Find opens another file: the unsaved text asks first, and Stay keeps it and the address.
+    await page.keyboard.press("Control+k");
+    await expect(
+      page.getByRole("combobox", { name: "Find a page, an action or content…" }),
+    ).toBeFocused();
+    await page.keyboard.type("architecture.png");
+    await expect(page.getByRole("option", { selected: true })).toHaveAccessibleName(
+      /architecture\.png/,
+    );
+    await page.keyboard.press("Enter");
+    await expect(ask(page)).toContainText("Discard unsaved changes?");
+    await ask(page).getByRole("button", { name: "Stay" }).click();
+    await expect(page).toHaveURL(/\/admin\/media\?filter=unused&file=a2$/);
+    await expect(page.locator("#alt-de")).toHaveValue("Noch nicht gespeichert");
+
+    // A reload comes back on the filter and the file, the text by its recovery copy.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async () => {
+            if (!(await indexedDB.databases()).some((db) => db.name === "admin-recovery")) {
+              return [];
+            }
+            return new Promise<string[]>((resolve) => {
+              const open = indexedDB.open("admin-recovery");
+              open.onsuccess = () => {
+                const all = open.result.transaction("copies").objectStore("copies").getAll();
+                all.onsuccess = () => {
+                  open.result.close();
+                  resolve((all.result as { field: string }[]).map((c) => c.field));
+                };
+              };
+            });
+          }),
+        { timeout: 8_000 },
+      )
+      .toEqual(["alt.de"]);
+    page.on("dialog", (dialog) => void dialog.accept().catch(() => undefined));
+    await page.reload();
+    await interactive(page);
+    await expect(page).toHaveURL(/\/admin\/media\?filter=unused&file=a2$/);
+    await expect(page.locator("#alt-de")).toHaveValue("Noch nicht gespeichert");
+
+    // Discarded on close: the address keeps the filter.
+    await page.keyboard.press("Escape");
+    await ask(page).getByRole("button", { name: "Discard" }).click();
+    await expect(page).toHaveURL(/\/admin\/media\?filter=unused$/);
+    await expect(unused).toHaveAttribute("aria-pressed", "true");
+
+    // Find opens a file at its address.
+    await page.keyboard.press("Control+k");
+    await expect(
+      page.getByRole("combobox", { name: "Find a page, an action or content…" }),
+    ).toBeFocused();
+    await page.keyboard.type("architecture.png");
+    await expect(page.getByRole("option", { selected: true })).toHaveAccessibleName(
+      /architecture\.png/,
+    );
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/admin\/media\?file=a1$/);
+    await expect(page.locator("#alt-en")).toHaveValue("A diagram");
+
+    // A file no longer in the library: said, and the address lets it go.
+    await openAdmin(page, "/admin/media?file=gone");
+    await expect(page.getByText("That file is no longer in the library.")).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/media$/);
+  });
+
+  test("a 401 while saving signs in over the panel; the text stays and saves after", async ({
+    page,
+    baseURL,
+    problems,
+  }) => {
+    let signedIn = false;
+    const unmocked = await fakeApi(page, baseURL, {
+      ...LIBRARY(() => signedIn),
+      "POST /auth/login": () => {
+        signedIn = true;
+        return saved({ ok: true, totpRequired: false, user: USER });
+      },
+    });
+    const patches = sentTo(page, "PATCH", "/admin/media/a2");
+    await openAdmin(page, "/admin/media");
+    await tile(page, "old-screenshot.png").click();
+    const alt = page.locator("#alt-en");
+    const signIn = page.getByRole("dialog", { name: "Sign in to carry on" });
+
+    await alt.fill(TYPED);
+    await save(page).click();
+    await expect(signIn).toBeVisible();
+    await expect(
+      page.getByText("Not saved: you were signed out. Sign in, then save again."),
+    ).toBeVisible();
+    await expect(alt).toHaveValue(TYPED);
+
+    await signIn.getByLabel("Password").fill("hunter2hunter2");
+    await signIn.getByRole("button", { name: "Sign in" }).click();
+    await expect(signIn).toBeHidden();
+    await expect(alt).toHaveValue(TYPED);
+    await save(page).click();
+    await expect(state(page)).toHaveText(/^Saved \d\d:\d\d/);
+    expect(patches).toHaveLength(2);
+    expect(patches[1]).toEqual({ altEn: TYPED, altDe: null });
+    expect(problems.pageErrors).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a 409 keeps the panel and every word: a refused save, and a delete the draft came to need", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "PATCH /admin/media/a2": () => ({ status: 409, body: { error: "conflict" } }),
+      "DELETE /admin/media/a2": () => ({
+        status: 409,
+        body: { error: "media_in_use", usedBy: ["project:project-one"] },
+      }),
+    });
+    await openAdmin(page, "/admin/media");
+    await tile(page, "old-screenshot.png").click();
+    await page.locator("#alt-en").fill("Kept");
+
+    await save(page).click();
+    await expect(page.getByText("Not saved", { exact: true })).toBeVisible();
+    await expect(panel(page)).toBeVisible();
+    await expect(page.locator("#alt-en")).toHaveValue("Kept");
+    await expect(state(page)).toHaveText("1 unsaved change");
+
+    await panel(page).getByRole("button", { name: "Delete" }).click();
+    await ask(page).getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByText("Not deleted", { exact: true })).toBeVisible();
+    // Words, not the code.
+    await expect(page.getByText("The draft uses it now: change those places first.")).toBeVisible();
+    await expect(page.getByText("media_in_use")).toHaveCount(0);
+    await expect(panel(page)).toBeVisible();
+    await expect(page.locator("#alt-en")).toHaveValue("Kept");
+  });
+
+  test("changed elsewhere: Keep editing sends nothing and keeps the text; Save anyway sends it", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      // Another tab saved this file's alt text after the panel opened.
+      "GET /admin/media": (n: number) => saved(MEDIA(n > 1 ? { altEn: "Theirs" } : {})),
+      "PATCH /admin/media/a2": { ok: true },
+    });
+    const patches = sentTo(page, "PATCH", "/admin/media/a2");
+    await openAdmin(page, "/admin/media");
+    await tile(page, "old-screenshot.png").click();
+    await page.locator("#alt-en").fill("Mine");
+
+    await save(page).click();
+    await expect(ask(page)).toContainText("Changed elsewhere");
+    await ask(page).getByRole("button", { name: "Keep editing" }).click();
+    expect(patches).toEqual([]);
+    await expect(page.locator("#alt-en")).toHaveValue("Mine");
+
+    await save(page).click();
+    await ask(page).getByRole("button", { name: "Save anyway" }).click();
+    await expect.poll(() => patches).toEqual([{ altEn: "Mine", altDe: null }]);
+  });
+
+  test("copies typed in the old panel come back: the file's panel opens by itself, at its address", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, { "PATCH /admin/media/a2": { ok: true } });
+    const patches = sentTo(page, "PATCH", "/admin/media/a2");
+    await openAdmin(page, "/admin/inbox");
+    const at = Date.now() - 60_000;
+    // As the old panel wrote them: `media`, the file's id, each language of each text.
+    await plantCopies(
+      page,
+      [
+        ["alt.en", "A screen of the old admin", "A diagram"],
+        ["alt.de", "Ein Bild des alten Admins", ""],
+        ["description.de", "Die alte Liste der Projekte.", ""],
+      ].map(([field, value, base]) => ({ editor: "media", item: "a2", field, value, base, at })),
+    );
+
+    await openAdmin(page, "/admin/media");
+    await expect(page).toHaveURL(/\/admin\/media\?file=a2$/);
+    await expect(banner(page)).toBeVisible();
+    await expect(page.locator("#alt-en")).toHaveValue("A screen of the old admin");
+    await expect(page.locator("#alt-de")).toHaveValue("Ein Bild des alten Admins");
+    await expect(page.locator("#description-de")).toHaveValue("Die alte Liste der Projekte.");
+
+    await save(page).click();
+    await expect.poll(() => patches).toHaveLength(1);
+    expect(patches[0]).toEqual({
+      altEn: "A screen of the old admin",
+      altDe: "Ein Bild des alten Admins",
+      descriptionEn: null,
+      descriptionDe: "Die alte Liste der Projekte.",
+    });
+  });
+
+  test("Delete waits while a file is in use and says why; a delete, one or several, leaves the focus on the heading", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "DELETE /admin/media/a2": { ok: true },
+      "POST /admin/media/cleanup": { ok: true, deleted: ["a2"], skipped: [], freedBytes: 120_000 },
+    });
+    const deletes: string[] = [];
+    page.on("request", (r) => void (r.method() === "DELETE" && deletes.push(r.url())));
+    const cleanups = sentTo(page, "POST", "/admin/media/cleanup");
+    await openAdmin(page, "/admin/media");
+    // No indigo left in the admin (plan 5, U15).
+    expect(
+      await page.evaluate(() =>
+        getComputedStyle(document.documentElement).getPropertyValue("--accent-indigo"),
+      ),
+    ).toBe("");
+
+    await tile(page, "architecture.png").click();
+    const remove = panel(page).getByRole("button", { name: "Delete" });
+    await expect(remove).toHaveAttribute("aria-disabled", "true");
+    await expect(remove).toHaveAccessibleDescription(
+      "The live site shows it. Publish without it first.",
+    );
+    // Reachable from the keyboard, so the reason is heard; pressing it does nothing.
+    await remove.focus();
+    await expect(remove).toBeFocused();
+    await page.keyboard.press("Enter");
+    await remove.click({ force: true });
+    await expect(ask(page)).toHaveCount(0);
+    expect(deletes).toEqual([]);
+
+    await page.keyboard.press("Escape");
+    await expect(panel(page)).toHaveCount(0);
+    // A file nothing uses goes from its panel; its tile goes too, so the focus goes to the heading.
+    const heading = page.getByRole("heading", { level: 1, name: "Media" });
+    await tile(page, "old-screenshot.png").click();
+    await panel(page).getByRole("button", { name: "Delete" }).click();
+    await ask(page).getByRole("button", { name: "Delete" }).click();
+    await expect(panel(page)).toHaveCount(0);
+    expect(deletes).toEqual([expect.stringMatching(/\/admin\/media\/a2$/)]);
+    await expect(heading).toBeFocused();
+
+    // Several at once: the bulk Delete goes with them, and the focus goes to the heading too.
+    await page.getByRole("button", { name: "Select unused (1)" }).click();
+    await page.getByRole("button", { name: "Delete 1" }).click();
+    await ask(page).getByRole("button", { name: "Delete" }).click();
+    await expect.poll(() => cleanups).toEqual([{ ids: ["a2"], confirm: false }]);
+    await expect(heading).toBeFocused();
+  });
+
+  test("the picker says a failed load, with Try again, never that there is nothing", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "GET /admin/media": (n: number) =>
+        n === 1 ? { status: 502, body: { error: "upstream_down" } } : saved(MEDIA()),
+    });
+    await openAdmin(page, "/admin/projects/project-one");
+    await page
+      .getByRole("group", { name: "Cover image" })
+      .getByRole("button", { name: /^(Choose|Replace)…$/ })
+      .click();
+    const picker = page.locator("hlm-sheet-content");
+    await expect(picker.getByText("Could not load the media library")).toBeVisible();
+    await expect(picker.getByText(/No images yet/)).toHaveCount(0);
+
+    await picker.getByRole("button", { name: "Try again" }).click();
+    await expect(picker.getByRole("button", { name: /old-screenshot\.png/ })).toBeVisible();
+  });
+
+  test("an upload is said once, never ticking, and so is its result", async ({ page, baseURL }) => {
+    await fakeApi(page, baseURL, {
+      "POST /admin/media": (n: number) =>
+        saved({ ok: true, media: mediaAsset(`u${n}`, `upload-${n}.png`) }),
+    });
+    await openAdmin(page, "/admin/media");
+    // Every text any live region holds while the files go up.
+    await page.evaluate(() => {
+      const said: string[] = [];
+      (window as unknown as { said: string[] }).said = said;
+      new MutationObserver(() => {
+        for (const region of document.querySelectorAll("[role=status], [aria-live]")) {
+          const text = region.textContent?.trim();
+          if (text && said.at(-1) !== text) said.push(text);
+        }
+      }).observe(document.body, { subtree: true, childList: true, characterData: true });
+    });
+    const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    await page
+      .locator("input[type=file]")
+      .first()
+      .setInputFiles([
+        { name: "one.png", mimeType: "image/png", buffer: png },
+        { name: "two.png", mimeType: "image/png", buffer: png },
+      ]);
+    await expect(page.getByText("Uploaded 2 files")).toBeVisible();
+
+    const said = await page.evaluate(() => (window as unknown as { said: string[] }).said);
+    expect(said.some((text) => text.includes("Uploading 2 files"))).toBe(true);
+    expect(said.filter((text) => /\d\s?%/.test(text))).toEqual([]);
+  });
+
+  for (const width of [1280, 390]) {
+    test(`Media from the keyboard at ${width}: a tile opens the panel on its alt text, Ctrl S saves, Escape returns to the tile`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await fakeApi(page, baseURL, LIBRARY());
+      await openAdmin(page, "/admin/media");
+      const target = tile(page, "old-screenshot.png");
+
+      // From the page's heading, Tab reaches the tile.
+      await page.getByRole("heading", { level: 1, name: "Media" }).focus();
+      for (
+        let i = 0;
+        i < 40 && !(await target.evaluate((el) => el === document.activeElement));
+        i++
+      ) {
+        await page.keyboard.press("Tab");
+      }
+      await expect(target).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(page.locator("#alt-en")).toBeFocused();
+      await page.keyboard.type("Typed from the keyboard");
+
+      // Tab stays inside the panel.
+      for (let i = 0; i < 12; i++) await page.keyboard.press("Tab");
+      expect(
+        await page.evaluate(() => !!document.activeElement?.closest("hlm-sheet-content")),
+      ).toBe(true);
+
+      await page.keyboard.press("Control+s");
+      await expect(state(page)).toHaveText(/^Saved \d\d:\d\d/);
+      await page.keyboard.press("Escape");
+      await expect(panel(page)).toHaveCount(0);
+      await expect(target).toBeFocused();
+    });
+  }
+
+  for (const colorScheme of ["dark", "light"] as const) {
+    test(`Media's panel, open with unsaved text, in the ${colorScheme} theme has no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme });
+      await fakeApi(page, baseURL);
+      await openAdmin(page, "/admin/media");
+      await tile(page, "architecture.png").click();
+      await page.locator("#alt-de").fill("Ein Diagramm");
+      await expect(state(page)).toHaveText("1 unsaved change");
       expect(await axeViolations(page)).toEqual([]);
     });
   }

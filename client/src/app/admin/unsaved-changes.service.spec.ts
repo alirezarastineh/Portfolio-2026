@@ -158,6 +158,20 @@ describe("unsavedChangesGuard", () => {
     expect(confirm.asked).toBe(2);
   });
 
+  it("asks when Media's open file changes or closes, never when one opens: `file` is a place once open", async () => {
+    const { service, confirm } = setup();
+    service.set("media", true);
+    confirm.answer = false;
+
+    expect(await runGuard("/admin/media?file=a1", "/admin/media")).toBe(false);
+    expect(await runGuard("/admin/media?file=a1", "/admin/media?file=a2")).toBe(false);
+    expect(confirm.asked).toBe(2);
+    // A filter keeps the file; opening one leaves no panel behind (a copy may come back first).
+    expect(await runGuard("/admin/media?file=a1", "/admin/media?filter=unused&file=a1")).toBe(true);
+    expect(await runGuard("/admin/media", "/admin/media?file=a1")).toBe(true);
+    expect(confirm.asked).toBe(2);
+  });
+
   it("stays put under the sign-in dialog, without a second question", async () => {
     const { service, confirm } = setup(true);
     service.set("seo", true);

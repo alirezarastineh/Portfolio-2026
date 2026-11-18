@@ -18,6 +18,7 @@ import { HlmSpinner } from "@spartan-ng/helm/spinner";
 
 import type { MediaAsset } from "../admin-api.service";
 import { MediaLibraryService } from "../media-library.service";
+import { LoadErrorComponent } from "./load-state.component";
 import { MediaTileComponent } from "./media-tile.component";
 
 const IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/avif,image/gif";
@@ -31,14 +32,24 @@ const IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/avif,image/gif";
 @Component({
   selector: "app-media-picker",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmButton, HlmEmptyImports, HlmProgressImports, HlmSpinner, MediaTileComponent, NgIcon],
+  imports: [
+    HlmButton,
+    HlmEmptyImports,
+    HlmProgressImports,
+    HlmSpinner,
+    LoadErrorComponent,
+    MediaTileComponent,
+    NgIcon,
+  ],
   viewProviders: [provideIcons({ lucideCheck, lucideImage, lucideUpload })],
   host: { class: "block" },
   template: `
     <div class="flex flex-col gap-4">
+      <!-- Said once as the file starts up; the percent shows, never spoken. -->
+      <p class="sr-only" role="status">{{ said() }}</p>
       <div
         class="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-6 text-center transition-colors"
-        [class.border-accent-indigo]="dragging()"
+        [class.border-foreground]="dragging()"
         [class.border-border]="!dragging()"
         (dragover)="onDragOver($event)"
         (dragleave)="dragging.set(false)"
@@ -49,8 +60,8 @@ const IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/avif,image/gif";
             <hlm-progress [value]="progress()" aria-label="Upload progress">
               <hlm-progress-indicator />
             </hlm-progress>
-            <p class="m-0 text-xs tabular-nums text-muted-foreground">
-              uploading… {{ progress() }}%
+            <p class="m-0 text-hint text-muted-foreground" aria-hidden="true">
+              Uploading: <span class="font-data">{{ progress() }}%</span>
             </p>
           </div>
         } @else {
@@ -60,7 +71,7 @@ const IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/avif,image/gif";
             Choose a file
           </button>
           <p class="m-0 text-hint text-muted-foreground">
-            {{ documentsOnly() ? "PDF" : "PNG · JPEG · WebP · AVIF · GIF" }} — max 10 MB
+            {{ documentsOnly() ? "A PDF" : "PNG, JPEG, WebP, AVIF or GIF" }}, up to 10&nbsp;MB
           </p>
         }
         <input
@@ -75,6 +86,15 @@ const IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/avif,image/gif";
 
       @if (loading()) {
         <hlm-spinner class="size-5 self-center" />
+      } @else if (library.error() && !library.assets().length) {
+        <!-- A failed load is never "nothing yet". -->
+        <app-load-error
+          compact
+          title="Could not load the media library"
+          description="Nothing was lost: the files are still on the server."
+          [reason]="library.error() ?? ''"
+          (retry)="retry()"
+        />
       } @else if (!offered().length) {
         <div hlmEmpty class="border border-dashed border-border">
           <div hlmEmptyHeader>
@@ -96,14 +116,14 @@ const IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/avif,image/gif";
               <button
                 type="button"
                 class="relative block w-full overflow-hidden rounded-lg border-2 text-left transition-colors hover:border-border-strong"
-                [class]="isSelected ? 'border-accent-indigo' : 'border-border'"
+                [class]="isSelected ? 'border-foreground' : 'border-border'"
                 [attr.aria-pressed]="isSelected"
                 (click)="chosen.emit(asset)"
               >
                 <app-media-tile [asset]="asset" />
                 @if (isSelected) {
                   <span
-                    class="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-accent-indigo text-background"
+                    class="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-foreground text-background"
                     aria-hidden="true"
                   >
                     <ng-icon name="lucideCheck" size="12" />
@@ -136,10 +156,17 @@ export class MediaPickerComponent implements OnInit {
   protected readonly loading = computed(() => !this.library.loaded());
   protected readonly uploading = signal(false);
   protected readonly progress = signal(0);
+  /** The upload's one line for screen readers: set as it starts, emptied when it ends. */
+  protected readonly said = signal("");
   protected readonly dragging = signal(false);
 
   ngOnInit(): void {
     void this.library.load();
+  }
+
+  /** After a failed load: asks again. */
+  protected retry(): void {
+    void this.library.load(true);
   }
 
   protected onDragOver(event: DragEvent): void {
@@ -166,8 +193,10 @@ export class MediaPickerComponent implements OnInit {
   private async upload(file: File): Promise<void> {
     this.progress.set(0);
     this.uploading.set(true);
+    this.said.set(`Uploading ${file.name}…`);
     const result = await this.library.upload(file, (percent) => this.progress.set(percent));
     this.uploading.set(false);
+    this.said.set("");
     if (!result.ok) {
       toast.error("Upload failed", { description: result.message });
       return;
