@@ -79,6 +79,13 @@
   scroll-padding-block: 8rem 6rem;
 }
 
+/* The draft tab (plan 5, U16): the site's sticky header above, the draft's bar below. The site's
+   own padding stops at the admin's layout (`styles.css`), so the draft takes it here. */
+:root:has(app-admin-preview-frame) {
+  scroll-padding-top: calc(5rem + env(safe-area-inset-top));
+  scroll-padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+
 /* The editor header (plan 5, U10) sticks under the 3rem top bar: a focused field or a jump
    stops clear of both; no save bar below. The outline sticks under them too. */
 :root:has(app-editor-header) {

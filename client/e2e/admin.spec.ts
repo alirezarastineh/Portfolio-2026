@@ -7133,50 +7133,76 @@ test.describe("telling the truth", () => {
     return bodies;
   }
 
-  test("the draft tab's suggested question asks nothing of the assistant", async ({
+  test("the draft tab asks nothing of the assistant: every entry point is inert, and its bar says why", async ({
     page,
     baseURL,
   }) => {
-    await fakeApi(page, baseURL);
-    // The assistant answering, as in production: a launcher that is not still would ask it.
+    // A case study to read, the site's own fixture through its server (plan 5, U16).
+    const core = (await (await page.request.get("/api/v2/content/en")).json()) as unknown;
+    const study = (await (
+      await page.request.get("/api/v2/content/en/projects/project-one")
+    ).json()) as unknown;
+    await fakeApi(page, baseURL, {
+      "GET /admin/content/preview/en": core as Answer,
+      "GET /admin/content/preview/en/projects/project-one": study as Answer,
+    });
+    // The assistant answering, as in production: anything not held in the tab would reach it.
     const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "*" };
-    await page.route("**/v1/ask/config", (route) =>
-      route.fulfill({
-        headers: cors,
-        json: {
-          state: "ok",
-          deep: true,
-          suggestions: { en: [], de: [] },
-          limits: { maxChars: 600, historyTurns: 8 },
-          model: "gemini-flash",
-        },
-      }),
-    );
-    await page.route("**/v1/ask", (route) =>
-      route.request().method() === "OPTIONS"
-        ? route.fulfill({ status: 204, headers: cors })
-        : route.fulfill({ status: 503, headers: cors, json: { error: "unavailable" } }),
+    const reached: string[] = [];
+    await page.route(
+      (url) => url.pathname.startsWith("/v1/ask") || url.pathname === "/api/v2/ask-questions",
+      (route) => {
+        const request = route.request();
+        if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+        reached.push(`${request.method()} ${new URL(request.url()).pathname}`);
+        return route.fulfill({
+          headers: cors,
+          json: {
+            state: "ok",
+            deep: true,
+            suggestions: { en: [], de: [] },
+            limits: { maxChars: 600, historyTurns: 8 },
+            model: "gemini-flash",
+            pages: [],
+          },
+        });
+      },
     );
     await page.goto("/admin/preview/en");
     await interactive(page);
-    const suggestion = page.locator("app-ask-stage .suggestion").first();
-    await expect(suggestion).toBeVisible({ timeout: 15_000 });
+    const stage = page.locator("app-ask-stage");
+    await expect(stage.locator(".suggestion").first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("The assistant answers only on the live site.")).toBeVisible();
 
-    // A question goes out within moments of the click, or not at all.
-    const asked = page
-      .waitForRequest((r) => r.method() === "POST" && new URL(r.url()).pathname === "/v1/ask", {
-        timeout: 6_000,
-      })
+    // Home's stage: no click, no key reaches it.
+    await expect(stage).toHaveAttribute("inert", "");
+    await stage.locator(".suggestion").first().click({ force: true });
+    await page.keyboard.press("/");
+
+    // A case study: its sections' and code's buttons, and a selection's, are inert too.
+    await page.goto("/admin/preview/en/work/project-one");
+    await interactive(page);
+    const sectionAsk = page.locator("button.reader-ask").first();
+    await expect(sectionAsk).toBeAttached({ timeout: 15_000 });
+    await expect(sectionAsk).toHaveAttribute("inert", "");
+    await page.evaluate(() => {
+      const text = document.querySelector("main p")!;
+      getSelection()!.selectAllChildren(text);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    const selection = page.locator("button.reader-ask-selection");
+    if (await selection.count()) await expect(selection).toHaveAttribute("inert", "");
+
+    // Read next asks the assistant's map at the article's end: held in the tab.
+    const mapAsked = page
+      .waitForRequest((r) => new URL(r.url()).pathname.startsWith("/v1/ask"), { timeout: 4_000 })
       .then(
         () => true,
         () => false,
       );
-    await suggestion.click();
-    // Said first: the toast is gone before the wait for a question ends.
-    await expect(
-      page.getByText("The assistant does not answer in the draft preview."),
-    ).toBeVisible();
-    expect(await asked).toBe(false);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    expect(await mapAsked).toBe(false);
+    expect(reached).toEqual([]);
   });
 
   test("a match link in the draft tab is held, with a note", async ({ page, baseURL }) => {
@@ -12817,8 +12843,8 @@ test.describe("Skills and Legal", () => {
   }
 });
 
-/** Media (plan 5, U15). */
-test.describe("Media", () => {
+/** Media (plan 5, U15) and the draft tab's shell and bar (U16, Part L1). */
+test.describe("Media and the draft tab", () => {
   const TYPED = "Typed before the session ended";
   const LOST = { status: 401, body: { error: "unauthenticated" } };
   const saved = (body: unknown = { ok: true }) => ({ status: 200, body });
@@ -13250,6 +13276,75 @@ test.describe("Media", () => {
       expect(await axeViolations(page)).toEqual([]);
     });
   }
+
+  test("the draft tab takes the public shell's scope from admin code: its headings set as on the site", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    // Every script the draft tab loads, as text.
+    const scripts: string[] = [];
+    page.on("response", (response) => {
+      if (response.request().resourceType() !== "script") return;
+      if (!page.url().includes("/admin/preview")) return;
+      void response.text().then(
+        (text) => scripts.push(text),
+        () => undefined,
+      );
+    });
+    const typeset = (page: Page) =>
+      page.evaluate(() =>
+        [document.querySelector("main h1"), document.querySelector("main h2")].map((el) => {
+          const style = getComputedStyle(el!);
+          return {
+            hyphens: style.hyphens,
+            wrap: style.textWrapStyle,
+            overflowWrap: style.overflowWrap,
+          };
+        }),
+      );
+
+    await page.goto("/en");
+    await interactive(page);
+    const site = await typeset(page);
+    expect(site.map((s) => s.hyphens)).toContain("auto");
+
+    await page.goto("/admin/preview/en");
+    await interactive(page);
+    await expect(page.locator("#hero-heading")).toBeVisible({ timeout: 15_000 });
+    expect(await typeset(page)).toEqual(site);
+    await expect(page.locator("app-public-shell")).toHaveCount(1);
+    // Not the site's shell: no Ask pill on the page, and none of its code loaded.
+    await expect(page.locator(".ask-fab")).toHaveCount(0);
+    await expect.poll(() => scripts.length).toBeGreaterThan(5);
+    expect(scripts.filter((text) => text.includes("ask-fab"))).toEqual([]);
+  });
+
+  test("the draft tab's bar: the language in words, the other one, Refresh and Close", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await page.goto("/admin/preview/en");
+    await interactive(page);
+    const bar = page.getByRole("complementary", { name: "Draft preview" });
+    await expect(bar).toContainText("Draft preview, English");
+    await expect(bar).toContainText("The assistant answers only on the live site.");
+
+    await bar.getByRole("link", { name: "German" }).click();
+    await expect(page).toHaveURL(/\/admin\/preview\/de$/);
+    await expect(bar).toContainText("Draft preview, German");
+    await expect(bar.getByRole("link", { name: "English" })).toBeVisible();
+
+    const reloaded = page.waitForEvent("load");
+    await bar.getByRole("button", { name: "Refresh" }).click();
+    await reloaded;
+    await expect(page).toHaveURL(/\/admin\/preview\/de$/);
+
+    await interactive(page);
+    await bar.getByRole("link", { name: "Close" }).click();
+    await expect(page).toHaveURL(/\/admin\/preview$/);
+  });
 });
 
 test.describe("admin accessibility", () => {

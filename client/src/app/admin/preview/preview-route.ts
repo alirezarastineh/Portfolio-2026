@@ -40,8 +40,15 @@ function draftSource(): ContentSource {
  */
 @Injectable()
 export class StillAskLauncher extends AskLauncherService {
+  constructor() {
+    super();
+    // Known, so the stage asks the site nothing: its built-in three stand.
+    this.questions.set({});
+  }
+
+  /** Its ways in are inert (the frame); this is the net under them. */
   override openSheet(): void {
-    toast.info("Not asked", { description: "The assistant does not answer in the draft preview." });
+    toast.info("Not asked", { description: "The assistant answers only on the live site." });
   }
 
   override openPanel(): void {
