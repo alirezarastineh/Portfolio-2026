@@ -27,6 +27,11 @@ const PUBLIC_PAGE_CACHE = {
 };
 const NO_STORE = { "cache-control": "no-store" };
 
+/** The admin's pages: the layout (`pages/admin.page.ts`) and every page under `pages/admin/`. */
+const ADMIN_PAGE = /[\\/]src[\\/]app[\\/]pages[\\/]admin(?:\.page\.ts|[\\/])/;
+/** An admin route's chunk, by the name `chunkFileNames` gives it. */
+const isAdminRoute = (file: string): boolean => /(?:^|\/)admin-[^/]+$/.test(file);
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -38,8 +43,19 @@ export default defineConfig(({ mode }) => {
   return {
     build: {
       target: ["es2020"],
+      // The public main entry lists each route's chunks for preloading. An admin route's are
+      // left out: no visitor needs them, and how the admin splits its code (Rolldown re-splits
+      // shared chunks around any lazily loaded admin code) must never cost a visitor a byte.
+      modulePreload: {
+        resolveDependencies: (filename, deps) => (isAdminRoute(filename) ? [] : deps),
+      },
       rollupOptions: {
         output: {
+          // An admin route's chunk says so in its name: all `resolveDependencies` is given.
+          chunkFileNames: (chunk) =>
+            chunk.facadeModuleId && ADMIN_PAGE.test(chunk.facadeModuleId)
+              ? "assets/admin-[name]-[hash].js"
+              : "assets/[name]-[hash].js",
           codeSplitting: {
             groups: [
               // The compiler's own helpers (class fields down-levelled for
