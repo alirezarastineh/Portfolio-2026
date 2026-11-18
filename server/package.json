@@ -23,8 +23,8 @@
     "ai:eval": "tsx src/ask/evals/cli.ts"
   },
   "dependencies": {
-    "@ai-sdk/google": "^4.0.121",
-    "@ai-sdk/provider": "^4.0.38",
+    "@ai-sdk/google": "^4.0.122",
+    "@ai-sdk/provider": "^4.0.39",
     "@hono/node-server": "^2.1.9",
     "@hono/zod-validator": "^0.9.1",
     "@langchain/core": "^1.4.1",
@@ -32,8 +32,8 @@
     "@langchain/langgraph": "^1.7.5",
     "@node-rs/argon2": "^2.2.2",
     "@openrouter/ai-sdk-provider": "^3.1.0",
-    "@sentry/node": "^11.13.0",
-    "ai": "^7.0.173",
+    "@sentry/node": "^11.14.0",
+    "ai": "^7.0.176",
     "dotenv": "^18.0.10",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.19",
@@ -52,13 +52,13 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@eslint/json": "^2.1.1",
-    "@eslint/markdown": "^8.0.3",
+    "@eslint/markdown": "^9.0.0",
     "@types/node": "^26.6.6",
     "@types/pdf-parse": "^1.1.5",
     "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
     "@types/sanitize-html": "^2.16.2",
-    "@vitest/coverage-v8": "5.1.0",
+    "@vitest/coverage-v8": "5.1.1",
     "drizzle-kit": "^0.31.11",
     "embedded-postgres": "18.6.0-beta.19",
     "eslint": "^10.15.0",
@@ -69,6 +69,6 @@
     "tsx": "^4.23.15",
     "typescript": "6.0.3",
     "typescript-eslint": "^8.73.0",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   }
 }
