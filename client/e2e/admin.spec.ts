@@ -13353,6 +13353,36 @@ test.describe("Media and the draft tab", () => {
     await expect(page).toHaveURL(/\/admin\/preview$/);
   });
 
+  test("an image's alt text is grey while the live site still shows other words for it", async ({
+    page,
+    baseURL,
+  }) => {
+    // The live English site shows `a1` on a project's cover with older words than the saved "A diagram".
+    const live = {
+      projects: [{ slug: "project-one", cover: { src: "/media/a1.png", alt: "Old" } }],
+    };
+    const side = (locale: "en" | "de") => ({
+      locale,
+      issues: [],
+      changed: false,
+      draft: live,
+      live,
+      liveVersionId: 12,
+      docs: [],
+    });
+    await fakeApi(page, baseURL, {
+      "GET /admin/publish/review": { canPublish: true, locales: [side("en"), side("de")] },
+    });
+    await openAdmin(page, "/admin/media");
+    await tile(page, "architecture.png").click();
+    const alt = page.locator("app-bilingual-field", { has: page.locator("#alt-en") });
+    await expect(alt).toHaveAttribute("data-change", "draft");
+    await expect(page.locator("#alt-en")).toHaveAccessibleDescription(/In draft/);
+
+    // Typing makes it unsaved, orange, as everywhere.
+    await page.locator("#alt-en").fill("A diagram of the system");
+    await expect(alt).toHaveAttribute("data-change", "unsaved");
+  });
 });
 
 test.describe("the review and History", () => {

@@ -1,4 +1,5 @@
 import type { MediaAsset } from "./admin-api.service";
+import type { DraftMarks } from "./change-trace";
 import type { Locale } from "../content/schema";
 
 /** Where a file is used, in words, and the editor where that place is changed. */
@@ -68,6 +69,37 @@ export function usageState(asset: MediaAsset): UsageState {
   if (!asset.usage) return "unknown";
   if (asset.usage.live) return "live";
   return asset.usage.draft.length ? "draft" : "unused";
+}
+
+/** Every alt text the content gives a picture of this file (`src` is the file's address). */
+function altsOf(node: unknown, src: string, out: string[] = []): string[] {
+  if (Array.isArray(node)) {
+    for (const child of node) altsOf(child, src, out);
+  } else if (node !== null && typeof node === "object") {
+    const image = node as Record<string, unknown>;
+    if (image["src"] === src && typeof image["alt"] === "string") out.push(image["alt"]);
+    else for (const child of Object.values(image)) altsOf(child, src, out);
+  }
+  return out;
+}
+
+/**
+ * The saved alt text is not on the site yet (plan 5, U16): only the draft uses the file, or a live
+ * picture of it says other words. The site falls back to the other language, then to a name of its
+ * own, so with no words in either language there is nothing to compare. Gallery pictures live in
+ * the case studies' pages, which the review does not hold: those are not compared.
+ */
+export function altInDraft(asset: MediaAsset, marks: DraftMarks | null): boolean {
+  if (asset.kind !== "image") return false;
+  const state = usageState(asset);
+  if (state === "draft") return true;
+  if (state !== "live" || !marks) return false;
+  const src = `/media/${asset.filename}`;
+  return (["en", "de"] as const).some((locale) => {
+    const [own, other] = locale === "en" ? [asset.altEn, asset.altDe] : [asset.altDe, asset.altEn];
+    const words = own?.trim() || other?.trim();
+    return !!words && altsOf(marks.live[locale], src).some((alt) => alt !== words);
+  });
 }
 
 /** Why a file cannot be deleted right now, or null when it can. */

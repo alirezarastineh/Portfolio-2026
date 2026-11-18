@@ -54,7 +54,9 @@ import {
   MediaLibraryService,
   UPLOAD_ACCEPT,
 } from "../../admin/media-library.service";
-import { deleteBlocker, usagePlace, missingAlt } from "../../admin/media-usage";
+import type { TraceState } from "../../admin/change-trace";
+import { altInDraft, deleteBlocker, usagePlace, missingAlt } from "../../admin/media-usage";
+import { AdminPulseService } from "../../admin/pulse.service";
 import { absoluteTime } from "../../admin/relative-time";
 import { toastNotSaved } from "../../admin/save-feedback";
 import { LoadErrorComponent } from "../../admin/components/load-state.component";
@@ -421,7 +423,7 @@ function textsOf(asset: MediaAsset): { id: string; updatedAt: string } {
                 hint="What the picture shows, for screen readers and when it does not load. Goes live with the next publish."
                 [maxLength]="300"
                 [ai]="false"
-                [state]="altChanged() ? 'unsaved' : 'live'"
+                [state]="altTrace()"
                 [controlEn]="control.alt.en"
                 [controlDe]="control.alt.de"
                 [below]="suggestAlt"
@@ -603,6 +605,7 @@ export default class AdminMediaPage implements OnInit {
   /** The copilot's drafts (alt text, descriptions), judged when saved (plan phase 27). */
   private readonly ledger = inject(CopilotLedger);
   private readonly recovery = inject(RecoveryService);
+  private readonly pulse = inject(AdminPulseService);
   /** Before a save: the file's texts read again, against what the panel opened with. */
   private readonly elsewhere = new ChangedElsewhere(this.confirm, async () => {
     const result = await this.api.listMedia();
@@ -709,6 +712,12 @@ export default class AdminMediaPage implements OnInit {
     return fields.filter(([, differs]) => differs).map(([field]) => field);
   });
   protected readonly altChanged = computed(() => this.changed().some((f) => f.startsWith("alt")));
+  /** Saved and not on the site yet: grey, as every field in the draft (plan 5, U16). */
+  protected readonly altTrace = computed<TraceState>(() => {
+    if (this.altChanged()) return "unsaved";
+    const asset = this.active();
+    return asset && altInDraft(asset, this.pulse.marks()) ? "draft" : "live";
+  });
   protected readonly descriptionChanged = computed(() =>
     this.changed().some((f) => f.startsWith("description")),
   );
