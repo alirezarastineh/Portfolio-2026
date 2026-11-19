@@ -87,7 +87,9 @@ function fromSource(lesson: Pick<Lesson, "source" | "topic" | "journalIds">, p: 
 
 /** Why a new lesson for this proposal would not be kept; null when it would. */
 export function newLessonProblem(p: Pick<FaqProposal, "source" | "topic">): string | null {
-  if (p.source !== "insight" || !p.topic) return JOURNAL_LESSON;
+  if (p.source !== "insight" || !p.topic) {
+    return JOURNAL_LESSON;
+  }
   return corroborationProblem({ source: "insight", topic: p.topic });
 }
 
@@ -99,28 +101,40 @@ async function planLesson(
   p: FaqProposal,
   choice: AcceptInput["lesson"],
 ): Promise<LessonPlan | Refusal> {
-  if (!choice) return null;
+  if (!choice) {
+    return null;
+  }
   if ("id" in choice) {
     const [lesson] = await tx
       .select()
       .from(aiLessons)
       .where(eq(aiLessons.id, choice.id))
       .for("update");
-    if (!lesson) return { ok: false, error: "unknown_lesson", status: 400 };
-    if (!fromSource(lesson, p)) return { ok: false, error: "lesson_elsewhere", status: 400 };
-    if (lesson.status === "retired") return { ok: false, error: "lesson_retired", status: 409 };
+    if (!lesson) {
+      return { ok: false, error: "unknown_lesson", status: 400 };
+    }
+    if (!fromSource(lesson, p)) {
+      return { ok: false, error: "lesson_elsewhere", status: 400 };
+    }
+    if (lesson.status === "retired") {
+      return { ok: false, error: "lesson_retired", status: 409 };
+    }
     if (lesson.appliedAt || lesson.status !== "proposed") {
       return { ok: false, error: "lesson_applied", status: 409 };
     }
     return { link: lesson.id };
   }
   const problem = newLessonProblem(p);
-  if (problem) return { ok: false, error: "not_corroborated", status: 400, reason: problem };
+  if (problem) {
+    return { ok: false, error: "not_corroborated", status: 400, reason: problem };
+  }
   if (words(choice.statement) < HEURISTIC_MIN_WORDS) {
     return { ok: false, error: "vague_statement", status: 400 };
   }
   const scope = cleanScope(choice.scope);
-  if (!scope.length) return { ok: false, error: "empty_scope", status: 400 };
+  if (!scope.length) {
+    return { ok: false, error: "empty_scope", status: 400 };
+  }
   return { create: { statement: choice.statement, scope } };
 }
 
@@ -156,7 +170,7 @@ async function applyLesson(
       ...applied,
     })
     .returning({ id: aiLessons.id });
-  return row!.id;
+  return row.id;
 }
 
 /**
@@ -247,10 +261,16 @@ export async function acceptFaqProposal(id: string, input: AcceptInput): Promise
   }
   const outcome = await getDb().transaction(async (tx) => {
     const p = await locked(tx, id);
-    if (!p) return { ok: false, error: "not_found", status: 404 } as const;
-    if (!isOpen(p)) return { ok: false, error: "not_open", status: 409 } as const;
+    if (!p) {
+      return { ok: false, error: "not_found", status: 404 } as const;
+    }
+    if (!isOpen(p)) {
+      return { ok: false, error: "not_open", status: 409 } as const;
+    }
     const plan = await planLesson(tx, p, input.lesson);
-    if (plan && "ok" in plan) return plan;
+    if (plan && "ok" in plan) {
+      return plan;
+    }
 
     const faqId = await insertFaq(tx, {
       isVisible: input.isVisible,
@@ -278,9 +298,11 @@ export async function acceptFaqProposal(id: string, input: AcceptInput): Promise
       },
       tx,
     );
-    return { ok: true, proposal: accepted!, linked: { journal, lesson }, drafted: p } as const;
+    return { ok: true, proposal: accepted, linked: { journal, lesson }, drafted: p } as const;
   });
-  if (!outcome.ok) return outcome;
+  if (!outcome.ok) {
+    return outcome;
+  }
   // Live from now: the assistant reads the FAQ again.
   invalidateAssistantCache();
   await decideDrafts(outcome.drafted, input.translations);
@@ -291,8 +313,12 @@ export async function acceptFaqProposal(id: string, input: AcceptInput): Promise
 export async function rejectFaqProposal(id: string): Promise<FaqDecision> {
   const outcome = await getDb().transaction(async (tx) => {
     const p = await locked(tx, id);
-    if (!p) return { ok: false, error: "not_found", status: 404 } as const;
-    if (!isOpen(p)) return { ok: false, error: "not_open", status: 409 } as const;
+    if (!p) {
+      return { ok: false, error: "not_found", status: 404 } as const;
+    }
+    if (!isOpen(p)) {
+      return { ok: false, error: "not_open", status: 409 } as const;
+    }
     const [rejected] = await tx
       .update(aiFaqProposals)
       .set({ ...decided(), status: "rejected" })
@@ -308,9 +334,11 @@ export async function rejectFaqProposal(id: string): Promise<FaqDecision> {
       },
       tx,
     );
-    return { ok: true, proposal: rejected! } as const;
+    return { ok: true, proposal: rejected } as const;
   });
-  if (!outcome.ok) return outcome;
+  if (!outcome.ok) {
+    return outcome;
+  }
   await decideDrafts(outcome.proposal, null);
   return { ok: true, proposal: outcome.proposal, linked: { journal: false, lesson: null } };
 }
@@ -342,7 +370,7 @@ export async function listFaqProposals(
     .where(statuses.length ? inArray(aiFaqProposals.status, [...statuses]) : undefined)
     .orderBy(desc(aiFaqProposals.createdAt), desc(aiFaqProposals.id))
     .limit(limit);
-  const open = rows.filter(isOpen);
+  const open = rows.filter((p) => isOpen(p));
   // The lessons not applied yet: few (the admin writes each).
   const unapplied = open.length
     ? await db

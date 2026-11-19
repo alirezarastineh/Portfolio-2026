@@ -44,7 +44,7 @@ export async function audit(entry: AuditEntry, db: DbExecutor = getDb()): Promis
       alert: entry.alert ?? false,
     })
     .returning();
-  return row!;
+  return row;
 }
 
 /** Tells the owner outside the admin too: an alert goes to Sentry as well. */
@@ -103,7 +103,9 @@ export function demotedSubjects(now = Date.now()): Promise<ReadonlySet<string>> 
     const value = readDemotions().then((rows) => new Set(rows.map((d) => d.subject)));
     cache = { at: now, value };
     value.catch(() => {
-      if (cache?.value === value) cache = undefined;
+      if (cache?.value === value) {
+        cache = undefined;
+      }
     });
   }
   return cache.value;

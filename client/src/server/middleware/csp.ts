@@ -25,10 +25,14 @@ let config: CspConfig | undefined;
  * `DEV=1` string must not switch the policy off.
  */
 export default defineEventHandler((event) => {
-  if (import.meta.env?.DEV === true) return;
+  if (import.meta.env?.DEV === true) {
+    return;
+  }
 
   config ??= cspConfigFromEnv(process.env);
-  if (config.mode === "off" || !isPagePath(event.path)) return;
+  if (config.mode === "off" || !isPagePath(event.path)) {
+    return;
+  }
 
   const nonce = newNonce();
   writeRequestNonce(event.node.req, nonce);

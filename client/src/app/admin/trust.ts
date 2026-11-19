@@ -21,9 +21,15 @@ export const levelLabel = (level: TrustLevel): string => LEVELS[level];
  * "feature:match" → "match a brief" (visitor plan V20).
  */
 export function subjectLabel(subject: string): string {
-  if (subject === "route:deep") return "the deep route";
-  if (subject === "feature:match") return "match a brief";
-  if (subject.startsWith("model:")) return `the model ${subject.slice(6)}`;
+  if (subject === "route:deep") {
+    return "the deep route";
+  }
+  if (subject === "feature:match") {
+    return "match a brief";
+  }
+  if (subject.startsWith("model:")) {
+    return `the model ${subject.slice(6)}`;
+  }
   return subject;
 }
 
@@ -43,12 +49,18 @@ export function rulesLine(rules: TrustRules): string {
 
 /** What needs a person, in a sentence, or null when nothing does. */
 export function trustAlert(trust: AssistantHealth["trust"]): string | null {
-  if (!trust) return null;
+  if (!trust) {
+    return null;
+  }
   const parts: string[] = [];
-  if (trust.alerts) parts.push(trust.alerts === 1 ? "1 alert" : `${trust.alerts} alerts`);
-  if (trust.demoted.length === 1)
-    parts.push(`${subjectLabel(trust.demoted[0]!.subject)} is demoted`);
-  else if (trust.demoted.length > 1) parts.push(`${trust.demoted.length} demotions`);
+  if (trust.alerts) {
+    parts.push(trust.alerts === 1 ? "1 alert" : `${trust.alerts} alerts`);
+  }
+  if (trust.demoted.length === 1) {
+    parts.push(`${subjectLabel(trust.demoted[0].subject)} is demoted`);
+  } else if (trust.demoted.length > 1) {
+    parts.push(`${trust.demoted.length} demotions`);
+  }
   return parts.length ? `${parts.join(" and ")}: see the Trust tab` : null;
 }
 

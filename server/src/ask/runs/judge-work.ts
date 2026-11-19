@@ -73,7 +73,9 @@ interface JudgeContext {
 
 /** The documents an answer read, as its snapshot holds them; null when none was kept. */
 function snapshotDocuments(ctx: JudgeContext, key: string | null): Promise<DocumentsById | null> {
-  if (!key) return Promise.resolve(null);
+  if (!key) {
+    return Promise.resolve(null);
+  }
   let documents = ctx.snapshots.get(key);
   if (!documents) {
     documents = getDb()
@@ -90,9 +92,13 @@ async function judgeOne(
   key: string,
   ctx: JudgeContext,
 ): Promise<{ ok: true } | { ok: false; down: boolean }> {
-  if (ctx.paid.signal.aborted) return { ok: false, down: false };
+  if (ctx.paid.signal.aborted) {
+    return { ok: false, down: false };
+  }
   await ctx.paid.start(key);
-  if (ctx.paid.signal.aborted) return { ok: false, down: false };
+  if (ctx.paid.signal.aborted) {
+    return { ok: false, down: false };
+  }
 
   const [message] = await getDb()
     .select({
@@ -150,6 +156,14 @@ async function judgeOne(
   return { ok: true };
 }
 
+async function judgeKeys(keys: readonly string[], ctx: JudgeContext, index = 0): Promise<boolean> {
+  if (index >= keys.length) {
+    return false;
+  }
+  const outcome = await judgeOne(keys[index], ctx);
+  return outcome.ok ? judgeKeys(keys, ctx, index + 1) : outcome.down;
+}
+
 /** A nightly run's params, or null for a calibration run. */
 export function nightlyParams(params: unknown): NightlyParams | null {
   const p = params as Partial<NightlyParams> | null;
@@ -168,7 +182,9 @@ export function nightlyParams(params: unknown): NightlyParams | null {
 export const judgeWork: WorkFn = async (work) => {
   const config = askConfig();
   const chain = askVisitorJudges(config);
-  if (!chain.length) return { status: "failed", error: NO_VISITOR_JUDGE };
+  if (!chain.length) {
+    return { status: "failed", error: NO_VISITOR_JUDGE };
+  }
   const corpus = await askCorpus(config);
   const pacing = askEvalPacing();
   const beforeModelCall = pacing ? createModelCallGate(pacing) : undefined;
@@ -188,25 +204,22 @@ export const judgeWork: WorkFn = async (work) => {
     calls,
     paid,
   };
-  let down = false;
+  const down = await judgeKeys(work.keys, ctx);
 
-  for (const key of work.keys) {
-    const outcome = await judgeOne(key, ctx);
-    if (!outcome.ok) {
-      down = outcome.down;
-      break;
-    }
-  }
-
-  const items = (await getRun(work.run.id))?.items ?? [];
+  const run = await getRun(work.run.id);
+  const items = run?.items ?? [];
   const summary = {
     answers: items.length,
     judged: items.filter((i) => i.status === "done").length,
-    judge: chain[0]!.id,
+    judge: chain[0].id,
     ...(nightly ? { day: nightly.day } : {}),
   };
   const stopped = paid.stoppedBy();
-  if (stopped) return { status: "failed", error: stopped, summary };
-  if (down) return { status: "failed", error: JUDGE_DOWN, summary };
+  if (stopped) {
+    return { status: "failed", error: stopped, summary };
+  }
+  if (down) {
+    return { status: "failed", error: JUDGE_DOWN, summary };
+  }
   return { status: "done", summary };
 };

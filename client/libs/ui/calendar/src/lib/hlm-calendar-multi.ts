@@ -25,6 +25,8 @@ import { HlmSelectImports } from "@spartan-ng/helm/select";
 import { hlm } from "@spartan-ng/helm/utils";
 import type { ClassValue } from "clsx";
 
+const defaultDateDisabled = (): boolean => false;
+
 @Component({
   selector: "hlm-calendar-multi",
   imports: [BrnCalendarImports, NgIcon, HlmIcon, NgTemplateOutlet, HlmSelectImports],
@@ -99,15 +101,17 @@ import type { ClassValue } from "clsx";
 
             <div class="flex items-center space-x-1">
               <button
+                type="button"
                 brnCalendarPreviousButton
-                class="ring-offset-background focus-visible:ring-ring border-input hover:bg-accent hover:text-accent-foreground absolute left-1 inline-flex h-7 w-7 items-center justify-center rounded-md border bg-transparent p-0 text-sm font-medium whitespace-nowrap opacity-50 transition-colors hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+                class="ring-offset-background focus-visible:ring-ring border-input hover:bg-accent hover:text-accent-foreground absolute left-1 inline-flex size-7 items-center justify-center rounded-md border bg-transparent p-0 text-sm font-medium whitespace-nowrap opacity-50 transition-colors hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
               >
                 <ng-icon hlm name="lucideChevronLeft" size="sm" />
               </button>
 
               <button
+                type="button"
                 brnCalendarNextButton
-                class="ring-offset-background focus-visible:ring-ring border-input hover:bg-accent hover:text-accent-foreground absolute right-1 inline-flex h-7 w-7 items-center justify-center rounded-md border bg-transparent p-0 text-sm font-medium whitespace-nowrap opacity-50 transition-colors hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+                class="ring-offset-background focus-visible:ring-ring border-input hover:bg-accent hover:text-accent-foreground absolute right-1 inline-flex size-7 items-center justify-center rounded-md border bg-transparent p-0 text-sm font-medium whitespace-nowrap opacity-50 transition-colors hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
               >
                 <ng-icon hlm name="lucideChevronRight" size="sm" />
               </button>
@@ -134,9 +138,9 @@ import type { ClassValue } from "clsx";
               @for (date of week; track _dateAdapter.getTime(date)) {
                 <td
                   brnCalendarCell
-                  class="data-selected:data-outside:bg-accent/50 data-selected:bg-accent relative h-8 w-8 p-0 text-center text-sm focus-within:relative focus-within:z-20 first:data-selected:rounded-l-md [&:has([aria-selected].day-range-end)]:rounded-r-md"
+                  class="data-selected:data-outside:bg-accent/50 data-selected:bg-accent relative size-8 p-0 text-center text-sm focus-within:relative focus-within:z-20 first:data-selected:rounded-l-md [&:has([aria-selected].day-range-end)]:rounded-r-md"
                 >
-                  <button brnCalendarCellButton [date]="date" [class]="_btnClass">
+                  <button type="button" brnCalendarCellButton [date]="date" [class]="_btnClass">
                     {{ _dateAdapter.getDate(date) }}
                   </button>
                 </td>
@@ -191,7 +195,7 @@ export class HlmCalendarMulti<T> {
   public readonly date = model<T[]>();
 
   /** Whether a specific date is disabled. */
-  public readonly dateDisabled = input<(date: T) => boolean>(() => false);
+  public readonly dateDisabled = input<(date: T) => boolean>(defaultDateDisabled);
 
   /** The day the week starts on */
   public readonly weekStartsOn = input<Weekday, NumberInput>(undefined, {
@@ -222,10 +226,10 @@ export class HlmCalendarMulti<T> {
   protected readonly _btnClass = hlm(
     buttonVariants({ variant: "ghost" }),
     "size-8 p-0 font-normal aria-selected:opacity-100",
-    "data-[outside]:text-muted-foreground data-[outside]:aria-selected:bg-accent/50 data-[outside]:aria-selected:text-muted-foreground data-[outside]:opacity-50 data-[outside]:aria-selected:opacity-30",
-    "data-[today]:bg-accent data-[today]:text-accent-foreground",
-    "data-[selected]:bg-primary data-[selected]:text-primary-foreground data-[selected]:hover:bg-primary data-[selected]:hover:text-primary-foreground data-[selected]:focus:bg-primary data-[selected]:focus:text-primary-foreground",
-    "data-[disabled]:text-muted-foreground data-[disabled]:opacity-50",
+    "data-outside:text-muted-foreground data-outside:aria-selected:bg-accent/50 data-outside:aria-selected:text-muted-foreground data-outside:opacity-50 data-outside:aria-selected:opacity-30",
+    "data-today:bg-accent data-today:text-accent-foreground",
+    "data-selected:bg-primary data-selected:text-primary-foreground data-selected:hover:bg-primary data-selected:hover:text-primary-foreground data-selected:focus:bg-primary data-selected:focus:text-primary-foreground",
+    "data-disabled:text-muted-foreground data-disabled:opacity-50",
     "dark:hover:text-accent-foreground",
   );
 

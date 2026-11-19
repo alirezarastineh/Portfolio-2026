@@ -69,7 +69,7 @@ export function fixtureConfig(overrides: Partial<AskConfig> = {}): AskConfig {
   try {
     return {
       ...parseAskConfig(),
-      firstChunkTimeoutMs: 5_000,
+      firstChunkTimeoutMs: 5000,
       requestTimeoutMs: 10_000,
       streamTimeoutMs: 10_000,
       retryBaseDelayMs: 1,
@@ -86,7 +86,7 @@ export function fixtureCorpus(config: AskConfig = fixtureConfig()): AskCorpus {
   return assembleCorpus(FIXTURE_BASE, DEFAULT_SETTINGS, [], config);
 }
 
-const ATLAS = FIXTURE_BASE.projects[0]!;
+const ATLAS = FIXTURE_BASE.projects[0];
 
 /** The fixture with a second project, for answers that span two (plan phase 20's escalation). */
 export const FIXTURE_TWO_PROJECTS: Corpus = {
@@ -142,13 +142,17 @@ export function uiText(chunks: Record<string, unknown>[]): string {
 /** Waits for something the stream's end writes asynchronously (the log row). */
 export async function eventually<T>(
   read: () => Promise<T | undefined>,
-  timeoutMs = 3_000,
+  timeoutMs = 3000,
 ): Promise<T> {
   const until = Date.now() + timeoutMs;
   const poll = async (): Promise<T> => {
     const value = await read();
-    if (value !== undefined) return value;
-    if (Date.now() > until) throw new Error("timed out waiting");
+    if (value !== undefined) {
+      return value;
+    }
+    if (Date.now() > until) {
+      throw new Error("timed out waiting");
+    }
     await new Promise<void>((resolve) => {
       setTimeout(resolve, 25);
     });

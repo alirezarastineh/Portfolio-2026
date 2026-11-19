@@ -57,7 +57,9 @@ export async function recordUsage(
   at = new Date(),
 ): Promise<void> {
   const { perModel } = summarizeCalls(calls, at);
-  if (!perModel.size) return;
+  if (!perModel.size) {
+    return;
+  }
   const day = utcDay(at);
   const rows = [...perModel]
     .sort(([a], [b]) => (a < b ? -1 : 1))

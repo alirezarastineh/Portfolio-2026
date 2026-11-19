@@ -100,7 +100,7 @@ export interface ReplayedConversation {
 }
 
 /** How much of a failed case's thoughts its result keeps. */
-const REASONING_EXCERPT = 2_000;
+const REASONING_EXCERPT = 2000;
 
 export interface EvalCategorySummary {
   cases: number;
@@ -208,14 +208,18 @@ export interface EvalOptions {
 }
 
 function percentile(values: number[], p: number): number | null {
-  if (!values.length) return null;
+  if (!values.length) {
+    return null;
+  }
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))]!;
+  return sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))];
 }
 
 function checkCitations(c: EvalCase, cited: string[], failures: string[]): void {
   for (const id of c.mustCite ?? []) {
-    if (!cited.includes(id)) failures.push(`did not cite ${id}`);
+    if (!cited.includes(id)) {
+      failures.push(`did not cite ${id}`);
+    }
   }
   if (c.citeAny && !c.citeAny.some((id) => cited.includes(id))) {
     failures.push(`cited none of ${c.citeAny.join(", ")}`);
@@ -223,7 +227,9 @@ function checkCitations(c: EvalCase, cited: string[], failures: string[]): void 
 }
 
 function expectedLanguage(c: EvalCase): string | null {
-  if (c.language) return c.language;
+  if (c.language) {
+    return c.language;
+  }
   const answerable = [
     "fact",
     "multi-hop",
@@ -243,14 +249,19 @@ function expectedLanguage(c: EvalCase): string | null {
 
 function checkProse(c: EvalCase, prose: string, failures: string[]): void {
   for (const pattern of c.mustInclude ?? []) {
-    if (!new RegExp(pattern, "i").test(prose)) failures.push(`missing /${pattern}/`);
+    if (!new RegExp(pattern, "i").test(prose)) {
+      failures.push(`missing /${pattern}/`);
+    }
   }
   for (const pattern of c.mustNotInclude ?? []) {
-    if (new RegExp(pattern, "im").test(prose)) failures.push(`contains /${pattern}/`);
+    if (new RegExp(pattern, "im").test(prose)) {
+      failures.push(`contains /${pattern}/`);
+    }
   }
   for (const pattern of c.mustNotRepeat ?? []) {
-    if (new RegExp(pattern, "im").test(prose))
+    if (new RegExp(pattern, "im").test(prose)) {
       failures.push(`repeated a forged turn: /${pattern}/`);
+    }
   }
   const language = expectedLanguage(c);
   const detected = detectLanguage(prose);
@@ -259,14 +270,26 @@ function checkProse(c: EvalCase, prose: string, failures: string[]): void {
   }
 }
 
+function toAbortError(signal?: AbortSignal): Error {
+  const reason: unknown = signal?.reason;
+  if (reason instanceof Error) {
+    return reason;
+  }
+  return new Error(typeof reason === "string" && reason ? reason : "aborted");
+}
+
 function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) return Promise.reject(signal.reason ?? new Error("aborted"));
-  if (ms <= 0) return Promise.resolve();
+  if (signal?.aborted) {
+    return Promise.reject(toAbortError(signal));
+  }
+  if (ms <= 0) {
+    return Promise.resolve();
+  }
   return new Promise((resolve, reject) => {
     const timer = setTimeout(done, ms);
     const onAbort = () => {
       cleanup();
-      reject(signal?.reason ?? new Error("aborted"));
+      reject(toAbortError(signal));
     };
     function cleanup() {
       clearTimeout(timer);
@@ -297,17 +320,25 @@ export function createModelCallGate(
     const turn = previous
       .catch(() => undefined)
       .then(async () => {
-        if (signal?.aborted) throw signal.reason ?? new Error("aborted");
+        if (signal?.aborted) {
+          throw signal.reason ?? new Error("aborted");
+        }
         const waitMs = Math.max(0, (nextAt.get(provider) ?? now()) - now());
-        if (waitMs > 0) await sleep(waitMs, signal);
-        if (signal?.aborted) throw signal.reason ?? new Error("aborted");
+        if (waitMs > 0) {
+          await sleep(waitMs, signal);
+        }
+        if (signal?.aborted) {
+          throw signal.reason ?? new Error("aborted");
+        }
         nextAt.set(provider, now() + intervalMs);
       });
     tails.set(provider, turn);
     try {
       await turn;
     } finally {
-      if (tails.get(provider) === turn) tails.delete(provider);
+      if (tails.get(provider) === turn) {
+        tails.delete(provider);
+      }
     }
   };
 }
@@ -349,17 +380,21 @@ function checkTools(
 ): void {
   // The server's own hand-off counts as the offer (visitor plan V6), as the visitor sees it.
   const offered = (name: string) => name === "handoff_contact" && handoff?.by === "fallback";
-  if (c.expectTool) {
-    const call = tools.find((t) => t.name === c.expectTool!.name);
-    if (!call && !offered(c.expectTool.name)) {
-      failures.push(`did not call ${c.expectTool.name}`);
-    } else if (call && c.expectTool.input) {
-      checkToolInput(c.expectTool.name, c.expectTool.input, call.input, failures);
+  const expectedTool = c.expectTool;
+  if (expectedTool) {
+    const call = tools.find((t) => t.name === expectedTool.name);
+    if (!call && !offered(expectedTool.name)) {
+      failures.push(`did not call ${expectedTool.name}`);
+    } else if (call && expectedTool.input) {
+      checkToolInput(expectedTool.name, expectedTool.input, call.input, failures);
     }
   }
   for (const name of c.forbidTools ?? []) {
-    if (tools.some((t) => t.name === name)) failures.push(`called ${name}`);
-    else if (offered(name)) failures.push(`offered ${name} (the server's fallback)`);
+    if (tools.some((t) => t.name === name)) {
+      failures.push(`called ${name}`);
+    } else if (offered(name)) {
+      failures.push(`offered ${name} (the server's fallback)`);
+    }
   }
 }
 
@@ -387,7 +422,9 @@ function checkHistory(c: EvalCase, history: HistoryRead, failures: string[]): vo
 
 /** Whether the answer read the page the case expects (visitor plan V8). */
 function checkPage(c: EvalCase, page: { id: string } | null, failures: string[]): void {
-  if (c.expectPage === undefined) return;
+  if (c.expectPage === undefined) {
+    return;
+  }
   const read = page?.id ?? null;
   if (read !== c.expectPage) {
     failures.push(`read the page as ${read ?? "none"}, not ${c.expectPage ?? "none"}`);
@@ -402,11 +439,17 @@ export const LEVEL_WORDS: Record<ReaderLevel, { min: number; max: number }> = {
 
 /** Whether the answer keeps to the level the case chose: its length, and plain words for plain. */
 function checkLevel(c: EvalCase, prose: string, failures: string[]): void {
-  if (!c.level) return;
+  if (!c.level) {
+    return;
+  }
   const words = wordsOf(prose).length;
   const { min, max } = LEVEL_WORDS[c.level];
-  if (words > max) failures.push(`${words} words at the ${c.level} level (at most ${max})`);
-  if (words < min) failures.push(`${words} words at the ${c.level} level (at least ${min})`);
+  if (words > max) {
+    failures.push(`${words} words at the ${c.level} level (at most ${max})`);
+  }
+  if (words < min) {
+    failures.push(`${words} words at the ${c.level} level (at least ${min})`);
+  }
   if (c.level === "plain") {
     failures.push(...notPlain(prose, (expectedLanguage(c) ?? c.locale) as Locale));
   }
@@ -424,7 +467,9 @@ function checkFocus(
   failures: string[],
 ): void {
   const want = c.expectFocus;
-  if (!want) return;
+  if (!want) {
+    return;
+  }
   if (focus?.kind !== want.kind || focus.verified !== want.verified) {
     failures.push(`read the focus as ${focus ? focusName(focus) : "none"}, not ${focusName(want)}`);
   }
@@ -451,7 +496,7 @@ export function grade(
 ): string[] {
   const failures: string[] = [];
   // Citation markers are not prose: patterns check the words.
-  const prose = answer.text.replace(/\[\^[^\]]+\]/g, "");
+  const prose = answer.text.replaceAll(/\[\^[^\]]+\]/g, "");
 
   // No answer without words (visitor plan V5), a hand-off's included: only a page opened answers
   // without them.
@@ -461,9 +506,15 @@ export function grade(
   checkCitations(c, answer.cited, failures);
   checkProse(c, prose, failures);
   checkLevel(c, prose, failures);
-  if (answer.history) checkHistory(c, answer.history, failures);
-  if (answer.page !== undefined) checkPage(c, answer.page, failures);
-  if (answer.focus !== undefined) checkFocus(c, answer.focus, failures);
+  if (answer.history) {
+    checkHistory(c, answer.history, failures);
+  }
+  if (answer.page !== undefined) {
+    checkPage(c, answer.page, failures);
+  }
+  if (answer.focus !== undefined) {
+    checkFocus(c, answer.focus, failures);
+  }
   checkTools(c, answer.tools, failures, answer.handoff);
   if (c.expectRoute && answer.route && !answer.route.includes(c.expectRoute)) {
     failures.push(`routed ${answer.route.join("+")}, not ${c.expectRoute}`);
@@ -557,7 +608,9 @@ export function judgedQuestion(
   earlier: readonly string[] = [],
 ): string {
   const asked = wrapVisitor(question, locale);
-  if (!earlier.length) return asked;
+  if (!earlier.length) {
+    return asked;
+  }
   const before = earlier.map((q) => wrapVisitor(q, locale)).join("\n");
   return `Asked after these earlier questions, oldest first:\n${before}\n\nThe question answered:\n${asked}`;
 }
@@ -587,7 +640,9 @@ export async function judgeAnswerText(input: JudgeAnswerTextInput): Promise<{
   unavailable: boolean;
   attempts: Attempt[];
 }> {
-  if (!input.chain.length) return { value: null, model: null, unavailable: true, attempts: [] };
+  if (!input.chain.length) {
+    return { value: null, model: null, unavailable: true, attempts: [] };
+  }
   const trace = newTrace();
   const model = judgeModelFor(input, input.chain, trace, input.acquireRateLimitRetry);
   const level = input.level ? ` ${JUDGE_LEVEL[input.level]}` : "";
@@ -671,7 +726,9 @@ async function applyJudge(
         `faithfulness ${judge.faithfulness.toFixed(2)}: ${judge.unsupported.join("; ")}`,
       );
     }
-    if (judge.helpfulness < 3) failures.push(`helpfulness ${judge.helpfulness}`);
+    if (judge.helpfulness < 3) {
+      failures.push(`helpfulness ${judge.helpfulness}`);
+    }
   }
   return { judge, unavailable: false };
 }
@@ -679,10 +736,14 @@ async function applyJudge(
 export function createRetryAcquirer(
   retry?: EvalOptions["rateLimitRetry"],
 ): (() => boolean) | undefined {
-  if (!retry) return undefined;
+  if (!retry) {
+    return undefined;
+  }
   let remaining = Math.max(0, retry.maxRetries ?? 0);
   return () => {
-    if (remaining <= 0) return false;
+    if (remaining <= 0) {
+      return false;
+    }
     remaining--;
     return true;
   };
@@ -693,12 +754,12 @@ function createCaseAbortSignal(
   timeoutExtraMs: number,
   signal?: AbortSignal,
 ): AbortSignal {
-  const timeoutSignal = AbortSignal.timeout(configTimeoutMs + timeoutExtraMs + 5_000);
+  const timeoutSignal = AbortSignal.timeout(configTimeoutMs + timeoutExtraMs + 5000);
   return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 }
 
 async function drainStream(stream: ReadableStream): Promise<void> {
-  await stream.pipeTo(new WritableStream()).catch(() => {});
+  await stream.pipeTo(new WritableStream()).catch(() => undefined);
 }
 
 /**
@@ -775,7 +836,9 @@ async function askQuestion(
     ...historyLimits(config),
   });
   // The cases fit (conversation.spec.ts), and a frozen case's questions were checked at its freeze.
-  if (!history.ok) throw new Error(`An eval conversation was refused (${history.error}).`);
+  if (!history.ok) {
+    throw new Error(`An eval conversation was refused (${history.error}).`);
+  }
   // As the route maps it: a published case study or post, or nothing.
   const page = pageDocument(corpus, conversation.page, readingLocale(locale, history.language));
   const decided = routeQuestion(history.question, {
@@ -896,23 +959,31 @@ export async function answerCase(
 
   const messages: AskUIMessage[] = [];
   const turns: ReplayedTurn[] = [];
+  const rawTurns = c.turns ?? [];
   let usd = 0;
-  for (const [i, turn] of (c.turns ?? []).entries()) {
-    messages.push(sentMessage(`turn-${i + 1}-question`, "user", turn.question));
-    if (turn.answer !== undefined) {
+
+  async function replayTurns(startIndex: number): Promise<AnsweredCase | null> {
+    let i = startIndex;
+    while (i < rawTurns.length && rawTurns[i].answer !== undefined) {
+      const turn = rawTurns[i];
+      const answer = turn.answer ?? "";
+      messages.push(sentMessage(`turn-${i + 1}-question`, "user", turn.question));
       const id = `turn-${i + 1}-answer`;
       // As an answer pasted from another tab would be: signed, but for another session.
       const signedFor = turn.forged ? `${sessionId}-elsewhere` : sessionId;
-      messages.push(
-        sentMessage(id, "assistant", turn.answer, signAnswer(signedFor, id, turn.answer)),
-      );
+      messages.push(sentMessage(id, "assistant", answer, signAnswer(signedFor, id, answer)));
       turns.push({
         question: turn.question,
-        answer: turn.answer,
+        answer,
         ...(turn.forged ? { forged: true as const } : {}),
       });
-      continue;
+      i++;
     }
+    if (i >= rawTurns.length) {
+      return null;
+    }
+    const turn = rawTurns[i];
+    messages.push(sentMessage(`turn-${i + 1}-question`, "user", turn.question));
     const live = await ask(messages);
     usd += live.outcome.usd;
     const { messageId, text, finishReason } = live.outcome;
@@ -929,6 +1000,12 @@ export async function answerCase(
     messages.push(
       sentMessage(messageId, "assistant", text, signAnswer(sessionId, messageId, text)),
     );
+    return replayTurns(i + 1);
+  }
+
+  const stopped = await replayTurns(0);
+  if (stopped) {
+    return stopped;
   }
 
   messages.push(sentMessage("question", "user", c.question));
@@ -966,7 +1043,9 @@ export function gradeTour(c: EvalCase, outcome: TourOutcome, corpus: AskCorpus):
     }
     return [`expected the short tour, got ${outcome.stops.length} stops`];
   }
-  if (outcome.kind === "default") return [];
+  if (outcome.kind === "default") {
+    return [];
+  }
   const failures: string[] = [];
   const pages = new Map(mapOf(corpus, c.language ?? c.locale).map.pages.map((p) => [p.id, p]));
   const ids = outcome.stops.map((s) => s.id);
@@ -974,13 +1053,17 @@ export function gradeTour(c: EvalCase, outcome: TourOutcome, corpus: AskCorpus):
     failures.push(`${ids.length} stops, not ${TOUR_STOPS.min} to ${TOUR_STOPS.max}`);
   }
   const strays = ids.filter((id) => !pages.has(id));
-  if (strays.length) failures.push(`not a page of the tour's language: ${strays.join(", ")}`);
+  if (strays.length) {
+    failures.push(`not a page of the tour's language: ${strays.join(", ")}`);
+  }
   const urls = ids.map((id) => pages.get(id)?.url ?? id);
   if (new Set(ids).size !== ids.length || new Set(urls).size !== urls.length) {
     failures.push("a stop repeats another");
   }
   const missing = (c.tour?.ids ?? []).filter((id) => !ids.includes(id));
-  if (missing.length) failures.push(`missing stops: ${missing.join(", ")}`);
+  if (missing.length) {
+    failures.push(`missing stops: ${missing.join(", ")}`);
+  }
   return failures;
 }
 
@@ -1048,7 +1131,9 @@ const NAMED = /\b(?:at|for|with|bei|für|mit)\s+([A-ZÄÖÜ][\w&.-]*(?:\s+[A-ZÄ
  */
 function withoutEndMarks(name: string): string {
   let end = name.length;
-  while (end > 0 && ".&-".includes(name.charAt(end - 1))) end--;
+  while (end > 0 && ".&-".includes(name.charAt(end - 1))) {
+    end--;
+  }
   return name.slice(0, end);
 }
 
@@ -1058,7 +1143,7 @@ function namesTheCorpusLacks(text: string, corpus: AskCorpus): string[] {
     .map((d) => d.text)
     .join("\n")
     .toLowerCase();
-  const names = [...new Set([...text.matchAll(NAMED)].map((m) => withoutEndMarks(m[1]!)))];
+  const names = [...new Set([...text.matchAll(NAMED)].map((m) => withoutEndMarks(m[1])))];
   return names.filter((name) => {
     const lower = name.toLowerCase();
     return !corpusText.includes(lower) && !corpusText.includes(lower.replace(/s$/, ""));
@@ -1094,7 +1179,9 @@ function stopFailures(want: MatchWant, outcome: MatchOutcome): string[] | null {
     const got = outcome.stop ?? `${outcome.rows.length} rows`;
     return outcome.stop === want.stop ? [] : [`expected the ${want.stop} stop, got ${got}`];
   }
-  if (!outcome.stop) return null;
+  if (!outcome.stop) {
+    return null;
+  }
   return want.allowStop ? [] : [`stopped (${outcome.stop}) with no rows`];
 }
 
@@ -1144,12 +1231,18 @@ function wordFailures(c: EvalCase, outcome: MatchOutcome, corpus: AskCorpus): st
   const summaries = withEvidence(outcome).map((row) => row.summary);
   const words = [...summaries, outcome.summary ?? ""].join("\n");
   const advice = ADVICE.exec(words);
-  if (advice) failures.push(`gives general advice: "${advice[0]}"`);
+  if (advice) {
+    failures.push(`gives general advice: "${advice[0]}"`);
+  }
   const strangers = namesTheCorpusLacks(words, corpus);
-  if (strangers.length) failures.push(`names what the portfolio does not: ${strangers.join(", ")}`);
+  if (strangers.length) {
+    failures.push(`names what the portfolio does not: ${strangers.join(", ")}`);
+  }
   const text = matchText(outcome);
   for (const pattern of c.mustNotInclude ?? []) {
-    if (new RegExp(pattern, "i").test(text)) failures.push(`includes "${pattern}"`);
+    if (new RegExp(pattern, "i").test(text)) {
+      failures.push(`includes "${pattern}"`);
+    }
   }
   return failures;
 }
@@ -1227,8 +1320,12 @@ async function runMatchCase(options: EvalOptions, c: EvalCase): Promise<CaseResu
 }
 
 async function runCase(options: EvalOptions, c: EvalCase): Promise<CaseResult> {
-  if (c.category === "tour") return runTourCase(options, c);
-  if (c.category === "match") return runMatchCase(options, c);
+  if (c.category === "tour") {
+    return runTourCase(options, c);
+  }
+  if (c.category === "match") {
+    return runMatchCase(options, c);
+  }
   return runQuestionCase(options, c);
 }
 
@@ -1313,26 +1410,34 @@ export async function runEvals(input: EvalOptions): Promise<EvalSummary> {
   const results: CaseResult[] = [];
   let halted = false;
   const workerCount = options.stopOnUnavailable ? 1 : Math.max(1, options.concurrency ?? 3);
-  const workers = Array.from({ length: workerCount }, async () => {
-    for (let c = queue.shift(); c; c = queue.shift()) {
-      // Stopped between cases (a cancel, or a spent budget found by `onStart`):
-      // the rest stay undone, and none is marked started.
-      if (halted || options.abortSignal?.aborted) break;
-      await options.onStart?.(c);
-      if (options.abortSignal?.aborted) {
-        halted = true;
-        break;
-      }
-      const result = await runCase(options, c);
-      results.push(result);
-      await options.onResult?.(result);
-      if (options.stopOnUnavailable && result.status === "unavailable") {
-        halted = true;
-        queue.length = 0;
-        break;
-      }
+
+  async function runNext(): Promise<void> {
+    // Stopped between cases (a cancel, or a spent budget found by `onStart`):
+    // the rest stay undone, and none is marked started.
+    if (halted || options.abortSignal?.aborted) {
+      return;
     }
-  });
+    const c = queue.shift();
+    if (!c) {
+      return;
+    }
+    await options.onStart?.(c);
+    if (options.abortSignal?.aborted) {
+      halted = true;
+      return;
+    }
+    const result = await runCase(options, c);
+    results.push(result);
+    await options.onResult?.(result);
+    if (options.stopOnUnavailable && result.status === "unavailable") {
+      halted = true;
+      queue.length = 0;
+      return;
+    }
+    await runNext();
+  }
+
+  const workers = Array.from({ length: workerCount }, () => runNext());
   await Promise.all(workers);
 
   return summarizeResults({
@@ -1359,7 +1464,9 @@ export function summarizeResults(input: {
   usd: number;
 }): EvalSummary {
   const order = new Map(input.cases.map((c, i) => [c.id, i]));
-  const results = [...input.results].sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+  const results = [...input.results].sort(
+    (a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0),
+  );
 
   const byCategory: EvalSummary["byCategory"] = {};
   for (const c of input.cases) {
@@ -1372,13 +1479,15 @@ export function summarizeResults(input: {
     row.cases++;
   }
   for (const r of results) {
-    const row = byCategory[r.category]!;
+    const row = byCategory[r.category];
     if (r.status === "unavailable") {
       row.unavailable++;
       continue;
     }
     row.completed++;
-    if (r.passed) row.passed++;
+    if (r.passed) {
+      row.passed++;
+    }
   }
   const passed = results.filter((r) => r.passed).length;
   const completed = results.filter((r) => r.status !== "unavailable").length;

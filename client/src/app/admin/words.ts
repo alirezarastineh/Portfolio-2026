@@ -74,7 +74,9 @@ export function tokenIssues(
 ): ApiIssue[] {
   return rows.flatMap((row) => {
     const token = row.token;
-    if (!token) return [];
+    if (!token) {
+      return [];
+    }
     return (["en", "de"] as const)
       .filter((locale) => !text(row, locale).includes(token))
       .map((locale) => ({
@@ -91,7 +93,9 @@ export function foundWords(
 ): { key: string; label: string; search: string; path: string }[] {
   return WORD_GROUPS.flatMap((group) =>
     Object.entries(ui.en[group] as Record<string, string | undefined>).flatMap(([key, en = ""]) => {
-      if (isHidden("section", "ui", `${group}.${key}`)) return [];
+      if (isHidden("section", "ui", `${group}.${key}`)) {
+        return [];
+      }
       const de = (ui.de[group] as Record<string, string | undefined>)[key] ?? "";
       return [
         {

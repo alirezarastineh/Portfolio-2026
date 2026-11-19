@@ -8,7 +8,7 @@ const DAY = new Date("2026-10-14T12:00:00Z");
 
 beforeEach(async () => {
   // Counts another test left in memory.
-  await flushMcpUsage(async () => {});
+  await flushMcpUsage(() => Promise.resolve());
 });
 
 const counted = (rows: McpUsageRow[]) =>
@@ -21,10 +21,10 @@ describe("flushMcpUsage", () => {
     countMcp("refused:origin", DAY);
 
     await expect(
-      flushMcpUsage(async () => {
+      flushMcpUsage(() => {
         // Counted while the write is on its way.
         countMcp("tools/list", DAY);
-        throw new Error("the database is down");
+        return Promise.reject(new Error("the database is down"));
       }),
     ).rejects.toThrow("the database is down");
     expect(counted(pendingMcpUsage())).toEqual([
@@ -34,8 +34,9 @@ describe("flushMcpUsage", () => {
 
     // The next flush writes them all, once.
     const written: McpUsageRow[] = [];
-    await flushMcpUsage(async (rows) => {
+    await flushMcpUsage((rows) => {
       written.push(...rows);
+      return Promise.resolve();
     });
     expect(counted(written)).toEqual(["2026-10-14 refused:origin 1", "2026-10-14 tools/list 3"]);
     expect(pendingMcpUsage()).toEqual([]);
@@ -43,8 +44,9 @@ describe("flushMcpUsage", () => {
 
   it("writes nothing when nothing was counted", async () => {
     let writes = 0;
-    await flushMcpUsage(async () => {
+    await flushMcpUsage(() => {
       writes++;
+      return Promise.resolve();
     });
     expect(writes).toBe(0);
   });

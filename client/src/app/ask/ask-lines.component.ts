@@ -113,10 +113,18 @@ export class AskLinesComponent {
 
   /** Site pages open in the app (keeping the view transition); files and modified clicks as usual. */
   protected follow(event: MouseEvent, line: OutLine): void {
-    if (!line.internal || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0)
+    if (
+      !line.internal ||
+      !line.href ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.button !== 0
+    ) {
       return;
+    }
     event.preventDefault();
     this.launcher.closeIfSheet();
-    void this.router.navigateByUrl(line.href!);
+    void this.router.navigateByUrl(line.href);
   }
 }

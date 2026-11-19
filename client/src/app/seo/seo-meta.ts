@@ -14,7 +14,9 @@ const FALLBACK_ORIGIN = "https://alirezarastineh.me";
 export function siteOrigin(content: AppContent): string {
   for (const candidate of [content.identity.siteUrl, content.seo.canonical]) {
     try {
-      if (candidate) return new URL(candidate).origin;
+      if (candidate) {
+        return new URL(candidate).origin;
+      }
     } catch {
       // try the next one
     }
@@ -38,7 +40,9 @@ export function languageAlternates(
   xDefault: string,
 ): Record<string, string> {
   const alternates: Record<string, string> = {};
-  for (const locale of LOCALES) alternates[locale] = pageUrl(origin, locale, path);
+  for (const locale of LOCALES) {
+    alternates[locale] = pageUrl(origin, locale, path);
+  }
   alternates["x-default"] = xDefault;
   return alternates;
 }
@@ -55,10 +59,14 @@ export function docLanguageAlternates(
   const out: Record<string, string> = {};
   for (const locale of LOCALES) {
     const path = alternates[locale];
-    if (path) out[locale] = `${origin}${path}`;
+    if (path) {
+      out[locale] = `${origin}${path}`;
+    }
   }
   const xDefault = out["en"] ?? Object.values(out)[0];
-  if (xDefault) out["x-default"] = xDefault;
+  if (xDefault) {
+    out["x-default"] = xDefault;
+  }
   return out;
 }
 
@@ -67,7 +75,9 @@ export function docLanguageAlternates(
  * when there is none a card can show — the legacy SVG placeholders are not.
  */
 export function absoluteImage(origin: string, image: Image | null | undefined): string | null {
-  if (!image || /\.svg$/i.test(image.src)) return null;
+  if (!image || /\.svg$/i.test(image.src)) {
+    return null;
+  }
   return /^https?:\/\//i.test(image.src) ? image.src : `${origin}${image.src}`;
 }
 
@@ -86,7 +96,9 @@ export function socialCard(
 
 /** The locale's RSS feed, when it has posts to put in one. */
 export function feedsOf(content: AppContent, locale: Locale): { title: string; href: string }[] {
-  if (content.posts.length === 0) return [];
+  if (content.posts.length === 0) {
+    return [];
+  }
   return [
     {
       title: `${content.ui.writing.heading} · ${content.identity.name}`,
@@ -112,6 +124,10 @@ interface PageMeta {
   twitterDescription?: string;
 }
 
+function firstNonEmpty(...values: (string | null | undefined)[]): string {
+  return values.find(Boolean) ?? "";
+}
+
 /**
  * The full set of tags for one page. Every page emits all of them: Analog
  * updates tags by name on navigation but never removes one, so a tag a page
@@ -135,7 +151,7 @@ export function pageMeta(content: AppContent, locale: Locale, page: PageMeta): M
     { property: "og:image", content: page.image ?? seo.ogImage },
     {
       property: "og:image:alt",
-      content: (page.image && page.imageAlt) || page.ogTitle || page.title,
+      content: firstNonEmpty(page.image ? page.imageAlt : undefined, page.ogTitle, page.title),
     },
     { property: "og:locale", content: seo.ogLocale || OG_LOCALE[locale] },
     { property: "og:locale:alternate", content: OG_LOCALE[otherLocale(locale)] },

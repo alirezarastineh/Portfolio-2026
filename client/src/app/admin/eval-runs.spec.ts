@@ -27,10 +27,16 @@ function item(key: string, verdict: "passed" | "failed" | "unavailable" | null):
           status: verdict,
           passed: verdict === "passed",
         } as EvalCaseResult);
+  let status: RunItem["status"] = "done";
+  if (verdict === null) {
+    status = "pending";
+  } else if (verdict === "unavailable") {
+    status = "unavailable";
+  }
   return {
     key,
     position: 0,
-    status: verdict === null ? "pending" : verdict === "unavailable" ? "unavailable" : "done",
+    status,
     result,
     attempts: 1,
     usd: 0,

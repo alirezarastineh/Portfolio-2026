@@ -34,7 +34,9 @@ export interface FaithfulnessRow {
 }
 
 function stats(rows: readonly JudgedRow[]): JudgedStats {
-  if (!rows.length) return { judged: 0, faithfulness: null, helpfulness: null, below: 0 };
+  if (!rows.length) {
+    return { judged: 0, faithfulness: null, helpfulness: null, below: 0 };
+  }
   const mean = (pick: (r: JudgedRow) => number) =>
     rows.reduce((sum, r) => sum + pick(r), 0) / rows.length;
   return {

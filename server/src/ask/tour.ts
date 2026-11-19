@@ -141,12 +141,7 @@ function checkLine(
   const cited = markersIn(stop.line).map(
     (raw) => resolveDocument(ctx.corpus, raw, ctx.language)?.id ?? raw,
   );
-  if (!cited.length) {
-    failures.push({
-      gate: "citation",
-      message: `stop ${n}: its line cites no page; end it with [^${id}]`,
-    });
-  } else {
+  if (cited.length) {
     const others = [...new Set(cited.filter((c) => c !== id))];
     if (others.length) {
       failures.push({
@@ -154,6 +149,11 @@ function checkLine(
         message: `stop ${n}: its line cites ${others.join(", ")}; cite only [^${id}]`,
       });
     }
+  } else {
+    failures.push({
+      gate: "citation",
+      message: `stop ${n}: its line cites no page; end it with [^${id}]`,
+    });
   }
   const words = wordCount(stop.line);
   if (words > TOUR_LINE_WORDS) {
@@ -182,7 +182,9 @@ function checkIntro(
 ): TourFailure[] {
   const failures: TourFailure[] = [];
   const words = wordCount(intro);
-  if (!words) failures.push({ gate: "length", message: "the intro is empty" });
+  if (!words) {
+    failures.push({ gate: "length", message: "the intro is empty" });
+  }
   if (words > TOUR_INTRO_WORDS) {
     failures.push({
       gate: "length",
@@ -205,7 +207,9 @@ function checkIntro(
     });
   }
   const instruction = instructionIn(intro, ctx.guard, ctx.interest);
-  if (instruction) failures.push({ gate: "instruction", message: `the intro: ${instruction}` });
+  if (instruction) {
+    failures.push({ gate: "instruction", message: `the intro: ${instruction}` });
+  }
   return failures;
 }
 
@@ -229,18 +233,18 @@ export function checkTour(plan: TourPlan, ctx: TourCheckContext): TourFailure[] 
     const at = i + 1;
     const id = pageId(stop.id, ctx);
     const page = ctx.pages.get(id);
-    if (!page || !allowedPath(ctx.corpus, page.url)) {
-      failures.push({
-        gate: "unknown",
-        message: `stop ${at}: ${stop.id} is not one of the pages listed`,
-      });
-    } else {
+    if (page && allowedPath(ctx.corpus, page.url)) {
       const earlier = seenIds.get(id) ?? seenUrls.get(page.url);
       if (earlier !== undefined) {
         failures.push({ gate: "duplicate", message: `stop ${at}: it repeats stop ${earlier}` });
       }
       seenIds.set(id, seenIds.get(id) ?? at);
       seenUrls.set(page.url, seenUrls.get(page.url) ?? at);
+    } else {
+      failures.push({
+        gate: "unknown",
+        message: `stop ${at}: ${stop.id} is not one of the pages listed`,
+      });
     }
     failures.push(...checkLine(stop, id, at, ctx));
   });
@@ -250,7 +254,9 @@ export function checkTour(plan: TourPlan, ctx: TourCheckContext): TourFailure[] 
 
 /** How the planner names a page's kind. */
 function kindLabel(page: MapPage): string {
-  if (page.kind === "project") return page.url.includes("/work/") ? "case study" : "project";
+  if (page.kind === "project") {
+    return page.url.includes("/work/") ? "case study" : "project";
+  }
   return page.kind;
 }
 
@@ -258,7 +264,7 @@ const EXCERPT_CHARS = 160;
 
 /** A page as the request lists it: its id, kind, title and the start of its text. */
 function pageLine(page: MapPage, corpus: Pick<AskCorpus, "byId">): string {
-  const text = (corpus.byId.get(page.id)?.text ?? "").replace(/\s+/g, " ").trim();
+  const text = (corpus.byId.get(page.id)?.text ?? "").replaceAll(/\s+/g, " ").trim();
   const excerpt = text.length > EXCERPT_CHARS ? `${text.slice(0, EXCERPT_CHARS - 1)}…` : text;
   return `- ${page.id} · ${kindLabel(page)} · ${page.title} · ${excerpt}`;
 }
@@ -351,7 +357,9 @@ function resolveReplan(
   map: readonly MapPage[],
   replan?: { from: string; seen: readonly string[] },
 ): TourReplan | undefined {
-  if (!replan) return undefined;
+  if (!replan) {
+    return undefined;
+  }
   const from = map.find((p) => p.id === replan.from);
   return from ? { id: from.id, title: from.title } : undefined;
 }
@@ -367,7 +375,10 @@ function formatTourPlan(
     kind: "plan",
     intro: plan.intro.trim(),
     stops: plan.stops.map((stop) => {
-      const page = ctx.pages.get(pageId(stop.id, ctx))!;
+      const page = ctx.pages.get(pageId(stop.id, ctx));
+      if (!page) {
+        throw new Error(`Unknown tour stop: ${stop.id}`);
+      }
       // Checked to cite its own stop: the visitor reads it without the marker, the stop is the link.
       return { id: page.id, title: page.title, url: page.url, line: withoutMarkers(stop.line) };
     }),
@@ -383,7 +394,9 @@ function handlePlanError(
   input: TourInput,
   details: { repaired: boolean; failures: string[]; searchCalls: ModelCall[] },
 ): TourOutcome {
-  if (input.abortSignal.aborted) throw error;
+  if (input.abortSignal.aborted) {
+    throw error;
+  }
   // An answer that is not the plan's shape is no plan; anything else, no model could plan.
   const reason = NoObjectGeneratedError.isInstance(error) ? "no-match" : "unavailable";
   if (!(error instanceof AllModelsFailedError) && reason === "unavailable") {
@@ -399,7 +412,9 @@ function handlePlanError(
  */
 export async function planTour(input: TourInput): Promise<TourOutcome> {
   const { interest, language, corpus, config } = input;
-  if (looksLikeInjection(interest)) return fallback("no-match", input, { injection: true });
+  if (looksLikeInjection(interest)) {
+    return fallback("no-match", input, { injection: true });
+  }
 
   const map = mapOf(corpus, language).map.pages;
   const searchCalls: ModelCall[] = [];
@@ -449,7 +464,9 @@ export async function planTour(input: TourInput): Promise<TourOutcome> {
   let repaired = false;
   try {
     let plan = await ask(messages);
-    if (!plan.stops.length) return fallback("no-match", input, { searchCalls });
+    if (!plan.stops.length) {
+      return fallback("no-match", input, { searchCalls });
+    }
     let failures = checkTour(plan, ctx);
     if (failures.length) {
       failed.push(...failures.map((f) => f.gate));
@@ -562,7 +579,9 @@ export function streamTour(request: TourStreamRequest): {
       const answering = answeringModel(trace);
       writer.write({ type: "start", messageId, messageMetadata: { createdAt: Date.now() } });
       writer.write({ type: "start-step" });
-      for (const source of sources) writer.write(source);
+      for (const source of sources) {
+        writer.write(source);
+      }
       writer.write({ type: "text-start", id: "intro" });
       writer.write({ type: "text-delta", id: "intro", delta: shown });
       writer.write({ type: "text-end", id: "intro" });
@@ -585,12 +604,16 @@ export function streamTour(request: TourStreamRequest): {
   });
 
   let resolveDone!: (outcome: TourOutcome | null) => void;
-  const done = new Promise<TourOutcome | null>((resolve) => (resolveDone = resolve));
+  const done = new Promise<TourOutcome | null>((resolve) => {
+    resolveDone = resolve;
+  });
 
   const stream = closingStream(ui, async (ending, error) => {
-    if (error !== undefined) failure ??= error;
+    if (error !== undefined) {
+      failure ??= error;
+    }
     request.onClose?.();
-    const result = outcome as TourOutcome | null;
+    const result = outcome;
     const finishReason = finishReasonOf(ending, request.abortSignal, failure);
     if (request.persist !== false) {
       await persistTour(request, {
@@ -611,8 +634,12 @@ export function streamTour(request: TourStreamRequest): {
 }
 
 function baseRouteReason(result: TourOutcome | null): string {
-  if (!result) return "none";
-  if (result.kind === "plan") return "plan";
+  if (!result) {
+    return "none";
+  }
+  if (result.kind === "plan") {
+    return "plan";
+  }
   const reason = result.injection ? "injection" : result.reason;
   return `default:${reason}`;
 }
@@ -654,13 +681,15 @@ function tourRow(
 ): AnswerLog {
   const { result, trace } = details;
   const { tokens, usd } = summarizeCalls([...trace.calls, ...(result?.searchCalls ?? [])]);
+  let fallbackReason: TourFallback | "injection" | undefined;
+  if (result?.kind === "default") {
+    fallbackReason = result.injection ? "injection" : result.reason;
+  }
   const tour: NonNullable<AnswerTrace["tour"]> = {
     stops: result?.stops.length ?? 0,
     repaired: result?.repaired ?? false,
     replanned: details.replanned,
-    ...(result?.kind === "default"
-      ? { fallback: result.injection ? ("injection" as const) : result.reason! }
-      : {}),
+    ...(fallbackReason === undefined ? {} : { fallback: fallbackReason }),
     ...(result?.failures.length ? { failures: [...new Set(result.failures)] } : {}),
   };
   const checks: AnswerChecks = { v: 1, flags: result?.injection ? ["injection-attempt"] : [] };

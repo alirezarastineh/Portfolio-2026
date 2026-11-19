@@ -43,7 +43,9 @@ function toolLabel(name: string, input: string, labels: AskCopy["tool"]): string
 
 function when(iso: string, locale: Locale): string {
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
   return new Intl.DateTimeFormat(locale === "de" ? "de-DE" : "en-GB", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -75,7 +77,7 @@ function stepLines(raw: unknown, n: number, copy: AskCopy, locale: Locale): OutL
         : t.noModel,
     },
   ];
-  for (const passed of arr(step["passedOver"]).map(obj)) {
+  for (const passed of arr(step["passedOver"]).map((item) => obj(item))) {
     lines.push({
       label: " ",
       text: fmt(t.passedOver, {
@@ -86,7 +88,7 @@ function stepLines(raw: unknown, n: number, copy: AskCopy, locale: Locale): OutL
       tone: "dim",
     });
   }
-  for (const tool of arr(step["tools"]).map(obj)) {
+  for (const tool of arr(step["tools"]).map((item) => obj(item))) {
     lines.push({
       label: " ",
       text: fmt(t.tool, {
@@ -152,10 +154,14 @@ function contextLines(view: Raw, t: AskCopy["inspect"]): OutLine[] {
 function outcomeLines(view: Raw, copy: AskCopy, locale: Locale): OutLine[] {
   const t = copy.inspect;
   const citations = obj(view["citations"]);
-  const kept = arr(citations["kept"]).map(str).filter(Boolean);
+  const kept = arr(citations["kept"])
+    .map((item) => str(item))
+    .filter(Boolean);
   const removed = num(citations["removed"]) ?? 0;
   const guard = Object.entries(obj(view["guard"])).filter(([, count]) => num(count));
-  const flags = arr(view["flags"]).map(str).filter(Boolean);
+  const flags = arr(view["flags"])
+    .map((item) => str(item))
+    .filter(Boolean);
   const repair = obj(view["repair"]);
   const time = (value: unknown) => {
     const ms = num(value);
@@ -218,7 +224,12 @@ export async function fetchInspect(
 ): Promise<{ ok: true; view: unknown } | { ok: false; missing: boolean }> {
   const attempts = options.attempts ?? 3;
   const delayMs = options.delayMs ?? 1000;
-  const sleep = options.sleep ?? ((ms) => new Promise<void>((done) => setTimeout(done, ms)));
+  const sleep =
+    options.sleep ??
+    ((ms) =>
+      new Promise<void>((done) => {
+        setTimeout(done, ms);
+      }));
   const failed = { ok: false as const, missing: false };
 
   async function step(attempt: number): Promise<Awaited<ReturnType<typeof fetchInspect>>> {
@@ -228,13 +239,18 @@ export async function fetchInspect(
     } catch {
       return failed;
     }
-    if (res.ok)
+    if (res.ok) {
       return res.json().then(
         (view: unknown) => ({ ok: true as const, view }),
         () => failed,
       );
-    if (res.status !== 404) return failed;
-    if (attempt >= attempts) return { ok: false, missing: true };
+    }
+    if (res.status !== 404) {
+      return failed;
+    }
+    if (attempt >= attempts) {
+      return { ok: false, missing: true };
+    }
     await sleep(delayMs);
     return step(attempt + 1);
   }

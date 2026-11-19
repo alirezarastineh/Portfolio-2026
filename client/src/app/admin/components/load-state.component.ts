@@ -69,7 +69,7 @@ export class LoadErrorComponent {
   readonly reason = input("");
   /** One line, for a card or a tile rather than a whole page. */
   readonly compact = input(false, { transform: booleanAttribute });
-  readonly retry = output<void>();
+  readonly retry = output();
 }
 
 /**
@@ -146,8 +146,8 @@ const LABEL_WIDTHS = ["w-24", "w-36", "w-28", "w-44", "w-32"];
           <div class="flex flex-col gap-2" aria-hidden="true">
             <div [class]="row.label"><hlm-skeleton class="h-3.5 w-full" /></div>
             <div class="grid gap-3 lg:grid-cols-2" [class]="row.field">
-              <hlm-skeleton class="h-full w-full" />
-              <hlm-skeleton class="hidden h-full w-full lg:block" />
+              <hlm-skeleton class="size-full" />
+              <hlm-skeleton class="hidden size-full lg:block" />
             </div>
           </div>
         }
@@ -163,7 +163,7 @@ export class FormSkeletonComponent {
   /** Varied, so it reads as a form rather than a stripe pattern. Every third field is a text area. */
   protected readonly items = computed<SkeletonRow[]>(() =>
     Array.from({ length: this.rows() }, (_, i) => ({
-      label: LABEL_WIDTHS[i % LABEL_WIDTHS.length]!,
+      label: LABEL_WIDTHS[i % LABEL_WIDTHS.length],
       field: i % 3 === 2 ? "h-20" : "h-9",
     })),
   );

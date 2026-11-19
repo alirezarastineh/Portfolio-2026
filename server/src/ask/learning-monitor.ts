@@ -93,7 +93,9 @@ async function newSinceInsights(): Promise<number> {
 async function measureLesson(id: string, rows: readonly OutcomeRow[], now: Date): Promise<boolean> {
   const reason = await getDb().transaction(async (tx) => {
     const [lesson] = await tx.select().from(aiLessons).where(eq(aiLessons.id, id)).for("update");
-    if (lesson?.status !== "active" || !lesson.appliedAt) return null;
+    if (lesson?.status !== "active" || !lesson.appliedAt) {
+      return null;
+    }
     const effect = lessonEffect(rows, lesson.scope, lesson.appliedAt, now, lesson.reopenedAt);
     const why = evictionReason(effect);
     await tx
@@ -108,7 +110,9 @@ async function measureLesson(id: string, rows: readonly OutcomeRow[], now: Date)
       .where(eq(aiLessons.id, id));
     return why;
   });
-  if (!reason) return false;
+  if (!reason) {
+    return false;
+  }
   await audit({
     actor: "system",
     action: "lesson.retire",
@@ -134,8 +138,12 @@ async function measureLessons(
 
 /** What the trigger did, in words. */
 function triggerWords(verdict: TriggerVerdict, ran: boolean, skipped: string | null): string {
-  if (!verdict.fire) return `the trigger held: ${verdict.reason}`;
-  if (ran) return `the trigger fired and insights ran (${verdict.reason})`;
+  if (!verdict.fire) {
+    return `the trigger held: ${verdict.reason}`;
+  }
+  if (ran) {
+    return `the trigger fired and insights ran (${verdict.reason})`;
+  }
   const why = skipped ? (NOT_RUN[skipped] ?? skipped) : "nothing to read";
   return `the trigger fired and insights did not run: ${why} (${verdict.reason})`;
 }
@@ -153,10 +161,11 @@ async function check(config: AskConfig, now: Date): Promise<LearningCheck> {
   if (verdict.fire) {
     // Fenced as `autoInsights`: off until the admin switches it on, and its own cap.
     const result = await runInsights(config, "auto", verdict.reason);
-    if (!result.ok) skipped = result.error;
-    else {
+    if (result.ok) {
       ran = !!result.snapshot;
       snapshot = result.snapshot?.id ?? null;
+    } else {
+      skipped = result.error;
     }
   }
   const lessons = await measureLessons(rows, now);
@@ -194,7 +203,9 @@ export async function runLearningCheck(
       LOCK,
     ]);
     locked = rows[0]?.ok === true;
-    if (!locked) return null;
+    if (!locked) {
+      return null;
+    }
     return await check(config, now);
   } finally {
     if (locked) {
@@ -223,7 +234,9 @@ let timer: NodeJS.Timeout | undefined;
 export function nextLearningCheckAt(now: Date): Date {
   const next = new Date(now);
   next.setUTCHours(3, 30, 0, 0);
-  if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
+  if (next <= now) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
   return next;
 }
 
@@ -242,7 +255,9 @@ export function startLearningMonitor(
     config?: () => AskConfig;
   } = {},
 ): void {
-  if (timer) return;
+  if (timer) {
+    return;
+  }
   const {
     now = new Date(),
     check: run = runLearningCheck,

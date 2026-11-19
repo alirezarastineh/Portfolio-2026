@@ -17,14 +17,35 @@ const broken = (id = "broken") =>
 
 const sent = (call: LanguageModelV4CallOptions | undefined) => JSON.stringify(call?.prompt);
 
+const byCodePoint = (a: string, b: string) => {
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+};
+
+function bySeoLead(outcome: Reply, problem: Reply, stack: Reply): (s: string) => Reply {
+  return (s) => {
+    if (s.includes("its outcome or result")) {
+      return outcome;
+    }
+    if (s.includes("the problem it solves")) {
+      return problem;
+    }
+    return stack;
+  };
+}
+
 async function jobFor(input: Record<string, unknown>): Promise<SkillJob> {
   const parsed = copilotInput.parse(input);
   const job = await skillFor(parsed.task).request(parsed, {
     config: fixtureConfig(),
-    corpus: async () => fixtureCorpus(),
-    image: async () => ({ ok: false, error: "not_found" }),
+    corpus: () => Promise.resolve(fixtureCorpus()),
+    image: () => Promise.resolve({ ok: false, error: "not_found" }),
   });
-  if (job instanceof SkillAnswer) throw new Error("no job");
+  if (job instanceof SkillAnswer) {
+    throw new TypeError("no job");
+  }
   return job;
 }
 
@@ -70,7 +91,7 @@ describe("running a skill (plan phase 28)", () => {
       "<p>Hallo <strong>Welt</strong>",
       "Hello world, my friend, 3",
     ];
-    const writer = answering((_s, call) => drafts[call - 1]!);
+    const writer = answering((_s, call) => drafts[call - 1]);
     const run = await runSkill({ writer: writer.model, judge: null }, await jobFor(html));
     expect(writer.calls).toHaveLength(MAX_DRAFTS);
     expect(run.text).toBe("<p>Hallo <strong>Welt</strong>");
@@ -121,7 +142,7 @@ describe("running a skill (plan phase 28)", () => {
       repairs: 1,
     });
     // Asked for again as it was: no empty turn, no repair note.
-    expect(writer.calls[1]!.prompt).toEqual(writer.calls[0]!.prompt);
+    expect(writer.calls[1].prompt).toEqual(writer.calls[0].prompt);
 
     const filtered = answering(() => ({ text: "", stop: "content-filter" }));
     const stopped = await runSkill({ writer: filtered.model, judge: null }, await jobFor(html));
@@ -130,12 +151,12 @@ describe("running a skill (plan phase 28)", () => {
   });
 
   it("ranks a draft stopped short below one that fails a gate, and never offers an empty one", async () => {
-    const writer = answering((s) =>
-      s.includes("its outcome or result")
-        ? { text: "Atlas cut support escalations by 38 % with", stop: "length" }
-        : s.includes("the problem it solves")
-          ? ""
-          : "Here is the description: a pgvector system over two million documents, built for support.",
+    const writer = answering(
+      bySeoLead(
+        { text: "Atlas cut support escalations by 38 % with", stop: "length" },
+        "",
+        "Here is the description: a pgvector system over two million documents, built for support.",
+      ),
     );
     const run = await runSkill(
       { writer: writer.model, judge: null },
@@ -147,24 +168,27 @@ describe("running a skill (plan phase 28)", () => {
     );
     // The problem lead's three drafts were all empty: not an alternative to put in a field.
     expect(run.candidates.map((c) => c.lead)).toEqual(["stack", "outcome"]);
-    expect(run.candidates[1]!.failures[0]).toEqual(STOPS.length);
+    expect(run.candidates[1].failures[0]).toEqual(STOPS.length);
     // Its retries still count: the stack lead's two repairs and the problem lead's two.
     expect(run.repairs).toBe(4);
     expect(writer.calls).toHaveLength(MAX_DRAFTS + 1 + MAX_DRAFTS);
   });
 
   it("explores three leads and ranks the passing drafts pairwise, positions swapped", async () => {
-    const writer = answering((s) =>
-      s.includes("its outcome or result")
-        ? "Atlas cut support escalations by 38 % with retrieval over two million documents."
-        : s.includes("the problem it solves")
-          ? "Support teams drowning in tickets: Atlas answers from two million documents."
-          : "Here is the description: a pgvector system over two million documents, built for support.",
+    const writer = answering(
+      bySeoLead(
+        "Atlas cut support escalations by 38 % with retrieval over two million documents.",
+        "Support teams drowning in tickets: Atlas answers from two million documents.",
+        "Here is the description: a pgvector system over two million documents, built for support.",
+      ),
     );
     // The judge prefers the problem lead's draft in either position.
     const judge = answering((s) => {
       const [, one = "", two = ""] = s.split(/Draft [12]:/);
-      return verdict(one.includes("drowning") ? "1" : two.includes("drowning") ? "2" : "tie");
+      if (one.includes("drowning")) {
+        return verdict("1");
+      }
+      return verdict(two.includes("drowning") ? "2" : "tie");
     });
     const job = await jobFor({
       task: "seo",
@@ -184,7 +208,7 @@ describe("running a skill (plan phase 28)", () => {
       const s = sent(call);
       return s.indexOf("drowning") < s.indexOf("cut support") ? "problem first" : "outcome first";
     });
-    expect(orders.sort()).toEqual(["outcome first", "problem first"]);
+    expect(orders.toSorted(byCodePoint)).toEqual(["outcome first", "problem first"]);
     expect(sent(judge.calls[0])).toContain(
       rankInstructions("a search-result description of the page"),
     );
@@ -192,12 +216,12 @@ describe("running a skill (plan phase 28)", () => {
   });
 
   it("counts a judge that changes its mind with the order as a tie, and keeps the leads' order", async () => {
-    const writer = answering((s) =>
-      s.includes("its outcome or result")
-        ? "Atlas cut support escalations by 38 % with retrieval over two million documents."
-        : s.includes("the problem it solves")
-          ? "Support teams drowning in tickets: Atlas answers from two million documents fast."
-          : "Atlas: pgvector retrieval over two million documents for a support team that drowned.",
+    const writer = answering(
+      bySeoLead(
+        "Atlas cut support escalations by 38 % with retrieval over two million documents.",
+        "Support teams drowning in tickets: Atlas answers from two million documents fast.",
+        "Atlas: pgvector retrieval over two million documents for a support team that drowned.",
+      ),
     );
     // Always the draft shown first: position bias.
     const judge = answering(() => verdict("1"));
@@ -214,13 +238,13 @@ describe("running a skill (plan phase 28)", () => {
   });
 
   it("counts a pair the judge could not read as a tie, and says so in the log", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const writer = answering((s) =>
-      s.includes("its outcome or result")
-        ? "Atlas cut support escalations by 38 % with retrieval over two million documents."
-        : s.includes("the problem it solves")
-          ? "Support teams drowning in tickets: Atlas answers from two million documents fast."
-          : "Atlas: pgvector retrieval over two million documents for a support team that drowned.",
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const writer = answering(
+      bySeoLead(
+        "Atlas cut support escalations by 38 % with retrieval over two million documents.",
+        "Support teams drowning in tickets: Atlas answers from two million documents fast.",
+        "Atlas: pgvector retrieval over two million documents for a support team that drowned.",
+      ),
     );
     const run = await runSkill(
       { writer: writer.model, judge: broken() },
@@ -236,9 +260,11 @@ describe("running a skill (plan phase 28)", () => {
   });
 
   it("leaves out a lead that could not be drafted, logged, and fails when none could", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const writer = answering((s) => {
-      if (s.includes("the problem it solves")) throw new Error("down");
+      if (s.includes("the problem it solves")) {
+        throw new Error("down");
+      }
       return "Atlas: retrieval over two million documents for support teams.";
     });
     const job = await jobFor({
@@ -254,12 +280,12 @@ describe("running a skill (plan phase 28)", () => {
   });
 
   it("lets a cancel through: an aborted judge or critic stops the run, and so do leads cut short (plan phase 29)", async () => {
-    const seoWriter = answering((s) =>
-      s.includes("its outcome or result")
-        ? "Atlas cut support escalations by 38 % with retrieval over two million documents."
-        : s.includes("the problem it solves")
-          ? "Support teams drowning in tickets: Atlas answers from two million documents fast."
-          : "Atlas: pgvector retrieval over two million documents for a support team that drowned.",
+    const seoWriter = answering(
+      bySeoLead(
+        "Atlas cut support escalations by 38 % with retrieval over two million documents.",
+        "Support teams drowning in tickets: Atlas answers from two million documents fast.",
+        "Atlas: pgvector retrieval over two million documents for a support team that drowned.",
+      ),
     );
     const seoJob = await jobFor({
       task: "seo",
@@ -365,9 +391,11 @@ describe("running a skill (plan phase 28)", () => {
   });
 
   it("refuses a revision that could not be written, and keeps the critic's notes", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const writer = answering((s) => {
-      if (s.includes("A reviewer read your translation")) throw new Error("down");
+      if (s.includes("A reviewer read your translation")) {
+        throw new Error("down");
+      }
       return LONG_DE;
     });
     const critic = answering(() => JSON.stringify({ ok: false, problems: ["The tone is off."] }));
@@ -414,7 +442,7 @@ describe("running a skill (plan phase 28)", () => {
   });
 
   it("leaves a draft unchecked when the critic fails, and says so in the log", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const writer = answering(() => LONG_DE);
     const run = await runSkill(
       { writer: writer.model, judge: broken() },

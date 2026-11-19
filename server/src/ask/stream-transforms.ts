@@ -28,19 +28,21 @@ type TextDeltaPart = { type: "text-delta"; id: string; text: string };
 
 /** The ids a text's markers name, as written (full-width brackets read the same). */
 export function markersIn(text: string): string[] {
-  return [...text.matchAll(MARKER)].map((match) => match[1]!);
+  return [...text.matchAll(MARKER)].map((match) => match[1]);
 }
 
 /** A text without its markers: what a reader sees of it, and what its words count. */
 export function withoutMarkers(text: string): string {
-  return text.replace(MARKER, "").replace(/\s+/g, " ").trim();
+  return text.replaceAll(MARKER, "").replaceAll(/\s+/g, " ").trim();
 }
 
 function findPendingCut(text: string): number {
   const open = Math.max(...OPENERS.map((opener) => text.lastIndexOf(opener)));
   if (open !== -1) {
     const start = open > 0 && text[open - 1] === " " ? open - 1 : open;
-    if (OPEN_TAIL.test(text.slice(start))) return start;
+    if (OPEN_TAIL.test(text.slice(start))) {
+      return start;
+    }
   }
   // A trailing space may belong to a marker the next chunk starts: an invented
   // one takes its space with it, so the answer reads the same however it is cut.
@@ -76,7 +78,7 @@ export function citeText(
   onSource: (source: CitedSource) => void,
 ): string {
   const { corpus, locale, cited, dropped } = options;
-  return text.replace(MARKER, (match, raw: string) => {
+  return text.replaceAll(MARKER, (match, raw: string) => {
     const doc = resolveDocument(corpus, raw, locale);
     if (!doc) {
       dropped?.push(raw);
@@ -120,7 +122,9 @@ export function citationTransform<TOOLS extends ToolSet>(
       const cut = findPendingCut(text);
       pending.set(part.id, text.slice(cut));
       const ready = rewrite(text.slice(0, cut), out);
-      if (ready) out.enqueue({ ...part, text: ready });
+      if (ready) {
+        out.enqueue({ ...part, text: ready });
+      }
     }
 
     function handleTextEnd(
@@ -129,9 +133,13 @@ export function citationTransform<TOOLS extends ToolSet>(
     ): void {
       const rest = pending.get(id);
       pending.delete(id);
-      if (!rest) return;
+      if (!rest) {
+        return;
+      }
       const flushed = rewrite(rest, out).replace(DANGLING, "");
-      if (flushed) out.enqueue({ type: "text-delta", id, text: flushed });
+      if (flushed) {
+        out.enqueue({ type: "text-delta", id, text: flushed });
+      }
     }
 
     return new TransformStream<TextStreamPart<TOOLS>, TextStreamPart<TOOLS>>({
@@ -189,13 +197,17 @@ export function fenceTransform<TOOLS extends ToolSet>(): StreamTextTransform<TOO
           const cut = findFenceCut(text);
           pending.set(part.id, text.slice(cut));
           const ready = text.slice(0, cut);
-          if (ready) out.enqueue({ ...part, text: ready });
+          if (ready) {
+            out.enqueue({ ...part, text: ready });
+          }
           return;
         }
         if (part.type === "text-end") {
           const rest = pending.get(part.id);
           pending.delete(part.id);
-          if (rest) out.enqueue({ type: "text-delta", id: part.id, text: rest });
+          if (rest) {
+            out.enqueue({ type: "text-delta", id: part.id, text: rest });
+          }
         }
         out.enqueue(part);
       },
@@ -293,8 +305,10 @@ function currentStep(record: AnswerRecord): RecordedStep {
 
 function recordedCall(record: AnswerRecord, id: string): RecordedToolCall | undefined {
   for (let i = record.steps.length - 1; i >= 0; i--) {
-    const call = record.steps[i]!.tools.find((t) => t.id === id);
-    if (call) return call;
+    const call = record.steps[i].tools.find((t) => t.id === id);
+    if (call) {
+      return call;
+    }
   }
   return undefined;
 }
@@ -333,7 +347,9 @@ export function recorderTransform<TOOLS extends ToolSet>(
             record.texts.set(part.id, (record.texts.get(part.id) ?? "") + part.text);
             break;
           case "reasoning-delta":
-            if (record.reasoning !== null) record.reasoning += part.text;
+            if (record.reasoning !== null) {
+              record.reasoning += part.text;
+            }
             break;
           case "start-step":
             record.steps.push({ tools: [], finishReason: null });
@@ -354,13 +370,17 @@ export function recorderTransform<TOOLS extends ToolSet>(
               call.outcome = toolOutcome(part.output);
               call.resultChars = jsonLength(part.output);
               const search = call.name === "search_portfolio" ? searchResult(part.output) : null;
-              if (search) call.search = search;
+              if (search) {
+                call.search = search;
+              }
             }
             break;
           }
           case "tool-error": {
             const call = recordedCall(record, part.toolCallId);
-            if (call) call.outcome = "error";
+            if (call) {
+              call.outcome = "error";
+            }
             break;
           }
           case "finish-step":
@@ -374,6 +394,8 @@ export function recorderTransform<TOOLS extends ToolSet>(
             break;
           case "abort":
             record.aborted = true;
+            break;
+          default:
             break;
         }
         out.enqueue(part);

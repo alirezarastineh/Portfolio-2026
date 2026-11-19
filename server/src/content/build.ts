@@ -70,7 +70,9 @@ class MediaIndex {
     const index = new MediaIndex();
     const wantedIds = [...new Set(ids.filter((id): id is string => Boolean(id)))];
     const wantedNames = [...new Set(filenames)];
-    if (wantedIds.length === 0 && wantedNames.length === 0) return index;
+    if (wantedIds.length === 0 && wantedNames.length === 0) {
+      return index;
+    }
 
     const conditions = [
       ...(wantedIds.length ? [inArray(mediaAssets.id, wantedIds)] : []),
@@ -111,7 +113,9 @@ class MediaIndex {
   /** An image asset as the payload's `imageSchema`; documents and unknown ids are null. */
   image(id: string | null, locale: Locale, fallbackAlt = ""): Image | null {
     const asset = this.asset(id);
-    if (asset?.kind !== "image") return null;
+    if (asset?.kind !== "image") {
+      return null;
+    }
 
     const variants = this.variants.get(asset.id) ?? [];
     const set = (format: string) =>
@@ -133,7 +137,7 @@ class MediaIndex {
       ],
       width: asset.width,
       height: asset.height,
-      alt: own?.trim() || other?.trim() || fallbackAlt,
+      alt: nonEmpty(own) ?? nonEmpty(other) ?? fallbackAlt,
       blur: asset.blurDataUri && asset.blurDataUri.length <= 2048 ? asset.blurDataUri : null,
     };
   }
@@ -142,7 +146,9 @@ class MediaIndex {
   bodyMedia(): Map<string, BodyMedia> {
     const out = new Map<string, BodyMedia>();
     for (const [filename, asset] of this.byFilename) {
-      if (asset.kind !== "image") continue;
+      if (asset.kind !== "image") {
+        continue;
+      }
       out.set(filename, {
         filename,
         width: asset.width,
@@ -171,6 +177,11 @@ function cleanMetrics(metrics: MetricValue[]): Metric[] {
       label: m.label.trim(),
       ...(m.context?.trim() ? { context: m.context.trim() } : {}),
     }));
+}
+
+function nonEmpty(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed === "" ? undefined : trimmed;
 }
 
 function originOf(url: string | undefined | null): string {
@@ -320,7 +331,8 @@ async function buildPosts(
           body: rendered.html,
           toc: rendered.toc,
           seo: { title: translation.seoTitle, description: translation.seoDescription },
-          canonicalUrl: post.canonicalUrl || null,
+          canonicalUrl:
+            post.canonicalUrl === null || post.canonicalUrl === "" ? null : post.canonicalUrl,
         },
       ];
 
@@ -521,7 +533,7 @@ export async function buildLocale(
       ...experienceRows.map((r) => r.experience.logoId),
       ...postRows.map((r) => r.post.coverId),
     ],
-    bodies.flatMap(bodyMediaFilenames),
+    bodies.flatMap((body) => bodyMediaFilenames(body)),
   );
   const bodyMedia = media.bodyMedia();
 
@@ -557,7 +569,7 @@ export async function buildLocale(
       contactEmail: profileRow.contactEmail,
       primaryCtaHref: profileRow.primaryCtaHref,
       secondaryCtaHref: profileRow.secondaryCtaHref,
-      siteUrl: profileRow.siteUrl?.trim() || originOf(seo.canonical),
+      siteUrl: nonEmpty(profileRow.siteUrl) ?? originOf(seo.canonical),
       availability: profileRow.availability,
       location: { city: profileRow.locationCity, country: profileRow.locationCountry },
       timezone: profileRow.timezone,
@@ -603,18 +615,22 @@ export async function buildLocale(
   const parsedDocs = new Map<string, Doc>();
   for (const [key, doc] of docs) {
     const parsed = docSchema.safeParse(doc);
-    if (parsed.success) parsedDocs.set(key, parsed.data);
-    else {
+    if (parsed.success) {
+      parsedDocs.set(key, parsed.data);
+    } else {
       issues.push(
         ...draftIssues(doc, parsed.error.issues, { path: ["docs", key], label: `docs[${key}]` }),
       );
     }
   }
-  if (!core.success || issues.length > 0) throw new DraftInvalidError(locale, issues);
+  if (!core.success || issues.length > 0) {
+    throw new DraftInvalidError(locale, issues);
+  }
   return { core: core.data, docs: parsedDocs };
 }
 
 /** The core payload only — anything that needs no bodies. */
 export async function buildContent(db: DbExecutor, locale: Locale): Promise<AppContent> {
-  return (await buildLocale(db, locale)).core;
+  const built = await buildLocale(db, locale);
+  return built.core;
 }

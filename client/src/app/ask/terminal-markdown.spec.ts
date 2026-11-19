@@ -8,14 +8,19 @@ import {
   type RenderOptions,
 } from "./terminal-markdown";
 
+const CITE_IDS = new Map<string, number>([
+  ["project:atlas@en", 1],
+  ["cv@en", 2],
+]);
+
 const options: RenderOptions = {
-  cite: (id) => (id === "project:atlas@en" ? 1 : id === "cv@en" ? 2 : null),
-  link: (href) =>
-    href.startsWith("/") && !href.startsWith("//")
-      ? "internal"
-      : href === "https://github.com/alirezarastineh"
-        ? "external"
-        : null,
+  cite: (id) => CITE_IDS.get(id) ?? null,
+  link: (href) => {
+    if (href.startsWith("/") && !href.startsWith("//")) {
+      return "internal";
+    }
+    return href === "https://github.com/alirezarastineh" ? "external" : null;
+  },
 };
 
 describe("renderInline", () => {

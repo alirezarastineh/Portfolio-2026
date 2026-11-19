@@ -85,6 +85,7 @@ const count = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" :
         <hlm-dropdown-menu class="w-56">
           <button
             hlmDropdownMenuItem
+            type="button"
             [disabled]="!changes() || saving()"
             (triggered)="discard.emit()"
           >
@@ -116,8 +117,8 @@ export class EditorHeaderComponent {
    */
   readonly savedAt = input<number | null>(null);
 
-  readonly save = output<void>();
-  readonly discard = output<void>();
+  readonly save = output();
+  readonly discard = output();
 
   protected readonly recovery = inject(RecoveryService);
 
@@ -132,7 +133,9 @@ export class EditorHeaderComponent {
     };
     unsaved.editor.set(handle);
     inject(DestroyRef).onDestroy(() => {
-      if (unsaved.editor() === handle) unsaved.editor.set(null);
+      if (unsaved.editor() === handle) {
+        unsaved.editor.set(null);
+      }
     });
   }
 
@@ -143,7 +146,9 @@ export class EditorHeaderComponent {
 
   protected readonly status = computed(() => {
     const quiet = "text-muted-foreground";
-    if (this.saving()) return { words: "Saving…", time: null, tone: quiet };
+    if (this.saving()) {
+      return { words: "Saving…", time: null, tone: quiet };
+    }
     const problems = this.problems();
     if (problems) {
       const words = `${count(problems, "field")} ${problems === 1 ? "needs" : "need"} attention`;
@@ -154,9 +159,13 @@ export class EditorHeaderComponent {
       return { words: count(changes, "unsaved change"), time: null, tone: "text-accent-orange" };
     }
     const at = this.savedAt();
-    if (at) return { words: "Saved", time: typedAt(at), tone: quiet };
+    if (at) {
+      return { words: "Saved", time: typedAt(at), tone: quiet };
+    }
     const notLive = this.notLive();
-    if (notLive === null) return { words: "", time: null, tone: quiet };
+    if (notLive === null) {
+      return { words: "", time: null, tone: quiet };
+    }
     // "Live", not the top bar's "All live": that one is the whole site's.
     return {
       words: notLive ? `${count(notLive, "field")} not live` : "Live",
@@ -171,10 +180,14 @@ export class EditorHeaderComponent {
   });
 
   protected onKeydown(event: KeyboardEvent): void {
-    if (!isSaveShortcut(event)) return;
+    if (!isSaveShortcut(event)) {
+      return;
+    }
     // Never the browser's "Save page as…" inside an editor.
     event.preventDefault();
-    if (this.saving()) return;
+    if (this.saving()) {
+      return;
+    }
     if (this.changes()) {
       this.save.emit();
       return;
@@ -182,7 +195,9 @@ export class EditorHeaderComponent {
     // Typed and saved in one breath: the keystroke's edit reaches `changes` with the next
     // change detection, which may not have run yet.
     setTimeout(() => {
-      if (this.changes() && !this.saving()) this.save.emit();
+      if (this.changes() && !this.saving()) {
+        this.save.emit();
+      }
     }, 50);
   }
 }

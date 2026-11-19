@@ -20,7 +20,7 @@ let client: TestClient;
 
 beforeEach(async () => {
   await resetDb();
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => undefined);
   await seed(); // drafts + a first publication of both locales
   await createAdmin();
   client = new TestClient(app);
@@ -53,7 +53,7 @@ async function rowTimes(name: string): Promise<Record<string, number>> {
 
 async function firstProject() {
   const [project] = await getDb().select().from(projects).orderBy(projects.position).limit(1);
-  return project!;
+  return project;
 }
 
 async function setProjectText(
@@ -70,6 +70,30 @@ async function setProjectText(
   return project;
 }
 
+function compareStrings(a: string, b: string): number {
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+}
+
+async function load() {
+  const ui = await section<Record<string, Record<string, string>>>("ui");
+  const { profile } = await json<{ profile: Record<string, unknown> }>(
+    await client.get("/admin/profile"),
+  );
+  // The input schema drops the row's extra fields (avatarPath).
+  const { updatedAt, ...input } = profile;
+  return {
+    ui,
+    input,
+    profileUpdatedAt: updatedAt as string,
+    groups: Object.fromEntries(
+      ["profile", "hero", "nav"].map((g) => [g, { en: ui.data.en[g], de: ui.data.de[g] }]),
+    ),
+  };
+}
+
 describe("section saves", () => {
   it("refuses a save built on an older version", async () => {
     const seo = await section<Record<string, string>>("seo");
@@ -84,7 +108,8 @@ describe("section saves", () => {
       updatedAt: seo.updatedAt,
     });
     expect(second.status).toBe(409);
-    expect((await section<Record<string, string>>("seo")).data.en["title"]).toBe("First");
+    const latestSeo = await section<Record<string, string>>("seo");
+    expect(latestSeo.data.en["title"]).toBe("First");
   });
 
   it("moves only the edited language's timestamp", async () => {
@@ -96,7 +121,7 @@ describe("section saves", () => {
     });
     const after = await rowTimes("seo");
     expect(after["de"]).toBe(before["de"]);
-    expect(after["en"]).toBeGreaterThan(before["en"]!);
+    expect(after["en"]).toBeGreaterThan(before["en"]);
     // The token returned is the newest row, so the next save passes.
     const { updatedAt } = await json<{ updatedAt: string }>(res);
     expect(new Date(updatedAt).getTime()).toBe(after["en"]);
@@ -154,7 +179,7 @@ describe("PATCH /admin/sections/ui", () => {
     const res = await client.patch("/admin/sections/ui", {
       groups: {
         skills: {
-          en: { heading: "Capabilities", subtitle: ui.data.en["skills"]!["subtitle"] },
+          en: { heading: "Capabilities", subtitle: ui.data.en["skills"]["subtitle"] },
           de: ui.data.de["skills"],
         },
       },
@@ -163,7 +188,7 @@ describe("PATCH /admin/sections/ui", () => {
     expect(res.status).toBe(200);
 
     const after = await section<Record<string, Record<string, string>>>("ui");
-    expect(after.data.en["skills"]!["heading"]).toBe("Capabilities");
+    expect(after.data.en["skills"]["heading"]).toBe("Capabilities");
     expect(after.data.en["about"]).toEqual(ui.data.en["about"]);
     expect(after.data.de).toEqual(ui.data.de);
   });
@@ -184,7 +209,7 @@ describe("PATCH /admin/sections/ui", () => {
     expect(issues).toEqual([
       expect.objectContaining({ path: ["groups", "experience", "de", "years"] }),
     ]);
-    expect(issues[0]!.message).toContain("{n}");
+    expect(issues[0].message).toContain("{n}");
   });
 
   it("refuses unknown groups and stale tokens", async () => {
@@ -204,23 +229,6 @@ describe("PATCH /admin/sections/ui", () => {
 });
 
 describe("PUT /admin/hero", () => {
-  async function load() {
-    const ui = await section<Record<string, Record<string, string>>>("ui");
-    const { profile } = await json<{ profile: Record<string, unknown> }>(
-      await client.get("/admin/profile"),
-    );
-    // The input schema drops the row's extra fields (avatarPath).
-    const { updatedAt, ...input } = profile;
-    return {
-      ui,
-      input,
-      profileUpdatedAt: updatedAt as string,
-      groups: Object.fromEntries(
-        ["profile", "hero", "nav"].map((g) => [g, { en: ui.data.en[g], de: ui.data.de[g] }]),
-      ),
-    };
-  }
-
   it("saves the identity and the copy together", async () => {
     const { ui, input, profileUpdatedAt, groups } = await load();
     const res = await client.put("/admin/hero", {
@@ -236,9 +244,8 @@ describe("PUT /admin/hero", () => {
 
     const [row] = await getDb().select({ handle: siteProfile.handle }).from(siteProfile);
     expect(row?.handle).toBe("@new");
-    expect(
-      (await section<Record<string, Record<string, string>>>("ui")).data.en["nav"]!["work"],
-    ).toBe("Cases");
+    const updatedUi = await section<Record<string, Record<string, string>>>("ui");
+    expect(updatedUi.data.en["nav"]["work"]).toBe("Cases");
   });
 
   it("reports problems in both parts at once", async () => {
@@ -253,8 +260,10 @@ describe("PUT /admin/hero", () => {
       profileUpdatedAt,
     });
     expect(res.status).toBe(400);
-    const paths = (await json<{ issues: Issue[] }>(res)).issues.map((i) => i.path.join("."));
-    expect(paths.sort()).toEqual(["profile.timezone", "ui.hero.en.downloadCv"]);
+    const errorBody = await json<{ issues: Issue[] }>(res);
+    const paths = errorBody.issues.map((i) => i.path.join("."));
+    const sortedPaths = paths.toSorted(compareStrings);
+    expect(sortedPaths).toEqual(["profile.timezone", "ui.hero.en.downloadCv"]);
   });
 
   it("writes nothing when either part is stale", async () => {
@@ -289,22 +298,28 @@ describe("PUT /admin/hero", () => {
       locationCity: "Berlin",
       locationCountry: "DE",
       timezone: "Europe/Berlin",
-      avatarId: avatar!.id,
+      avatarId: avatar.id,
     };
     const save = (profile: Record<string, unknown>) =>
       client.put("/admin/hero", { profile, ui: groups, updatedAt: ui.updatedAt, profileUpdatedAt });
 
-    for (const [field, value] of [
+    const invalidFields = [
       ["locationCountry", "germany"],
       ["siteUrl", "https://x.example/path"],
-    ] as const) {
-      const res = await save({ ...identity, [field]: value });
-      expect(res.status).toBe(400);
-      const { issues } = await json<{ issues: Issue[] }>(res);
-      expect(issues.map((i) => i.path.join("."))).toEqual([`profile.${field}`]);
-    }
+    ] as const;
+    await invalidFields.reduce<Promise<void>>(
+      (chain, [field, value]) =>
+        chain.then(async () => {
+          const res = await save({ ...identity, [field]: value });
+          expect(res.status).toBe(400);
+          const { issues } = await json<{ issues: Issue[] }>(res);
+          expect(issues.map((i) => i.path.join("."))).toEqual([`profile.${field}`]);
+        }),
+      Promise.resolve(),
+    );
 
-    expect((await save(identity)).status).toBe(200);
+    const saved = await save(identity);
+    expect(saved.status).toBe(200);
     const { profile } = await json<{ profile: Record<string, unknown> }>(
       await client.get("/admin/profile"),
     );
@@ -380,7 +395,7 @@ describe("draft preview", () => {
       .values({ slug: "unfinished", status: "draft" })
       .returning({ id: posts.id });
     await getDb().insert(postTranslations).values({
-      postId: post!.id,
+      postId: post.id,
       locale: "en",
       title: "Unfinished thoughts",
       excerpt: "",
@@ -399,15 +414,18 @@ describe("draft preview", () => {
       title: "Unfinished thoughts",
     });
 
-    expect((await client.get("/admin/content/preview/de/posts/unfinished")).status).toBe(404);
-    expect((await client.get("/admin/content/preview/en/nope/unfinished")).status).toBe(404);
+    const missingDe = await client.get("/admin/content/preview/de/posts/unfinished");
+    expect(missingDe.status).toBe(404);
+    const unknownKind = await client.get("/admin/content/preview/en/nope/unfinished");
+    expect(unknownKind.status).toBe(404);
   });
 
   it("answers 422 with the problems when the draft does not build", async () => {
     await setProjectText("en", { name: "" });
     const res = await client.get("/admin/content/preview/en");
     expect(res.status).toBe(422);
-    expect((await json<{ issues: Issue[] }>(res)).issues.length).toBeGreaterThan(0);
+    const previewBody = await json<{ issues: Issue[] }>(res);
+    expect(previewBody.issues.length).toBeGreaterThan(0);
   });
 });
 
@@ -421,7 +439,8 @@ describe("GET /admin/i18n", () => {
   }
 
   async function items(): Promise<Item[]> {
-    return (await json<{ items: Item[] }>(await client.get("/admin/i18n"))).items;
+    const body = await json<{ items: Item[] }>(await client.get("/admin/i18n"));
+    return body.items;
   }
 
   it("reports German fields left empty", async () => {
@@ -451,11 +470,14 @@ describe("GET /admin/i18n", () => {
       .update(projectTranslations)
       .set({ updatedAt: sql`now() - interval '1 hour'` })
       .where(eq(projectTranslations.projectId, project.id));
-    expect((await put(translations.en)).status).toBe(200);
-    expect((await items()).some((i) => i.id === project.slug && i.stale)).toBe(false);
+    const unchangedRes = await put(translations.en);
+    expect(unchangedRes.status).toBe(200);
+    const afterUnchanged = await items();
+    expect(afterUnchanged.some((i) => i.id === project.slug && i.stale)).toBe(false);
 
     // Changing only the English one makes the German look behind.
-    expect((await put({ ...translations.en, hook: "Sharper hook" })).status).toBe(200);
+    const changedRes = await put({ ...translations.en, hook: "Sharper hook" });
+    expect(changedRes.status).toBe(200);
     expect(await items()).toContainEqual(
       expect.objectContaining({ kind: "project", id: project.slug, stale: true }),
     );
@@ -468,7 +490,7 @@ describe("GET /admin/i18n", () => {
       .returning({ id: posts.id });
     await getDb()
       .insert(postTranslations)
-      .values({ postId: post!.id, locale: "en", title: "Hello", excerpt: "", body: "" });
+      .values({ postId: post.id, locale: "en", title: "Hello", excerpt: "", body: "" });
     expect(await items()).toContainEqual(
       expect.objectContaining({ kind: "post", id: "english-only", absent: "de" }),
     );
@@ -494,7 +516,7 @@ describe("media usage and cleanup", () => {
         checksumSha256: Buffer.alloc(32, counter),
       })
       .returning({ id: mediaAssets.id });
-    return { id: row!.id, filename };
+    return { id: row.id, filename };
   }
 
   interface Listed {

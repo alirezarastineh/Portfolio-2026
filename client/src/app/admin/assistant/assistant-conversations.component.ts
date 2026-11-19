@@ -217,7 +217,9 @@ export class AssistantConversationsComponent implements OnInit {
 
   protected onFilter(value: unknown): void {
     const filter = FILTERS.find((f) => f.id === value)?.id;
-    if (filter) this.setFilter(filter);
+    if (filter) {
+      this.setFilter(filter);
+    }
   }
 
   protected setFilter(filter: ConversationFilter): void {
@@ -234,8 +236,11 @@ export class AssistantConversationsComponent implements OnInit {
     this.loading.set(true);
     const result = await this.api.assistantConversations(this.filter(), this.source());
     this.loading.set(false);
-    if (result.ok) this.rows.set(result.data.messages);
-    else toast.error("Could not load conversations", { description: result.error });
+    if (result.ok) {
+      this.rows.set(result.data.messages);
+    } else {
+      toast.error("Could not load conversations", { description: result.error });
+    }
   }
 
   protected when(iso: string): string {
@@ -254,7 +259,9 @@ export class AssistantConversationsComponent implements OnInit {
   /** A match run's kind and rows (visitor plan V20): "role · 5 rows · 1 taken back". */
   protected matchBadge(row: ConversationRow): string | null {
     const match = row.route === "match" ? row.trace?.match : undefined;
-    if (!match) return null;
+    if (!match) {
+      return null;
+    }
     const rows = match.items.filter((item) => item.status !== null).length;
     const back = match.items.filter((item) => item.downgraded).length;
     return [

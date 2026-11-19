@@ -223,7 +223,9 @@ export class JournalLessonsComponent {
       rows: true,
       saved: () => {
         const list = this.lessons();
-        if (!list.length) return null;
+        if (!list.length) {
+          return null;
+        }
         return Object.fromEntries(
           list.map((l) => [l.id, { as: l.appliedAs ?? "faq", ref: l.appliedRef ?? "" }]),
         );
@@ -319,7 +321,9 @@ export class JournalLessonsComponent {
       confirmLabel: "Delete lesson",
       destructive: true,
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
     const result = await this.api.deleteLesson(lesson.id);
     if (!result.ok) {
       toast.error("Could not delete the lesson", {

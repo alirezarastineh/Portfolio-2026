@@ -27,7 +27,7 @@ function sharedBody(path: string, marker: string): string {
   const at = source.indexOf(marker);
   expect(at, `marker missing in ${path}`).toBeGreaterThan(-1);
   // Normalise line endings so a git autocrlf checkout cannot fail this.
-  return source.slice(at).replace(/\r\n/g, "\n");
+  return source.slice(at).replaceAll("\r\n", "\n");
 }
 
 /**

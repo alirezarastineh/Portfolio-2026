@@ -36,20 +36,30 @@ export function summaryProblem(
   summary: unknown,
   visitor: { question: string; language: Locale },
 ): SummaryProblem | null {
-  if (typeof summary !== "string" || !summary.trim()) return "missing";
+  if (typeof summary !== "string" || !summary.trim()) {
+    return "missing";
+  }
   const detected = detectLanguage(summary);
-  if (detected && detected !== visitor.language) return "language";
+  if (detected && detected !== visitor.language) {
+    return "language";
+  }
   const own = visitor.question.toLowerCase();
   const added = [...personalPieces(summary), ...[...summary.matchAll(LINK)].map((m) => m[0])];
-  if (added.some((piece) => !own.includes(piece.toLowerCase()))) return "added-contact";
-  if (SENT.test(summary)) return "claims-sent";
+  if (added.some((piece) => !own.includes(piece.toLowerCase()))) {
+    return "added-contact";
+  }
+  if (SENT.test(summary)) {
+    return "claims-sent";
+  }
   return null;
 }
 
 /** The visitor's own question as a summary: cleaned, on one line, cut at a word. */
 export function ownWords(question: string): string {
-  const text = cleanVisitorText(question).replace(/\s+/g, " ");
-  if (text.length <= OWN_WORDS_CHARS) return text;
+  const text = cleanVisitorText(question).replaceAll(/\s+/g, " ");
+  if (text.length <= OWN_WORDS_CHARS) {
+    return text;
+  }
   const cut = text.slice(0, OWN_WORDS_CHARS - 1);
   const space = cut.lastIndexOf(" ");
   return `${(space > OWN_WORDS_CHARS / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
@@ -89,7 +99,9 @@ export function handoffOffer(input: {
     }
     return { by: "tool", summary: ownWords(input.question), replaced: true };
   }
-  if (!input.intent || !input.finished || input.openedContact) return null;
+  if (!input.intent || !input.finished || input.openedContact) {
+    return null;
+  }
   return { by: "fallback", summary: ownWords(input.question) };
 }
 

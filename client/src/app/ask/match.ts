@@ -30,6 +30,8 @@ export interface MatchRow {
   cites: { id: string; title: string; url: string }[];
 }
 
+const str = (value: unknown): string => (typeof value === "string" ? value : "");
+
 /**
  * A match's rows from its answer's `data-match` part, read field by field;
  * null when it has none, or a malformed one. A cite's page must be the site's
@@ -43,19 +45,26 @@ export function matchData(
     { data?: Record<string, unknown> } | undefined;
   const data = part?.data;
   const kind = data?.["kind"];
-  if (data?.["v"] !== 1 || typeof kind !== "string" || !isMatchKind(kind)) return null;
-  const str = (value: unknown) => (typeof value === "string" ? value : "");
+  if (data?.["v"] !== 1 || typeof kind !== "string" || !isMatchKind(kind)) {
+    return null;
+  }
   const objects = (value: unknown) =>
     (Array.isArray(value) ? value : []).map(
       (raw: unknown) => (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>,
     );
   const items = objects(data["items"]).flatMap((r): MatchRow[] => {
     const { n, status } = r;
-    if (typeof n !== "number" || !Number.isInteger(n) || n < 1) return [];
-    if (!(MATCH_STATUSES as readonly unknown[]).includes(status)) return [];
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 1) {
+      return [];
+    }
+    if (!(MATCH_STATUSES as readonly unknown[]).includes(status)) {
+      return [];
+    }
     const text = str(r["text"]);
     const statusLabel = str(r["statusLabel"]);
-    if (!text || !statusLabel) return [];
+    if (!text || !statusLabel) {
+      return [];
+    }
     const cites = objects(r["cites"]).flatMap((c) => {
       const cite = { id: str(c["id"]), title: str(c["title"]), url: str(c["url"]) };
       return cite.id && cite.title && link(cite.url) === "internal" ? [cite] : [];
@@ -86,7 +95,7 @@ export function markOf(row: Pick<MatchRow, "status" | "summary">): MatchMark {
 }
 
 /** The most a brief may be, as the server takes it (`MATCH_BRIEF_CHARS`, server/src/ask/match/prompt.ts). */
-export const MATCH_BRIEF_CHARS = 4_000;
+export const MATCH_BRIEF_CHARS = 4000;
 
 /** A brief asked for: sent with its command, and again by a retry. */
 export interface MatchRequest {
@@ -107,7 +116,9 @@ export type MatchStep =
 
 /** A progress part's data, read field by field; null for anything else. */
 export function matchStep(data: unknown): MatchStep | null {
-  if (!data || typeof data !== "object") return null;
+  if (!data || typeof data !== "object") {
+    return null;
+  }
   const d = data as Record<string, unknown>;
   const items =
     typeof d["items"] === "number" && Number.isInteger(d["items"]) && d["items"] >= 0
@@ -121,7 +132,9 @@ export function matchStep(data: unknown): MatchStep | null {
     case "search":
       return items === null ? null : { step: "search", items };
     case "write":
-      if (items === null) return null;
+      if (items === null) {
+        return null;
+      }
       return d["repair"] === true
         ? { step: "write", items, repair: true }
         : { step: "write", items };

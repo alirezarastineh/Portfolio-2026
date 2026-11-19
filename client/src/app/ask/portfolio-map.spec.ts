@@ -12,9 +12,16 @@ import {
 
 /** The portfolio's map in the browser (visitor plan V15): read, checked, read next and what's new. */
 
+const pageKind = (id: string): MapPage["kind"] => {
+  if (id.startsWith("post:")) {
+    return "post";
+  }
+  return id.startsWith("project:") ? "project" : "experience";
+};
+
 const page = (id: string, extra: Partial<MapPage> = {}): MapPage => ({
   id,
-  kind: id.startsWith("post:") ? "post" : id.startsWith("project:") ? "project" : "experience",
+  kind: pageKind(id),
   title: id,
   url: id.startsWith("post:") ? `/en/writing/${id}` : `/en/work/${id}`,
   related: [],
@@ -114,9 +121,10 @@ describe("fetchMap", () => {
   afterEach(() => resetMapCache());
 
   it("asks once per language and keeps the answer for the page view", async () => {
-    const get = vi.fn(
-      async () =>
+    const get = vi.fn(() =>
+      Promise.resolve(
         new Response(JSON.stringify({ pages: [page("project:atlas@en")] }), { status: 200 }),
+      ),
     );
     const [a, b] = await Promise.all([fetchMap("en", get), fetchMap("en", get)]);
     expect(a).toEqual([page("project:atlas@en")]);

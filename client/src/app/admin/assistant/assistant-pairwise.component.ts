@@ -27,7 +27,7 @@ import {
   type PairwiseCaseResult,
 } from "../pairwise";
 
-const POLL_MS = 2_000;
+const POLL_MS = 2000;
 
 /**
  * Pairwise runs: two answerers (a route, lite or deep, or a model id) over
@@ -130,6 +130,7 @@ const POLL_MS = 2_000;
             <div>
               <button
                 hlmBtn
+                type="button"
                 size="sm"
                 variant="outline"
                 [disabled]="busy()"
@@ -210,7 +211,9 @@ const POLL_MS = 2_000;
             <li class="flex flex-wrap items-center gap-2">
               <span class="font-data">{{ when(r.createdAt) }}</span>
               <span>{{ label(r) }} · {{ r.status }}</span>
-              <button hlmBtn size="sm" variant="ghost" (click)="open(r.id)">Open</button>
+              <button hlmBtn type="button" size="sm" variant="ghost" (click)="open(r.id)">
+                Open
+              </button>
             </li>
           }
         </ul>
@@ -236,7 +239,9 @@ export class AssistantPairwiseComponent implements OnInit {
   /** Any run going on: one paid run at a time, whatever its kind. */
   protected readonly active = computed(() => {
     const v = this.view();
-    if (v && isActive(v.run)) return v.run;
+    if (v && isActive(v.run)) {
+      return v.run;
+    }
     return this.runs().find(isActive) ?? null;
   });
   protected readonly history = computed(() => this.runs().filter((r) => r.kind === "pairwise"));
@@ -270,7 +275,9 @@ export class AssistantPairwiseComponent implements OnInit {
     }
     this.runs.set(list.data.runs);
     const going = list.data.runs.find((r) => r.kind === "pairwise" && isActive(r));
-    if (going) await this.open(going.id);
+    if (going) {
+      await this.open(going.id);
+    }
   }
 
   protected async open(id: string): Promise<void> {
@@ -289,7 +296,9 @@ export class AssistantPairwiseComponent implements OnInit {
   }
 
   protected async start(): Promise<void> {
-    if (!this.canStart()) return;
+    if (!this.canStart()) {
+      return;
+    }
     const [a, b] = [this.a().trim(), this.b().trim()];
     const go = await this.confirm.ask({
       title: `Compare ${a} with ${b}?`,
@@ -297,7 +306,9 @@ export class AssistantPairwiseComponent implements OnInit {
         "Every eval case is answered by both, then judged twice: four model calls a case, paced for free-tier limits (up to half an hour for the whole suite). Its cost counts toward today's budget.",
       confirmLabel: "Compare",
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
     this.busy.set(true);
     const result = await this.api.startPairwiseRun(a, b);
     this.busy.set(false);
@@ -313,7 +324,9 @@ export class AssistantPairwiseComponent implements OnInit {
     this.busy.set(true);
     const result = await this.api.cancelRun(run.id);
     this.busy.set(false);
-    if (!result.ok) toast.error("Could not cancel the comparison", { description: result.error });
+    if (!result.ok) {
+      toast.error("Could not cancel the comparison", { description: result.error });
+    }
     await this.open(run.id);
   }
 
@@ -324,7 +337,9 @@ export class AssistantPairwiseComponent implements OnInit {
       description: `The ${left} ${left === 1 ? "case" : "cases"} still to do are answered by both sides and judged twice; their cost counts toward today's budget.`,
       confirmLabel: "Resume",
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
     this.busy.set(true);
     const result = await this.api.resumeRun(run.id);
     this.busy.set(false);
@@ -337,7 +352,9 @@ export class AssistantPairwiseComponent implements OnInit {
 
   private async refreshList(): Promise<void> {
     const list = await this.api.listRuns();
-    if (list.ok) this.runs.set(list.data.runs);
+    if (list.ok) {
+      this.runs.set(list.data.runs);
+    }
   }
 
   protected label(run: RunRow): string {

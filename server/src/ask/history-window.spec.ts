@@ -8,14 +8,14 @@ import { wrapVisitor } from "./prompt.js";
 
 const asked = (text: string): ModelMessage => ({ role: "user", content: wrapVisitor(text, "en") });
 const answered = (text: string): ModelMessage => ({ role: "assistant", content: text });
+const row = (id: string, session: string, dropped = 0) => ({
+  id,
+  sessionHash: session,
+  trace: { window: { dropped } },
+});
 
 describe("the conversation window", () => {
   it("measures sessions trimmed, and rephrases after a trim against the rest", () => {
-    const row = (id: string, session: string, dropped = 0) => ({
-      id,
-      sessionHash: session,
-      trace: { window: { dropped } },
-    });
     const metrics = measureWindow(
       [
         row("a1", "s1"),

@@ -74,7 +74,9 @@ function respond(c: Context, error: unknown, duplicate: string): Response {
   }
   // The unique index is the real guard: two concurrent creates can both pass
   // the friendly check, and only one survives the insert.
-  if (pgErrorCode(error) === "23505") return c.json({ error: duplicate }, 409);
+  if (pgErrorCode(error) === "23505") {
+    return c.json({ error: duplicate }, 409);
+  }
   throw error;
 }
 
@@ -94,13 +96,17 @@ async function assertMedia(
   kind: "image" | "document",
 ): Promise<Map<string, string>> {
   const wanted = [...new Set(ids.filter((id): id is string => Boolean(id)))];
-  if (wanted.length === 0) return new Map();
+  if (wanted.length === 0) {
+    return new Map();
+  }
   const rows = await tx
     .select({ id: mediaAssets.id, filename: mediaAssets.filename, kind: mediaAssets.kind })
     .from(mediaAssets)
     .where(inArray(mediaAssets.id, wanted));
   const bad = wanted.filter((id) => rows.find((r) => r.id === id)?.kind !== kind);
-  if (bad.length > 0) throw new InputError(400, "invalid_media", { ids: bad, expected: kind });
+  if (bad.length > 0) {
+    throw new InputError(400, "invalid_media", { ids: bad, expected: kind });
+  }
   return new Map(rows.map((r) => [r.id, r.filename]));
 }
 
@@ -131,7 +137,9 @@ function editedAt(
   next: Record<string, unknown>,
   now: Date,
 ): Date {
-  if (!stored) return now;
+  if (!stored) {
+    return now;
+  }
   const before = Object.fromEntries(Object.keys(next).map((key) => [key, stored[key]]));
   return canonicalJson(before) === canonicalJson(next) ? stored.updatedAt : now;
 }
@@ -159,7 +167,9 @@ adminCollectionsRouter.get("/profile", async (c) => {
     })
     .from(siteProfile)
     .limit(1);
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
   return c.json({ profile: row });
 });
 
@@ -173,7 +183,7 @@ adminCollectionsRouter.get("/profile", async (c) => {
 adminCollectionsRouter.put("/hero", async (c) => {
   let body: { profile?: unknown; ui?: unknown; updatedAt?: unknown; profileUpdatedAt?: unknown };
   try {
-    body = (await c.req.json()) as typeof body;
+    body = await c.req.json<typeof body>();
   } catch {
     return c.json({ error: "invalid_input" }, 400);
   }
@@ -204,7 +214,9 @@ adminCollectionsRouter.put("/hero", async (c) => {
       await assertMedia(tx, [rest.avatarId], "image");
 
       const saved = await saveUiGroups(tx, ui.groups, expectedToken(body.updatedAt), userId);
-      if (!saved.ok) return { ok: false as const };
+      if (!saved.ok) {
+        return { ok: false as const };
+      }
 
       const now = new Date();
       await tx
@@ -213,7 +225,9 @@ adminCollectionsRouter.put("/hero", async (c) => {
         .where(eq(siteProfile.id, true));
       return { ok: true as const, updatedAt: saved.updatedAt, profileUpdatedAt: now.toISOString() };
     });
-    if (!outcome.ok) return c.json({ error: "stale" }, 409);
+    if (!outcome.ok) {
+      return c.json({ error: "stale" }, 409);
+    }
     return c.json(outcome);
   } catch (error) {
     return respond(c, error, "duplicate");
@@ -255,9 +269,13 @@ adminCollectionsRouter.get("/resumes", async (c) => {
 
 adminCollectionsRouter.put("/resumes/:locale", async (c) => {
   const locale = localeSchema.safeParse(c.req.param("locale"));
-  if (!locale.success) return c.json({ error: "unsupported_locale" }, 400);
+  if (!locale.success) {
+    return c.json({ error: "unsupported_locale" }, 400);
+  }
   const parsed = await readJson(c, resumeInput);
-  if (!parsed.ok) return parsed.response;
+  if (!parsed.ok) {
+    return parsed.response;
+  }
 
   try {
     await getDb().transaction(async (tx) => {
@@ -279,7 +297,9 @@ adminCollectionsRouter.put("/resumes/:locale", async (c) => {
 
 adminCollectionsRouter.delete("/resumes/:locale", async (c) => {
   const locale = localeSchema.safeParse(c.req.param("locale"));
-  if (!locale.success) return c.json({ error: "unsupported_locale" }, 400);
+  if (!locale.success) {
+    return c.json({ error: "unsupported_locale" }, 400);
+  }
   await getDb().delete(profileResumes).where(eq(profileResumes.locale, locale.data));
   return c.json({ ok: true });
 });
@@ -295,7 +315,9 @@ adminCollectionsRouter.get("/socials", async (c) => {
 
 adminCollectionsRouter.post("/socials", async (c) => {
   const parsed = await readJson(c, socialInput);
-  if (!parsed.ok) return parsed.response;
+  if (!parsed.ok) {
+    return parsed.response;
+  }
 
   const row = await getDb().transaction(async (tx) => {
     const [inserted] = await tx
@@ -309,7 +331,9 @@ adminCollectionsRouter.post("/socials", async (c) => {
 
 adminCollectionsRouter.put("/socials/:id", async (c) => {
   const parsed = await readJson(c, socialInput);
-  if (!parsed.ok) return parsed.response;
+  if (!parsed.ok) {
+    return parsed.response;
+  }
 
   const [row] = await getDb()
     .update(socials)
@@ -317,7 +341,9 @@ adminCollectionsRouter.put("/socials/:id", async (c) => {
     .where(eq(socials.id, c.req.param("id")))
     .returning();
 
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
   return c.json({ ok: true, social: row });
 });
 
@@ -327,7 +353,9 @@ adminCollectionsRouter.delete("/socials/:id", async (c) => {
     .where(eq(socials.id, c.req.param("id")))
     .returning({ id: socials.id });
 
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
   return c.json({ ok: true });
 });
 
@@ -359,7 +387,9 @@ adminCollectionsRouter.get("/skills", async (c) => {
 
 adminCollectionsRouter.post("/skills", async (c) => {
   const parsed = await readJson(c, skillInput);
-  if (!parsed.ok) return parsed.response;
+  if (!parsed.ok) {
+    return parsed.response;
+  }
   const { translations, ...skill } = parsed.data;
 
   try {
@@ -368,7 +398,9 @@ adminCollectionsRouter.post("/skills", async (c) => {
         .select({ id: skills.id })
         .from(skills)
         .where(eq(skills.id, skill.id));
-      if (existing) throw new InputError(409, "duplicate_id");
+      if (existing) {
+        throw new InputError(409, "duplicate_id");
+      }
       await tx.insert(skills).values({ ...skill, position: await nextPosition(tx, skills) });
       await tx.insert(skillTranslations).values(
         LOCALES.map((locale) => ({
@@ -386,13 +418,17 @@ adminCollectionsRouter.post("/skills", async (c) => {
 
 adminCollectionsRouter.put("/skills/:id", async (c) => {
   const parsed = await readJson(c, skillInput);
-  if (!parsed.ok) return parsed.response;
+  if (!parsed.ok) {
+    return parsed.response;
+  }
 
   const id = c.req.param("id");
   const { translations, ...skill } = parsed.data;
 
   // The id is the join key for translations, so renaming it is a delete+create.
-  if (skill.id !== id) return c.json({ error: "id_immutable" }, 400);
+  if (skill.id !== id) {
+    return c.json({ error: "id_immutable" }, 400);
+  }
 
   const updated = await getDb().transaction(async (tx) => {
     const [row] = await tx
@@ -406,7 +442,9 @@ adminCollectionsRouter.put("/skills/:id", async (c) => {
       })
       .where(eq(skills.id, id))
       .returning({ id: skills.id });
-    if (!row) return false;
+    if (!row) {
+      return false;
+    }
 
     await tx
       .insert(skillTranslations)
@@ -428,7 +466,9 @@ adminCollectionsRouter.put("/skills/:id", async (c) => {
     return true;
   });
 
-  if (!updated) return c.json({ error: "not_found" }, 404);
+  if (!updated) {
+    return c.json({ error: "not_found" }, 404);
+  }
   return c.json({ ok: true });
 });
 
@@ -439,7 +479,9 @@ adminCollectionsRouter.delete("/skills/:id", async (c) => {
     .where(eq(skills.id, c.req.param("id")))
     .returning({ id: skills.id });
 
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
   return c.json({ ok: true });
 });
 
@@ -483,7 +525,9 @@ adminCollectionsRouter.get("/projects", async (c) => {
 
 adminCollectionsRouter.get("/projects/:id", async (c) => {
   const id = c.req.param("id");
-  if (!isUuid(id)) return c.json({ error: "invalid_id" }, 400);
+  if (!isUuid(id)) {
+    return c.json({ error: "invalid_id" }, 400);
+  }
 
   const [row] = await getDb()
     .select({
@@ -508,7 +552,9 @@ adminCollectionsRouter.get("/projects/:id", async (c) => {
     .where(eq(projects.id, id))
     .limit(1);
 
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
   return c.json({ project: row });
 });
 
@@ -521,7 +567,9 @@ async function writeProject(tx: Tx, id: string | null, data: ProjectData): Promi
     .where(
       id ? and(eq(projects.slug, data.slug), ne(projects.id, id)) : eq(projects.slug, data.slug),
     );
-  if (clash) throw new InputError(409, "duplicate_slug");
+  if (clash) {
+    throw new InputError(409, "duplicate_slug");
+  }
 
   await assertMedia(tx, [data.coverId, ...data.gallery.map((g) => g.mediaId)], "image");
 
@@ -549,13 +597,17 @@ async function writeProject(tx: Tx, id: string | null, data: ProjectData): Promi
       .set(values)
       .where(eq(projects.id, projectId))
       .returning({ id: projects.id });
-    if (!row) return null;
+    if (!row) {
+      return null;
+    }
   } else {
     const [row] = await tx
       .insert(projects)
       .values({ ...values, position: await nextPosition(tx, projects) })
       .returning({ id: projects.id });
-    if (!row) throw new Error("insert failed");
+    if (!row) {
+      throw new Error("insert failed");
+    }
     projectId = row.id;
   }
 
@@ -583,7 +635,7 @@ async function writeProject(tx: Tx, id: string | null, data: ProjectData): Promi
   if (data.gallery.length > 0) {
     await tx.insert(projectGallery).values(
       data.gallery.map((g, position) => ({
-        projectId: projectId!,
+        projectId,
         mediaId: g.mediaId,
         position,
         caption: g.caption,
@@ -595,7 +647,9 @@ async function writeProject(tx: Tx, id: string | null, data: ProjectData): Promi
 
 adminCollectionsRouter.post("/projects", async (c) => {
   const parsed = await readJson(c, projectInputSanitized);
-  if (!parsed.ok) return parsed.response;
+  if (!parsed.ok) {
+    return parsed.response;
+  }
 
   try {
     const id = await getDb().transaction((tx) => writeProject(tx, null, parsed.data));
@@ -607,13 +661,19 @@ adminCollectionsRouter.post("/projects", async (c) => {
 
 adminCollectionsRouter.put("/projects/:id", async (c) => {
   const id = c.req.param("id");
-  if (!isUuid(id)) return c.json({ error: "invalid_id" }, 400);
+  if (!isUuid(id)) {
+    return c.json({ error: "invalid_id" }, 400);
+  }
   const parsed = await readJson(c, projectInputSanitized);
-  if (!parsed.ok) return parsed.response;
+  if (!parsed.ok) {
+    return parsed.response;
+  }
 
   try {
     const written = await getDb().transaction((tx) => writeProject(tx, id, parsed.data));
-    if (!written) return c.json({ error: "not_found" }, 404);
+    if (!written) {
+      return c.json({ error: "not_found" }, 404);
+    }
     return c.json({ ok: true });
   } catch (error) {
     return respond(c, error, "duplicate_slug");
@@ -626,7 +686,9 @@ adminCollectionsRouter.delete("/projects/:id", async (c) => {
     .where(eq(projects.id, c.req.param("id")))
     .returning({ id: projects.id });
 
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
   return c.json({ ok: true });
 });
 
@@ -691,13 +753,17 @@ async function writeExperience(
       .set(values)
       .where(eq(experiences.id, experienceId))
       .returning({ id: experiences.id });
-    if (!row) return null;
+    if (!row) {
+      return null;
+    }
   } else {
     const [row] = await tx
       .insert(experiences)
       .values({ ...values, position: await nextPosition(tx, experiences) })
       .returning({ id: experiences.id });
-    if (!row) throw new Error("insert failed");
+    if (!row) {
+      throw new Error("insert failed");
+    }
     experienceId = row.id;
   }
 
@@ -728,7 +794,9 @@ async function writeExperience(
 
 adminCollectionsRouter.post("/experiences", async (c) => {
   const parsed = await readJson(c, experienceInput);
-  if (!parsed.ok) return parsed.response;
+  if (!parsed.ok) {
+    return parsed.response;
+  }
   try {
     const id = await getDb().transaction((tx) => writeExperience(tx, null, parsed.data));
     return c.json({ ok: true, id }, 201);
@@ -739,12 +807,18 @@ adminCollectionsRouter.post("/experiences", async (c) => {
 
 adminCollectionsRouter.put("/experiences/:id", async (c) => {
   const id = c.req.param("id");
-  if (!isUuid(id)) return c.json({ error: "invalid_id" }, 400);
+  if (!isUuid(id)) {
+    return c.json({ error: "invalid_id" }, 400);
+  }
   const parsed = await readJson(c, experienceInput);
-  if (!parsed.ok) return parsed.response;
+  if (!parsed.ok) {
+    return parsed.response;
+  }
   try {
     const written = await getDb().transaction((tx) => writeExperience(tx, id, parsed.data));
-    if (!written) return c.json({ error: "not_found" }, 404);
+    if (!written) {
+      return c.json({ error: "not_found" }, 404);
+    }
     return c.json({ ok: true });
   } catch (error) {
     return respond(c, error, "duplicate");
@@ -756,7 +830,9 @@ adminCollectionsRouter.delete("/experiences/:id", async (c) => {
     .delete(experiences)
     .where(eq(experiences.id, c.req.param("id")))
     .returning({ id: experiences.id });
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
   return c.json({ ok: true });
 });
 
@@ -793,7 +869,9 @@ adminCollectionsRouter.get("/posts", async (c) => {
 
 adminCollectionsRouter.get("/posts/:id", async (c) => {
   const id = c.req.param("id");
-  if (!isUuid(id)) return c.json({ error: "invalid_id" }, 400);
+  if (!isUuid(id)) {
+    return c.json({ error: "invalid_id" }, 400);
+  }
 
   const [row] = await getDb()
     .select({
@@ -807,10 +885,12 @@ adminCollectionsRouter.get("/posts/:id", async (c) => {
     .from(posts)
     .where(eq(posts.id, id))
     .limit(1);
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
 
   // Both keys always present: null = the post does not exist in that language.
-  const translations = row.translations as Partial<Record<Locale, unknown>>;
+  const translations = row.translations;
   return c.json({
     post: { ...row, translations: { en: translations.en ?? null, de: translations.de ?? null } },
   });
@@ -823,7 +903,9 @@ async function writePost(tx: Tx, id: string | null, data: PostData): Promise<str
     .select({ id: posts.id })
     .from(posts)
     .where(id ? and(eq(posts.slug, data.slug), ne(posts.id, id)) : eq(posts.slug, data.slug));
-  if (clash) throw new InputError(409, "duplicate_slug");
+  if (clash) {
+    throw new InputError(409, "duplicate_slug");
+  }
   await assertMedia(tx, [data.coverId], "image");
 
   const now = new Date();
@@ -844,10 +926,14 @@ async function writePost(tx: Tx, id: string | null, data: PostData): Promise<str
       .set(values)
       .where(eq(posts.id, postId))
       .returning({ id: posts.id });
-    if (!row) return null;
+    if (!row) {
+      return null;
+    }
   } else {
     const [row] = await tx.insert(posts).values(values).returning({ id: posts.id });
-    if (!row) throw new Error("insert failed");
+    if (!row) {
+      throw new Error("insert failed");
+    }
     postId = row.id;
   }
 
@@ -878,7 +964,9 @@ async function writePost(tx: Tx, id: string | null, data: PostData): Promise<str
 
 adminCollectionsRouter.post("/posts", async (c) => {
   const parsed = await readJson(c, postInputSanitized);
-  if (!parsed.ok) return parsed.response;
+  if (!parsed.ok) {
+    return parsed.response;
+  }
   try {
     const id = await getDb().transaction((tx) => writePost(tx, null, parsed.data));
     return c.json({ ok: true, id }, 201);
@@ -889,12 +977,18 @@ adminCollectionsRouter.post("/posts", async (c) => {
 
 adminCollectionsRouter.put("/posts/:id", async (c) => {
   const id = c.req.param("id");
-  if (!isUuid(id)) return c.json({ error: "invalid_id" }, 400);
+  if (!isUuid(id)) {
+    return c.json({ error: "invalid_id" }, 400);
+  }
   const parsed = await readJson(c, postInputSanitized);
-  if (!parsed.ok) return parsed.response;
+  if (!parsed.ok) {
+    return parsed.response;
+  }
   try {
     const written = await getDb().transaction((tx) => writePost(tx, id, parsed.data));
-    if (!written) return c.json({ error: "not_found" }, 404);
+    if (!written) {
+      return c.json({ error: "not_found" }, 404);
+    }
     return c.json({ ok: true });
   } catch (error) {
     return respond(c, error, "duplicate_slug");
@@ -906,7 +1000,9 @@ adminCollectionsRouter.delete("/posts/:id", async (c) => {
     .delete(posts)
     .where(eq(posts.id, c.req.param("id")))
     .returning({ id: posts.id });
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
   return c.json({ ok: true });
 });
 
@@ -926,16 +1022,22 @@ for (const [path, table] of [
 ] as const) {
   adminCollectionsRouter.patch(`/${path}/:id/visibility`, async (c) => {
     const id = c.req.param("id");
-    if (!isUuid(id)) return c.json({ error: "invalid_id" }, 400);
+    if (!isUuid(id)) {
+      return c.json({ error: "invalid_id" }, 400);
+    }
     const parsed = await readJson(c, visibilityInput);
-    if (!parsed.ok) return parsed.response;
+    if (!parsed.ok) {
+      return parsed.response;
+    }
 
     const [row] = await getDb()
       .update(table)
       .set({ isVisible: parsed.data.isVisible, updatedAt: new Date() })
       .where(eq(table.id, id))
       .returning({ id: table.id });
-    if (!row) return c.json({ error: "not_found" }, 404);
+    if (!row) {
+      return c.json({ error: "not_found" }, 404);
+    }
     return c.json({ ok: true });
   });
 }
@@ -958,17 +1060,27 @@ const REORDERABLE = {
 for (const [path, { table, idType }] of Object.entries(REORDERABLE)) {
   adminCollectionsRouter.patch(`/${path}/reorder`, async (c) => {
     const parsed = await readJson(c, reorderInput);
-    if (!parsed.ok) return parsed.response;
+    if (!parsed.ok) {
+      return parsed.response;
+    }
     const ids = parsed.data.ids;
-    if (new Set(ids).size !== ids.length) return c.json({ error: "duplicate_ids" }, 400);
-    if (idType === "uuid" && !ids.every(isUuid)) return c.json({ error: "invalid_id" }, 400);
+    if (new Set(ids).size !== ids.length) {
+      return c.json({ error: "duplicate_ids" }, 400);
+    }
+    if (idType === "uuid" && !ids.every(isUuid)) {
+      return c.json({ error: "invalid_id" }, 400);
+    }
 
     const unknown = await getDb().transaction(async (tx) => {
       const known = ids.length
         ? await tx.select({ id: table.id }).from(table).where(inArray(table.id, ids))
         : [];
-      if (known.length !== ids.length) return true;
-      if (ids.length === 0) return false;
+      if (known.length !== ids.length) {
+        return true;
+      }
+      if (ids.length === 0) {
+        return false;
+      }
 
       const rows = sql.join(
         ids.map((id, index) => sql`(${id}::${sql.raw(idType)}, ${index}::int)`),
@@ -981,7 +1093,9 @@ for (const [path, { table, idType }] of Object.entries(REORDERABLE)) {
       return false;
     });
 
-    if (unknown) return c.json({ error: "unknown_ids" }, 400);
+    if (unknown) {
+      return c.json({ error: "unknown_ids" }, 400);
+    }
     return c.json({ ok: true });
   });
 }

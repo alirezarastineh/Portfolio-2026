@@ -22,7 +22,7 @@ export const seo = defineSkill<SeoInput>({
   models: "text",
   build: (input) => ({
     instructions: `Write a search-result description in ${LANGUAGE[input.locale]} for this page of a senior AI / full-stack engineer's portfolio: specific, factual, no hype, at most ${input.maxLength} characters. Return only the description.`,
-    prompt: input.text.replace(/<[^<>]{1,1000}>/g, " ").slice(0, 8_000),
+    prompt: input.text.replaceAll(/<[^<>]{1,1000}>/g, " ").slice(0, 8000),
   }),
   gates: [
     withinLength((input) => input.maxLength),
@@ -33,7 +33,7 @@ export const seo = defineSkill<SeoInput>({
   ],
   explore: {
     subject: "a search-result description of the page",
-    evidence: (input) => visible(input.text).slice(0, 8_000),
+    evidence: (input) => visible(input.text).slice(0, 8000),
     leads: [
       { id: "outcome", instruction: "Lead with what the work achieved: its outcome or result." },
       { id: "problem", instruction: "Lead with the problem it solves, and for whom." },

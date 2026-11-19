@@ -174,7 +174,9 @@ function itemName(side: Side, root: string, key: string): string {
 /** The editor's label for a field; a part it does not name belongs to the field above it. */
 function fieldWords(generic: string): string | null {
   const label = FIELDS[generic];
-  if (label) return label;
+  if (label) {
+    return label;
+  }
   if (generic.endsWith(".alt")) {
     const image = FIELDS[generic.slice(0, -".alt".length)];
     return image ? `${image}, alt text` : null;
@@ -184,17 +186,23 @@ function fieldWords(generic: string): string | null {
 }
 
 function uiWords(group: string, key: string): string | null {
-  if (group === "about" || group === "profile") return FIELDS[`ui.${group}.${key}`] ?? null;
+  if (group === "about" || group === "profile") {
+    return FIELDS[`ui.${group}.${key}`] ?? null;
+  }
   const row = ROWS.find((r) => r.group === group && r.key === key);
   return row ? `${WORD_HEADINGS[group as WordGroup]} › ${row.label}` : null;
 }
 
 function placed(path: string | null, query?: Record<string, string>): Place | null {
-  return path ? (query ? { path, query } : { path }) : null;
+  if (!path) {
+    return null;
+  }
+  return query ? { path, query } : { path };
 }
 
 function worded(open: Place | null, words: string | null, path: string): WordedChange {
-  const page = (open && navItemFor(open.path)?.label) || "Other";
+  const label = open ? (navItemFor(open.path)?.label ?? "") : "";
+  const page = label === "" ? "Other" : label;
   return { page, what: words ?? path, named: words !== null, open };
 }
 
@@ -213,12 +221,41 @@ function docChange(kind: string, key: string, path: string, side: Side): WordedC
   return worded(placed(link), words, path);
 }
 
+function splitRoot(path: string): { root: string; rest: string } {
+  const boundary = path.search(/[^a-zA-Z]/);
+  return boundary > 0
+    ? { root: path.slice(0, boundary), rest: path.slice(boundary) }
+    : { root: path, rest: "" };
+}
+
+function itemWords(path: string, whole: string, list: string, name: string): string | null {
+  if (path === whole) {
+    return name;
+  }
+  const field = fieldWords(`${list}[]${path.slice(whole.length)}`);
+  return field ? `${name} › ${field}` : null;
+}
+
+function itemChange(path: string, item: RegExpExecArray, side: Side, alt: boolean): WordedChange {
+  const [whole = "", list = "", key = ""] = item;
+  const name = itemName(side, list, key);
+  const words = itemWords(path, whole, list, name);
+  const kept = find(side.after, list, key) !== undefined;
+  const link = kept
+    ? editorLinkFor({ path: [list], label: path })
+    : editorLinkFor({ path: [list], label: list });
+  const query = list === "experiences" && kept ? { edit: key } : undefined;
+  return worded(placed(alt ? "/admin/media" : link, alt ? undefined : query), words, path);
+}
+
 /** A path of the review (or a problem's label) in words, with where to change it. */
 export function nameChange(path: string, side: Side): WordedChange {
   const doc = /^(project|post|legal):(.+)$/.exec(path);
-  if (doc) return docChange(doc[1]!, doc[2]!, path, side);
+  if (doc) {
+    return docChange(doc[1], doc[2], path, side);
+  }
 
-  const [, root = path, rest = ""] = /^([a-zA-Z]+)(.*)$/.exec(path) ?? [];
+  const { root, rest } = splitRoot(path);
   // Alt text is written in Media, whichever page shows the picture.
   const alt = path.endsWith(".alt");
   if (root === "ui") {
@@ -235,42 +272,42 @@ export function nameChange(path: string, side: Side): WordedChange {
     return worded(placed(alt ? "/admin/media" : link), fieldWords(path), path);
   }
 
-  const [whole = "", list = "", key = ""] = item;
-  const name = itemName(side, list, key);
-  const generic = `${list}[]${path.slice(whole.length)}`;
-  const field = path === whole ? null : fieldWords(generic);
-  const words = path === whole ? name : field ? `${name} › ${field}` : null;
-  const kept = find(side.after, list, key) !== undefined;
-  const link = kept
-    ? editorLinkFor({ path: [list], label: path })
-    : editorLinkFor({ path: [list], label: list });
-  const query = list === "experiences" && kept ? { edit: key } : undefined;
-  return worded(placed(alt ? "/admin/media" : link, alt ? undefined : query), words, path);
+  return itemChange(path, item, side, alt);
 }
 
 /** The new text, plain and short: no tags, one space between words; a list's items; yes or no. */
 function plain(value: unknown): string | null {
-  if (typeof value !== "string" || value === "null") return null;
-  if (value === "true" || value === "false") return value === "true" ? "Yes" : "No";
+  if (typeof value !== "string" || value === "null") {
+    return null;
+  }
+  if (value === "true" || value === "false") {
+    return value === "true" ? "Yes" : "No";
+  }
   if (value.startsWith("[")) {
     try {
       const list: unknown = JSON.parse(value);
-      if (Array.isArray(list)) return list.join(", ") || null;
+      if (Array.isArray(list)) {
+        return list.join(", ") || null;
+      }
     } catch {
       // Prose that starts with a bracket: shown as it is.
     }
   }
   const text = value.includes("<")
-    ? (new DOMParser().parseFromString(value.replace(/<[^>]*>/g, " "), "text/html").documentElement
-        .textContent ?? "")
+    ? (new DOMParser().parseFromString(value.replaceAll(/<[^<>]{0,1000}>/g, " "), "text/html")
+        .documentElement.textContent ?? "")
     : value;
-  return text.replace(/\s+/g, " ").trim().slice(0, 300) || null;
+  return text.replaceAll(/\s+/g, " ").trim().slice(0, 300) || null;
 }
 
 /** What a row's two lines show: the new value of a field, a page's new body; nothing where none reads. */
 export function excerptOf(row: ChangeRow): string | null {
-  if (row.kind === "removed" || row.path.endsWith("(order)")) return null;
-  if (row.doc) return plain((row.doc.draft as { body?: unknown } | null)?.body);
+  if (row.kind === "removed" || row.path.endsWith("(order)")) {
+    return null;
+  }
+  if (row.doc) {
+    return plain((row.doc.draft as { body?: unknown } | null)?.body);
+  }
   return plain(row.entries.find((entry) => entry.path === row.path)?.after);
 }
 
@@ -279,8 +316,27 @@ const RAIL_ORDER = new Map(PAGES.map((item, i) => [item.label, i]));
 /** The item a row belongs to, so an item's changes sit together (its page last of them). */
 function itemOf(path: string): string {
   const doc = /^(project|post):(.+)$/.exec(path);
-  if (doc) return `${DOC_LISTS[doc[1]!]}[${doc[2]}]`;
+  if (doc) {
+    return `${DOC_LISTS[doc[1]]}[${doc[2]}]`;
+  }
   return ITEM.exec(path)?.[0] ?? path;
+}
+
+function firstSeen(keys: string[]): (key: string) => number {
+  const seen = new Map<string, number>();
+  keys.forEach((key, i) => {
+    if (!seen.has(key)) {
+      seen.set(key, i);
+    }
+  });
+  return (key: string) => seen.get(key) ?? 0;
+}
+
+function compareLocaleOrder(a: Locale, b: Locale): number {
+  if (a === b) {
+    return 0;
+  }
+  return a === "en" ? -1 : 1;
 }
 
 /**
@@ -299,13 +355,6 @@ export function wordChanges(
       row,
     })),
   );
-  const firstSeen = (keys: string[]) => {
-    const seen = new Map<string, number>();
-    keys.forEach((key, i) => {
-      if (!seen.has(key)) seen.set(key, i);
-    });
-    return (key: string) => seen.get(key) ?? 0;
-  };
   const item = firstSeen(listed.map((c) => itemOf(c.row.path)));
   const what = firstSeen(listed.map((c) => c.what));
   const page = (c: ListedChange) => RAIL_ORDER.get(c.page) ?? PAGES.length;
@@ -314,20 +363,25 @@ export function wordChanges(
       page(a) - page(b) ||
       item(itemOf(a.row.path)) - item(itemOf(b.row.path)) ||
       what(a.what) - what(b.what) ||
-      (a.locale === b.locale ? 0 : a.locale === "en" ? -1 : 1),
+      compareLocaleOrder(a.locale, b.locale),
   );
   const groups: ChangeGroup[] = [];
   for (const change of sorted) {
     const last = groups.at(-1);
-    if (last?.page === change.page) last.changes.push(change);
-    else groups.push({ page: change.page, changes: [change] });
+    if (last?.page === change.page) {
+      last.changes.push(change);
+    } else {
+      groups.push({ page: change.page, changes: [change] });
+    }
   }
   return groups;
 }
 
 /** Why the server would not reach or take it, in words; an unknown code as itself. */
 function serverWords(code: string): string {
-  if (SESSION_LOST.has(code)) return "You were signed out. Sign in, then try again.";
+  if (SESSION_LOST.has(code)) {
+    return "You were signed out. Sign in, then try again.";
+  }
   if (code === "request_failed" || /^http_5\d\d$/.test(code)) {
     return "The server did not answer. Try again.";
   }
@@ -342,8 +396,9 @@ export function publishRefusal(code: string): string {
   if (code === "publish_failed") {
     return "Not published: the server could not build the site, so nothing went live. Try again.";
   }
-  if (SESSION_LOST.has(code))
+  if (SESSION_LOST.has(code)) {
     return "Not published: you were signed out. Sign in, then publish again.";
+  }
   if (code === "request_failed" || /^http_5\d\d$/.test(code)) {
     return "Not published: the server did not answer, so nothing went live. Try again.";
   }

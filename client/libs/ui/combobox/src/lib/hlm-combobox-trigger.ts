@@ -25,6 +25,7 @@ import type { ClassValue } from "clsx";
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <button
+      type="button"
       brnComboboxTrigger
       brnComboboxAnchor
       brnComboboxPopoverTrigger

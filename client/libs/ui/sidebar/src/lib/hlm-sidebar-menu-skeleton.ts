@@ -6,7 +6,7 @@ import { classes } from "@spartan-ng/helm/utils";
 function randomSkeletonWidth(): string {
   const buffer = new Uint8Array(1);
   crypto.getRandomValues(buffer);
-  return `${(buffer[0]! % 40) + 50}%`;
+  return `${(buffer[0] % 40) + 50}%`;
 }
 
 @Component({

@@ -722,7 +722,7 @@ export default class AdminProjectEditorPage implements OnInit {
     return found?.ok ? [found.data.project] : null;
   });
 
-  private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private gone = false;
 
   protected readonly detailFields = DETAIL_FIELDS;
@@ -776,13 +776,17 @@ export default class AdminProjectEditorPage implements OnInit {
     ]),
   ) as Record<PlainKey, Record<Locale, FormControl<string>>>;
 
-  protected readonly title = computed(
-    () =>
-      this.project()?.translations.en.name ||
-      this.project()?.slug ||
-      this.route.snapshot.paramMap.get("slug") ||
-      "Project",
-  );
+  protected readonly title = computed(() => {
+    const candidates = [
+      this.project()?.translations.en.name,
+      this.project()?.slug,
+      this.route.snapshot.paramMap.get("slug"),
+    ];
+    return (
+      candidates.find((value): value is string => typeof value === "string" && value !== "") ??
+      "Project"
+    );
+  });
 
   /** The saved case study's draft page, when it has one: what the old page header's Preview opened. */
   protected readonly casePreview = computed(() => {
@@ -818,12 +822,14 @@ export default class AdminProjectEditorPage implements OnInit {
   }
 
   protected currentFor(key: PlainKey, locale: Locale): () => string {
-    return this.current[key]![locale];
+    return this.current[key][locale];
   }
 
   private pageText(locale: Locale): string {
     const t = this.project()?.translations[locale];
-    if (!t) return "";
+    if (!t) {
+      return "";
+    }
     return [t.name, t.descriptor, t.hook, t.problem, t.aiArchitecture, t.fullStackInfra, t.body]
       .filter(Boolean)
       .join("\n");
@@ -846,7 +852,9 @@ export default class AdminProjectEditorPage implements OnInit {
     this.revision();
     const now = this.project();
     const base = this.pristine;
-    if (!now || !base) return {};
+    if (!now || !base) {
+      return {};
+    }
     const marks = this.pulse?.marks() ?? null;
     const saved = this.savedHere();
     const typed = this.typedGlossary();
@@ -856,9 +864,12 @@ export default class AdminProjectEditorPage implements OnInit {
         key === "glossary"
           ? LOCALES.some((l) => typed[l] !== glossaryText(base.translations[l].glossary))
           : JSON.stringify(read(now)) !== JSON.stringify(read(base));
-      const inReview = path
-        ? inDraft(marks, `projects[${base.slug}].${path}`)
-        : docInDraft(marks, base.slug, doc!);
+      let inReview = false;
+      if (path) {
+        inReview = inDraft(marks, `projects[${base.slug}].${path}`);
+      } else if (doc) {
+        inReview = docInDraft(marks, base.slug, doc);
+      }
       // Saved here after the review was asked: in the draft, though the review cannot say so yet.
       const draft = inReview || (saved.get(key) ?? 0) > (marks?.asked ?? 0);
       out[key] = stateOf(unsaved, draft);
@@ -868,7 +879,9 @@ export default class AdminProjectEditorPage implements OnInit {
 
   /** Fields saved to the draft and not live; null until the review or a save here says. */
   protected readonly notLive = computed(() => {
-    if (!this.pulse?.marks() && this.savedHere().size === 0) return null;
+    if (!this.pulse?.marks() && this.savedHere().size === 0) {
+      return null;
+    }
     return Object.values(this.trace()).filter((state) => state === "draft").length;
   });
 
@@ -892,7 +905,9 @@ export default class AdminProjectEditorPage implements OnInit {
   /** The sections for the rail: how far along each is, its trace, and the last save's problems in it. */
   protected readonly outline = computed<OutlineItem[]>(() => {
     const p = this.project();
-    if (!p) return [];
+    if (!p) {
+      return [];
+    }
     const trace = this.trace();
     const problems = this.issues.entries().map(([path]) => path);
     return projectOutline(p, problems).map((item) => ({
@@ -908,7 +923,9 @@ export default class AdminProjectEditorPage implements OnInit {
     this.revision();
     const row = this.project();
     const saved = this.pristine;
-    if (!row || !saved) return null;
+    if (!row || !saved) {
+      return null;
+    }
     return (base, locale, media) =>
       withProject(base, locale, row, { slug: saved.slug, coverId: saved.coverId }, media);
   });
@@ -950,7 +967,9 @@ export default class AdminProjectEditorPage implements OnInit {
     for (const { key } of PLAIN_FIELDS) {
       for (const locale of LOCALES) {
         this.controls[key][locale].valueChanges.subscribe((text) => {
-          if (text !== this.textOf(locale, key)) this.patchText(locale, key, text);
+          if (text !== this.textOf(locale, key)) {
+            this.patchText(locale, key, text);
+          }
         });
       }
     }
@@ -961,7 +980,9 @@ export default class AdminProjectEditorPage implements OnInit {
       saved: () => {
         this.revision();
         const row = this.pristine;
-        if (!row) return null;
+        if (!row) {
+          return null;
+        }
         const typedGlossary = {
           en: glossaryText(row.translations.en.glossary),
           de: glossaryText(row.translations.de.glossary),
@@ -1021,7 +1042,9 @@ export default class AdminProjectEditorPage implements OnInit {
     const found = result?.ok ? result.data.project : null;
     this.project.set(found ? structuredClone(found) : null);
     this.pristine = found ? structuredClone(found) : null;
-    if (found) this.versions.remember([found]);
+    if (found) {
+      this.versions.remember([found]);
+    }
     this.showGlossary(found);
     this.revision.update((v) => v + 1);
     this.fill(true);
@@ -1034,7 +1057,9 @@ export default class AdminProjectEditorPage implements OnInit {
         const control = this.controls[key][locale];
         const text = this.textOf(locale, key);
         // A reset abandons the field's own drafts and its Undo: only where the text moved, or on a load.
-        if (fresh || control.value !== text) control.reset(text);
+        if (fresh || control.value !== text) {
+          control.reset(text);
+        }
       }
     }
   }
@@ -1080,7 +1105,7 @@ export default class AdminProjectEditorPage implements OnInit {
 
   protected patchDetail(key: DetailKey, value: string): void {
     const dates = key === "periodStart" || key === "periodEnd";
-    this.patch({ [key]: dates ? value || null : value } as Partial<ProjectRow>);
+    this.patch({ [key]: dates ? value || null : value });
   }
 
   protected chooseCover(asset: MediaAsset | null): void {
@@ -1090,12 +1115,16 @@ export default class AdminProjectEditorPage implements OnInit {
   protected patch(change: Partial<ProjectRow>): void {
     this.project.update((p) => (p ? { ...p, ...change } : p));
     this.revision.update((v) => v + 1);
-    for (const key of Object.keys(change)) this.issues.resolve(key);
+    for (const key of Object.keys(change)) {
+      this.issues.resolve(key);
+    }
   }
 
   /** A text field's value in one language (the shared templates' `field` is untyped). */
   protected textOf(locale: Locale, key: PlainKey | RichKey | "body"): string {
-    if (key === "glossary") return this.typedGlossary()[locale];
+    if (key === "glossary") {
+      return this.typedGlossary()[locale];
+    }
     return this.project()?.translations[locale][key] ?? "";
   }
 
@@ -1116,7 +1145,7 @@ export default class AdminProjectEditorPage implements OnInit {
       this.patchTranslation(locale, { glossary: parseGlossary(value) });
       return;
     }
-    this.patchTranslation(locale, { [key]: value } as Partial<ProjectTranslation>);
+    this.patchTranslation(locale, { [key]: value });
   }
 
   protected patchTranslation(locale: Locale, change: Partial<ProjectTranslation>): void {
@@ -1132,7 +1161,9 @@ export default class AdminProjectEditorPage implements OnInit {
         : p,
     );
     this.revision.update((v) => v + 1);
-    for (const key of Object.keys(change)) this.issues.resolve(`translations.${locale}.${key}`);
+    for (const key of Object.keys(change)) {
+      this.issues.resolve(`translations.${locale}.${key}`);
+    }
   }
 
   protected discard(): void {
@@ -1155,7 +1186,9 @@ export default class AdminProjectEditorPage implements OnInit {
 
   protected async save(): Promise<void> {
     const current = this.project();
-    if (!current || this.saving()) return;
+    if (!current || this.saving()) {
+      return;
+    }
 
     this.saving.set(true);
     const name = current.translations.en.name || current.slug;
@@ -1191,12 +1224,19 @@ export default class AdminProjectEditorPage implements OnInit {
         de: { ...current.translations.de, metrics: filledMetrics(current.translations.de.metrics) },
       },
     });
-    if (result.ok) await this.versions.refresh();
+    if (result.ok) {
+      await this.versions.refresh();
+    }
     this.saving.set(false);
     ended(result.ok);
-    if (this.gone) return;
-    if (result.ok) this.saved(current);
-    else this.refused(result.error, result.issues ?? []);
+    if (this.gone) {
+      return;
+    }
+    if (result.ok) {
+      this.saved(current);
+    } else {
+      this.refused(result.error, result.issues ?? []);
+    }
   }
 
   /** A refused save: its problems on their fields, the first focused, in the language that shows them. */
@@ -1216,10 +1256,14 @@ export default class AdminProjectEditorPage implements OnInit {
     const other = issues.find((i) => isLocale(i.path[1]) && shown !== "both" && i.path[1] !== shown)
       ?.path[1] as Locale | undefined;
     // A problem in the language not shown: show it (both where both fit), then place the problems.
-    if (other) this.view.set(this.wide() ? "both" : other);
+    if (other) {
+      this.view.set(this.wide() ? "both" : other);
+    }
     afterNextRender(
       () => {
-        if (this.gone) return;
+        if (this.gone) {
+          return;
+        }
         this.placeIssues();
         focusFirstInvalid(this.host.nativeElement);
       },
@@ -1235,13 +1279,19 @@ export default class AdminProjectEditorPage implements OnInit {
     const at = Date.now();
     this.savedHere.update((map) => {
       const next = new Map(map);
-      for (const [key, state] of Object.entries(before)) if (state === "unsaved") next.set(key, at);
+      for (const [key, state] of Object.entries(before)) {
+        if (state === "unsaved") {
+          next.set(key, at);
+        }
+      }
       return next;
     });
     this.revision.update((v) => v + 1);
     this.issues.clear();
     for (const { key } of PLAIN_FIELDS) {
-      for (const locale of LOCALES) this.controls[key][locale].markAsPristine();
+      for (const locale of LOCALES) {
+        this.controls[key][locale].markAsPristine();
+      }
     }
     this.savedAt.set(at);
 
@@ -1256,7 +1306,9 @@ export default class AdminProjectEditorPage implements OnInit {
     for (const { key } of PLAIN_FIELDS) {
       for (const locale of LOCALES) {
         const message = this.textIssue(locale, key);
-        if (message) this.controls[key][locale].setErrors({ server: message });
+        if (message) {
+          this.controls[key][locale].setErrors({ server: message });
+        }
       }
     }
   }

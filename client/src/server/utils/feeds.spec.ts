@@ -77,10 +77,10 @@ describe("sitemap", () => {
   const byPath = new Map(pages.map((p) => [p.path, p.lastmod]));
 
   it("lists a case study and a post only in the languages that have them", () => {
-    expect(byPath.get(`/work/${en.projects[0]!.slug}`)).toEqual({ en: "2026-07-01" });
+    expect(byPath.get(`/work/${en.projects[0].slug}`)).toEqual({ en: "2026-07-01" });
     expect(byPath.get("/writing/english-only")).toEqual({ en: "2026-09-10" });
     expect(byPath.get("/writing/both")).toEqual({ en: "2026-08-02", de: "2026-08-02" });
-    expect(byPath.has(`/work/${en.projects[1]!.slug}`)).toBe(false);
+    expect(byPath.has(`/work/${en.projects[1].slug}`)).toBe(false);
   });
 
   it("dates the writing index by its newest post, and home by the publish", () => {

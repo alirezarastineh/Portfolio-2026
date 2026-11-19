@@ -89,7 +89,9 @@ export class SignalLimiter {
   take(sessionHash: string, now = Date.now()): boolean {
     const window = this.windows.get(sessionHash);
     if (window && window.resetAt > now) {
-      if (window.count >= this.perHour) return false;
+      if (window.count >= this.perHour) {
+        return false;
+      }
       window.count++;
       return true;
     }
@@ -108,7 +110,9 @@ export class SignalLimiter {
   /** Drops expired windows from the front, then the oldest while it is full. */
   private makeRoom(now: number): void {
     for (const [key, window] of this.windows) {
-      if (window.resetAt > now && this.windows.size < this.maxSessions) return;
+      if (window.resetAt > now && this.windows.size < this.maxSessions) {
+        return;
+      }
       this.windows.delete(key);
     }
   }

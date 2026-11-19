@@ -152,7 +152,9 @@ export class StringListComponent {
   }
 
   private syncFromValue(incoming: string[]): void {
-    if (this.sameAsLast(incoming)) return;
+    if (this.sameAsLast(incoming)) {
+      return;
+    }
 
     this.entriesState.set(incoming.map((v) => ({ id: `s${counter++}`, value: v })));
     this.lastEmitted = [...incoming];

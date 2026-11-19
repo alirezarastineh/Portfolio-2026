@@ -37,9 +37,13 @@ function leaveHome(
   to: RouterStateSnapshot,
 ): boolean {
   let next = to.root;
-  while (next.firstChild) next = next.firstChild;
+  while (next.firstChild) {
+    next = next.firstChild;
+  }
   const doc = inject(DOCUMENT);
-  if (next.routeConfig === here.routeConfig || !unsent(doc)) return true;
+  if (next.routeConfig === here.routeConfig || !unsent(doc)) {
+    return true;
+  }
   return doc.defaultView?.confirm(LEAVE[inject(LanguageService).lang()]) ?? true;
 }
 
@@ -114,6 +118,8 @@ export default class Home {
   private readonly doc = inject(DOCUMENT);
 
   protected warn(event: Event): void {
-    if (unsent(this.doc)) event.preventDefault();
+    if (unsent(this.doc)) {
+      event.preventDefault();
+    }
   }
 }

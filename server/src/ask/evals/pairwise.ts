@@ -102,14 +102,22 @@ export function summarizePairwise(input: {
   /** Cases the judge saw in both orders: what the swap agreement is about. */
   let seen = 0;
   for (const result of input.results) {
-    if (result.status !== "judged" || !result.outcome) continue;
+    if (result.status !== "judged" || !result.outcome) {
+      continue;
+    }
     judged++;
-    if (result.verdicts) seen++;
+    if (result.verdicts) {
+      seen++;
+    }
     tally[result.outcome]++;
     byCategory[result.category] ??= emptyTally();
     byCategory[result.category][result.outcome]++;
-    if (!result.a.failures.length) passed.a++;
-    if (!result.b.failures.length) passed.b++;
+    if (!result.a.failures.length) {
+      passed.a++;
+    }
+    if (!result.b.failures.length) {
+      passed.b++;
+    }
   }
   return {
     a: input.a,

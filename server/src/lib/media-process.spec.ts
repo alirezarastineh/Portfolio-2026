@@ -26,14 +26,17 @@ async function phonePhoto(width: number, height: number): Promise<Buffer> {
 
 async function process(buffer: Buffer) {
   const sniffed = sniffImage(buffer);
-  if (!sniffed) throw new Error("not an image");
+  if (!sniffed) {
+    throw new Error("not an image");
+  }
   return processImage(buffer, sniffed);
 }
 
 describe("processImage", () => {
   it("strips EXIF, GPS included", async () => {
     const input = await phonePhoto(1000, 600);
-    expect((await sharp(input).metadata()).exif).toBeDefined();
+    const inputMeta = await sharp(input).metadata();
+    expect(inputMeta.exif).toBeDefined();
     expect(input.includes(Buffer.from("PhoneCo"))).toBe(true);
 
     const { original } = await process(input);
@@ -61,9 +64,13 @@ describe("processImage", () => {
       expect(variants.filter((v) => v.format === format).map((v) => v.width)).toEqual(expected);
     }
     // Proportional height, and really the named format.
-    const webp768 = variants.find((v) => v.format === "webp" && v.width === 768)!;
+    const webp768 = variants.find((v) => v.format === "webp" && v.width === 768);
+    if (!webp768) {
+      throw new Error("expected webp 768 variant");
+    }
     expect(webp768.height).toBe(Math.round((700 * 768) / 1300));
-    expect((await sharp(webp768.buffer).metadata()).format).toBe("webp");
+    const webpMeta = await sharp(webp768.buffer).metadata();
+    expect(webpMeta.format).toBe("webp");
   });
 
   it("never upscales a small image", async () => {
@@ -72,13 +79,17 @@ describe("processImage", () => {
     })
       .png()
       .toBuffer();
-    expect((await process(input)).variants).toEqual([]);
+    const processed = await process(input);
+    expect(processed.variants).toEqual([]);
   });
 
   it("produces a tiny blur placeholder as a data URI", async () => {
     const { blurDataUri } = await process(await phonePhoto(800, 800));
     expect(blurDataUri).toMatch(/^data:image\/webp;base64,/);
-    expect(blurDataUri!.length).toBeLessThan(1500);
+    if (!blurDataUri) {
+      throw new Error("expected blurDataUri");
+    }
+    expect(blurDataUri.length).toBeLessThan(1500);
   });
 
   /** A tiny file whose header claims 10000×10000: refused before it is decoded. */

@@ -203,6 +203,9 @@ describe("careful items", () => {
   });
 });
 
+const rowCheckFailures = (row: Partial<MatchSynthesis["rows"][number]>, n = 2) =>
+  checkRows(withRow(n, row), rowsCtx()).map((f) => f.gate);
+
 describe("the rows' critic", () => {
   it("passes rows citing their passages or the core, grounded, in the language", () => {
     expect(checkRows(ROWS, rowsCtx())).toEqual([]);
@@ -228,24 +231,24 @@ describe("the rows' critic", () => {
   });
 
   it("refuses a figure no cited document holds, a row too long, in German or with a link", () => {
-    const failures = (row: Partial<MatchSynthesis["rows"][number]>, n = 2) =>
-      checkRows(withRow(n, row), rowsCtx()).map((f) => f.gate);
-    expect(failures({ summary: "Built Atlas over 90,000 documents." })).toEqual(["figures"]);
-    expect(failures({ summary: Array.from({ length: 41 }, () => "word").join(" ") })).toEqual([
-      "length",
+    expect(rowCheckFailures({ summary: "Built Atlas over 90,000 documents." })).toEqual([
+      "figures",
     ]);
-    expect(failures({ summary: "Er hat Atlas gebaut und die Suche betrieben." })).toEqual([
+    expect(
+      rowCheckFailures({ summary: Array.from({ length: 41 }, () => "word").join(" ") }),
+    ).toEqual(["length"]);
+    expect(rowCheckFailures({ summary: "Er hat Atlas gebaut und die Suche betrieben." })).toEqual([
       "language",
     ]);
-    expect(failures({ summary: "Built Atlas, see https://example.com for the code." })).toEqual([
-      "instruction",
-    ]);
+    expect(
+      rowCheckFailures({ summary: "Built Atlas, see https://example.com for the code." }),
+    ).toEqual(["instruction"]);
   });
 
   it("wants one row for each item sent: none missing, none twice, none for another item", () => {
     const out: MatchSynthesis = {
       ...ROWS,
-      rows: [ROWS.rows[0]!, ROWS.rows[0]!, { ...ROWS.rows[1]!, item: 7 }],
+      rows: [ROWS.rows[0], ROWS.rows[0], { ...ROWS.rows[1], item: 7 }],
     };
     const failures = checkRows(out, rowsCtx());
     expect(failures).toContainEqual({ gate: "rows", message: "item 1 has two rows: write one" });
@@ -271,7 +274,7 @@ describe("the rows' critic", () => {
   it("turns a row that still fails, or is missing, into not-published, counted downgraded", () => {
     const out: MatchSynthesis = {
       ...ROWS,
-      rows: [withRow(1, { cites: ["project:nebula@en"] }).rows[0]!, ROWS.rows[2]!],
+      rows: [withRow(1, { cites: ["project:nebula@en"] }).rows[0], ROWS.rows[2]],
     };
     const rows = settleRows(out, checkRows(out, rowsCtx()), rowsCtx());
     expect(rows.map((r) => [r.n, r.status, r.downgraded])).toEqual([
@@ -279,7 +282,7 @@ describe("the rows' critic", () => {
       [2, "not-published", true],
       [3, "partial", false],
     ]);
-    expect(rows[2]!.cites).toEqual(["skills@en"]);
+    expect(rows[2].cites).toEqual(["skills@en"]);
   });
 
   it("keeps a summary that cites only what the rows cite, and drops any other", () => {
@@ -301,16 +304,18 @@ function model(id: string, ...replies: (object | Error)[]) {
   let i = 0;
   const mock = new MockLanguageModelV4({
     modelId: id,
-    doGenerate: async (call) => {
+    doGenerate: (call) => {
       calls.push(call);
-      const reply = replies[Math.min(i++, replies.length - 1)]!;
-      if (reply instanceof Error) throw reply;
-      return {
+      const reply = replies[Math.min(i++, replies.length - 1)];
+      if (reply instanceof Error) {
+        return Promise.reject(reply);
+      }
+      return Promise.resolve({
         content: [{ type: "text", text: JSON.stringify(reply) }],
         finishReason: { unified: "stop", raw: "stop" },
         usage: usage(300, 60),
         warnings: [],
-      };
+      });
     },
   });
   return { entry: mockEntry(id, mock), calls };
@@ -373,14 +378,14 @@ describe("runMatch", () => {
     ]);
     // The plan reads the fenced brief; the synthesis the fenced items, their passages,
     // the brief again and, after its instructions, the core.
-    expect(sent(lite.calls[0]!)).toContain('<visitor locale=\\"en\\">Senior AI Engineer');
-    const synth = sent(deep.calls[0]!);
+    expect(sent(lite.calls[0])).toContain('<visitor locale=\\"en\\">Senior AI Engineer');
+    const synth = sent(deep.calls[0]);
     expect(synth).toContain('<visitor locale=\\"en\\">1. (must) Python in production');
     expect(synth).toContain("- project:atlas@en · Atlas:");
     expect(synth).toContain("(related: experience:northwind@en)");
     expect(synth).toContain("The brief, for reference:");
     expect(synth).toContain(JSON.stringify(corpus.core.en.slice(0, 200)).slice(1, -1));
-    expect(deep.calls[0]!.responseFormat?.type).toBe("json");
+    expect(deep.calls[0].responseFormat?.type).toBe("json");
   });
 
   it("writes the rows on lite when the deep route is closed, skipping models without structured output", async () => {
@@ -395,11 +400,11 @@ describe("runMatch", () => {
   });
 
   it("repairs the plan once with the exact failures, and stops politely when it fails again", async () => {
-    const twice: MatchPlan = { items: [PLAN.items[0]!, PLAN.items[0]!] };
+    const twice: MatchPlan = { items: [PLAN.items[0], PLAN.items[0]] };
     const fixed = model("gemini-3.5-flash-lite", twice, PLAN, ROWS);
     const outcome = await run("role", BRIEF, [fixed.entry]);
     expect(outcome).toMatchObject({ repaired: { plan: true }, failures: ["duplicate"] });
-    expect(sent(fixed.calls[1]!)).toContain(
+    expect(sent(fixed.calls[1])).toContain(
       "That list failed these checks:\\n- item 2 repeats item 1",
     );
     expect(outcome.rows).toHaveLength(3);
@@ -457,7 +462,7 @@ describe("runMatch", () => {
     const found = model("gemini-3.5-flash-lite", lost, rows);
     const outcome = await run("role", BRIEF, [found.entry]);
     expect(outcome.searches).toBe(2);
-    expect(outcome.items[0]!.hits).toEqual(["skills@en"]);
+    expect(outcome.items[0].hits).toEqual(["skills@en"]);
     expect(outcome.rows[0]).toMatchObject({ status: "evidence", cites: ["skills@en"] });
 
     resetBreakers();
@@ -479,7 +484,7 @@ describe("runMatch", () => {
     const outcome = await run("role", BRIEF, [fixed.entry]);
     // An invented document grounds nothing either: its row's 40,000 is ungrounded too.
     expect(outcome).toMatchObject({ repaired: { rows: true }, failures: ["citation", "figures"] });
-    expect(sent(fixed.calls[2]!)).toContain(
+    expect(sent(fixed.calls[2])).toContain(
       "Those rows failed these checks:\\n- item 2 cites project:nebula@en, which the site does not have",
     );
     expect(outcome.rows.every((r) => !r.downgraded)).toBe(true);
@@ -557,7 +562,7 @@ describe("runMatch", () => {
     ]);
     expect(outcome.searches).toBe(1);
     expect(outcome.items[1]).toMatchObject({ careful: true, hits: [] });
-    expect(sent(m.calls[1]!)).not.toContain("2. (must) Budget");
+    expect(sent(m.calls[1])).not.toContain("2. (must) Budget");
     expect(outcome.rows[1]).toMatchObject({ status: "not-published", downgraded: false });
     expect(matchText(outcome)).toContain(
       "- – **Budget: €40,000** · not published: ask him directly.",
@@ -606,7 +611,7 @@ describe("runMatch", () => {
     const outcome = await run("role", "Wir suchen eine Person mit Python und FastAPI.", [m.entry], {
       language: "de",
     });
-    expect(outcome.items[0]!.hits).toContain("skills@de");
+    expect(outcome.items[0].hits).toContain("skills@de");
     expect(outcome.rows[0]).toMatchObject({ status: "evidence", cites: ["skills@de"] });
     expect(matchText(outcome)).toBe(
       [
@@ -617,6 +622,24 @@ describe("runMatch", () => {
     );
   });
 });
+
+const streamedMatch = (kind: MatchKind, brief: string, entry: ModelEntry) =>
+  drain(
+    streamMatch({
+      kind,
+      brief,
+      locale: "en",
+      language: "en",
+      sessionId: "session-match-0002",
+      sessionHash: "hash",
+      corpus,
+      config,
+      lite: [entry],
+      deep: null,
+      abortSignal: new AbortController().signal,
+      persist: false,
+    }).stream,
+  );
 
 describe("streamMatch", () => {
   beforeEach(() => resetBreakers());
@@ -667,10 +690,10 @@ describe("streamMatch", () => {
         meta.sig as string,
       ),
     ).toBe(true);
-    expect(meta.handoff).toEqual({
-      by: "fallback",
-      summary: expect.stringMatching(/^Role: Senior AI Engineer \(Berlin\)\. Must have/),
-    });
+    expect(meta.handoff).toMatchObject({ by: "fallback" });
+    expect((meta.handoff as { summary: string }).summary).toMatch(
+      /^Role: Senior AI Engineer \(Berlin\)\. Must have/,
+    );
     expect(meta.receipt).toEqual({
       lookups: 3,
       sources: 2,
@@ -678,39 +701,30 @@ describe("streamMatch", () => {
       match: { kind: "role", rows: 3, downgraded: 0 },
     });
     const outcome = await done;
+    expect(outcome).not.toBeNull();
     expect(outcome?.rows).toHaveLength(3);
     // The critic's rows again as data, after the text, in the server's words (plan 3 W2).
     expect(types.indexOf("data-match")).toBe(types.indexOf("text-end") + 1);
-    const data = dataOf(chunks)!;
+    const data = dataOf(chunks);
+    expect(data).toBeDefined();
+    if (!data || !outcome) {
+      throw new Error("missing match stream outcome or data");
+    }
     expect(data.items.map((i) => [i.n, i.status, i.summary, i.cites.map((c) => c.id)])).toEqual(
-      outcome!.rows.map((r) => [r.n, r.status, r.summary, r.cites]),
+      outcome.rows.map((r) => [r.n, r.status, r.summary, r.cites]),
     );
     expect(data.items.map((i) => [i.text, i.priorityLabel, i.statusLabel])).toEqual([
       ["Python in production", "must", "evidence"],
       ["Retrieval-augmented generation", "must", "evidence"],
       ["Kubernetes", "nice to have", "partial"],
     ]);
-    const atlas = corpus.byId.get("project:atlas@en")!;
-    expect(data.items[1]!.cites).toEqual([{ id: atlas.id, title: atlas.title, url: atlas.url }]);
+    const atlas = corpus.byId.get("project:atlas@en");
+    expect(atlas).toBeDefined();
+    if (!atlas) {
+      throw new Error("missing project:atlas@en");
+    }
+    expect(data.items[1].cites).toEqual([{ id: atlas.id, title: atlas.title, url: atlas.url }]);
   });
-
-  const streamed = (kind: MatchKind, brief: string, entry: ModelEntry) =>
-    drain(
-      streamMatch({
-        kind,
-        brief,
-        locale: "en",
-        language: "en",
-        sessionId: "session-match-0002",
-        sessionHash: "hash",
-        corpus,
-        config,
-        lite: [entry],
-        deep: null,
-        abortSignal: new AbortController().signal,
-        persist: false,
-      }).stream,
-    );
 
   it("gives a row nothing shows the server's line, and a stopped match no rows as data", async () => {
     const plan: MatchPlan = {
@@ -732,18 +746,18 @@ describe("streamMatch", () => {
     };
     const brief = "We need a document pipeline. Budget: €40,000.";
     const m = model("gemini-3.5-flash-lite", plan, rows);
-    const data = dataOf(await streamed("project", brief, m.entry));
+    const data = dataOf(await streamedMatch("project", brief, m.entry));
     // A project's rows show no priority, as its text does.
     expect(
       data?.items.map((i) => [i.priorityLabel, i.statusLabel, i.summary, i.cites.length]),
     ).toEqual([
-      ["", "relevant", rows.rows[0]!.summary, 1],
+      ["", "relevant", rows.rows[0].summary, 1],
       ["", "not published", "ask him directly.", 0],
     ]);
 
     resetBreakers();
     const none = model("gemini-3.5-flash-lite", { items: [] });
-    const stopped = await streamed("project", "Hello there", none.entry);
+    const stopped = await streamedMatch("project", "Hello there", none.entry);
     expect(stopped.some((c) => c.type === "text-delta")).toBe(true);
     expect(dataOf(stopped)).toBeUndefined();
   });
@@ -756,7 +770,7 @@ describe("streamMatch", () => {
       ),
     };
     const m = model("gemini-3.5-flash-lite", PLAN, link);
-    const data = dataOf(await streamed("role", BRIEF, m.entry));
+    const data = dataOf(await streamedMatch("role", BRIEF, m.entry));
     expect(data?.items[1]).toMatchObject({
       status: "not-published",
       summary: "nothing on his site shows this.",

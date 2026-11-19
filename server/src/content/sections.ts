@@ -34,7 +34,9 @@ function newest(rows: { updatedAt: Date }[]): Date | null {
 
 /** A token the client sent: an ISO string, or nothing (then there is nothing to check). */
 export function expectedToken(value: unknown): Date | null {
-  if (typeof value !== "string") return null;
+  if (typeof value !== "string") {
+    return null;
+  }
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
@@ -74,24 +76,26 @@ export async function saveSection(
   >;
   const next = build(current);
   const now = new Date();
-  let written = false;
-
-  for (const locale of LOCALES) {
-    if (locale in current && canonicalJson(current[locale]) === canonicalJson(next[locale])) {
-      continue;
-    }
-    written = true;
-    await tx
-      .insert(contentDocuments)
-      .values({ section, locale, data: next[locale], updatedAt: now, updatedBy: userId })
-      .onConflictDoUpdate({
-        target: [contentDocuments.section, contentDocuments.locale],
-        set: { data: next[locale], updatedAt: now, updatedBy: userId },
-      });
+  const changedLocales = LOCALES.filter(
+    (locale) =>
+      !(locale in current) || canonicalJson(current[locale]) !== canonicalJson(next[locale]),
+  );
+  if (changedLocales.length > 0) {
+    await Promise.all(
+      changedLocales.map((locale) =>
+        tx
+          .insert(contentDocuments)
+          .values({ section, locale, data: next[locale], updatedAt: now, updatedBy: userId })
+          .onConflictDoUpdate({
+            target: [contentDocuments.section, contentDocuments.locale],
+            set: { data: next[locale], updatedAt: now, updatedBy: userId },
+          }),
+      ),
+    );
   }
 
   // Nothing changed: the token the editor holds stays valid.
-  const token = written ? now : latest;
+  const token = changedLocales.length > 0 ? now : latest;
   return { ok: true, updatedAt: (token ?? now).toISOString() };
 }
 
@@ -107,7 +111,9 @@ export function parseUiGroups(
   prefix: (string | number)[],
 ): { ok: true; groups: UiGroups } | { ok: false; issues: Issue[] } {
   const shape = groupsInput.safeParse(value);
-  if (!shape.success) return { ok: false, issues: toIssues(shape.error.issues, prefix) };
+  if (!shape.success) {
+    return { ok: false, issues: toIssues(shape.error.issues, prefix) };
+  }
 
   const issues: Issue[] = [];
   const groups: UiGroups = {};
@@ -120,8 +126,11 @@ export function parseUiGroups(
     const parsed: Partial<Record<Locale, unknown>> = {};
     for (const locale of LOCALES) {
       const result = schema.safeParse(locales[locale]);
-      if (result.success) parsed[locale] = result.data;
-      else issues.push(...toIssues(result.error.issues, [...prefix, name, locale]));
+      if (result.success) {
+        parsed[locale] = result.data;
+      } else {
+        issues.push(...toIssues(result.error.issues, [...prefix, name, locale]));
+      }
     }
     groups[name] = parsed as Record<Locale, unknown>;
   }
@@ -147,7 +156,9 @@ export function saveUiGroups(
         LOCALES.map((locale) => {
           const base = (current[locale] ?? {}) as Record<string, unknown>;
           const merged = { ...base };
-          for (const [name, value] of Object.entries(groups)) merged[name] = value[locale];
+          for (const [name, value] of Object.entries(groups)) {
+            merged[name] = value[locale];
+          }
           return [locale, merged];
         }),
       ) as Record<Locale, unknown>,

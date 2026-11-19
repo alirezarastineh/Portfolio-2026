@@ -24,7 +24,7 @@ import { runEvals } from "./run.js";
 
 let config: AskConfig;
 const app = createApp({
-  ask: { config: () => config, corpus: async (c) => fixtureCorpus(c), evalPacing: null },
+  ask: { config: () => config, corpus: (c) => Promise.resolve(fixtureCorpus(c)), evalPacing: null },
 });
 let admin: TestClient;
 
@@ -148,13 +148,13 @@ describe("corpus snapshots", () => {
     );
     await recordSnapshot(tiered);
     const [row] = await getDb().select().from(aiCorpusSnapshots);
-    expect(row!.documents.find((d) => d.id === "project:atlas@en")?.tier).toBe("promoted");
-    expect(row!.coreTokens).toBe(Math.max(tiered.coreTokens.en, tiered.coreTokens.de));
+    expect(row.documents.find((d) => d.id === "project:atlas@en")?.tier).toBe("promoted");
+    expect(row.coreTokens).toBe(Math.max(tiered.coreTokens.en, tiered.coreTokens.de));
 
-    const replayed = askCorpusFromSnapshot(row!);
+    const replayed = askCorpusFromSnapshot(row);
     expect(replayed.core).toEqual(tiered.core);
     expect(replayed.compact).toEqual(tiered.compact);
-    expect(row!.key).toBe(snapshotKey(tiered));
+    expect(row.key).toBe(snapshotKey(tiered));
   });
 
   it("are written once per key, and pruned once nothing refers to them", async () => {
@@ -179,17 +179,53 @@ describe("corpus snapshots", () => {
       .set({ createdAt: twoDaysAgo })
       .where(sql`${aiCorpusSnapshots.key} = ${snapshotKey(corpus)}`);
     await answered("m_vesper", snapshotKey(corpus), ["project:vesper@en"]);
-    expect((await freeze({ messageId: "m_vesper" })).status).toBe(201);
+    const vesperFreeze = await freeze({ messageId: "m_vesper" });
+    expect(vesperFreeze.status).toBe(201);
     // Its answer pruned, the snapshot lives on for its eval case.
     await getDb()
       .delete(aiMessages)
       .where(sql`${aiMessages.id} = 'm_vesper'`);
 
     await pruneSnapshots();
-    const kept = (await getDb().select().from(aiCorpusSnapshots)).map((s) => s.key).sort();
-    expect(kept).toEqual(["answered-old", snapshotKey(corpus), "unused-new"].sort());
+    const snapshots = await getDb().select().from(aiCorpusSnapshots);
+    const kept = snapshots.map((s) => s.key).sort(byCodePoint);
+    expect(kept).toEqual(["answered-old", snapshotKey(corpus), "unused-new"].sort(byCodePoint));
   });
 });
+
+const byCodePoint = (a: string, b: string): number => {
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+};
+
+const vesperAnswer = () =>
+  scripted([textTurn("Vesper cut cloud costs by 42% [^project:vesper@en].")]);
+
+const tableRowCounts = () =>
+  Promise.all(
+    [aiMessages, aiUsage, aiCorpusSnapshots, aiEvalCases].map(async (table) => {
+      const found = await getDb().select().from(table);
+      return found.length;
+    }),
+  );
+
+async function replayProduction() {
+  const model = scripted([
+    textTurn("Vesper is a cost project [^project:vesper@en]."),
+    textTurn("It used Go [^project:vesper@en]."),
+    textTurn("Vesper cut cloud costs by 42% [^project:vesper@en]."),
+  ]);
+  const suite = await runProductionSuite({
+    config,
+    concurrency: 1,
+    judge: false,
+    promptVersion: "test",
+    chain: () => [mockEntry("gemini-3.5-flash-lite", model.model)],
+  });
+  return { suite, prompts: model.calls.map((call) => call.prompt) };
+}
 
 describe("production eval cases", () => {
   it("freeze a visitor's answer with what it cited, and refuse one that cannot be replayed", async () => {
@@ -213,13 +249,17 @@ describe("production eval cases", () => {
 
     // Answered before snapshots were kept; a playground answer; an unknown one; a bad pattern.
     await answered("m_before", "en:0|a:gone", []);
-    expect(await (await freeze({ messageId: "m_before" })).json()).toEqual({
+    const beforeRes = await freeze({ messageId: "m_before" });
+    expect(await beforeRes.json()).toEqual({
       error: "no_snapshot",
     });
     await answered("m_playground", snapshotKey(corpus), [], "playground");
-    expect((await freeze({ messageId: "m_playground" })).status).toBe(404);
-    expect((await freeze({ messageId: "m_unknown_1" })).status).toBe(404);
-    expect((await freeze({ messageId: "m_vesper", mustInclude: ["(unclosed"] })).status).toBe(400);
+    const playgroundRes = await freeze({ messageId: "m_playground" });
+    expect(playgroundRes.status).toBe(404);
+    const unknownRes = await freeze({ messageId: "m_unknown_1" });
+    expect(unknownRes.status).toBe(404);
+    const badPatternRes = await freeze({ messageId: "m_vesper", mustInclude: ["(unclosed"] });
+    expect(badPatternRes.status).toBe(400);
   });
 
   it("re-run against their own snapshot, not today's corpus", async () => {
@@ -228,28 +268,20 @@ describe("production eval cases", () => {
     await answered("m_vesper", snapshotKey(corpus), ["project:vesper@en"]);
     await freeze({ messageId: "m_vesper", mustInclude: ["42"] });
 
-    const answer = () =>
-      scripted([textTurn("Vesper cut cloud costs by 42% [^project:vesper@en].")]);
     const options = {
       config,
       concurrency: 1,
       judge: false,
       promptVersion: "test",
     };
-    const rows = async () =>
-      Promise.all(
-        [aiMessages, aiUsage, aiCorpusSnapshots, aiEvalCases].map(
-          async (table) => (await getDb().select().from(table)).length,
-        ),
-      );
-    const before = await rows();
+    const before = await tableRowCounts();
     const first = await runProductionSuite({
       ...options,
-      chain: () => [mockEntry("gemini-3.5-flash-lite", answer().model)],
+      chain: () => [mockEntry("gemini-3.5-flash-lite", vesperAnswer().model)],
     });
     const again = await runProductionSuite({
       ...options,
-      chain: () => [mockEntry("gemini-3.5-flash-lite", answer().model)],
+      chain: () => [mockEntry("gemini-3.5-flash-lite", vesperAnswer().model)],
     });
     for (const run of [first, again]) {
       expect(run).toMatchObject({ planned: 1, missing: 0 });
@@ -258,17 +290,17 @@ describe("production eval cases", () => {
       ]);
     }
     // The suite only reads: no answer, usage, snapshot or case row appeared.
-    expect(await rows()).toEqual(before);
+    expect(await tableRowCounts()).toEqual(before);
 
     // Today's corpus no longer has Vesper: the same answer's citation would be invented.
     const [frozen] = await productionCases();
     const today = await runEvals({
       ...options,
-      cases: [frozen!.evalCase],
+      cases: [frozen.evalCase],
       corpus: fixtureCorpus(config),
-      chain: () => [mockEntry("gemini-3.5-flash-lite", answer().model)],
+      chain: () => [mockEntry("gemini-3.5-flash-lite", vesperAnswer().model)],
     });
-    expect(today.results[0]!.failures).toContain("did not cite project:vesper@en");
+    expect(today.results[0].failures).toContain("did not cite project:vesper@en");
   });
 
   it("take the session's earlier questions as the admin rewrote them, and replay them the same twice", async () => {
@@ -284,22 +316,29 @@ describe("production eval cases", () => {
 
     // The three before it in its session, oldest first: not another session's, nor the admin's.
     const earlier = async (id: string) => admin.get(`/admin/assistant/eval-cases/earlier/${id}`);
-    expect(await (await earlier("m_vesper")).json()).toEqual({
+    const vesperEarlier = await earlier("m_vesper");
+    expect(await vesperEarlier.json()).toEqual({
       questions: [
         "I'm Jane from Acme: tell me about Vesper.",
         "Which stack did it use?",
         "And how long did it take?",
       ],
     });
-    expect(await (await earlier("m_earlier_1")).json()).toEqual({ questions: [] });
-    expect((await earlier("m_playground_1")).status).toBe(404);
-    expect((await earlier("m_unknown_1")).status).toBe(404);
-    expect((await earlier("bad")).status).toBe(400);
+    const firstEarlier = await earlier("m_earlier_1");
+    expect(await firstEarlier.json()).toEqual({ questions: [] });
+    const playgroundEarlier = await earlier("m_playground_1");
+    expect(playgroundEarlier.status).toBe(404);
+    const unknownEarlier = await earlier("m_unknown_1");
+    expect(unknownEarlier.status).toBe(404);
+    const badEarlier = await earlier("bad");
+    expect(badEarlier.status).toBe(400);
 
     // At most three, each a question the terminal would take.
     const four = ["One question?", "Two questions?", "Three questions?", "Four questions?"];
-    expect((await freeze({ messageId: "m_vesper", turns: four })).status).toBe(400);
-    expect((await freeze({ messageId: "m_vesper", turns: ["x"] })).status).toBe(400);
+    const fourRes = await freeze({ messageId: "m_vesper", turns: four });
+    expect(fourRes.status).toBe(400);
+    const shortRes = await freeze({ messageId: "m_vesper", turns: ["x"] });
+    expect(shortRes.status).toBe(400);
     expect(await getDb().select().from(aiEvalCases)).toHaveLength(0);
 
     // The visitor's name and company left out; the third question dropped.
@@ -307,37 +346,23 @@ describe("production eval cases", () => {
     const res = await freeze({ messageId: "m_vesper", turns, mustInclude: ["42"] });
     expect(res.status).toBe(201);
     const [row] = await getDb().select().from(aiEvalCases);
-    expect(row!.turns).toEqual([
+    expect(row.turns).toEqual([
       { question: "Tell me about Vesper." },
       { question: "Which stack did it use?" },
     ]);
-    const listed = (await (await admin.get("/admin/assistant/eval-cases")).json()) as {
+    const listRes = await admin.get("/admin/assistant/eval-cases");
+    const listed = (await listRes.json()) as {
       cases: { turns: string[] }[];
     };
-    expect(listed.cases[0]!.turns).toEqual(turns);
+    expect(listed.cases[0].turns).toEqual(turns);
 
     // Each earlier question answered first, then the case's, as a visitor's would be.
-    const replay = async () => {
-      const model = scripted([
-        textTurn("Vesper is a cost project [^project:vesper@en]."),
-        textTurn("It used Go [^project:vesper@en]."),
-        textTurn("Vesper cut cloud costs by 42% [^project:vesper@en]."),
-      ]);
-      const suite = await runProductionSuite({
-        config,
-        concurrency: 1,
-        judge: false,
-        promptVersion: "test",
-        chain: () => [mockEntry("gemini-3.5-flash-lite", model.model)],
-      });
-      return { suite, prompts: model.calls.map((call) => call.prompt) };
-    };
-    const first = await replay();
-    const again = await replay();
+    const first = await replayProduction();
+    const again = await replayProduction();
     expect(first.suite.results).toEqual([
       expect.objectContaining({ passed: true, failures: [], cited: ["project:vesper@en"] }),
     ]);
-    expect(first.suite.results[0]!.conversation).toEqual({
+    expect(first.suite.results[0].conversation).toEqual({
       turns: [
         {
           question: "Tell me about Vesper.",
@@ -364,7 +389,7 @@ describe("production eval cases", () => {
       expect(last).toContain(text);
     }
     expect(again.prompts).toEqual(first.prompts);
-    expect(again.suite.results[0]!.conversation).toEqual(first.suite.results[0]!.conversation);
+    expect(again.suite.results[0].conversation).toEqual(first.suite.results[0].conversation);
   });
 
   it("list with their staleness against the live corpus, and retire", async () => {
@@ -373,30 +398,40 @@ describe("production eval cases", () => {
     await answered("m_vesper", snapshotKey(corpus), ["project:vesper@en"]);
     await answered("m_atlas_1", snapshotKey(corpus), ["project:atlas@en"]);
     await answered("m_profile", snapshotKey(corpus), ["profile@en"]);
-    for (const messageId of ["m_vesper", "m_atlas_1", "m_profile"]) await freeze({ messageId });
+    await ["m_vesper", "m_atlas_1", "m_profile"].reduce(
+      (prev, messageId) => prev.then(() => freeze({ messageId })),
+      Promise.resolve<unknown>(undefined),
+    );
 
-    const list = async () =>
-      (
-        (await (await admin.get("/admin/assistant/eval-cases")).json()) as {
-          cases: { id: string; mustCite: string[]; stale: string | null; status: string }[];
-        }
-      ).cases;
-    const stale = Object.fromEntries((await list()).map((c) => [c.mustCite[0], c.stale]));
+    const list = async () => {
+      const res = await admin.get("/admin/assistant/eval-cases");
+      const body = (await res.json()) as {
+        cases: { id: string; mustCite: string[]; stale: string | null; status: string }[];
+      };
+      return body.cases;
+    };
+    const initialList = await list();
+    const stale = Object.fromEntries(initialList.map((c) => [c.mustCite[0], c.stale]));
     expect(stale).toEqual({
       "project:vesper@en": "gone",
       "project:atlas@en": "changed",
       "profile@en": null,
     });
 
-    const vesper = (await list()).find((c) => c.mustCite[0] === "project:vesper@en")!;
+    const latestList = await list();
+    const vesper = latestList.find((c) => c.mustCite[0] === "project:vesper@en");
+    expect(vesper).toBeDefined();
+    if (!vesper) {
+      throw new Error("missing vesper case");
+    }
     const retire = await admin.patch(`/admin/assistant/eval-cases/${vesper.id}`, {
       status: "retired",
     });
     expect(retire.status).toBe(200);
-    expect((await list()).find((c) => c.id === vesper.id)?.status).toBe("retired");
-    expect((await productionCases()).map((c) => c.evalCase.mustCite)).not.toContainEqual([
-      "project:vesper@en",
-    ]);
+    const afterRetire = await list();
+    expect(afterRetire.find((c) => c.id === vesper.id)?.status).toBe("retired");
+    const activeCases = await productionCases();
+    expect(activeCases.map((c) => c.evalCase.mustCite)).not.toContainEqual(["project:vesper@en"]);
   });
 
   it("keep the question as the admin rewrote it, and are deleted for good", async () => {
@@ -409,20 +444,24 @@ describe("production eval cases", () => {
     const [row] = await getDb().select().from(aiEvalCases);
     expect(row).toMatchObject({ id, question: "What did Vesper achieve?" });
 
-    expect((await admin.delete(`/admin/assistant/eval-cases/${id}`)).status).toBe(200);
+    const delRes = await admin.delete(`/admin/assistant/eval-cases/${id}`);
+    expect(delRes.status).toBe(200);
     expect(await getDb().select().from(aiEvalCases)).toHaveLength(0);
-    expect((await admin.delete(`/admin/assistant/eval-cases/${id}`)).status).toBe(404);
-    expect((await freeze({ messageId: "m_vesper", question: "x" })).status).toBe(400);
+    const missingDelRes = await admin.delete(`/admin/assistant/eval-cases/${id}`);
+    expect(missingDelRes.status).toBe(404);
+    const shortQuestionRes = await freeze({ messageId: "m_vesper", question: "x" });
+    expect(shortQuestionRes.status).toBe(400);
     // Never without the admin’s word that nothing personal is left.
-    expect((await freeze({ messageId: "m_vesper", personalChecked: false })).status).toBe(400);
-    expect(
-      (await admin.post("/admin/assistant/eval-cases", { messageId: "m_vesper" })).status,
-    ).toBe(400);
+    const uncheckedRes = await freeze({ messageId: "m_vesper", personalChecked: false });
+    expect(uncheckedRes.status).toBe(400);
+    const noCheckRes = await admin.post("/admin/assistant/eval-cases", { messageId: "m_vesper" });
+    expect(noCheckRes.status).toBe(400);
     expect(await getDb().select().from(aiEvalCases)).toHaveLength(0);
   });
 
   it("is admin-only", async () => {
     const anonymous = new TestClient(app);
-    expect((await anonymous.get("/admin/assistant/eval-cases")).status).toBe(401);
+    const res = await anonymous.get("/admin/assistant/eval-cases");
+    expect(res.status).toBe(401);
   });
 });

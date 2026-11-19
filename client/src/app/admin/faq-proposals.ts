@@ -83,7 +83,9 @@ export function sourceLine(
     return asked ? `From a journal entry: “${clip(asked)}”` : "From a journal entry";
   }
   const t = p.topic;
-  if (!t) return "From an insight topic";
+  if (!t) {
+    return "From an insight topic";
+  }
   const counts = `${t.questions} ${t.questions === 1 ? "question" : "questions"}${t.unanswered ? ", not answered" : ""}`;
   return `From the insight topic “${t.title}” (${counts})`;
 }
@@ -92,7 +94,9 @@ export function sourceLine(
 export function provenanceOf(proposals: readonly FaqProposalRow[]): Map<string, string> {
   const out = new Map<string, string>();
   for (const p of proposals) {
-    if (p.status !== "accepted" || !p.faqId) continue;
+    if (p.status !== "accepted" || !p.faqId) {
+      continue;
+    }
     out.set(
       p.faqId,
       p.source === "insight" ? `From insights: ${p.topic?.title ?? "a topic"}` : "From the journal",
@@ -140,7 +144,7 @@ export function acceptForm(p: FaqProposal): AcceptForm {
       de: { question: p.questionDe, answer: p.answerDe },
     },
     visible: true,
-    measure: measureChoices(p)[0]!.value,
+    measure: measureChoices(p)[0].value,
     statement: "",
     scope: scopeFromTitle(p.topic?.title ?? "").join(", "),
   };
@@ -155,14 +159,18 @@ export function lessonExample(p: Pick<FaqProposalRow, "topic">): string {
 /** Why the form cannot be accepted yet; null when it can. */
 export function acceptProblem(form: AcceptForm): string | null {
   const filled = LOCALES.filter((l) => form.text[l].question.trim() || form.text[l].answer.trim());
-  if (!filled.length) return "Write the entry in at least one language.";
+  if (!filled.length) {
+    return "Write the entry in at least one language.";
+  }
   for (const locale of filled) {
     const { question, answer } = form.text[locale];
     if (question.trim().length < 3 || answer.trim().length < 3) {
       return `Write both the question and the answer in ${locale.toUpperCase()} (3 characters or more), or leave both empty.`;
     }
   }
-  if (form.measure !== "new") return null;
+  if (form.measure !== "new") {
+    return null;
+  }
   const problem = lessonProblem(form.statement, form.scope);
   return problem ? `${problem} Or choose “Not measured”.` : null;
 }
@@ -181,8 +189,9 @@ export function acceptBody(form: AcceptForm): AcceptBody {
     }
   }
   let lesson: AcceptBody["lesson"];
-  if (form.measure.startsWith("lesson:")) lesson = { id: form.measure.slice("lesson:".length) };
-  else if (form.measure === "new") {
+  if (form.measure.startsWith("lesson:")) {
+    lesson = { id: form.measure.slice("lesson:".length) };
+  } else if (form.measure === "new") {
     lesson = { statement: form.statement.trim(), scope: scopeWords(form.scope) };
   }
   return { isVisible: form.visible, translations, ...(lesson ? { lesson } : {}) };

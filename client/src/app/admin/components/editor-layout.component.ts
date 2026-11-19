@@ -93,14 +93,18 @@ export class EditorLayoutComponent {
   );
 
   protected readonly width = computed(() => {
-    if (this.split()) return "max-w-none";
+    if (this.split()) {
+      return "max-w-none";
+    }
     return this.outline().length ? "max-w-4xl xl:max-w-6xl" : "max-w-4xl";
   });
 
   protected readonly editorShare = computed(() => Math.round(100 - this.preview.size()));
 
   protected onLayout(sizes: number[]): void {
-    const size = sizes[1];
-    if (sizes.length === 2 && size !== undefined) this.preview.size.set(clampSize(size));
+    const size = sizes.at(1);
+    if (sizes.length === 2 && size !== undefined) {
+      this.preview.size.set(clampSize(size));
+    }
   }
 }

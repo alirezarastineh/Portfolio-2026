@@ -29,6 +29,19 @@ interface FooterColumn {
 const linkClass =
   "inline-flex items-center text-muted-foreground transition-colors duration-(--dur-2) [overflow-wrap:anywhere] hover:text-foreground pointer-coarse:min-h-11";
 
+function currentYear(): number {
+  return new Date().getFullYear();
+}
+
+function buildInfo(): { id: string; href: string | null } | null {
+  const raw = import.meta.env.VITE_GIT_SHA;
+  if (!raw || raw.length < 4) {
+    return null;
+  }
+  const id = raw.length > 12 ? raw.slice(0, 12) : raw;
+  return { id, href: /^[0-9a-f]{7,40}$/i.test(raw) ? `${REPO}/commit/${raw}` : null };
+}
+
 /**
  * Every page's end: the name once more, as a closing statement, the site in
  * columns (case studies and Check the fit, writing, the legal pages every site
@@ -106,18 +119,13 @@ export class SiteFooterComponent {
   protected readonly chrome = computed(() => CHROME[this.lang.lang()].footer);
 
   readonly name = computed(() => this.lang.content().identity.name);
-  readonly year = computed(() => new Date().getFullYear());
+  readonly year = computed(currentYear);
   protected readonly colophon = computed(() =>
     fmt(this.chrome().colophon, { angular: VERSION.major }),
   );
 
   /** The commit this build was made from, linked when it is a real SHA. */
-  readonly build = computed(() => {
-    const raw = import.meta.env.VITE_GIT_SHA;
-    if (!raw || raw.length < 4) return null;
-    const id = raw.length > 12 ? raw.slice(0, 12) : raw;
-    return { id, href: /^[0-9a-f]{7,40}$/i.test(raw) ? `${REPO}/commit/${raw}` : null };
-  });
+  readonly build = computed(buildInfo);
 
   protected readonly columns = computed<FooterColumn[]>(() => {
     const { projects, posts, socials } = this.lang.content();

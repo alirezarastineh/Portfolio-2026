@@ -173,10 +173,14 @@ function passedOver(attempts: readonly Attempt[]): TraceStep["passedOver"] {
 }
 
 function segmentAttempts(attempts: readonly Attempt[]): Attempt[][] {
-  const segments: Attempt[][] = [[]];
+  let current: Attempt[] = [];
+  const segments: Attempt[][] = [current];
   for (const attempt of attempts) {
-    segments.at(-1)!.push(attempt);
-    if (attempt.outcome === "ok") segments.push([]);
+    current.push(attempt);
+    if (attempt.outcome === "ok") {
+      current = [];
+      segments.push(current);
+    }
   }
   return segments;
 }
@@ -204,14 +208,20 @@ function unansweredStep(unanswered: readonly Attempt[]): TraceStep {
 }
 
 function routeFields(route?: RouteMetadata): Partial<RouteMetadata> {
-  if (!route) return {};
+  if (!route) {
+    return {};
+  }
   const out: Partial<RouteMetadata> = {};
   for (const [key, value] of Object.entries(route) as [
     keyof RouteMetadata,
     RouteMetadata[keyof RouteMetadata],
   ][]) {
-    if (value === undefined) continue;
-    if (key === "guard" && Object.keys(value).length === 0) continue;
+    if (value === undefined) {
+      continue;
+    }
+    if (key === "guard" && Object.keys(value).length === 0) {
+      continue;
+    }
     out[key] = value as never;
   }
   return out;
@@ -238,7 +248,7 @@ export function buildAnswerTrace(
     tokens: call.usage ? tokenCounts(call.usage) : null,
     finishReason: recorded[i]?.finishReason ?? call.finishReason,
     passedOver: passedOver(segments[i] ?? []),
-    tools: (recorded[i]?.tools ?? []).map(mapTool),
+    tools: (recorded[i]?.tools ?? []).map((tool) => mapTool(tool)),
   }));
 
   const unanswered = segments[trace.calls.length] ?? [];

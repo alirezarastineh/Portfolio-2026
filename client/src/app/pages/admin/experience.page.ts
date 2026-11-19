@@ -46,6 +46,7 @@ import { map } from "rxjs";
 import {
   AdminApiService,
   type ApiIssue,
+  type ApiResult,
   type ExperienceInput,
   type ExperienceRow,
   type MediaAsset,
@@ -548,7 +549,7 @@ function inputOf(d: Draft): ExperienceInput {
                           cdkDragHandle
                           type="button"
                           data-grip
-                          class="flex size-6 cursor-grab items-center justify-center rounded text-muted-foreground hover:text-foreground active:cursor-grabbing pointer-coarse:size-11"
+                          class="flex size-6 cursor-grab items-center justify-center rounded-sm text-muted-foreground hover:text-foreground active:cursor-grabbing pointer-coarse:size-11"
                           [attr.aria-label]="'Reorder ' + name(row) + '. Use Alt with arrow keys.'"
                           (keydown)="onGripKey($event, i)"
                         >
@@ -624,13 +625,18 @@ function inputOf(d: Draft): ExperienceInput {
               <hlm-dropdown-menu class="w-48">
                 <button
                   hlmDropdownMenuItem
+                  type="button"
                   routerLink="/admin/experience"
                   [queryParams]="{ edit: row.id }"
                 >
                   <ng-icon name="lucidePencil" size="14" aria-hidden="true" />
                   <span>Edit</span>
                 </button>
-                <button hlmDropdownMenuItem (triggered)="toggleVisible(row, !row.isVisible)">
+                <button
+                  hlmDropdownMenuItem
+                  type="button"
+                  (triggered)="toggleVisible(row, !row.isVisible)"
+                >
                   <ng-icon
                     [name]="row.isVisible ? 'lucideEyeOff' : 'lucideEye'"
                     size="14"
@@ -638,11 +644,17 @@ function inputOf(d: Draft): ExperienceInput {
                   />
                   <span>{{ row.isVisible ? "Hide from site" : "Show on site" }}</span>
                 </button>
-                <button hlmDropdownMenuItem [disabled]="i === 0" (triggered)="move(i, -1)">
+                <button
+                  hlmDropdownMenuItem
+                  type="button"
+                  [disabled]="i === 0"
+                  (triggered)="move(i, -1)"
+                >
                   Move up
                 </button>
                 <button
                   hlmDropdownMenuItem
+                  type="button"
                   [disabled]="i === rows().length - 1"
                   (triggered)="move(i, 1)"
                 >
@@ -651,6 +663,7 @@ function inputOf(d: Draft): ExperienceInput {
                 <hlm-dropdown-menu-separator />
                 <button
                   hlmDropdownMenuItem
+                  type="button"
                   class="text-destructive focus:text-destructive"
                   (triggered)="remove(row)"
                 >
@@ -757,7 +770,9 @@ export default class AdminExperiencePage implements OnInit {
   protected readonly trace = computed<Record<string, TraceState>>(() => {
     const now = this.draft();
     const base = this.openedDraft();
-    if (!now || !base) return {};
+    if (!now || !base) {
+      return {};
+    }
     const marks = this.pulse?.marks() ?? null;
     const saved = this.savedHere();
     // A new or a hidden entry is not on the site: nothing of it is live, or in the draft against it.
@@ -791,14 +806,20 @@ export default class AdminExperiencePage implements OnInit {
   /** Fields saved to the draft and not live; null for an entry not on the site, or while unknown. */
   protected readonly notLive = computed(() => {
     const base = this.openedDraft();
-    if (!base?.id || !base.isVisible) return null;
-    if (!this.pulse?.marks() && this.savedHere().size === 0) return null;
+    if (!base?.id || !base.isVisible) {
+      return null;
+    }
+    if (!this.pulse?.marks() && this.savedHere().size === 0) {
+      return null;
+    }
     return Object.values(this.trace()).filter((state) => state === "draft").length;
   });
 
   /** The sections for the rail: the trace rolled up, and the last save's problems in each. */
   protected readonly outline = computed<OutlineItem[]>(() => {
-    if (!this.draft()) return [];
+    if (!this.draft()) {
+      return [];
+    }
     const trace = this.trace();
     const problems = this.issues.entries().map(([path]) => path);
     return SECTIONS.map(({ id, label, prefixes }) => ({
@@ -811,7 +832,9 @@ export default class AdminExperiencePage implements OnInit {
 
   /** The timeline as it would be published: the list and the open entry. */
   protected readonly livePreview = computed<LiveCompose | null>(() => {
-    if (this.loading() || this.loadError()) return null;
+    if (this.loading() || this.loadError()) {
+      return null;
+    }
     const rows = this.rows();
     const open = this.draft();
     return (base, locale, media) => withExperiences(base, locale, rows, open, media);
@@ -825,10 +848,12 @@ export default class AdminExperiencePage implements OnInit {
 
   protected readonly previewNote = computed(() => {
     const d = this.draft();
-    if (d && !d.isVisible) return "Hidden on the site: shown here so you can check it.";
-    return !d && !this.loading() && !this.rows().some((row) => row.isVisible)
-      ? "No entries shown yet: the timeline is left off the page."
-      : null;
+    if (d && !d.isVisible) {
+      return "Hidden on the site: shown here so you can check it.";
+    }
+    return d || this.loading() || this.rows().some((row) => row.isVisible)
+      ? null
+      : "No entries shown yet: the timeline is left off the page.";
   });
 
   /** The logo's hint, with its trace's words: a media slot has no description of its own. */
@@ -848,7 +873,9 @@ export default class AdminExperiencePage implements OnInit {
     // The address decides what shows, once the list is here: the list, an entry, or a new one.
     effect(() => {
       const edit = this.edit();
-      if (this.loading() || this.loadError()) return;
+      if (this.loading() || this.loadError()) {
+        return;
+      }
       untracked(() => this.follow(edit));
     });
     // A text typed, or put there by its ⋯, goes into the draft like any edit.
@@ -914,19 +941,27 @@ export default class AdminExperiencePage implements OnInit {
     const result = await this.api.listExperiences();
     this.loading.set(false);
     this.loadError.set(result.ok ? null : result.error);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     this.rows.set(result.data.experiences);
     this.versions.remember(result.data.experiences);
-    if (!this.reopened) void this.reopen();
+    if (!this.reopened) {
+      void this.reopen();
+    }
   }
 
   /** A copy kept in this browser: its entry opens again, and the copy comes back over it. */
   private async reopen(): Promise<void> {
     this.reopened = true;
-    if (this.edit() !== null) return;
+    if (this.edit() !== null) {
+      return;
+    }
     const [item] = await this.recovery.items("experience-entry");
     const known = item === "new" || this.rows().some((row) => row.id === item);
-    if (item && known && !this.gone && this.edit() === null) this.goTo(item);
+    if (item && known && !this.gone && this.edit() === null) {
+      this.goTo(item);
+    }
   }
 
   protected add(): void {
@@ -940,7 +975,9 @@ export default class AdminExperiencePage implements OnInit {
   /** The address's entry, opened in the list's place; none, and the list is back. */
   private follow(edit: string | null): void {
     const open = this.draft();
-    if (edit === (open ? (open.id ?? "new") : null) && !(edit === null && this.missing())) return;
+    if (edit === (open ? (open.id ?? "new") : null) && !(edit === null && this.missing())) {
+      return;
+    }
     const row = edit && edit !== "new" ? this.rows().find((r) => r.id === edit) : undefined;
     this.missing.set(edit !== null && edit !== "new" && !row);
     if (edit === null || this.missing()) {
@@ -948,7 +985,9 @@ export default class AdminExperiencePage implements OnInit {
       this.opened.set("");
       this.issues.clear();
       // A query's change is no page change to the layout: the focus goes back to the entry left.
-      if (open) this.focusRow(open.id);
+      if (open) {
+        this.focusRow(open.id);
+      }
       return;
     }
     this.open(row ?? null);
@@ -993,7 +1032,9 @@ export default class AdminExperiencePage implements OnInit {
         const control = this.controls[key][locale];
         const text = d?.translations[locale][key] ?? "";
         // A reset abandons the field's own drafts and its Undo: only where the text moved, or on an open.
-        if (fresh || control.value !== text) control.reset(text);
+        if (fresh || control.value !== text) {
+          control.reset(text);
+        }
       }
     }
   }
@@ -1022,12 +1063,14 @@ export default class AdminExperiencePage implements OnInit {
   }
 
   protected patchDetail(key: DetailKey, value: string): void {
-    this.patch({ [key]: key === "endDate" ? value || null : value } as Partial<Draft>);
+    this.patch({ [key]: key === "endDate" ? value || null : value });
   }
 
   protected patch(change: Partial<Draft>): void {
     this.draft.update((d) => (d ? { ...d, ...change } : d));
-    for (const key of Object.keys(change)) this.issues.resolve(key);
+    for (const key of Object.keys(change)) {
+      this.issues.resolve(key);
+    }
   }
 
   protected patchText(locale: Locale, change: Partial<Draft["translations"]["en"]>): void {
@@ -1039,7 +1082,9 @@ export default class AdminExperiencePage implements OnInit {
           }
         : d,
     );
-    for (const key of Object.keys(change)) this.issues.resolve(`translations.${locale}.${key}`);
+    for (const key of Object.keys(change)) {
+      this.issues.resolve(`translations.${locale}.${key}`);
+    }
   }
 
   protected chooseLogo(asset: MediaAsset | null): void {
@@ -1059,7 +1104,9 @@ export default class AdminExperiencePage implements OnInit {
 
   protected async save(): Promise<void> {
     const d = this.draft();
-    if (!d || this.saving()) return;
+    if (!d || this.saving()) {
+      return;
+    }
 
     this.saving.set(true);
     if (!(await this.versions.mayOverwrite(d.id ? [d.id] : [], this.title()))) {
@@ -1067,18 +1114,33 @@ export default class AdminExperiencePage implements OnInit {
       return;
     }
     const input = inputOf(d);
-    const created = d.id ? null : await this.api.createExperience(input);
-    const result = created ?? (await this.api.updateExperience(d.id!, input));
-    if (result.ok) await this.versions.refresh();
+    let nextId = d.id;
+    let result: ApiResult<{ ok: true }>;
+    if (d.id) {
+      result = await this.api.updateExperience(d.id, input);
+    } else {
+      const created = await this.api.createExperience(input);
+      result = created;
+      if (created.ok) {
+        nextId = created.data.id;
+      }
+    }
+    if (result.ok) {
+      await this.versions.refresh();
+    }
     this.saving.set(false);
-    if (this.gone) return;
+    if (this.gone) {
+      return;
+    }
     if (!result.ok) {
       this.refused(result.error, result.issues ?? []);
       return;
     }
-    const id = created?.ok ? created.data.id : d.id;
+    const id = nextId;
     // A new entry's copy was kept under `new`: it is saved now, under its id.
-    if (!d.id) this.backup.drop("new");
+    if (!d.id) {
+      this.backup.drop("new");
+    }
     this.saved({ ...d, id });
     if (!d.id) {
       void this.router.navigate([], {
@@ -1098,12 +1160,18 @@ export default class AdminExperiencePage implements OnInit {
     this.opened.set(JSON.stringify(current));
     this.savedHere.update((marks) => {
       const next = new Map(marks);
-      for (const [key, state] of Object.entries(before)) if (state === "unsaved") next.set(key, at);
+      for (const [key, state] of Object.entries(before)) {
+        if (state === "unsaved") {
+          next.set(key, at);
+        }
+      }
       return next;
     });
     this.issues.clear();
     for (const key of ["title", "summary"] as const) {
-      for (const locale of LOCALES) this.controls[key][locale].markAsPristine();
+      for (const locale of LOCALES) {
+        this.controls[key][locale].markAsPristine();
+      }
     }
     this.savedAt.set(at);
     // Now, not at the next render: a new entry's address changes next, and the guard reads this.
@@ -1121,12 +1189,16 @@ export default class AdminExperiencePage implements OnInit {
     const shown = this.shownView();
     const other = issues.find((i) => isLocale(i.path[1]) && shown !== "both" && i.path[1] !== shown)
       ?.path[1] as Locale | undefined;
-    if (other) this.view.set(this.wide() ? "both" : other);
+    if (other) {
+      this.view.set(this.wide() ? "both" : other);
+    }
     this.afterRender((root) => {
       for (const key of ["title", "summary"] as const) {
         for (const locale of LOCALES) {
           const message = this.issues.get(`translations.${locale}.${key}`);
-          if (message) this.controls[key][locale].setErrors({ server: message });
+          if (message) {
+            this.controls[key][locale].setErrors({ server: message });
+          }
         }
       }
       focusFirstInvalid(root);
@@ -1152,7 +1224,9 @@ export default class AdminExperiencePage implements OnInit {
       confirmLabel: "Delete entry",
       destructive: true,
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
 
     const previous = this.rows();
     this.rows.update((list) => list.filter((r) => r.id !== row.id));
@@ -1168,7 +1242,9 @@ export default class AdminExperiencePage implements OnInit {
   }
 
   protected onGripKey(event: KeyboardEvent, index: number): void {
-    if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+    if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) {
+      return;
+    }
     event.preventDefault();
     this.move(index, event.key === "ArrowUp" ? -1 : 1);
   }
@@ -1183,7 +1259,9 @@ export default class AdminExperiencePage implements OnInit {
 
   private moveTo(from: number, to: number): void {
     const list = [...this.rows()];
-    if (from === to || to < 0 || to >= list.length) return;
+    if (from === to || to < 0 || to >= list.length) {
+      return;
+    }
     moveItemInArray(list, from, to);
     void this.onReorder(list);
     // A moved row is a node moved, which loses the focus: its grip takes it back where it lands.
@@ -1211,7 +1289,9 @@ export default class AdminExperiencePage implements OnInit {
   private afterRender(run: (root: HTMLElement) => void): void {
     afterNextRender(
       () => {
-        if (!this.gone) run(this.host.nativeElement);
+        if (!this.gone) {
+          run(this.host.nativeElement);
+        }
       },
       { injector: this.injector },
     );

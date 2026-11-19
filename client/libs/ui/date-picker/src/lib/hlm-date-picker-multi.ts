@@ -116,7 +116,7 @@ export class HlmDatePickerMulti<T> implements ControlValueAccessor {
   public readonly userClass = input<ClassValue>("", { alias: "class" }); // NOSONAR - alias required: 'class' is a reserved keyword, cannot be a TS property name
   protected readonly _computedClass = computed(() =>
     hlm(
-      "ring-offset-background border-input bg-background hover:bg-accent dark:bg-input/30 dark:hover:bg-input/50 inline-flex h-9 w-[280px] cursor-default items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm font-normal whitespace-nowrap transition-all disabled:pointer-events-none disabled:opacity-50",
+      "ring-offset-background border-input bg-background hover:bg-accent dark:bg-input/30 dark:hover:bg-input/50 inline-flex h-9 w-70 cursor-default items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm font-normal whitespace-nowrap transition-all disabled:pointer-events-none disabled:opacity-50",
       "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
       "disabled:pointer-events-none disabled:opacity-50",
       "[&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0",
@@ -190,9 +190,13 @@ export class HlmDatePickerMulti<T> implements ControlValueAccessor {
   protected _onTouched?: TouchFn;
 
   protected _handleChange(value: T[] | undefined) {
-    if (value === undefined) return;
+    if (value === undefined) {
+      return;
+    }
 
-    if (this._mutableDisabled()) return;
+    if (this._mutableDisabled()) {
+      return;
+    }
     const transformedDate = this.transformDates()(value);
 
     this._mutableDate.set(transformedDate);

@@ -19,7 +19,7 @@ import { HlmComboboxChipRemove } from "./hlm-combobox-chip-remove";
     <ng-content />
 
     @if (showRemove()) {
-      <button hlmComboboxChipRemove>
+      <button type="button" hlmComboboxChipRemove>
         <ng-icon name="lucideX" />
       </button>
     }

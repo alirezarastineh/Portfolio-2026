@@ -12,10 +12,10 @@ export default defineEventHandler(async (event) => {
   const byLocale = Object.fromEntries(
     LOCALES.map((l, i) => [
       l,
-      { content: results[i]!.payload as AppContent, lastModified: results[i]!.lastModified },
+      { content: results[i].payload as AppContent, lastModified: results[i].lastModified },
     ]),
   ) as SitemapInput;
-  const origin = siteOriginOf(results[0]!.payload, FALLBACK_ORIGIN);
+  const origin = siteOriginOf(results[0].payload, FALLBACK_ORIGIN);
 
   setResponseHeader(event, "Content-Type", "application/xml; charset=utf-8");
   setResponseHeader(event, "Cache-Control", "public, max-age=0, s-maxage=3600");

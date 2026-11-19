@@ -15,9 +15,13 @@ const FORMAT = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
  */
 export function relativeTime(iso: string, now = Date.now()): string {
   const seconds = Math.round((new Date(iso).getTime() - now) / 1000);
-  if (Math.abs(seconds) < 45) return "just now";
+  if (Math.abs(seconds) < 45) {
+    return "just now";
+  }
   for (const [unit, size] of UNITS) {
-    if (Math.abs(seconds) >= size) return FORMAT.format(Math.round(seconds / size), unit);
+    if (Math.abs(seconds) >= size) {
+      return FORMAT.format(Math.round(seconds / size), unit);
+    }
   }
   return FORMAT.format(Math.round(seconds / 60), "minute");
 }

@@ -115,7 +115,7 @@ import {
           </label>
           <ol class="m-0 flex list-none flex-wrap gap-2 p-0 font-data text-xs">
             @for (w of v.primary.weeks; track w.week) {
-              <li class="rounded border border-border px-2 py-1">
+              <li class="rounded-sm border border-border px-2 py-1">
                 {{ w.week }}: {{ share(w.value) }}
               </li>
             }
@@ -163,8 +163,11 @@ export class AssistantOutcomesComponent implements OnInit {
 
   private async load(): Promise<void> {
     const result = await this.api.assistantOutcomes();
-    if (result.ok) this.view.set(result.data);
-    else if (this.view()) toast.error("Could not load the outcomes", { description: result.error });
+    if (result.ok) {
+      this.view.set(result.data);
+    } else if (this.view()) {
+      toast.error("Could not load the outcomes", { description: result.error });
+    }
     this.loadError.set(!result.ok && !this.view());
   }
 

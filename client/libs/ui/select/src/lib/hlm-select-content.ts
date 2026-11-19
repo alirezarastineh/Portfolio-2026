@@ -11,6 +11,8 @@ import { classes, hlm } from "@spartan-ng/helm/utils";
 import { HlmSelectScrollDown } from "./hlm-select-scroll-down";
 import { HlmSelectScrollUp } from "./hlm-select-scroll-up";
 
+const defaultListboxClasses = (): string => hlm("flex flex-col");
+
 @Component({
   selector: "hlm-select-content",
   imports: [HlmSelectScrollUp, HlmSelectScrollDown],
@@ -31,7 +33,7 @@ import { HlmSelectScrollUp } from "./hlm-select-scroll-up";
   `,
 })
 export class HlmSelectContent {
-  protected readonly _computedListboxClasses = computed(() => hlm("flex flex-col"));
+  protected readonly _computedListboxClasses = computed(defaultListboxClasses);
 
   public readonly showScroll = input<boolean, BooleanInput>(false, { transform: booleanAttribute });
 

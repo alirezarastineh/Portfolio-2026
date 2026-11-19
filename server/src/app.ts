@@ -25,7 +25,9 @@ export function createApp(options: { ask?: AskDeps } = {}): Hono {
   const app = new Hono();
   app.onError(onApiError);
   // Silent under test, where it would only bury the reporter's output.
-  if (process.env.NODE_ENV !== "test") app.use("*", requestLog);
+  if (process.env.NODE_ENV !== "test") {
+    app.use("*", requestLog);
+  }
 
   const corsOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173,http://localhost:3000")
     .split(",")
@@ -67,7 +69,9 @@ export function createApp(options: { ask?: AskDeps } = {}): Hono {
     try {
       await Promise.race([
         getPool().query("select 1"),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 2000).unref()),
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("timeout")), 2000).unref();
+        }),
       ]);
       return c.json({ status: "ok" });
     } catch {

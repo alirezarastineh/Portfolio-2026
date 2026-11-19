@@ -2,7 +2,10 @@ import { PLATFORM_ID } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const sentry = vi.hoisted(() => ({ init: vi.fn(), captureException: vi.fn() }));
+const sentry = vi.hoisted(() => ({
+  init: vi.fn<(options: Record<string, unknown>) => void>(),
+  captureException: vi.fn<(error: unknown) => void>(),
+}));
 vi.mock("@sentry/browser", () => sentry);
 
 import { ReportingErrorHandler, SENTRY_DSN } from "./reporting-error-handler";
@@ -21,10 +24,13 @@ function handler(platform: "browser" | "server", dsn: string | undefined): Repor
 }
 
 /** Long enough for a dynamic import that is going to happen to have happened. */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+const settle = () =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, 50);
+  });
 
 beforeEach(() => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 
 afterEach(() => {
@@ -43,18 +49,17 @@ describe("ReportingErrorHandler", () => {
     const error = new Error("boom");
     handler("browser", DSN).handleError(error);
     await vi.waitFor(() => expect(sentry.captureException).toHaveBeenCalledWith(error));
-    expect(sentry.init).toHaveBeenCalledWith(
-      expect.objectContaining({
-        dsn: DSN,
-        dataCollection: expect.objectContaining({
-          userInfo: false,
-          cookies: false,
-          httpHeaders: false,
-          httpBodies: [],
-          urlQueryParams: false,
-        }),
-      }),
-    );
+    expect(sentry.init).toHaveBeenCalledOnce();
+    expect(sentry.init.mock.calls[0]?.[0]).toMatchObject({
+      dsn: DSN,
+      dataCollection: {
+        userInfo: false,
+        cookies: false,
+        httpHeaders: false,
+        httpBodies: [],
+        urlQueryParams: false,
+      },
+    });
   });
 
   it("never loads Sentry during server rendering", async () => {

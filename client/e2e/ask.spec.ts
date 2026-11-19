@@ -1,7 +1,24 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Page, Route } from "@playwright/test";
 
-import { askPanel, expect, interactive, settled, test } from "./fixtures";
+import {
+  askPanel,
+  expect,
+  fetchText,
+  interactive,
+  requireBox,
+  requireViewport,
+  runSequentially,
+  settled,
+  test,
+} from "./fixtures";
+
+const delay = (ms: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const matchBrief = (kind: string) => `A ${kind} about retrieval in production and embedded C.`;
 
 /**
  * The portfolio assistant, in its panel on every page. The API is cross-origin in
@@ -59,7 +76,7 @@ function answer(options: {
         fallback: false,
         route: "lite",
         totalMs: 1300,
-        tokens: { input: 10_000, cached: 9_100, output: 60 },
+        tokens: { input: 10_000, cached: 9100, output: 60 },
       },
     },
   ];
@@ -90,14 +107,14 @@ const INSPECTED = {
   route: "lite",
   reason: "default",
   model: "gemini-3.1-flash-lite",
-  ttftMs: 6_640,
-  totalMs: 7_900,
+  ttftMs: 6640,
+  totalMs: 7900,
   steps: [
     {
       model: "gemini-3.1-flash-lite",
       ttftMs: 640,
-      tokens: { input: 9_000, cached: 8_000, output: 60 },
-      passedOver: [{ model: "gemini-3.5-flash-lite", outcome: "timeout", ms: 6_000 }],
+      tokens: { input: 9000, cached: 8000, output: 60 },
+      passedOver: [{ model: "gemini-3.5-flash-lite", outcome: "timeout", ms: 6000 }],
       tools: [{ name: "search_portfolio", input: "evals", outcome: "ok", chars: 812 }],
     },
   ],
@@ -131,7 +148,7 @@ const SCORECARD = {
     citationsVerified: { share: 0.96, n: 40 },
     repaired: { share: 0.02, n: 51 },
     figuresFlagged: null,
-    firstWordMs: { median: 1_800, n: 30 },
+    firstWordMs: { median: 1800, n: 30 },
     refusals: { invalid_input: 16, rate_limited: 2 },
   },
   judge: null,
@@ -245,7 +262,7 @@ async function mockAsk(
       await route.fulfill({ status: 204, headers: cors });
       return;
     }
-    mock.bodies.push(route.request().postDataJSON());
+    mock.bodies.push(route.request().postDataJSON() as AskMock["bodies"][number]);
     await respond(route, mock.bodies.length);
   });
   return mock;
@@ -268,18 +285,25 @@ function sse(route: Route, chunks: Chunk[]) {
  * page's own fetch instead, stopping for `pause` ms after chunk `cut`, as a
  * model (or a tool call) does.
  */
-async function pausedStream(page: Page, chunks: Chunk[], cut: number, pause: number) {
+async function pausedStream(page: Page, chunks: Chunk[], cut: number, pauseMs: number) {
   await page.addInitScript(
     ({ head, tail, pause }) => {
-      const original = window.fetch.bind(window);
-      window.fetch = async (input, init) => {
-        const url =
-          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-        if (!url.endsWith("/v1/ask") || init?.method !== "POST") return original(input, init);
+      const original = globalThis.fetch.bind(globalThis);
+      globalThis.fetch = async (input, init) => {
+        let url: string;
+        if (typeof input === "string") {
+          url = input;
+        } else if (input instanceof URL) {
+          url = input.href;
+        } else {
+          url = input.url;
+        }
+        if (!url.endsWith("/v1/ask") || init?.method !== "POST") {
+          return original(input, init);
+        }
         const encoder = new TextEncoder();
-        const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
         const body = new ReadableStream<Uint8Array>({
-          async start(controller) {
+          start(controller) {
             // As a real fetch's body: a stop (the signal) ends it with an AbortError.
             let aborted = false;
             init?.signal?.addEventListener("abort", () => {
@@ -287,18 +311,34 @@ async function pausedStream(page: Page, chunks: Chunk[], cut: number, pause: num
               controller.error(new DOMException("The user aborted a request.", "AbortError"));
             });
             const send = (chunk: unknown) => {
-              if (!aborted)
+              if (!aborted) {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+              }
             };
-            for (const chunk of head) {
-              send(chunk);
-              await wait(50);
-            }
-            await wait(pause);
-            for (const chunk of tail) send(chunk);
-            if (aborted) return;
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-            controller.close();
+            const emitTail = () => {
+              for (const chunk of tail) {
+                send(chunk);
+              }
+              if (aborted) {
+                return;
+              }
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              controller.close();
+            };
+            let index = 0;
+            const emitHead = () => {
+              if (aborted) {
+                return;
+              }
+              if (index >= head.length) {
+                setTimeout(emitTail, pause);
+                return;
+              }
+              send(head[index]);
+              index += 1;
+              setTimeout(emitHead, 50);
+            };
+            emitHead();
           },
         });
         return new Response(body, {
@@ -306,7 +346,7 @@ async function pausedStream(page: Page, chunks: Chunk[], cut: number, pause: num
         });
       };
     },
-    { head: chunks.slice(0, cut + 1), tail: chunks.slice(cut + 1), pause },
+    { head: chunks.slice(0, cut + 1), tail: chunks.slice(cut + 1), pause: pauseMs },
   );
 }
 
@@ -378,18 +418,8 @@ async function offerHandoff(page: Page, by: "tool" | "fallback" = "tool") {
       },
     ]),
   );
-  const confirmed: unknown[] = [];
-  const sent: unknown[] = [];
-  const answerJson = (list: unknown[]) => async (route: Route) => {
-    if (route.request().method() === "OPTIONS") {
-      await route.fulfill({ status: 204, headers: cors });
-      return;
-    }
-    list.push(route.request().postDataJSON());
-    await route.fulfill({ headers: cors, json: { ok: true } });
-  };
-  await page.route("**/v1/ask/handoff", answerJson(confirmed));
-  await page.route("**/contact", answerJson(sent));
+  const confirmed = await recordPosts(page, "**/v1/ask/handoff");
+  const sent = await recordPosts(page, "**/contact");
   const prompt = await openPrompt(page);
   await run(prompt, "I want to hire him");
   const confirm = page.getByRole("group", {
@@ -479,7 +509,7 @@ test.describe("assistant terminal", () => {
     page,
     request,
   }) => {
-    const html = await (await request.get("/en")).text();
+    const html = await fetchText(request, "/en");
     expect(html).toContain("Answers come from an AI, using this site’s content.");
     // The panel itself (and the AI SDK) loads in the browser only, and About has no terminal.
     expect(html).not.toContain('id="ask-input');
@@ -579,10 +609,13 @@ test.describe("assistant terminal", () => {
     await run(prompt, "The second question?");
     await expect(log.locator(".latest")).toContainText("Answered in 1.3 s");
 
-    const top = await log.evaluate(
-      (el) =>
-        el.querySelector(".latest")!.getBoundingClientRect().top - el.getBoundingClientRect().top,
-    );
+    const top = await log.evaluate((el) => {
+      const latest = el.querySelector(".latest");
+      if (!latest) {
+        throw new Error("Expected .latest element in log");
+      }
+      return latest.getBoundingClientRect().top - el.getBoundingClientRect().top;
+    });
     // The log's own 1rem of air above it.
     expect(top).toBeGreaterThanOrEqual(0);
     expect(top).toBeLessThan(20);
@@ -679,7 +712,7 @@ test.describe("assistant terminal", () => {
   }) => {
     await mockAsk(page, () => undefined, { scorecard: true });
     await page.route("**/v1/ask/scorecard", async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await delay(800);
       await route.fulfill({ headers: cors, json: SCORECARD });
     });
     const prompt = await openPrompt(page, "/en/writing");
@@ -708,7 +741,7 @@ test.describe("assistant terminal", () => {
     await page.goto("/en/writing");
     await interactive(page);
     await page.route("**/*.js", async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await delay(500);
       await route.continue();
     });
     await page.getByRole("button", { name: "Ask about my work" }).click();
@@ -795,7 +828,7 @@ test.describe("assistant terminal", () => {
         "He runs evals before every prompt change.",
       );
 
-      const body = mock.bodies[0]!;
+      const body = mock.bodies[0];
       expect(body.locale).toBe("en");
       expect(body.sessionId).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
       expect(body.messages.map((m) => m.role)).toEqual(["user"]);
@@ -803,7 +836,7 @@ test.describe("assistant terminal", () => {
       // A follow-up is one click, and carries the signed answer as history.
       await log.getByRole("button", { name: "Which stack did he use?" }).click();
       await expect.poll(() => mock.bodies.length).toBe(2);
-      expect(mock.bodies[1]!.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+      expect(mock.bodies[1].messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
       expect(problems.cspViolations).toEqual([]);
       expect(problems.pageErrors).toEqual([]);
     },
@@ -840,7 +873,7 @@ test.describe("assistant terminal", () => {
     const signals = await recordPosts(page, "**/v1/ask/signal");
     const feedback = await recordPosts(page, "**/v1/ask/feedback");
     const of = (messageId: string) =>
-      (signals.filter((s) => s["messageId"] === messageId).at(-1)?.["signals"] ?? {}) as Record<
+      (signals.findLast((s) => s["messageId"] === messageId)?.["signals"] ?? {}) as Record<
         string,
         number | boolean
       >;
@@ -900,7 +933,12 @@ test.describe("assistant terminal", () => {
       .poll(() => signals.at(-1))
       .toMatchObject({ messageId: "m_e2e00000001", signals: { stopped: true } });
     // Its first words showed while it streamed, well before the stop.
-    const { shownMs, doneMs } = signals.at(-1)!["signals"] as { shownMs: number; doneMs: number };
+    const lastSignal = signals.at(-1);
+    expect(lastSignal).toBeDefined();
+    const { shownMs, doneMs } = (lastSignal?.["signals"] ?? {}) as {
+      shownMs: number;
+      doneMs: number;
+    };
     expect(shownMs).toBeLessThan(doneMs);
   });
 
@@ -961,7 +999,7 @@ test.describe("assistant terminal", () => {
       await expect(log).toContainText("How does he test AI features?");
       await expect(log).toContainText("Evals on every prompt change.");
       // On a phone the keyboard stays down after a button (plan 4 U9).
-      await expect(page.viewportSize()!.width < 1024 ? log : prompt).toBeFocused();
+      await expect(requireViewport(page).width < 1024 ? log : prompt).toBeFocused();
       expect(mock.bodies).toHaveLength(1);
       await expect(starters).toHaveCount(0);
 
@@ -978,7 +1016,7 @@ test.describe("assistant terminal", () => {
     const prompt = await openPrompt(page, "/de");
     await run(prompt, "Wie testet er?");
     await expect(askPanel(page).locator("[role=log]")).toContainText("Er testet jede Änderung.");
-    expect(mock.bodies[0]!.locale).toBe("de");
+    expect(mock.bodies[0].locale).toBe("de");
   });
 
   test("while it thinks, the status is read once: its ticking clock is not", async ({ page }) => {
@@ -990,7 +1028,7 @@ test.describe("assistant terminal", () => {
     const status = askPanel(page).getByRole("status");
     // Seen: the seconds count up. Heard: no number, so nothing to read again.
     await expect(status).toContainText(/thinking… \d+\.\d s/);
-    expect(await status.ariaSnapshot()).not.toMatch(/\d+\.\d s/);
+    expect(await status.ariaSnapshot()).not.toMatch(/\d\.\d s/);
     await expect(askPanel(page).locator("[role=log]")).toContainText("Hybrid search.");
   });
 
@@ -1040,7 +1078,7 @@ test.describe("assistant terminal", () => {
     await expect(log).toContainText("Second try worked.");
     // The answer that came says its question was asked again (visitor plan V2).
     await expect
-      .poll(() => signals.filter((s) => s["messageId"] === "m_e2e00000003").at(-1)?.["signals"])
+      .poll(() => signals.findLast((s) => s["messageId"] === "m_e2e00000003")?.["signals"])
       .toMatchObject({ retries: 1 });
   });
 
@@ -1228,10 +1266,12 @@ test.describe("assistant terminal", () => {
     page,
     request,
   }) => {
-    expect(await (await request.get("/de")).text()).toContain("Was hat er zuletzt gebaut?");
+    expect(await fetchText(request, "/de")).toContain("Was hat er zuletzt gebaut?");
     const asked: string[] = [];
     page.on("request", (sent) => {
-      if (/\/v1\/ask|ask-questions/.test(sent.url())) asked.push(sent.url());
+      if (/\/v1\/ask|ask-questions/.test(sent.url())) {
+        asked.push(sent.url());
+      }
     });
     await page.goto("/de");
     await interactive(page);
@@ -1283,7 +1323,7 @@ test.describe("assistant terminal", () => {
     const sheet = page.getByRole("dialog", { name: "Ask about my work" });
     const prompt = sheet.locator("textarea");
     // On a phone the prompt waits for a tap: its keyboard would cover the suggestions.
-    await expect(page.viewportSize()!.width < 1024 ? sheet : prompt).toBeFocused();
+    await expect(requireViewport(page).width < 1024 ? sheet : prompt).toBeFocused();
     await run(prompt, "Hello");
     await expect(sheet).toContainText("From the sheet.");
     await page.keyboard.press("Escape");
@@ -1323,7 +1363,7 @@ test.describe("assistant terminal", () => {
     "a citation and the hand-off happen beside the open panel, which holds still; a phone's sheet steps aside for them (plan 4 U8)",
     PHONE,
     async ({ page }) => {
-      const phone = page.viewportSize()!.width < 1024;
+      const phone = requireViewport(page).width < 1024;
       const summary = "Wants to discuss a six-month contract.";
       await mockAsk(page, (route, n) =>
         sse(
@@ -1404,8 +1444,8 @@ test.describe("assistant terminal", () => {
       await expect(page.locator("#contact-name")).toBeFocused();
       await (phone ? expect(panel).toBeHidden() : expect(panel).toBeVisible());
       if (phone) {
-        const attach = await page.locator('label[for="contact-attach"]').boundingBox();
-        expect(attach!.height).toBeGreaterThanOrEqual(44);
+        const attach = await requireBox(page.locator('label[for="contact-attach"]'));
+        expect(attach.height).toBeGreaterThanOrEqual(44);
       }
     },
   );
@@ -1436,14 +1476,17 @@ test.describe("assistant terminal", () => {
     await expect(fab).toBeHidden();
 
     // Wider for code and tables, and back.
-    const narrow = (await panel.boundingBox())!.width;
+    const narrowBox = await requireBox(panel);
+    const narrow = narrowBox.width;
     const wider = panel.getByRole("button", { name: "Wider" });
     await wider.click();
     await expect(wider).toHaveAttribute("aria-pressed", "true");
-    expect((await panel.boundingBox())!.width).toBeGreaterThan(narrow);
+    const widerBox = await requireBox(panel);
+    expect(widerBox.width).toBeGreaterThan(narrow);
     await wider.click();
     await expect(wider).toHaveAttribute("aria-pressed", "false");
-    expect((await panel.boundingBox())!.width).toBe(narrow);
+    const restoredBox = await requireBox(panel);
+    expect(restoredBox.width).toBe(narrow);
 
     // Turned or zoomed across 1024px while open: the same dialog becomes the sheet and back.
     const behind = () =>
@@ -1451,12 +1494,12 @@ test.describe("assistant terminal", () => {
         inert: !!main.closest("[inert]"),
         locked: document.documentElement.classList.contains("overflow-hidden"),
       }));
-    for (const width of [800, 320]) {
+    await runSequentially([800, 320], async (width) => {
       await page.setViewportSize({ width, height: 720 });
       await expect.poll(behind).toEqual({ inert: true, locked: true });
       expect(await panel.boundingBox()).toEqual({ x: 0, y: 0, width, height: 720 });
       expect(await panel.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
-    }
+    });
     await expect(wider).toBeHidden();
     await page.setViewportSize({ width: 1280, height: 720 });
     await expect.poll(behind).toEqual({ inert: false, locked: false });
@@ -1494,7 +1537,7 @@ test.describe("assistant terminal", () => {
       await expect(sheet).toContainText("A retrieval platform, built in TypeScript.");
       expect(mock.bodies).toHaveLength(1);
       // The page goes with the question (visitor plan V8): the server maps it to the case study.
-      expect(mock.bodies[0]!.page).toBe("/en/work/project-one");
+      expect(mock.bodies[0].page).toBe("/en/work/project-one");
     },
   );
 
@@ -1597,14 +1640,14 @@ test.describe("assistant terminal", () => {
     await expect(about).toContainText("how technical answers are");
     await run(prompt, "What is Atlas?");
     await expect.poll(() => mock.bodies.length).toBe(1);
-    expect(mock.bodies[0]!.level).toBe("plain");
+    expect(mock.bodies[0].level).toBe("plain");
 
     // Still plain after a reload: the browser keeps it.
     await page.reload();
     prompt = await openPrompt(page);
     await run(prompt, "And Borealis?");
     await expect.poll(() => mock.bodies.length).toBe(2);
-    expect(mock.bodies[1]!.level).toBe("plain");
+    expect(mock.bodies[1].level).toBe("plain");
 
     // Standard sends nothing; a question about a level is a question.
     await run(prompt, "level standard");
@@ -1723,7 +1766,7 @@ test.describe("assistant terminal", () => {
   }) => {
     const [start, ...rest] = answer({ text: "From the second model." });
     const chunks = [
-      start!,
+      start,
       { type: "data-status", data: { code: "failover", position: 2, of: 3 }, transient: true },
       ...rest,
     ];
@@ -1779,7 +1822,7 @@ test.describe("assistant terminal", () => {
     // Its last line asks the assistant, which answers from the system card.
     await log.getByRole("button", { name: "how this assistant works" }).click();
     await expect(log).toContainText("It answers from this site's content.");
-    expect(JSON.stringify(mock.bodies[0]!.messages)).toContain("How does this assistant work?");
+    expect(JSON.stringify(mock.bodies[0].messages)).toContain("How does this assistant work?");
   });
 
   test("unpublished, evals says so without asking, and help and the row leave it out (visitor plan V13)", async ({
@@ -1830,13 +1873,15 @@ test.describe("assistant terminal", () => {
     await run(prompt, "level plain");
     await run(prompt, "Where does he live?");
     await expect(log).toContainText("He lives in Berlin.");
-    const first = (await session())["sessionId"];
+    const firstSession = await session();
+    const first = firstSession["sessionId"];
     // A reset begins a new session; the log keeps the earlier one, which forget still reaches.
     await run(prompt, "reset");
     await expect(log).toContainText("The log keeps it up to 90 days; `forget` deletes it.");
     await run(prompt, "Is he available?");
     await expect(log).toContainText("He lives in Berlin.");
-    const second = (await session())["sessionId"];
+    const secondSession = await session();
+    const second = secondSession["sessionId"];
     expect(second).not.toBe(first);
 
     // It names what goes and what stays, and a no sends nothing.
@@ -1929,7 +1974,9 @@ test.describe("assistant terminal", () => {
     await run(prompt, "y");
     await expect(log).toContainText("What’s new is on.");
     const today = new Date().toISOString().slice(0, 10);
-    expect(JSON.parse((await kept())!)).toEqual({ since: today, last: today });
+    const keptAfterOn = await kept();
+    expect(keptAfterOn).not.toBeNull();
+    expect(JSON.parse(keptAfterOn ?? "null")).toEqual({ since: today, last: today });
 
     // A later visit, the last one on Sep 1: the empty terminal and the palette count what changed.
     await page.evaluate(() => {
@@ -1944,7 +1991,9 @@ test.describe("assistant terminal", () => {
     const again = await openPrompt(page);
     const updates = page.getByRole("button", { name: `2 updates since ${since}` });
     await expect(updates).toBeVisible();
-    expect(JSON.parse((await kept())!)).toEqual({ since: "2026-09-01", last: today });
+    const keptAfterVisit = await kept();
+    expect(keptAfterVisit).not.toBeNull();
+    expect(JSON.parse(keptAfterVisit ?? "null")).toEqual({ since: "2026-09-01", last: today });
     await page.keyboard.press("Control+k");
     await expect(page.getByRole("option", { name: /What’s new/ })).toContainText(
       `2 updates since ${since}`,
@@ -1959,7 +2008,7 @@ test.describe("assistant terminal", () => {
     expect(mock.bodies).toHaveLength(0);
     await log.getByRole("button", { name: "summarize them" }).click();
     await expect(log).toContainText("Two pages changed.");
-    expect(JSON.stringify(mock.bodies.at(-1)!.messages.at(-1))).toContain(
+    expect(JSON.stringify(mock.bodies.at(-1)?.messages.at(-1))).toContain(
       "Summarize what is new on these pages: Atlas, Shipping RAG to production.",
     );
 
@@ -2132,7 +2181,7 @@ test.describe("assistant terminal", () => {
     const mock = await mockAsk(
       page,
       (route, n) => {
-        const kind = order[n - 1]!;
+        const kind = order[n - 1];
         const { prefix, brief } = kinds[kind];
         return sse(route, [
           { type: "data-match-progress", data: { v: 1, step: "plan" }, transient: true },
@@ -2194,7 +2243,7 @@ test.describe("assistant terminal", () => {
 
     await run(prompt, "help");
     await expect(log).toContainText("match role|project|problem");
-    for (const [i, kind] of order.entries()) {
+    await runSequentially(order, async (kind, i) => {
       const { label, prefix, brief } = kinds[kind];
       await run(prompt, `match ${kind}`);
       const box = log.getByLabel(label);
@@ -2218,12 +2267,12 @@ test.describe("assistant terminal", () => {
       await expect(offer).toBeVisible();
       if (kind !== "problem") {
         await offer.getByRole("button", { name: "no" }).click();
-        continue;
+        return;
       }
       expect(await axeViolations(page)).toEqual([]);
       await offer.getByRole("button", { name: "yes" }).click();
       await expect(page.locator("#contact-message")).toHaveValue(`${prefix}: ${brief}`);
-    }
+    });
   });
 
   test("a match shows its step while it runs, said only as it starts and with its rows (visitor plan V20)", async ({
@@ -2280,12 +2329,11 @@ test.describe("assistant terminal", () => {
       },
     } as const;
     const order = ["role", "project", "problem"] as const;
-    const brief = (kind: string) => `A ${kind} about retrieval in production and embedded C.`;
     const mock = await mockAsk(
       page,
       (route, n) => {
-        const kind = order[n - 1]!;
-        const handoff = `${kinds[kind].prefix}: ${brief(kind)}`;
+        const kind = order[n - 1];
+        const handoff = `${kinds[kind].prefix}: ${matchBrief(kind)}`;
         return sse(route, matchChunks(`m_e2epage000${n}`, kind, handoff));
       },
       { match: true },
@@ -2296,17 +2344,20 @@ test.describe("assistant terminal", () => {
     const table = page.getByRole("table", {
       name: "Each point of the brief, with what his work shows",
     });
-    for (const [i, kind] of order.entries()) {
+    await runSequentially(order, async (kind, i) => {
       const { radio, label, item } = kinds[kind];
       await page.getByRole("radio", { name: radio }).check();
       // The page's box stays where it is and takes no focus.
       const box = page.getByLabel(label);
       await expect(box).not.toBeFocused();
-      await box.fill(brief(kind));
+      await box.fill(matchBrief(kind));
       await page.getByRole("button", { name: "check it" }).click();
       await expect(table.getByRole("columnheader", { name: item })).toBeVisible();
-      expect(mock.bodies[i]).toMatchObject({ mode: "match", match: { kind, brief: brief(kind) } });
-    }
+      expect(mock.bodies[i]).toMatchObject({
+        mode: "match",
+        match: { kind, brief: matchBrief(kind) },
+      });
+    });
     // The server's words in each row, and the page each rests on.
     const rows = table.getByRole("row");
     await expect(rows).toHaveCount(3);
@@ -2326,7 +2377,9 @@ test.describe("assistant terminal", () => {
     await expect(table.getByRole("columnheader", { name: "Aspect" })).toBeVisible();
     await page.getByRole("button", { name: "Hand this to the contact form" }).click();
     await expect(page).toHaveURL(/\/en#contact$/);
-    await expect(page.locator("#contact-message")).toHaveValue(`Question: ${brief("problem")}`);
+    await expect(page.locator("#contact-message")).toHaveValue(
+      `Question: ${matchBrief("problem")}`,
+    );
     await expect.poll(() => confirmed.length).toBe(1);
     expect(confirmed[0]).toMatchObject({ messageId: "m_e2epage0003" });
   });
@@ -2398,8 +2451,10 @@ test.describe("assistant terminal", () => {
   test("the match page holds the field's place while it loads, and says so if the settings fail (plan 4 U30)", async ({
     page,
   }) => {
-    let release = () => {};
-    const held = new Promise<void>((resolve) => (release = resolve));
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     await page.route("**/v1/ask/config", async (route) => {
       await held;
       await route.fulfill({ status: 503, headers: cors, json: {} });
@@ -2432,19 +2487,19 @@ test.describe("assistant terminal", () => {
     await expect(printed).toContainText("by the AI assistant");
     await expect(printed).toContainText(/\/en\/match$/);
     await expect(page.getByRole("table")).toBeVisible();
-    for (const control of await page.locator(".match-controls").all()) {
+    await runSequentially(await page.locator(".match-controls").all(), async (control) => {
       await expect(control).toBeHidden();
-    }
+    });
   });
 
   test("the match page's server HTML says what it does and offers the kinds, with nothing of the store (plan 3 W3)", async ({
     request,
   }) => {
-    const html = await (await request.get("/en/match")).text();
+    const html = await fetchText(request, "/en/match");
     expect(html).toMatch(/<h1[^>]*>\s*Check the fit\s*<\/h1>/);
     expect(html.match(/type="radio"/g)).toHaveLength(3);
     // The address's kind, chosen before the app has loaded.
-    const shared = await (await request.get("/en/match?kind=project")).text();
+    const shared = await fetchText(request, "/en/match?kind=project");
     expect(shared).toMatch(/<input[^>]*type="radio"[^>]*checked[^>]*>\s*A project/);
     expect(html).toMatch(/hreflang="de" href="[^"]*\/de\/match"/);
     // The paste box and the table come with the store, after hydration.
@@ -2588,7 +2643,7 @@ test.describe("assistant terminal", () => {
     await page.keyboard.press("Enter");
     await expect(palette).toBeHidden();
     await expect(askPanel(page)).toContainText("With evals.");
-    expect(JSON.stringify(mock.bodies[0]!.messages)).toContain("how does he test");
+    expect(JSON.stringify(mock.bodies[0].messages)).toContain("how does he test");
   });
 
   test("the contact form is a WebMCP tool only once it works: the server's HTML names nothing, the honeypot never (plan 3 W5)", async ({
@@ -2596,7 +2651,7 @@ test.describe("assistant terminal", () => {
     request,
   }) => {
     // With no `action`, a submit before hydration is a GET: named fields would put the message in the URL.
-    const html = await (await request.get("/en")).text();
+    const html = await fetchText(request, "/en");
     const form = /<form[^>]*>[\s\S]*?<\/form>/.exec(html.slice(html.indexOf('id="contact"')))?.[0];
     expect(form).toContain('id="contact-message"');
     expect(form).not.toMatch(/\sname=|toolname|tooldescription/);
@@ -2607,9 +2662,9 @@ test.describe("assistant terminal", () => {
     await expect(ready).toHaveAttribute("toolname", "contact_alireza");
     await expect(ready).toHaveAttribute("tooldescription", /^Prepares a message to Alireza/);
     await expect(ready).not.toHaveAttribute("toolautosubmit");
-    for (const field of ["name", "email", "message"]) {
+    await runSequentially(["name", "email", "message"], async (field) => {
       await expect(page.locator(`#contact-${field}`)).toHaveAttribute("name", field);
-    }
+    });
     await expect(page.locator("#contact-website")).not.toHaveAttribute("name");
   });
 
@@ -2619,7 +2674,9 @@ test.describe("assistant terminal", () => {
     await mockAsk(page, () => undefined, { match: true });
     const loaded: string[] = [];
     page.on("request", (r) => {
-      if (/\/agent-tools-[^/]*\.js$/.test(r.url())) loaded.push(r.url());
+      if (/\/agent-tools-[^/]*\.js$/.test(r.url())) {
+        loaded.push(r.url());
+      }
     });
     await page.goto("/en");
     await interactive(page);
@@ -2628,15 +2685,19 @@ test.describe("assistant terminal", () => {
 
     await page.addInitScript(() => {
       const names: string[] = [];
-      Object.assign(window, { __agentTools: names });
+      Object.assign(globalThis, { __agentTools: names });
       Object.defineProperty(document, "modelContext", {
-        value: { registerTool: (tool: { name: string }) => void names.push(tool.name) },
+        value: {
+          registerTool: (tool: { name: string }) => {
+            names.push(tool.name);
+          },
+        },
       });
     });
     await page.reload();
     await interactive(page);
     await expect
-      .poll(() => page.evaluate(() => (window as { __agentTools?: string[] }).__agentTools))
+      .poll(() => page.evaluate(() => (globalThis as { __agentTools?: string[] }).__agentTools))
       .toEqual(["list_pages", "open_page", "ask_portfolio", "match_brief"]);
     expect(loaded).toHaveLength(1);
   });
@@ -2647,7 +2708,9 @@ test.describe("assistant terminal", () => {
     async ({ page, context, browserName, baseURL }) => {
       // Only Chromium lets a test grant clipboard access and read it back.
       const readable = browserName === "chromium";
-      if (readable) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+      if (readable) {
+        await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+      }
       const mock = await mockAsk(page, (route) =>
         sse(route, answer({ text: "A retrieval platform, built in TypeScript." })),
       );
@@ -2669,7 +2732,7 @@ test.describe("assistant terminal", () => {
         await page.evaluate(
           () =>
             (
-              window as unknown as {
+              globalThis as unknown as {
                 umamiBeforeSend: (t: string, p: { url: string }) => { url: string };
               }
             ).umamiBeforeSend("event", { url: "/en?ask=x&utm_source=news" }).url,
@@ -2680,7 +2743,7 @@ test.describe("assistant terminal", () => {
       await prompt.press("Enter");
       await expect(sheet).toContainText("A retrieval platform, built in TypeScript.");
       expect(mock.bodies).toHaveLength(1);
-      expect(JSON.stringify(mock.bodies[0]!.messages.at(-1))).toContain(question);
+      expect(JSON.stringify(mock.bodies[0].messages.at(-1))).toContain(question);
 
       // share: the link carries the question, said once.
       await sheet
@@ -2689,8 +2752,9 @@ test.describe("assistant terminal", () => {
       await expect(sheet.getByRole("button", { name: "Link copied" })).toBeVisible();
       await expect(sheet.locator("[aria-live=polite]")).toHaveText("Link copied");
       if (readable) {
+        expect(baseURL).toBeDefined();
         expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-          `${new URL(baseURL!).origin}/en/work/project-one?ask=${encodeURIComponent(question)}`,
+          `${new URL(baseURL ?? "").origin}/en/work/project-one?ask=${encodeURIComponent(question)}`,
         );
       }
 
@@ -2706,11 +2770,17 @@ test.describe("assistant terminal", () => {
   test("the reader pages' server HTML has none of the ask buttons: the browser adds them", async ({
     request,
   }) => {
-    for (const [path, heading] of [
-      ["/en/work/project-one", 'id="architecture-decisions"'],
-      ["/en/writing/shipping-rag-to-production", 'id="caching"'],
-    ] as const) {
-      const html = await (await request.get(path)).text();
+    const pages = await Promise.all(
+      [
+        ["/en/work/project-one", 'id="architecture-decisions"'],
+        ["/en/writing/shipping-rag-to-production", 'id="caching"'],
+      ].map(async ([path, heading]) => ({
+        path,
+        heading,
+        html: await fetchText(request, path),
+      })),
+    );
+    for (const { path, heading, html } of pages) {
       // The headings and their anchors are there; nothing the browser adds is (V9, V15).
       expect(html, path).toContain(heading);
       expect(html, path).not.toMatch(/reader-ask|code-explain|code-frame|read-next/);
@@ -2907,6 +2977,16 @@ for (const colorScheme of ["dark", "light"] as const) {
   });
 }
 
+/** An open sheet on a page off home; the prompt is not focused, so no keyboard shows. */
+async function openSheet(page: Page) {
+  await page.goto("/en/work/project-one");
+  await interactive(page);
+  await page.getByRole("button", { name: "Ask about my work" }).click();
+  const sheet = page.getByRole("dialog", { name: "Ask about my work" });
+  await expect(sheet).toBeFocused();
+  return sheet;
+}
+
 test.describe("assistant on a phone", () => {
   test.use({ viewport: { width: 390, height: 780 }, hasTouch: true, isMobile: true });
 
@@ -2928,8 +3008,8 @@ test.describe("assistant on a phone", () => {
         expect(await axeViolations(page)).toEqual([]);
       });
 
-      test("the palette", async ({ page, browserName }) => {
-        test.skip(
+      test("the palette", async ({ page, browserName }, testInfo) => {
+        testInfo.skip(
           browserName === "firefox",
           "Firefox has no mobile emulation, so no coarse pointer",
         );
@@ -2966,7 +3046,8 @@ test.describe("assistant on a phone", () => {
     await page.goto("/en/match");
     await interactive(page);
     // The kind: 44px on touch.
-    expect((await page.locator(".kind").first().boundingBox())?.height).toBeGreaterThanOrEqual(44);
+    const kindBox = await requireBox(page.locator(".kind").first());
+    expect(kindBox.height).toBeGreaterThanOrEqual(44);
     await page.getByLabel("Paste the role").fill("Senior AI engineer: retrieval in production.");
     await page.getByRole("button", { name: "Check it" }).tap();
     const rows = page.getByRole("table").getByRole("row");
@@ -3002,23 +3083,13 @@ test.describe("assistant on a phone", () => {
     await expect(sheet).toContainText("From the sheet.");
   });
 
-  /** An open sheet on a page off home; the prompt is not focused, so no keyboard shows. */
-  async function openSheet(page: Page) {
-    await page.goto("/en/work/project-one");
-    await interactive(page);
-    await page.getByRole("button", { name: "Ask about my work" }).click();
-    const sheet = page.getByRole("dialog", { name: "Ask about my work" });
-    await expect(sheet).toBeFocused();
-    return sheet;
-  }
-
   test(
     "the sheet fills the screen, with no zoom on focus, a sentence keyboard and a 44px close (plan 4 U9)",
     PHONE,
     async ({ page }) => {
       await mockAsk(page, () => undefined);
       const sheet = await openSheet(page);
-      const { width, height } = page.viewportSize()!;
+      const { width, height } = requireViewport(page);
       expect(await sheet.boundingBox()).toEqual({ x: 0, y: 0, width, height });
 
       const prompt = sheet.locator("textarea");
@@ -3026,7 +3097,8 @@ test.describe("assistant on a phone", () => {
       await expect(prompt).toHaveAttribute("autocapitalize", "sentences");
       await expect(prompt).toHaveAttribute("spellcheck", "true");
       await expect(prompt).toHaveAttribute("enterkeyhint", "send");
-      expect((await prompt.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      const promptBox = await requireBox(prompt);
+      expect(promptBox.height).toBeGreaterThanOrEqual(44);
 
       const close = sheet.getByRole("button", { name: "Close the assistant", exact: true });
       const target = await close.boundingBox();
@@ -3092,20 +3164,26 @@ test.describe("assistant on a phone", () => {
       const fab = page.getByRole("button", { name: "Ask about my work" });
       const sheet = page.getByRole("dialog", { name: "Ask about my work" });
       // Long enough for the router's scroll, which runs a frame after a navigation it skips.
-      const settled = () => page.evaluate(() => new Promise((done) => setTimeout(done, 200)));
+      const waitForRouterScroll = () =>
+        page.evaluate(
+          () =>
+            new Promise<void>((done) => {
+              setTimeout(done, 200);
+            }),
+        );
 
       await fab.click();
       await expect(sheet).toBeVisible();
       await page.goBack();
       await expect(sheet).toBeHidden();
       await expect(page).toHaveURL(/\/en\/work\/project-one#problem$/);
-      await settled();
+      await waitForRouterScroll();
       await expect.poll(off).toBeLessThanOrEqual(1);
 
       await fab.click();
       await sheet.getByRole("button", { name: "Close the assistant", exact: true }).click();
       await expect(sheet).toBeHidden();
-      await settled();
+      await waitForRouterScroll();
       await expect.poll(off).toBeLessThanOrEqual(1);
 
       // One Back leaves the page: the sheet's step went with it. (Firefox, told it is a phone,
@@ -3125,7 +3203,10 @@ test.describe("assistant on a phone", () => {
       const viewport = (height: number, offsetTop: number) =>
         page.evaluate(
           ([h, top]) => {
-            const vv = window.visualViewport!;
+            const vv = window.visualViewport;
+            if (!vv) {
+              throw new Error("Expected window.visualViewport");
+            }
             Object.defineProperty(vv, "height", { configurable: true, get: () => h });
             Object.defineProperty(vv, "offsetTop", { configurable: true, get: () => top });
             vv.dispatchEvent(new Event("resize"));
@@ -3136,7 +3217,7 @@ test.describe("assistant on a phone", () => {
       await prompt.focus();
       await viewport(400, 120);
       await expect.poll(() => sheet.boundingBox()).toMatchObject({ y: 120, height: 400 });
-      const box = (await prompt.boundingBox())!;
+      const box = await requireBox(prompt);
       expect(box.y + box.height).toBeLessThanOrEqual(520);
 
       // Keyboard gone, focus gone, and iOS 26 still reporting the offset.

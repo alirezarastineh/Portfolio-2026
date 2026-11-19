@@ -165,8 +165,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * only missing keys are filled. A non-object `value` is replaced wholesale.
  */
 export function fillMissing(value: unknown, defaults: unknown): unknown {
-  if (!isRecord(defaults)) return value === undefined ? defaults : value;
-  if (!isRecord(value)) return structuredClone(defaults);
+  if (!isRecord(defaults)) {
+    return value === undefined ? defaults : value;
+  }
+  if (!isRecord(value)) {
+    return structuredClone(defaults);
+  }
 
   const out: Record<string, unknown> = { ...value };
   for (const [key, fallback] of Object.entries(defaults)) {

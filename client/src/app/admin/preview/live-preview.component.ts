@@ -222,9 +222,13 @@ export class LivePreviewComponent {
   protected readonly base = computed(() => this.preview.base(this.locale()));
   protected readonly failure = computed(() => {
     const base = this.base();
-    if (base.state !== "failed") return "";
+    if (base.state !== "failed") {
+      return "";
+    }
     const n = base.issues.length;
-    if (!n) return base.error;
+    if (!n) {
+      return base.error;
+    }
     const label = n === 1 ? "problem" : "problems";
     return `The saved draft has ${n} ${label} to fix before it builds (${base.error}).`;
   });
@@ -232,7 +236,9 @@ export class LivePreviewComponent {
   /** The page as it would be published with this editor's edits. */
   private readonly content = computed<AppContent | null>(() => {
     const base = this.base();
-    if (base.state !== "ready") return null;
+    if (base.state !== "ready") {
+      return null;
+    }
     const byId = new Map(this.library.assets().map((asset) => [asset.id, asset]));
     return this.compose()(base.content, this.locale(), (id) => (id ? byId.get(id) : undefined));
   });
@@ -275,8 +281,9 @@ export class LivePreviewComponent {
       void this.library.load();
       this.prepareFrame(destroyRef);
       const resize = new ResizeObserver(([entry]) => {
-        if (entry)
+        if (entry) {
           this.box.set({ width: entry.contentRect.width, height: entry.contentRect.height });
+        }
       });
       resize.observe(this.viewport().nativeElement);
       destroyRef.onDestroy(() => resize.disconnect());
@@ -285,7 +292,9 @@ export class LivePreviewComponent {
     effect(() => {
       const content = this.content();
       const locale = this.locale();
-      if (content) untracked(() => this.schedule(content, locale));
+      if (content) {
+        untracked(() => this.schedule(content, locale));
+      }
     });
 
     // A different section, card or width: bring it into view again.
@@ -294,7 +303,9 @@ export class LivePreviewComponent {
       this.focusKey();
       this.preview.device();
       untracked(() => {
-        if (this.page) void this.reveal();
+        if (this.page) {
+          void this.reveal();
+        }
       });
     });
 
@@ -310,11 +321,15 @@ export class LivePreviewComponent {
   }
 
   protected onLocale(value: unknown): void {
-    if (value === "en" || value === "de") this.locale.set(value);
+    if (value === "en" || value === "de") {
+      this.locale.set(value);
+    }
   }
 
   protected onDevice(value: unknown): void {
-    if (value === "desktop" || value === "phone") this.preview.device.set(value);
+    if (value === "desktop" || value === "phone") {
+      this.preview.device.set(value);
+    }
   }
 
   protected retry(): void {
@@ -325,7 +340,9 @@ export class LivePreviewComponent {
   private prepareFrame(destroyRef: DestroyRef): void {
     const frame = this.frame().nativeElement;
     const doc = frame.contentDocument;
-    if (!doc) return;
+    if (!doc) {
+      return;
+    }
     // Only the parser sets a document's mode: without a doctype the frame would
     // lay the page out in quirks mode. Written, not loaded: no request is made.
     doc.open();
@@ -356,7 +373,9 @@ export class LivePreviewComponent {
     });
 
     const content = this.content();
-    if (content) this.schedule(content, this.locale());
+    if (content) {
+      this.schedule(content, this.locale());
+    }
   }
 
   /**
@@ -365,17 +384,23 @@ export class LivePreviewComponent {
    */
   private mirrorStyles(): void {
     const head = this.frameDoc?.head;
-    if (!head) return;
+    if (!head) {
+      return;
+    }
     for (const node of Array.from(
       this.doc.head.querySelectorAll('link[rel="stylesheet"], style'),
     )) {
-      if (node.id === ADMIN_STYLES_ID || this.mirrored.has(node)) continue;
+      if (node.id === ADMIN_STYLES_ID || this.mirrored.has(node)) {
+        continue;
+      }
       const copy = node.cloneNode(true);
       head.append(copy);
       this.mirrored.set(node, copy);
     }
     for (const [node, copy] of this.mirrored) {
-      if (node.isConnected) continue;
+      if (node.isConnected) {
+        continue;
+      }
       (copy as ChildNode).remove();
       this.mirrored.delete(node);
     }
@@ -383,16 +408,22 @@ export class LivePreviewComponent {
 
   private mirrorTheme(): void {
     const root = this.frameDoc?.documentElement;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
     const theme = this.doc.documentElement.getAttribute("data-theme"); // NOSONAR
-    if (theme) root.setAttribute("data-theme", theme); // NOSONAR
+    if (theme) {
+      root.setAttribute("data-theme", theme); // NOSONAR
+    }
     root.classList.toggle("dark", this.doc.documentElement.classList.contains("dark"));
   }
 
   /** New content: at once for the first page and a language switch, else once typing settles. */
   private schedule(content: AppContent, locale: Locale): void {
     clearTimeout(this.timer);
-    if (!this.frameDoc) return;
+    if (!this.frameDoc) {
+      return;
+    }
     if (!this.page) {
       void this.mount(content, locale);
       return;
@@ -418,7 +449,9 @@ export class LivePreviewComponent {
    * again for it alone.
    */
   private async mount(content: AppContent, locale: Locale): Promise<void> {
-    if (this.mounting || !this.frameDoc) return;
+    if (this.mounting || !this.frameDoc) {
+      return;
+    }
     this.mounting = true;
     const { default: Home } = (await import("../../pages/[locale]/index.page")) as {
       default: Type<unknown>;
@@ -450,27 +483,48 @@ export class LivePreviewComponent {
   private async reveal(): Promise<void> {
     const ticket = ++this.revealing;
     const win = this.frameDoc?.defaultView;
-    if (!win) return;
-    const started = Date.now();
-    let target = this.target();
-    // The sections below the hero arrive with their code: wait for this one.
-    while (!target && Date.now() - started < FIND_MS) {
-      await new Promise((resolve) => win.requestAnimationFrame(resolve));
-      if (ticket !== this.revealing) return;
-      target = this.target();
+    if (!win) {
+      return;
     }
-    if (!target || ticket !== this.revealing) return;
+    const target = this.target() ?? (await this.waitForTarget(win, ticket));
+    if (!target || ticket !== this.revealing) {
+      return;
+    }
     // Scrolls the frame only: scrollIntoView would move the admin page too.
     const top = target.getBoundingClientRect().top + win.scrollY - 24;
     win.scrollTo({ top: Math.max(0, top), behavior: "instant" });
   }
 
+  // The sections below the hero arrive with their code: wait for this one.
+  private waitForTarget(win: Window, ticket: number): Promise<Element | null> {
+    const started = Date.now();
+    return new Promise((resolve) => {
+      const step = (): void => {
+        if (ticket !== this.revealing) {
+          resolve(null);
+          return;
+        }
+        const target = this.target();
+        if (target || Date.now() - started >= FIND_MS) {
+          resolve(target);
+          return;
+        }
+        win.requestAnimationFrame(step);
+      };
+      win.requestAnimationFrame(step);
+    });
+  }
+
   private target(): Element | null {
     const section = this.frameDoc?.getElementById(this.anchor());
-    if (!section) return null;
+    if (!section) {
+      return null;
+    }
     const wanted = this.focus();
     const focus = (typeof wanted === "string" ? wanted : wanted?.[this.locale()])?.trim();
-    if (!focus) return section;
+    if (!focus) {
+      return section;
+    }
     const title = Array.from(section.querySelectorAll("h3, h4")).find(
       (el) => el.textContent?.trim() === focus,
     );

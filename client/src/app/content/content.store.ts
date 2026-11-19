@@ -42,10 +42,14 @@ export class ContentStore {
    */
   ensure(locale: Locale): Promise<AppContent> {
     const loaded = this.state[locale]();
-    if (loaded) return Promise.resolve(loaded);
+    if (loaded) {
+      return Promise.resolve(loaded);
+    }
 
     const existing = this.inFlight.get(locale);
-    if (existing) return existing;
+    if (existing) {
+      return existing;
+    }
 
     const request = this.fetchLocale(locale).finally(() => this.inFlight.delete(locale));
     this.inFlight.set(locale, request);

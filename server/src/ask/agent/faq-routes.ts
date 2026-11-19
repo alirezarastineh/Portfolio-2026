@@ -60,14 +60,18 @@ const sourceInput = z.discriminatedUnion("source", [
 /** Drafts a proposal for the source (201), or returns its open one without a model call (200). */
 faqProposalsRouter.post("/", zValidator("json", sourceInput, invalid), async (c) => {
   const outcome = await draftFaqProposal(c.req.valid("json"));
-  if (!outcome.ok) return c.json({ error: outcome.error }, outcome.status);
+  if (!outcome.ok) {
+    return c.json({ error: outcome.error }, outcome.status);
+  }
   return outcome.existing
     ? c.json({ proposal: outcome.proposal, existing: true })
     : c.json({ proposal: outcome.proposal }, 201);
 });
 
 function answer(c: Context, decision: FaqDecision): Response {
-  if (decision.ok) return c.json({ proposal: decision.proposal, linked: decision.linked });
+  if (decision.ok) {
+    return c.json({ proposal: decision.proposal, linked: decision.linked });
+  }
   if (decision.error === "not_corroborated") {
     return c.json({ error: decision.error, detail: { reason: decision.reason } }, 400);
   }

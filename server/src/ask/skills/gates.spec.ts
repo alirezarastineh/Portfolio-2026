@@ -37,6 +37,8 @@ import {
 
 /** A gate whose accessor reads the source straight from the prepared input. */
 const source = (s: string) => s;
+const values = (text: string) => numbersOf(text).map((f) => f.value);
+const optional = (text: string) => numbersOf(text).map((f) => [f.value, f.optional]);
 
 describe("the skills' gates (plan phase 28)", () => {
   it("reads what a reader sees: no tags, entities decoded, whitespace collapsed", () => {
@@ -161,7 +163,6 @@ describe("the skills' gates (plan phase 28)", () => {
   });
 
   it("reads numbers as both languages write them: groups joined, decimal points kept", () => {
-    const values = (text: string) => numbersOf(text).map((f) => f.value);
     expect(values("2,000 and 2.000, 3.5 or 3,5 % in 2024–2026; 1 000 and 7 8")).toEqual([
       "2000",
       "2000",
@@ -181,7 +182,6 @@ describe("the skills' gates (plan phase 28)", () => {
       "1.2.3",
     ]);
     // A time's numbers and an ordinal are optional; a unit written onto a number keeps it owed.
-    const optional = (text: string) => numbersOf(text).map((f) => [f.value, f.optional]);
     expect(optional("2–4pm, 9.30–17.30 Uhr, von 9 bis 17 Uhr, 09:00")).toEqual([
       ["2", true],
       ["4", true],
@@ -224,14 +224,14 @@ describe("the skills' gates (plan phase 28)", () => {
       "a number changed or missing: 10; a number not in the source: 20",
     );
     // A time however each language writes it, an ordinal spelled out, a repeat dropped: all pass.
-    for (const [text, from] of [
+    for (const [text, src] of [
       ["Sprechzeiten 14–16 Uhr MEZ", "Office hours 2–4pm CET"],
       ["Erreichbar 9.30–17.30 Uhr", "Available 9.30am–5.30pm"],
       ["Erreichbar von 9.30 bis 17.30 Uhr", "Erreichbar 9.30–17.30 Uhr"],
       ["Erreichbar 09:00–17:00 Uhr", "Available 9am–5pm"],
       ["Geöffnet 0–6 Uhr", "Open 12am–6am"],
     ]) {
-      expect(gate.check(text!, from!), text).toBeNull();
+      expect(gate.check(text, src), text).toBeNull();
     }
     expect(
       gate.check("Ein Team aus 6 Engineers und 1 PM", "A team of 6 engineers and 1 PM"),

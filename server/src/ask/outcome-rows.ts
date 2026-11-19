@@ -1,4 +1,4 @@
-import { and, eq, notInArray, sql } from "drizzle-orm";
+import { and, eq, notInArray, sql, type SQL } from "drizzle-orm";
 
 import { aiFeedback, aiMessages } from "../db/schema.js";
 import { NOT_IN_PORTFOLIO } from "./answer-patterns.js";
@@ -9,16 +9,21 @@ export const TOUR_ROUTE = "tour";
 /** The route a matched brief is logged under (visitor plan V19): a visitor's row, but no answer. */
 export const MATCH_ROUTE = "match";
 
+const visitorAnswer = and(
+  eq(aiMessages.source, "terminal"),
+  notInArray(aiMessages.route, [TOUR_ROUTE, MATCH_ROUTE]),
+);
+if (!visitorAnswer) {
+  throw new Error("VISITOR_ANSWER condition must be defined");
+}
+
 /**
  * A visitor's answers: the terminal's rows less their tours (visitor plan
  * V16) and matched briefs (V19), which every measure of answers leaves out.
  * `forget`, `inspect`, the browser's signals and the contact form's attached
  * conversation reach them all.
  */
-export const VISITOR_ANSWER = and(
-  eq(aiMessages.source, "terminal"),
-  notInArray(aiMessages.route, [TOUR_ROUTE, MATCH_ROUTE]),
-)!;
+export const VISITOR_ANSWER: SQL = visitorAnswer;
 
 /**
  * Answers that admit the portfolio does not say: the list worth turning into

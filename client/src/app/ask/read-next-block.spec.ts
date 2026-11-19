@@ -36,6 +36,14 @@ const month = (day: string) =>
     new Date(`${day}T00:00:00Z`),
   );
 
+function query<T extends Element = Element>(root: ParentNode, selector: string): T {
+  const found = root.querySelector<T>(selector);
+  if (!found) {
+    throw new Error(`Missing element: ${selector}`);
+  }
+  return found;
+}
+
 describe("readNextBlock", () => {
   it("names each page's kind, dates what dates itself, and links it", () => {
     const nav = readNextBlock(document, [BOREALIS, NORTHWIND], ATLAS, "en", {
@@ -44,21 +52,21 @@ describe("readNextBlock", () => {
     });
     expect(nav.tagName).toBe("NAV");
     expect(nav.getAttribute("aria-labelledby")).toBe("read-next-title");
-    expect(nav.querySelector("h2#read-next-title")!.textContent).toBe("Read next");
+    expect(query(nav, "h2#read-next-title").textContent).toBe("Read next");
     const items = [...nav.querySelectorAll("li.read-next-item")];
-    expect(items.map((i) => i.querySelector(".read-next-kind")!.textContent)).toEqual([
+    expect(items.map((i) => query(i, ".read-next-kind").textContent)).toEqual([
       `case study, updated ${month("2026-10-01")}`,
       // The publish dates an experience entry: no date of its own is claimed.
       "experience",
     ]);
-    expect(items.map((i) => i.querySelector("a")!.getAttribute("href"))).toEqual([
+    expect(items.map((i) => query(i, "a").getAttribute("href"))).toEqual([
       "/en/work/borealis",
       "/en#experience",
     ]);
     // Each "How do they connect?" is described by the page it is about.
-    const button = items[1]!.querySelector("button")!;
+    const button = query(items[1], "button");
     expect(button.textContent).toBe("How do they connect?");
-    expect(nav.querySelector(`#${button.getAttribute("aria-describedby")}`)!.textContent).toBe(
+    expect(query(nav, `#${button.getAttribute("aria-describedby")}`).textContent).toBe(
       NORTHWIND.title,
     );
   });
@@ -67,7 +75,7 @@ describe("readNextBlock", () => {
     const open = vi.fn();
     const ask = vi.fn();
     const nav = readNextBlock(document, [BOREALIS], ATLAS, "en", { open, ask });
-    const link = nav.querySelector("a")!;
+    const link = query(nav, "a");
     const plain = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
     link.dispatchEvent(plain);
     expect(plain.defaultPrevented).toBe(true);
@@ -77,12 +85,12 @@ describe("readNextBlock", () => {
     expect(newTab.defaultPrevented).toBe(false);
     expect(open).toHaveBeenCalledTimes(1);
 
-    nav.querySelector("button")!.click();
+    query<HTMLButtonElement>(nav, "button").click();
     expect(ask).toHaveBeenCalledWith("How do Atlas and Borealis connect?");
     const de = readNextBlock(document, [BOREALIS], ATLAS, "de", { open, ask });
-    de.querySelector("button")!.click();
+    query<HTMLButtonElement>(de, "button").click();
     expect(ask).toHaveBeenLastCalledWith("Wie hängen Atlas und Borealis zusammen?");
-    expect(de.querySelector("h2")!.textContent).toBe("Weiterlesen");
+    expect(query(de, "h2").textContent).toBe("Weiterlesen");
   });
 
   it("tells a case study from a project shown on home", () => {
@@ -140,26 +148,28 @@ describe("injectReadNext", () => {
     vi.stubGlobal(
       "IntersectionObserver",
       class {
+        observe = vi.fn();
+        disconnect = vi.fn();
         constructor(callback: (entries: { isIntersecting: boolean }[]) => void) {
           observed.push(callback);
         }
-        observe(): void {}
-        disconnect(): void {}
       },
     );
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url: string) => {
+      vi.fn((url: string) => {
         fetches.push(url);
-        return new Response(
-          JSON.stringify({
-            v: 1,
-            locale: "en",
-            pages: [
-              { ...ATLAS, kind: "project", url: "/en/work/atlas", related: [BOREALIS.id] },
-              BOREALIS,
-            ],
-          }),
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              v: 1,
+              locale: "en",
+              pages: [
+                { ...ATLAS, kind: "project", url: "/en/work/atlas", related: [BOREALIS.id] },
+                BOREALIS,
+              ],
+            }),
+          ),
         );
       }),
     );
@@ -182,17 +192,17 @@ describe("injectReadNext", () => {
     await fixture.whenStable();
     expect(fetches).toEqual([]);
     expect(observed).toHaveLength(1);
-    observed[0]!([{ isIntersecting: false }]);
+    observed[0]([{ isIntersecting: false }]);
     expect(fetches).toEqual([]);
-    observed[0]!([{ isIntersecting: true }]);
+    observed[0]([{ isIntersecting: true }]);
     const host = fixture.nativeElement as HTMLElement;
     await vi.waitFor(() => expect(host.querySelector("nav.read-next")).not.toBeNull());
     expect(fetches).toEqual([`${apiBaseUrl()}/v1/ask/map?locale=en`]);
-    const article = host.querySelector("article")!;
+    const article = query(host, "article");
     expect(article.querySelector(":scope > nav.read-next + footer")).not.toBeNull();
-    host.querySelector<HTMLButtonElement>("button.read-next-ask")!.click();
+    query<HTMLButtonElement>(host, "button.read-next-ask").click();
     expect(ask).toHaveBeenCalledWith("How do Atlas and Borealis connect?", "read-next");
-    host.querySelector<HTMLAnchorElement>("a.read-next-link")!.click();
+    query<HTMLAnchorElement>(host, "a.read-next-link").click();
     expect(navigateByUrl).toHaveBeenCalledWith("/en/work/borealis");
     fixture.destroy();
   });

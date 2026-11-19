@@ -56,7 +56,7 @@ const clip = (value: string | undefined) =>
 /** "Both languages are live.", or the one that is. */
 function liveWords(published: readonly { locale: Locale }[]): string {
   return published.length === 1
-    ? `${LANGUAGE[published[0]!.locale]} is live.`
+    ? `${LANGUAGE[published[0].locale]} is live.`
     : "Both languages are live.";
 }
 
@@ -319,7 +319,7 @@ export class PublishDialogComponent {
 
   readonly open = model(false);
   /** After a publish or a roll back that wrote something. */
-  readonly published = output<void>();
+  readonly published = output();
 
   protected readonly loading = signal(false);
   protected readonly publishing = signal(false);
@@ -401,13 +401,17 @@ export class PublishDialogComponent {
     inject(DestroyRef).onDestroy(() => (this.destroyed = true));
     // A fresh review every time it opens: the draft may have changed since.
     effect(() => {
-      if (this.open()) untracked(() => void this.load());
+      if (this.open()) {
+        untracked(() => void this.load());
+      }
     });
     // The note's Save lands in the draft: the review reads it again, quietly.
     effect(() => {
       this.api.writes();
       untracked(() => {
-        if (!this.awaitingSave || !this.open()) return;
+        if (!this.awaitingSave || !this.open()) {
+          return;
+        }
         this.awaitingSave = false;
         void this.load(true);
       });
@@ -425,7 +429,9 @@ export class PublishDialogComponent {
   }
 
   protected onState(state: string): void {
-    if (state === "closed") this.open.set(false);
+    if (state === "closed") {
+      this.open.set(false);
+    }
   }
 
   /** After a publish, Publish in the top bar says "All live" and is off: the focus goes to the page. */
@@ -458,29 +464,41 @@ export class PublishDialogComponent {
       // What is live now (the newest publication with anything live): Roll back's target after a
       // publish. The review does not wait for it; until it comes, History holds the way back.
       void this.api.publications().then((list) => {
-        if (this.destroyed || !list.ok) return;
+        if (this.destroyed || !list.ok) {
+          return;
+        }
         const live = list.data.publications.find((p) => p.versions.some((v) => v.live));
         this.liveBefore.set(live?.id ?? null);
       });
     }
     const review = await this.api.publishReview();
-    if (this.destroyed) return;
+    if (this.destroyed) {
+      return;
+    }
     this.loading.set(false);
     this.review.set(review.ok ? review.data : null);
   }
 
   protected onEnter(event: Event): void {
-    if ((event as KeyboardEvent).isComposing) return;
-    if (this.canPublish()) void this.publish();
+    if ((event as KeyboardEvent).isComposing) {
+      return;
+    }
+    if (this.canPublish()) {
+      void this.publish();
+    }
   }
 
   protected async publish(): Promise<void> {
-    if (this.publishing() || !this.canPublish()) return;
+    if (this.publishing() || !this.canPublish()) {
+      return;
+    }
     this.publishing.set(true);
     this.refusal.set(null);
     const result = await this.api.publish(this.label().trim() || undefined);
     this.publishing.set(false);
-    if (this.destroyed) return;
+    if (this.destroyed) {
+      return;
+    }
 
     if (!result.ok) {
       const detail = result.detail as
@@ -523,11 +541,15 @@ export class PublishDialogComponent {
   }
 
   protected async rollBack(to: number): Promise<void> {
-    if (this.rollingBack()) return;
+    if (this.rollingBack()) {
+      return;
+    }
     this.rollingBack.set(true);
     const result = await this.api.rollbackPublication(to);
     this.rollingBack.set(false);
-    if (this.destroyed) return;
+    if (this.destroyed) {
+      return;
+    }
     if (!result.ok) {
       this.outcome.update(
         (done) =>
@@ -546,8 +568,11 @@ export class PublishDialogComponent {
   /** The result replaces the review where it happened; closed meanwhile, it is said once. */
   private finish(outcome: Outcome): void {
     this.outcome.set(outcome);
-    if (this.open()) this.focus("#publish-result");
-    else toast.success(outcome.heading, { description: outcome.words });
+    if (this.open()) {
+      this.focus("#publish-result");
+    } else {
+      toast.success(outcome.heading, { description: outcome.words });
+    }
   }
 
   /** After the next render, while the dialog still exists. */
@@ -555,7 +580,9 @@ export class PublishDialogComponent {
     afterNextRender(
       () => {
         // The dialog title's id is brain's own (its aria-labelledby): found by attribute.
-        if (!this.destroyed) this.doc.querySelector<HTMLElement>(selector)?.focus();
+        if (!this.destroyed) {
+          this.doc.querySelector<HTMLElement>(selector)?.focus();
+        }
       },
       { injector: this.injector },
     );

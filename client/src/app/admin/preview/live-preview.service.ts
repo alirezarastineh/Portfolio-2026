@@ -46,7 +46,9 @@ function write(key: string, value: string): void {
 }
 
 export function clampSize(value: number): number {
-  if (!Number.isFinite(value)) return PREVIEW_SIZE.default;
+  if (!Number.isFinite(value)) {
+    return PREVIEW_SIZE.default;
+  }
   return Math.min(PREVIEW_SIZE.max, Math.max(PREVIEW_SIZE.min, value));
 }
 
@@ -91,10 +93,14 @@ export class LivePreviewService {
 
     // A write changed the draft: what is loaded is stale. Reloaded when next shown.
     effect(() => {
-      if (this.api.writes() === 0) return;
+      if (this.api.writes() === 0) {
+        return;
+      }
       untracked(() => {
         for (const locale of ["en", "de"] as const) {
-          if (this.bases[locale]() !== null) void this.load(locale, true);
+          if (this.bases[locale]() !== null) {
+            void this.load(locale, true);
+          }
         }
       });
     });
@@ -107,7 +113,9 @@ export class LivePreviewService {
 
   /** Loads the draft for `locale` unless it already is (or is on its way). */
   ensure(locale: Locale): void {
-    if (this.bases[locale]() === null) void this.load(locale);
+    if (this.bases[locale]() === null) {
+      void this.load(locale);
+    }
   }
 
   /**
@@ -116,8 +124,12 @@ export class LivePreviewService {
    */
   load(locale: Locale, again = false): Promise<void> {
     const pending = this.inFlight.get(locale);
-    if (pending !== undefined) return pending;
-    if (!again || this.bases[locale]() === null) this.bases[locale].set({ state: "loading" });
+    if (pending !== undefined) {
+      return pending;
+    }
+    if (!again || this.bases[locale]() === null) {
+      this.bases[locale].set({ state: "loading" });
+    }
     const request = this.api
       .preview(locale)
       .then((result) => {

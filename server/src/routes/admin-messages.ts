@@ -59,7 +59,9 @@ adminMessagesRouter.patch(
       .set({ status: c.req.valid("json").status })
       .where(eq(contactMessages.id, c.req.valid("param").id))
       .returning({ id: contactMessages.id });
-    if (!row) return c.json({ error: "not_found" }, 404);
+    if (!row) {
+      return c.json({ error: "not_found" }, 404);
+    }
     return c.json({ ok: true });
   },
 );

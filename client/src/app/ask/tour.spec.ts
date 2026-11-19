@@ -79,7 +79,7 @@ describe("the short tour (visitor plan V16)", () => {
       "Open to senior full-stack and AI engineering roles.",
     ]);
     // Headings without their comment marks.
-    expect(stops[0]!.title).toBe("About");
+    expect(stops[0].title).toBe("About");
   });
 
   it("leaves out what the content lacks", () => {
@@ -124,7 +124,7 @@ describe("tourData", () => {
       ...PLAN,
       stops: [...PLAN.stops, { id: "x", title: "X", url: "//evil.example", line: "No." }],
     };
-    expect(tourData(answer(hostile))!.stops).toEqual(PLAN.stops);
+    expect(tourData(answer(hostile))?.stops).toEqual(PLAN.stops);
     expect(tourData(answer({ ...PLAN, kind: "default", stops: [] }))).toMatchObject({
       kind: "default",
       stops: [],
@@ -175,9 +175,7 @@ describe("a stop's move", () => {
       text: "That was the last stop.",
       tone: "dim",
     });
-    expect(tourLines({ ...state, kind: "default" }, copy)[0]!.text).toBe(
-      "The short tour, 3 stops:",
-    );
+    expect(tourLines({ ...state, kind: "default" }, copy)[0].text).toBe("The short tour, 3 stops:");
   });
 
   it("replans only from a page of the map", () => {

@@ -217,7 +217,7 @@ export class FaqProposalsComponent {
   /** One to show first: just drafted from Insights or the Journal. */
   readonly focus = input<string | null>(null);
   /** Accepted or rejected: the FAQ tab reads the entries and the proposals again. */
-  readonly decided = output<void>();
+  readonly decided = output();
 
   protected readonly locales: Locale[] = ["en", "de"];
   protected readonly source = sourceLine;
@@ -251,7 +251,9 @@ export class FaqProposalsComponent {
     // A proposal just drafted elsewhere: its heading takes focus once it is listed, once.
     effect(() => {
       const id = this.focus();
-      if (!id || id === this.focused || !this.proposals().some((p) => p.id === id)) return;
+      if (!id || id === this.focused || !this.proposals().some((p) => p.id === id)) {
+        return;
+      }
       this.focused = id;
       untracked(() =>
         afterNextRender(() => document.getElementById(`faq-proposal-${id}`)?.focus(), {
@@ -287,7 +289,9 @@ export class FaqProposalsComponent {
 
   protected async accept(p: FaqProposal): Promise<void> {
     const form = this.formOf(p);
-    if (acceptProblem(form)) return;
+    if (acceptProblem(form)) {
+      return;
+    }
     this.busy.set(p.id);
     const result = await this.api.acceptFaqProposal(p.id, acceptBody(form));
     this.busy.set(null);
@@ -313,7 +317,9 @@ export class FaqProposalsComponent {
   private refused(error: string, detail: unknown): void {
     const words = faqProposalWords(error, detail);
     toast.error("Not done", { description: words });
-    if (this.gone) return;
+    if (this.gone) {
+      return;
+    }
     this.said.set(`Not done: ${words}`);
     // Decided elsewhere, or gone: the list is read again, and the card with the button goes.
     if (error === "not_open" || error === "not_found") {

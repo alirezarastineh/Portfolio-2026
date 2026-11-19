@@ -16,7 +16,9 @@ export function answersByQuestion(messages: readonly AskMessage[]): Map<string, 
   const newest = messages.length - 1;
   messages.forEach((m, i) => {
     const next = messages[i + 1];
-    if (m.role !== "user" || next?.role !== "assistant") return;
+    if (m.role !== "user" || next?.role !== "assistant") {
+      return;
+    }
     map.set(m.id, i + 1 === newest ? { ...next, parts: [...next.parts] } : next);
   });
   return map;

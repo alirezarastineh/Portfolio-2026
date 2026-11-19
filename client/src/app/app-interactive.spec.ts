@@ -8,12 +8,14 @@ describe("markWhenInteractive", () => {
   it("marks the page once it is stable, idle, and stable again", async () => {
     const steps: string[] = [];
     const appRef = {
-      whenStable: vi.fn(async () => {
+      whenStable: vi.fn(() => {
         steps.push("stable");
+        return Promise.resolve();
       }),
     };
-    const idle = vi.fn(async () => {
+    const idle = vi.fn(() => {
       steps.push("idle");
+      return Promise.resolve();
     });
 
     await markWhenInteractive(appRef, document, idle);
@@ -24,13 +26,15 @@ describe("markWhenInteractive", () => {
 
   it("does not mark the page while the idle-hydrated blocks are still loading", async () => {
     let finishLoading!: () => void;
-    const loading = new Promise<void>((resolve) => (finishLoading = resolve));
+    const loading = new Promise<void>((resolve) => {
+      finishLoading = resolve;
+    });
     const whenStable = vi
       .fn<() => Promise<void>>()
       .mockResolvedValueOnce(undefined)
       .mockReturnValueOnce(loading);
 
-    const marked = markWhenInteractive({ whenStable }, document, async () => undefined);
+    const marked = markWhenInteractive({ whenStable }, document, () => Promise.resolve());
     await vi.waitFor(() => expect(whenStable).toHaveBeenCalledTimes(2));
     expect(document.documentElement.hasAttribute(INTERACTIVE_ATTRIBUTE)).toBe(false);
 

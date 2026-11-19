@@ -50,6 +50,7 @@ describe("a stuttered tool name", () => {
   it("still fails when no single tool fits", async () => {
     const { stream, done } = answer([toolTurn("delete_everything", {})]);
     await drain(stream);
-    expect((await done).finishReason).toBe("error:error");
+    const outcome = await done;
+    expect(outcome.finishReason).toBe("error:error");
   });
 });

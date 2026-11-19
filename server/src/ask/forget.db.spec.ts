@@ -39,7 +39,7 @@ const app = createApp({
   ask: {
     config: () => config,
     chain: () => [],
-    corpus: async (c) => fixtureCorpus(c),
+    corpus: (c) => Promise.resolve(fixtureCorpus(c)),
   },
 });
 
@@ -76,13 +76,21 @@ const forgottenCount = () =>
     .filter((e) => e.kind === "forgotten")
     .reduce((sum, e) => sum + e.count, 0);
 
+function badForgetRequest(body: unknown) {
+  return app.request("/v1/ask/forget", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 beforeEach(async () => {
   await resetDb();
   invalidateAssistantCache();
   resetRecordedSnapshots();
   resetForgotten();
   // Counts from earlier tests are not this one's.
-  await flushGuardEvents(async () => undefined);
+  await flushGuardEvents(() => Promise.resolve());
   config = fixtureConfig();
 });
 
@@ -118,10 +126,18 @@ describe("POST /v1/ask/forget (visitor plan V14)", () => {
     expect(await res.json()).toEqual({ ok: true, deleted: 3 });
 
     const left = await getDb().select({ id: aiMessages.id }).from(aiMessages);
-    expect(left.map((r) => r.id).sort()).toEqual(["m_forget_play_01", "m_forget_theirs1"]);
-    expect((await getDb().select().from(aiFeedback)).map((f) => f.messageId)).toEqual([
-      "m_forget_theirs1",
-    ]);
+    expect(
+      left
+        .map((r) => r.id)
+        .sort((a, b) => {
+          if (a < b) {
+            return -1;
+          }
+          return a > b ? 1 : 0;
+        }),
+    ).toEqual(["m_forget_play_01", "m_forget_theirs1"]);
+    const feedback = await getDb().select().from(aiFeedback);
+    expect(feedback.map((f) => f.messageId)).toEqual(["m_forget_theirs1"]);
     expect(await getDb().select().from(aiReviews)).toEqual([]);
     // Counted as an aggregate, never whose.
     expect(forgottenCount()).toBe(1);
@@ -159,10 +175,11 @@ describe("POST /v1/ask/forget (visitor plan V14)", () => {
       askTranscript: transcript,
     });
 
-    expect(await (await forget(MINE)).json()).toEqual({ ok: true, deleted: 1 });
+    const forgotten = await forget(MINE);
+    expect(await forgotten.json()).toEqual({ ok: true, deleted: 1 });
     const [contact] = await getDb().select().from(contactMessages);
     expect(contact).toMatchObject({ askMessageId: null, askTranscript: transcript });
-    const [kept] = await getDb().select().from(aiEvalCases).where(eq(aiEvalCases.id, frozen!.id));
+    const [kept] = await getDb().select().from(aiEvalCases).where(eq(aiEvalCases.id, frozen.id));
     expect(kept).toMatchObject({ question: "Is he open to contract work?", fromMessageId: null });
   });
 
@@ -203,7 +220,7 @@ describe("POST /v1/ask/forget (visitor plan V14)", () => {
 
     await forget(MINE);
     const [snapshot] = await getDb().select().from(aiInsightSnapshots);
-    expect(snapshot!.topics).toEqual([{ ...topics[0], examples: ["Kubernetes on bare metal"] }]);
+    expect(snapshot.topics).toEqual([{ ...topics[0], examples: ["Kubernetes on bare metal"] }]);
   });
 
   it("removes the insights runs' quotes of its questions, in case and spacing as quoted, and no other", async () => {
@@ -227,7 +244,7 @@ describe("POST /v1/ask/forget (visitor plan V14)", () => {
 
     await forget(MINE);
     const [snapshot] = await getDb().select().from(aiInsightSnapshots);
-    expect(snapshot!.topics).toEqual([
+    expect(snapshot.topics).toEqual([
       { ...topics[0], examples: ["What is Atlas?", "Does he relocate?"] },
       topics[1],
     ]);
@@ -267,7 +284,8 @@ describe("POST /v1/ask/forget (visitor plan V14)", () => {
     await getDb()
       .insert(aiMessages)
       .values(row("m_forget_theirs1", "other", "What is Atlas?"));
-    expect(await (await forget("never-seen-session-0001")).json()).toEqual({
+    const res = await forget("never-seen-session-0001");
+    expect(await res.json()).toEqual({
       ok: true,
       deleted: 0,
     });
@@ -276,14 +294,10 @@ describe("POST /v1/ask/forget (visitor plan V14)", () => {
   });
 
   it("refuses what no terminal sends, and limits each address", async () => {
-    const bad = (body: unknown) =>
-      app.request("/v1/ask/forget", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    expect((await bad({})).status).toBe(400);
-    expect((await bad({ sessionId: "short" })).status).toBe(400);
+    const emptyBody = await badForgetRequest({});
+    expect(emptyBody.status).toBe(400);
+    const shortSession = await badForgetRequest({ sessionId: "short" });
+    expect(shortSession.status).toBe(400);
 
     const bucket = `forget:${hashWithSalt("ip", "198.51.100.41")}`;
     await getDb()
@@ -292,7 +306,8 @@ describe("POST /v1/ask/forget (visitor plan V14)", () => {
     const limited = await forget(MINE, "198.51.100.41");
     expect(limited.status).toBe(429);
     expect(Number(limited.headers.get("retry-after"))).toBeGreaterThan(0);
-    expect((await forget(MINE, "198.51.100.42")).status).toBe(200);
+    const otherIp = await forget(MINE, "198.51.100.42");
+    expect(otherIp.status).toBe(200);
   });
 
   it("keeps an answer still being written for a forgotten session out of the log; its spend still counts", async () => {

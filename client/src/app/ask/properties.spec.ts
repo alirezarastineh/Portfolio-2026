@@ -24,7 +24,7 @@ import {
  * fast-check could shrink it to.
  */
 
-const seed = Number(process.env["FC_SEED"] ?? 20261021);
+const seed = Number(process.env["FC_SEED"] ?? 20_261_021);
 const runs = (numRuns: number) => ({ seed, numRuns });
 
 /** Every inline node of a rendered answer, nested ones included. */
@@ -36,14 +36,18 @@ function* inlines(nodes: readonly (Block | Inline)[]): Generator<Inline> {
         break;
       case "ul":
       case "ol":
-        for (const item of node.items) yield* inlines(item);
+        for (const item of node.items) {
+          yield* inlines(item);
+        }
         break;
       case "pre":
         break;
       case "strong":
       case "em":
       case "link":
-        if (node.t === "link") yield node;
+        if (node.t === "link") {
+          yield node;
+        }
         yield* inlines(node.c);
         break;
       default:
@@ -131,10 +135,15 @@ describe("an answer's links", () => {
     fc.assert(
       fc.property(answer, (text) => {
         for (const node of inlines(renderMarkdown(text, { cite: () => 1, link: policy }))) {
-          if (node.t !== "link") continue;
+          if (node.t !== "link") {
+            continue;
+          }
           // Opened by the router, or by a browser in a new tab: this site either way.
-          if (node.internal) expect(origin(node.href), node.href).toBe(SITE);
-          else expect(KNOWN, node.href).toContain(node.href);
+          if (node.internal) {
+            expect(origin(node.href), node.href).toBe(SITE);
+          } else {
+            expect(KNOWN, node.href).toContain(node.href);
+          }
         }
       }),
       runs(400),
@@ -219,7 +228,9 @@ describe("an answer's citations", () => {
           link: () => null,
         });
         for (const node of inlines(blocks)) {
-          if (node.t !== "cite") continue;
+          if (node.t !== "cite") {
+            continue;
+          }
           expect(chips[node.n - 1]?.id).toBe(node.id);
           expect(final.find((f) => f.id === node.id)?.n).toBe(node.n);
         }
@@ -298,7 +309,7 @@ describe("the shell", () => {
         fc.boolean(),
         (cmd, gaps, upper) => {
           const [head, ...rest] = cmd.split(" ");
-          const typed = `${gaps[0]}${upper ? head!.toUpperCase() : head}${rest.map((r) => gaps[1] + r).join("")}${gaps[2]}`;
+          const typed = `${gaps[0]}${upper ? head.toUpperCase() : head}${rest.map((r) => gaps[1] + r).join("")}${gaps[2]}`;
           expect(parseInput(typed)).toEqual(parseInput(cmd));
           expect(parseInput(typed).kind).toBe("local");
         },
@@ -355,7 +366,10 @@ describe("what goes back to the server", () => {
         const sent = forRequest(messages);
         const byId = new Map(messages.map((m) => [m.id, m]));
         for (const m of sent) {
-          const original = byId.get(m.id)!;
+          const original = byId.get(m.id);
+          if (!original) {
+            throw new Error(`Missing original message: ${m.id}`);
+          }
           expect(m.parts.every((p) => p.type === "text")).toBe(true);
           expect(m.parts.map((p) => p.text)).toEqual(
             original.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])),
@@ -378,25 +392,34 @@ describe("what goes back to the server", () => {
   it("pairs each answer with the question right before it, whatever the order of roles", () => {
     fc.assert(
       fc.property(fc.array(fc.constantFrom("user", "assistant"), { maxLength: 30 }), (roles) => {
-        const messages = roles.map(
-          (role, i) =>
-            ({ id: `m${i}`, role, parts: [{ type: "text", text: `${i}` }] }) as AskMessage,
-        );
+        const messages: AskMessage[] = roles.map((role, i) => ({
+          id: `m${i}`,
+          role,
+          parts: [{ type: "text", text: `${i}` }],
+        }));
         const map = answersByQuestion(messages);
         let pairs = 0;
         messages.forEach((m, i) => {
           const next = messages[i + 1];
           if (m.role !== "user" || next?.role !== "assistant") {
-            if (m.role === "user") expect(map.has(m.id)).toBe(false);
+            if (m.role === "user") {
+              expect(map.has(m.id)).toBe(false);
+            }
             return;
           }
           pairs++;
-          const answer = map.get(m.id)!;
-          expect(answer.id).toBe(next.id);
-          expect(answer.parts).toEqual(next.parts);
+          const paired = map.get(m.id);
+          if (!paired) {
+            throw new Error(`Missing paired answer: ${m.id}`);
+          }
+          expect(paired.id).toBe(next.id);
+          expect(paired.parts).toEqual(next.parts);
           // The newest answer, the one that may still stream, as a fresh copy; the rest as they are.
-          if (i + 1 === messages.length - 1) expect(answer).not.toBe(next);
-          else expect(answer).toBe(next);
+          if (i + 1 === messages.length - 1) {
+            expect(paired).not.toBe(next);
+          } else {
+            expect(paired).toBe(next);
+          }
         });
         expect(map.size).toBe(pairs);
       }),

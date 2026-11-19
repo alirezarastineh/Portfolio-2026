@@ -33,7 +33,7 @@ const CARD = {
     citationsVerified: { share: 0.96, n: 40 },
     repaired: { share: 0.02, n: 51 },
     figuresFlagged: null,
-    firstWordMs: { median: 1_800, n: 30 },
+    firstWordMs: { median: 1800, n: 30 },
     refusals: { invalid_input: 16, rate_limited: 2 },
   },
   judge: { median: 0.92, n: 25 },
@@ -42,6 +42,12 @@ const CARD = {
 
 const rows = (lines: ReturnType<typeof scorecardLines>) =>
   lines.map((l) => [l.label ?? "", l.text, ...(l.ask ? [l.ask] : [])]);
+
+const helpLabels = (scorecard: boolean) =>
+  helpLines(ASK_COPY.en, "disclosure", { scorecard }).map((l) => l.label);
+
+const respond = (status: number, body: unknown = {}) =>
+  Promise.resolve(new Response(JSON.stringify(body), { status }));
 
 describe("evals' lines (visitor plan V13)", () => {
   it("prints the recorded run, the live checks and the judge, then asks for the system card", () => {
@@ -121,18 +127,15 @@ describe("evals' lines (visitor plan V13)", () => {
   });
 
   it("lists evals under help only while the scorecard is published", () => {
-    const labels = (scorecard: boolean) =>
-      helpLines(ASK_COPY.en, "disclosure", { scorecard }).map((l) => l.label);
-    expect(labels(false)).not.toContain("evals");
-    expect(labels(true)).toContain("evals");
-    expect(labels(true).indexOf("evals")).toBe(labels(true).indexOf("history · clear · reset") - 1);
+    expect(helpLabels(false)).not.toContain("evals");
+    expect(helpLabels(true)).toContain("evals");
+    expect(helpLabels(true).indexOf("evals")).toBe(
+      helpLabels(true).indexOf("history · clear · reset") - 1,
+    );
   });
 });
 
 describe("fetchScorecard", () => {
-  const respond = (status: number, body: unknown = {}) =>
-    Promise.resolve(new Response(JSON.stringify(body), { status }));
-
   it("reads the scorecard, or says why not", async () => {
     expect(await fetchScorecard(() => respond(200, { v: 1 }))).toEqual({
       ok: true,

@@ -104,8 +104,12 @@ function valueOf(row: SkillRow, key: Traced): unknown {
 
 /** What the live site lists: nothing before the first publish; unknown when the review carries no list. */
 function liveSkills(marks: DraftMarks | null): readonly Skill[] | null {
-  if (!marks) return null;
-  if (marks.live.en === null) return [];
+  if (!marks) {
+    return null;
+  }
+  if (marks.live.en === null) {
+    return [];
+  }
   return marks.live.en?.skills ?? null;
 }
 
@@ -384,7 +388,9 @@ export default class AdminSkillsPage implements OnInit {
 
   /** Fields saved to the draft and not live; null until the review or a save here says. */
   protected readonly notLive = computed(() => {
-    if (!this.pulse?.marks() && this.savedHere().size === 0) return null;
+    if (!this.pulse?.marks() && this.savedHere().size === 0) {
+      return null;
+    }
     let count = 0;
     for (const states of this.trace().values()) {
       count += Object.values(states).filter((state) => state === "draft").length;
@@ -394,7 +400,9 @@ export default class AdminSkillsPage implements OnInit {
 
   /** A section per group: its name, the trace rolled up, and the last save's problems in it. */
   protected readonly outline = computed<OutlineItem[]>(() => {
-    if (this.loading() || this.loadError()) return [];
+    if (this.loading() || this.loadError()) {
+      return [];
+    }
     const trace = this.trace();
     const problems = this.issues.entries().map(([path]) => path);
     return this.rows().map((row) => ({
@@ -407,7 +415,9 @@ export default class AdminSkillsPage implements OnInit {
 
   /** The section as it would be published: these groups, in this order. */
   protected readonly livePreview = computed<LiveCompose | null>(() => {
-    if (this.loading() || this.loadError()) return null;
+    if (this.loading() || this.loadError()) {
+      return null;
+    }
     const rows = this.rows();
     return (base, locale) => withSkills(base, locale, rows);
   });
@@ -466,11 +476,15 @@ export default class AdminSkillsPage implements OnInit {
   /** A group's controls, made on first use: a text typed, or put there by a field's ⋯, goes into its row. */
   private controlsOf(id: string): Record<TextKey, Record<Locale, FormControl<string>>> {
     const known = this.controls.get(id);
-    if (known) return known;
+    if (known) {
+      return known;
+    }
     const make = (key: TextKey, locale: Locale) => {
       const control = new FormControl(this.textOf(id, key, locale), { nonNullable: true });
       control.valueChanges.subscribe((text) => {
-        if (text !== this.textOf(id, key, locale)) this.patchText(id, locale, { [key]: text });
+        if (text !== this.textOf(id, key, locale)) {
+          this.patchText(id, locale, { [key]: text });
+        }
       });
       return control;
     };
@@ -494,7 +508,9 @@ export default class AdminSkillsPage implements OnInit {
         for (const locale of LOCALES) {
           const text = row.translations[locale][key];
           // A reset drops the field's own drafts and its Undo: only where the text moved.
-          if (set[key][locale].value !== text) set[key][locale].reset(text);
+          if (set[key][locale].value !== text) {
+            set[key][locale].reset(text);
+          }
         }
       }
     }
@@ -509,7 +525,9 @@ export default class AdminSkillsPage implements OnInit {
     const result = await this.api.listSkills();
     this.loading.set(false);
     this.loadError.set(result.ok ? null : result.error);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     this.rows.set(result.data.skills);
     this.saved.set(new Map(result.data.skills.map((row) => [row.id, structuredClone(row)])));
     this.versions.remember(result.data.skills);
@@ -518,7 +536,9 @@ export default class AdminSkillsPage implements OnInit {
 
   protected patch(id: string, change: Partial<SkillInput>): void {
     this.rows.update((list) => list.map((r) => (r.id === id ? { ...r, ...change } : r)));
-    for (const key of Object.keys(change)) this.issues.resolve(`${id}.${key}`);
+    for (const key of Object.keys(change)) {
+      this.issues.resolve(`${id}.${key}`);
+    }
   }
 
   private patchText(
@@ -558,9 +578,13 @@ export default class AdminSkillsPage implements OnInit {
 
   /** Every changed group. One that fails keeps its edits and says why. */
   protected async save(): Promise<void> {
-    if (this.saving()) return;
+    if (this.saving()) {
+      return;
+    }
     const changedRows = this.rows().filter((row) => this.changedIds().includes(row.id));
-    if (!changedRows.length) return;
+    if (!changedRows.length) {
+      return;
+    }
     this.saving.set(true);
     const ids = changedRows.map((row) => row.id);
     if (!(await this.versions.mayOverwrite(ids, "A group on this page"))) {
@@ -580,7 +604,9 @@ export default class AdminSkillsPage implements OnInit {
     const at = Date.now();
     this.recordSaved(done, before, at);
     this.saving.set(false);
-    if (this.gone) return;
+    if (this.gone) {
+      return;
+    }
     this.finishSave(done, failed, error, at);
   }
 
@@ -611,15 +637,21 @@ export default class AdminSkillsPage implements OnInit {
     before: ReadonlyMap<string, Record<Traced, TraceState>>,
     at: number,
   ): void {
-    if (!done.length) return;
+    if (!done.length) {
+      return;
+    }
     this.saved.update((savedMap) => {
       const next = new Map(savedMap);
-      for (const row of done) next.set(row.id, structuredClone(row));
+      for (const row of done) {
+        next.set(row.id, structuredClone(row));
+      }
       return next;
     });
     this.savedHere.update((marks) => {
       const next = new Map(marks);
-      for (const row of done) this.markRowSavedHere(next, row.id, before.get(row.id), at);
+      for (const row of done) {
+        this.markRowSavedHere(next, row.id, before.get(row.id), at);
+      }
       return next;
     });
   }
@@ -632,7 +664,9 @@ export default class AdminSkillsPage implements OnInit {
     at: number,
   ): void {
     for (const key of TRACED) {
-      if (prior?.[key] === "unsaved") marks.set(`${id}.${key}`, at);
+      if (prior?.[key] === "unsaved") {
+        marks.set(`${id}.${key}`, at);
+      }
     }
   }
 
@@ -640,7 +674,9 @@ export default class AdminSkillsPage implements OnInit {
   private finishSave(done: SkillRow[], failed: ApiIssue[], error: string, at: number): void {
     if (done.length) {
       this.savedAt.set(at);
-      for (const row of done) this.markGroupPristine(row.id);
+      for (const row of done) {
+        this.markGroupPristine(row.id);
+      }
     }
     if (failed.length) {
       this.refused(failed);
@@ -654,9 +690,13 @@ export default class AdminSkillsPage implements OnInit {
   /** Mark a saved group's text controls pristine so field state matches the new baseline. */
   private markGroupPristine(id: string): void {
     const set = this.controls.get(id);
-    if (!set) return;
+    if (!set) {
+      return;
+    }
     for (const key of TEXT_KEYS) {
-      for (const locale of LOCALES) set[key][locale].markAsPristine();
+      for (const locale of LOCALES) {
+        set[key][locale].markAsPristine();
+      }
     }
   }
 
@@ -668,13 +708,17 @@ export default class AdminSkillsPage implements OnInit {
     const other = issues
       .map((issue) => issue.path[2])
       .find((locale): locale is Locale => isLocale(locale) && shown !== "both" && locale !== shown);
-    if (other) this.view.set(this.wide() ? "both" : other);
+    if (other) {
+      this.view.set(this.wide() ? "both" : other);
+    }
     this.afterRender((root) => {
       for (const [id, set] of this.controls) {
         for (const key of TEXT_KEYS) {
           for (const locale of LOCALES) {
             const message = this.issues.get(`${id}.translations.${locale}.${key}`);
-            if (message) set[key][locale].setErrors({ server: message });
+            if (message) {
+              set[key][locale].setErrors({ server: message });
+            }
           }
         }
       }
@@ -701,7 +745,9 @@ export default class AdminSkillsPage implements OnInit {
     // Only the new group: edits waiting on the others stay as they are.
     const list = await this.api.listSkills();
     const added = list.ok ? list.data.skills.find((row) => row.id === id) : undefined;
-    if (!added || this.gone) return;
+    if (!added || this.gone) {
+      return;
+    }
     this.rows.update((rows) => [...rows, added]);
     this.saved.update((map) => new Map(map).set(id, structuredClone(added)));
     this.fill();
@@ -724,7 +770,9 @@ export default class AdminSkillsPage implements OnInit {
       confirmLabel: "Delete group",
       destructive: true,
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
 
     const previous = this.rows();
     this.rows.update((list) => list.filter((r) => r.id !== row.id));
@@ -764,7 +812,9 @@ export default class AdminSkillsPage implements OnInit {
   private afterRender(run: (root: HTMLElement) => void): void {
     afterNextRender(
       () => {
-        if (!this.gone) run(this.host.nativeElement);
+        if (!this.gone) {
+          run(this.host.nativeElement);
+        }
       },
       { injector: this.injector },
     );

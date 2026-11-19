@@ -82,22 +82,32 @@ function getHighlighter(): Promise<HighlighterCore> {
   return highlighter;
 }
 
-function colorClass(prefix: "shd" | "shl", color: string | undefined): string | null {
-  const hex = /^#([0-9a-f]{3,8})$/i.exec(color ?? "")?.[1];
+function colorClass(prefix: "shd" | "shl", color = ""): string | null {
+  const hex = /^#([0-9a-f]{3,8})$/i.exec(color)?.[1];
   return hex ? `${prefix}-${hex.toLowerCase()}` : null;
 }
 
 function tokenHtml(token: ThemedToken): string {
-  const style = (token.htmlStyle ?? {}) as Record<string, string>;
+  const style = token.htmlStyle ?? {};
   const classes = new Set<string>();
   const dark = colorClass("shd", style["--shiki-dark"]);
   const light = colorClass("shl", style["--shiki-light"]);
-  if (dark) classes.add(dark);
-  if (light) classes.add(light);
+  if (dark) {
+    classes.add(dark);
+  }
+  if (light) {
+    classes.add(light);
+  }
   for (const [key, value] of Object.entries(style)) {
-    if (key.endsWith("font-style") && value === "italic") classes.add("sh-i");
-    if (key.endsWith("font-weight") && value === "bold") classes.add("sh-b");
-    if (key.endsWith("text-decoration") && value === "underline") classes.add("sh-u");
+    if (key.endsWith("font-style") && value === "italic") {
+      classes.add("sh-i");
+    }
+    if (key.endsWith("font-weight") && value === "bold") {
+      classes.add("sh-b");
+    }
+    if (key.endsWith("text-decoration") && value === "underline") {
+      classes.add("sh-u");
+    }
   }
   const content = escapeHtml(token.content);
   return classes.size > 0 ? `<span class="${[...classes].join(" ")}">${content}</span>` : content;
@@ -110,28 +120,37 @@ function tokenHtml(token: ThemedToken): string {
  */
 export async function highlightCode(code: string, lang: string | null): Promise<string> {
   const source = code.replace(/\n$/, "");
-  if (!lang) return escapeHtml(source);
+  if (!lang) {
+    return escapeHtml(source);
+  }
 
   const hl = await getHighlighter();
-  if (!hl.getLoadedLanguages().includes(lang)) return escapeHtml(source);
+  if (!hl.getLoadedLanguages().includes(lang)) {
+    return escapeHtml(source);
+  }
 
   const { tokens } = hl.codeToTokens(source, { lang, themes: CODE_THEMES, defaultColor: false });
   return tokens
-    .map((line) => `<span class="line">${line.map(tokenHtml).join("")}</span>`)
+    .map((line) => `<span class="line">${line.map((token) => tokenHtml(token)).join("")}</span>`)
     .join("\n");
 }
 
 /** Every language name (and alias) a code block may use. */
 export async function supportedLanguages(): Promise<string[]> {
-  return (await getHighlighter()).getLoadedLanguages().sort((a, b) => a.localeCompare(b));
+  const hl = await getHighlighter();
+  return hl.getLoadedLanguages().sort((a, b) => a.localeCompare(b));
 }
 
 function themeColors(theme: ReturnType<HighlighterCore["getTheme"]>): string[] {
   const colors = new Set<string>();
-  if (theme.fg) colors.add(theme.fg.toLowerCase());
+  if (theme.fg) {
+    colors.add(theme.fg.toLowerCase());
+  }
   for (const setting of theme.settings ?? []) {
     const fg = setting.settings?.foreground;
-    if (typeof fg === "string") colors.add(fg.toLowerCase());
+    if (typeof fg === "string") {
+      colors.add(fg.toLowerCase());
+    }
   }
   return [...colors].sort((a, b) => a.localeCompare(b));
 }
@@ -146,14 +165,16 @@ export async function codeStylesheet(): Promise<string> {
   for (const [mode, name] of Object.entries(CODE_THEMES) as ["dark" | "light", string][]) {
     for (const color of themeColors(hl.getTheme(name))) {
       const cls = colorClass(mode === "dark" ? "shd" : "shl", color);
-      if (cls && !mapped.has(cls)) throw new Error(`[code-css] no role for ${cls} (${name})`);
+      if (cls && !mapped.has(cls)) {
+        throw new Error(`[code-css] no role for ${cls} (${name})`);
+      }
     }
   }
 
-  const rules = Object.entries(CODE_ROLES).map(
-    ([token, classes]) =>
-      `${classes.map((cls) => `.code-block .${cls}`).join(",\n")} {\n  color: var(${token});\n}`,
-  );
+  const rules = Object.entries(CODE_ROLES).map(([token, classes]) => {
+    const selectors = classes.map((cls) => `.code-block .${cls}`).join(",\n");
+    return `${selectors} {\n  color: var(${token});\n}`;
+  });
   rules.push(
     ".code-block .sh-i {\n  font-style: italic;\n}",
     ".code-block .sh-b {\n  font-weight: 600;\n}",

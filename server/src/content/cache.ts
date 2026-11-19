@@ -27,7 +27,9 @@ const docs = new Map<string, Doc | null>();
 
 export function getCached(locale: Locale): PublishedEntry | null {
   const entry = cache.get(locale);
-  if (!entry) return null;
+  if (!entry) {
+    return null;
+  }
 
   if (Date.now() - entry.cachedAt >= TTL_MS) {
     cache.delete(locale);
@@ -52,7 +54,9 @@ export function setCachedDoc(versionId: number, key: string, doc: Doc | null): v
   if (docs.size >= MAX_DOCS) {
     // Oldest first: Map iterates in insertion order.
     const oldest = docs.keys().next().value;
-    if (oldest !== undefined) docs.delete(oldest);
+    if (oldest !== undefined) {
+      docs.delete(oldest);
+    }
   }
   docs.set(docCacheKey(versionId, key), doc);
 }
@@ -62,8 +66,11 @@ export function setCachedDoc(versionId: number, key: string, doc: Doc | null): v
  * route, and the route can read it without importing publish.
  */
 export function invalidateContentCache(locale?: Locale): void {
-  if (locale) cache.delete(locale);
-  else cache.clear();
+  if (locale) {
+    cache.delete(locale);
+  } else {
+    cache.clear();
+  }
   // Cheap to refill, and a rollback reuses no version id — but a cleared map
   // keeps memory honest after many publishes.
   docs.clear();

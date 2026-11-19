@@ -55,10 +55,14 @@ async function loadLive(db: DbExecutor, locale: Locale): Promise<LiveVersion | n
     .innerJoin(contentVersions, eq(contentVersions.id, contentPointers.versionId))
     .where(eq(contentPointers.locale, locale))
     .limit(1);
-  if (!row) return null;
+  if (!row) {
+    return null;
+  }
 
   const core = upcast(row.payload, row.publishedAt.toISOString());
-  if (!core.ok) return null;
+  if (!core.ok) {
+    return null;
+  }
   const stored = await db
     .select({ key: contentVersionDocs.key, payload: contentVersionDocs.payload })
     .from(contentVersionDocs)
@@ -96,27 +100,29 @@ function docChanges(draft: Map<string, Doc>, live: Map<string, Doc>): DocChange[
  * "nothing changed" here means a publish would write nothing either.
  */
 export async function reviewDraft(db: DbExecutor, now: Date = new Date()): Promise<LocaleReview[]> {
-  const reviews: LocaleReview[] = [];
-  for (const locale of LOCALES) {
-    let built: BuiltLocale | null = null;
-    let issues: DraftIssue[] = [];
-    try {
-      built = await buildLocale(db, locale, now);
-    } catch (error) {
-      if (!(error instanceof DraftInvalidError)) throw error;
-      issues = error.issues;
-    }
+  return Promise.all(
+    LOCALES.map(async (locale): Promise<LocaleReview> => {
+      let built: BuiltLocale | null = null;
+      let issues: DraftIssue[] = [];
+      try {
+        built = await buildLocale(db, locale, now);
+      } catch (error) {
+        if (!(error instanceof DraftInvalidError)) {
+          throw error;
+        }
+        issues = error.issues;
+      }
 
-    const live = await loadLive(db, locale);
-    reviews.push({
-      locale,
-      issues,
-      changed: !built || builtChecksum(built) !== live?.checksum,
-      draft: built?.core ?? null,
-      live: live?.built.core ?? null,
-      liveVersionId: live?.versionId ?? null,
-      docs: built ? docChanges(built.docs, live?.built.docs ?? new Map()) : [],
-    });
-  }
-  return reviews;
+      const live = await loadLive(db, locale);
+      return {
+        locale,
+        issues,
+        changed: !built || builtChecksum(built) !== live?.checksum,
+        draft: built?.core ?? null,
+        live: live?.built.core ?? null,
+        liveVersionId: live?.versionId ?? null,
+        docs: built ? docChanges(built.docs, live?.built.docs ?? new Map<string, Doc>()) : [],
+      };
+    }),
+  );
 }

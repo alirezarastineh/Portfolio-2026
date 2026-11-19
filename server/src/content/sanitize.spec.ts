@@ -119,7 +119,7 @@ describe("images in text (plan phase 17)", () => {
 
   it("read the same marker from a listed alt as the text shows", () => {
     const [first] = mediaImages(body);
-    expect(htmlToText(body, { images: true })).toContain(imageMarker(first!.alt));
+    expect(htmlToText(body, { images: true })).toContain(imageMarker(first.alt));
     expect(imageMarker("  ")).toBe("[image]");
   });
 
@@ -127,10 +127,10 @@ describe("images in text (plan phase 17)", () => {
     const tagged =
       '<p>The terminal:</p><img src="/media/t.png" alt="The &lt;AskTerminal&gt; component, &quot;ask&quot; &amp; answer">';
     const [picture] = mediaImages(tagged);
-    expect(picture!.alt).toBe('The <AskTerminal> component, "ask" & answer');
+    expect(picture.alt).toBe('The <AskTerminal> component, "ask" & answer');
     expect(htmlToText(tagged, { images: true })).toBe(
       'The terminal:\n[image: The <AskTerminal> component, "ask" & answer]',
     );
-    expect(htmlToText(tagged, { images: true })).toContain(imageMarker(picture!.alt));
+    expect(htmlToText(tagged, { images: true })).toContain(imageMarker(picture.alt));
   });
 });

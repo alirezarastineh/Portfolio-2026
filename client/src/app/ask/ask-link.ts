@@ -15,8 +15,14 @@ const UNSAFE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u202A-\u202
 
 /** A question as the prompt takes it: no control characters, trimmed, at most 600 characters. */
 export function cleanLinkQuestion(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  const text = raw.replace(UNSAFE, "").replace(/\r\n?/g, "\n").trim().slice(0, ASK_LINK_CHARS);
+  if (typeof raw !== "string") {
+    return null;
+  }
+  const text = raw
+    .replaceAll(UNSAFE, "")
+    .replaceAll(/\r\n?/g, "\n")
+    .trim()
+    .slice(0, ASK_LINK_CHARS);
   return text.trim() || null;
 }
 

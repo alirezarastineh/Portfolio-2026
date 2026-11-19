@@ -29,13 +29,20 @@ export type LiveCompose = (base: AppContent, locale: Locale, media: MediaLookup)
 /** An uploaded asset by its id, from the media library (undefined until it has loaded). */
 export type MediaLookup = (id: string | null) => MediaAsset | undefined;
 
+function nonEmpty(text: string | null | undefined): string | null {
+  const trimmed = text?.trim() ?? "";
+  return trimmed === "" ? null : trimmed;
+}
+
 /** An image asset as the payload's image, as the server's `MediaIndex.image` builds it. */
 export function imageFromAsset(
   asset: MediaAsset | undefined,
   locale: Locale,
   fallbackAlt: string,
 ): Image | null {
-  if (asset?.kind !== "image") return null;
+  if (asset?.kind !== "image") {
+    return null;
+  }
   const set = (format: "webp" | "avif") =>
     asset.variants
       .filter((v) => v.format === format)
@@ -54,7 +61,7 @@ export function imageFromAsset(
     ],
     width: asset.width,
     height: asset.height,
-    alt: own?.trim() || other?.trim() || fallbackAlt,
+    alt: nonEmpty(own) ?? nonEmpty(other) ?? fallbackAlt,
     blur: asset.blurDataUri && asset.blurDataUri.length <= 2048 ? asset.blurDataUri : null,
   };
 }
@@ -70,7 +77,9 @@ function imageFor(
   alt: string,
   saved: { id: string | null; image: Image | null },
 ): Image | null {
-  if (!id) return null;
+  if (!id) {
+    return null;
+  }
   return imageFromAsset(media(id), locale, alt) ?? (id === saved.id ? saved.image : null);
 }
 
@@ -83,7 +92,9 @@ export function withUi(
   const ui = { ...base.ui } as Record<string, object>;
   for (const [group, value] of Object.entries(groups)) {
     const own = value?.[locale];
-    if (own) ui[group] = { ...ui[group], ...own };
+    if (own) {
+      ui[group] = { ...ui[group], ...own };
+    }
   }
   return { ...base, ui: ui as AppTranslations };
 }
@@ -172,8 +183,11 @@ export function withProject(
     updatedAt: before?.updatedAt ?? row.updatedAt,
   };
   const projects = [...base.projects];
-  if (at >= 0) projects[at] = project;
-  else projects.push(project);
+  if (at >= 0) {
+    projects[at] = project;
+  } else {
+    projects.push(project);
+  }
   return { ...base, projects };
 }
 
@@ -187,7 +201,9 @@ function toExperience(
   saved: { id: string | null; image: Image | null },
 ): Experience | null {
   const t = row.translations[locale];
-  if (!t) return null;
+  if (!t) {
+    return null;
+  }
   return {
     id: row.id ?? "draft",
     kind: row.kind,
@@ -227,17 +243,23 @@ export function withExperiences(
   let placed = false;
   for (const row of rows) {
     const editing = open?.id === row.id;
-    if (!editing && !row.isVisible) continue;
+    if (!editing && !row.isVisible) {
+      continue;
+    }
     const source = editing && open ? open : row;
     // The list holds the saved row: its logo is the one the draft was built with.
     const saved = { id: row.logoId, image: drawn.get(row.id) ?? null };
     const entry = toExperience(source, locale, media, saved);
-    if (entry) list.push(entry);
+    if (entry) {
+      list.push(entry);
+    }
     placed ||= editing;
   }
   if (open && !placed) {
     const entry = toExperience(open, locale, media, { id: null, image: null });
-    if (entry) list.push(entry);
+    if (entry) {
+      list.push(entry);
+    }
   }
   return { ...base, experiences: list };
 }

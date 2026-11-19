@@ -1,6 +1,6 @@
 import type { APIRequestContext, Locator, Page } from "@playwright/test";
 
-import { expect, interactive, test } from "./fixtures";
+import { expect, fetchText, interactive, requireBox, runSequentially, test } from "./fixtures";
 
 // Content comes from e2e/fixture-content.mjs: `project-one` has a case study in
 // both languages, `project-two` in English only; `shipping-rag-to-production`
@@ -9,7 +9,7 @@ const SITE = "https://alirezarastineh.me";
 
 /** The page's JSON-LD graph, parsed, and the types it declares. */
 async function jsonLd(request: APIRequestContext, path: string) {
-  const html = await (await request.get(path)).text();
+  const html = await fetchText(request, path);
   const blocks = [
     ...html.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g),
   ];
@@ -19,12 +19,17 @@ async function jsonLd(request: APIRequestContext, path: string) {
 }
 
 async function hreflangs(page: Page): Promise<Record<string, string>> {
-  const links = page.locator('link[rel="alternate"][hreflang]');
-  const out: Record<string, string> = {};
-  for (const link of await links.all()) {
-    out[(await link.getAttribute("hreflang"))!] = (await link.getAttribute("href"))!;
-  }
-  return out;
+  const links = await page.locator('link[rel="alternate"][hreflang]').all();
+  const entries = await Promise.all(
+    links.map(async (link) => {
+      const lang = await link.getAttribute("hreflang");
+      const href = await link.getAttribute("href");
+      expect(lang).not.toBeNull();
+      expect(href).not.toBeNull();
+      return [lang ?? "", href ?? ""] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
 }
 
 /**
@@ -40,10 +45,14 @@ async function expectPaper(page: Page, offPage: Locator[]): Promise<void> {
     page.locator('a[href$="#main"]'),
     ...offPage,
   ];
-  for (const locator of hidden) await expect(locator).toBeVisible();
+  await runSequentially(hidden, async (locator) => {
+    await expect(locator).toBeVisible();
+  });
 
   await page.emulateMedia({ media: "print" });
-  for (const locator of hidden) await expect(locator).toBeHidden();
+  await runSequentially(hidden, async (locator) => {
+    await expect(locator).toBeHidden();
+  });
   await expect(page.locator("main h1")).toBeVisible();
   await expect(page.locator("main .prose-body").first()).toBeVisible();
   const colours = await page.evaluate(() => {
@@ -72,7 +81,7 @@ test.describe("case study", () => {
 
       await expect(page.locator("main h1")).toBeVisible();
       await expect(page.getByText(locale === "de" ? "99,95 %" : "99.95%")).toBeVisible();
-      await expect(page.locator('main a[href="/' + locale + '#contact"]')).toBeVisible();
+      await expect(page.locator(`main a[href="/${locale}#contact"]`)).toBeVisible();
     });
 
     test(`/${locale}/work/project-one declares CreativeWork and a breadcrumb`, async ({
@@ -102,20 +111,26 @@ test.describe("case study", () => {
     const card = await request.get("/en/og/work/project-one.png", { maxRedirects: 0 });
     expect(card.status()).toBe(200);
     expect(card.headers()["content-type"]).toBe("image/png");
-    expect((await card.body()).subarray(0, 4)).toEqual(Buffer.from([137, 80, 78, 71]));
+    const cardBody = await card.body();
+    expect(cardBody.subarray(0, 4)).toEqual(Buffer.from([137, 80, 78, 71]));
 
     const post = await request.get("/de/og/writing/shipping-rag-to-production.png", {
       maxRedirects: 0,
     });
     expect(post.status()).toBe(200);
     // No card for what has no page: a project without a case study, an unknown kind.
-    expect((await request.get("/en/og/work/project-three.png")).status()).toBe(404);
-    expect((await request.get("/en/og/nope/project-one.png")).status()).toBe(404);
-    expect((await request.get("/de/og/writing/notes-on-evals.png")).status()).toBe(404);
+    const [projectThree, unknownKind, germanOnlyPost] = await Promise.all([
+      request.get("/en/og/work/project-three.png"),
+      request.get("/en/og/nope/project-one.png"),
+      request.get("/de/og/writing/notes-on-evals.png"),
+    ]);
+    expect(projectThree.status()).toBe(404);
+    expect(unknownKind.status()).toBe(404);
+    expect(germanOnlyPost.status()).toBe(404);
   });
 
   test("the body's headings keep their anchors, in the server render too", async ({ request }) => {
-    const html = await (await request.get("/en/work/project-one")).text();
+    const html = await fetchText(request, "/en/work/project-one");
     expect(html).toMatch(/<h2[^>]* id="architecture-decisions"[^>]*>Architecture decisions<\/h2>/);
     expect(html).toMatch(/<h3[^>]* id="retrieval"/);
     // The table of contents links to them through the router, not a bare #.
@@ -155,7 +170,9 @@ test.describe("case study", () => {
   }) => {
     // Only Chromium lets a test grant clipboard access and read it back.
     const readable = browserName === "chromium";
-    if (readable) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    if (readable) {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    }
     await page.goto("/en/work/project-one");
     await interactive(page);
     const frame = page.locator("main .code-frame");
@@ -174,8 +191,10 @@ test.describe("case study", () => {
     const lines = await frame.locator("pre").evaluate((pre) => {
       const style = getComputedStyle(pre);
       const inner =
-        pre.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
-      return inner / parseFloat(style.lineHeight);
+        pre.clientHeight -
+        Number.parseFloat(style.paddingTop) -
+        Number.parseFloat(style.paddingBottom);
+      return inner / Number.parseFloat(style.lineHeight);
     });
     expect(lines).toBeCloseTo(2, 1);
   });
@@ -187,16 +206,16 @@ test.describe("case study", () => {
         .first()
         .evaluate((el) => getComputedStyle(el).color);
     const token = (name: string) =>
-      page.evaluate((name) => {
+      page.evaluate((tokenName) => {
         const probe = document.createElement("i");
-        probe.style.color = `var(${name})`;
+        probe.style.color = `var(${tokenName})`;
         document.body.append(probe);
         const value = getComputedStyle(probe).color;
         probe.remove();
         return value;
       }, name);
 
-    for (const theme of ["dark", "light"] as const) {
+    await runSequentially(["dark", "light"] as const, async (theme) => {
       await page.emulateMedia({ colorScheme: theme });
       await page.goto("/en/work/project-one");
       await interactive(page);
@@ -208,7 +227,7 @@ test.describe("case study", () => {
         "background-color",
         await token("--card"),
       );
-    }
+    });
   });
 
   test("a table-of-contents link scrolls to its section without leaving the page", async ({
@@ -237,7 +256,8 @@ test.describe("case study", () => {
     await expect(dialog).toContainText("1 / 2");
     const close = dialog.getByRole("button", { name: "Close" });
     await expect(close).toBeFocused();
-    expect((await close.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const closeBox = await requireBox(close);
+    expect(closeBox.height).toBeGreaterThanOrEqual(44);
 
     await page.keyboard.press("ArrowRight");
     await expect(dialog).toContainText("2 / 2");
@@ -258,8 +278,9 @@ test.describe("case study", () => {
     const dialog = page.getByRole("dialog", { name: "Gallery" });
     await expect(dialog.locator("img")).toBeVisible();
     const close = dialog.getByRole("button", { name: "Close" });
-    const caption = await dialog.locator("figcaption").boundingBox();
-    expect(caption!.y + caption!.height).toBeLessThanOrEqual((await close.boundingBox())!.y);
+    const caption = await requireBox(dialog.locator("figcaption"));
+    const closeBox = await requireBox(close);
+    expect(caption.y + caption.height).toBeLessThanOrEqual(closeBox.y);
     await close.scrollIntoViewIfNeeded();
     await expect(close).toBeInViewport();
   });
@@ -317,11 +338,11 @@ test.describe("case study", () => {
     const expert =
       "Streaming ingestion with idempotent writes; backfills replay through the same path.";
     // Server-rendered where they are set, and nowhere else.
-    const html = await (await request.get("/en/work/project-two")).text();
+    const html = await fetchText(request, "/en/work/project-two");
     expect(html).toContain(plain);
     expect(html).toContain("<details");
     expect(html).toContain("Terms used here");
-    const without = await (await request.get("/en/work/project-one")).text();
+    const without = await fetchText(request, "/en/work/project-one");
     expect(without).not.toContain("case-aids");
     expect(without).not.toContain("Terms used here");
 
@@ -366,7 +387,9 @@ test.describe("case study", () => {
     await interactive(page);
     let loads = 0;
     page.on("request", (request) => {
-      if (request.resourceType() === "document") loads += 1;
+      if (request.resourceType() === "document") {
+        loads += 1;
+      }
     });
 
     const link = page.getByRole("link", { name: /^Read case study/ });
@@ -394,8 +417,6 @@ test.describe("case study", () => {
 test.describe("case study on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  const top = async (locator: Locator) => (await locator.boundingBox())!.y;
-
   test("puts the result above the story, with the contents folded between them", async ({
     page,
   }) => {
@@ -410,14 +431,16 @@ test.describe("case study on a phone", () => {
       main.locator("app-picture img").first(),
       main.getByRole("heading", { level: 2, name: "Problem", exact: true }),
     ];
-    const tops = await Promise.all(order.map(top));
+    const boxes = await Promise.all(order.map((locator) => requireBox(locator)));
+    const tops = boxes.map((box) => box.y);
     expect(tops).toEqual([...tops].sort((a, b) => a - b));
 
     // Folded: the links wait behind "On this page", a 44px row.
     const contents = page.getByRole("navigation", { name: "On this page" });
     await expect(contents.getByRole("link", { name: "Outcomes" })).toBeHidden();
     const summary = fold.locator("summary");
-    expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const summaryBox = await requireBox(summary);
+    expect(summaryBox.height).toBeGreaterThanOrEqual(44);
     await summary.tap();
     await expect(contents.getByRole("link", { name: "Outcomes" })).toBeVisible();
   });
@@ -440,22 +463,23 @@ test.describe("case study on a phone", () => {
     await interactive(page);
     const ask = page.getByRole("button", { name: "Ask about this section: Problem" });
     await expect(ask).toHaveCSS("opacity", "1");
-    expect((await ask.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const askBox = await requireBox(ask);
+    expect(askBox.height).toBeGreaterThanOrEqual(44);
   });
 
   test("code's Copy and Explain show, 44px tall, in the band kept for them", async ({ page }) => {
     await page.goto("/en/work/project-one");
     await interactive(page);
     const frame = page.locator("main .code-frame");
-    for (const name of ["Copy", "Explain code block 1"]) {
+    await runSequentially(["Copy", "Explain code block 1"], async (name) => {
       const button = frame.getByRole("button", { name });
       await expect(button).toBeVisible();
-      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    }
-    const tools = (await frame.locator(".code-tools").boundingBox())!;
-    expect(tools.y + tools.height).toBeLessThanOrEqual(
-      (await frame.locator("code").boundingBox())!.y,
-    );
+      const box = await requireBox(button);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    });
+    const tools = await requireBox(frame.locator(".code-tools"));
+    const code = await requireBox(frame.locator("code"));
+    expect(tools.y + tools.height).toBeLessThanOrEqual(code.y);
   });
 
   test("the gallery is a row running to the screen's edge, the next image cut by it", async ({
@@ -465,16 +489,16 @@ test.describe("case study on a phone", () => {
     await interactive(page);
     const row = page.locator("app-gallery ul");
     await row.scrollIntoViewIfNeeded();
-    const box = (await row.boundingBox())!;
+    const box = await requireBox(row);
     expect(box.x + box.width).toBe(390);
     const images = await row
       .locator("li")
       .evaluateAll((items) =>
         items.map((item) => item.getBoundingClientRect().toJSON() as DOMRect),
       );
-    expect(images[1]!.top).toBe(images[0]!.top);
-    expect(images[1]!.left).toBeLessThan(390);
-    expect(images[1]!.right).toBeGreaterThan(390);
+    expect(images[1].top).toBe(images[0].top);
+    expect(images[1].left).toBeLessThan(390);
+    expect(images[1].right).toBeGreaterThan(390);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   });
 });
@@ -569,7 +593,11 @@ test.describe("writing", () => {
       const res = await page.goto(`/${locale}/writing/shipping-rag-to-production`);
       expect(res?.status()).toBe(200);
       await expect(page.locator('meta[property="og:type"]')).toHaveAttribute("content", "article");
-      expect(Object.keys(await hreflangs(page)).sort()).toEqual(["de", "en", "x-default"]);
+      expect(Object.keys(await hreflangs(page)).sort((a, b) => a.localeCompare(b))).toEqual([
+        "de",
+        "en",
+        "x-default",
+      ]);
 
       const { graph, types } = await jsonLd(
         request,
@@ -581,7 +609,7 @@ test.describe("writing", () => {
         datePublished: "2026-08-12T08:00:00.000Z",
         dateModified: "2026-09-02T08:00:00.000Z",
       });
-      expect(graph[1]!["itemListElement"] as unknown[]).toHaveLength(3);
+      expect(graph[1]["itemListElement"] as unknown[]).toHaveLength(3);
     });
   }
 
@@ -589,7 +617,10 @@ test.describe("writing", () => {
     page,
   }) => {
     await page.goto("/en/writing/notes-on-evals");
-    expect(Object.keys(await hreflangs(page)).sort()).toEqual(["en", "x-default"]);
+    expect(Object.keys(await hreflangs(page)).sort((a, b) => a.localeCompare(b))).toEqual([
+      "en",
+      "x-default",
+    ]);
     await expect(page.locator('header a[hreflang="de"]').first()).toHaveAttribute(
       "href",
       "/de/writing",
@@ -613,12 +644,12 @@ test.describe("writing on a phone", () => {
   }) => {
     await page.goto("/en/writing");
     await interactive(page);
-    const tags = page.getByRole("navigation", { name: "Tags" }).getByRole("link");
-    const boxes = await Promise.all((await tags.all()).map((tag) => tag.boundingBox()));
-    expect(new Set(boxes.map((box) => box!.y)).size).toBe(1);
-    expect(boxes.every((box) => box!.height >= 44)).toBe(true);
+    const tagLinks = await page.getByRole("navigation", { name: "Tags" }).getByRole("link").all();
+    const boxes = await Promise.all(tagLinks.map((tag) => requireBox(tag)));
+    expect(new Set(boxes.map((box) => box.y)).size).toBe(1);
+    expect(boxes.every((box) => box.height >= 44)).toBe(true);
 
-    const row = (await page.locator("main nav ul").boundingBox())!;
+    const row = await requireBox(page.locator("main nav ul"));
     expect(row.x + row.width).toBe(390);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   });
@@ -633,22 +664,27 @@ test.describe("feeds and files", () => {
     expect(xml).toContain(`<atom:link href="${SITE}/en/rss.xml" rel="self"`);
     expect(xml.match(/<item>/g)).toHaveLength(2);
 
-    const de = await (await request.get("/de/rss.xml")).text();
+    const de = await fetchText(request, "/de/rss.xml");
     expect(de.match(/<item>/g)).toHaveLength(1);
     expect(de).toContain("<language>de</language>");
 
-    expect((await request.get("/fr/rss.xml")).status()).toBe(404);
+    const fr = await request.get("/fr/rss.xml");
+    expect(fr.status()).toBe(404);
   });
 
   test("llms.txt indexes the portfolio for language models, in each language", async ({
     request,
   }) => {
     // The convention's root file is the English one.
-    for (const path of ["/llms.txt", "/en/llms.txt"]) {
-      const res = await request.get(path);
+    const responses = await Promise.all(
+      ["/llms.txt", "/en/llms.txt"].map(async (path) => {
+        const res = await request.get(path);
+        return { path, res, text: await res.text() };
+      }),
+    );
+    for (const { path, res, text } of responses) {
       expect(res.status(), path).toBe(200);
       expect(res.headers()["content-type"], path).toContain("text/plain");
-      const text = await res.text();
       expect(text, path).toMatch(/^# \S.*\n\n> \S/);
       expect(text, path).toContain(`](${SITE}/en/work/`);
       expect(text, path).toContain(`](${SITE}/en/writing/`);
@@ -661,10 +697,11 @@ test.describe("feeds and files", () => {
       expect(text, path).toContain(`- [Agent card](${SITE}/.well-known/agent-card.json)`);
       expect(text, path).toContain(`- [Deutsche Fassung](${SITE}/de/llms.txt)`);
     }
-    const de = await (await request.get("/de/llms.txt")).text();
+    const de = await fetchText(request, "/de/llms.txt");
     expect(de).toContain("## Für Agenten");
     expect(de).toContain(`- [English version](${SITE}/en/llms.txt)`);
-    expect((await request.get("/fr/llms.txt")).status()).toBe(404);
+    const fr = await request.get("/fr/llms.txt");
+    expect(fr.status()).toBe(404);
   });
 
   test("the agent card says what the assistant can do, and where its tools are", async ({
@@ -694,7 +731,7 @@ test.describe("feeds and files", () => {
       "list_projects",
       "get_resume",
     ]);
-    expect(card.capabilities.extensions[0]!.params.endpoint).toMatch(/^https:\/\/[^/]+\/v1\/mcp$/);
+    expect(card.capabilities.extensions[0].params.endpoint).toMatch(/^https:\/\/[^/]+\/v1\/mcp$/);
   });
 
   test("/en/resume.pdf redirects to the uploaded CV", async ({ request }) => {
@@ -715,7 +752,7 @@ test.describe("feeds and files", () => {
   });
 
   test("the sitemap lists case studies and posts only where they exist", async ({ request }) => {
-    const xml = await (await request.get("/sitemap.xml")).text();
+    const xml = await fetchText(request, "/sitemap.xml");
     for (const path of [
       "/en/work/project-one",
       "/de/work/project-one",
@@ -804,7 +841,9 @@ test.describe("home: the line", () => {
     await expect(line).toBeVisible();
     // One per rendered section: projects, experience, skills, writing, about, contact.
     await expect(nodes).toHaveCount(6);
-    for (const node of await nodes.all()) await expect(node).toHaveAttribute("aria-hidden", "true");
+    await runSequentially(await nodes.all(), async (node) => {
+      await expect(node).toHaveAttribute("aria-hidden", "true");
+    });
 
     await page.emulateMedia({ media: "print" });
     await expect(line).toBeHidden();
@@ -870,12 +909,15 @@ test("legal and the writing index share the site's one left edge, and legal's he
   const heading = page.locator("main h1");
   await expect(heading).toHaveClass(/text-h1/);
   await expect(page.locator("main header p")).not.toContainText("//");
-  const left = (await heading.boundingBox())?.x;
+  const headingBox = await heading.boundingBox();
+  const left = headingBox?.x;
   // The body's anchors, for a shared `#section` link.
   await expect(page.locator(".prose-body h2").first()).toHaveAttribute("id", "controller");
 
   await page.goto("/en/writing");
-  expect((await page.locator("main h1").boundingBox())?.x).toBe(left);
+  const writingBox = await page.locator("main h1").boundingBox();
+  expect(writingBox?.x).toBe(left);
   await page.goto("/en/match");
-  expect((await page.locator("main h1").boundingBox())?.x).toBe(left);
+  const matchBox = await page.locator("main h1").boundingBox();
+  expect(matchBox?.x).toBe(left);
 });

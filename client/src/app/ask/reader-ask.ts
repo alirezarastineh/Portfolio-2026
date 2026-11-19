@@ -67,7 +67,7 @@ const SECTION_HEADINGS = "h2.case-h[id], app-prose-body > .prose-body > h2[id]";
 /** The body's code blocks, in the order the server counts them (its document's `code`). */
 const CODE_BLOCKS = "app-prose-body pre.code-block";
 
-const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
+const oneLine = (text: string) => text.replaceAll(/\s+/g, " ").trim();
 
 /** `text` cut to `max` characters, with "…" where it was. */
 function cut(text: string, max: number): string {
@@ -75,7 +75,9 @@ function cut(text: string, max: number): string {
 }
 
 function setAttribute(el: Element, name: string, value: string): void {
-  if (el.getAttribute(name) !== value) el.setAttribute(name, value);
+  if (el.getAttribute(name) !== value) {
+    el.setAttribute(name, value);
+  }
 }
 
 /**
@@ -109,7 +111,9 @@ export function decorateCode(root: Element, copy: ReaderAskCopy): void {
     const tools = pre.parentElement?.classList.contains("code-frame")
       ? pre.parentElement.querySelector(":scope > .code-tools")
       : null;
-    if (!tools) return;
+    if (!tools) {
+      return;
+    }
     let button = tools.querySelector(":scope > button.code-explain");
     if (!button) {
       button = tools.ownerDocument.createElement("button");
@@ -117,7 +121,9 @@ export function decorateCode(root: Element, copy: ReaderAskCopy): void {
       button.className = "code-explain";
       tools.insertBefore(button, tools.querySelector(":scope > .code-copy"));
     }
-    if (button.textContent !== copy.code.label) button.textContent = copy.code.label;
+    if (button.textContent !== copy.code.label) {
+      button.textContent = copy.code.label;
+    }
     setAttribute(button, "data-index", String(index));
     setAttribute(button, "aria-label", fmt(copy.code.name, { n: index + 1 }));
   });
@@ -142,7 +148,9 @@ export function buttonQuestion(
     };
   }
   const code = target.closest<HTMLElement>("button.code-explain");
-  if (!code || !root.contains(code)) return null;
+  if (!code || !root.contains(code)) {
+    return null;
+  }
   const index = Number(code.dataset["index"]);
   const source = root.querySelectorAll(CODE_BLOCKS)[index]?.textContent ?? "";
   const firstLine = source.split("\n").find((line) => line.trim()) ?? "";
@@ -155,9 +163,13 @@ export function buttonQuestion(
 
 /** A selection's text as a question sends it, or null: nothing selected, or not in `root`. */
 export function selectedText(selection: Selection | null, root: Element): string | null {
-  if (!selection || selection.isCollapsed || !selection.rangeCount) return null;
+  if (!selection || selection.isCollapsed || !selection.rangeCount) {
+    return null;
+  }
   const range = selection.getRangeAt(0);
-  if (!root.contains(range.commonAncestorContainer)) return null;
+  if (!root.contains(range.commonAncestorContainer)) {
+    return null;
+  }
   const text = oneLine(selection.toString());
   return text ? text.slice(0, SELECTION_CHARS) : null;
 }
@@ -182,7 +194,9 @@ const SELECTION_SETTLE_MS = 250;
  * call it from the page's constructor. Nothing happens on the server.
  */
 export function injectReaderAsk(root: () => Element | null): void {
-  if (!isPlatformBrowser(inject(PLATFORM_ID))) return;
+  if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+    return;
+  }
   const launcher = inject(AskLauncherService);
   const lang = inject(LanguageService);
   const doc = inject(DOCUMENT);
@@ -191,7 +205,9 @@ export function injectReaderAsk(root: () => Element | null): void {
   // After every render: a new page or language replaces the headings and code blocks.
   afterEveryRender(() => {
     const el = root();
-    if (!el) return;
+    if (!el) {
+      return;
+    }
     decorateSections(el, copy());
     decorateCode(el, copy());
   });
@@ -199,9 +215,13 @@ export function injectReaderAsk(root: () => Element | null): void {
   const onClick = (event: MouseEvent) => {
     const el = root();
     const target = event.target;
-    if (!el || !(target instanceof Element)) return;
+    if (!el || !(target instanceof Element)) {
+      return;
+    }
     const asked = buttonQuestion(target, el, copy());
-    if (asked) launcher.ask(asked.question, asked.source, asked.about);
+    if (asked) {
+      launcher.ask(asked.question, asked.source, asked.about);
+    }
   };
   doc.addEventListener("click", onClick);
 
@@ -213,10 +233,14 @@ export function injectReaderAsk(root: () => Element | null): void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const hide = () => {
     selected = null;
-    if (button) button.hidden = true;
+    if (button) {
+      button.hidden = true;
+    }
   };
   const selectionButton = (): HTMLButtonElement => {
-    if (button) return button;
+    if (button) {
+      return button;
+    }
     const made = doc.createElement("button");
     made.type = "button";
     made.className = "reader-ask-selection";
@@ -229,7 +253,9 @@ export function injectReaderAsk(root: () => Element | null): void {
     made.addEventListener("pointercancel", () => (pressing = false));
     made.addEventListener("click", () => {
       pressing = false;
-      if (!selected) return;
+      if (!selected) {
+        return;
+      }
       const asked = selectionQuestion(selected, copy());
       hide();
       launcher.ask(asked.question, asked.source, asked.about);
@@ -242,9 +268,11 @@ export function injectReaderAsk(root: () => Element | null): void {
     const el = root();
     const selection = doc.getSelection();
     const text = el ? selectedText(selection, el) : null;
-    if (!text || !selection) return hide();
+    const view = doc.defaultView;
+    if (!text || !selection || !view) {
+      return hide();
+    }
     const rect = selection.getRangeAt(0).getBoundingClientRect();
-    const view = doc.defaultView!;
     const b = selectionButton();
     b.textContent = copy().selection.label;
     b.setAttribute("aria-label", copy().selection.name);
@@ -258,13 +286,17 @@ export function injectReaderAsk(root: () => Element | null): void {
   const onSelection = () => {
     clearTimeout(timer);
     if (doc.getSelection()?.isCollapsed !== false) {
-      if (!pressing) hide();
+      if (!pressing) {
+        hide();
+      }
       return;
     }
     timer = setTimeout(show, SELECTION_SETTLE_MS);
   };
   const onKey = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && selected) hide();
+    if (event.key === "Escape" && selected) {
+      hide();
+    }
   };
   doc.addEventListener("selectionchange", onSelection);
   doc.addEventListener("keydown", onKey);

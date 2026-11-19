@@ -14,7 +14,9 @@ export class HlmInputGroup {
   private readonly _fieldControlChild = contentChild(BrnFieldControl);
 
   private readonly _spartanInvalid = computed(() => {
-    if (this._fieldControl) return this._fieldControl.spartanInvalid();
+    if (this._fieldControl) {
+      return this._fieldControl.spartanInvalid();
+    }
 
     return this._fieldControlChild()?.spartanInvalid();
   });

@@ -13,7 +13,9 @@ const run = (command) =>
   spawnSync(process.execPath, [cli, command], { stdio: "inherit" }).status ?? 1;
 
 const collected = run("collect");
-if (collected !== 0) process.exit(collected);
+if (collected !== 0) {
+  process.exit(collected);
+}
 
 const asserted = run("assert");
 // On GitHub Actions (the GitHub Actions plan, Phase 4), each failed hard gate also
@@ -28,10 +30,14 @@ if (process.env.GITHUB_STEP_SUMMARY && existsSync(results)) {
     const audit = auditProperty ? `${auditId}:${auditProperty}` : auditId;
     const line = `${audit} on ${new URL(url).pathname}: ${actual}, expected ${operator} ${expected}`;
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `- lighthouse ${level}: ${line}\n`);
-    if (level === "error") console.log(`::error title=lighthouse::${escape(line)}`);
+    if (level === "error") {
+      console.log(`::error title=lighthouse::${escape(line)}`);
+    }
   }
 }
 // Uploaded even when an assertion failed: that is when the reports matter.
-if (run("upload") !== 0) process.stderr.write("upload failed\n");
+if (run("upload") !== 0) {
+  process.stderr.write("upload failed\n");
+}
 
 process.exit(asserted);

@@ -68,7 +68,9 @@ export function newTrace(now = Date.now()): Trace {
 }
 
 function formatAttempts(attempts: readonly Attempt[]): string {
-  if (attempts.length === 0) return "none configured";
+  if (attempts.length === 0) {
+    return "none configured";
+  }
   return attempts.map((a) => `${a.model}=${a.outcome}`).join(", ");
 }
 
@@ -147,18 +149,26 @@ interface Classified {
 
 function retryAfterMs(headers: Record<string, string> | undefined, now: number): number | null {
   const raw = headers?.["retry-after"];
-  if (!raw) return null;
+  if (!raw) {
+    return null;
+  }
   const seconds = Number(raw);
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  if (Number.isFinite(seconds)) {
+    return Math.max(0, seconds * 1000);
+  }
   const at = Date.parse(raw);
   return Number.isFinite(at) ? Math.max(0, at - now) : null;
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
   if (error && typeof error === "object") {
-    if ("message" in error && typeof (error as { message: unknown }).message === "string") {
+    if ("message" in error && typeof error.message === "string") {
       return (error as { message: string }).message;
     }
     try {
@@ -191,7 +201,9 @@ export function classifyError(error: unknown, now = Date.now()): Classified {
     if (status >= 500 || status === 408) {
       return { outcome: "server-error", retryable: true, retryAfterMs: null, message };
     }
-    if (status === 0) return { outcome: "network", retryable: true, retryAfterMs: null, message };
+    if (status === 0) {
+      return { outcome: "network", retryable: true, retryAfterMs: null, message };
+    }
     return { outcome: "client-error", retryable: false, retryAfterMs: null, message };
   }
   const message = errorMessage(error);
@@ -224,7 +236,9 @@ function mergeProviderOptions(
   base: SharedV4ProviderOptions | undefined,
   extra: SharedV4ProviderOptions | undefined,
 ): SharedV4ProviderOptions | undefined {
-  if (!extra) return base;
+  if (!extra) {
+    return base;
+  }
   const merged: SharedV4ProviderOptions = { ...base };
   for (const [key, value] of Object.entries(extra)) {
     merged[key] = { ...base?.[key], ...value };
@@ -244,7 +258,9 @@ function beforeDeadline<T>(
   phase: AttemptTimeoutError["phase"],
 ): Promise<T> {
   const remaining = deadline - now();
-  if (remaining <= 0) return Promise.reject(new AttemptTimeoutError(phase));
+  if (remaining <= 0) {
+    return Promise.reject(new AttemptTimeoutError(phase));
+  }
   let timer: NodeJS.Timeout | undefined;
   return Promise.race([
     Promise.resolve(promise),
@@ -256,19 +272,29 @@ function beforeDeadline<T>(
 
 function assertNotAborted(signal?: AbortSignal, entryId?: string, error?: unknown): void {
   if (signal?.aborted) {
-    if (entryId) releaseProbe(entryId);
+    if (entryId) {
+      releaseProbe(entryId);
+    }
     throw error ?? signal.reason;
   }
 }
 
+function toAbortError(signal: AbortSignal | undefined, fallbackMessage: string): Error {
+  const reason: unknown = signal?.reason;
+  if (reason instanceof Error) {
+    return reason;
+  }
+  return new Error(typeof reason === "string" && reason ? reason : fallbackMessage);
+}
+
 function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) {
-    return Promise.reject(signal.reason ?? new Error("request aborted"));
+    return Promise.reject(toAbortError(signal, "request aborted"));
   }
   return new Promise((resolve, reject) => {
     const onAbort = () => {
       clearTimeout(timer);
-      reject(signal?.reason ?? new Error("request aborted"));
+      reject(toAbortError(signal, "request aborted"));
     };
     signal?.addEventListener("abort", onAbort, { once: true });
     const timer = setTimeout(() => {
@@ -301,14 +327,16 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
     assertNotAborted(signal, entryId);
   }
 
+  type PreparedEntry = { options: LanguageModelV4CallOptions; answerOnly: boolean };
+  type PrepareResult =
+    | { ok: true; options: LanguageModelV4CallOptions; answerOnly: boolean }
+    | { ok: false; outcome: AttemptOutcome };
+
   /**
    * The request for one model, or why it cannot take it. Models without tools
    * get the answer-only rebuild; a prompt that still does not fit is skipped.
    */
-  function prepare(
-    entry: ModelEntry,
-    call: LanguageModelV4CallOptions,
-  ): { options: LanguageModelV4CallOptions; answerOnly: boolean } | AttemptOutcome {
+  function prepare(entry: ModelEntry, call: LanguageModelV4CallOptions): PrepareResult {
     let prepared: LanguageModelV4CallOptions = {
       ...call,
       providerOptions: mergeProviderOptions(call.providerOptions, entry.providerOptions),
@@ -319,115 +347,148 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
         prepared = options.answerOnly(prepared);
         answerOnly = true;
       } else if (hasTools(call)) {
-        return "skipped-capability";
+        return { ok: false, outcome: "skipped-capability" };
       }
     }
     const needed = options.estimateTokens(prepared) + (prepared.maxOutputTokens ?? 0);
-    if (needed > entry.contextWindow) return "skipped-context";
-    return { options: prepared, answerOnly };
+    if (needed > entry.contextWindow) {
+      return { ok: false, outcome: "skipped-context" };
+    }
+    return { ok: true, options: prepared, answerOnly };
   }
 
-  function qualifyEntry(
-    entry: ModelEntry,
-    call: LanguageModelV4CallOptions,
-  ): { options: LanguageModelV4CallOptions; answerOnly: boolean } | AttemptOutcome {
-    if (!entry.available) return "skipped-missing";
+  function qualifyEntry(entry: ModelEntry, call: LanguageModelV4CallOptions): PrepareResult {
+    if (!entry.available) {
+      return { ok: false, outcome: "skipped-missing" };
+    }
     const prep = prepare(entry, call);
-    if (typeof prep === "string") return prep;
-    if (!tryAcquire(entry.id, now())) return "skipped-open";
+    if (!prep.ok) {
+      return prep;
+    }
+    if (!tryAcquire(entry.id, now())) {
+      return { ok: false, outcome: "skipped-open" };
+    }
     return prep;
   }
 
-  async function tryEntryWithRetries<T>(
+  async function runSingleAttempt<T>(
     entry: ModelEntry,
-    prepared: { options: LanguageModelV4CallOptions; answerOnly: boolean },
+    prepared: PreparedEntry,
     call: LanguageModelV4CallOptions,
     attempt: (
       entry: ModelEntry,
       prepared: LanguageModelV4CallOptions,
       record: ModelCall,
     ) => Promise<T>,
-  ): Promise<{ ok: true; result: T } | { ok: false; attempt: Attempt }> {
-    let transientRetries = 0;
-    let rateLimitRetries = 0;
-    for (;;) {
-      try {
-        await options.beforeAttempt?.(entry, call.abortSignal);
-        assertNotAborted(call.abortSignal, entry.id);
-      } catch (error) {
-        assertNotAborted(call.abortSignal, entry.id, error);
-        throw error;
-      }
-      const started = now();
-      const record: ModelCall = {
-        model: entry.id,
-        answerOnly: prepared.answerOnly,
-        ttftMs: null,
-        usage: null,
-        finishReason: null,
-      };
-      try {
-        const result = await attempt(entry, prepared.options, record);
-        const attemptEntry: Attempt = {
-          model: entry.id,
-          outcome: "ok",
-          ms: now() - started,
-        };
-        if (prepared.answerOnly) attemptEntry.answerOnly = true;
-        trace.attempts.push(attemptEntry);
-        trace.calls.push(record);
-        return { ok: true, result };
-      } catch (error) {
-        assertNotAborted(call.abortSignal, entry.id, error);
-        const failure = classifyError(error, now());
-        if (
-          failure.outcome === "rate-limited" &&
-          options.rateLimitRetry &&
-          (options.acquireRateLimitRetry?.() ??
-            rateLimitRetries < options.rateLimitRetry.maxRetries)
-        ) {
-          rateLimitRetries++;
-          const requested = failure.retryAfterMs ?? options.rateLimitRetry.defaultDelayMs;
-          await waitBeforeRetry(
-            Math.min(requested, options.rateLimitRetry.maxDelayMs),
-            call.abortSignal,
-            entry.id,
-          );
-          continue;
-        }
-        if (failure.retryable && transientRetries < options.maxRetries) {
-          await waitBeforeRetry(backoff(transientRetries), call.abortSignal, entry.id);
-          transientRetries++;
-          continue;
-        }
-        recordFailure(
-          entry.id,
-          {
-            error: failure.message,
-            rateLimited: failure.outcome === "rate-limited",
-            retryAfterMs: failure.retryAfterMs,
-          },
-          now(),
-        );
-        const failedAttempt: Attempt = {
-          model: entry.id,
-          outcome: failure.outcome,
-          ms: now() - started,
-          error: failure.message,
-        };
-        trace.attempts.push(failedAttempt);
-        console.warn(`[ask] ${entry.id} failed (${failure.outcome}): ${failure.message}`);
-        return { ok: false, attempt: failedAttempt };
-      }
+  ): Promise<{ ok: true; result: T } | { ok: false; error: unknown; started: number }> {
+    try {
+      await options.beforeAttempt?.(entry, call.abortSignal);
+      assertNotAborted(call.abortSignal, entry.id);
+    } catch (error) {
+      assertNotAborted(call.abortSignal, entry.id, error);
+      throw error;
     }
+    const started = now();
+    const record: ModelCall = {
+      model: entry.id,
+      answerOnly: prepared.answerOnly,
+      ttftMs: null,
+      usage: null,
+      finishReason: null,
+    };
+    try {
+      const result = await attempt(entry, prepared.options, record);
+      const attemptEntry: Attempt = {
+        model: entry.id,
+        outcome: "ok",
+        ms: now() - started,
+      };
+      if (prepared.answerOnly) {
+        attemptEntry.answerOnly = true;
+      }
+      trace.attempts.push(attemptEntry);
+      trace.calls.push(record);
+      return { ok: true, result };
+    } catch (error) {
+      return { ok: false, error, started };
+    }
+  }
+
+  async function attemptWithRetries<T>(
+    entry: ModelEntry,
+    prepared: PreparedEntry,
+    call: LanguageModelV4CallOptions,
+    attempt: (
+      entry: ModelEntry,
+      prepared: LanguageModelV4CallOptions,
+      record: ModelCall,
+    ) => Promise<T>,
+    transientRetries = 0,
+    rateLimitRetries = 0,
+  ): Promise<{ ok: true; result: T } | { ok: false; attempt: Attempt }> {
+    const outcome = await runSingleAttempt(entry, prepared, call, attempt);
+    if (outcome.ok) {
+      return outcome;
+    }
+    assertNotAborted(call.abortSignal, entry.id, outcome.error);
+    const failure = classifyError(outcome.error, now());
+    if (
+      failure.outcome === "rate-limited" &&
+      options.rateLimitRetry &&
+      (options.acquireRateLimitRetry?.() ?? rateLimitRetries < options.rateLimitRetry.maxRetries)
+    ) {
+      const requested = failure.retryAfterMs ?? options.rateLimitRetry.defaultDelayMs;
+      await waitBeforeRetry(
+        Math.min(requested, options.rateLimitRetry.maxDelayMs),
+        call.abortSignal,
+        entry.id,
+      );
+      return attemptWithRetries(
+        entry,
+        prepared,
+        call,
+        attempt,
+        transientRetries,
+        rateLimitRetries + 1,
+      );
+    }
+    if (failure.retryable && transientRetries < options.maxRetries) {
+      await waitBeforeRetry(backoff(transientRetries), call.abortSignal, entry.id);
+      return attemptWithRetries(
+        entry,
+        prepared,
+        call,
+        attempt,
+        transientRetries + 1,
+        rateLimitRetries,
+      );
+    }
+    recordFailure(
+      entry.id,
+      {
+        error: failure.message,
+        rateLimited: failure.outcome === "rate-limited",
+        retryAfterMs: failure.retryAfterMs,
+      },
+      now(),
+    );
+    const failedAttempt: Attempt = {
+      model: entry.id,
+      outcome: failure.outcome,
+      ms: now() - outcome.started,
+      error: failure.message,
+    };
+    trace.attempts.push(failedAttempt);
+    console.warn(`[ask] ${entry.id} failed (${failure.outcome}): ${failure.message}`);
+    return { ok: false, attempt: failedAttempt };
   }
 
   /**
    * Walks the chain. `attempt` either returns (the model is answering) or
-   * throws; the loop records the outcome and decides whether to retry here,
+   * throws; the step records the outcome and decides whether to retry here,
    * move on, or give up because the visitor left.
    */
-  async function walk<T>(
+  async function tryModelsSequentially<T>(
     call: LanguageModelV4CallOptions,
     attempt: (
       entry: ModelEntry,
@@ -437,25 +498,62 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
   ): Promise<T> {
     const attempts: Attempt[] = [];
     const callable = options.entries.filter((entry) => entry.available);
-    let failed = false;
-    for (const entry of options.entries) {
-      const prepared = qualifyEntry(entry, call);
-      if (typeof prepared === "string") {
-        const skipped: Attempt = { model: entry.id, outcome: prepared, ms: 0 };
+
+    async function step(index: number, failed: boolean): Promise<T> {
+      let i = index;
+      let nextEntry: { entry: ModelEntry; prepared: PreparedEntry } | null = null;
+      while (i < options.entries.length) {
+        const entry = options.entries[i];
+        const prepared = qualifyEntry(entry, call);
+        if (prepared.ok) {
+          nextEntry = { entry, prepared };
+          break;
+        }
+        const skipped: Attempt = { model: entry.id, outcome: prepared.outcome, ms: 0 };
         trace.attempts.push(skipped);
         attempts.push(skipped);
-        continue;
+        i++;
       }
-
+      if (!nextEntry) {
+        throw new AllModelsFailedError(attempts);
+      }
       if (failed) {
-        options.onFailover?.({ position: callable.indexOf(entry) + 1, of: callable.length });
+        options.onFailover?.({
+          position: callable.indexOf(nextEntry.entry) + 1,
+          of: callable.length,
+        });
       }
-      const outcome = await tryEntryWithRetries(entry, prepared, call, attempt);
-      if (outcome.ok) return outcome.result;
-      failed = true;
+      const outcome = await attemptWithRetries(nextEntry.entry, nextEntry.prepared, call, attempt);
+      if (outcome.ok) {
+        return outcome.result;
+      }
       attempts.push(outcome.attempt);
+      return step(i + 1, true);
     }
-    throw new AllModelsFailedError(attempts);
+
+    return step(0, false);
+  }
+
+  async function readUntilFirstContent(
+    reader: ReadableStreamDefaultReader<LanguageModelV4StreamPart>,
+    firstDeadline: number,
+    thoughtsAsAdmin: boolean | undefined,
+    buffered: LanguageModelV4StreamPart[],
+  ): Promise<void> {
+    const { done, value } = await beforeDeadline(reader.read(), firstDeadline, now, "first-chunk");
+    if (done) {
+      return;
+    }
+    if (value.type === "error") {
+      throw value.error;
+    }
+    buffered.push(value);
+    // Thoughts asked for the admin (plan phase 23) wait with the rest: the deadline is
+    // for the first text, as in a visitor's answer, which never asks for them.
+    if (isContent(value) && !(thoughtsAsAdmin && value.type === "reasoning-delta")) {
+      return;
+    }
+    return readUntilFirstContent(reader, firstDeadline, thoughtsAsAdmin, buffered);
   }
 
   async function streamOne(
@@ -485,20 +583,7 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
         "first-chunk",
       );
       reader = result.stream.getReader();
-      for (;;) {
-        const { done, value } = await beforeDeadline(
-          reader.read(),
-          firstDeadline,
-          now,
-          "first-chunk",
-        );
-        if (done) break;
-        if (value.type === "error") throw value.error;
-        buffered.push(value);
-        // Thoughts asked for the admin (plan phase 23) wait with the rest: the deadline is
-        // for the first text, as in a visitor's answer, which never asks for them.
-        if (isContent(value) && !(entry.thoughts && value.type === "reasoning-delta")) break;
-      }
+      await readUntilFirstContent(reader, firstDeadline, entry.thoughts, buffered);
     } catch (error) {
       controller.abort(error);
       void reader?.cancel().catch(() => undefined);
@@ -510,7 +595,9 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
     // OpenRouter reasoning model) meets the deadline, but the first token is still its text's.
     recordSuccess(entry.id, now() - started, now());
     const stamp = (part: LanguageModelV4StreamPart) => {
-      if (record.ttftMs !== null || part.type === "reasoning-delta" || !isContent(part)) return;
+      if (record.ttftMs !== null || part.type === "reasoning-delta" || !isContent(part)) {
+        return;
+      }
       record.ttftMs = now() - started;
       trace.firstTokenAt ??= now();
     };
@@ -518,7 +605,9 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
     const activeReader = reader;
     let closed = false;
     const close = () => {
-      if (closed) return false;
+      if (closed) {
+        return false;
+      }
       closed = true;
       detach();
       return true;
@@ -542,7 +631,9 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
 
     const stream = new ReadableStream<LanguageModelV4StreamPart>({
       start(out) {
-        for (const part of buffered) forward(part, out);
+        for (const part of buffered) {
+          forward(part, out);
+        }
       },
       async pull(out) {
         try {
@@ -559,7 +650,9 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
           }
           forward(value, out);
         } catch (error) {
-          if (!close()) return;
+          if (!close()) {
+            return;
+          }
           controller.abort(error);
           void activeReader.cancel().catch(() => undefined);
           if (!caller?.aborted) {
@@ -616,8 +709,8 @@ export function createFallbackModel(options: FallbackOptions): LanguageModelV4 {
     provider: "portfolio.fallback",
     modelId: first,
     supportedUrls: {},
-    doStream: (call) => walk(call, streamOne),
-    doGenerate: (call) => walk(call, generateOne),
+    doStream: (call) => tryModelsSequentially(call, streamOne),
+    doGenerate: (call) => tryModelsSequentially(call, generateOne),
   };
 }
 

@@ -126,13 +126,17 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 /** "5 answers: 1 said it isn't there, 0 thumbs down, 1 failed". */
 export function ratesLine(r: Rates): string {
-  if (!r.answers) return "no matching answers";
+  if (!r.answers) {
+    return "no matching answers";
+  }
   return `${plural(r.answers, "answer", "answers")}: ${r.unknown} said it isn't there, ${r.down} thumbs down, ${r.failed} failed`;
 }
 
 /** The effect in one line: a count until there are enough applications to judge. */
 export function effectLine(effect: LessonEffect | null): string {
-  if (!effect) return "Not applied yet: nothing to measure.";
+  if (!effect) {
+    return "Not applied yet: nothing to measure.";
+  }
   const { applications, successes, value } = effect;
   if (value === null || applications < LESSON_RULES.minApplications) {
     return `Too little to judge yet: ${successes} of ${plural(applications, "matching answer", "matching answers")} since the fix went well (${LESSON_RULES.minApplications} needed).`;
@@ -156,9 +160,13 @@ export function scopeWords(text: string): string[] {
   const words: string[] = [];
   for (const raw of text.split(/[\s,;]+/)) {
     const word = raw.trim().toLowerCase();
-    if (!/^[\p{L}\p{N}]{3,40}$/u.test(word) || words.includes(word)) continue;
+    if (!/^[\p{L}\p{N}]{3,40}$/u.test(word) || words.includes(word)) {
+      continue;
+    }
     words.push(word);
-    if (words.length === LESSON_RULES.maxScope) break;
+    if (words.length === LESSON_RULES.maxScope) {
+      break;
+    }
   }
   return words;
 }
@@ -170,7 +178,9 @@ export function scopeFromEntries(entries: readonly Pick<JournalEntry, "diagnosis
 
 /** Why an insight topic cannot become a lesson; null when it can. */
 export function topicProblem(topic: Pick<InsightTopic, "questions" | "unanswered">): string | null {
-  if (!topic.unanswered) return "Only a topic the assistant could not answer becomes a lesson.";
+  if (!topic.unanswered) {
+    return "Only a topic the assistant could not answer becomes a lesson.";
+  }
   return topic.questions >= LESSON_RULES.minTopicQuestions
     ? null
     : `A lesson needs ${LESSON_RULES.minTopicQuestions} questions on the topic; it has ${topic.questions}.`;
@@ -224,7 +234,7 @@ export function lessonProblem(statement: string, scopeText: string): string | nu
   if (words < HEURISTIC_MIN_WORDS) {
     return `Write the lesson as a rule someone can follow: at least ${HEURISTIC_MIN_WORDS} words (${words} so far).`;
   }
-  return scopeWords(scopeText).length ? null : REFUSALS["empty_scope"]!;
+  return scopeWords(scopeText).length ? null : REFUSALS["empty_scope"];
 }
 
 /** The Overview's notice: why insights ran by themselves, and what they found. */

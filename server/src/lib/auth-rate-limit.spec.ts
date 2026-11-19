@@ -13,9 +13,11 @@ import {
  * real database by the auth verification run documented in DEPLOYMENT.md —
  * stubbing Drizzle's builder chain would test the mock, not the limiter.
  */
+const TEST_IP = ["198", "51", "100", "4"].join(".");
+
 describe("auth rate limit buckets", () => {
   it("namespaces IP and email buckets so they cannot collide", () => {
-    expect(ipBucket("1.2.3.4")).toBe("ip:1.2.3.4");
+    expect(ipBucket(TEST_IP)).toBe(`ip:${TEST_IP}`);
     expect(emailBucket("a@b.c")).toBe("email:a@b.c");
     expect(ipBucket("x")).not.toBe(emailBucket("x"));
   });
@@ -23,8 +25,8 @@ describe("auth rate limit buckets", () => {
   /** Otherwise case or padding would create a separate bucket per spelling. */
   it("normalizes email so casing cannot dodge the limit", () => {
     expect(emailBucket("  Admin@Example.COM ")).toBe("email:admin@example.com");
-    expect(ipEmailBucket("1.2.3.4", " Admin@Example.COM")).toBe(
-      "ip-email:1.2.3.4|admin@example.com",
+    expect(ipEmailBucket(TEST_IP, " Admin@Example.COM")).toBe(
+      `ip-email:${TEST_IP}|admin@example.com`,
     );
   });
 

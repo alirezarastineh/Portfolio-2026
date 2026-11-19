@@ -50,7 +50,10 @@ const dayTotal = (day: string) =>
  */
 export async function spendToday(feature: Feature, at = new Date()): Promise<Spend> {
   const day = utcDay(at);
-  if (feature === "terminal") return { totalUsd: (await dayTotal(day))[0]?.usd ?? 0, ownUsd: 0 };
+  if (feature === "terminal") {
+    const [total] = await dayTotal(day);
+    return { totalUsd: total?.usd ?? 0, ownUsd: 0 };
+  }
   const [[total], [own]] = await Promise.all([
     dayTotal(day),
     getDb()
@@ -85,11 +88,19 @@ export async function spendByFeature(
 
 /** Why `feature` is off, whatever the spend; null when its switches are on. */
 function offReason(config: AskConfig, settings: AiSettings, feature: Feature): string | null {
-  if (!config.enabled) return "disabled";
-  if (config.unavailableReason) return "unconfigured";
+  if (!config.enabled) {
+    return "disabled";
+  }
+  if (config.unavailableReason) {
+    return "unconfigured";
+  }
   // The admin's switch closes the visitors' terminal, and match with it, not the admin's own tools.
-  if (VISITOR_FEATURES.has(feature) && !settings.enabled) return "disabled_by_admin";
-  if (isSwitched(feature) && !settings.featureSwitches[feature]) return "switched_off";
+  if (VISITOR_FEATURES.has(feature) && !settings.enabled) {
+    return "disabled_by_admin";
+  }
+  if (isSwitched(feature) && !settings.featureSwitches[feature]) {
+    return "switched_off";
+  }
   return null;
 }
 
@@ -108,7 +119,9 @@ export function stateFor(
   spend: Spend,
 ): Availability {
   const reason = offReason(config, settings, feature);
-  if (reason) return { state: "off", reason };
+  if (reason) {
+    return { state: "off", reason };
+  }
   const budgetUsd = settings.dailyBudgetUsd ?? config.dailyBudgetUsd;
   const spentUsd = spend.totalUsd;
   const resting = (line: SpendLine): Availability => ({
@@ -117,14 +130,18 @@ export function stateFor(
     budgetUsd,
     line,
   });
-  if (spentUsd >= budgetUsd) return resting("budget");
+  if (spentUsd >= budgetUsd) {
+    return resting("budget");
+  }
   if (feature !== "terminal") {
     const inReserve = VISITOR_FEATURES.has(feature);
     if (!inReserve && spentUsd >= reserveLine(budgetUsd, settings.publicReserve)) {
       return resting("reserve");
     }
     const cap = settings.featureCaps[feature];
-    if (cap !== null && spend.ownUsd >= cap) return resting("cap");
+    if (cap !== null && spend.ownUsd >= cap) {
+      return resting("cap");
+    }
   }
   return {
     state: "ok",
@@ -177,7 +194,8 @@ export function refusal(state: Exclude<Availability, { state: "ok" }>): string {
  */
 const processSalt = randomBytes(16).toString("hex");
 export function hashWithSalt(kind: "ip" | "session", value: string): string {
-  const salt = process.env.IP_HASH_SALT?.trim() || processSalt;
+  const configured = process.env.IP_HASH_SALT?.trim() ?? "";
+  const salt = configured === "" ? processSalt : configured;
   return createHash("sha256").update(`${salt}:${kind}:${value}`).digest("hex");
 }
 
@@ -197,7 +215,9 @@ async function overLimit({ bucket, limit, windowMs }: Window, now: number): Prom
     .select({ n: sql<number>`count(*)::int` })
     .from(aiRateEvents)
     .where(and(eq(aiRateEvents.bucket, bucket), gte(aiRateEvents.occurredAt, since)));
-  if ((count?.n ?? 0) < limit) return null;
+  if ((count?.n ?? 0) < limit) {
+    return null;
+  }
   const [oldest] = await getDb()
     .select({ at: aiRateEvents.occurredAt })
     .from(aiRateEvents)
@@ -245,7 +265,7 @@ export async function recordRequest(ipHash: string, sessionHash: string): Promis
  * them, so wider than the visitors' questions, and in a bucket of their own,
  * so agents and visitors never use up each other's.
  */
-export const MCP_RATE = { perHour: 120, perDay: 1_000 } as const;
+export const MCP_RATE = { perHour: 120, perDay: 1000 } as const;
 
 /**
  * The public scorecard's limits per IP (visitor plan V13): a read the server
@@ -265,7 +285,7 @@ export const FORGET_RATE = { perHour: 10, perDay: 30 } as const;
  * each reader page and terminal asks for once, as wide as MCP's reads, in a
  * bucket of its own.
  */
-export const MAP_RATE = { perHour: 120, perDay: 1_000 } as const;
+export const MAP_RATE = { perHour: 120, perDay: 1000 } as const;
 
 /**
  * Match's limits (visitor plan V19): a brief costs two to four calls, so 3 an
@@ -384,11 +404,15 @@ export class ConcurrencyGate {
 
   /** A release function, or null when full. Releasing twice is harmless. */
   tryEnter(): (() => void) | null {
-    if (this.active >= this.limit()) return null;
+    if (this.active >= this.limit()) {
+      return null;
+    }
     this.active++;
     let released = false;
     return () => {
-      if (released) return;
+      if (released) {
+        return;
+      }
       released = true;
       this.active--;
     };

@@ -37,8 +37,10 @@ export async function totpQrSvg(secret: string, label: string): Promise<string> 
  * second use of the same code inside its 90s validity window.
  */
 export function matchTotpStep(secret: string, token: string, now = Date.now()): number | null {
-  const cleaned = token.replace(/\s+/g, "");
-  if (!/^\d{6}$/.test(cleaned)) return null;
+  const cleaned = token.replaceAll(/\s+/g, "");
+  if (!/^\d{6}$/.test(cleaned)) {
+    return null;
+  }
 
   // `validate` returns the time-step delta, or null when no step matches.
   const totp = totpFor(secret, "admin");
@@ -58,7 +60,9 @@ export function generateRecoveryCodes(count = 10): string[] {
   for (let i = 0; i < count; i++) {
     let code = "";
     for (let c = 0; c < 10; c++) {
-      if (c === 5) code += "-";
+      if (c === 5) {
+        code += "-";
+      }
       code += alphabet[randomInt(alphabet.length)];
     }
     codes.push(code);
@@ -72,7 +76,7 @@ export function generateRecoveryCodes(count = 10): string[] {
  * otherwise a correct code would fail on formatting alone.
  */
 export function normalizeRecoveryCode(code: string): string {
-  const compact = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const compact = code.toUpperCase().replaceAll(/[^A-Z0-9]/g, "");
   return compact.length === 10 ? `${compact.slice(0, 5)}-${compact.slice(5)}` : compact;
 }
 

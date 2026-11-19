@@ -88,9 +88,11 @@ interface Group {
   template: `
     <dialog
       #dialog
+      tabindex="-1"
       class="palette"
       [attr.aria-label]="labels().title"
       (close)="palette.hide()"
+      (keydown.escape)="palette.hide()"
       (click)="closeOnBackdrop($event)"
     >
       <div class="palette-search">
@@ -127,10 +129,12 @@ interface Group {
       <div id="palette-list" role="listbox" class="palette-list" [attr.aria-label]="labels().title">
         <div
           role="option"
+          tabindex="-1"
           class="palette-option"
           [id]="ask().id"
           [attr.aria-selected]="ask().id === activeId()"
           (click)="run(ask())"
+          (keydown.enter)="run(ask())"
           (pointermove)="highlight(ask().id)"
         >
           <ng-icon name="lucideSparkles" size="16" class="palette-icon" aria-hidden="true" />
@@ -148,10 +152,12 @@ interface Group {
             @for (command of group.commands; track command.id) {
               <div
                 role="option"
+                tabindex="-1"
                 class="palette-option"
                 [id]="command.id"
                 [attr.aria-selected]="command.id === activeId()"
                 (click)="run(command)"
+                (keydown.enter)="run(command)"
                 (pointermove)="highlight(command.id)"
               >
                 <ng-icon [name]="command.icon" size="16" class="palette-icon" aria-hidden="true" />
@@ -414,13 +420,14 @@ export class CommandPaletteComponent {
 
     const other = otherLocale(l);
     const dark = this.theme.theme() === "dark";
+    const newsHint = this.newsHint();
     const actions: Command[] = [
       {
         id: "palette-news",
         label: labels.palette.news,
         icon: "lucideBell",
         keywords: "news updates",
-        ...(this.newsHint() ? { hint: this.newsHint()! } : {}),
+        ...(newsHint ? { hint: newsHint } : {}),
         run: () => this.launcher.ask("news", "palette"),
       },
       {
@@ -525,7 +532,9 @@ export class CommandPaletteComponent {
         this.query.set("");
         this.active.set(this.firstMatch());
         dialog.showModal();
-        if (!this.touch || this.palette.byKey) this.input().nativeElement.focus();
+        if (!this.touch || this.palette.byKey) {
+          this.input().nativeElement.focus();
+        }
         void this.loadNews();
       } else if (!open && dialog.open) {
         dialog.close();
@@ -537,7 +546,9 @@ export class CommandPaletteComponent {
     // Keep the highlighted option in view while arrowing through a long list.
     afterRenderEffect(() => {
       const id = this.activeId();
-      if (id) this.doc.getElementById(id)?.scrollIntoView({ block: "nearest" });
+      if (id) {
+        this.doc.getElementById(id)?.scrollIntoView({ block: "nearest" });
+      }
     });
   }
 
@@ -553,7 +564,9 @@ export class CommandPaletteComponent {
 
   protected highlight(id: string): void {
     const index = this.flat().findIndex((command) => command.id === id);
-    if (index >= 0) this.active.set(index);
+    if (index >= 0) {
+      this.active.set(index);
+    }
   }
 
   protected onKey(event: KeyboardEvent): void {
@@ -573,7 +586,9 @@ export class CommandPaletteComponent {
       return;
     }
     const move = moves[event.key];
-    if (!move) return;
+    if (!move) {
+      return;
+    }
     event.preventDefault();
     this.active.set(move());
   }
@@ -587,7 +602,9 @@ export class CommandPaletteComponent {
 
   /** A click on the backdrop lands on the dialog itself. */
   protected closeOnBackdrop(event: MouseEvent): void {
-    if (event.target === event.currentTarget) this.palette.hide();
+    if (event.target === event.currentTarget) {
+      this.palette.hide();
+    }
   }
 
   /**

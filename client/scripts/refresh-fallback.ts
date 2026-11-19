@@ -34,7 +34,7 @@ const OUT_DIR = resolve(here, "../src/app/content");
 
 function resolveApiBase(): string {
   const flag = process.argv.indexOf("--api");
-  const fromFlag = flag !== -1 ? process.argv[flag + 1] : undefined;
+  const fromFlag = flag === -1 ? undefined : process.argv[flag + 1];
   let base = fromFlag ?? process.env["VITE_API_BASE_URL"] ?? "https://api.alirezarastineh.me";
   while (base.endsWith("/")) {
     base = base.slice(0, -1);
@@ -47,7 +47,9 @@ console.log(`[fallback] source: ${api}`);
 
 async function getJson(path: string): Promise<unknown> {
   const response = await fetch(`${api}${path}`, { headers: { accept: "application/json" } });
-  if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`${path}: HTTP ${response.status}`);
+  }
   return response.json();
 }
 
@@ -68,24 +70,24 @@ function docsOf(core: AppContent): [DocKind, string][] {
   ];
 }
 
-for (const locale of LOCALES) {
+async function refreshLocale(locale: (typeof LOCALES)[number]): Promise<void> {
   try {
     // Never write an unvalidated payload — a bad fallback only surfaces during
     // an outage, which is the worst possible time to discover it.
     const core = appContentSchema.parse(await getJson(`/v2/content/${locale}`));
-    const docs: Record<string, Doc> = {};
-    for (const [kind, slug] of docsOf(core)) {
-      docs[docKey(kind, slug)] = docSchema.parse(
-        await getJson(`/v2/content/${locale}/${kind}/${slug}`),
-      );
-    }
-    write(`fallback.${locale}.json`, core);
-    write(
-      `fallback-docs.${locale}.json`,
-      Object.fromEntries(Object.entries(docs).sort(([a], [b]) => a.localeCompare(b))),
+    const entries = await Promise.all(
+      docsOf(core).map(async ([kind, slug]): Promise<[string, Doc]> => {
+        const doc = docSchema.parse(await getJson(`/v2/content/${locale}/${kind}/${slug}`));
+        return [docKey(kind, slug), doc];
+      }),
     );
+    entries.sort(([a], [b]) => a.localeCompare(b));
+    write(`fallback.${locale}.json`, core);
+    write(`fallback-docs.${locale}.json`, Object.fromEntries(entries));
   } catch (error) {
     console.error(`[fallback] ${locale}:`, error);
     process.exitCode = 1;
   }
 }
+
+await Promise.all(LOCALES.map((locale) => refreshLocale(locale)));

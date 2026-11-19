@@ -67,7 +67,7 @@ try {
     .values({ email, passwordHash: await hashPassword(password) })
     .returning({ id: adminUsers.id, email: adminUsers.email });
 
-  console.log(`[create-admin] created ${created!.email} (${created!.id})`);
+  console.log(`[create-admin] created ${created.email} (${created.id})`);
   if (generated) {
     console.log(`[create-admin] generated password: ${password}`);
     console.log("[create-admin] store it now — it is not recoverable.");

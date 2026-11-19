@@ -9,9 +9,9 @@ import { UnsavedChangesService, unsavedChangesGuard } from "./unsaved-changes.se
 class StubConfirm {
   answer = false;
   asked = 0;
-  async ask(): Promise<boolean> {
+  ask(): Promise<boolean> {
     this.asked++;
-    return this.answer;
+    return Promise.resolve(this.answer);
   }
 }
 
@@ -32,12 +32,15 @@ function setup(lost = false) {
 const runGuard = (from?: string, to?: string) =>
   TestBed.runInInjectionContext(() =>
     unsavedChangesGuard(
-      {} as never,
+      {},
       {} as never,
       (from ? { url: from } : {}) as never,
       (to ? { url: to } : {}) as never,
     ),
   ) as Promise<boolean>;
+
+const beforeUnloadRegistrations = (spy: MockInstance<typeof globalThis.addEventListener>): number =>
+  spy.mock.calls.filter(([type]: [string, ...unknown[]]) => type === "beforeunload").length;
 
 describe("UnsavedChangesService", () => {
   it("tracks dirty editors independently", () => {
@@ -85,17 +88,15 @@ describe("beforeunload", () => {
    */
   it("registers only while something is dirty", () => {
     const { service } = setup();
-    const registrations = () =>
-      add.mock.calls.filter(([type]: [string, ...unknown[]]) => type === "beforeunload").length;
 
-    expect(registrations()).toBe(0);
+    expect(beforeUnloadRegistrations(add)).toBe(0);
 
     service.set("seo", true);
-    expect(registrations()).toBe(1);
+    expect(beforeUnloadRegistrations(add)).toBe(1);
 
     // A second dirty editor must not stack another listener.
     service.set("hero", true);
-    expect(registrations()).toBe(1);
+    expect(beforeUnloadRegistrations(add)).toBe(1);
 
     service.clearAll();
     expect(

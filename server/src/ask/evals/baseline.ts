@@ -77,7 +77,9 @@ export function promptGuard(baseline: Baseline, version: string): { ok: boolean;
     return { ok: true, message: `${version} has a recorded eval run (${baseline.at}).` };
   }
   const waiver = baseline.waivers[version];
-  if (waiver) return { ok: true, message: `${version} is waived: ${waiver}` };
+  if (waiver) {
+    return { ok: true, message: `${version} is waived: ${waiver}` };
+  }
   return {
     ok: false,
     message:
@@ -133,15 +135,21 @@ export function recordRefusal(
     incomparable?: string | null;
   },
 ): string | null {
-  if (summary.incomplete) return "Not updating the baseline from an incomplete run.";
-  if (run.filtered) return "Not updating the baseline from a filtered run.";
+  if (summary.incomplete) {
+    return "Not updating the baseline from an incomplete run.";
+  }
+  if (run.filtered) {
+    return "Not updating the baseline from a filtered run.";
+  }
   if (run.live) {
     return "Not updating the baseline from the live corpus: the gate compares fixture runs.";
   }
   if (!summary.judge) {
     return "Not updating the baseline from a run without the judge: its cases cannot fail on faithfulness or helpfulness.";
   }
-  if (run.acceptReason?.trim()) return null;
+  if (run.acceptReason?.trim()) {
+    return null;
+  }
   if (run.failures.length) {
     return 'Not updating the baseline from a run that fails the gate. To lower the bar on purpose, add --accept-regression "<why>": the reason is recorded with the baseline.';
   }
@@ -201,9 +209,11 @@ function categoryLines(
     const was = before[name];
     const is = now[name];
     const label = `    ${name.padEnd(14)}`;
-    if (!is) lines.push(`${label} not run (was ${was!.passed}/${was!.completed})`);
-    else if (!was) lines.push(`${label} ${is.passed}/${is.completed} (new)`);
-    else if (rate(is) !== rate(was)) {
+    if (!is) {
+      lines.push(`${label} not run (was ${was.passed}/${was.completed})`);
+    } else if (!was) {
+      lines.push(`${label} ${is.passed}/${is.completed} (new)`);
+    } else if (rate(is) !== rate(was)) {
       const mark = rate(is) < rate(was) ? "▼" : "▲";
       lines.push(`${label} ${was.passed}/${was.completed} → ${is.passed}/${is.completed} ${mark}`);
     }
@@ -244,7 +254,9 @@ export function compareToBaseline(
     };
   }
   const reason = incomparable(summary, baseline);
-  if (reason) return { compared: false, failures: [], lines: [reason] };
+  if (reason) {
+    return { compared: false, failures: [], lines: [reason] };
+  }
 
   const failures: string[] = [];
   const lines = [
@@ -256,7 +268,9 @@ export function compareToBaseline(
   lines.push(
     `  pass rate      ${(baseline.passRate * 100).toFixed(1)} % → ${(summary.passRate * 100).toFixed(1)} % (${points})`,
   );
-  if (delta < 0) failures.push(`the pass rate fell ${(-delta * 100).toFixed(1)} pts`);
+  if (delta < 0) {
+    failures.push(`the pass rate fell ${(-delta * 100).toFixed(1)} pts`);
+  }
   lines.push(...categoryLines(summary.byCategory, baseline.byCategory));
 
   if (baseline.cases !== summary.cases) {
@@ -268,8 +282,9 @@ export function compareToBaseline(
   const costRise = rise(cost, baseline.usdPerCase);
   const costLimit = `limit ${percent(limits.maxCostIncrease)}`;
   lines.push(
-    `  cost per case  $${baseline.usdPerCase?.toFixed(4)} → $${cost?.toFixed(4)}` +
-      (costRise === null ? "" : ` (${percent(costRise)}, ${costLimit})`),
+    `  cost per case  $${baseline.usdPerCase?.toFixed(4)} → $${cost?.toFixed(4)}${
+      costRise === null ? "" : ` (${percent(costRise)}, ${costLimit})`
+    }`,
   );
   if (costRise !== null && costRise > limits.maxCostIncrease) {
     failures.push(`cost per case rose ${percent(costRise)} (${costLimit})`);
@@ -277,8 +292,9 @@ export function compareToBaseline(
 
   const ttftRise = rise(summary.p50TtftMs, baseline.p50TtftMs);
   lines.push(
-    `  p50 TTFT       ${baseline.p50TtftMs ?? "–"} ms → ${summary.p50TtftMs ?? "–"} ms` +
-      (ttftRise === null ? "" : ` (${percent(ttftRise)})`),
+    `  p50 TTFT       ${baseline.p50TtftMs ?? "–"} ms → ${summary.p50TtftMs ?? "–"} ms${
+      ttftRise === null ? "" : ` (${percent(ttftRise)})`
+    }`,
   );
   const totalRise = rise(summary.p95TotalMs, baseline.p95TotalMs);
   const latencyLimit =
@@ -286,8 +302,9 @@ export function compareToBaseline(
       ? "not gated"
       : `limit ${percent(limits.maxLatencyIncrease)}`;
   lines.push(
-    `  p95 total      ${baseline.p95TotalMs ?? "–"} ms → ${summary.p95TotalMs ?? "–"} ms` +
-      (totalRise === null ? "" : ` (${percent(totalRise)}, ${latencyLimit})`),
+    `  p95 total      ${baseline.p95TotalMs ?? "–"} ms → ${summary.p95TotalMs ?? "–"} ms${
+      totalRise === null ? "" : ` (${percent(totalRise)}, ${latencyLimit})`
+    }`,
   );
   if (
     totalRise !== null &&

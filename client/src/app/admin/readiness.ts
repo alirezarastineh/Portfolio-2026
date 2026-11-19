@@ -46,13 +46,13 @@ export interface ReadinessReport {
   locales: Locale[];
 }
 
-/** `TODO` as a word, the way the seed content marks what is still to write. */
+/** The placeholder marker as a word, the way the seed content marks what is still to write. */
 const PLACEHOLDER = /\bTODO\b/;
 
 /** The seed's covers: the SVG stubs in `public/projects/`. Uploads live under `/media/`. */
 const STAND_IN_COVER_PREFIX = "/projects/";
 
-/** Still the seed's "TODO" copy. */
+/** Still the seed's placeholder marker copy. */
 export function isPlaceholder(text: string): boolean {
   return PLACEHOLDER.test(text);
 }
@@ -220,9 +220,9 @@ const CHECKS: CheckDef[] = [
     link: "/admin/hero",
     listsPlaces: false,
     find: ({ identity }) =>
-      !identity.location.city.trim() || !identity.timezone.trim()
-        ? missing(["identity", "location"])
-        : [],
+      identity.location.city.trim() && identity.timezone.trim()
+        ? []
+        : missing(["identity", "location"]),
   },
   {
     id: "avatar",
@@ -251,7 +251,11 @@ export function checkReadiness(drafts: Partial<Record<Locale, AppContent>>): Rea
   const checks = CHECKS.map(({ find, ...def }): ReadinessCheck => {
     const hits = new Map<string, ReadinessHit>();
     for (const locale of locales) {
-      for (const finding of find(drafts[locale]!)) {
+      const content = drafts[locale];
+      if (!content) {
+        continue;
+      }
+      for (const finding of find(content)) {
         const known = hits.get(finding.label);
         if (known) {
           known.locales.push(locale);
@@ -293,10 +297,12 @@ function missing(path: string[]): Finding[] {
   return [{ path, label: path.join("."), detail: "" }];
 }
 
-/** Collects every string that still says TODO, named by where it is. */
+/** Collects every string that still has the placeholder marker, named by where it is. */
 function walk(value: unknown, path: (string | number)[], label: string, found: Finding[]): void {
   if (typeof value === "string") {
-    if (PLACEHOLDER.test(value)) found.push({ path, label, detail: excerpt(value) });
+    if (PLACEHOLDER.test(value)) {
+      found.push({ path, label, detail: excerpt(value) });
+    }
     return;
   }
   if (Array.isArray(value)) {
@@ -314,8 +320,12 @@ function walk(value: unknown, path: (string | number)[], label: string, found: F
 function itemName(item: unknown, index: number): string {
   if (item && typeof item === "object") {
     const { slug, id } = item as { slug?: unknown; id?: unknown };
-    if (typeof slug === "string") return slug;
-    if (typeof id === "string") return id;
+    if (typeof slug === "string") {
+      return slug;
+    }
+    if (typeof id === "string") {
+      return id;
+    }
   }
   return String(index);
 }

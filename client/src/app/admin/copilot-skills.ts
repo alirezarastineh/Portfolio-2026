@@ -106,7 +106,9 @@ export function verdictLine(stats: SkillVersionStats, rules: CopilotSkillsView["
 }
 
 export function medianEdit(stats: SkillVersionStats): string {
-  if (stats.medianEdit === null) return "–";
+  if (stats.medianEdit === null) {
+    return "–";
+  }
   const words = Math.round(stats.medianEdit);
   return `${words} ${words === 1 ? "word" : "words"}`;
 }
@@ -132,29 +134,39 @@ export interface DraftOffer {
   chosen: number;
 }
 
+function reviewNotes(needsReview?: string[]): string[] {
+  return needsReview?.length ? [`Needs your eye: ${needsReview.join("; ")}.`] : [];
+}
+
 /**
  * The offer a draft makes: its own notes (what it still fails, what a second
  * reading changed, or found and could not fix) and its alternatives'; null
  * when there is nothing to show beside the field (one clean draft).
  */
 export function draftOffer(draft: CopilotDraft): DraftOffer | null {
-  const notes = (needsReview?: string[]) =>
-    needsReview?.length ? [`Needs your eye: ${needsReview.join("; ")}.`] : [];
   const readNotes = (read: CopilotDraft["critic"]): string[] => {
-    if (!read?.notes.length) return [];
-    if (read.revised) return [`A second reading changed it: ${read.notes.join(" ")}`];
+    if (!read?.notes.length) {
+      return [];
+    }
+    if (read.revised) {
+      return [`A second reading changed it: ${read.notes.join(" ")}`];
+    }
     return [`A second reading found: ${read.notes.join(" ")} Its revision was not kept.`];
   };
   const critic = readNotes(draft.critic);
   const drafts = [
-    { text: draft.text, lead: draft.lead ?? null, notes: [...notes(draft.needsReview), ...critic] },
+    {
+      text: draft.text,
+      lead: draft.lead ?? null,
+      notes: [...reviewNotes(draft.needsReview), ...critic],
+    },
     ...(draft.alternatives ?? []).map((alt) => ({
       text: alt.text,
       lead: alt.lead,
-      notes: notes(alt.needsReview),
+      notes: reviewNotes(alt.needsReview),
     })),
   ];
-  return drafts.length > 1 || drafts[0]!.notes.length ? { drafts, chosen: 0 } : null;
+  return drafts.length > 1 || drafts[0].notes.length ? { drafts, chosen: 0 } : null;
 }
 
 const GATES: Record<string, string> = {

@@ -25,6 +25,7 @@ import { HlmInputGroupImports } from "@spartan-ng/helm/input-group";
       <hlm-input-group-addon align="inline-end">
         @if (showTrigger()) {
           <button
+            type="button"
             brnComboboxPopoverTrigger
             hlmInputGroupButton
             data-slot="input-group-button"
@@ -40,6 +41,7 @@ import { HlmInputGroupImports } from "@spartan-ng/helm/input-group";
         @if (showClear()) {
           <button
             *brnComboboxClear
+            type="button"
             hlmInputGroupButton
             data-slot="combobox-clear"
             [disabled]="comboboxInput.disabled()"

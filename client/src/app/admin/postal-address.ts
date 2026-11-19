@@ -5,5 +5,5 @@
  * "No postal address found", never that there is none. Upgrade if a real imprint trips it.
  */
 export function hasPostalAddress(html: string): boolean {
-  return /\b\d{5}\s+\p{Lu}/u.test(html.replace(/&nbsp;|<[^<>]+>/g, " "));
+  return /\b\d{5}\s+\p{Lu}/u.test(html.replaceAll(/&nbsp;|<[^<>]+>/g, " "));
 }

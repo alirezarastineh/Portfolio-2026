@@ -99,21 +99,21 @@ describe("outcomes", () => {
   it("reads what the browsers saw: times beside the server's, shares of what applies, the 👎's reasons (visitor plan V2)", () => {
     const rows = [
       row("a", {
-        signals: { v: 1, shownMs: 900, doneMs: 3_000, followups: 1, citations: 2, copies: 1 },
+        signals: { v: 1, shownMs: 900, doneMs: 3000, followups: 1, citations: 2, copies: 1 },
         ttftMs: 700,
         followupsOffered: true,
         cited: true,
       }),
       row("b", {
-        signals: { v: 1, shownMs: 4_000, doneMs: 9_000, stopped: true },
-        ttftMs: 3_500,
+        signals: { v: 1, shownMs: 4000, doneMs: 9000, stopped: true },
+        ttftMs: 3500,
         followupsOffered: true,
         cited: true,
         feedback: -1,
         downReason: "wrong",
       }),
       // Asked again after a failure; no follow-ups offered, nothing cited.
-      row("c", { signals: { v: 1, doneMs: 1_000, retries: 1 }, ttftMs: null }),
+      row("c", { signals: { v: 1, doneMs: 1000, retries: 1 }, ttftMs: null }),
       // Its browser never reported: in no share, but its 👎 still counts.
       row("d", { feedback: -1 }),
       row("e", { feedback: -1, downReason: "a code from a newer terminal" }),
@@ -121,9 +121,9 @@ describe("outcomes", () => {
     expect(browserView(rows)).toEqual({
       reported: 3,
       shownP50Ms: 900,
-      shownP95Ms: 4_000,
+      shownP95Ms: 4000,
       serverP50Ms: 700,
-      serverP95Ms: 3_500,
+      serverP95Ms: 3500,
       stopRate: 1 / 3,
       copyRate: 1 / 3,
       // Of the two that offered follow-ups, one was clicked; of the two citing, one was followed.

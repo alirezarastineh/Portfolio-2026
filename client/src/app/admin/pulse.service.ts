@@ -27,16 +27,28 @@ const AFTER_WRITE: readonly PulsePart[] = ["status", "review", "messages", "i18n
 
 /** Why the assistant needs a look, or null while it is answering normally. */
 export function assistantAlert(health: AssistantHealth | null): string | null {
-  if (!health) return null;
+  if (!health) {
+    return null;
+  }
   // An alert or a demotion waits for a person; a breaker heals by itself.
   const trust = trustAlert(health.trust);
-  if (trust) return trust;
+  if (trust) {
+    return trust;
+  }
   const open = health.breakers.filter((b) => b.state === "open").length;
-  if (open === 1) return "A model is failing: its breaker is open";
-  if (open > 1) return `${open} models are failing: their breakers are open`;
+  if (open === 1) {
+    return "A model is failing: its breaker is open";
+  }
+  if (open > 1) {
+    return `${open} models are failing: their breakers are open`;
+  }
   const failed = health.last24h.failures;
-  if (failed === 1) return "1 answer failed in the last 24 hours";
-  if (failed > 1) return `${failed} answers failed in the last 24 hours`;
+  if (failed === 1) {
+    return "1 answer failed in the last 24 hours";
+  }
+  if (failed > 1) {
+    return `${failed} answers failed in the last 24 hours`;
+  }
   return null;
 }
 
@@ -98,7 +110,9 @@ export class AdminPulseService {
 
   constructor() {
     effect(() => {
-      if (this.api.writes() > 0) untracked(() => this.afterWrite());
+      if (this.api.writes() > 0) {
+        untracked(() => this.afterWrite());
+      }
     });
     inject(DestroyRef).onDestroy(() => {
       clearTimeout(this.settle);
@@ -108,7 +122,9 @@ export class AdminPulseService {
 
   /** Called by the layout once someone is signed in. */
   start(): void {
-    if (this.started) return;
+    if (this.started) {
+      return;
+    }
     this.started = true;
     this.doc.addEventListener("visibilitychange", this.onVisibility);
     void this.refresh();
@@ -121,17 +137,21 @@ export class AdminPulseService {
   pause(paused: boolean): void {
     const resumed = this.paused && !paused;
     this.paused = paused;
-    if (resumed && this.started) void this.refresh();
+    if (resumed && this.started) {
+      void this.refresh();
+    }
   }
 
   async refresh(parts: readonly PulsePart[] = ALL): Promise<void> {
-    if (this.paused) return;
+    if (this.paused) {
+      return;
+    }
     this.lastRefresh = Date.now();
     await Promise.all(parts.map((part) => this.load(part)));
   }
 
   /** For a page that shows these numbers: fresh ones, unless they just arrived. */
-  refreshIfStale(ms = 5_000): Promise<void> {
+  refreshIfStale(ms = 5000): Promise<void> {
     return Date.now() - this.lastRefresh > ms ? this.refresh() : Promise.resolve();
   }
 
@@ -146,7 +166,9 @@ export class AdminPulseService {
     this.started = false;
     this.lastRefresh = 0;
     this.doc.removeEventListener("visibilitychange", this.onVisibility);
-    for (const part of ALL) this.latest[part]++;
+    for (const part of ALL) {
+      this.latest[part]++;
+    }
     this.status.set(null);
     this.review.set(null);
     this.marks.set(null);
@@ -158,7 +180,9 @@ export class AdminPulseService {
   }
 
   private afterWrite(): void {
-    if (!this.started) return;
+    if (!this.started) {
+      return;
+    }
     clearTimeout(this.settle);
     this.settle = setTimeout(() => void this.refresh(AFTER_WRITE), SETTLE_MS);
   }
@@ -211,13 +235,22 @@ export class AdminPulseService {
   ): Promise<void> {
     const request = ++this.latest[part];
     const result = await fetch();
-    if (request !== this.latest[part]) return;
-    if (result.ok) apply(result.data);
+    if (request !== this.latest[part]) {
+      return;
+    }
+    if (result.ok) {
+      apply(result.data);
+    }
     this.failed.update((failed) => {
-      if (failed.has(part) === !result.ok) return failed;
+      if (failed.has(part) === !result.ok) {
+        return failed;
+      }
       const next = new Set(failed);
-      if (result.ok) next.delete(part);
-      else next.add(part);
+      if (result.ok) {
+        next.delete(part);
+      } else {
+        next.add(part);
+      }
       return next;
     });
   }

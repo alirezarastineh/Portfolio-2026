@@ -24,7 +24,7 @@ type PlaygroundMessage = UIMessage<Meta>;
 function sessionId(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
-  return btoa(String.fromCodePoint(...bytes)).replace(/[+/=]/g, "x");
+  return btoa(String.fromCodePoint(...bytes)).replaceAll(/[+/=]/g, "x");
 }
 
 /**
@@ -54,7 +54,9 @@ function sessionId(): string {
           <hlm-switch [checked]="deep()" (checkedChange)="deep.set($event)" />
           Deep model
         </label>
-        <button hlmBtn variant="ghost" size="sm" (click)="clear()">New conversation</button>
+        <button hlmBtn type="button" variant="ghost" size="sm" (click)="clear()">
+          New conversation
+        </button>
       </div>
 
       <div
@@ -162,21 +164,27 @@ export class AssistantPlaygroundComponent {
   protected readonly busy = computed(() => ["submitted", "streaming"].includes(this.status()));
   protected readonly error = computed(() => {
     const error = this.chat.error;
-    if (!error) return null;
+    if (!error) {
+      return null;
+    }
     const body = (error as { responseBody?: string }).responseBody;
     return body ? `Failed: ${body}` : `Failed: ${error.message}`;
   });
 
   protected send(): void {
     const text = this.question.trim();
-    if (!text || this.busy()) return;
+    if (!text || this.busy()) {
+      return;
+    }
     this.question = "";
     void this.chat.sendMessage({ text });
   }
 
   /** Enter asks; Shift+Enter is a new line. */
   protected onEnter(event: KeyboardEvent): void {
-    if (event.shiftKey) return;
+    if (event.shiftKey) {
+      return;
+    }
     event.preventDefault();
     this.send();
   }

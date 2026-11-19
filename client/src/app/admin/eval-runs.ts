@@ -12,7 +12,9 @@ export function isActive(run: Pick<RunRow, "status">): boolean {
 
 /** A stopped run with items still to do. */
 export function canResume(run: Pick<RunRow, "status" | "progress">): boolean {
-  if (!["interrupted", "failed", "cancelled"].includes(run.status)) return false;
+  if (!["interrupted", "failed", "cancelled"].includes(run.status)) {
+    return false;
+  }
   const { total, done } = run.progress;
   return done < total;
 }
@@ -27,9 +29,13 @@ export function passCounts(items: readonly RunItem[]): { passed: number; graded:
   let passed = 0;
   let graded = 0;
   for (const item of items) {
-    if (item.status !== "done" || !item.result) continue;
+    if (item.status !== "done" || !item.result) {
+      continue;
+    }
     graded++;
-    if (item.result.passed) passed++;
+    if (item.result.passed) {
+      passed++;
+    }
   }
   return { passed, graded };
 }
@@ -45,7 +51,9 @@ export interface ComparisonRow {
 }
 
 function verdict(result: EvalCaseResult | null | undefined): CaseVerdict {
-  if (!result || result.status === "unavailable") return "not run";
+  if (!result || result.status === "unavailable") {
+    return "not run";
+  }
   return result.passed ? "passed" : "failed";
 }
 
@@ -63,19 +71,27 @@ export function compareRuns(a: readonly RunItem[], b: readonly RunItem[]): Compa
     .sort((x, y) => Number(y.changed) - Number(x.changed));
 }
 
+function countLabel(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
 /**
  * A conversation case's earlier turns in a line (visitor plan V3): how many,
  * how many were answered live, and what the history did with them.
  */
 export function conversationLine(c: EvalConversation): string {
-  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-  const parts = [`after ${count(c.turns.length, "earlier turn", "earlier turns")}`];
+  const parts = [`after ${countLabel(c.turns.length, "earlier turn", "earlier turns")}`];
   const live = c.turns.filter((t) => t.live).length;
-  if (live) parts.push(`${live} answered live`);
-  if (c.droppedAnswers === null) parts.push("stopped at a live turn");
-  else if (c.droppedAnswers) parts.push(`${count(c.droppedAnswers, "answer", "answers")} refused`);
+  if (live) {
+    parts.push(`${live} answered live`);
+  }
+  if (c.droppedAnswers === null) {
+    parts.push("stopped at a live turn");
+  } else if (c.droppedAnswers) {
+    parts.push(`${countLabel(c.droppedAnswers, "answer", "answers")} refused`);
+  }
   if (c.windowDropped) {
-    parts.push(`${count(c.windowDropped, "question", "questions")} past the window`);
+    parts.push(`${countLabel(c.windowDropped, "question", "questions")} past the window`);
   }
   return parts.join(" · ");
 }

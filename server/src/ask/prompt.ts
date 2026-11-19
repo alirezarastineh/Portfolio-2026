@@ -116,7 +116,7 @@ export function carefulInstruction(topic: Sensitivity): string {
 
 /** Every careful block: instructions too, for the output guard and the prompt's hash. */
 export const CAREFUL_BLOCKS: readonly string[] = (Object.keys(CAREFUL_TOPICS) as Sensitivity[]).map(
-  carefulInstruction,
+  (topic) => carefulInstruction(topic),
 );
 
 /** The contact block's own words: no answer has a reason to repeat them (answer-patterns.ts). */
@@ -412,8 +412,10 @@ const FENCE = /<\/?visitor(?:\s[^<>]{0,60})?>/gi;
  */
 export function withoutFence(text: string): string {
   for (let rest = text; ;) {
-    const next = rest.replace(FENCE, "");
-    if (next === rest) return rest;
+    const next = rest.replaceAll(FENCE, "");
+    if (next === rest) {
+      return rest;
+    }
     rest = next;
   }
 }
@@ -436,7 +438,7 @@ export function hashedPromptText(): string {
     buildAnswerOnlyInstructions(""),
     pageInstruction(PAGE_SAMPLE),
     pageInstruction({ id: PAGE_SAMPLE.id, title: PAGE_SAMPLE.title, url: PAGE_SAMPLE.url }),
-    ...FOCUS_SAMPLES.map(focusInstruction),
+    ...FOCUS_SAMPLES.map((sample) => focusInstruction(sample)),
     withSelection("q", "s", "en"),
     ...LEVEL_INSTRUCTIONS,
     ...(["en", "de"] as const).flatMap((locale) =>

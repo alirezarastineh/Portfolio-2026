@@ -24,7 +24,9 @@ import { contentPointers, contentVersionDocs, contentVersions } from "../db/sche
 /** The live version for a locale, upcast to v2 and cached. */
 export async function loadPublished(locale: Locale): Promise<PublishedEntry | null> {
   const cached = getCached(locale);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
 
   const [row] = await getDb()
     .select({
@@ -36,7 +38,9 @@ export async function loadPublished(locale: Locale): Promise<PublishedEntry | nu
     .innerJoin(contentVersions, eq(contentVersions.id, contentPointers.versionId))
     .where(eq(contentPointers.locale, locale))
     .limit(1);
-  if (!row) return null;
+  if (!row) {
+    return null;
+  }
 
   const publishedAt = row.publishedAt.toISOString();
   const result = upcast(row.payload, publishedAt);
@@ -65,11 +69,14 @@ export async function loadPublishedDoc(
   key: string,
 ): Promise<Doc | null> {
   const cached = getCachedDoc(entry.versionId, key);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    return cached;
+  }
 
   let doc: Doc | null = null;
   if (entry.from < CONTENT_SCHEMA_VERSION) {
-    doc = (await upcastDocs(entry.from, locale, [])).get(key) ?? null;
+    const docs = await upcastDocs(entry.from, locale, []);
+    doc = docs.get(key) ?? null;
   } else {
     const [row] = await getDb()
       .select({ payload: contentVersionDocs.payload })
@@ -80,12 +87,14 @@ export async function loadPublishedDoc(
       .limit(1);
     if (row) {
       const parsed = docSchema.safeParse(row.payload);
-      if (parsed.success) doc = parsed.data;
-      else
+      if (parsed.success) {
+        doc = parsed.data;
+      } else {
         console.error(
           `[content] doc ${key} of v${entry.versionId} does not validate`,
           parsed.error.issues,
         );
+      }
     }
   }
   setCachedDoc(entry.versionId, key, doc);
@@ -128,10 +137,14 @@ export const contentV2Router = new Hono();
 
 contentV2Router.get("/:locale", async (c) => {
   const resolved = await resolveLocale(c);
-  if (!resolved.ok) return resolved.response;
+  if (!resolved.ok) {
+    return resolved.response;
+  }
   const { locale, entry } = resolved;
 
-  if (versionHeaders(c, entry, `W/"${locale}-${entry.versionId}"`)) return c.body(null, 304);
+  if (versionHeaders(c, entry, `W/"${locale}-${entry.versionId}"`)) {
+    return c.body(null, 304);
+  }
   return c.json(entry.payload);
 });
 
@@ -143,7 +156,9 @@ contentV2Router.get("/:locale/:kind/:slug", async (c) => {
   }
 
   const resolved = await resolveLocale(c);
-  if (!resolved.ok) return resolved.response;
+  if (!resolved.ok) {
+    return resolved.response;
+  }
   const { locale, entry } = resolved;
 
   const key = docKey(kind, slug);
@@ -154,6 +169,8 @@ contentV2Router.get("/:locale/:kind/:slug", async (c) => {
     return c.json({ error: "not_found" }, 404);
   }
 
-  if (versionHeaders(c, entry, `W/"${locale}-${entry.versionId}-${key}"`)) return c.body(null, 304);
+  if (versionHeaders(c, entry, `W/"${locale}-${entry.versionId}-${key}"`)) {
+    return c.body(null, 304);
+  }
   return c.json(doc);
 });

@@ -19,7 +19,7 @@ import { track } from "./track";
  */
 
 /** Chrome's guidance for a tool's output. */
-const MAX_OUTPUT = 1_500;
+const MAX_OUTPUT = 1500;
 
 const BUSY = "The site's assistant is still answering; try again once it is done.";
 const PROVIDER =
@@ -66,11 +66,15 @@ function answerOf(store: AgentStore, entry: Entry | undefined): AskMessage | und
 
 /** What the visitor would read in the terminal: the answer and its sources, or why there is none. */
 function answerText(store: AgentStore, entry: Entry | undefined): string {
-  if (!entry) return "No answer: the conversation was reset meanwhile.";
+  if (!entry) {
+    return "No answer: the conversation was reset meanwhile.";
+  }
   if (entry.kind === "local") {
     return entry.lines.map((l) => (l.label ? `${l.label}: ${l.text}` : l.text)).join("\n");
   }
-  if (entry.failure) return plainText(store.messageFor(entry.failure, entry.retryAfter));
+  if (entry.failure) {
+    return plainText(store.messageFor(entry.failure, entry.retryAfter));
+  }
   const parts = answerOf(store, entry)?.parts ?? [];
   const text = plainText(parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n\n"));
   const sources = parts.flatMap((p) =>
@@ -99,7 +103,9 @@ export function agentTools({ store, locale, navigate, pages }: AgentDeps): Tool[
     annotations: { readOnlyHint: true },
     execute: async () => {
       const list = await pages();
-      if (!list) return "The list of pages could not be loaded; try again.";
+      if (!list) {
+        return "The list of pages could not be loaded; try again.";
+      }
       return list
         .map((p) => [p.url, p.kind, p.title, ...(p.updated ? [p.updated] : [])].join(" · "))
         .join("\n");
@@ -117,8 +123,11 @@ export function agentTools({ store, locale, navigate, pages }: AgentDeps): Tool[
     },
     execute: async (args) => {
       const path = arg(args, "path");
-      const page = (await pages())?.find((p) => p.url === path);
-      if (!page) return "Not one of the site's pages: list_pages gives their paths.";
+      const list = await pages();
+      const page = list?.find((p) => p.url === path);
+      if (!page) {
+        return "Not one of the site's pages: list_pages gives their paths.";
+      }
       await navigate(page.url);
       return `Opened "${page.title}" (${page.url}).`;
     },
@@ -135,9 +144,15 @@ export function agentTools({ store, locale, navigate, pages }: AgentDeps): Tool[
     annotations: { untrustedContentHint: true },
     execute: async (args) => {
       const question = arg(args, "question");
-      if (!question) return "Ask a question.";
-      if (question.length > maxChars()) return `Too long: at most ${maxChars()} characters.`;
-      if (busy()) return BUSY;
+      if (!question) {
+        return "Ask a question.";
+      }
+      if (question.length > maxChars()) {
+        return `Too long: at most ${maxChars()} characters.`;
+      }
+      if (busy()) {
+        return BUSY;
+      }
       return answerText(store, await settle(store, store.askQuestion(question)));
     },
   };
@@ -155,20 +170,28 @@ export function agentTools({ store, locale, navigate, pages }: AgentDeps): Tool[
     },
     annotations: { untrustedContentHint: true },
     execute: async (args) => {
-      if (store.remote()?.match !== true) return "Matching is switched off on this site just now.";
+      if (store.remote()?.match !== true) {
+        return "Matching is switched off on this site just now.";
+      }
       const kind = arg(args, "kind");
       const brief = arg(args, "brief");
-      if (!isMatchKind(kind)) return "kind must be role, project or problem.";
+      if (!isMatchKind(kind)) {
+        return "kind must be role, project or problem.";
+      }
       if (!brief || brief.length > MATCH_BRIEF_CHARS) {
         return `The brief must be 1 to ${MATCH_BRIEF_CHARS} characters.`;
       }
-      if (busy()) return BUSY;
+      if (busy()) {
+        return BUSY;
+      }
       const path = `/${locale()}/match`;
       await navigate(path);
       const entry = await settle(store, store.sendMatch(kind, brief, "agent"));
       // The cites stay on the page, where the user sees them.
       const rows = matchData(answerOf(store, entry), () => null)?.items;
-      if (!rows) return answerText(store, entry);
+      if (!rows) {
+        return answerText(store, entry);
+      }
       return [
         `Checked; the user sees the table on ${path}.`,
         ...rows.map((r) => `${r.n}. ${r.text}: ${r.status}`),

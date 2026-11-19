@@ -20,7 +20,9 @@ export class ToolBudget {
   /** True the first time this search (its words, whatever the case or spacing, and kinds) runs. */
   firstSearch(query: string, kinds: readonly string[] = []): boolean {
     const key = `${normaliseQuery(query)}|${[...kinds].sort((a, b) => a.localeCompare(b)).join(",")}`;
-    if (this.searches.has(key)) return false;
+    if (this.searches.has(key)) {
+      return false;
+    }
     this.searches.add(key);
     return true;
   }
@@ -37,7 +39,9 @@ export class ToolBudget {
    */
   take(id: string, length: number): number | null {
     const left = DOCUMENT_CHARS - this.chars;
-    if (this.calls >= DOCUMENT_CALLS || left <= 0) return null;
+    if (this.calls >= DOCUMENT_CALLS || left <= 0) {
+      return null;
+    }
     const chars = Math.min(length, FETCH_CLIP, left);
     this.calls++;
     this.chars += chars;

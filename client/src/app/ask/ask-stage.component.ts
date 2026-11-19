@@ -399,8 +399,12 @@ export class AskStageComponent {
       this.http.get<AskEntryState>("/api/v2/ask-questions").subscribe({
         next: ({ state, suggestions, scorecard }) => {
           this.launcher.questions.set(suggestions ?? {});
-          if (scorecard !== undefined) this.launcher.scorecard.set(scorecard);
-          if (state) this.launcher.assistant.set(state === "ok" ? "online" : "resting");
+          if (scorecard !== undefined) {
+            this.launcher.scorecard.set(scorecard);
+          }
+          if (state) {
+            this.launcher.assistant.set(state === "ok" ? "online" : "resting");
+          }
         },
         error: () => undefined, // The built-in three stand.
       });
@@ -408,7 +412,9 @@ export class AskStageComponent {
 
     let observer: IntersectionObserver | undefined;
     afterNextRender(() => {
-      if (!this.isBrowser) return;
+      if (!this.isBrowser) {
+        return;
+      }
       this.launcher.stageReady.set(true);
       observer = new IntersectionObserver(
         ([entry]) => this.launcher.stageInView.set(entry?.isIntersecting ?? false),
@@ -434,13 +440,18 @@ export class AskStageComponent {
    * On the click, not on focus: tabbing past must not throw anyone into a sheet (WCAG 3.2.1).
    */
   protected toSheet(): void {
-    if (this.launcher.narrow()) this.launcher.openSheet("hero");
+    if (this.launcher.narrow()) {
+      this.launcher.openSheet("hero");
+    }
   }
 
   protected submit(event: Event, field: HTMLInputElement): void {
     event.preventDefault();
     const text = field.value.trim();
-    if (text) this.launcher.ask(text, "hero");
-    else this.launcher.openSheet("hero");
+    if (text) {
+      this.launcher.ask(text, "hero");
+    } else {
+      this.launcher.openSheet("hero");
+    }
   }
 }

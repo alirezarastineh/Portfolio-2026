@@ -24,11 +24,11 @@ const WORD = /[\p{L}\p{N}]/u;
 /** Prose without code, citation markers and Markdown's emphasis and list marks. */
 function prose(text: string): string {
   return text
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/`[^`\n]*`/g, " ")
-    .replace(/\[\^[^\]]+\]/g, "")
-    .replace(/[*_]{1,2}/g, "")
-    .replace(/^[ \t]*(?:[-•]|\d+\.)[ \t]+/gm, "");
+    .replaceAll(/```[\s\S]*?```/g, " ")
+    .replaceAll(/`[^`\n]*`/g, " ")
+    .replaceAll(/\[\^[^\]]+\]/g, "")
+    .replaceAll(/[*_]{1,2}/g, "")
+    .replaceAll(/^[ \t]*(?:[-•]|\d+\.)[ \t]+/gm, "");
 }
 
 /** The words of `text` as the bounds count them. */

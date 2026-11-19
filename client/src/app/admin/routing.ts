@@ -102,7 +102,9 @@ export function tierRows(view: RouterView): TierRow[] {
 /** "3 of 40 answers kept on the lite route went wrong (8 %): 1 flagged, 2 rephrased", or null. */
 export function falseSimpleLine(view: RouterView): string | null {
   const f = view.falseSimple;
-  if (!f.kept) return null;
+  if (!f.kept) {
+    return null;
+  }
   const why = (Object.keys(REASON_LABELS) as FalseSimpleReason[])
     .filter((r) => f.byReason[r])
     .map((r) => `${f.byReason[r]} ${REASON_LABELS[r]}`)
@@ -115,7 +117,9 @@ export function falseSimpleLine(view: RouterView): string | null {
 /** "2 of 25 routed lite moved up (8 %): 1 fetched two projects, …", or null without any. */
 export function escalationLine(view: RouterView): string | null {
   const e = view.escalation;
-  if (!e.answers) return null;
+  if (!e.answers) {
+    return null;
+  }
   const why = Object.entries(e.byReason)
     .map(([reason, n]) => `${n} ${ESCALATION_LABELS[reason] ?? reason}`)
     .join(", ");
@@ -126,7 +130,9 @@ export function escalationLine(view: RouterView): string | null {
 /** "Careful answers: 3 (pay and rates 2, family 1)", or null without any. */
 export function sensitiveLine(view: RouterView): string | null {
   const s = view.sensitive;
-  if (!s.answers) return null;
+  if (!s.answers) {
+    return null;
+  }
   const topics = Object.entries(s.byTopic)
     .sort(([, a], [, b]) => b - a)
     .map(([topic, n]) => `${TOPIC_LABELS[topic] ?? topic} ${n}`)

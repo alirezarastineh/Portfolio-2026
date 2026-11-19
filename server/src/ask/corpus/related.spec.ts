@@ -75,9 +75,9 @@ describe("related documents", () => {
       }),
     );
     const documents = relate([doc({ id: "profile@en", kind: "profile" }), ...faq]);
-    const related = relatedOf(documents, "profile@en")!;
+    const related = relatedOf(documents, "profile@en");
     expect(related).toHaveLength(MAX_RELATED);
-    expect(related[0]).toBe("faq:5@en");
+    expect(related?.[0]).toBe("faq:5@en");
   });
 
   it("link documents that share two stack items, tags or skills, and not one", () => {
@@ -152,10 +152,10 @@ describe("related documents", () => {
       input,
       projects.map((p) => facts(p.id, ["Go", "Rust"])),
     );
-    const employer = relatedOf(documents, "experience:nw@en")!;
+    const employer = relatedOf(documents, "experience:nw@en");
     expect(employer).toHaveLength(MAX_RELATED);
     // The project that names the employer outranks those that share skills.
-    expect(employer[0]).toBe("project:p6@en");
+    expect(employer?.[0]).toBe("project:p6@en");
     expect(documents.at(-1)).toBe(input.at(-1));
   });
 

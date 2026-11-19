@@ -6,6 +6,10 @@ import { classify, CopilotLedger, MAX_WORD_PAIRS, sharedWords, wordsOf } from ".
 import type { DraftVerdict } from "./copilot-skills";
 
 const words = (n: number, prefix = "w") => Array.from({ length: n }, (_, i) => `${prefix}${i}`);
+const tick = (): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
 
 describe("a draft's verdict (plan phase 27)", () => {
   it("counts words as the server does, whitespace aside", () => {
@@ -82,10 +86,10 @@ describe("a draft's verdict (plan phase 27)", () => {
     expect(sharedWords(["a", "b", "c", "d"], ["b", "a", "d", "c"])).toBe(2);
     expect(sharedWords([], ["a"])).toBe(0);
     // Past the cap (2,001 × 2,001 words), a multiset count: an upper bound.
-    const big = words(2_001);
+    const big = words(2001);
     expect(big.length * big.length).toBeGreaterThan(MAX_WORD_PAIRS);
     const reversed = [...big].reverse();
-    expect(sharedWords(big, reversed)).toBe(2_001);
+    expect(sharedWords(big, reversed)).toBe(2001);
     // A reordered text the bound matches word for word is still an edit, never a 0-word one.
     expect(classify(big.join(" "), reversed.join(" "))).toEqual({ outcome: "edited", distance: 1 });
   });
@@ -95,8 +99,6 @@ describe("the ledger", () => {
   let reported: DraftVerdict[][];
   let ledger: CopilotLedger;
   let fail = false;
-
-  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
   beforeEach(() => {
     reported = [];
@@ -108,11 +110,13 @@ describe("the ledger", () => {
         {
           provide: AdminApiService,
           useValue: {
-            reportDrafts: async (outcomes: DraftVerdict[]) => {
+            reportDrafts: (outcomes: DraftVerdict[]) => {
               reported.push(outcomes);
-              return fail
-                ? { ok: false, error: "not_found", status: 404 }
-                : { ok: true, data: { recorded: outcomes.length } };
+              return Promise.resolve(
+                fail
+                  ? { ok: false, error: "not_found", status: 404 }
+                  : { ok: true, data: { recorded: outcomes.length } },
+              );
             },
           },
         },
@@ -277,10 +281,11 @@ describe("the ledger", () => {
   });
 
   it("splits more than fifty verdicts, and never troubles the admin when the API refuses", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     fail = true;
-    for (let i = 0; i < 51; i++)
+    for (let i = 0; i < 51; i++) {
       ledger.propose(`f:${i}`, { suggestionId: `s${i}`, text: "x" }, { read: () => "x" });
+    }
     ledger.abandonPrefix("f:");
     await tick();
     expect(reported.map((batch) => batch.length)).toEqual([50, 1]);

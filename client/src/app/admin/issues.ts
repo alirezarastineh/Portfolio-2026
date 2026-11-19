@@ -23,7 +23,9 @@ export class FieldIssues {
     for (const issue of issues) {
       const path = startsWith(issue.path, strip) ? issue.path.slice(strip.length) : issue.path;
       const key = issueKey(path);
-      if (!next.has(key)) next.set(key, issue.message);
+      if (!next.has(key)) {
+        next.set(key, issue.message);
+      }
     }
     this.map.set(next);
   }
@@ -34,7 +36,9 @@ export class FieldIssues {
   }
 
   clear(): void {
-    if (this.map().size > 0) this.map.set(new Map());
+    if (this.map().size > 0) {
+      this.map.set(new Map());
+    }
   }
 
   /** The message for exactly this field. Reactive. */
@@ -45,7 +49,9 @@ export class FieldIssues {
   /** The first message for this field or anything inside it (a list, a nested object). */
   under(path: string): string | null {
     for (const [key, message] of this.map()) {
-      if (key === path || key.startsWith(`${path}.`)) return message;
+      if (key === path || key.startsWith(`${path}.`)) {
+        return message;
+      }
     }
     return null;
   }
@@ -56,7 +62,9 @@ export class FieldIssues {
     const next = new Map(
       [...current].filter(([key]) => key !== path && !key.startsWith(`${path}.`)),
     );
-    if (next.size !== current.size) this.map.set(next);
+    if (next.size !== current.size) {
+      this.map.set(next);
+    }
   }
 
   entries(): [string, string][] {
@@ -100,14 +108,18 @@ export function countServerErrors(control: AbstractControl): number {
   const own = control.errors?.["server"] ? 1 : 0;
   const children = (control as { controls?: Record<string, AbstractControl> | AbstractControl[] })
     .controls;
-  if (!children) return own;
+  if (!children) {
+    return own;
+  }
   return Object.values(children).reduce((sum, child) => sum + countServerErrors(child), own);
 }
 
 /** "3 fields need attention" and the first message, for a toast. */
 export function issueSummary(issues: readonly ApiIssue[]): string {
-  if (issues.length === 0) return "";
-  const first = issues[0]!;
+  if (issues.length === 0) {
+    return "";
+  }
+  const first = issues[0];
   const where = first.label ?? issueKey(first.path);
   const head = `${where}: ${first.message}`;
   return issues.length === 1 ? head : `${head} (and ${issues.length - 1} more)`;
@@ -118,7 +130,9 @@ export function issueSummary(issues: readonly ApiIssue[]): string {
  * the messages — so a keyboard or screen-reader user lands on the problem.
  */
 export function focusFirstInvalid(root: ParentNode | null | undefined): void {
-  if (!root) return;
+  if (!root) {
+    return;
+  }
   setTimeout(() => {
     const field = root.querySelector<HTMLElement>('[aria-invalid="true"]');
     field?.focus();

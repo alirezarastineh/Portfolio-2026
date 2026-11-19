@@ -10,12 +10,12 @@ export function editDistance(a: string, b: string): number {
   for (let i = 1; i <= a.length; i++) {
     const current = [i];
     for (let j = 1; j <= b.length; j++) {
-      const substitute = previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1);
-      current.push(Math.min(previous[j]! + 1, current[j - 1]! + 1, substitute));
+      const substitute = previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1);
+      current.push(Math.min(previous[j] + 1, current[j - 1] + 1, substitute));
     }
     previous = current;
   }
-  return previous[b.length]!;
+  return previous[b.length];
 }
 
 /** `/EN/Work/Atlas/?x#y` → `/en/work/atlas`. */

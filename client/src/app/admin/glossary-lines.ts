@@ -15,9 +15,13 @@ export interface GlossaryLine {
 export function parseGlossary(text: string): GlossaryLine[] {
   return text.split("\n").flatMap((raw) => {
     const line = raw.trim();
-    if (!line) return [];
+    if (!line) {
+      return [];
+    }
     const at = line.includes(": ") ? line.indexOf(": ") : line.indexOf(":");
-    if (at < 0) return [{ term: line, definition: "" }];
+    if (at < 0) {
+      return [{ term: line, definition: "" }];
+    }
     return [{ term: line.slice(0, at).trim(), definition: line.slice(at + 1).trim() }];
   });
 }

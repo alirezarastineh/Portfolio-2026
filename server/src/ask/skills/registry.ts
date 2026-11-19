@@ -28,7 +28,9 @@ const BY_ID = new Map(SKILLS.map((skill) => [skill.id, skill]));
 
 export function skillFor(id: SkillId): Skill {
   const skill = BY_ID.get(id);
-  if (!skill) throw new Error(`no skill ${id}`);
+  if (!skill) {
+    throw new Error(`no skill ${id}`);
+  }
   return skill;
 }
 

@@ -1,6 +1,6 @@
 import { signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
-import type { ActivatedRouteSnapshot, ViewTransitionInfo } from "@angular/router";
+import type { ActivatedRouteSnapshot } from "@angular/router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LanguageService } from "../services/language.service";
@@ -15,7 +15,9 @@ import {
 function snapshot(path: string): ActivatedRouteSnapshot {
   const segments = path.split("/").filter(Boolean);
   let node: { url: { path: string }[]; firstChild: unknown } | null = null;
-  for (const segment of segments.reverse()) node = { url: [{ path: segment }], firstChild: node };
+  for (const segment of segments.toReversed()) {
+    node = { url: [{ path: segment }], firstChild: node };
+  }
   return { url: [], firstChild: node } as unknown as ActivatedRouteSnapshot;
 }
 
@@ -25,7 +27,7 @@ function transitionBetween(from: string, to: string) {
     transition: { skipTransition } as unknown as ViewTransition,
     from: snapshot(from),
     to: snapshot(to),
-  } as ViewTransitionInfo);
+  });
   return skipTransition;
 }
 
@@ -44,9 +46,13 @@ function typesBetween(from: string, to: string): string[] {
       transition: { skipTransition: vi.fn(), types } as unknown as ViewTransition,
       from: snapshot(from),
       to: snapshot(to),
-    } as ViewTransitionInfo),
+    }),
   );
   return [...types];
+}
+
+function unreadContent(): never {
+  throw new Error('[i18n] "en" content read before the locale route loaded it');
 }
 
 describe("animatePageChangesOnly", () => {
@@ -71,11 +77,8 @@ describe("animatePageChangesOnly", () => {
 
   it("never reads the site's content on a move that is not between case studies", () => {
     // As the real service does outside a locale route (the admin): it throws.
-    const content = () => {
-      throw new Error('[i18n] "en" content read before the locale route loaded it');
-    };
     TestBed.resetTestingModule().configureTestingModule({
-      providers: [{ provide: LanguageService, useValue: { content } }],
+      providers: [{ provide: LanguageService, useValue: { content: unreadContent } }],
     });
     const types = new Set<string>();
     const move = (from: string, to: string) =>
@@ -84,7 +87,7 @@ describe("animatePageChangesOnly", () => {
           transition: { skipTransition: vi.fn(), types } as unknown as ViewTransition,
           from: snapshot(from),
           to: snapshot(to),
-        } as ViewTransitionInfo),
+        }),
       );
 
     expect(() => move("/admin/login", "/admin")).not.toThrow();

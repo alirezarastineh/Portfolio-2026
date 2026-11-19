@@ -19,7 +19,7 @@ import { injectHlmSidebarConfig } from "./hlm-sidebar.token";
 // 32 px with a mouse and 44 on touch, and the site's focus ring, drawn inside the scrolled list.
 // Collapsed to icons, an entry fills the rail's width with its icon in the middle.
 const sidebarMenuButtonVariants = cva(
-  "peer/menu-button text-muted-foreground hover:bg-surface-2 hover:text-foreground data-[active=true]:bg-surface-2 data-[active=true]:text-foreground data-[state=open]:hover:bg-surface-2 flex w-full items-center justify-start gap-2 overflow-hidden rounded-lg p-2 text-left text-sm transition-[width,height,padding] motion-reduce:transition-none focus-visible:-outline-offset-2 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 group-data-[collapsible=icon]:!w-full group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:!p-0 cursor-pointer touch-manipulation disabled:pointer-events-none disabled:opacity-50 disabled:cursor-default aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:font-medium [&>_ng-icon]:size-4 [&>_ng-icon]:shrink-0 group-data-[collapsible=icon]:[&>span]:hidden [&>span:last-child]:truncate",
+  "peer/menu-button text-muted-foreground hover:bg-surface-2 hover:text-foreground data-[active=true]:bg-surface-2 data-[active=true]:text-foreground data-[state=open]:hover:bg-surface-2 flex w-full items-center justify-start gap-2 overflow-hidden rounded-lg p-2 text-left text-sm transition-[width,height,padding] motion-reduce:transition-none focus-visible:-outline-offset-2 group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:w-full! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! cursor-pointer touch-manipulation disabled:pointer-events-none disabled:opacity-50 disabled:cursor-default aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:font-medium [&>_ng-icon]:size-4 [&>_ng-icon]:shrink-0 group-data-[collapsible=icon]:[&>span]:hidden [&>span:last-child]:truncate",
   {
     variants: {
       variant: {
@@ -29,7 +29,7 @@ const sidebarMenuButtonVariants = cva(
       size: {
         default: "h-8 pointer-coarse:h-11 text-sm",
         sm: "h-7 pointer-coarse:h-11 text-xs",
-        lg: "h-12 text-sm group-data-[collapsible=icon]:!p-0",
+        lg: "h-12 text-sm group-data-[collapsible=icon]:p-0!",
       },
     },
     defaultVariants: {

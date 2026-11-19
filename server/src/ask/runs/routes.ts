@@ -100,18 +100,29 @@ async function planRun(
   }
   if (input.kind === "judge") {
     const judge = askVisitorJudges(askConfig())[0]?.id;
-    if (!judge) return { error: "no_visitor_judge", status: 400 };
+    if (!judge) {
+      return { error: "no_visitor_judge", status: 400 };
+    }
     const keys = await reviewedToJudge(judge);
-    if (!keys.length) return { error: "nothing_to_judge", status: 400 };
+    if (!keys.length) {
+      return { error: "nothing_to_judge", status: 400 };
+    }
     return { params: { judge }, keys };
   }
-  const chosen = input.cases?.length
-    ? EVAL_CASES.filter((e) => input.cases!.includes(e.id))
+  const requested = input.cases;
+  const chosen = requested?.length
+    ? EVAL_CASES.filter((e) => requested.includes(e.id))
     : EVAL_CASES;
-  if (!chosen.length) return { error: "no_cases", status: 400 };
+  if (!chosen.length) {
+    return { error: "no_cases", status: 400 };
+  }
   const keys = chosen.map((e) => e.id);
-  if (input.kind === "eval") return { params: { cases: input.cases ?? null }, keys };
-  if (input.a === input.b) return { error: "same_answerer", status: 400 };
+  if (input.kind === "eval") {
+    return { params: { cases: input.cases ?? null }, keys };
+  }
+  if (input.a === input.b) {
+    return { error: "same_answerer", status: 400 };
+  }
   for (const side of [input.a, input.b]) {
     if (!askVariantChain(askConfig(), side)?.length) {
       return { error: "unknown_answerer", status: 400 };
@@ -123,31 +134,49 @@ async function planRun(
 runsRouter.post("/", zValidator("json", runInput, invalid), async (c) => {
   const input = c.req.valid("json");
   const plan = await planRun(input);
-  if ("error" in plan) return c.json({ error: plan.error }, plan.status);
+  if ("error" in plan) {
+    return c.json({ error: plan.error }, plan.status);
+  }
   const started = await whileStarting(async (): Promise<{ id: string } | Refusal> => {
     // One paid run at a time, whatever its kind: they share the providers' quota.
-    if ((await activeRuns()).length) return { error: "already_running", status: 409 };
+    const active = await activeRuns();
+    if (active.length) {
+      return { error: "already_running", status: 409 };
+    }
     const blocked = await spendBlocked(input.kind);
-    if (blocked) return { error: blocked, status: 503 };
+    if (blocked) {
+      return { error: blocked, status: 503 };
+    }
     const run = await startRun(input.kind, plan.params, plan.keys);
     return run ? { id: run.id } : { error: "already_running", status: 409 };
   });
-  if (started === "busy") return c.json({ error: "already_running" }, 409);
-  if ("error" in started) return c.json({ error: started.error }, started.status);
+  if (started === "busy") {
+    return c.json({ error: "already_running" }, 409);
+  }
+  if ("error" in started) {
+    return c.json({ error: started.error }, started.status);
+  }
   return c.json({ id: started.id }, 202);
 });
 
-runsRouter.get("/", async (c) => c.json({ runs: (await listRuns()).map(view) }));
+runsRouter.get("/", async (c) => {
+  const runs = await listRuns();
+  return c.json({ runs: runs.map((run) => view(run)) });
+});
 
 runsRouter.get("/:id", idParam, async (c) => {
   const found = await getRun(c.req.valid("param").id);
-  if (!found) return c.json({ error: "not_found" }, 404);
+  if (!found) {
+    return c.json({ error: "not_found" }, 404);
+  }
   return c.json({ run: view(found.run), items: found.items });
 });
 
 runsRouter.post("/:id/cancel", idParam, async (c) => {
   const found = await getRun(c.req.valid("param").id);
-  if (!found) return c.json({ error: "not_found" }, 404);
+  if (!found) {
+    return c.json({ error: "not_found" }, 404);
+  }
   if (!(await cancelRun(found.run.id, found.run.status))) {
     return c.json({ error: "not_cancellable" }, 409);
   }
@@ -156,16 +185,27 @@ runsRouter.post("/:id/cancel", idParam, async (c) => {
 
 runsRouter.post("/:id/resume", idParam, async (c) => {
   const resumed = await whileStarting(async (): Promise<{ id: string } | Refusal> => {
-    if ((await activeRuns()).length) return { error: "already_running", status: 409 };
+    const active = await activeRuns();
+    if (active.length) {
+      return { error: "already_running", status: 409 };
+    }
     const found = await getRun(c.req.valid("param").id);
-    if (!found) return { error: "not_resumable", status: 409 };
+    if (!found) {
+      return { error: "not_resumable", status: 409 };
+    }
     // Its own feature: a nightly judge run resumes within `nightlyJudge`'s fences.
     const blocked = await spendBlocked(runFeature(found.run));
-    if (blocked) return { error: blocked, status: 503 };
+    if (blocked) {
+      return { error: blocked, status: 503 };
+    }
     const run = await resumeRun(found.run.id);
     return run ? { id: run.id } : { error: "not_resumable", status: 409 };
   });
-  if (resumed === "busy") return c.json({ error: "already_running" }, 409);
-  if ("error" in resumed) return c.json({ error: resumed.error }, resumed.status);
+  if (resumed === "busy") {
+    return c.json({ error: "already_running" }, 409);
+  }
+  if ("error" in resumed) {
+    return c.json({ error: resumed.error }, resumed.status);
+  }
   return c.json({ id: resumed.id }, 202);
 });

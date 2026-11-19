@@ -12,7 +12,9 @@ export function pgErrorCode(error: unknown): string | undefined {
   let current: unknown = error;
   for (let depth = 0; depth < 5 && current && typeof current === "object"; depth++) {
     const code = (current as { code?: unknown }).code;
-    if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)) return code;
+    if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)) {
+      return code;
+    }
     current = (current as { cause?: unknown }).cause;
   }
   return undefined;
@@ -27,7 +29,9 @@ const INVALID_INPUT_SQLSTATE = "22P02";
  * same `{ error }` shape as every deliberate response; details stay in the log.
  */
 export const onApiError: ErrorHandler = (error, c) => {
-  if (error instanceof HTTPException) return error.getResponse();
+  if (error instanceof HTTPException) {
+    return error.getResponse();
+  }
 
   if (pgErrorCode(error) === INVALID_INPUT_SQLSTATE) {
     return c.json({ error: "invalid_id" }, 400);

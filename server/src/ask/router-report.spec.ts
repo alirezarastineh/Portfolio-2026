@@ -21,7 +21,7 @@ function row(change: Partial<RouterRow> = {}): RouterRow {
     handoffOffered: false,
     handoffConfirmed: false,
     route: "lite",
-    ttftMs: 1_000,
+    ttftMs: 1000,
     routing: { reason: "default" },
     escalation: null,
     ...change,
@@ -40,14 +40,15 @@ describe("the router's tiers", () => {
   it("takes percentiles by nearest rank", () => {
     expect(percentile([], 0.5)).toBeNull();
     expect(percentile([300, 100, 200], 0.5)).toBe(200);
-    expect(percentile([100, 200, 300, 400, 500, 600, 700, 800, 900, 1_000], 0.9)).toBe(900);
+    expect(percentile([100, 200, 300, 400, 500, 600, 700, 800, 900, 1000], 0.9)).toBe(900);
   });
 });
+
+const at = (minute: number) => new Date(Date.UTC(2026, 9, 2, 9, minute));
 
 describe("routerReport", () => {
   it("counts the answers kept lite that went wrong, why, and lists the newest first", () => {
     const session = "session-rephrase";
-    const at = (minute: number) => new Date(Date.UTC(2026, 9, 2, 9, minute));
     const rows = [
       row({ flags: ["uncited"] }),
       row({ feedback: -1, routing: { reason: "default+lookup", lookup: true } }),
@@ -82,8 +83,8 @@ describe("routerReport", () => {
     expect(falseSimple.rate).toBeCloseTo(3 / 6);
     expect(falseSimple.listed.map((c) => [c.question, c.tier, c.reasons])).toEqual([
       ["Where did he study computer science?", "lite", ["rephrased"]],
-      [rows[1]!.question, "lookup", ["thumbs-down"]],
-      [rows[0]!.question, "lite", ["flagged"]],
+      [rows[1].question, "lookup", ["thumbs-down"]],
+      [rows[0].question, "lite", ["flagged"]],
     ]);
   });
 
@@ -91,23 +92,26 @@ describe("routerReport", () => {
     const rows = [
       row({ routing: { reason: "default+lookup", lookup: true }, ttftMs: 400 }),
       row({ routing: { reason: "default+lookup", lookup: true }, ttftMs: 600, usd: 0.003 }),
-      row({ ttftMs: 1_200 }),
-      row({ route: "lite→deep", escalation: "projects-fetched", ttftMs: 2_000 }),
-      row({ route: "lite→deep", escalation: "search-spans-projects", ttftMs: 2_400 }),
+      row({ ttftMs: 1200 }),
+      row({ route: "lite→deep", escalation: "projects-fetched", ttftMs: 2000 }),
+      row({ route: "lite→deep", escalation: "search-spans-projects", ttftMs: 2400 }),
       row({
         route: "deep",
         routing: { reason: "compare+sensitive:compensation", sensitive: "compensation" },
-        ttftMs: 3_000,
+        ttftMs: 3000,
       }),
       row({ routing: { reason: "default+sensitive:family", sensitive: "family" }, ttftMs: null }),
     ];
     const report = routerReport(rows);
-    const lookup = report.tiers.find((t) => t.tier === "lookup")!;
+    const lookup = report.tiers.find((t) => t.tier === "lookup");
+    if (!lookup) {
+      throw new Error("expected lookup tier");
+    }
     expect(lookup).toMatchObject({ answers: 2, p50TtftMs: 400, p90TtftMs: 600, helpfulRate: 1 });
     expect(lookup.usdPerAnswer).toBeCloseTo(0.002);
     expect(report.tiers.find((t) => t.tier === "lite")).toMatchObject({
       answers: 2,
-      p50TtftMs: 1_200,
+      p50TtftMs: 1200,
     });
     expect(report.tiers.find((t) => t.tier === "answer-only")).toMatchObject({
       answers: 0,

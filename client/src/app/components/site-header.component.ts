@@ -73,6 +73,7 @@ const DESKTOP = "(min-width: 1024px)";
          and while the menu is open. -->
     <header
       #bar
+      tabindex="-1"
       class="site-header fixed inset-x-0 top-0 z-(--z-header) border-b border-border bg-background pt-[env(safe-area-inset-top)]"
       [attr.data-open]="open() ? '' : null"
       (keydown)="trapFocus($event)"
@@ -325,7 +326,9 @@ export class SiteHeaderComponent {
     const home = this.home();
     return this.sections().flatMap<NavLink>((id) => {
       const label = labels[id];
-      if (!label) return [];
+      if (!label) {
+        return [];
+      }
       return id === "writing"
         ? [{ label, key: id, commands: [...home, "writing"] }]
         : [{ label, key: id, commands: home, fragment: id }];
@@ -371,7 +374,9 @@ export class SiteHeaderComponent {
     // observing starts over on every page change.
     effect(() => {
       this.lang.page();
-      if (this.rendered) untracked(() => this.watchSections());
+      if (this.rendered) {
+        untracked(() => this.watchSections());
+      }
     });
 
     inject(DestroyRef).onDestroy(() => this.unwatch());
@@ -383,8 +388,12 @@ export class SiteHeaderComponent {
    */
   isActive(link: NavLink): boolean {
     const page = this.lang.page();
-    if (page === "/") return this.active() === link.key;
-    if (link.key === "writing") return page === "/writing" || page.startsWith("/writing/");
+    if (page === "/") {
+      return this.active() === link.key;
+    }
+    if (link.key === "writing") {
+      return page === "/writing" || page.startsWith("/writing/");
+    }
     return link.key === "projects" && page.startsWith("/work/");
   }
 
@@ -406,27 +415,37 @@ export class SiteHeaderComponent {
   /** Moves focus into the page's <main>, rather than only scrolling to it. */
   skipToContent(event: Event): void {
     const main = this.doc.getElementById("main");
-    if (!main) return;
+    if (!main) {
+      return;
+    }
     event.preventDefault();
-    if (!main.hasAttribute("tabindex")) main.setAttribute("tabindex", "-1");
+    if (!main.hasAttribute("tabindex")) {
+      main.setAttribute("tabindex", "-1");
+    }
     main.focus();
   }
 
   onEscape(): void {
-    if (!this.open()) return;
+    if (!this.open()) {
+      return;
+    }
     this.closeMenu();
     this.toggleButton().nativeElement.focus();
   }
 
   /** While the menu is open, Tab cycles through the header rather than the page behind it. */
   trapFocus(event: KeyboardEvent): void {
-    if (event.key !== "Tab" || !this.open()) return;
+    if (event.key !== "Tab" || !this.open()) {
+      return;
+    }
     const focusable = [
       ...this.bar().nativeElement.querySelectorAll<HTMLElement>("a[href], button:not([disabled])"),
     ].filter((el) => el.offsetParent !== null);
     const first = focusable[0];
     const last = focusable.at(-1);
-    if (!first || !last) return;
+    if (!first || !last) {
+      return;
+    }
     const current = this.doc.activeElement;
     if (event.shiftKey && current === first) {
       event.preventDefault();
@@ -440,9 +459,13 @@ export class SiteHeaderComponent {
   /** Widening the window to the desktop layout closes the menu it no longer shows. */
   private closeOnDesktop(): void {
     const query = globalThis.matchMedia?.(DESKTOP);
-    if (!query) return;
+    if (!query) {
+      return;
+    }
     const close = (e: MediaQueryListEvent) => {
-      if (e.matches) this.closeMenu();
+      if (e.matches) {
+        this.closeMenu();
+      }
     };
     query.addEventListener("change", close);
     this.cleanups.push(() => query.removeEventListener("change", close));
@@ -454,7 +477,9 @@ export class SiteHeaderComponent {
     this.observed.clear();
     this.active.set("hero");
     // Sections exist on the home page only.
-    if (!this.isBrowser || this.lang.page() !== "/") return;
+    if (!this.isBrowser || this.lang.page() !== "/") {
+      return;
+    }
 
     const expected = this.sections();
     this.observer = new IntersectionObserver(
@@ -468,7 +493,9 @@ export class SiteHeaderComponent {
           }
         }
         const next = expected.find((id) => this.visible.has(id));
-        if (next) this.active.set(next);
+        if (next) {
+          this.active.set(next);
+        }
       },
       { rootMargin: "-30% 0px -55% 0px", threshold: 0 },
     );
@@ -496,13 +523,19 @@ export class SiteHeaderComponent {
 
   private unwatch(): void {
     this.unwatchSections();
-    for (const cleanup of this.cleanups) cleanup();
+    for (const cleanup of this.cleanups) {
+      cleanup();
+    }
   }
 
   private observePending(ids: readonly SectionId[]): void {
-    if (!this.observer) return;
+    if (!this.observer) {
+      return;
+    }
     for (const id of ids) {
-      if (this.observed.has(id)) continue;
+      if (this.observed.has(id)) {
+        continue;
+      }
       const el = this.doc.getElementById(id);
       if (el) {
         this.observer.observe(el);

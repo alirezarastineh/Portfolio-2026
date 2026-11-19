@@ -50,8 +50,11 @@ export function countMcp(name: McpUsageName, at = new Date()): void {
   const day = utcDay(at);
   const key = `${day}|${name}`;
   const row = pending.get(key);
-  if (row) row.count++;
-  else pending.set(key, { day, name, count: 1 });
+  if (row) {
+    row.count++;
+  } else {
+    pending.set(key, { day, name, count: 1 });
+  }
 }
 
 async function upsert(rows: McpUsageRow[]): Promise<void> {
@@ -66,7 +69,9 @@ async function upsert(rows: McpUsageRow[]): Promise<void> {
 
 /** Writes what has gathered. Counts that fail to write are kept for the next flush. */
 export async function flushMcpUsage(write = upsert): Promise<void> {
-  if (!pending.size) return;
+  if (!pending.size) {
+    return;
+  }
   const rows = [...pending.values()];
   pending.clear();
   try {
@@ -89,7 +94,9 @@ export function pendingMcpUsage(): McpUsageRow[] {
 let timer: NodeJS.Timeout | undefined;
 
 export function startMcpUsageFlush(intervalMs = 60_000): void {
-  if (timer) return;
+  if (timer) {
+    return;
+  }
   timer = setInterval(() => {
     void flushMcpUsage().catch((error: unknown) =>
       console.error("[mcp] usage counts not written", error),

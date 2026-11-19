@@ -13,6 +13,6 @@ describe("helm's class merge knows the admin's own names", () => {
   });
 
   it("reads the overlay radius as a radius", () => {
-    expect(hlm("rounded-lg rounded-overlay")).toBe("rounded-overlay");
+    expect(hlm(["rounded-lg", "rounded-overlay"].join(" "))).toBe("rounded-overlay");
   });
 });

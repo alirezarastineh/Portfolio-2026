@@ -32,7 +32,7 @@ import { calibrationLine, type JudgeStatus } from "../pairwise";
 import { FreezeCaseComponent } from "./freeze-case.component";
 import { cycleLabel, emptyLabels, goodShare, LABEL_NAMES, nextUnreviewed } from "../review-queue";
 
-const POLL_MS = 2_000;
+const POLL_MS = 2000;
 
 const VERDICTS: { value: boolean | null; label: string }[] = [
   { value: true, label: "Good" },
@@ -67,6 +67,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
         <div class="flex items-center gap-2">
           <button
             hlmBtn
+            type="button"
             size="sm"
             variant="outline"
             [disabled]="!data()"
@@ -77,6 +78,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
           <span class="text-data">{{ data()?.week ?? "…" }}</span>
           <button
             hlmBtn
+            type="button"
             size="sm"
             variant="outline"
             [disabled]="!data()?.next"
@@ -214,7 +216,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
                 ></textarea>
               </label>
               <div class="flex items-center gap-3">
-                <button hlmBtn size="sm" [disabled]="saving()" (click)="save()">
+                <button hlmBtn type="button" size="sm" [disabled]="saving()" (click)="save()">
                   Save and next
                 </button>
                 @if (entry.review) {
@@ -247,6 +249,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
               <div>
                 <button
                   hlmBtn
+                  type="button"
                   size="sm"
                   variant="outline"
                   [disabled]="judging()"
@@ -310,7 +313,9 @@ export class AssistantReviewsComponent implements OnInit {
 
   private async loadJudge(): Promise<void> {
     const result = await this.api.judgeStatus();
-    if (result.ok) this.judge.set(result.data);
+    if (result.ok) {
+      this.judge.set(result.data);
+    }
   }
 
   /** A paid background run: the judge scores the reviewed answers it has not yet. */
@@ -321,7 +326,9 @@ export class AssistantReviewsComponent implements OnInit {
         "One model call each, to the judge that already answers visitors. Its cost counts toward today's budget.",
       confirmLabel: "Judge",
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
     this.judging.set(true);
     const started = await this.api.startJudgeRun();
     if (!started.ok) {
@@ -334,16 +341,25 @@ export class AssistantReviewsComponent implements OnInit {
 
   /** Until the judge run ends; then the calibration is read again. */
   private follow(id: string): void {
-    if (!this.isBrowser) return;
-    this.timer = setTimeout(async () => {
-      const result = await this.api.getRun(id);
-      if (result.ok && isActive(result.data.run)) return this.follow(id);
-      this.judging.set(false);
-      if (result.ok && result.data.run.error) {
-        toast.error("The judge stopped", { description: result.data.run.error });
-      }
-      await this.loadJudge();
+    if (!this.isBrowser) {
+      return;
+    }
+    this.timer = setTimeout(() => {
+      void this.pollJudge(id);
     }, POLL_MS);
+  }
+
+  private async pollJudge(id: string): Promise<void> {
+    const result = await this.api.getRun(id);
+    if (result.ok && isActive(result.data.run)) {
+      this.follow(id);
+      return;
+    }
+    this.judging.set(false);
+    if (result.ok && result.data.run.error) {
+      toast.error("The judge stopped", { description: result.data.run.error });
+    }
+    await this.loadJudge();
   }
 
   private async load(week?: string, keep: string | null = null): Promise<void> {
@@ -353,15 +369,20 @@ export class AssistantReviewsComponent implements OnInit {
     if (!result.ok) {
       if (this.data()) {
         toast.error("Could not load the review queue", { description: result.error });
-      } else this.loadError.set(result.error);
+      } else {
+        this.loadError.set(result.error);
+      }
       return;
     }
     this.loadError.set(null);
     this.data.set(result.data);
     const next = keep ?? nextUnreviewed(result.data.queue, null)?.message.id ?? null;
     const entry = result.data.queue.find((e) => e.message.id === next) ?? result.data.queue[0];
-    if (entry) this.select(entry);
-    else this.selectedId.set(null);
+    if (entry) {
+      this.select(entry);
+    } else {
+      this.selectedId.set(null);
+    }
   }
 
   protected reload(): void {
@@ -381,7 +402,9 @@ export class AssistantReviewsComponent implements OnInit {
   protected async save(): Promise<void> {
     const entry = this.selected();
     const week = this.data()?.week;
-    if (!entry || !week || this.saving()) return;
+    if (!entry || !week || this.saving()) {
+      return;
+    }
     // An empty review would count as reviewed and say nothing.
     if (Object.values(this.draft()).every((v) => v === null) && !this.note().trim()) {
       toast.error("Pick a verdict or write a note first.");
@@ -413,7 +436,9 @@ export class AssistantReviewsComponent implements OnInit {
   }
 
   protected onKeydown(event: KeyboardEvent): void {
-    if (!isShortcutTarget(event) || !this.selected()) return;
+    if (!isShortcutTarget(event) || !this.selected()) {
+      return;
+    }
     const key = event.key.toLowerCase();
     if (key === "j" || key === "k") {
       const list = this.queue().map((e) => ({ id: e.message.id }));
@@ -425,7 +450,7 @@ export class AssistantReviewsComponent implements OnInit {
       }
     } else if (/^[1-5]$/.test(key)) {
       event.preventDefault();
-      const label = REVIEW_LABELS[Number(key) - 1]!;
+      const label = REVIEW_LABELS[Number(key) - 1];
       this.setLabel(label, cycleLabel(this.draft()[label]));
     } else if (key === "s") {
       event.preventDefault();

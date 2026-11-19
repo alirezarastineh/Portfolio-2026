@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 
 import AxeBuilder from "@axe-core/playwright";
-import { test as base, type Locator, type Page } from "@playwright/test";
+import { test as base, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 
 export { expect } from "@playwright/test";
 
@@ -13,12 +13,15 @@ export { expect } from "@playwright/test";
  * WebKit every night.
  * shortcut: no axe in Firefox while Playwright is 1.65.x; the next Playwright version scans again by itself.
  */
-const PLAYWRIGHT: string = createRequire(import.meta.url)("@playwright/test/package.json").version;
-if (/^1\.65\./.test(PLAYWRIGHT)) {
-  const analyze = AxeBuilder.prototype.analyze;
+const pkg = createRequire(import.meta.url)("@playwright/test/package.json") as { version: string };
+const PLAYWRIGHT = pkg.version;
+if (PLAYWRIGHT.startsWith("1.65.")) {
+  const analyze = Reflect.get(AxeBuilder.prototype, "analyze");
   AxeBuilder.prototype.analyze = function (this: AxeBuilder) {
     const info = test.info();
-    if (info.project.name !== "firefox") return analyze.call(this);
+    if (info.project.name !== "firefox") {
+      return analyze.call(this);
+    }
     info.annotations.push({
       type: "axe skipped",
       description: `Playwright ${PLAYWRIGHT}'s Firefox crashes in axe (microsoft/playwright#43967)`,
@@ -43,9 +46,7 @@ export interface PageProblems {
 }
 
 declare global {
-  interface Window {
-    __reportCspViolation?: (violation: string) => void;
-  }
+  var __reportCspViolation: ((violation: string) => void) | undefined;
 }
 
 async function watchProblems(page: Page): Promise<PageProblems> {
@@ -53,7 +54,9 @@ async function watchProblems(page: Page): Promise<PageProblems> {
   // The documents the page loaded, for a 404 page's report of its own status below.
   const documents = new Set<string>();
   page.on("request", (request) => {
-    if (request.isNavigationRequest()) documents.add(request.url());
+    if (request.isNavigationRequest()) {
+      documents.add(request.url());
+    }
   });
 
   await page.exposeFunction("__reportCspViolation", (violation: string) => {
@@ -64,7 +67,7 @@ async function watchProblems(page: Page): Promise<PageProblems> {
   await page.addInitScript(() => {
     document.addEventListener("securitypolicyviolation", (event) => {
       const source = event.sourceFile ? ` at ${event.sourceFile}:${event.lineNumber}` : "";
-      window.__reportCspViolation?.(
+      globalThis.__reportCspViolation?.(
         `${event.effectiveDirective} ${event.blockedURI || "inline"}${source}`,
       );
     });
@@ -72,13 +75,19 @@ async function watchProblems(page: Page): Promise<PageProblems> {
 
   page.on("pageerror", (error) => problems.pageErrors.push(error.message));
   page.on("console", (message) => {
-    if (message.type() !== "error") return;
+    if (message.type() !== "error") {
+      return;
+    }
     const text = message.text();
     // Requests to other origins are aborted below; their failures are expected.
-    if (text.includes("ERR_BLOCKED_BY_CLIENT")) return;
+    if (text.includes("ERR_BLOCKED_BY_CLIENT")) {
+      return;
+    }
     // Chrome and WebKit report a 404 page's own status as a failed load; the status is the
     // point. WebKit reports it before page.url() names the new page, hence the loaded documents.
-    if (text.startsWith("Failed to load resource") && documents.has(message.location().url)) return;
+    if (text.startsWith("Failed to load resource") && documents.has(message.location().url)) {
+      return;
+    }
     problems.consoleErrors.push(text);
   });
 
@@ -86,10 +95,10 @@ async function watchProblems(page: Page): Promise<PageProblems> {
 }
 
 export const test = base.extend<{ problems: PageProblems }>({
-  page: async ({ page, baseURL }, use) => {
+  page: async ({ page, baseURL = "http://127.0.0.1" }, use) => {
     // Hermetic: nothing leaves the test server — not the API baked into the
     // build, not analytics, not error reporting.
-    const origin = new URL(baseURL ?? "http://127.0.0.1").origin;
+    const origin = new URL(baseURL).origin;
     await page.route(
       (url) => url.origin !== origin && url.protocol.startsWith("http"),
       (route) => route.abort("blockedbyclient"),
@@ -157,15 +166,59 @@ export function inlineScripts(html: string): { attrs: string; nonce: string | nu
   const scripts: { attrs: string; nonce: string | null }[] = [];
   for (const match of html.matchAll(/<script\b([^>]*)>/gi)) {
     const attrs = match[1] ?? "";
-    if (/\bsrc=/i.test(attrs)) continue;
+    if (/\bsrc=/i.test(attrs)) {
+      continue;
+    }
     const type = /\btype="([^"]*)"/i.exec(attrs)?.[1]?.toLowerCase();
-    if (type === "application/json" || type === "application/ld+json") continue;
+    if (type === "application/json" || type === "application/ld+json") {
+      continue;
+    }
     scripts.push({ attrs, nonce: /\bnonce="([^"]*)"/i.exec(attrs)?.[1] ?? null });
   }
   return scripts;
 }
 
 /** The nonce a policy header allows, if any. */
-export function policyNonce(policy: string | undefined): string | null {
-  return /'nonce-([^']+)'/.exec(policy ?? "")?.[1] ?? null;
+export function policyNonce(policy = ""): string | null {
+  return /'nonce-([^']+)'/.exec(policy)?.[1] ?? null;
+}
+
+/** Runs async steps one after another when each step shares Playwright page state. */
+export async function runSequentially<T>(
+  items: readonly T[],
+  step: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  await items.reduce<Promise<void>>(
+    (chain, item, index) => chain.then(() => step(item, index)),
+    Promise.resolve(),
+  );
+}
+
+/** Fetches a path via Playwright's request context and returns its text body. */
+export async function fetchText(request: APIRequestContext, path: string): Promise<string> {
+  const response = await request.get(path);
+  return response.text();
+}
+
+/** Returns a locator's bounding box, throwing if it is not rendered. */
+export async function requireBox(locator: Locator): Promise<{
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}> {
+  const box = await locator.boundingBox();
+  if (box === null) {
+    throw new Error("Expected locator to have a bounding box");
+  }
+  return box;
+}
+
+/** Returns the page's viewport size, throwing if no viewport is set. */
+export function requireViewport(page: Page): { width: number; height: number } {
+  const viewport = page.viewportSize();
+  if (viewport === null) {
+    throw new Error("Expected page to have a viewport size");
+  }
+  return viewport;
 }

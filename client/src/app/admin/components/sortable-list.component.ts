@@ -23,6 +23,8 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideGripVertical } from "@ng-icons/lucide";
 import { HlmDropdownMenuImports } from "@spartan-ng/helm/dropdown-menu";
 
+const noChange = (): string | null => null;
+
 /** Marks the caller's row template: `<ng-template appSortableRow let-item let-i="index">`. */
 @Directive({ selector: "[appSortableRow]" })
 export class SortableRowDirective {}
@@ -64,7 +66,7 @@ export class SortableRowDirective {}
           <button
             cdkDragHandle
             type="button"
-            class="mt-0.5 cursor-grab rounded p-1 text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
+            class="mt-0.5 cursor-grab rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
             data-grip
             [hlmDropdownMenuTrigger]="moves"
             [hlmDropdownMenuTriggerData]="{ $implicit: i }"
@@ -96,8 +98,15 @@ export class SortableRowDirective {}
 
     <ng-template #moves let-i>
       <hlm-dropdown-menu class="w-40">
-        <button hlmDropdownMenuItem [disabled]="i === 0" (triggered)="move(i, -1)">Move up</button>
-        <button hlmDropdownMenuItem [disabled]="i === items().length - 1" (triggered)="move(i, 1)">
+        <button hlmDropdownMenuItem type="button" [disabled]="i === 0" (triggered)="move(i, -1)">
+          Move up
+        </button>
+        <button
+          hlmDropdownMenuItem
+          type="button"
+          [disabled]="i === items().length - 1"
+          (triggered)="move(i, 1)"
+        >
           Move down
         </button>
       </hlm-dropdown-menu>
@@ -114,7 +123,7 @@ export class SortableListComponent<T> {
   /** Ruled rows of several lines (Skills' groups): the grip at the row's top, not its middle. */
   readonly tall = input(false);
   /** A row's trace (`unsaved`, `draft`), or null when it is live. */
-  readonly change = input<(item: T) => string | null>(() => null);
+  readonly change = input<(item: T) => string | null>(noChange);
 
   /** Emits the reordered array; the caller persists it. */
   readonly reordered = output<T[]>();
@@ -124,7 +133,9 @@ export class SortableListComponent<T> {
   private readonly injector = inject(Injector);
 
   protected onDrop(event: CdkDragDrop<unknown>): void {
-    if (event.previousIndex === event.currentIndex) return;
+    if (event.previousIndex === event.currentIndex) {
+      return;
+    }
 
     const next = [...this.items()];
     moveItemInArray(next, event.previousIndex, event.currentIndex);
@@ -132,15 +143,21 @@ export class SortableListComponent<T> {
   }
 
   protected onHandleKey(event: KeyboardEvent, index: number): void {
-    if (!event.altKey) return;
-    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    if (!event.altKey) {
+      return;
+    }
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+      return;
+    }
     event.preventDefault();
     this.move(index, event.key === "ArrowUp" ? -1 : 1);
   }
 
   protected move(index: number, delta: -1 | 1): void {
     const target = index + delta;
-    if (target < 0 || target >= this.items().length) return;
+    if (target < 0 || target >= this.items().length) {
+      return;
+    }
     const next = [...this.items()];
     moveItemInArray(next, index, target);
     this.reordered.emit(next);

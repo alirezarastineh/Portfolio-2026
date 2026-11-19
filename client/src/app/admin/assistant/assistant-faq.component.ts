@@ -77,7 +77,7 @@ function emptyForm(question = ""): Form {
         <p class="m-0 text-sm text-muted-foreground">
           Answers to questions the portfolio does not cover (notice period, relocation, rates…).
         </p>
-        <button hlmBtn size="sm" (click)="startNew()">New entry</button>
+        <button hlmBtn type="button" size="sm" (click)="startNew()">New entry</button>
       </div>
 
       <app-faq-proposals [proposals]="openProposals()" [focus]="proposal()" (decided)="load()" />
@@ -168,6 +168,7 @@ function emptyForm(question = ""): Form {
               </span>
               <button
                 hlmBtn
+                type="button"
                 variant="ghost"
                 size="sm"
                 [disabled]="i === 0"
@@ -178,6 +179,7 @@ function emptyForm(question = ""): Form {
               </button>
               <button
                 hlmBtn
+                type="button"
                 variant="ghost"
                 size="sm"
                 [disabled]="last"
@@ -186,8 +188,12 @@ function emptyForm(question = ""): Form {
               >
                 ↓
               </button>
-              <button hlmBtn variant="outline" size="sm" (click)="edit(entry)">Edit</button>
-              <button hlmBtn variant="ghost" size="sm" (click)="remove(entry)">Delete</button>
+              <button hlmBtn type="button" variant="outline" size="sm" (click)="edit(entry)">
+                Edit
+              </button>
+              <button hlmBtn type="button" variant="ghost" size="sm" (click)="remove(entry)">
+                Delete
+              </button>
             </li>
           } @empty {
             <li class="text-sm text-muted-foreground">No entries yet.</li>
@@ -200,7 +206,7 @@ function emptyForm(question = ""): Form {
 export class AssistantFaqComponent implements OnInit {
   /** A question from the insights to start a new entry with. */
   readonly seed = input<string | null>(null);
-  readonly seedTaken = output<void>();
+  readonly seedTaken = output();
   /** A proposal just drafted from Insights or the Journal (plan phase 31): shown first. */
   readonly proposal = input<string | null>(null);
 
@@ -237,7 +243,9 @@ export class AssistantFaqComponent implements OnInit {
 
   protected offerFor(locale: Locale): DraftOffer | null {
     const offer = this.offers()[locale];
-    if (!offer) return null;
+    if (!offer) {
+      return null;
+    }
     return !offer.tracked || this.ledger.waits(`faq:${locale}`) ? offer.value : null;
   }
   private gone = false;
@@ -245,7 +253,9 @@ export class AssistantFaqComponent implements OnInit {
   constructor() {
     effect(() => {
       const question = this.seed();
-      if (!question) return;
+      if (!question) {
+        return;
+      }
       untracked(() => {
         this.replaceForm(emptyForm(question));
         this.seedTaken.emit();
@@ -256,7 +266,9 @@ export class AssistantFaqComponent implements OnInit {
     const since = this.drafts.drafted()?.n ?? 0;
     effect(() => {
       const drafted = this.drafts.drafted();
-      if (drafted && drafted.n > since) untracked(() => void this.load());
+      if (drafted && drafted.n > since) {
+        untracked(() => void this.load());
+      }
     });
     // Leaving with the form open: a drafted answer not saved was not kept.
     inject(DestroyRef).onDestroy(() => {
@@ -297,20 +309,31 @@ export class AssistantFaqComponent implements OnInit {
     const [result, proposals] = await Promise.all([this.api.listFaq(), this.api.faqProposals()]);
     this.loading.set(false);
     this.loadError.set(result.ok ? null : result.error);
-    if (result.ok) this.entries.set(result.data.faq);
-    if (result.ok && !this.reopened) void this.reopen();
+    if (result.ok) {
+      this.entries.set(result.data.faq);
+    }
+    if (result.ok && !this.reopened) {
+      void this.reopen();
+    }
     // An API without the pipeline answers 404: there is nothing to propose.
-    if (proposals.ok) this.proposals.set(proposals.data.proposals);
+    if (proposals.ok) {
+      this.proposals.set(proposals.data.proposals);
+    }
   }
 
   /** A copy kept in this browser: its form opens again, and the copy comes back over it. */
   private async reopen(): Promise<void> {
     this.reopened = true;
     const [item] = await this.recovery.items("faq");
-    if (!item || this.form()) return;
+    if (!item || this.form()) {
+      return;
+    }
     const entry = this.entries().find((e) => e.id === item);
-    if (entry) this.edit(entry);
-    else if (item === "new") this.startNew();
+    if (entry) {
+      this.edit(entry);
+    } else if (item === "new") {
+      this.startNew();
+    }
   }
 
   protected langs(entry: FaqEntry): string {
@@ -351,7 +374,9 @@ export class AssistantFaqComponent implements OnInit {
 
   protected async draftAnswer(locale: Locale): Promise<void> {
     const question = this.form()?.text[locale].question.trim();
-    if (!question) return;
+    if (!question) {
+      return;
+    }
     this.drafting.set(true);
     const serial = this.formSerial;
     const result = await this.api.copilot({ task: "faq-answer", question, locale });
@@ -384,7 +409,9 @@ export class AssistantFaqComponent implements OnInit {
 
   protected async save(): Promise<void> {
     const f = this.form();
-    if (!f) return;
+    if (!f) {
+      return;
+    }
     const translations: FaqInput["translations"] = {};
     for (const locale of LOCALES) {
       const t = f.text[locale];
@@ -401,8 +428,10 @@ export class AssistantFaqComponent implements OnInit {
     const ended = this.ledger.beginSave(
       Object.fromEntries(LOCALES.map((l) => [`faq:${l}`, translations[l]?.answer ?? ""])),
     );
-    const input: FaqInput = { isVisible: f.isVisible, translations };
-    const result = f.id ? await this.api.updateFaq(f.id, input) : await this.api.createFaq(input);
+    const payload: FaqInput = { isVisible: f.isVisible, translations };
+    const result = f.id
+      ? await this.api.updateFaq(f.id, payload)
+      : await this.api.createFaq(payload);
     this.saving.set(false);
     ended(result.ok);
     if (!result.ok) {
@@ -422,7 +451,7 @@ export class AssistantFaqComponent implements OnInit {
   protected async move(index: number, by: -1 | 1): Promise<void> {
     const list = [...this.entries()];
     const [item] = list.splice(index, 1);
-    list.splice(index + by, 0, item!);
+    list.splice(index + by, 0, item);
     this.entries.set(list);
     const result = await this.api.reorderFaq(list.map((e) => e.id));
     if (!result.ok) {
@@ -438,7 +467,9 @@ export class AssistantFaqComponent implements OnInit {
       confirmLabel: "Delete entry",
       destructive: true,
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
     const result = await this.api.deleteFaq(entry.id);
     if (!result.ok) {
       toast.error("Not deleted", { description: result.error });

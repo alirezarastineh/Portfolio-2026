@@ -34,19 +34,20 @@ function shown(path: string): boolean {
 
 /** The same diff as the publish review's count, so the trace and Publish's number agree. */
 export function draftMarks(review: PublishReview, asked: number): DraftMarks {
+  const docs: Record<Locale, readonly DocChange[]> = { en: [], de: [] };
   const marks: DraftMarks = {
     paths: { en: [], de: [] },
     live: { en: null, de: null },
     asked,
-    docs: { en: [], de: [] },
+    docs,
   };
   for (const side of review.locales) {
     marks.live[side.locale] = side.live;
-    marks.docs![side.locale] = side.docs ?? [];
+    docs[side.locale] = side.docs ?? [];
     if (side.draft) {
       marks.paths[side.locale] = contentDiff(side.live, side.draft)
         .map((e) => e.path)
-        .filter(shown);
+        .filter((path) => shown(path));
     }
   }
   return marks;
@@ -58,10 +59,11 @@ export function draftMarks(review: PublishReview, asked: number): DraftMarks {
  * one below it.
  */
 export function inDraft(marks: DraftMarks | null, path: string, locale?: Locale): boolean {
-  if (!marks) return false;
-  const under = (p: string) => p === path || p.startsWith(`${path}.`) || p.startsWith(`${path}[`);
+  if (!marks) {
+    return false;
+  }
   return (locale ? [marks.paths[locale]] : [marks.paths.en, marks.paths.de]).some((paths) =>
-    paths.some(under),
+    paths.some((p) => p === path || p.startsWith(`${path}.`) || p.startsWith(`${path}[`)),
   );
 }
 
@@ -77,19 +79,25 @@ export function traceOf(
   savedAt = 0,
   locale?: Locale,
 ): TraceState {
-  if (unsaved) return "unsaved";
+  if (unsaved) {
+    return "unsaved";
+  }
   return inDraft(marks, path, locale) || savedAt > (marks?.asked ?? 0) ? "draft" : "live";
 }
 
 /** A field's state from what the editor knows: unsaved first, then in the draft, else live. */
 export function stateOf(unsaved: boolean, draft: boolean): TraceState {
-  if (unsaved) return "unsaved";
+  if (unsaved) {
+    return "unsaved";
+  }
   return draft ? "draft" : "live";
 }
 
 /** A section's or a page's mark: unsaved if any field is, else in the draft if any is. */
 export function rollUp(states: readonly TraceState[]): "unsaved" | "draft" | undefined {
-  if (states.includes("unsaved")) return "unsaved";
+  if (states.includes("unsaved")) {
+    return "unsaved";
+  }
   return states.includes("draft") ? "draft" : undefined;
 }
 
@@ -110,7 +118,11 @@ export function languageNote(
   de: string,
   live: Record<Locale, string> | null,
 ): LanguageNote | null {
-  if (!hasText(en)) return null;
-  if (!hasText(de)) return "Missing in German";
+  if (!hasText(en)) {
+    return null;
+  }
+  if (!hasText(de)) {
+    return "Missing in German";
+  }
   return live && en !== live.en && de === live.de ? "English changed, German not" : null;
 }

@@ -32,7 +32,7 @@ async function asset(kind: "image" | "document" = "image"): Promise<string> {
       checksumSha256: Buffer.alloc(32, assetCounter),
     })
     .returning({ id: mediaAssets.id });
-  return row!.id;
+  return row.id;
 }
 
 function translation(name: string) {
@@ -97,12 +97,19 @@ async function getProject(id: string): Promise<FullProject> {
   return ((await res.json()) as { project: FullProject }).project;
 }
 
+function compareStrings(a: string, b: string): number {
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+}
+
 describe("projects", () => {
   it("creates a project with both translations", async () => {
     const id = await createProject("alpha");
     const [project] = await listProjects();
     expect(project?.id).toBe(id);
-    expect(Object.keys(project!.translations).sort()).toEqual(["de", "en"]);
+    expect(Object.keys(project.translations).sort(compareStrings)).toEqual(["de", "en"]);
   });
 
   it("lists names only and serves the full project by id", async () => {
@@ -113,10 +120,10 @@ describe("projects", () => {
       },
     });
     const [listed] = await listProjects();
-    expect(listed!.translations["en"]).toEqual({ name: "EN", hasCaseStudy: true });
+    expect(listed.translations["en"]).toEqual({ name: "EN", hasCaseStudy: true });
 
     const full = await getProject(id);
-    expect(full.translations["en"]!.body).toBe("<h2>Why</h2><p>long read</p>");
+    expect(full.translations["en"].body).toBe("<h2>Why</h2><p>long read</p>");
   });
 
   it("refuses a duplicate slug", async () => {
@@ -138,8 +145,8 @@ describe("projects", () => {
       },
     });
     const full = await getProject(id);
-    expect(full.translations["en"]!.problem).toBe("<p>ok</p>");
-    expect(full.translations["en"]!.body).toBe('<p>x</p><img src="/media/a.png" />');
+    expect(full.translations["en"].problem).toBe("<p>ok</p>");
+    expect(full.translations["en"].body).toBe('<p>x</p><img src="/media/a.png" />');
   });
 
   it("stores the cover, period, category and gallery", async () => {
@@ -165,14 +172,13 @@ describe("projects", () => {
       category: "ai-platform",
     });
     expect(full.coverPath).toMatch(/^\/media\/.+\.png$/);
-    expect(full.gallery).toEqual([
-      {
-        mediaId: shot,
-        caption: { en: "Dashboard", de: "Übersicht" },
-        path: expect.stringMatching(/^\/media\//),
-      },
-    ]);
-    expect(full.translations["en"]!.metrics).toEqual([{ value: "40%", label: "less latency" }]);
+    expect(full.gallery).toHaveLength(1);
+    expect(full.gallery[0]).toMatchObject({
+      mediaId: shot,
+      caption: { en: "Dashboard", de: "Übersicht" },
+    });
+    expect(full.gallery[0]?.path).toMatch(/^\/media\//);
+    expect(full.translations["en"].metrics).toEqual([{ value: "40%", label: "less latency" }]);
   });
 
   it("refuses a PDF as a cover, and a period that ends before it starts", async () => {
@@ -192,7 +198,8 @@ describe("projects", () => {
     const id = await createProject("alpha");
     const res = await client.patch(`/admin/projects/${id}/visibility`, { isVisible: false });
     expect(res.status).toBe(200);
-    expect((await listProjects())[0]!.isVisible).toBe(false);
+    const listed = await listProjects();
+    expect(listed[0].isVisible).toBe(false);
   });
 
   it("reorders by the given id list", async () => {
@@ -202,7 +209,8 @@ describe("projects", () => {
 
     const res = await client.patch("/admin/projects/reorder", { ids: [c, a, b] });
     expect(res.status).toBe(200);
-    expect((await listProjects()).map((p) => p.slug)).toEqual(["gamma", "alpha", "beta"]);
+    const listed = await listProjects();
+    expect(listed.map((p) => p.slug)).toEqual(["gamma", "alpha", "beta"]);
   });
 
   it("rejects a reorder that names an unknown project or one twice", async () => {
@@ -220,9 +228,8 @@ describe("projects", () => {
   it("answers 404 for a well-formed id that does not exist", async () => {
     const res = await client.delete("/admin/projects/00000000-0000-4000-8000-000000000000");
     expect(res.status).toBe(404);
-    expect((await client.get("/admin/projects/00000000-0000-4000-8000-000000000000")).status).toBe(
-      404,
-    );
+    const getRes = await client.get("/admin/projects/00000000-0000-4000-8000-000000000000");
+    expect(getRes.status).toBe(404);
   });
 
   /** Used to reach Postgres as an invalid uuid and come back as a bare 500. */
@@ -231,7 +238,8 @@ describe("projects", () => {
     expect(del.status).toBe(400);
     expect(await del.json()).toEqual({ error: "invalid_id" });
 
-    expect((await client.get("/admin/projects/not-a-uuid")).status).toBe(400);
+    const getRes = await client.get("/admin/projects/not-a-uuid");
+    expect(getRes.status).toBe(400);
     const reorder = await client.patch("/admin/projects/reorder", { ids: ["not-a-uuid"] });
     expect(reorder.status).toBe(400);
   });
@@ -264,7 +272,8 @@ describe("skills and socials", () => {
         de: { title: "Kern", caption: "", narrative: "" },
       },
     };
-    expect((await client.post("/admin/skills", skill)).status).toBe(201);
+    const first = await client.post("/admin/skills", skill);
+    expect(first.status).toBe(201);
     const again = await client.post("/admin/skills", skill);
     expect(again.status).toBe(409);
     expect(await again.json()).toEqual({ error: "duplicate_id" });
@@ -290,24 +299,23 @@ describe("experiences", () => {
     const first = await client.post("/admin/experiences", experienceBody("Acme"));
     expect(first.status).toBe(201);
     const a = ((await first.json()) as { id: string }).id;
-    const b = (
-      (await (await client.post("/admin/experiences", experienceBody("Globex"))).json()) as {
-        id: string;
-      }
-    ).id;
+    const second = await client.post("/admin/experiences", experienceBody("Globex"));
+    const b = ((await second.json()) as { id: string }).id;
 
-    const list = async () =>
-      (
-        (await (await client.get("/admin/experiences")).json()) as {
-          experiences: {
-            id: string;
-            orgName: string;
-            translations: Record<string, { title: string }>;
-          }[];
-        }
-      ).experiences;
-    expect((await list()).map((e) => e.orgName)).toEqual(["Acme", "Globex"]);
-    expect((await list())[0]!.translations["de"]!.title).toBe("Ingenieur");
+    const list = async () => {
+      const res = await client.get("/admin/experiences");
+      const body = (await res.json()) as {
+        experiences: {
+          id: string;
+          orgName: string;
+          translations: Record<string, { title: string }>;
+        }[];
+      };
+      return body.experiences;
+    };
+    const listed = await list();
+    expect(listed.map((e) => e.orgName)).toEqual(["Acme", "Globex"]);
+    expect(listed[0].translations["de"].title).toBe("Ingenieur");
 
     const put = await client.put(
       `/admin/experiences/${a}`,
@@ -315,30 +323,31 @@ describe("experiences", () => {
     );
     expect(put.status).toBe(200);
 
-    expect((await client.patch("/admin/experiences/reorder", { ids: [b, a] })).status).toBe(200);
-    expect((await list()).map((e) => e.orgName)).toEqual(["Globex", "Acme Corp"]);
+    const reorder = await client.patch("/admin/experiences/reorder", { ids: [b, a] });
+    expect(reorder.status).toBe(200);
+    const reordered = await list();
+    expect(reordered.map((e) => e.orgName)).toEqual(["Globex", "Acme Corp"]);
 
-    expect((await client.delete(`/admin/experiences/${b}`)).status).toBe(200);
-    expect((await list()).map((e) => e.orgName)).toEqual(["Acme Corp"]);
+    const del = await client.delete(`/admin/experiences/${b}`);
+    expect(del.status).toBe(200);
+    const remaining = await list();
+    expect(remaining.map((e) => e.orgName)).toEqual(["Acme Corp"]);
   });
 
   it("validates the period, the employment type and the logo", async () => {
-    expect(
-      (
-        await client.post(
-          "/admin/experiences",
-          experienceBody("A", { startDate: "2024-01-01", endDate: "2023-01-01" }),
-        )
-      ).status,
-    ).toBe(400);
-    expect(
-      (await client.post("/admin/experiences", experienceBody("A", { employmentType: "slavery" })))
-        .status,
-    ).toBe(400);
+    const badDates = await client.post(
+      "/admin/experiences",
+      experienceBody("A", { startDate: "2024-01-01", endDate: "2023-01-01" }),
+    );
+    expect(badDates.status).toBe(400);
+    const badEmployment = await client.post(
+      "/admin/experiences",
+      experienceBody("A", { employmentType: "slavery" }),
+    );
+    expect(badEmployment.status).toBe(400);
     const pdf = await asset("document");
-    expect(
-      (await client.post("/admin/experiences", experienceBody("A", { logoId: pdf }))).status,
-    ).toBe(400);
+    const badLogo = await client.post("/admin/experiences", experienceBody("A", { logoId: pdf }));
+    expect(badLogo.status).toBe(400);
   });
 });
 
@@ -368,30 +377,34 @@ describe("posts", () => {
     expect(created.status).toBe(201);
     const id = ((await created.json()) as { id: string }).id;
 
-    const get = async () =>
-      (
-        (await (await client.get(`/admin/posts/${id}`)).json()) as {
-          post: { translations: { en: { title: string } | null; de: { title: string } | null } };
-        }
-      ).post;
-    expect((await get()).translations.de?.title).toBe("Hallo");
+    const get = async () => {
+      const res = await client.get(`/admin/posts/${id}`);
+      const body = (await res.json()) as {
+        post: { translations: { en: { title: string } | null; de: { title: string } | null } };
+      };
+      return body.post;
+    };
+    const initial = await get();
+    expect(initial.translations.de?.title).toBe("Hallo");
 
     await client.put(`/admin/posts/${id}`, postBody("hello"));
-    expect((await get()).translations.de).toBeNull();
+    const updated = await get();
+    expect(updated.translations.de).toBeNull();
   });
 
   it("requires a publish date for a published post, and one language at least", async () => {
-    expect((await client.post("/admin/posts", postBody("a", { status: "published" }))).status).toBe(
-      400,
+    const missingDate = await client.post("/admin/posts", postBody("a", { status: "published" }));
+    expect(missingDate.status).toBe(400);
+    const noLang = await client.post(
+      "/admin/posts",
+      postBody("b", { translations: { en: null, de: null } }),
     );
-    expect(
-      (await client.post("/admin/posts", postBody("b", { translations: { en: null, de: null } })))
-        .status,
-    ).toBe(400);
+    expect(noLang.status).toBe(400);
   });
 
   it("refuses a duplicate slug", async () => {
-    expect((await client.post("/admin/posts", postBody("same"))).status).toBe(201);
+    const first = await client.post("/admin/posts", postBody("same"));
+    expect(first.status).toBe(201);
     const again = await client.post("/admin/posts", postBody("same"));
     expect(again.status).toBe(409);
     expect(await again.json()).toEqual({ error: "duplicate_slug" });
@@ -414,16 +427,22 @@ describe("profile and CVs", () => {
     const pdf = await asset("document");
     const image = await asset("image");
 
-    expect((await client.put("/admin/resumes/en", { mediaId: image })).status).toBe(400);
-    expect((await client.put("/admin/resumes/en", { mediaId: pdf })).status).toBe(200);
-    expect((await client.put("/admin/resumes/fr", { mediaId: pdf })).status).toBe(400);
+    const badMime = await client.put("/admin/resumes/en", { mediaId: image });
+    expect(badMime.status).toBe(400);
+    const ok = await client.put("/admin/resumes/en", { mediaId: pdf });
+    expect(ok.status).toBe(200);
+    const badLocale = await client.put("/admin/resumes/fr", { mediaId: pdf });
+    expect(badLocale.status).toBe(400);
 
-    const { resumes } = (await (await client.get("/admin/resumes")).json()) as {
+    const listRes = await client.get("/admin/resumes");
+    const { resumes } = (await listRes.json()) as {
       resumes: Record<string, { mediaId: string; path: string } | null>;
     };
-    expect(resumes["en"]).toMatchObject({ mediaId: pdf, path: expect.stringMatching(/\.pdf$/) });
+    expect(resumes["en"]).toMatchObject({ mediaId: pdf });
+    expect(resumes["en"]?.path).toMatch(/\.pdf$/);
     expect(resumes["de"]).toBeNull();
 
-    expect((await client.delete("/admin/resumes/en")).status).toBe(200);
+    const del = await client.delete("/admin/resumes/en");
+    expect(del.status).toBe(200);
   });
 });

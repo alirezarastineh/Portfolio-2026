@@ -43,7 +43,9 @@ export class SessionDialogComponent {
    */
   protected reopenWhileLost(dialog: HlmDialog): void {
     queueMicrotask(() => {
-      if (this.session.lost()) dialog.open();
+      if (this.session.lost()) {
+        dialog.open();
+      }
     });
   }
 }

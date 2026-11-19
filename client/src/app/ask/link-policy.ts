@@ -29,7 +29,9 @@ export function linkPolicyFor(
   // A path is checked against the site's address, or a stand-in while none is set.
   const home = originOf(site, "https://site.invalid") ?? "https://site.invalid";
   return (href) => {
-    if (known.has(href)) return "external";
+    if (known.has(href)) {
+      return "external";
+    }
     const page = href.startsWith("/") || (site !== "" && href.startsWith(`${site}/`));
     return page && originOf(href, home) === home ? "internal" : null;
   };

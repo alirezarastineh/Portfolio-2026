@@ -7,7 +7,9 @@
  */
 export function sentenceCase(label: string, locale: string): string {
   const word = label.trim();
-  if (!/^\p{Lu}{4,}$/u.test(word)) return label;
+  if (!/^\p{Lu}{4,}$/u.test(word)) {
+    return label;
+  }
   const lower = word.toLocaleLowerCase(locale);
   return lower.charAt(0).toLocaleUpperCase(locale) + lower.slice(1);
 }

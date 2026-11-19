@@ -5,6 +5,14 @@ import { describe, expect, it } from "vitest";
 import { LanguageService } from "../services/language.service";
 import { MatchBoxComponent } from "./match-box.component";
 
+function query<T extends Element = Element>(root: ParentNode, selector: string): T {
+  const found = root.querySelector<T>(selector);
+  if (!found) {
+    throw new Error(`Missing element: ${selector}`);
+  }
+  return found;
+}
+
 /** The brief's paste box (visitor plan V20): its label, counter and keys, and nothing sent unasked. */
 function mount(lang: "en" | "de" = "en", page = false) {
   TestBed.resetTestingModule();
@@ -20,7 +28,7 @@ function mount(lang: "en" | "de" = "en", page = false) {
   fixture.componentInstance.dismissed.subscribe(() => dismissed++);
   fixture.detectChanges();
   const el = fixture.nativeElement as HTMLElement;
-  const box = el.querySelector("textarea")!;
+  const box = query<HTMLTextAreaElement>(el, "textarea");
   const type = (text: string) => {
     box.value = text;
     box.dispatchEvent(new Event("input"));
@@ -37,7 +45,7 @@ function mount(lang: "en" | "de" = "en", page = false) {
 describe("the brief's paste box (visitor plan V20)", () => {
   it("names the kind's box, tells where the text goes, and counts it to 4,000", () => {
     const { el, box, type } = mount();
-    const label = el.querySelector("label")!;
+    const label = query<HTMLLabelElement>(el, "label");
     expect(label.textContent?.trim()).toBe("Describe your project");
     expect(label.htmlFor).toBe(box.id);
     expect(box.getAttribute("maxlength")).toBe("4000");
@@ -54,7 +62,7 @@ describe("the brief's paste box (visitor plan V20)", () => {
 
   it("sends the brief trimmed on its button or Ctrl+Enter, never an empty one", () => {
     const { el, type, key, sent } = mount();
-    const send = el.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    const send = query<HTMLButtonElement>(el, 'button[type="submit"]');
     expect(send.disabled).toBe(true);
     type("   ");
     expect(send.disabled).toBe(true);
@@ -75,13 +83,13 @@ describe("the brief's paste box (visitor plan V20)", () => {
     el.parentElement?.addEventListener("keydown", () => (reached = true));
     expect(key({ key: "Escape" }).defaultPrevented).toBe(true);
     expect(reached).toBe(false);
-    el.querySelector<HTMLButtonElement>('button[type="button"]')!.click();
+    query<HTMLButtonElement>(el, 'button[type="button"]').click();
     expect(dismissed()).toBe(2);
   });
 
   it("on the match page is the site's field, and shows a brief being checked", () => {
     const { fixture, el, type } = mount("en", true);
-    const send = el.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    const send = query<HTMLButtonElement>(el, 'button[type="submit"]');
     expect(el.querySelector("textarea")?.classList.contains("field")).toBe(true);
     expect(send.classList.contains("btn-solid")).toBe(true);
     type("A data platform");

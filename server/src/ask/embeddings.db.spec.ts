@@ -60,11 +60,12 @@ beforeEach(async () => {
   model = new MockEmbeddingModelV4({
     modelId: "gemini-embedding-2",
     maxEmbeddingsPerCall: 100,
-    doEmbed: async ({ values }) => ({
-      embeddings: values.map((v) => [v.length, 1, /mlops/i.test(v) ? 1 : 0]),
-      usage: { tokens: 10 * values.length },
-      warnings: [],
-    }),
+    doEmbed: ({ values }) =>
+      Promise.resolve({
+        embeddings: values.map((v) => [v.length, 1, /mlops/i.test(v) ? 1 : 0]),
+        usage: { tokens: 10 * values.length },
+        warnings: [],
+      }),
   });
   // The real fence and the real usage record; only the model is scripted.
   setEmbeddingDeps({ model: () => model });
@@ -112,7 +113,7 @@ describe("search vectors (plan phase 18)", () => {
     expect(stored).toHaveLength(2);
     expect(stored[0]).toMatchObject({ model: "gemini-embedding-2", dims: 3 });
     // Stored at unit length.
-    const v = stored[0]!.vector;
+    const v = stored[0].vector;
     expect(Math.hypot(...v)).toBeCloseTo(1);
     const [usage] = await getDb()
       .select()
@@ -126,7 +127,7 @@ describe("search vectors (plan phase 18)", () => {
     expect(model.doEmbedCalls).toHaveLength(calls);
     await backfillEmbeddings(corpusOf([...DOCS, doc("post:c@en", "A new post.")]), config);
     expect(model.doEmbedCalls).toHaveLength(calls + 1);
-    expect(model.doEmbedCalls.at(-1)!.values).toEqual(["A new post."]);
+    expect(model.doEmbedCalls.at(-1)?.values).toEqual(["A new post."]);
     expect(await rows()).toHaveLength(3);
   });
 
@@ -148,7 +149,7 @@ describe("search vectors (plan phase 18)", () => {
     const old = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
     const corpus = corpusOf(DOCS);
     // A chunk of the live corpus, embedded long ago: still in use, so kept.
-    const inUse = corpus.search.chunks[0]!.hash;
+    const inUse = corpus.search.chunks[0].hash;
     const vector = { model: "gemini-embedding-2", dims: 3, vector: [1, 0, 0] };
     await getDb()
       .insert(aiEmbeddings)
@@ -159,7 +160,8 @@ describe("search vectors (plan phase 18)", () => {
         { ...vector, model: "another", contentHash: "old-other-model", createdAt: old },
       ]);
     await backfillEmbeddings(corpus, config);
-    const hashes = (await rows()).map((r) => r.contentHash);
+    const storedRows = await rows();
+    const hashes = storedRows.map((r) => r.contentHash);
     // The other chunk got its vector; the old one in use was not embedded again.
     expect(hashes).toHaveLength(4);
     expect(hashes.filter((h) => h === inUse)).toHaveLength(1);
@@ -176,7 +178,8 @@ describe("search vectors (plan phase 18)", () => {
         reading: "en",
         spend: { record: false },
       });
-    expect((await search()).semantic).toBe(true);
+    const before = await search();
+    expect(before.semantic).toBe(true);
     const embedded = model.doEmbedCalls.length;
 
     // What the Settings save does: the row, then the settings cache, and nothing else.
@@ -185,7 +188,8 @@ describe("search vectors (plan phase 18)", () => {
       .set({ featureSwitches: { embeddings: false } })
       .where(eq(aiSettings.id, 1));
     invalidateAssistantCache();
-    expect((await search()).semantic).toBe(false);
+    const after = await search();
+    expect(after.semantic).toBe(false);
     expect(model.doEmbedCalls).toHaveLength(embedded);
   });
 

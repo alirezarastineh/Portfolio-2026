@@ -20,15 +20,22 @@ const dryRun = process.argv.includes("--dry-run");
 try {
   const { processed, missing, failed } = await reprocessMedia({ dryRun });
 
-  for (const name of processed)
+  for (const name of processed) {
     console.log(`[media] ${dryRun ? "would process" : "processed"} ${name}`);
-  for (const name of missing) console.warn(`[media] file missing on disk: ${name}`);
-  for (const { filename, error } of failed) console.error(`[media] failed ${filename}: ${error}`);
+  }
+  for (const name of missing) {
+    console.warn(`[media] file missing on disk: ${name}`);
+  }
+  for (const { filename, error } of failed) {
+    console.error(`[media] failed ${filename}: ${error}`);
+  }
 
   console.log(
     `[media] ${processed.length} ${dryRun ? "to process" : "processed"}, ${missing.length} missing, ${failed.length} failed`,
   );
-  if (failed.length > 0) process.exitCode = 1;
+  if (failed.length > 0) {
+    process.exitCode = 1;
+  }
 } catch (error) {
   console.error("[media] reprocess failed", error);
   process.exitCode = 1;

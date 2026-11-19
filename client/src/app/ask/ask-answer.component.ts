@@ -774,7 +774,7 @@ export class AskAnswerComponent {
   readonly latest = input(false);
 
   readonly ask = output<string>();
-  readonly retry = output<void>();
+  readonly retry = output();
   /** `inspect` for this answer, by its message id (visitor plan V12). */
   readonly inspect = output<string>();
 
@@ -836,7 +836,9 @@ export class AskAnswerComponent {
    */
   protected readonly sharedQuestion = computed(() => {
     const entry = this.entry();
-    if (entry.tour) return null;
+    if (entry.tour) {
+      return null;
+    }
     const parsed = parseInput(entry.input);
     return parsed.kind === "ask" ? parsed.text : null;
   });
@@ -844,7 +846,9 @@ export class AskAnswerComponent {
   /** A tour's stops (visitor plan V16): the server's checked plan, or the short tour made here. */
   protected readonly tourStops = computed(() => {
     const data = tourData(this.message());
-    if (!data) return [];
+    if (!data) {
+      return [];
+    }
     return data.kind === "plan" ? data.stops : defaultTour(this.lang.content(), this.lang.lang());
   });
 
@@ -858,15 +862,18 @@ export class AskAnswerComponent {
   /** The server moved past a busy model, until this answer's first words (visitor plan V12). */
   protected readonly failover = computed(() => {
     const status = this.store.failover();
-    if (!status || !this.live() || status.entryId !== this.entry().id || this.text()) return null;
+    if (!status || !this.live() || status.entryId !== this.entry().id || this.text()) {
+      return null;
+    }
     return failoverLine(status, this.copy().failover);
   });
 
   /** The step a match is on (visitor plan V20), until its rows come. */
   protected readonly matchProgress = computed(() => {
     const progress = this.store.matchStep();
-    if (!progress || !this.live() || progress.entryId !== this.entry().id || this.text())
+    if (!progress || !this.live() || progress.entryId !== this.entry().id || this.text()) {
       return null;
+    }
     return stepLine(progress.step, this.copy().match.steps);
   });
 
@@ -896,7 +903,9 @@ export class AskAnswerComponent {
     const copy = this.copy().trace;
     const content = this.lang.content();
     return (this.message()?.parts ?? []).flatMap((part) => {
-      if (!isToolUIPart(part)) return [];
+      if (!isToolUIPart(part)) {
+        return [];
+      }
       const name = part.type.slice("tool-".length);
       const text = toolStep(name, (part.input ?? {}) as Record<string, unknown>, copy, content);
       const pending = part.state === "input-streaming" || part.state === "input-available";
@@ -919,7 +928,9 @@ export class AskAnswerComponent {
   /** The trace's last line, once the answer stands: the server's own time for it. */
   protected readonly answeredIn = computed(() => {
     const ms = this.message()?.metadata?.totalMs;
-    if (!this.done() || typeof ms !== "number") return null;
+    if (!this.done() || typeof ms !== "number") {
+      return null;
+    }
     return fmt(this.copy().trace.answered, { time: duration(ms, this.lang.lang()) });
   });
 
@@ -937,8 +948,9 @@ export class AskAnswerComponent {
     for (const part of this.message()?.parts ?? []) {
       if (part.type === "tool-suggest_followups" && part.input) {
         const items = (part.input as { items?: unknown }).items;
-        if (Array.isArray(items))
+        if (Array.isArray(items)) {
           return items.filter((i): i is string => typeof i === "string").slice(0, 3);
+        }
       }
     }
     return [];
@@ -958,9 +970,15 @@ export class AskAnswerComponent {
   /** What can be asked again: a stopped answer, a failure, a rate limit once it is over. */
   protected readonly retryable = computed(() => {
     const failure = this.entry().failure;
-    if (!this.latest()) return false;
-    if (!failure) return this.interrupted();
-    if (failure === "rateLimited") return this.rateLeft() === 0;
+    if (!this.latest()) {
+      return false;
+    }
+    if (!failure) {
+      return this.interrupted();
+    }
+    if (failure === "rateLimited") {
+      return this.rateLeft() === 0;
+    }
     return !["resting", "off", "invalid", "tooLong"].includes(failure);
   });
 
@@ -968,7 +986,9 @@ export class AskAnswerComponent {
 
   protected readonly failureText = computed(() => {
     const entry = this.entry();
-    if (!entry.failure) return "";
+    if (!entry.failure) {
+      return "";
+    }
     if (entry.failure === "rateLimited") {
       const errors = this.copy().errors;
       const left = this.rateLeft();
@@ -979,12 +999,18 @@ export class AskAnswerComponent {
 
   protected readonly meta = computed(() => {
     const m = this.message()?.metadata;
-    if (!m?.model) return null;
+    if (!m?.model) {
+      return null;
+    }
     const copy = this.copy();
     const fallback = m.fallback ? ` (${copy.fallback})` : "";
-    if (!this.store.stats()) return m.fallback ? `${m.model}${fallback}` : null;
+    if (!this.store.stats()) {
+      return m.fallback ? `${m.model}${fallback}` : null;
+    }
     const parts = [`${m.model}${m.route === "deep" ? " · deep" : ""}${fallback}`];
-    if (typeof m.totalMs === "number") parts.push(`${(m.totalMs / 1000).toFixed(1)} s`);
+    if (typeof m.totalMs === "number") {
+      parts.push(`${(m.totalMs / 1000).toFixed(1)} s`);
+    }
     if (m.tokens && m.tokens.input > 0) {
       parts.push(fmt(copy.cached, { p: Math.round((m.tokens.cached / m.tokens.input) * 100) }));
     }
@@ -1029,7 +1055,7 @@ export class AskAnswerComponent {
   }
 
   protected noteId(id: string): string {
-    return `ask-note-${this.message()?.id ?? "x"}-${id.replace(/[^a-z0-9]/gi, "-")}`;
+    return `ask-note-${this.message()?.id ?? "x"}-${id.replaceAll(/[^a-z0-9]/gi, "-")}`;
   }
 
   protected footnoteHref(id: string): string {
@@ -1042,7 +1068,9 @@ export class AskAnswerComponent {
   }
 
   protected follow(event: MouseEvent, href: string, internal: boolean): void {
-    if (!internal || modified(event)) return;
+    if (!internal || modified(event)) {
+      return;
+    }
     event.preventDefault();
     this.launcher.closeIfSheet();
     void this.router.navigateByUrl(href.replace(/^https?:\/\/[^/]+/, ""));
@@ -1055,20 +1083,26 @@ export class AskAnswerComponent {
 
   /** Focus from the keyboard lights the chip up, as `:focus-visible` did; a click's does not. */
   protected focusCite(event: FocusEvent, n: number): void {
-    if ((event.target as HTMLElement).matches(":focus-visible")) this.lit.set(n);
+    if ((event.target as HTMLElement).matches(":focus-visible")) {
+      this.lit.set(n);
+    }
   }
 
   protected followSource(event: MouseEvent, url: string): void {
     // Followed, in this tab or another (visitor plan V2): a citation or its chip.
     this.note("citations");
-    if (modified(event) || !url.startsWith("/") || url.startsWith("/media/")) return;
+    if (modified(event) || !url.startsWith("/") || url.startsWith("/media/")) {
+      return;
+    }
     event.preventDefault();
     this.launcher.closeIfSheet();
     void this.router.navigateByUrl(url);
   }
 
   protected openMatchPage(event: MouseEvent, href: string): void {
-    if (modified(event)) return;
+    if (modified(event)) {
+      return;
+    }
     event.preventDefault();
     this.launcher.closeSheet();
     void this.router.navigateByUrl(href);
@@ -1076,7 +1110,9 @@ export class AskAnswerComponent {
 
   /** A tour's stop opened from its list: the visitor's own step, through the router (V16). */
   protected followStop(event: MouseEvent, url: string): void {
-    if (modified(event)) return;
+    if (modified(event)) {
+      return;
+    }
     event.preventDefault();
     void this.router.navigateByUrl(url);
   }
@@ -1087,10 +1123,14 @@ export class AskAnswerComponent {
    */
   protected async shareQuestion(): Promise<void> {
     const question = this.sharedQuestion();
-    if (!question) return;
+    if (!question) {
+      return;
+    }
     const result = await copyText(shareLink(this.doc.location.origin, this.router.url, question));
     this.shared.set(result);
-    if (result === "copied") track("ask_share");
+    if (result === "copied") {
+      track("ask_share");
+    }
     this.store.announce(result === "copied" ? this.copy().share.copied : this.copy().failed);
     setTimeout(() => this.shared.set(null), COPIED_MS);
   }
@@ -1103,25 +1143,33 @@ export class AskAnswerComponent {
 
   protected rate(value: 1 | -1): void {
     const id = this.message()?.id;
-    if (id && this.rating() !== value) void this.store.rate(id, value);
+    if (id && this.rating() !== value) {
+      void this.store.rate(id, value);
+    }
   }
 
   protected giveReason(reason: DownReason): void {
     const id = this.message()?.id;
-    if (id && this.downReason() !== reason) void this.store.rate(id, -1, reason);
+    if (id && this.downReason() !== reason) {
+      void this.store.rate(id, -1, reason);
+    }
   }
 
   protected async copyAnswer(): Promise<void> {
     const result = await copyText(plainText(this.text()));
     this.copied.set(result);
-    if (result === "copied") this.note("copies");
+    if (result === "copied") {
+      this.note("copies");
+    }
     setTimeout(() => this.copied.set(null), COPIED_MS);
   }
 
   /** What the visitor did with this answer, for the browser's signals (visitor plan V2). */
   private note(count: "followups" | "citations" | "copies"): void {
     const id = this.message()?.id;
-    if (id) this.store.note(id, count);
+    if (id) {
+      this.store.note(id, count);
+    }
   }
 }
 

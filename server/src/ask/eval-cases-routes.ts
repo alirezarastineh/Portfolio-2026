@@ -85,7 +85,9 @@ const freezeInput = z.object({
 evalCasesRouter.post("/", zValidator("json", freezeInput, invalid), async (c) => {
   const { messageId, question, turns, mustCite, mustInclude } = c.req.valid("json");
   const result = await freezeCase(messageId, { question, turns, mustCite, mustInclude });
-  if (!result.ok) return c.json({ error: result.error }, result.error === "not_found" ? 404 : 409);
+  if (!result.ok) {
+    return c.json({ error: result.error }, result.error === "not_found" ? 404 : 409);
+  }
   return c.json({ id: result.id }, 201);
 });
 
@@ -97,7 +99,9 @@ evalCasesRouter.get(
   ),
   async (c) => {
     const questions = await earlierQuestions(c.req.valid("param").messageId);
-    if (!questions) return c.json({ error: "not_found" }, 404);
+    if (!questions) {
+      return c.json({ error: "not_found" }, 404);
+    }
     return c.json({ questions });
   },
 );
@@ -112,7 +116,9 @@ evalCasesRouter.delete("/:id", idParam, async (c) => {
     .delete(aiEvalCases)
     .where(eq(aiEvalCases.id, c.req.valid("param").id))
     .returning({ id: aiEvalCases.id });
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
   return c.json({ ok: true });
 });
 
@@ -126,7 +132,9 @@ evalCasesRouter.patch(
       .set({ status: c.req.valid("json").status, updatedAt: new Date() })
       .where(eq(aiEvalCases.id, c.req.valid("param").id))
       .returning({ id: aiEvalCases.id });
-    if (!row) return c.json({ error: "not_found" }, 404);
+    if (!row) {
+      return c.json({ error: "not_found" }, 404);
+    }
     return c.json({ ok: true });
   },
 );

@@ -74,7 +74,9 @@ export class MediaTileComponent {
   protected readonly facts = computed(() => {
     const a = this.asset();
     let shape = a.kind === "document" ? "PDF" : "—";
-    if (a.width && a.height) shape = `${a.width}×${a.height}`;
+    if (a.width && a.height) {
+      shape = `${a.width}×${a.height}`;
+    }
     return `${shape} · ${formatBytes(a.byteSize)}`;
   });
 

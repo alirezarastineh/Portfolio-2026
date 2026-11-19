@@ -6,7 +6,13 @@ const READ = { suggestions: { en: ["One?"], de: [] }, state: "resting", scorecar
 const OK = { ...READ, model: "not for the page" };
 
 function respond(body: unknown, status = 200) {
-  return vi.fn(async () => new Response(JSON.stringify(body), { status }));
+  return vi.fn(() => Promise.resolve(new Response(JSON.stringify(body), { status })));
+}
+
+async function expectCachedAfterFailure(failing: () => Promise<Response>): Promise<void> {
+  vi.advanceTimersByTime(60_001);
+  vi.stubGlobal("fetch", failing);
+  expect(await getAskQuestions()).toEqual(READ);
 }
 
 describe("the admin's suggested questions on the server", () => {
@@ -35,15 +41,9 @@ describe("the admin's suggested questions on the server", () => {
   it("keeps the last good ones when the API fails or answers nonsense", async () => {
     vi.stubGlobal("fetch", respond(OK));
     await getAskQuestions();
-    for (const failing of [
-      respond({}, 500),
-      respond({ suggestions: "no" }),
-      vi.fn(() => Promise.reject(new Error("down"))),
-    ]) {
-      vi.advanceTimersByTime(60_001);
-      vi.stubGlobal("fetch", failing);
-      expect(await getAskQuestions()).toEqual(READ);
-    }
+    await expectCachedAfterFailure(respond({}, 500));
+    await expectCachedAfterFailure(respond({ suggestions: "no" }));
+    await expectCachedAfterFailure(vi.fn(() => Promise.reject(new Error("down"))));
   });
 
   it("has none to give without an API, or when it never answered", async () => {

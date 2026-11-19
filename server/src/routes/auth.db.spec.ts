@@ -76,18 +76,49 @@ describe("CSRF layers", () => {
   });
 });
 
+async function expectSequential401(steps: readonly (() => Promise<Response>)[]): Promise<void> {
+  await steps.reduce<Promise<void>>(
+    (chain, step) =>
+      chain.then(async () => {
+        const res = await step();
+        expect(res.status).toBe(401);
+      }),
+    Promise.resolve(),
+  );
+}
+
+/** How many of `n` copies of a request, sent at once, got past the limits. */
+async function passed(n: number, send: () => Promise<Response>): Promise<number> {
+  const responses = await Promise.all(Array.from({ length: n }, send));
+  return responses.filter((res) => res.status !== 429).length;
+}
+
+async function ageSession(sessionFilter: { pendingTotp: boolean }) {
+  const db = getDb();
+  const [row] = await db
+    .select({ id: adminSessions.id, idleExpiresAt: adminSessions.idleExpiresAt })
+    .from(adminSessions)
+    .where(eq(adminSessions.pendingTotp, sessionFilter.pendingTotp));
+  await db
+    .update(adminSessions)
+    .set({ lastSeenAt: new Date(Date.now() - 2 * 60 * 1000) })
+    .where(eq(adminSessions.id, row.id));
+  return row;
+}
+
 describe("login rate limiting", () => {
   it("locks an IP out of an account after 5 failures, but not the account itself", async () => {
     const attacker = new TestClient(app, "198.51.100.66");
-    for (let i = 0; i < 5; i++) {
-      expect((await attacker.login(ADMIN_EMAIL, "wrong password!")).status).toBe(401);
-    }
-    expect((await attacker.login()).status).toBe(429);
+    const attempt = () => attacker.login(ADMIN_EMAIL, "wrong password!");
+    await expectSequential401([attempt, attempt, attempt, attempt, attempt]);
+    const locked = await attacker.login();
+    expect(locked.status).toBe(429);
 
     // The real admin, elsewhere, still gets in: knowing the address is not
     // enough to lock the only operator out.
     const admin = new TestClient(app, "192.0.2.10");
-    expect((await admin.login()).status).toBe(200);
+    const ok = await admin.login();
+    expect(ok.status).toBe(200);
   });
 });
 
@@ -100,12 +131,14 @@ describe("TOTP", () => {
     const client = new TestClient(app);
     const login = await client.login();
     expect(await login.json()).toMatchObject({ totpRequired: true });
-    expect((await client.get("/auth/sessions")).status).toBe(401);
+    const unverified = await client.get("/auth/sessions");
+    expect(unverified.status).toBe(401);
 
     // The confirming code's step is already spent, so log in with the next one.
     const totp = await client.post("/auth/totp", { code: totpCode(otpauthUri, 1) });
     expect(totp.status).toBe(200);
-    expect((await client.get("/auth/sessions")).status).toBe(200);
+    const verified = await client.get("/auth/sessions");
+    expect(verified.status).toBe(200);
   });
 
   it("refuses to accept the same code twice", async () => {
@@ -116,7 +149,8 @@ describe("TOTP", () => {
 
     const first = new TestClient(app);
     await first.login();
-    expect((await first.post("/auth/totp", { code })).status).toBe(200);
+    const firstTotp = await first.post("/auth/totp", { code });
+    expect(firstTotp.status).toBe(200);
 
     const replay = new TestClient(app);
     await replay.login();
@@ -131,26 +165,30 @@ describe("TOTP", () => {
     const setup = await client.post("/auth/totp/setup", { password: ADMIN_PASSWORD });
     const { otpauthUri } = (await setup.json()) as { otpauthUri: string };
     const code = totpCode(otpauthUri);
-    expect((await client.post("/auth/totp/confirm", { code })).status).toBe(200);
+    const confirmRes = await client.post("/auth/totp/confirm", { code });
+    expect(confirmRes.status).toBe(200);
 
     const next = new TestClient(app);
     await next.login();
-    expect((await next.post("/auth/totp", { code })).status).toBe(401);
+    const nextTotp = await next.post("/auth/totp", { code });
+    expect(nextTotp.status).toBe(401);
   });
 
   it("accepts a recovery code typed without its hyphen, exactly once", async () => {
     const setupClient = new TestClient(app);
     await setupClient.login();
     const { recoveryCodes } = await enrolTotp(setupClient);
-    const typed = recoveryCodes[0]!.replace("-", "").toLowerCase();
+    const typed = recoveryCodes[0].replace("-", "").toLowerCase();
 
     const first = new TestClient(app);
     await first.login();
-    expect((await first.post("/auth/totp", { code: typed })).status).toBe(200);
+    const firstUse = await first.post("/auth/totp", { code: typed });
+    expect(firstUse.status).toBe(200);
 
     const again = new TestClient(app);
     await again.login();
-    expect((await again.post("/auth/totp", { code: typed })).status).toBe(401);
+    const secondUse = await again.post("/auth/totp", { code: typed });
+    expect(secondUse.status).toBe(401);
   });
 
   it("stores the secret encrypted when TOTP_ENC_KEY is set", async () => {
@@ -168,7 +206,8 @@ describe("TOTP", () => {
 
     const client = new TestClient(app);
     await client.login();
-    expect((await client.post("/auth/totp", { code: totpCode(otpauthUri, 1) })).status).toBe(200);
+    const totpRes = await client.post("/auth/totp", { code: totpCode(otpauthUri, 1) });
+    expect(totpRes.status).toBe(200);
   });
 
   it("needs a current code to replace an enrolled factor, and signs out other sessions", async () => {
@@ -179,7 +218,8 @@ describe("TOTP", () => {
     const other = new TestClient(app, "192.0.2.77");
     await other.login();
     await other.post("/auth/totp", { code: totpCode(otpauthUri, 1) });
-    expect((await other.get("/auth/sessions")).status).toBe(200);
+    const otherSessions = await other.get("/auth/sessions");
+    expect(otherSessions.status).toBe(200);
 
     // The password alone must not be enough to swap in a new authenticator.
     const withoutCode = await owner.post("/auth/totp/setup", { password: ADMIN_PASSWORD });
@@ -191,10 +231,13 @@ describe("TOTP", () => {
     });
     expect(setup.status).toBe(200);
     const { otpauthUri: nextUri } = (await setup.json()) as { otpauthUri: string };
-    expect((await owner.post("/auth/totp/confirm", { code: totpCode(nextUri) })).status).toBe(200);
+    const confirmNew = await owner.post("/auth/totp/confirm", { code: totpCode(nextUri) });
+    expect(confirmNew.status).toBe(200);
 
-    expect((await other.get("/auth/sessions")).status).toBe(401);
-    expect((await owner.get("/auth/sessions")).status).toBe(200);
+    const otherAfter = await other.get("/auth/sessions");
+    expect(otherAfter.status).toBe(401);
+    const ownerAfter = await owner.get("/auth/sessions");
+    expect(ownerAfter.status).toBe(200);
   });
 });
 
@@ -215,28 +258,24 @@ describe("password asked again", () => {
     expect(guesses).toHaveLength(REAUTH_LIMIT);
 
     // One short of the limit, then the right password clears the count, as a login does.
-    for (const guess of guesses.slice(1)) expect((await guess()).status).toBe(401);
-    expect((await client.post("/auth/totp/setup", { password: ADMIN_PASSWORD })).status).toBe(200);
-    for (const guess of guesses) expect((await guess()).status).toBe(401);
-    expect((await change(ADMIN_PASSWORD)).status).toBe(429);
+    await expectSequential401(guesses.slice(1));
+    const reauthOk = await client.post("/auth/totp/setup", { password: ADMIN_PASSWORD });
+    expect(reauthOk.status).toBe(200);
+    await expectSequential401(guesses);
+    const locked = await change(ADMIN_PASSWORD);
+    expect(locked.status).toBe(429);
   });
 });
 
 describe("parallel attempts", () => {
-  /** How many of `n` copies of a request, sent at once, got past the limits. */
-  async function passed(n: number, send: () => Promise<Response>): Promise<number> {
-    const responses = await Promise.all(Array.from({ length: n }, send));
-    return responses.filter((res) => res.status !== 429).length;
-  }
-
   it("pass no limit: each login, code or password asked again runs alone", async () => {
     const owner = new TestClient(app);
     await owner.login();
     const { otpauthUri } = await enrolTotp(owner);
     // Outside the codes valid now, even if a step boundary passes meanwhile.
-    const valid = [-1, 0, 1, 2].map((step) => totpCode(otpauthUri, step));
+    const valid = new Set([-1, 0, 1, 2].map((step) => totpCode(otpauthUri, step)));
     const wrongCode = ["000000", "111111", "222222", "333333", "444444"].find(
-      (code) => !valid.includes(code),
+      (code) => !valid.has(code),
     );
 
     const pending = new TestClient(app, "192.0.2.20");
@@ -259,19 +298,6 @@ describe("parallel attempts", () => {
 });
 
 describe("session cookie", () => {
-  async function ageSession(sessionFilter: { pendingTotp: boolean }) {
-    const db = getDb();
-    const [row] = await db
-      .select({ id: adminSessions.id, idleExpiresAt: adminSessions.idleExpiresAt })
-      .from(adminSessions)
-      .where(eq(adminSessions.pendingTotp, sessionFilter.pendingTotp));
-    await db
-      .update(adminSessions)
-      .set({ lastSeenAt: new Date(Date.now() - 2 * 60 * 1000) })
-      .where(eq(adminSessions.id, row!.id));
-    return row!;
-  }
-
   it("is re-issued when activity slides the idle window", async () => {
     const client = new TestClient(app);
     await client.login();
@@ -287,7 +313,7 @@ describe("session cookie", () => {
       .select({ idleExpiresAt: adminSessions.idleExpiresAt })
       .from(adminSessions)
       .where(eq(adminSessions.id, before.id));
-    expect(after!.idleExpiresAt.getTime()).toBeGreaterThan(before.idleExpiresAt.getTime());
+    expect(after.idleExpiresAt.getTime()).toBeGreaterThan(before.idleExpiresAt.getTime());
   });
 
   it("never slides a half-authenticated (pending TOTP) session", async () => {
@@ -307,6 +333,6 @@ describe("session cookie", () => {
       .select({ idleExpiresAt: adminSessions.idleExpiresAt })
       .from(adminSessions)
       .where(eq(adminSessions.id, before.id));
-    expect(after!.idleExpiresAt.getTime()).toBe(before.idleExpiresAt.getTime());
+    expect(after.idleExpiresAt.getTime()).toBe(before.idleExpiresAt.getTime());
   });
 });

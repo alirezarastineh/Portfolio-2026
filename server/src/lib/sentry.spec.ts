@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const sdk = vi.hoisted(() => ({
   init: vi.fn(),
   captureException: vi.fn(),
-  flush: vi.fn(async () => true),
+  flush: vi.fn(() => Promise.resolve(true)),
 }));
 vi.mock("@sentry/node", () => sdk);
 
@@ -38,7 +38,7 @@ describe("sentry", () => {
       }),
     );
     // SDK 11 collects everything unless told not to (it replaced `sendDefaultPii`).
-    expect(sdk.init.mock.calls[0]![0]).toMatchObject({
+    expect(sdk.init.mock.calls[0][0]).toMatchObject({
       dataCollection: {
         userInfo: false,
         cookies: false,
@@ -49,7 +49,7 @@ describe("sentry", () => {
         stackFrameVariables: false,
       },
     });
-    expect(sdk.init.mock.calls[0]![0]).not.toHaveProperty("tracesSampleRate");
+    expect(sdk.init.mock.calls[0][0]).not.toHaveProperty("tracesSampleRate");
   });
 
   it("reports captured errors with their tags once configured", async () => {

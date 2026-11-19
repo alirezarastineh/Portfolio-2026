@@ -21,7 +21,9 @@ function own<T>(record: Record<string, T>, key: string): T | undefined {
 
 /** Milliseconds under a second, seconds with one decimal above. */
 export function duration(ms: number, locale: Locale): string {
-  if (ms < 1000) return `${Math.round(ms)}\u00A0ms`;
+  if (ms < 1000) {
+    return `${Math.round(ms)}\u00A0ms`;
+  }
   const seconds = (ms / 1000).toLocaleString(locale === "de" ? "de-DE" : "en-GB", {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
@@ -31,7 +33,9 @@ export function duration(ms: number, locale: Locale): string {
 
 /** A count in its words. */
 export function counted(n: number, forms: Counted): string {
-  if (n === 0) return forms.none;
+  if (n === 0) {
+    return forms.none;
+  }
   return n === 1 ? forms.one : fmt(forms.many, { n });
 }
 
@@ -55,7 +59,9 @@ export function receiptAlways(receipt: AnswerReceipt | undefined): boolean {
 /** A match's clause (visitor plan V20): its rows, and those the check took back. */
 function matchClause(receipt: AnswerReceipt, copy: AskCopy["receipt"]): string {
   const match = receipt.match;
-  if (!match) return "";
+  if (!match) {
+    return "";
+  }
   const rows = counted(match.rows, copy.match.rows);
   return match.downgraded > 0
     ? `${rows}, ${counted(match.downgraded, copy.match.downgraded)}`
@@ -65,19 +71,29 @@ function matchClause(receipt: AnswerReceipt, copy: AskCopy["receipt"]): string {
 /** The case study's or post's name for a page's document id (`project:atlas@en`), if the site has it. */
 export function pageTitle(id: string, content: AppContent): string | null {
   const match = /^(project|post):([^@]+)@/.exec(id);
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
   const [, kind, slug] = match;
-  if (kind === "project") return content.projects.find((p) => p.slug === slug)?.name ?? null;
+  if (kind === "project") {
+    return content.projects.find((p) => p.slug === slug)?.name ?? null;
+  }
   return content.posts.find((p) => p.slug === slug)?.title ?? null;
 }
 
 /** What a lookup read: a page's title, an entry's organisation, else its kind in words. */
 function documentName(id: string, content: AppContent, docs: AskCopy["trace"]["docs"]): string {
   const page = pageTitle(id, content);
-  if (page) return page;
+  if (page) {
+    return page;
+  }
   const [, kind = "", key] = /^([a-z-]+)(?::([^@]+))?@/.exec(id) ?? [];
-  const org = kind === "experience" && content.experiences.find((e) => e.id === key)?.org.name;
-  return org || (own(docs, kind) ?? id);
+  const org =
+    kind === "experience" ? content.experiences.find((e) => e.id === key)?.org.name : undefined;
+  if (org) {
+    return org;
+  }
+  return own(docs, kind) ?? id;
 }
 
 /**
@@ -112,8 +128,12 @@ export function toolStep(
 /** Which model answered: the move to the thorough one and why, or the route it took. */
 function modelClause(meta: AnswerMetadata, copy: AskCopy["receipt"]): string {
   const why = meta.receipt?.escalation ? own(copy.escalation, meta.receipt.escalation) : undefined;
-  if (why) return fmt(copy.escalated, { why });
-  if (!meta.route) return "";
+  if (why) {
+    return fmt(copy.escalated, { why });
+  }
+  if (!meta.route) {
+    return "";
+  }
   return meta.route === "deep" ? copy.thorough : copy.fast;
 }
 
@@ -127,16 +147,26 @@ function focusClause(
   copy: AskCopy["receipt"],
   label: string | undefined,
 ): string {
-  if (!focus) return "";
-  if (!focus.verified) return own(copy.focusMissing, focus.kind) ?? "";
-  if (focus.kind === "selection") return copy.focus.selection;
+  if (!focus) {
+    return "";
+  }
+  if (!focus.verified) {
+    return own(copy.focusMissing, focus.kind) ?? "";
+  }
+  if (focus.kind === "selection") {
+    return copy.focus.selection;
+  }
   const said = own(copy.focus, focus.kind);
-  if (!said) return "";
+  if (!said) {
+    return "";
+  }
   return label ? fmt(said, { label }) : said.replace(/:? ?\{label\}/, "");
 }
 
 function repairClause(repair: AnswerReceipt["repair"], copy: AskCopy["receipt"]): string {
-  if (!repair) return "";
+  if (!repair) {
+    return "";
+  }
   return repair.by === "fixed-line" ? copy.repair.fixed : (own(copy.repair, repair.reason) ?? "");
 }
 
@@ -147,7 +177,9 @@ export function receiptClauses(
   context: { pageTitle?: string | null; about?: AskAbout } = {},
 ): string[] {
   const receipt = meta?.receipt;
-  if (!receipt) return [];
+  if (!receipt) {
+    return [];
+  }
   const level = receipt.level === "plain" || receipt.level === "expert" ? receipt.level : null;
   return [
     modelClause(meta, copy),

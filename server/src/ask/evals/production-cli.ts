@@ -29,7 +29,7 @@ export function productionJudging(
   return {
     judge,
     chain: (role) => (role === "judge" ? judges : buildChain(config, role)),
-    label: judge ? `judged by ${judges[0]!.id}` : "without a judge",
+    label: judge ? `judged by ${judges[0].id}` : "without a judge",
   };
 }
 

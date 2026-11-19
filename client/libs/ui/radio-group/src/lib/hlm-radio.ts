@@ -55,7 +55,7 @@ import type { ClassValue } from "clsx";
 export class HlmRadio<T = unknown> {
   private readonly _document = inject(DOCUMENT);
   private readonly _renderer = inject(Renderer2);
-  private readonly _elementRef = inject(ElementRef);
+  private readonly _elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly _isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly _radioGroup = inject(BrnRadioGroup, { optional: true });
 
@@ -117,13 +117,17 @@ export class HlmRadio<T = unknown> {
     effect(() => {
       const isDisabled = this.disabled();
 
-      if (!this._elementRef.nativeElement || !this._isBrowser) return;
+      if (!this._elementRef.nativeElement || !this._isBrowser) {
+        return;
+      }
 
       const labelElement =
         this._elementRef.nativeElement.closest("label") ??
         this._document.querySelector(`label[for="${this.id()}"]`);
 
-      if (!labelElement) return;
+      if (!labelElement) {
+        return;
+      }
       this._renderer.setAttribute(labelElement, "data-disabled", isDisabled ? "true" : "false");
     });
   }

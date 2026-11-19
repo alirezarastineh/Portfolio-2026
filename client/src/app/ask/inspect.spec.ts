@@ -17,17 +17,17 @@ const VIEW = {
   route: "lite→deep",
   reason: "multi-project+sensitive:contract",
   model: "nemotron-3-ultra",
-  ttftMs: 6_640,
-  totalMs: 9_100,
+  ttftMs: 6640,
+  totalMs: 9100,
   steps: [
     {
       model: "nemotron-3-ultra",
       ttftMs: 640,
-      tokens: { input: 9_000, cached: 8_000, output: 120 },
-      passedOver: [{ model: "gemini-3.5-flash-lite", outcome: "timeout", ms: 6_000 }],
+      tokens: { input: 9000, cached: 8000, output: 120 },
+      passedOver: [{ model: "gemini-3.5-flash-lite", outcome: "timeout", ms: 6000 }],
       tools: [
         { name: "search_portfolio", input: "atlas evals", outcome: "ok", chars: 812 },
-        { name: "get_document", input: "project:atlas@en", outcome: "ok", chars: 2_400 },
+        { name: "get_document", input: "project:atlas@en", outcome: "ok", chars: 2400 },
         { name: "list_projects", outcome: "no_hits", chars: 15 },
         { name: "search_portfolio", outcome: "ok", chars: 5 },
         { name: "handoff_contact", outcome: "ok", chars: 40 },
@@ -138,15 +138,16 @@ describe("inspect's timeline (visitor plan V12)", () => {
   });
 });
 
+const respond = (status: number, body: unknown = {}) =>
+  new Response(JSON.stringify(body), { status });
+
 describe("fetchInspect", () => {
-  const respond = (status: number, body: unknown = {}) =>
-    new Response(JSON.stringify(body), { status });
   const noWait = { sleep: () => Promise.resolve() };
 
   it("waits for an answer still being logged, then reads it", async () => {
     const replies = [respond(404), respond(200, { id: "m_1" })];
     let calls = 0;
-    const result = await fetchInspect(() => Promise.resolve(replies[calls++]!), noWait);
+    const result = await fetchInspect(() => Promise.resolve(replies[calls++]), noWait);
     expect(result).toEqual({ ok: true, view: { id: "m_1" } });
     expect(calls).toBe(2);
   });

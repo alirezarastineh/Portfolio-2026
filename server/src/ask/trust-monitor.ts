@@ -62,7 +62,9 @@ async function judgedScores(db: DbExecutor, model: string, since?: Date): Promis
     isNotNull(sql`${aiMessages.judge} ->> 'faithfulness'`),
     sql`(${aiMessages.judge} ->> 'source' is null or ${aiMessages.judge} ->> 'pick' = 'sample')`,
   ];
-  if (since) conditions.push(gt(aiMessages.createdAt, since));
+  if (since) {
+    conditions.push(gt(aiMessages.createdAt, since));
+  }
   const rows = await db
     .select({ score: faithfulness })
     .from(aiMessages)
@@ -82,7 +84,9 @@ async function deepEndings(db: DbExecutor, since?: Date): Promise<string[]> {
     inArray(aiMessages.route, ["deep", ESCALATED_ROUTE]),
     ne(aiMessages.finishReason, "aborted"),
   ];
-  if (since) conditions.push(gt(aiMessages.createdAt, since));
+  if (since) {
+    conditions.push(gt(aiMessages.createdAt, since));
+  }
   const rows = await db
     .select({ finishReason: aiMessages.finishReason })
     .from(aiMessages)
@@ -105,7 +109,9 @@ async function matchRuns(
     eq(aiMessages.route, MATCH_ROUTE),
     sql`${aiMessages.trace} -> 'match' ->> 'stop' is null`,
   ];
-  if (since) conditions.push(gt(aiMessages.createdAt, since));
+  if (since) {
+    conditions.push(gt(aiMessages.createdAt, since));
+  }
   const items = sql`coalesce(${aiMessages.trace} -> 'match' -> 'items', '[]'::jsonb)`;
   return db
     .select({
@@ -123,7 +129,7 @@ const REFUSAL_QUIET_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Whether `subject`'s demotion was refused, and alerted, within the quiet period. */
 async function refusedLately(db: DbExecutor, subject: string): Promise<boolean> {
-  const [row] = await db
+  const rows = await db
     .select({ id: aiAudit.id })
     .from(aiAudit)
     .where(
@@ -135,16 +141,20 @@ async function refusedLately(db: DbExecutor, subject: string): Promise<boolean> 
       ),
     )
     .limit(1);
-  return row !== undefined;
+  return rows.length > 0;
 }
 
 /** The chain a demotion of `id` would leave with no model, or null. */
 function emptiedChain(config: AskConfig, id: string, demoted: ReadonlySet<string>): string | null {
   for (const role of ["lite", "deep"] as const) {
     const chain = askChain(config, role);
-    if (!chain.some((e) => e.id === id)) continue;
+    if (!chain.some((e) => e.id === id)) {
+      continue;
+    }
     const left = chain.filter((e) => e.id !== id && !demoted.has(modelSubject(e.id)));
-    if (!left.length) return role;
+    if (!left.length) {
+      return role;
+    }
   }
   return null;
 }
@@ -158,9 +168,12 @@ export async function runTrustCheck(config: AskConfig = askConfig()): Promise<Tr
     const { rows } = await tx.execute<{ locked: boolean }>(
       sql`select pg_try_advisory_xact_lock(${CHECK_LOCK}) as locked`,
     );
-    if (!rows[0]?.locked) return null;
+    if (!rows[0]?.locked) {
+      return null;
+    }
 
-    const demoted = new Set((await readDemotions(tx)).map((d) => d.subject));
+    const demotionRows = await readDemotions(tx);
+    const demoted = new Set(demotionRows.map((d) => d.subject));
     const since = await lastReinstated(tx);
     const models = [
       ...new Set([...askChain(config, "lite"), ...askChain(config, "deep")].map((e) => e.id)),
@@ -201,14 +214,13 @@ export async function runTrustCheck(config: AskConfig = askConfig()): Promise<Tr
       }
     }
 
-    const unquietRefusals = (
-      await Promise.all(
-        toRefuse.map(async (r) => ({
-          ...r,
-          alreadyAlerted: await refusedLately(tx, r.subject),
-        })),
-      )
-    ).filter((r) => !r.alreadyAlerted);
+    const checkedRefusals = await Promise.all(
+      toRefuse.map(async (r) => ({
+        ...r,
+        alreadyAlerted: await refusedLately(tx, r.subject),
+      })),
+    );
+    const unquietRefusals = checkedRefusals.filter((r) => !r.alreadyAlerted);
 
     const alerts = await Promise.all([
       ...unquietRefusals.map((r) =>
@@ -257,8 +269,12 @@ export async function runTrustCheck(config: AskConfig = askConfig()): Promise<Tr
     return { check, alerts };
   });
   invalidateTrustCache();
-  if (!outcome) return null;
-  for (const row of outcome.alerts) notifyAlert(row);
+  if (!outcome) {
+    return null;
+  }
+  for (const row of outcome.alerts) {
+    notifyAlert(row);
+  }
   return outcome.check;
 }
 
@@ -269,7 +285,9 @@ let timer: NodeJS.Timeout | undefined;
 export function nextCheckAt(now: Date): Date {
   const next = new Date(now);
   next.setUTCHours(3, 0, 0, 0);
-  if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
+  if (next <= now) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
   return next;
 }
 
@@ -285,7 +303,9 @@ export function startTrustMonitor(
     config?: () => AskConfig;
   } = {},
 ): void {
-  if (timer) return;
+  if (timer) {
+    return;
+  }
   const { now = new Date(), check = runTrustCheck, config: read = askConfig } = options;
   const tick = () => {
     const config = read();

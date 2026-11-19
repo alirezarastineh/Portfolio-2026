@@ -57,7 +57,7 @@ export class HlmSwitch implements ControlValueAccessor {
   protected readonly _computedClass = computed(() =>
     hlm(
       // The track at 3:1 when off; its target reaches 32px with a mouse and 44px on touch.
-      "data-[state=checked]:bg-primary data-[state=unchecked]:bg-input-line group relative inline-flex h-[1.15rem] w-8 shrink-0 items-center rounded-full cursor-pointer touch-manipulation border border-transparent transition-colors after:absolute after:inset-x-0 after:-inset-y-[7px] pointer-coarse:after:-inset-x-1.5 pointer-coarse:after:-inset-y-[13px] data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-50",
+      "data-[state=checked]:bg-primary data-[state=unchecked]:bg-input-line group relative inline-flex h-[1.15rem] w-8 shrink-0 items-center rounded-full cursor-pointer touch-manipulation border border-transparent transition-colors after:absolute after:inset-x-0 after:-inset-y-1.75 pointer-coarse:after:-inset-x-1.5 pointer-coarse:after:-inset-y-3.25 data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-50",
       this.userClass(),
     ),
   );

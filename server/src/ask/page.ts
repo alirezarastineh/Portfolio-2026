@@ -40,12 +40,16 @@ export function pageDocument(
 ): PageDocument | null {
   const path = page ? allowedPath(corpus, page) : null;
   const match = path ? DOCUMENT_PAGE.exec(path) : null;
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
   const locale = match[1] as Locale;
-  const slug = match[3]!;
+  const slug = match[3];
   const work = match[2] === "work";
   const document = corpus.byId.get(`${work ? "project" : "post"}:${slug}@${locale}`);
-  if (!document) return null;
+  if (!document) {
+    return null;
+  }
   const project = work
     ? corpus.projects.find((p) => p.locale === locale && p.slug === slug)?.name
     : undefined;
@@ -80,7 +84,9 @@ export function heldIn(
   document: CorpusDocument,
   reading: Locale,
 ): Held {
-  if (handlesOf(corpus.documents, corpus.layout, reading).has(document.id)) return "handle";
+  if (handlesOf(corpus.documents, corpus.layout, reading).has(document.id)) {
+    return "handle";
+  }
   const limit = coreLimit(document, corpus.layout);
   return limit !== undefined && document.text.length > limit ? "clipped" : "whole";
 }

@@ -55,7 +55,9 @@ export class LocaleToggleComponent {
   );
 
   protected onChange(value: unknown): void {
-    if (value === "en" || value === "de" || value === "both") this.view.set(value);
+    if (value === "en" || value === "de" || value === "both") {
+      this.view.set(value);
+    }
   }
 }
 
@@ -66,7 +68,7 @@ export class LocaleToggleComponent {
   host: { class: "contents" },
   template: `
     @if (message()) {
-      <p [id]="id()" class="m-0 mt-1 text-xs leading-snug text-destructive">
+      <p [id]="id()" class="m-0 mt-1 text-xs/snug text-destructive">
         {{ message() }}
       </p>
     }
@@ -122,7 +124,7 @@ const PREVIEW_WAIT_MS = 30_000;
     }
   `,
   template: `
-    <div class="-mx-6 border-t border-border bg-card/95 px-6 py-3 backdrop-blur">
+    <div class="-mx-6 border-t border-border bg-card/95 px-6 py-3 backdrop-blur-sm">
       <div class="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <!-- A new status takes the other branch, so the old one leaves as the new one enters. -->
         <p class="m-0 grid text-hint" role="status">
@@ -202,8 +204,8 @@ export class SaveBarComponent {
   /** The draft page this editor shows up on; offers "Save & preview" when set. */
   readonly previewHref = input<string | null>(null);
 
-  readonly save = output<void>();
-  readonly discard = output<void>();
+  readonly save = output();
+  readonly discard = output();
 
   private readonly isMac =
     typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform ?? "");
@@ -217,7 +219,9 @@ export class SaveBarComponent {
   private previewUntil = 0;
 
   protected readonly status = computed(() => {
-    if (this.saving()) return "saving…";
+    if (this.saving()) {
+      return "saving…";
+    }
     const problems = this.problems();
     if (problems > 0) {
       return problems === 1 ? "1 field needs attention" : `${problems} fields need attention`;
@@ -235,13 +239,17 @@ export class SaveBarComponent {
     source: this.status,
     computation: (text, previous) => {
       const before = previous?.value;
-      if (!before) return { text, odd: false };
+      if (!before) {
+        return { text, odd: false };
+      }
       return { text, odd: before.text === text ? before.odd : !before.odd };
     },
   });
 
   protected readonly statusClass = computed(() => {
-    if (this.problems() > 0 && !this.saving()) return "text-destructive";
+    if (this.problems() > 0 && !this.saving()) {
+      return "text-destructive";
+    }
     return this.dirty() && !this.saving() ? "text-accent-orange" : "text-muted-foreground";
   });
 
@@ -251,8 +259,12 @@ export class SaveBarComponent {
       const dirty = this.dirty();
       if (this.wasSaving && !saving) {
         const saved = !dirty && this.problems() === 0;
-        if (saved) this.savedAt.set(new Date());
-        if (this.previewUntil > Date.now() && saved) this.openPreview();
+        if (saved) {
+          this.savedAt.set(new Date());
+        }
+        if (this.previewUntil > Date.now() && saved) {
+          this.openPreview();
+        }
         this.previewUntil = 0;
       }
       this.wasSaving = saving;
@@ -272,7 +284,9 @@ export class SaveBarComponent {
   /** A new tab, still within the click's activation for a save of a second or two. */
   private openPreview(): void {
     const href = this.previewHref();
-    if (!href || typeof window === "undefined") return;
+    if (!href || typeof window === "undefined") {
+      return;
+    }
     const opened = window.open(href, "_blank");
     if (opened) {
       opened.opener = null;
@@ -284,10 +298,14 @@ export class SaveBarComponent {
   }
 
   protected onKeydown(event: KeyboardEvent): void {
-    if (!isSaveShortcut(event)) return;
+    if (!isSaveShortcut(event)) {
+      return;
+    }
     // Never the browser's "Save page as…" inside an editor.
     event.preventDefault();
-    if (this.saving()) return;
+    if (this.saving()) {
+      return;
+    }
     if (this.dirty()) {
       this.requestSave();
       return;
@@ -295,7 +313,9 @@ export class SaveBarComponent {
     // Typed and saved in one breath: the keystroke's edit reaches `dirty`
     // with the next change detection, which may not have run yet.
     setTimeout(() => {
-      if (this.dirty() && !this.saving()) this.requestSave();
+      if (this.dirty() && !this.saving()) {
+        this.requestSave();
+      }
     }, 50);
   }
 }

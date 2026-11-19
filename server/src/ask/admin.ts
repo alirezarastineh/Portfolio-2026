@@ -196,9 +196,11 @@ const merged = (
 export function fenceChanges(before: AiSettings, after: AiSettings): string[] {
   const changes: string[] = [];
   const note = (key: string, was: unknown, now: unknown) => {
-    const before = JSON.stringify(was);
-    const after = JSON.stringify(now);
-    if (before !== after) changes.push(`${key} ${before} → ${after}`);
+    const beforeJson = JSON.stringify(was);
+    const afterJson = JSON.stringify(now);
+    if (beforeJson !== afterJson) {
+      changes.push(`${key} ${beforeJson} → ${afterJson}`);
+    }
   };
   note("enabled", before.enabled, after.enabled);
   note("dailyBudgetUsd", before.dailyBudgetUsd, after.dailyBudgetUsd);
@@ -278,9 +280,11 @@ async function spendView(config: AskConfig, settings: AiSettings) {
 }
 
 function percentile(values: number[], p: number): number | null {
-  if (!values.length) return null;
+  if (!values.length) {
+    return null;
+  }
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))]!;
+  return sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))];
 }
 
 adminAskRouter.get("/assistant/health", async (c) => {
@@ -306,9 +310,13 @@ adminAskRouter.get("/assistant/health", async (c) => {
       failures++;
       continue;
     }
-    if (row.model !== firstChoice && row.model !== askChain(config, "deep")[0]?.id) fallbacks++;
+    if (row.model !== firstChoice && row.model !== askChain(config, "deep")[0]?.id) {
+      fallbacks++;
+    }
     const list = byModel.get(row.model) ?? [];
-    if (row.ttftMs !== null) list.push(row.ttftMs);
+    if (row.ttftMs !== null) {
+      list.push(row.ttftMs);
+    }
     byModel.set(row.model, list);
   }
 
@@ -325,7 +333,9 @@ adminAskRouter.get("/assistant/health", async (c) => {
   try {
     const current = await askCorpus(config);
     const kinds: Record<string, number> = {};
-    for (const d of current.documents) kinds[d.kind] = (kinds[d.kind] ?? 0) + 1;
+    for (const d of current.documents) {
+      kinds[d.kind] = (kinds[d.kind] ?? 0) + 1;
+    }
     const largest = largestCore(current);
     corpus = {
       key: current.key,
@@ -376,7 +386,9 @@ adminAskRouter.get("/assistant/health", async (c) => {
 adminAskRouter.post("/assistant/corpus/count", async (c) => {
   const config = askConfig();
   const apiKey = config.gemini.apiKey;
-  if (!apiKey) return c.json({ error: "no_gemini_key" }, 400);
+  if (!apiKey) {
+    return c.json({ error: "no_gemini_key" }, 400);
+  }
   const corpus = await askCorpus(config);
   const count = async (locale: Locale): Promise<number | null> => {
     const res = await fetch(
@@ -390,12 +402,16 @@ adminAskRouter.post("/assistant/corpus/count", async (c) => {
         signal: AbortSignal.timeout(10_000),
       },
     ).catch(() => null);
-    if (!res?.ok) return null;
+    if (!res?.ok) {
+      return null;
+    }
     const { totalTokens } = (await res.json()) as { totalTokens?: number };
     return totalTokens ?? null;
   };
   const [en, de] = await Promise.all([count("en"), count("de")]);
-  if (en === null && de === null) return c.json({ error: "count_failed" }, 502);
+  if (en === null && de === null) {
+    return c.json({ error: "count_failed" }, 502);
+  }
   return c.json({
     model: config.gemini.model,
     totalTokens: en,
@@ -425,7 +441,9 @@ adminAskRouter.get("/assistant/corpus", async (c) => {
       })),
     });
   } catch (error) {
-    if (error instanceof PublicationError) return c.json({ error: error.code }, 422);
+    if (error instanceof PublicationError) {
+      return c.json({ error: error.code }, 422);
+    }
     throw error;
   }
 });
@@ -537,17 +555,28 @@ adminAskRouter.get("/assistant/conversations", async (c) => {
   const source = c.req.query("source") === "playground" ? "playground" : "terminal";
   const before = c.req.query("before");
   const conditions: SQL[] = [eq(aiMessages.source, source)];
-  if (before && !Number.isNaN(Date.parse(before)))
+  if (before && !Number.isNaN(Date.parse(before))) {
     conditions.push(lt(aiMessages.createdAt, new Date(before)));
-  if (filter === "down") conditions.push(eq(aiFeedback.value, -1));
-  if (filter === "unknown") conditions.push(UNKNOWN_ANSWER);
-  if (filter === "failed") conditions.push(sql`${aiMessages.finishReason} like 'error:%'`);
+  }
+  if (filter === "down") {
+    conditions.push(eq(aiFeedback.value, -1));
+  }
+  if (filter === "unknown") {
+    conditions.push(UNKNOWN_ANSWER);
+  }
+  if (filter === "failed") {
+    conditions.push(sql`${aiMessages.finishReason} like 'error:%'`);
+  }
   if (filter === "dropped") {
     conditions.push(sql`jsonb_array_length(${aiMessages.droppedCitations}) > 0`);
   }
-  if (filter === "flagged") conditions.push(FLAGGED);
+  if (filter === "flagged") {
+    conditions.push(FLAGGED);
+  }
   // Matched briefs (visitor plan V20): their kind and rows are in the trace.
-  if (filter === "match") conditions.push(eq(aiMessages.route, MATCH_ROUTE));
+  if (filter === "match") {
+    conditions.push(eq(aiMessages.route, MATCH_ROUTE));
+  }
 
   const rows = await getDb()
     .select(CONVERSATION_ROW)
@@ -568,9 +597,12 @@ adminAskRouter.get("/assistant/conversations", async (c) => {
  * the estimate down.
  */
 adminAskRouter.get("/assistant/reviews", async (c) => {
-  const week = c.req.query("week") || isoWeek(new Date());
+  const rawWeek = c.req.query("week") ?? "";
+  const week = rawWeek === "" ? isoWeek(new Date()) : rawWeek;
   const bounds = weekBounds(week);
-  if (!bounds) return c.json({ error: "invalid_input" }, 400);
+  if (!bounds) {
+    return c.json({ error: "invalid_input" }, 400);
+  }
   const db = getDb();
 
   const candidates = await db
@@ -616,7 +648,9 @@ adminAskRouter.get("/assistant/reviews", async (c) => {
   const reviewed = new Map(reviews.map((review) => [review.messageId, review]));
   const entries = queue.flatMap((entry) => {
     const message = messages.get(entry.id);
-    if (!message) return []; // pruned in between
+    if (!message) {
+      return [];
+    } // pruned in between
     const review = reviewed.get(entry.id);
     return [
       {
@@ -666,11 +700,14 @@ adminAskRouter.put(
       .select({ id: aiMessages.id })
       .from(aiMessages)
       .where(and(eq(aiMessages.id, messageId), VISITOR_ANSWER));
-    if (!message) return c.json({ error: "not_found" }, 404);
+    if (!message) {
+      return c.json({ error: "not_found" }, 404);
+    }
 
+    const trimmedNote = input.note?.trim() ?? "";
     const review = {
       labels: input.labels,
-      note: input.note?.trim() || null,
+      note: trimmedNote === "" ? null : trimmedNote,
       reviewedAt: new Date(),
     };
     await getDb()
@@ -696,7 +733,7 @@ adminAskRouter.get("/assistant/outcomes", async (c) => {
   const now = new Date();
   const weeks = completedWeeks(OUTCOME_WEEKS, now);
   const since = new Date(now.getTime() - OUTCOME_DAYS * 24 * 60 * 60 * 1000);
-  const oldest = weekBounds(weeks[0]!)!.start;
+  const oldest = weekBounds(weeks[0])?.start ?? since;
   const from = oldest < since ? oldest : since;
   const db = getDb();
 
@@ -801,32 +838,44 @@ adminAskRouter.put(
         .set({ isVisible: input.isVisible, updatedAt: new Date() })
         .where(eq(aiFaq.id, id))
         .returning({ id: aiFaq.id });
-      if (!row) return false;
+      if (!row) {
+        return false;
+      }
       // A language left out goes; the others are written in place, and a translation's date
       // moves only when its words do: it is the "as of" date the assistant gives (plan phase 19).
-      const kept = LOCALES.filter((locale) => input.translations[locale]);
-      await tx
-        .delete(aiFaqTranslations)
-        .where(and(eq(aiFaqTranslations.faqId, id), notInArray(aiFaqTranslations.locale, kept)));
+      const translations = LOCALES.flatMap((locale) => {
+        const translation = input.translations[locale];
+        return translation ? [{ locale, translation }] : [];
+      });
+      await tx.delete(aiFaqTranslations).where(
+        and(
+          eq(aiFaqTranslations.faqId, id),
+          notInArray(
+            aiFaqTranslations.locale,
+            translations.map((entry) => entry.locale),
+          ),
+        ),
+      );
       await Promise.all(
-        kept.map((locale) => {
-          const t = input.translations[locale]!;
-          return tx
+        translations.map(({ locale, translation }) =>
+          tx
             .insert(aiFaqTranslations)
-            .values({ faqId: id, locale, ...t })
+            .values({ faqId: id, locale, ...translation })
             .onConflictDoUpdate({
               target: [aiFaqTranslations.faqId, aiFaqTranslations.locale],
               set: {
-                question: t.question,
-                answer: t.answer,
+                question: translation.question,
+                answer: translation.answer,
                 updatedAt: sql`case when ${aiFaqTranslations.question} is distinct from excluded.question or ${aiFaqTranslations.answer} is distinct from excluded.answer then now() else ${aiFaqTranslations.updatedAt} end`,
               },
-            });
-        }),
+            }),
+        ),
       );
       return true;
     });
-    if (!found) return c.json({ error: "not_found" }, 404);
+    if (!found) {
+      return c.json({ error: "not_found" }, 404);
+    }
     invalidateAssistantCache();
     return c.json({ ok: true });
   },
@@ -837,7 +886,9 @@ adminAskRouter.delete("/assistant/faq/:id", idParam, async (c) => {
     .delete(aiFaq)
     .where(eq(aiFaq.id, c.req.valid("param").id))
     .returning({ id: aiFaq.id });
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
   invalidateAssistantCache();
   return c.json({ ok: true });
 });
@@ -847,7 +898,9 @@ adminAskRouter.patch(
   zValidator("json", z.object({ ids: z.array(z.uuid()).max(200) }), invalid),
   async (c) => {
     const { ids } = c.req.valid("json");
-    if (!ids.length) return c.json({ ok: true });
+    if (!ids.length) {
+      return c.json({ ok: true });
+    }
     const values = sql.join(
       ids.map((id, position) => sql`(${id}::uuid, ${position}::int)`),
       sql`, `,
@@ -880,7 +933,9 @@ adminAskRouter.post("/assistant/insights", async (c) => {
       insightQuestions().then((rows) => rows.slice(0, 1)),
     ]);
     const fresh = latest && Date.now() - latest.createdAt.getTime() < config.insightCacheTtlMs;
-    if (!newest) return c.json({ topics: [], analysed: 0 });
+    if (!newest) {
+      return c.json({ topics: [], analysed: 0 });
+    }
     if (fresh && latest.newestMessageId === newest.id) {
       return c.json({
         topics: latest.topics,
@@ -891,8 +946,12 @@ adminAskRouter.post("/assistant/insights", async (c) => {
     }
   }
   const result = await runInsights(config, "admin");
-  if (!result.ok) return c.json({ error: result.error }, 503);
-  if (!result.snapshot) return c.json({ topics: [], analysed: 0 });
+  if (!result.ok) {
+    return c.json({ error: result.error }, 503);
+  }
+  if (!result.snapshot) {
+    return c.json({ topics: [], analysed: 0 });
+  }
   return c.json({
     topics: result.snapshot.topics,
     analysed: result.snapshot.analysed,
@@ -913,7 +972,9 @@ adminAskRouter.post(
     result.success ? undefined : c.json({ error: "invalid_id" }, 400),
   ),
   async (c) => {
-    if (!(await markSeen(c.req.valid("param").id))) return c.json({ error: "not_found" }, 404);
+    if (!(await markSeen(c.req.valid("param").id))) {
+      return c.json({ error: "not_found" }, 404);
+    }
     return c.json({ ok: true });
   },
 );
@@ -929,14 +990,18 @@ adminAskRouter.post("/assistant/playground", async (c) => {
       messages: z.array(z.unknown()).min(1).max(40),
     })
     .safeParse(await c.req.json().catch(() => undefined));
-  if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
+  if (!parsed.success) {
+    return c.json({ error: "invalid_input" }, 400);
+  }
   const body = parsed.data;
 
   const config = askConfig();
   // The admin's switch turns the public assistant off, not the playground,
   // which stops at the visitors' reserve and its own cap instead.
   const state = await availability(config, await readAiSettings(), "playground");
-  if (state.state !== "ok") return c.json({ error: refusal(state) }, 503);
+  if (state.state !== "ok") {
+    return c.json({ error: refusal(state) }, 503);
+  }
 
   const history = await buildHistory({
     messages: body.messages,
@@ -944,15 +1009,19 @@ adminAskRouter.post("/assistant/playground", async (c) => {
     locale: body.locale,
     // The admin may try a longer question than a visitor.
     ...historyLimits(config),
-    maxChars: 2_000,
+    maxChars: 2000,
   });
-  if (!history.ok) return c.json({ error: history.error }, 400);
+  if (!history.ok) {
+    return c.json({ error: history.error }, 400);
+  }
 
   let corpus;
   try {
     corpus = await askDraftCorpus(config);
   } catch (error) {
-    if (error instanceof PublicationError) return c.json({ error: error.code }, 422);
+    if (error instanceof PublicationError) {
+      return c.json({ error: error.code }, 422);
+    }
     throw error;
   }
   const route = routeQuestion(history.question, {
@@ -961,7 +1030,9 @@ adminAskRouter.post("/assistant/playground", async (c) => {
     projectNames: corpus.projects.map((p) => p.name),
   });
   const chain = askChain(config, route.route);
-  if (!chain.length) return c.json({ error: "assistant_off" }, 503);
+  if (!chain.length) {
+    return c.json({ error: "assistant_off" }, 503);
+  }
   // As for visitors: an answer routed lite may move up to the deep chain (plan phase 20).
   const escalation = state.deepAllowed ? () => askChain(config, "deep") : undefined;
 
@@ -1058,13 +1129,20 @@ adminAskRouter.post(
   zValidator("json", z.object({ cases: z.array(z.string().max(40)).max(60).optional() }), invalid),
   async (c) => {
     // Claimed before the first await, so no run can start in between.
-    if (!claimRequestEval()) return c.json({ error: "already_running" }, 409);
+    if (!claimRequestEval()) {
+      return c.json({ error: "already_running" }, 409);
+    }
     const calls: ModelCall[] = [];
     try {
-      if ((await activeRuns()).length) return c.json({ error: "already_running" }, 409);
+      const runs = await activeRuns();
+      if (runs.length) {
+        return c.json({ error: "already_running" }, 409);
+      }
       const config = askConfig();
       const state = await availability(config, await readAiSettings(), "eval");
-      if (state.state !== "ok") return c.json({ error: refusal(state) }, 503);
+      if (state.state !== "ok") {
+        return c.json({ error: refusal(state) }, 503);
+      }
 
       const wanted = c.req.valid("json").cases;
       const cases = wanted?.length ? EVAL_CASES.filter((e) => wanted.includes(e.id)) : EVAL_CASES;

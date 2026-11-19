@@ -235,6 +235,7 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
       <div
         class="flex flex-wrap items-center gap-0.5 border-b border-border bg-card/40 p-1"
         role="toolbar"
+        tabindex="-1"
         [attr.aria-label]="label() + ' formatting'"
         (keydown)="onToolbarKey($event)"
       >
@@ -242,7 +243,7 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
           <button
             #tool
             type="button"
-            class="inline-flex size-7 items-center justify-center rounded transition-colors"
+            class="inline-flex size-7 items-center justify-center rounded-sm transition-colors"
             [class]="toolClass(activeMarks().includes(action.id))"
             [attr.tabindex]="$index === activeTool() ? 0 : -1"
             [attr.aria-label]="action.label"
@@ -257,7 +258,7 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
         <button
           #tool
           type="button"
-          class="inline-flex size-7 items-center justify-center rounded transition-colors"
+          class="inline-flex size-7 items-center justify-center rounded-sm transition-colors"
           [class]="toolClass(activeMarks().includes('link'))"
           [attr.tabindex]="actions().length === activeTool() ? 0 : -1"
           aria-label="Add or edit link"
@@ -271,7 +272,7 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
           <button
             #tool
             type="button"
-            class="inline-flex size-7 items-center justify-center rounded transition-colors"
+            class="inline-flex size-7 items-center justify-center rounded-sm transition-colors"
             [class]="toolClass(false)"
             [attr.tabindex]="actions().length + 1 === activeTool() ? 0 : -1"
             aria-label="Insert an image from the media library"
@@ -286,7 +287,7 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
           <label class="ml-1 flex items-center gap-1 text-xs text-muted-foreground">
             <span>language</span>
             <select
-              class="h-7 rounded border border-border bg-card px-1 text-xs text-foreground"
+              class="h-7 rounded-sm border border-border bg-card px-1 text-xs text-foreground"
               [ngModel]="codeLanguage()"
               (ngModelChange)="setCodeLanguage($event)"
               aria-label="Code block language"
@@ -303,7 +304,7 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
       <!-- Tiptap replaces this element's contents; Angular must not manage them. -->
       <div
         #host
-        class="admin-prose px-3 py-2 text-sm leading-relaxed focus-within:outline-none"
+        class="admin-prose px-3 py-2 text-sm/relaxed focus-within:outline-none"
         [class.min-h-32]="mode() === 'inline'"
         [class.min-h-96]="mode() === 'long'"
       ></div>
@@ -328,7 +329,6 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
             aria-label="Link address"
             [ngModel]="linkHref()"
             (ngModelChange)="linkHref.set($event)"
-            autofocus
           />
           <label class="flex items-center gap-2 text-sm text-muted-foreground">
             <input
@@ -532,7 +532,9 @@ export class RichTextComponent implements ControlValueAccessor {
       return;
     }
     // Already showing this — re-setting it would throw the caret to the start.
-    if (next === this.editor.getHTML()) return;
+    if (next === this.editor.getHTML()) {
+      return;
+    }
     // emitUpdate: false — a value arriving FROM the form must not echo back
     // into it.
     this.editor.commands.setContent(next || "<p></p>", { emitUpdate: false });
@@ -552,7 +554,9 @@ export class RichTextComponent implements ControlValueAccessor {
   }
 
   private create(): void {
-    if (!this.isBrowser) return;
+    if (!this.isBrowser) {
+      return;
+    }
 
     const long = this.mode() === "long";
     this.editor = new Editor({
@@ -597,9 +601,14 @@ export class RichTextComponent implements ControlValueAccessor {
 
   private describe(ids: string | null): void {
     const dom = this.editor?.view.dom;
-    if (!dom) return;
-    if (ids) dom.setAttribute("aria-describedby", ids);
-    else dom.removeAttribute("aria-describedby");
+    if (!dom) {
+      return;
+    }
+    if (ids) {
+      dom.setAttribute("aria-describedby", ids);
+    } else {
+      dom.removeAttribute("aria-describedby");
+    }
   }
 
   private schedule(html: string): void {
@@ -613,8 +622,13 @@ export class RichTextComponent implements ControlValueAccessor {
     this.timer = undefined;
 
     // An empty document is an empty field: "<p></p>" read as a change when the text was only passed through.
-    const html = this.editor ? (this.editor.isEmpty ? "" : this.editor.getHTML()) : this.pending;
-    if (html === this.lastEmitted) return;
+    let html = this.pending;
+    if (this.editor) {
+      html = this.editor.isEmpty ? "" : this.editor.getHTML();
+    }
+    if (html === this.lastEmitted) {
+      return;
+    }
 
     this.lastEmitted = html;
     this.onChange(html);
@@ -622,12 +636,16 @@ export class RichTextComponent implements ControlValueAccessor {
 
   /** Runs before the save bar's own listener on `document`: a save sees every word typed. */
   protected onKeydown(event: KeyboardEvent): void {
-    if (isSaveShortcut(event)) this.flush();
+    if (isSaveShortcut(event)) {
+      this.flush();
+    }
   }
 
   private refreshActive(editor: Editor): void {
     const active = ACTIONS.filter((a) => a.isActive?.(editor)).map((a) => a.id);
-    if (editor.isActive("link")) active.push("link");
+    if (editor.isActive("link")) {
+      active.push("link");
+    }
     this.activeMarks.set(active);
 
     const inCode = editor.isActive("codeBlock");
@@ -638,12 +656,16 @@ export class RichTextComponent implements ControlValueAccessor {
   }
 
   protected apply(action: ToolbarAction): void {
-    if (this.editor) action.run(this.editor);
+    if (this.editor) {
+      action.run(this.editor);
+    }
   }
 
   /** The toolbar's arrows, Home and End; a focused select keeps its own. */
   protected onToolbarKey(event: KeyboardEvent): void {
-    if (!(event.target instanceof HTMLSelectElement)) this.keys.onKeydown(event);
+    if (!(event.target instanceof HTMLSelectElement)) {
+      this.keys.onKeydown(event);
+    }
   }
 
   /** A button reached by the arrows, a click or Tab: the toolbar's stop moves to it. */
@@ -671,7 +693,9 @@ export class RichTextComponent implements ControlValueAccessor {
 
   protected openLinkDialog(): void {
     const editor = this.editor;
-    if (!editor) return;
+    if (!editor) {
+      return;
+    }
     const attributes = editor.getAttributes("link") as { href?: string; target?: string };
     this.linkHref.set(attributes.href ?? "");
     this.linkNewTab.set(attributes.target === "_blank");
@@ -685,7 +709,9 @@ export class RichTextComponent implements ControlValueAccessor {
 
   protected applyLink(): void {
     const editor = this.editor;
-    if (!editor) return;
+    if (!editor) {
+      return;
+    }
 
     const href = this.linkHref().trim();
     if (!href) {
@@ -715,7 +741,9 @@ export class RichTextComponent implements ControlValueAccessor {
 
   protected insertImage(asset: MediaAsset): void {
     this.imagePickerOpen.set(false);
-    if (asset.kind !== "image") return;
+    if (asset.kind !== "image") {
+      return;
+    }
     this.editor
       ?.chain()
       .focus()

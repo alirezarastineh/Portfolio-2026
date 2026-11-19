@@ -178,15 +178,19 @@ export class MediaPickerComponent implements OnInit {
     event.preventDefault();
     this.dragging.set(false);
     const file = event.dataTransfer?.files?.[0];
-    if (file) void this.upload(file);
+    if (file) {
+      void this.upload(file);
+    }
   }
 
   protected onFileInput(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (file) void this.upload(file);
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (file) {
+      void this.upload(file);
+    }
     // Reset so re-picking the same file fires change again.
-    input.value = "";
+    target.value = "";
   }
 
   /** Uploads, then chooses what was uploaded. */
@@ -201,9 +205,11 @@ export class MediaPickerComponent implements OnInit {
       toast.error("Upload failed", { description: result.message });
       return;
     }
-    if (result.deduped)
+    if (result.deduped) {
       toast.info("Already uploaded", { description: "Reusing the existing copy." });
-    else toast.success("Uploaded");
+    } else {
+      toast.success("Uploaded");
+    }
     this.chosen.emit(result.asset);
   }
 }

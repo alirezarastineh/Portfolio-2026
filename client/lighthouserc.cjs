@@ -14,7 +14,7 @@
 // the first paint (vite-plugins/boot-after-paint.ts), 0.94-0.97 home,
 // 0.99-1 case study, 1 legal page. Home's total blocking time varies from
 // run to run (~190-270 ms): its hydration is the most work.
-// eslint-disable-next-line @typescript-eslint/no-require-imports -- lhci require()s this CommonJS file
+// lhci require()s this CommonJS file.
 const { loadEnv } = require("vite");
 
 const PORT = process.env.LHCI_PORT || "4174";

@@ -42,8 +42,10 @@ export function aotOnly(): Plugin {
     apply: "build",
     enforce: "post",
     transform(code, id) {
-      const file = id.split("?")[0]!;
-      if (file.includes("/node_modules/") || !/\.[cm]?tsx?$/.test(file)) return;
+      const file = id.split("?")[0];
+      if (file.includes("/node_modules/") || !/\.[cm]?tsx?$/.test(file)) {
+        return;
+      }
       const left = decoratorLeft(code);
       if (left) {
         this.error(

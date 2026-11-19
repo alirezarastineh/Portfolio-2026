@@ -10,7 +10,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const load = (file: string): AppContent =>
   appContentSchema.parse(JSON.parse(readFileSync(resolve(here, `../content/${file}`), "utf8")));
 
-/** The seed content: TODO copy, stub covers, no experience, no posts, no CV. */
+/** The seed content: placeholder marker copy, stub covers, no experience, no posts, no CV. */
 const en = load("fallback.en.json");
 const de = load("fallback.de.json");
 
@@ -24,7 +24,7 @@ const image = (alt: string): Image => ({
   blur: null,
 });
 
-/** Every string with its TODO written, and every section filled in. */
+/** Every string with its placeholder marker replaced, and every section filled in. */
 function finished(content: AppContent): AppContent {
   const written = JSON.parse(JSON.stringify(content).replaceAll("TODO", "Done")) as AppContent;
   return {
@@ -76,7 +76,9 @@ function finished(content: AppContent): AppContent {
 
 const check = (report: ReadinessReport, id: string) => {
   const found = report.checks.find((c) => c.id === id);
-  if (!found) throw new Error(`no check ${id}`);
+  if (!found) {
+    throw new Error(`no check ${id}`);
+  }
   return found;
 };
 
@@ -156,7 +158,7 @@ describe("checkReadiness", () => {
   it("asks for alt text on real covers only once they have none", () => {
     const ready = finished(en);
     const report = checkReadiness({
-      en: { ...ready, projects: [{ ...ready.projects[0]!, cover: image(" ") }] },
+      en: { ...ready, projects: [{ ...ready.projects[0], cover: image(" ") }] },
     });
     expect(check(report, "alt-text").hits.map((hit) => hit.label)).toEqual([
       "projects[project-one].cover.alt",
@@ -185,7 +187,7 @@ describe("findPlaceholders", () => {
     const long = `${"Intro words. ".repeat(10)}TODO: say what it does. ${"More. ".repeat(40)}`;
     const [hit] = findPlaceholders({
       ...finished(en),
-      projects: [{ ...finished(en).projects[0]!, hook: long }],
+      projects: [{ ...finished(en).projects[0], hook: long }],
     });
     expect(hit?.detail).toMatch(/^….*TODO: say what it does.*…$/);
     expect(hit?.detail.length).toBeLessThanOrEqual(92);

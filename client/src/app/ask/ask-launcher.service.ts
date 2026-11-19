@@ -110,14 +110,18 @@ export class AskLauncherService {
 
   /** The panel takes each request to open or to ask, so it happens once. */
   takeFocus(): boolean {
-    if (!this._focusPending()) return false;
+    if (!this._focusPending()) {
+      return false;
+    }
     this._focusPending.set(false);
     return true;
   }
 
   /** Home's stage takes a request while it is on screen; otherwise the panel does (plan 4 U11b). */
   openSheet(source?: AskSource): void {
-    if (source) this.source = source;
+    if (source) {
+      this.source = source;
+    }
     if (this.stageReady() && this.stageInView() && !this.narrow() && !this._sheet()) {
       this.stageAsked.set(true);
     } else {
@@ -141,7 +145,9 @@ export class AskLauncherService {
    * contact form) is what they see and can focus. Beside the page, from 1024px, it stays.
    */
   closeIfSheet(): void {
-    if (this.narrow()) this.closeSheet();
+    if (this.narrow()) {
+      this.closeSheet();
+    }
   }
 
   /** Where a visible Turnstile check goes: the console on show; else the page's own box. */
@@ -152,7 +158,9 @@ export class AskLauncherService {
   /** Puts a question to the assistant, with what a reader points at, when they did (visitor plan V9). */
   ask(text: string, source: AskSource, about?: AskAbout): void {
     const question = text.trim();
-    if (!question) return;
+    if (!question) {
+      return;
+    }
     this._question.set(question);
     this.about = about ?? null;
     this.openSheet(source);
@@ -164,7 +172,9 @@ export class AskLauncherService {
    */
   prefill(text: string, source: AskSource): void {
     const question = text.trim();
-    if (!question) return;
+    if (!question) {
+      return;
+    }
     this.draft = question;
     this.openSheet(source);
   }

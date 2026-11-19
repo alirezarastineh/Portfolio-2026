@@ -20,32 +20,42 @@ const FIELDS = ["problem", "aiArchitecture", "fullStackInfra"] as const;
 try {
   const db = getDb();
   const rows = await db.select().from(projectTranslations);
-  let changed = 0;
-
-  for (const row of rows) {
+  const updates = rows.flatMap((row) => {
     const next: Partial<Record<(typeof FIELDS)[number], string>> = {};
 
     for (const field of FIELDS) {
       const converted = plainTextToRichText(row[field]);
-      if (converted !== row[field]) next[field] = converted;
+      if (converted !== row[field]) {
+        next[field] = converted;
+      }
     }
 
-    if (Object.keys(next).length === 0) continue;
+    if (Object.keys(next).length === 0) {
+      return [];
+    }
 
     // Keyed on the full (project, locale) primary key: matching the project
     // alone wrote this row's converted text over every other locale too.
-    await db
-      .update(projectTranslations)
-      .set(next)
-      .where(
-        and(
-          eq(projectTranslations.projectId, row.projectId),
-          eq(projectTranslations.locale, row.locale),
-        ),
-      );
-    changed++;
-    console.log(`[richtext] converted ${row.projectId} (${row.locale})`);
-  }
+    return [{ projectId: row.projectId, locale: row.locale, next }];
+  });
+
+  await updates.reduce(
+    (chain, { projectId, locale, next }) =>
+      chain.then(async () => {
+        await db
+          .update(projectTranslations)
+          .set(next)
+          .where(
+            and(
+              eq(projectTranslations.projectId, projectId),
+              eq(projectTranslations.locale, locale),
+            ),
+          );
+        console.log(`[richtext] converted ${projectId} (${locale})`);
+      }),
+    Promise.resolve(),
+  );
+  const changed = updates.length;
 
   console.log(
     changed === 0

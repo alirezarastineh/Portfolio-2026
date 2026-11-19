@@ -20,7 +20,9 @@ import { LanguageService } from "../../../services/language.service";
  */
 async function legalDoc(docParam: string | null): Promise<LegalDocPayload | null> {
   const doc = legalDocSchema.safeParse(docParam);
-  if (!doc.success) return null;
+  if (!doc.success) {
+    return null;
+  }
   const lang = inject(LanguageService);
   const found = await inject(DocStore).ensure(lang.lang(), "legal", doc.data);
   return found?.kind === "legal" ? found : null;
@@ -39,7 +41,9 @@ const titleResolver: ResolveFn<string> = async (route) => {
 const metaResolver: ResolveFn<MetaTag[]> = async (route) => {
   const lang = inject(LanguageService);
   const doc = await legalDoc(route.paramMap.get("doc"));
-  if (!doc) return [{ name: "robots", content: "noindex" }];
+  if (!doc) {
+    return [{ name: "robots", content: "noindex" }];
+  }
 
   const content = lang.content();
   return pageMeta(content, lang.lang(), {
@@ -116,7 +120,9 @@ export default class LegalPageComponent {
   /** In UTC, so the server and the browser print the same day. */
   protected readonly updated = computed(() => {
     const page = this.doc();
-    if (!page) return "";
+    if (!page) {
+      return "";
+    }
     return new Intl.DateTimeFormat(this.lang.lang(), { dateStyle: "long", timeZone: "UTC" }).format(
       new Date(page.updatedAt),
     );

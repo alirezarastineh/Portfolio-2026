@@ -5,7 +5,7 @@ import { changedFields, isRecord, sameValue, type ChangedField } from "./changed
 const DATABASE = "admin-recovery";
 const STORE = "copies";
 /** A second after the last keystroke. */
-const WAIT_MS = 1_000;
+const WAIT_MS = 1000;
 /** How every admin tab's title ends; the dashboard's list shows what comes before it. */
 export const TITLE_END = " · Admin";
 
@@ -107,7 +107,9 @@ export class RecoveryService {
 
     const forget = (): void => {
       const shown = entry;
-      if (shown) this.back.update((all) => all.filter((one) => one !== shown));
+      if (shown) {
+        this.back.update((all) => all.filter((one) => one !== shown));
+      }
       entry = null;
     };
     const live: Live = {
@@ -123,7 +125,9 @@ export class RecoveryService {
         pending = null;
         forget();
         const target = item ?? (rows ? null : looked);
-        if (target === null && !rows) return;
+        if (target === null && !rows) {
+          return;
+        }
         written = new Map([...written].filter(([, c]) => target !== null && c.item !== target));
         void this.write((store) => store.delete(rangeOf(editor(), target)));
       },
@@ -139,10 +143,16 @@ export class RecoveryService {
         const changes = rows
           ? changedFields(onlyIn(saved, current), onlyIn(current, saved))
           : changedFields(saved, current);
-        if (!changes.length) forget();
-        if (!changes.length && !written.size) return;
+        if (!changes.length) {
+          forget();
+        }
+        if (!changes.length && !written.size) {
+          return;
+        }
         void this.replace(editor(), rows ? null : item, changes, written).then((kept) => {
-          if (kept) written = kept;
+          if (kept) {
+            written = kept;
+          }
         });
       };
       timer = setTimeout(() => live.flush(), WAIT_MS);
@@ -150,12 +160,16 @@ export class RecoveryService {
 
     const look = (item: string): void => {
       void this.list(editor(), rows ? null : item).then((found) => {
-        if (gone || looked !== item) return;
+        if (gone || looked !== item) {
+          return;
+        }
         ready = true;
         written = new Map(found.map((copy) => [keyOf(copy), copy]));
         const saved = untracked(source.saved);
         const current = untracked(source.current);
-        if (saved === null || current === null) return;
+        if (saved === null || current === null) {
+          return;
+        }
         const back = overlay(saved, current, found, rows);
         if (back.restored.length) {
           source.restore(back.value);
@@ -165,9 +179,13 @@ export class RecoveryService {
             discard: () => {
               const edits = untracked(source.current);
               const now = untracked(source.saved);
-              if (now) source.restore(structuredClone(now));
+              if (now) {
+                source.restore(structuredClone(now));
+              }
               return () => {
-                if (edits) source.restore(edits);
+                if (edits) {
+                  source.restore(edits);
+                }
               };
             },
           };
@@ -193,9 +211,12 @@ export class RecoveryService {
           ready = false;
           written = new Map();
         }
-        if (item === null || saved === null || current === null) return;
-        if (ready) schedule(item, saved, current);
-        else if (looking !== item) {
+        if (item === null || saved === null || current === null) {
+          return;
+        }
+        if (ready) {
+          schedule(item, saved, current);
+        } else if (looking !== item) {
           looking = item;
           look(item);
         }
@@ -217,16 +238,16 @@ export class RecoveryService {
    * shortcut: a copy of a row deleted elsewhere (another browser, the content agent) stays until
    * a sign-out clears the store; prune by age if one ever lingers on the dashboard.
    */
-  async list(editor?: string, item?: string | null): Promise<RecoveryCopy[]> {
+  async list(editor?: string, item: string | null = null): Promise<RecoveryCopy[]> {
     try {
       const db = await this.open();
       return await new Promise((resolve, reject) => {
         const request = db
           .transaction(STORE)
           .objectStore(STORE)
-          .getAll(editor === undefined ? undefined : rangeOf(editor, item ?? null));
+          .getAll(editor === undefined ? undefined : rangeOf(editor, item));
         request.onsuccess = () => resolve(request.result as RecoveryCopy[]);
-        request.onerror = () => reject(request.error);
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB read failed"));
       });
     } catch {
       this.reopenNextTime();
@@ -236,7 +257,8 @@ export class RecoveryService {
 
   /** The rows of an editor that have a copy: a panel opens by itself on the way back. */
   async items(editor: string): Promise<string[]> {
-    return [...new Set((await this.list(editor)).map((copy) => copy.item))];
+    const copies = await this.list(editor);
+    return [...new Set(copies.map((copy) => copy.item))];
   }
 
   /** The row was deleted: a copy of it could only mislead. */
@@ -246,7 +268,9 @@ export class RecoveryService {
 
   /** The edits on this page were thrown away on purpose: their copies go too. */
   dropLive(): void {
-    for (const live of this.live) live.drop();
+    for (const live of this.live) {
+      live.drop();
+    }
     this.back.set([]);
   }
 
@@ -274,7 +298,7 @@ export class RecoveryService {
       for (const { path, before, after } of changes) {
         const copy: RecoveryCopy = {
           editor,
-          item: item ?? path[0]!,
+          item: item ?? path[0],
           field: (item === null ? path.slice(1) : path).join("."),
           value: after,
           base: before,
@@ -284,11 +308,15 @@ export class RecoveryService {
         };
         const old = written.get(keyOf(copy));
         const same = old !== undefined && sameValue(old.value, copy.value);
-        if (!same) store.put(copy);
+        if (!same) {
+          store.put(copy);
+        }
         kept.set(keyOf(copy), same ? old : copy);
       }
       for (const [key, copy] of written) {
-        if (!kept.has(key)) store.delete([copy.editor, copy.item, copy.field]);
+        if (!kept.has(key)) {
+          store.delete([copy.editor, copy.item, copy.field]);
+        }
       }
     });
     return stored ? kept : null;
@@ -304,7 +332,8 @@ export class RecoveryService {
       await new Promise<void>((resolve, reject) => {
         const transaction = db.transaction(STORE, "readwrite");
         transaction.oncomplete = () => resolve();
-        transaction.onabort = () => reject(transaction.error);
+        transaction.onabort = () =>
+          reject(transaction.error ?? new Error("IndexedDB transaction aborted"));
         work(transaction.objectStore(STORE));
         transaction.commit();
       });
@@ -332,7 +361,7 @@ export class RecoveryService {
         this.db = request.result;
         resolve(request.result);
       };
-      request.onerror = () => reject(request.error);
+      request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed"));
     }).catch((error: unknown) => {
       this.database = undefined;
       throw error;
@@ -345,13 +374,19 @@ export class RecoveryService {
    * being torn down can lose its last transaction (4 of 5 reloads kept it, 2026-11-09).
    */
   private listen(): void {
-    if (this.listening) return;
+    if (this.listening) {
+      return;
+    }
     this.listening = true;
     const flush = (): void => {
-      for (const live of this.live) live.flush();
+      for (const live of this.live) {
+        live.flush();
+      }
     };
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") flush();
+      if (document.visibilityState === "hidden") {
+        flush();
+      }
     });
     addEventListener("pagehide", flush);
   }
@@ -395,8 +430,12 @@ export function overlay<T extends object>(
     const key = path.at(-1);
     const parent = valueAt(value, path.slice(0, -1));
     const savedNow = valueAt(saved, path);
-    if (key === undefined || !isRecord(parent)) continue;
-    if (sameValue(savedNow, copy.value) || sameValue(parent[key], copy.value)) continue;
+    if (key === undefined || !isRecord(parent)) {
+      continue;
+    }
+    if (sameValue(savedNow, copy.value) || sameValue(parent[key], copy.value)) {
+      continue;
+    }
     parent[key] = structuredClone(copy.value);
     restored.push(copy);
     changedSince ||= !sameValue(savedNow, copy.base);

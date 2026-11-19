@@ -29,9 +29,14 @@ describe("GET /health", () => {
   /** A hung connection must not hang the healthcheck with it. */
   it("gives up on a database that never answers", async () => {
     vi.useFakeTimers();
-    pool.query.mockReturnValue(new Promise(() => {}));
+    pool.query.mockReturnValue(
+      new Promise(() => {
+        /* intentionally never settles */
+      }),
+    );
     const pending = app.request("/health");
     await vi.advanceTimersByTimeAsync(2000);
-    expect((await pending).status).toBe(503);
+    const res = await pending;
+    expect(res.status).toBe(503);
   });
 });

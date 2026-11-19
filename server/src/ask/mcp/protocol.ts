@@ -24,15 +24,15 @@ export const META = {
 } as const;
 
 export const ERRORS = {
-  parse: -32700,
-  invalidRequest: -32600,
-  methodNotFound: -32601,
-  invalidParams: -32602,
-  internal: -32603,
-  headerMismatch: -32020,
-  unsupportedVersion: -32022,
+  parse: -32_700,
+  invalidRequest: -32_600,
+  methodNotFound: -32_601,
+  invalidParams: -32_602,
+  internal: -32_603,
+  headerMismatch: -32_020,
+  unsupportedVersion: -32_022,
   /** The application's own, outside JSON-RPC's reserved range (-32768 to -32000). */
-  rateLimited: -31429,
+  rateLimited: -31_429,
 } as const;
 
 export type Id = string | number;
@@ -71,9 +71,12 @@ export function parseMessage(body: unknown): Message {
   if (params !== undefined && !isObject(params)) {
     return { kind: "invalid", id, reason: "params must be an object" };
   }
-  if (rawId === undefined) return { kind: "notification", method, params: params ?? {} };
-  if (id === null)
+  if (rawId === undefined) {
+    return { kind: "notification", method, params: params ?? {} };
+  }
+  if (id === null) {
     return { kind: "invalid", id: null, reason: "The id must be a string or an integer" };
+  }
   return { kind: "request", id, method, params: params ?? {} };
 }
 
@@ -86,7 +89,9 @@ export function eraOf(
   params: Record<string, unknown>,
   method: string,
 ): "handshake" | "meta" | "legacy" {
-  if (method === "initialize") return "handshake";
+  if (method === "initialize") {
+    return "handshake";
+  }
   const meta = params["_meta"];
   return isObject(meta) && META.protocolVersion in meta ? "meta" : "legacy";
 }
@@ -119,7 +124,7 @@ export function decodeHeaderValue(value: string): string | null {
   const encoded = /^=\?base64\?([A-Za-z0-9+/]*={0,2})\?=$/.exec(value);
   if (encoded) {
     try {
-      return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.from(encoded[1]!, "base64"));
+      return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.from(encoded[1], "base64"));
     } catch {
       return null;
     }
@@ -141,21 +146,31 @@ function headerMismatch(
   header: (name: string) => string | undefined,
 ): string | null {
   const protocol = header("mcp-protocol-version");
-  if (protocol === undefined) return "MCP-Protocol-Version is missing";
+  if (protocol === undefined) {
+    return "MCP-Protocol-Version is missing";
+  }
   if (protocol !== version) {
     return `MCP-Protocol-Version ${quoted(protocol)} does not match the body's ${quoted(version)}`;
   }
   const mirrored = header("mcp-method");
-  if (mirrored === undefined) return "Mcp-Method is missing";
+  if (mirrored === undefined) {
+    return "Mcp-Method is missing";
+  }
   if (mirrored !== method) {
     return `Mcp-Method ${quoted(mirrored)} does not match the body's ${quoted(method)}`;
   }
   if (method === "tools/call") {
     const raw = header("mcp-name");
-    if (raw === undefined) return "Mcp-Name is missing";
+    if (raw === undefined) {
+      return "Mcp-Name is missing";
+    }
     const name = decodeHeaderValue(raw);
-    if (name === null) return "Mcp-Name is not a valid header value";
-    if (name !== params["name"]) return "Mcp-Name does not match the body's name";
+    if (name === null) {
+      return "Mcp-Name is not a valid header value";
+    }
+    if (name !== params["name"]) {
+      return "Mcp-Name does not match the body's name";
+    }
   }
   return null;
 }
@@ -222,7 +237,9 @@ export function checkMeta(
  */
 export function checkLegacy(header: (name: string) => string | undefined): Checked {
   const protocol = header("mcp-protocol-version");
-  if (protocol === undefined) return { ok: true, version: UNVERSIONED_LEGACY, modern: false };
+  if (protocol === undefined) {
+    return { ok: true, version: UNVERSIONED_LEGACY, modern: false };
+  }
   if ((LEGACY_VERSIONS as readonly string[]).includes(protocol)) {
     return { ok: true, version: protocol, modern: false };
   }

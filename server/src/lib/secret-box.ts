@@ -17,7 +17,9 @@ const KEY_BYTES = 32;
 
 function encryptionKey(): Buffer | null {
   const raw = process.env.TOTP_ENC_KEY?.trim();
-  if (!raw) return null;
+  if (!raw) {
+    return null;
+  }
 
   // Either `openssl rand -hex 32` (64 hex chars) or 32 bytes in base64. Hex is
   // checked first: 64 hex chars are also valid base64, but would decode to 48
@@ -35,7 +37,9 @@ export function isSealed(stored: string): boolean {
 
 export function seal(plaintext: string): string {
   const key = encryptionKey();
-  if (!key) return plaintext;
+  if (!key) {
+    return plaintext;
+  }
 
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
@@ -46,16 +50,22 @@ export function seal(plaintext: string): string {
 }
 
 export function unseal(stored: string): string {
-  if (!isSealed(stored)) return stored;
+  if (!isSealed(stored)) {
+    return stored;
+  }
 
   const key = encryptionKey();
-  if (!key) throw new Error("TOTP secret is encrypted but TOTP_ENC_KEY is not set");
+  if (!key) {
+    throw new Error("TOTP secret is encrypted but TOTP_ENC_KEY is not set");
+  }
 
   const [iv, ciphertext, tag] = stored
     .slice(PREFIX.length)
     .split(":")
     .map((part) => Buffer.from(part, "base64url"));
-  if (!iv || !ciphertext || !tag) throw new Error("malformed sealed secret");
+  if (!iv || !ciphertext || !tag) {
+    throw new Error("malformed sealed secret");
+  }
 
   // The full 16-byte tag: without a length, GCM checks only as many bytes as
   // it is given, and Node 22 accepts a tag as short as 4.

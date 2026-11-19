@@ -71,7 +71,7 @@ describe("LanguageService", () => {
   it("exposes structural content for the active locale", () => {
     const { service } = setup();
     service.activate("de");
-    expect(service.content().skills[0]!.title).toBe("Kernarchitektur");
+    expect(service.content().skills[0].title).toBe("Kernarchitektur");
   });
 
   /** Reading content outside the locale route is a bug; it must say so, not render blanks. */

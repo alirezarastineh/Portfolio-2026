@@ -8,8 +8,10 @@ export function hasFlag(argv: readonly string[], name: string): boolean {
 export function optionValues(argv: readonly string[], name: string): string[] {
   const out: string[] = [];
   argv.forEach((arg, i) => {
-    const next = argv[i + 1];
-    if (arg === `--${name}` && next !== undefined && !next.startsWith("--")) out.push(next);
+    const next = argv.at(i + 1);
+    if (arg === `--${name}` && next !== undefined && !next.startsWith("--")) {
+      out.push(next);
+    }
   });
   return out;
 }

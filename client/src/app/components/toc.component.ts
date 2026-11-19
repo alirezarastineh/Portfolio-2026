@@ -72,31 +72,42 @@ export class TocComponent {
     // After render, when the targets (and the ids restored on them) exist.
     afterRenderEffect(() => {
       const ids = this.items().map((item) => item.id);
-      if (this.isBrowser) this.watch(ids);
+      if (this.isBrowser) {
+        this.watch(ids);
+      }
     });
   }
 
   /** The current section: the last heading that has scrolled past the header. */
   private watch(ids: string[]): void {
     this.observer?.disconnect();
-    if (typeof IntersectionObserver === "undefined") return;
+    if (typeof IntersectionObserver === "undefined") {
+      return;
+    }
 
     const visible = new Set<string>();
     this.observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          if (entry.isIntersecting) visible.add(entry.target.id);
-          else visible.delete(entry.target.id);
+          if (entry.isIntersecting) {
+            visible.add(entry.target.id);
+          } else {
+            visible.delete(entry.target.id);
+          }
         }
         const current = ids.find((id) => visible.has(id));
-        if (current) this.active.set(current);
+        if (current) {
+          this.active.set(current);
+        }
       },
       // A band just below the fixed header: a heading counts once it reaches it.
       { rootMargin: "-80px 0px -70% 0px" },
     );
     for (const id of ids) {
       const target = document.getElementById(id);
-      if (target) this.observer.observe(target);
+      if (target) {
+        this.observer.observe(target);
+      }
     }
   }
 }

@@ -37,18 +37,29 @@ let writerId: string | null = "gemini-3.5-flash-lite";
 /** The judge chain (ranking, the critic): none unless a test sets one. */
 let judge: ScriptedModel | null = null;
 
+function testChain(_c: AskConfig, role: string) {
+  if (role === "copilot") {
+    return writerId ? [mockEntry(writerId, writer.model)] : [];
+  }
+  if (role === "judge" && judge) {
+    return [mockEntry("gemini-3.7-flash", judge.model)];
+  }
+  return [];
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 const app = createApp({
   ask: {
     config: () => config,
-    chain: (_c, role) =>
-      role === "copilot"
-        ? writerId
-          ? [mockEntry(writerId, writer.model)]
-          : []
-        : role === "judge" && judge
-          ? [mockEntry("gemini-3.7-flash", judge.model)]
-          : [],
-    corpus: async (c) => fixtureCorpus(c),
+    chain: testChain,
+    corpus: (c) => Promise.resolve(fixtureCorpus(c)),
   },
 });
 
@@ -65,8 +76,7 @@ function drafting(
   options: { tokens?: number; hold?: (sent: string) => boolean; abortable?: boolean } = {},
 ) {
   const calls: LanguageModelV4CallOptions[] = [];
-  let open: () => void = () => {};
-  const opened = new Promise<void>((resolve) => (open = resolve));
+  const { promise: opened, resolve: open } = deferred();
   const model = new MockLanguageModelV4({
     modelId: "writer",
     doGenerate: async (call) => {
@@ -75,10 +85,19 @@ function drafting(
       if (options.hold?.(sent)) {
         await new Promise<void>((resolve, reject) => {
           void opened.then(resolve);
-          if (options.abortable) {
-            call.abortSignal?.addEventListener("abort", () => reject(call.abortSignal!.reason), {
-              once: true,
-            });
+          const signal = call.abortSignal;
+          if (options.abortable && signal) {
+            signal.addEventListener(
+              "abort",
+              () => {
+                reject(
+                  signal.reason instanceof Error
+                    ? signal.reason
+                    : new Error(String(signal.reason ?? "Aborted")),
+                );
+              },
+              { once: true },
+            );
           }
         });
       }
@@ -91,7 +110,7 @@ function drafting(
       };
     },
   });
-  return { model, calls, open: () => open() };
+  return { model, calls, open };
 }
 
 /** Translations into German, and search descriptions too short to pass. */
@@ -102,7 +121,7 @@ const answers = (sent: string) =>
 
 beforeEach(async () => {
   await resetDb();
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => undefined);
   invalidateAssistantCache();
   resetBreakers();
   config = fixtureConfig();
@@ -128,8 +147,13 @@ async function switchOn(featureCaps?: Record<string, number>) {
 /** Fills every gap the seed left, so a test plans only the ones it makes. */
 async function closeGaps() {
   const targets = await contentTargets(["translations", "seo"], 1000);
-  for (const t of targets)
-    await fill(t, t.goal === "seo" ? "A short, filled search description of the page." : "Filled.");
+  await targets.reduce(
+    (chain, t) =>
+      chain.then(() =>
+        fill(t, t.goal === "seo" ? "A short, filled search description of the page." : "Filled."),
+      ),
+    Promise.resolve(),
+  );
 }
 
 async function fill(target: Target, text: string) {
@@ -149,9 +173,8 @@ async function fill(target: Target, text: string) {
 }
 
 async function projectIds(): Promise<string[]> {
-  return (await getDb().select({ id: projects.id }).from(projects).orderBy(projects.position)).map(
-    (p) => p.id,
-  );
+  const rows = await getDb().select({ id: projects.id }).from(projects).orderBy(projects.position);
+  return rows.map((p) => p.id);
 }
 
 async function setText(projectId: string, locale: Locale, change: Record<string, string>) {
@@ -165,11 +188,16 @@ async function setText(projectId: string, locale: Locale, change: Record<string,
 
 /** A German hook to translate on each of the first `n` projects. */
 async function hookGaps(n: number): Promise<string[]> {
-  const ids = (await projectIds()).slice(0, n);
-  for (const id of ids) {
-    await setText(id, "en", { hook: "Search that answers with sources." });
-    await setText(id, "de", { hook: "" });
-  }
+  const allIds = await projectIds();
+  const ids = allIds.slice(0, n);
+  await ids.reduce(
+    (chain, id) =>
+      chain.then(async () => {
+        await setText(id, "en", { hook: "Search that answers with sources." });
+        await setText(id, "de", { hook: "" });
+      }),
+    Promise.resolve(),
+  );
   return ids.map((id) => `translations|project|${id}|hook|de`);
 }
 
@@ -200,7 +228,8 @@ async function started(body: Record<string, unknown>): Promise<string> {
 
 const ended = (id: string) =>
   eventually(async () => {
-    const view = (await (await admin.get(`/admin/assistant/runs/${id}`)).json()) as RunView;
+    const res = await admin.get(`/admin/assistant/runs/${id}`);
+    const view = (await res.json()) as RunView;
     return ["done", "failed", "cancelled", "interrupted"].includes(view.run.status)
       ? view
       : undefined;
@@ -221,11 +250,18 @@ describe("the content agent (plan phase 29)", () => {
     const nothing = await start({ goals: ["translations"] });
     expect(nothing.status).toBe(400);
     expect(await nothing.json()).toEqual({ error: "nothing_to_do" });
-    for (const goals of [[], ["typos"], ["alt", "alt"]]) {
-      expect((await start({ goals })).status, JSON.stringify(goals)).toBe(400);
-    }
-    expect((await start({ goals: ["alt"], maxItems: 101 })).status).toBe(400);
-    expect((await start({ goals: ["alt"], maxUsd: 2 })).status).toBe(400);
+    await [[], ["typos"], ["alt", "alt"]].reduce(
+      (chain, goals) =>
+        chain.then(async () => {
+          const res = await start({ goals });
+          expect(res.status, JSON.stringify(goals)).toBe(400);
+        }),
+      Promise.resolve(),
+    );
+    const overItems = await start({ goals: ["alt"], maxItems: 101 });
+    expect(overItems.status).toBe(400);
+    const overUsd = await start({ goals: ["alt"], maxUsd: 2 });
+    expect(overUsd.status).toBe(400);
   });
 
   it("drafts gated proposals over a seeded database, never the content, and records the spend and the drafts as the agent's (the done-when)", async () => {
@@ -233,8 +269,8 @@ describe("the content agent (plan phase 29)", () => {
     const [hook] = await hookGaps(1);
     const [projectId] = await projectIds();
     // A German search description to draft from the page: this writer's drafts are too short.
-    await setText(projectId!, "de", { seoDescription: "" });
-    await setText(projectId!, "en", { seoDescription: "" });
+    await setText(projectId, "de", { seoDescription: "" });
+    await setText(projectId, "en", { seoDescription: "" });
 
     const id = await started({ goals: ["translations", "seo"] });
     const view = await ended(id);
@@ -242,9 +278,16 @@ describe("the content agent (plan phase 29)", () => {
     expect(view.run.summary).toEqual({ proposed: 1, needsYou: 2, stale: 0 });
 
     const rows = await proposals();
-    const byKey = (key: string) =>
-      rows.find((p) => [p.goal, p.kind, p.entityId, p.field, p.locale].join("|") === key)!;
-    expect(byKey(hook!)).toMatchObject({
+    const byKey = (key: string) => {
+      const found = rows.find(
+        (p) => [p.goal, p.kind, p.entityId, p.field, p.locale].join("|") === key,
+      );
+      if (!found) {
+        throw new Error(`Missing proposal for ${key}`);
+      }
+      return found;
+    };
+    expect(byKey(hook)).toMatchObject({
       runId: id,
       status: "proposed",
       before: "",
@@ -263,7 +306,7 @@ describe("the content agent (plan phase 29)", () => {
       .select()
       .from(projectTranslations)
       .where(
-        and(eq(projectTranslations.projectId, projectId!), eq(projectTranslations.locale, "de")),
+        and(eq(projectTranslations.projectId, projectId), eq(projectTranslations.locale, "de")),
       );
     expect(de).toMatchObject({ hook: "", seoDescription: "" });
 
@@ -272,7 +315,9 @@ describe("the content agent (plan phase 29)", () => {
     expect(new Set(spent.map((r) => r.feature))).toEqual(new Set(["agent"]));
     const uses = await getDb().select().from(aiSkillUses);
     expect(uses.map((u) => u.source)).toEqual(["agent", "agent", "agent"]);
-    expect(byKey(hook!).useId).toBe(uses.find((u) => u.skill === "translate")!.id);
+    const translateUse = uses.find((u) => u.skill === "translate");
+    expect(translateUse).toBeDefined();
+    expect(byKey(hook).useId).toBe(translateUse?.id);
 
     // The translation kept the portfolio's names: the glossary went with it.
     const translation = writer.calls.find((c) =>
@@ -290,8 +335,8 @@ describe("the content agent (plan phase 29)", () => {
     const held = drafting(answers, { hold: () => true });
     writer = held;
     const id = await started({ goals: ["translations"] });
-    await eventually(async () => (held.calls.length === 1 ? true : undefined));
-    const secondId = second!.split("|")[2]!;
+    await eventually(() => Promise.resolve(held.calls.length === 1 ? true : undefined));
+    const secondId = second.split("|")[2];
     await setText(secondId, "de", { hook: "Von Hand geschrieben." });
     held.open();
 
@@ -312,8 +357,9 @@ describe("the content agent (plan phase 29)", () => {
     const held = drafting(answers, { hold: () => held.calls.length >= 2 });
     writer = held;
     const id = await started({ goals: ["translations"] });
-    await eventually(async () => (held.calls.length === 2 ? true : undefined));
-    expect((await admin.post(`/admin/assistant/runs/${id}/cancel`, {})).status).toBe(200);
+    await eventually(() => Promise.resolve(held.calls.length === 2 ? true : undefined));
+    const cancelRes = await admin.post(`/admin/assistant/runs/${id}/cancel`, {});
+    expect(cancelRes.status).toBe(200);
     held.open();
     const cancelled = await ended(id);
     expect(cancelled.run.status).toBe("cancelled");
@@ -322,13 +368,13 @@ describe("the content agent (plan phase 29)", () => {
 
     // The third's proposal is there already, as a process that stopped after writing it leaves it.
     const [, , third] = gaps;
-    const [goal, kind, entityId, field, locale] = third!.split("|");
+    const [goal, kind, entityId, field, locale] = third.split("|");
     await insertProposal({
       runId: id,
       goal: goal as "translations",
       kind: kind as "project",
-      entityId: entityId!,
-      field: field!,
+      entityId,
+      field,
       locale: locale as Locale,
       label: "Project · Hook (DE)",
       after: "Schon vorgeschlagen.",
@@ -338,15 +384,19 @@ describe("the content agent (plan phase 29)", () => {
     });
 
     writer = drafting(answers);
-    expect((await admin.post(`/admin/assistant/runs/${id}/resume`, {})).status).toBe(202);
+    const resumeRes = await admin.post(`/admin/assistant/runs/${id}/resume`, {});
+    expect(resumeRes.status).toBe(202);
     const resumed = await ended(id);
     expect(resumed.run).toMatchObject({ status: "done", summary: { proposed: 3 } });
     // Only the second is drafted again: the first was done, the third already proposed.
     expect(writer.calls).toHaveLength(1);
-    const keys = (await proposals()).map((p) =>
+    const storedProposals = await proposals();
+    const keys = storedProposals.map((p) =>
       [p.goal, p.kind, p.entityId, p.field, p.locale].join("|"),
     );
-    expect(keys.sort()).toEqual([...gaps].sort());
+    expect(keys.toSorted((a, b) => a.localeCompare(b))).toEqual(
+      gaps.toSorted((a, b) => a.localeCompare(b)),
+    );
   });
 
   it("plans at most its item limit", async () => {
@@ -366,7 +416,8 @@ describe("the content agent (plan phase 29)", () => {
     expect(view.run).toMatchObject({ status: "failed", error: RUN_LIMIT });
     expect(view.items.map((i) => i.status)).toEqual(["done", "pending", "pending"]);
     // The limit is the run's: a resume stops at it again.
-    expect((await admin.post(`/admin/assistant/runs/${view.run.id}/resume`, {})).status).toBe(202);
+    const resumeRes = await admin.post(`/admin/assistant/runs/${view.run.id}/resume`, {});
+    expect(resumeRes.status).toBe(202);
     const again = await ended(view.run.id);
     expect(again.run).toMatchObject({ status: "failed", error: RUN_LIMIT });
     expect(writer.calls).toHaveLength(1);
@@ -375,8 +426,8 @@ describe("the content agent (plan phase 29)", () => {
   it("stops when the models are down, resumable; an item failing twice needs the admin", async () => {
     await switchOn();
     const [hook] = await hookGaps(1);
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     writer = {
       model: new MockLanguageModelV4({ doGenerate: () => Promise.reject(apiError(503)) }),
       calls: [],
@@ -389,7 +440,8 @@ describe("the content agent (plan phase 29)", () => {
     ]);
 
     resetBreakers();
-    expect((await admin.post(`/admin/assistant/runs/${first.run.id}/resume`, {})).status).toBe(202);
+    const resumeRes = await admin.post(`/admin/assistant/runs/${first.run.id}/resume`, {});
+    expect(resumeRes.status).toBe(202);
     const second = await ended(first.run.id);
     expect(second.run).toMatchObject({
       status: "done",
@@ -406,7 +458,7 @@ describe("the content agent (plan phase 29)", () => {
     const held = drafting(answers, { hold: () => true, abortable: true });
     writer = held;
     const id = await started({ goals: ["translations"] });
-    await eventually(async () => (held.calls.length === 1 ? true : undefined));
+    await eventually(() => Promise.resolve(held.calls.length === 1 ? true : undefined));
     // A deploy's SIGTERM: every run in this process stops, its draft in flight with it.
     abortAllRuns();
     const cut = await ended(id);
@@ -418,7 +470,8 @@ describe("the content agent (plan phase 29)", () => {
 
     // Resumed with the models answering: drafted, not handed over as failing twice.
     writer = drafting(answers);
-    expect((await admin.post(`/admin/assistant/runs/${id}/resume`, {})).status).toBe(202);
+    const resumeRes = await admin.post(`/admin/assistant/runs/${id}/resume`, {});
+    expect(resumeRes.status).toBe(202);
     const resumed = await ended(id);
     expect(resumed.run).toMatchObject({ status: "done", summary: { proposed: 1, needsYou: 0 } });
     expect(await proposals()).toEqual([
@@ -432,18 +485,20 @@ describe("the content agent (plan phase 29)", () => {
     const held = drafting(answers, { hold: () => true, abortable: true });
     writer = held;
     const id = await started({ goals: ["translations"] });
-    await eventually(async () => (held.calls.length === 1 ? true : undefined));
+    await eventually(() => Promise.resolve(held.calls.length === 1 ? true : undefined));
     abortAllRuns();
-    expect((await ended(id)).run.status).toBe("interrupted");
+    const cutRun = await ended(id);
+    expect(cutRun.run.status).toBe("interrupted");
 
     // Its second start meets the models down: a first failure, not a second.
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     writer = {
       model: new MockLanguageModelV4({ doGenerate: () => Promise.reject(apiError(503)) }),
       calls: [],
     };
-    expect((await admin.post(`/admin/assistant/runs/${id}/resume`, {})).status).toBe(202);
+    const resumeRes = await admin.post(`/admin/assistant/runs/${id}/resume`, {});
+    expect(resumeRes.status).toBe(202);
     const down = await ended(id);
     expect(down.run).toMatchObject({ status: "failed" });
     expect(down.run.error).toMatch(/stopped answering/);
@@ -469,9 +524,10 @@ describe("the content agent (plan phase 29)", () => {
     );
     writer = held;
     const id = await started({ goals: ["translations"] });
-    await eventually(async () => (held.calls.length === 2 ? true : undefined));
+    await eventually(() => Promise.resolve(held.calls.length === 2 ? true : undefined));
     abortAllRuns();
-    expect((await ended(id)).run.status).toBe("interrupted");
+    const cutRun = await ended(id);
+    expect(cutRun.run.status).toBe("interrupted");
     // The first draft's call was paid for: it is in the agent's spend.
     await eventually(async () => {
       const spent = await getDb().select().from(aiUsageFeatures);
@@ -492,8 +548,8 @@ describe("the content agent (plan phase 29)", () => {
   it("drafts nothing it cannot, and says why: a source too long, an image it cannot read, no model that sees", async () => {
     await switchOn();
     const [projectId] = await projectIds();
-    await setText(projectId!, "en", { body: `<p>${"Wort ".repeat(4_100)}</p>` });
-    await setText(projectId!, "de", { body: "" });
+    await setText(projectId, "en", { body: `<p>${"Wort ".repeat(4100)}</p>` });
+    await setText(projectId, "de", { body: "" });
     const [image] = await getDb()
       .insert(mediaAssets)
       .values({
@@ -508,11 +564,12 @@ describe("the content agent (plan phase 29)", () => {
 
     await ended(await started({ goals: ["translations", "alt"] }));
     expect(writer.calls).toHaveLength(0);
-    const notes = Object.fromEntries((await proposals()).map((p) => [p.goal, p]));
+    const proposalRows = await proposals();
+    const notes = Object.fromEntries(proposalRows.map((p) => [p.goal, p]));
     expect(notes["translations"]).toMatchObject({ status: "needs_you", after: null });
-    expect(notes["translations"]!.notes[0]).toMatch(/more than one draft takes/);
+    expect(notes["translations"].notes[0]).toMatch(/more than one draft takes/);
     expect(notes["alt"]).toMatchObject({
-      entityId: image!.id,
+      entityId: image.id,
       status: "needs_you",
       notes: ["Its file could not be read: write the alt text in the media library."],
     });
@@ -549,8 +606,8 @@ describe("the content agent (plan phase 29)", () => {
       "Atlas answers support questions from two million documents and cites every source it uses, so the team can check each answer quickly and trust what the assistant says to customers every day.";
     const german =
       "Atlas beantwortet Supportfragen aus zwei Millionen Dokumenten und nennt jede Quelle, die es nutzt, damit das Team jede Antwort schnell prüfen und dem vertrauen kann, was der Assistent den Kunden jeden Tag sagt.";
-    await setText(projectId!, "en", { hook: english });
-    await setText(projectId!, "de", { hook: "" });
+    await setText(projectId, "en", { hook: english });
+    await setText(projectId, "de", { hook: "" });
     writer = drafting((sent) =>
       sent.includes("A reviewer read your translation")
         ? german.replace("Supportfragen", "Support-Fragen")
@@ -592,23 +649,25 @@ describe("the content agent (plan phase 29)", () => {
     await switchOn();
     await hookGaps(1);
     const [projectId] = await projectIds();
-    await setText(projectId!, "de", { seoDescription: "" });
-    await setText(projectId!, "en", { seoDescription: "" });
+    await setText(projectId, "de", { seoDescription: "" });
+    await setText(projectId, "en", { seoDescription: "" });
     const id = await started({ goals: ["translations", "seo"] });
     await ended(id);
 
-    const all = (await (await admin.get(`/admin/assistant/proposals?run=${id}`)).json()) as {
+    const allRes = await admin.get(`/admin/assistant/proposals?run=${id}`);
+    const all = (await allRes.json()) as {
       proposals: { status: string; label: string }[];
     };
     expect(all.proposals).toHaveLength(3);
-    const needing = (await (
-      await admin.get("/admin/assistant/proposals?status=needs_you")
-    ).json()) as {
+    const needingRes = await admin.get("/admin/assistant/proposals?status=needs_you");
+    const needing = (await needingRes.json()) as {
       proposals: { status: string }[];
     };
     expect(needing.proposals.map((p) => p.status)).toEqual(["needs_you", "needs_you"]);
-    expect((await admin.get("/admin/assistant/proposals?run=nope")).status).toBe(400);
-    expect((await admin.get("/admin/assistant/proposals?status=done")).status).toBe(400);
+    const badRun = await admin.get("/admin/assistant/proposals?run=nope");
+    expect(badRun.status).toBe(400);
+    const badStatus = await admin.get("/admin/assistant/proposals?status=done");
+    expect(badStatus.status).toBe(400);
   });
 
   it("keeps one proposal per target and run, in a known status (migration 0024)", async () => {
@@ -618,7 +677,7 @@ describe("the content agent (plan phase 29)", () => {
       .values({ kind: "agent", status: "done", params: { task: "content" } })
       .returning({ id: aiRuns.id });
     const row = {
-      runId: run!.id,
+      runId: run.id,
       goal: "translations" as const,
       kind: "project" as const,
       entityId: "p",
@@ -642,7 +701,7 @@ describe("the content agent (plan phase 29)", () => {
       db.insert(aiProposals).values({ ...row, goal: "typos" as never }),
     ).rejects.toThrow();
     // The run deleted, its proposals stay.
-    await db.delete(aiRuns).where(eq(aiRuns.id, run!.id));
+    await db.delete(aiRuns).where(eq(aiRuns.id, run.id));
     expect(await proposals()).toEqual([expect.objectContaining({ id, runId: null })]);
   });
 });

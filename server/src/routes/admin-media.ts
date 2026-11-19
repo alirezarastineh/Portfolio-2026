@@ -38,8 +38,8 @@ const altInput = z.object({
   altEn: z.string().max(300).nullable().optional(),
   altDe: z.string().max(300).nullable().optional(),
   /** What a diagram or screenshot shows, for the assistant (plan phase 17). */
-  descriptionEn: z.string().max(2_000).nullable().optional(),
-  descriptionDe: z.string().max(2_000).nullable().optional(),
+  descriptionEn: z.string().max(2000).nullable().optional(),
+  descriptionDe: z.string().max(2000).nullable().optional(),
 });
 
 /** Publications this far back count as "recent" for the delete warning. */
@@ -185,9 +185,13 @@ type SniffedMedia =
 
 function detectMedia(buffer: Buffer): SniffedMedia | null {
   const image = sniffImage(buffer);
-  if (image) return { kind: "image", info: image };
+  if (image) {
+    return { kind: "image", info: image };
+  }
   const document = sniffDocument(buffer);
-  if (document) return { kind: "document", info: document };
+  if (document) {
+    return { kind: "document", info: document };
+  }
   return null;
 }
 
@@ -205,7 +209,9 @@ async function healMissingMedia(
   buffer: Buffer,
   media: SniffedMedia,
 ): Promise<void> {
-  if (await mediaExists(existingFilename)) return;
+  if (await mediaExists(existingFilename)) {
+    return;
+  }
 
   const healed =
     media.kind === "image"
@@ -281,7 +287,7 @@ async function insertMediaAssetWithVariants(params: {
   userId: string;
   variants: Omit<typeof mediaVariants.$inferInsert, "assetId">[];
 }) {
-  return await getDb().transaction(async (tx) => {
+  return getDb().transaction(async (tx) => {
     const [row] = await tx
       .insert(mediaAssets)
       .values({
@@ -297,7 +303,9 @@ async function insertMediaAssetWithVariants(params: {
         createdBy: params.userId,
       })
       .returning();
-    if (!row) throw new Error("media insert returned no row");
+    if (!row) {
+      throw new Error("media insert returned no row");
+    }
 
     const variantRows = params.variants.length
       ? await tx
@@ -371,6 +379,11 @@ adminMediaRouter.post("/media", async (c) => {
   }
 });
 
+function normalizeDescription(value: string | null): string | null {
+  const trimmed = value?.trim() ?? "";
+  return trimmed === "" ? null : trimmed;
+}
+
 adminMediaRouter.patch("/media/:id", async (c) => {
   let body: unknown;
   try {
@@ -387,19 +400,21 @@ adminMediaRouter.patch("/media/:id", async (c) => {
   const [row] = await getDb()
     .update(mediaAssets)
     .set({
-      ...(parsed.data.altEn !== undefined ? { altEn: parsed.data.altEn } : {}),
-      ...(parsed.data.altDe !== undefined ? { altDe: parsed.data.altDe } : {}),
-      ...(parsed.data.descriptionEn !== undefined
-        ? { descriptionEn: parsed.data.descriptionEn?.trim() || null }
-        : {}),
-      ...(parsed.data.descriptionDe !== undefined
-        ? { descriptionDe: parsed.data.descriptionDe?.trim() || null }
-        : {}),
+      ...(parsed.data.altEn === undefined ? {} : { altEn: parsed.data.altEn }),
+      ...(parsed.data.altDe === undefined ? {} : { altDe: parsed.data.altDe }),
+      ...(parsed.data.descriptionEn === undefined
+        ? {}
+        : { descriptionEn: normalizeDescription(parsed.data.descriptionEn) }),
+      ...(parsed.data.descriptionDe === undefined
+        ? {}
+        : { descriptionDe: normalizeDescription(parsed.data.descriptionDe) }),
     })
     .where(eq(mediaAssets.id, c.req.param("id")))
     .returning({ id: mediaAssets.id });
 
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
   // The assistant reads a saved description with the next question (same process).
   invalidateImageDescriptions();
   return c.json({ ok: true });
@@ -434,7 +449,9 @@ async function deleteAsset(id: string, confirmed: boolean): Promise<DeleteOutcom
       .where(eq(mediaAssets.id, id))
       .limit(1)
       .for("update");
-    if (!asset) return { status: 404 as const, body: { error: "not_found" } };
+    if (!asset) {
+      return { status: 404 as const, body: { error: "not_found" } };
+    }
 
     const usedBy = await findMediaUsage(asset.id, asset.filename, tx);
     if (usedBy.length > 0) {
@@ -526,7 +543,9 @@ const cleanupInput = z.object({
  */
 adminMediaRouter.post("/media/cleanup", async (c) => {
   const parsed = await readJson(c, cleanupInput);
-  if (!parsed.ok) return parsed.response;
+  if (!parsed.ok) {
+    return parsed.response;
+  }
 
   const deleted: string[] = [];
   const skipped: { id: string; error: string }[] = [];

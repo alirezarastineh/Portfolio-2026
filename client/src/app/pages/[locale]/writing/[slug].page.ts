@@ -37,7 +37,9 @@ const SLUG = /^[a-z0-9-]{1,80}$/;
 
 /** The post, or null: an unknown slug, or a post not written in this language. */
 async function post(slug: string | null): Promise<PostDoc | null> {
-  if (!slug || !SLUG.test(slug)) return null;
+  if (!slug || !SLUG.test(slug)) {
+    return null;
+  }
   const lang = inject(LanguageService);
   const doc = await inject(DocStore).ensure(lang.lang(), "posts", slug);
   return doc?.kind === "post" ? doc : null;
@@ -54,7 +56,9 @@ const titleResolver: ResolveFn<string> = async (route) => {
 const metaResolver: ResolveFn<MetaTag[]> = async (route) => {
   const lang = inject(LanguageService);
   const doc = await post(route.paramMap.get("slug"));
-  if (!doc) return [{ name: "robots", content: "noindex" }];
+  if (!doc) {
+    return [{ name: "robots", content: "noindex" }];
+  }
 
   const content = lang.content();
   const origin = siteOrigin(content);
@@ -91,9 +95,10 @@ const headResolver: ResolveFn<true> = async (route): Promise<true> => {
   const locale = lang.lang();
   const origin = siteOrigin(content);
   const path = `/${locale}/writing/${doc.slug}`;
+  const canonical = doc.canonicalUrl ?? "";
   applyHead(document, {
-    canonical: doc.canonicalUrl || `${origin}${path}`,
-    alternates: doc.canonicalUrl ? {} : docLanguageAlternates(origin, doc.alternates),
+    canonical: canonical === "" ? `${origin}${path}` : canonical,
+    alternates: canonical === "" ? docLanguageAlternates(origin, doc.alternates) : {},
     jsonLd: postJsonLd(content, locale, origin, doc),
     feeds: feedsOf(content, locale),
   });
@@ -254,9 +259,12 @@ export default class PostPageComponent {
   /** The absolute address to share: the canonical one when it lives elsewhere. */
   protected readonly url = computed(() => {
     const p = this.post();
-    if (!p) return "";
+    if (!p) {
+      return "";
+    }
     const origin = siteOrigin(this.lang.content());
-    return p.canonicalUrl || pageUrl(origin, this.lang.lang(), `/writing/${p.slug}`);
+    const canonical = p.canonicalUrl ?? "";
+    return canonical === "" ? pageUrl(origin, this.lang.lang(), `/writing/${p.slug}`) : canonical;
   });
 
   /** Shown when the post changed on a later day than it was published. */

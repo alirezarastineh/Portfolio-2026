@@ -19,21 +19,39 @@ class HostComponent {
   readonly items = signal(["TypeScript", "Python", "Postgres"]);
 }
 
+function mustQuery<T extends Element = HTMLElement>(parent: ParentNode, selector: string): T {
+  const el = parent.querySelector<T>(selector);
+  if (!el) {
+    throw new Error(`Expected element matching ${selector}`);
+  }
+  return el;
+}
+
+const nextTick = (): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve);
+  });
+
 async function setUp() {
   const fixture = TestBed.createComponent(HostComponent);
   fixture.detectChanges();
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;
-  const field = root.querySelector<HTMLInputElement>("#stack")!;
+  const field = mustQuery<HTMLInputElement>(root, "#stack");
   const tokens = () =>
     Array.from(root.querySelectorAll<HTMLButtonElement>("button.token")).map((b) =>
-      b.textContent!.trim(),
+      b.textContent.trim(),
     );
-  const token = (name: string) =>
-    Array.from(root.querySelectorAll<HTMLButtonElement>("button.token")).find(
-      (b) => b.textContent!.trim() === name,
-    )!;
-  const said = () => root.querySelector("#stack-said")!.textContent!.trim();
+  const token = (name: string) => {
+    const match = Array.from(root.querySelectorAll<HTMLButtonElement>("button.token")).find(
+      (b) => b.textContent.trim() === name,
+    );
+    if (!match) {
+      throw new Error(`Expected token button "${name}"`);
+    }
+    return match;
+  };
+  const said = () => mustQuery(root, "#stack-said").textContent.trim();
   const press = async (target: HTMLElement, key: string, init: KeyboardEventInit = {}) => {
     const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
     target.dispatchEvent(event);
@@ -87,7 +105,7 @@ describe("TokenFieldComponent", () => {
     field.value = "";
     const event = await press(field, "Backspace");
     expect(event.defaultPrevented).toBe(true);
-    await new Promise((resolve) => setTimeout(resolve));
+    await nextTick();
     expect(tokens()).toHaveLength(3);
     expect(root.ownerDocument.activeElement).toBe(token("Postgres"));
   });
@@ -95,14 +113,14 @@ describe("TokenFieldComponent", () => {
   it("Delete or Backspace removes a token, its neighbour takes the focus, the last one leaves it to the field", async () => {
     const { fixture, root, field, tokens, token, said, press } = await setUp();
     await press(token("Python"), "Delete");
-    await new Promise((resolve) => setTimeout(resolve));
+    await nextTick();
     expect(tokens()).toEqual(["TypeScript", "Postgres"]);
     expect(said()).toBe("Python removed.");
     expect(root.ownerDocument.activeElement).toBe(token("Postgres"));
 
     await press(token("Postgres"), "Backspace");
     await press(token("TypeScript"), "Backspace");
-    await new Promise((resolve) => setTimeout(resolve));
+    await nextTick();
     expect(tokens()).toEqual([]);
     expect(root.ownerDocument.activeElement).toBe(field);
     expect(fixture.componentInstance.items()).toEqual([]);
@@ -111,7 +129,7 @@ describe("TokenFieldComponent", () => {
   it("Alt with an arrow moves a token and keeps its focus; at the end it stays", async () => {
     const { fixture, root, tokens, token, said, press } = await setUp();
     await press(token("TypeScript"), "ArrowRight", { altKey: true });
-    await new Promise((resolve) => setTimeout(resolve));
+    await nextTick();
     expect(tokens()).toEqual(["Python", "TypeScript", "Postgres"]);
     expect(said()).toBe("TypeScript moved to 2 of 3.");
     expect(root.ownerDocument.activeElement).toBe(token("TypeScript"));
@@ -141,7 +159,7 @@ describe("TokenFieldComponent", () => {
     expect(root.querySelector(`label[for="stack"]`)?.textContent?.trim()).toBe("Tech stack");
     expect(field.getAttribute("aria-describedby")).toContain("stack-hint");
     expect(root.querySelector("ul")?.getAttribute("aria-label")).toBe("Tech stack");
-    const remove = root.querySelector<HTMLButtonElement>(`button[aria-label="Remove Python"]`)!;
+    const remove = mustQuery<HTMLButtonElement>(root, 'button[aria-label="Remove Python"]');
     expect(remove.tabIndex).toBe(-1);
     expect(root.querySelector("#stack-said")?.getAttribute("aria-live")).toBe("polite");
   });

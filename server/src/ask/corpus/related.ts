@@ -44,12 +44,16 @@ const clean = (items: readonly string[]) =>
 /** Whether `text` names `name` as a whole word or phrase, in any case. */
 export function names(text: string, name: string): boolean {
   const needle = name.trim().toLowerCase();
-  if (needle.length < 3) return false;
+  if (needle.length < 3) {
+    return false;
+  }
   const hay = text.toLowerCase();
   for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, at + 1)) {
     const before = hay[at - 1];
     const after = hay[at + needle.length];
-    if (!isWordChar(before) && !isWordChar(after)) return true;
+    if (!isWordChar(before) && !isWordChar(after)) {
+      return true;
+    }
   }
   return false;
 }
@@ -98,7 +102,11 @@ const onProfileTopic = (text: string) => PROFILE_TOPICS.some((pattern) => patter
 
 function shared(a: Set<string>, b: Set<string>): number {
   let n = 0;
-  for (const item of a) if (b.has(item)) n++;
+  for (const item of a) {
+    if (b.has(item)) {
+      n++;
+    }
+  }
   return n;
 }
 
@@ -107,7 +115,9 @@ class Links {
   readonly map = new Map<string, Map<string, number>>();
 
   link(from: string, to: string, strength: number): void {
-    if (from === to) return;
+    if (from === to) {
+      return;
+    }
     const mine = this.map.get(from) ?? new Map<string, number>();
     mine.set(to, Math.max(mine.get(to) ?? 0, strength));
     this.map.set(from, mine);
@@ -139,7 +149,9 @@ function linkEmployers(links: Links, employers: readonly Node[], projects: reado
 function linkProjects(links: Links, projects: readonly Node[]): void {
   projects.forEach((a, i) => {
     for (const b of projects.slice(i + 1)) {
-      if (shared(a.items, b.items) >= 2) links.both(a.doc.id, b.doc.id, STRENGTH.shared);
+      if (shared(a.items, b.items) >= 2) {
+        links.both(a.doc.id, b.doc.id, STRENGTH.shared);
+      }
     }
   });
 }
@@ -152,7 +164,9 @@ function linkPosts(
 ): void {
   for (const post of posts) {
     for (const project of projects) {
-      if (names(post.text, project.doc.title)) links.link(post.id, project.doc.id, STRENGTH.named);
+      if (names(post.text, project.doc.title)) {
+        links.link(post.id, project.doc.id, STRENGTH.named);
+      }
     }
   }
 }
@@ -189,7 +203,9 @@ function linksIn(documents: readonly CorpusDocument[], facts: ReadonlyMap<string
   linkProjects(links, projects);
   linkPosts(links, of("post"), projects);
   const profile = of("profile")[0];
-  if (profile) linkFaq(links, profile, of("faq"));
+  if (profile) {
+    linkFaq(links, profile, of("faq"));
+  }
   return links.map;
 }
 
@@ -204,7 +220,9 @@ export function relate(
   const facts = new Map(projects.map((p) => [p.id, p]));
   const order = new Map(documents.map((d, i) => [d.id, i]));
   const byLocale = new Map<Locale, CorpusDocument[]>();
-  for (const d of documents) byLocale.set(d.locale, [...(byLocale.get(d.locale) ?? []), d]);
+  for (const d of documents) {
+    byLocale.set(d.locale, [...(byLocale.get(d.locale) ?? []), d]);
+  }
 
   const related = new Map<string, string[]>();
   for (const group of byLocale.values()) {
@@ -212,7 +230,7 @@ export function relate(
       related.set(
         from,
         [...to]
-          .sort(([a, x], [b, y]) => y - x || order.get(a)! - order.get(b)!)
+          .sort(([a, x], [b, y]) => y - x || (order.get(a) ?? 0) - (order.get(b) ?? 0))
           .slice(0, MAX_RELATED)
           .map(([id]) => id),
       );
@@ -232,6 +250,22 @@ const sample = (
   url: "/x",
   text: "",
   ...d,
+});
+
+const sampleFacts = (id: string, stack: string[]): ProjectFacts => ({
+  id,
+  slug: id,
+  locale: "en",
+  name: id,
+  descriptor: "",
+  role: "",
+  period: null,
+  category: null,
+  stack,
+  tags: [],
+  metrics: [],
+  url: "/x",
+  hasCaseStudy: false,
 });
 
 /**
@@ -262,24 +296,9 @@ export function relateSample(): string {
     ...[1, 2, 3, 4, 5].map((n) => faq(n, `Q: Question ${n}?`)),
     faq(6, "Q: Would he relocate?"),
   ];
-  const facts = (id: string, stack: string[]): ProjectFacts => ({
-    id,
-    slug: id,
-    locale: "en",
-    name: id,
-    descriptor: "",
-    role: "",
-    period: null,
-    category: null,
-    stack,
-    tags: [],
-    metrics: [],
-    url: "/x",
-    hasCaseStudy: false,
-  });
   return relate(documents, [
-    facts("project:p2@en", ["Go", "Rust"]),
-    facts("project:p3@en", ["go", "rust", "Zig"]),
+    sampleFacts("project:p2@en", ["Go", "Rust"]),
+    sampleFacts("project:p3@en", ["go", "rust", "Zig"]),
   ])
     .map((d) => `${d.id}: ${(d.related ?? []).join(", ")}`)
     .join("\n");

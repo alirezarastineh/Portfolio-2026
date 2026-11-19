@@ -1,29 +1,31 @@
 import type { Page } from "@playwright/test";
 
-import { expect, interactive, test } from "./fixtures";
+import { expect, fetchText, interactive, requireBox, test } from "./fixtures";
 
 // The site-wide pieces: home layout, theme, skip link, command palette and the
 // contact form. Content from e2e/fixture-content.mjs.
 
 declare global {
-  interface Window {
-    /** Whether `<body>` existed when the theme first changed (see below). */
-    __themeSetWithBody?: boolean;
-    /** The view transitions' types, and what each circle clip animated (see below). */
-    __reveals?: { types: string[]; clips: string[] };
-  }
+  /** Whether `<body>` existed when the theme first changed (see below). */
+  var __themeSetWithBody: boolean | undefined;
+  /** The view transitions' types, and what each circle clip animated (see below). */
+  var __reveals: { types: string[]; clips: string[] } | undefined;
 }
+
+const middleY = (rect: DOMRect) => rect.top + rect.height / 2;
 
 /** An init script: records the types of each view transition and each circle clip's target. */
 function recordReveals() {
   const log = { types: [] as string[], clips: [] as string[] };
-  window.__reveals = log;
+  globalThis.__reveals = log;
   const start = document.startViewTransition.bind(document);
   document.startViewTransition = (options) => {
-    if (typeof options === "object") log.types.push(...(options.types ?? []));
+    if (typeof options === "object") {
+      log.types.push(...(options.types ?? []));
+    }
     return start(options);
   };
-  const animate = Element.prototype.animate;
+  const animate = Reflect.get(Element.prototype, "animate");
   Element.prototype.animate = function (keyframes, options) {
     if (typeof options === "object" && JSON.stringify(keyframes).includes("circle(")) {
       log.clips.push(options.pseudoElement ?? "");
@@ -91,7 +93,7 @@ test.describe("home", () => {
   }) => {
     const headline = "I turn language models into products that keep working after the demo.";
     // verify-deploy.sh finds the published headline's text before its full stop in the server's HTML.
-    const html = await (await request.get("/en")).text();
+    const html = await fetchText(request, "/en");
     expect(html).toContain(headline.slice(0, -1));
 
     await page.goto("/en");
@@ -104,17 +106,17 @@ test.describe("home", () => {
 
   test("from lg the line starts at that stop: down to the headline's foot, back to the gutter, on to the page's line", async ({
     page,
-  }) => {
+  }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/en");
-    test.skip(
+    testInfo.skip(
       !(await page.evaluate(() => CSS.supports("anchor-name: --a"))),
       "no anchor positioning: the stop stands alone",
     );
     const box = (selector: string) =>
       page.locator(selector).evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
     const [h1, stop, start, line] = await Promise.all(
-      ["h1", "h1 .hero-dot", ".hero-line", ".page-line"].map(box),
+      ["h1", "h1 .hero-dot", ".hero-line", ".page-line"].map((selector) => box(selector)),
     );
     const near = (a: number, b: number) => expect(Math.abs(a - b)).toBeLessThanOrEqual(1);
     near(start.top, h1.bottom);
@@ -149,7 +151,7 @@ test.describe("home", () => {
   });
 
   test("the server sends About's whole text, as prose", async ({ request }) => {
-    const html = await (await request.get("/en")).text();
+    const html = await fetchText(request, "/en");
     expect(html).toContain("Building AI applications in a Jupyter notebook is easy");
     expect(html).not.toContain("cat philosophy.txt");
   });
@@ -212,7 +214,7 @@ test.describe("home", () => {
       .locator("#projects > div > ul > li")
       .evaluateAll((items) => items.map((li) => Math.round(li.getBoundingClientRect().width)));
     expect(widths).toHaveLength(3);
-    expect(widths[0]).toBeGreaterThan(widths[1]! * 1.9);
+    expect(widths[0]).toBeGreaterThan(widths[1] * 1.9);
     expect(widths[1]).toBe(widths[2]);
   });
 
@@ -223,7 +225,7 @@ test.describe("home", () => {
     await expect(card.getByRole("link")).toHaveCount(1);
     // Its image, well away from the link's text, is part of the link too.
     await card.scrollIntoViewIfNeeded();
-    const image = (await card.locator(".card-media").boundingBox())!;
+    const image = await requireBox(card.locator(".card-media"));
     await page.mouse.click(image.x + image.width / 2, image.y + image.height / 2);
     await expect(page).toHaveURL(/\/en\/work\/project-one$/);
   });
@@ -246,7 +248,7 @@ test.describe("home", () => {
     expect(await underline()).toBe("0px 2px");
     // Over the cover, which the plate's one link covers too.
     await plate.scrollIntoViewIfNeeded();
-    const cover = (await plate.locator(".card-media").boundingBox())!;
+    const cover = await requireBox(plate.locator(".card-media"));
     await page.mouse.move(cover.x + cover.width / 2, cover.y + cover.height / 2);
     await expect.poll(underline).toBe("100% 2px");
     await page.mouse.move(0, 0);
@@ -310,13 +312,13 @@ test.describe("theme", () => {
     // parser is still in <head>: before <body> exists, so before any paint.
     await page.addInitScript(() => {
       new MutationObserver((_, observer) => {
-        window.__themeSetWithBody = document.body !== null;
+        globalThis.__themeSetWithBody = Boolean(document.body);
         observer.disconnect();
       }).observe(document, { attributes: true, subtree: true, attributeFilter: ["data-theme"] });
     });
     await page.reload();
     await expect(html).toHaveAttribute("data-theme", "light");
-    expect(await page.evaluate(() => window.__themeSetWithBody)).toBe(false);
+    expect(await page.evaluate(() => globalThis.__themeSetWithBody)).toBe(false);
     await expect(page.getByRole("button", { name: "Switch to the dark theme" })).toBeVisible();
   });
 
@@ -332,13 +334,13 @@ test.describe("theme", () => {
     await page.getByRole("button", { name: "Switch to the light theme" }).click();
     await expect(html).toHaveAttribute("data-theme", "light");
     await expect
-      .poll(() => page.evaluate(() => window.__reveals))
+      .poll(() => page.evaluate(() => globalThis.__reveals))
       .toEqual({ types: ["theme"], clips: ["::view-transition-new(root)"] });
 
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.getByRole("button", { name: "Switch to the dark theme" }).click();
     await expect(html).toHaveAttribute("data-theme", "dark");
-    expect(await page.evaluate(() => window.__reveals?.types)).toEqual(["theme"]);
+    expect(await page.evaluate(() => globalThis.__reveals?.types)).toEqual(["theme"]);
   });
 
   test("the browser's own colour is the page's, from before the first paint", async ({ page }) => {
@@ -402,7 +404,7 @@ test.describe("motion", () => {
     const talk = page.getByRole("link", { name: "Let’s talk" });
     const scale = () => talk.evaluate((el) => getComputedStyle(el).scale);
     const hold = async () => {
-      const box = (await talk.boundingBox())!;
+      const box = await requireBox(talk);
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await page.mouse.down();
     };
@@ -451,7 +453,7 @@ test.describe("command palette", () => {
     page,
     request,
   }) => {
-    const html = await (await request.get("/en")).text();
+    const html = await fetchText(request, "/en");
     expect(html).not.toMatch(/<kbd[^>]*>\s*(Ctrl|⌘)/);
     await page.goto("/en");
     await interactive(page);
@@ -560,12 +562,13 @@ test.describe("contact form", () => {
     page,
     request,
   }) => {
-    const label = (await page.locator('label[for="contact-name"]').boundingBox())!;
+    const label = await requireBox(page.locator('label[for="contact-name"]'));
     const name = page.locator("#contact-name");
-    expect(label.y + label.height).toBeLessThanOrEqual((await name.boundingBox())!.y);
+    const nameBox = await requireBox(name);
+    expect(label.y + label.height).toBeLessThanOrEqual(nameBox.y);
     await expect(name).toHaveCSS("min-height", "56px");
     await expect(page.locator('label[for="contact-name"]')).toHaveCSS("font-size", "16px");
-    const html = await (await request.get("/en")).text();
+    const html = await fetchText(request, "/en");
     expect(html).toMatch(/>contact@<wbr\/?>alirezarastineh\.me</);
     expect(html).not.toContain("break-all");
   });
@@ -577,7 +580,9 @@ test.describe("contact form", () => {
   }) => {
     // Only Chromium lets a test grant clipboard access and read it back.
     const readable = browserName === "chromium";
-    if (readable) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    if (readable) {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    }
     const contact = page.locator("#contact");
     await expect(
       contact.getByRole("link", { name: "GitHub (opens in a new tab)" }),
@@ -640,8 +645,8 @@ test.describe("contact form", () => {
 
   test("the page's line ends at Send, and after a send at “Message sent”, which closes on the dot", async ({
     page,
-  }) => {
-    test.skip(
+  }, testInfo) => {
+    testInfo.skip(
       !(await page.evaluate(() => CSS.supports("anchor-name: --a"))),
       "no anchor positioning: the line runs to the foot of the page",
     );
@@ -649,12 +654,13 @@ test.describe("contact form", () => {
     const box = (selector: string) =>
       page.locator(selector).evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
     const near = (a: number, b: number) => expect(Math.abs(a - b)).toBeLessThanOrEqual(1);
-    const middle = (rect: DOMRect) => rect.top + rect.height / 2;
     const [line, run, send] = await Promise.all(
-      [".page-line", ".page-line-run", "#contact button[type=submit]"].map(box),
+      [".page-line", ".page-line-run", "#contact button[type=submit]"].map((selector) =>
+        box(selector),
+      ),
     );
-    near(line.bottom, middle(send));
-    near(run.top, middle(send));
+    near(line.bottom, middleY(send));
+    near(run.top, middleY(send));
     near(run.left, line.left);
     near(run.right, send.left);
     await expect(page.locator(".page-line-run")).toHaveAttribute("aria-hidden", "true");
@@ -670,9 +676,14 @@ test.describe("contact form", () => {
     await expect(page.locator(".page-line-run")).toHaveCount(0);
     // In one read: the page is still scrolling to the message, which moves both boxes.
     const offset = await page.evaluate(() => {
-      const end = document.querySelector("#contact .page-line-end")!.getBoundingClientRect();
-      const line = document.querySelector(".page-line")!.getBoundingClientRect();
-      return line.bottom - (end.top + end.height / 2);
+      const endEl = document.querySelector("#contact .page-line-end");
+      const lineEl = document.querySelector(".page-line");
+      if (!endEl || !lineEl) {
+        throw new Error("Expected contact line end and page line elements");
+      }
+      const endRect = endEl.getBoundingClientRect();
+      const lineRect = lineEl.getBoundingClientRect();
+      return lineRect.bottom - (endRect.top + endRect.height / 2);
     });
     near(offset, 0);
   });
@@ -715,10 +726,11 @@ test.describe("contact form", () => {
 
   test("an unsent message asks before the page reloads or closes", async ({ page }) => {
     await page.locator("#contact-message").fill("A question about Atlas.");
-    const dialog = page.waitForEvent("dialog");
+    const dialogPromise = page.waitForEvent("dialog");
     await page.close({ runBeforeUnload: true });
-    expect((await dialog).type()).toBe("beforeunload");
-    await (await dialog).dismiss();
+    const dialog = await dialogPromise;
+    expect(dialog.type()).toBe("beforeunload");
+    await dialog.dismiss();
   });
 });
 
@@ -727,7 +739,9 @@ test.describe("contact form before hydration", () => {
     // The form's code held back until a field is filled: the visitor types
     // into the server's markup, then the form hydrates around their text.
     let release!: () => void;
-    const held = new Promise<void>((resolve) => (release = resolve));
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     await page.route(/\/contact\.component-[^/]*\.js$/, async (route) => {
       await held;
       await route.continue();
@@ -745,14 +759,16 @@ test.describe("visitor preferences", () => {
   test("a tap answers in the signal on the public site, not in the admin", async ({
     page,
     browserName,
-  }) => {
-    test.skip(browserName !== "chromium", "only Chromium reports the tap colour");
+  }, testInfo) => {
+    testInfo.skip(browserName !== "chromium", "only Chromium reports the tap colour");
     const tint = () =>
-      page.evaluate(() =>
-        getComputedStyle(document.querySelector("a, button")!).getPropertyValue(
-          "-webkit-tap-highlight-color",
-        ),
-      );
+      page.evaluate(() => {
+        const target = document.querySelector("a, button");
+        if (!target) {
+          throw new Error("Expected a link or button element");
+        }
+        return getComputedStyle(target).getPropertyValue("-webkit-tap-highlight-color");
+      });
     await page.goto("/en");
     await interactive(page);
     const publicTint = await tint();
@@ -764,8 +780,8 @@ test.describe("visitor preferences", () => {
   test("more contrast raises borders and quiet text, on public pages only", async ({
     page,
     browserName,
-  }) => {
-    test.skip(browserName !== "chromium", "Chromium's emulation of prefers-contrast");
+  }, testInfo) => {
+    testInfo.skip(browserName !== "chromium", "Chromium's emulation of prefers-contrast");
     const token = (name: string) =>
       page.evaluate(
         (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim(),
@@ -787,8 +803,8 @@ test.describe("visitor preferences", () => {
   test("forced colours keep the dot, a field's focus line and the palette's row", async ({
     page,
     browserName,
-  }) => {
-    test.skip(browserName !== "chromium", "Chromium's emulation of forced-colors");
+  }, testInfo) => {
+    testInfo.skip(browserName !== "chromium", "Chromium's emulation of forced-colors");
     await page.emulateMedia({ forcedColors: "active" });
     await page.goto("/en");
     await interactive(page);
@@ -800,9 +816,12 @@ test.describe("visitor preferences", () => {
     await expect(page.locator("#contact form[data-ready]")).toBeAttached();
     await page.locator("#contact-name").focus();
     expect(
-      await page
-        .locator("#contact-name")
-        .evaluate((el) => getComputedStyle(el.parentElement!, "::after").forcedColorAdjust),
+      await page.locator("#contact-name").evaluate((el) => {
+        if (!el.parentElement) {
+          throw new Error("Expected #contact-name to have a parent element");
+        }
+        return getComputedStyle(el.parentElement, "::after").forcedColorAdjust;
+      }),
     ).toBe("none");
 
     await page.keyboard.press("ControlOrMeta+k");
@@ -822,8 +841,8 @@ test.describe("visitor preferences", () => {
     await page.keyboard.press("ControlOrMeta+k");
     const palette = page.getByRole("dialog", { name: "Command palette" });
     await expect(palette.getByRole("combobox")).toBeInViewport();
-    const box = await palette.boundingBox();
-    expect(box!.y + box!.height).toBeLessThanOrEqual(200);
+    const box = await requireBox(palette);
+    expect(box.y + box.height).toBeLessThanOrEqual(200);
     await expect(palette.locator(".palette-keys")).toBeInViewport();
   });
 });

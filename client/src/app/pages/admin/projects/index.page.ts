@@ -85,7 +85,14 @@ import { absoluteTime, relativeTime } from "../../../admin/relative-time";
         description="The projects in the home page's order: a featured one spans the row, the rest go two across. The section's heading is in Words."
         preview="/admin/preview/en#projects"
       >
-        <button hlmBtn variant="outline" headerActions [disabled]="adding()" (click)="add()">
+        <button
+          hlmBtn
+          variant="outline"
+          type="button"
+          headerActions
+          [disabled]="adding()"
+          (click)="add()"
+        >
           <ng-icon name="lucidePlus" size="14" aria-hidden="true" />
           <span class="ml-1.5">Add project</span>
         </button>
@@ -120,7 +127,7 @@ import { absoluteTime, relativeTime } from "../../../admin/relative-time";
                       cdkDragHandle
                       type="button"
                       data-grip
-                      class="flex size-6 cursor-grab items-center justify-center rounded text-muted-foreground hover:text-foreground active:cursor-grabbing pointer-coarse:size-11"
+                      class="flex size-6 cursor-grab items-center justify-center rounded-sm text-muted-foreground hover:text-foreground active:cursor-grabbing pointer-coarse:size-11"
                       [attr.aria-label]="'Reorder ' + name(row) + '. Use Alt with arrow keys.'"
                       (keydown)="onGripKey($event, i)"
                     >
@@ -198,11 +205,15 @@ import { absoluteTime, relativeTime } from "../../../admin/relative-time";
 
         <ng-template #rowMenu let-row let-i="index">
           <hlm-dropdown-menu class="w-48">
-            <button hlmDropdownMenuItem [routerLink]="['/admin/projects', row.slug]">
+            <button hlmDropdownMenuItem type="button" [routerLink]="['/admin/projects', row.slug]">
               <ng-icon name="lucidePencil" size="14" aria-hidden="true" />
               <span>Edit</span>
             </button>
-            <button hlmDropdownMenuItem (triggered)="toggleVisible(row, !row.isVisible)">
+            <button
+              hlmDropdownMenuItem
+              type="button"
+              (triggered)="toggleVisible(row, !row.isVisible)"
+            >
               <ng-icon
                 [name]="row.isVisible ? 'lucideEyeOff' : 'lucideEye'"
                 size="14"
@@ -210,11 +221,17 @@ import { absoluteTime, relativeTime } from "../../../admin/relative-time";
               />
               <span>{{ row.isVisible ? "Hide from site" : "Show on site" }}</span>
             </button>
-            <button hlmDropdownMenuItem [disabled]="i === 0" (triggered)="move(i, -1)">
+            <button
+              hlmDropdownMenuItem
+              type="button"
+              [disabled]="i === 0"
+              (triggered)="move(i, -1)"
+            >
               Move up
             </button>
             <button
               hlmDropdownMenuItem
+              type="button"
               [disabled]="i === rows().length - 1"
               (triggered)="move(i, 1)"
             >
@@ -223,6 +240,7 @@ import { absoluteTime, relativeTime } from "../../../admin/relative-time";
             <hlm-dropdown-menu-separator />
             <button
               hlmDropdownMenuItem
+              type="button"
               class="text-destructive focus:text-destructive"
               (triggered)="remove(row)"
             >
@@ -256,7 +274,8 @@ export default class AdminProjectsPage implements OnInit {
   }
 
   protected name(row: ProjectListRow): string {
-    return row.translations.en?.name || row.slug;
+    const enName = row.translations.en?.name ?? "";
+    return enName === "" ? row.slug : enName;
   }
 
   /** The languages with a case study: "EN, DE", "EN", or "None". */
@@ -274,7 +293,9 @@ export default class AdminProjectsPage implements OnInit {
     const result = await this.api.listProjects();
     this.loading.set(false);
     this.loadError.set(result.ok ? null : result.error);
-    if (result.ok) this.rows.set(result.data.projects);
+    if (result.ok) {
+      this.rows.set(result.data.projects);
+    }
   }
 
   protected async toggleVisible(row: ProjectListRow, isVisible: boolean): Promise<void> {
@@ -310,7 +331,9 @@ export default class AdminProjectsPage implements OnInit {
       confirmLabel: "Delete project",
       destructive: true,
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
 
     const previous = this.rows();
     this.rows.update((list) => list.filter((r) => r.id !== row.id));
@@ -327,7 +350,9 @@ export default class AdminProjectsPage implements OnInit {
   }
 
   protected onGripKey(event: KeyboardEvent, index: number): void {
-    if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+    if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) {
+      return;
+    }
     event.preventDefault();
     this.move(index, event.key === "ArrowUp" ? -1 : 1);
   }
@@ -342,7 +367,9 @@ export default class AdminProjectsPage implements OnInit {
 
   private moveTo(from: number, to: number): void {
     const list = [...this.rows()];
-    if (from === to || to < 0 || to >= list.length) return;
+    if (from === to || to < 0 || to >= list.length) {
+      return;
+    }
     moveItemInArray(list, from, to);
     void this.onReorder(list);
     // A moved row is a node moved, which loses the focus: its grip takes it back where it lands.

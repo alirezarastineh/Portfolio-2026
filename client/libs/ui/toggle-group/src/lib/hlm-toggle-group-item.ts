@@ -26,8 +26,8 @@ export class HlmToggleGroupItem {
   public readonly variant = input<ToggleVariants["variant"]>("default");
   public readonly size = input<ToggleVariants["size"]>("default");
 
-  protected readonly _variant = computed(() => this._toggleGroup.variant() || this.variant());
-  protected readonly _size = computed(() => this._toggleGroup.size() || this.size());
+  protected readonly _variant = computed(() => this._toggleGroup.variant() ?? this.variant());
+  protected readonly _size = computed(() => this._toggleGroup.size() ?? this.size());
 
   constructor() {
     classes(() => [

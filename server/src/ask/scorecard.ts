@@ -232,7 +232,9 @@ export function scorecard(
     const value = compute(judge, new Date(now));
     cached = { at: now, judge, value };
     value.catch(() => {
-      if (cached?.value === value) cached = null;
+      if (cached?.value === value) {
+        cached = null;
+      }
     });
   }
   return cached.value;

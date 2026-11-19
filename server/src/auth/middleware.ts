@@ -48,7 +48,9 @@ function safeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
   const right = Buffer.from(b);
   // timingSafeEqual throws on length mismatch, which would itself leak length.
-  if (left.length !== right.length) return false;
+  if (left.length !== right.length) {
+    return false;
+  }
   return timingSafeEqual(left, right);
 }
 
@@ -57,7 +59,9 @@ function safeEqual(a: string, b: string): boolean {
  * state-changing request whose Origin is absent or not allow-listed.
  */
 export const requireTrustedOrigin: MiddlewareHandler = async (c, next) => {
-  if (!UNSAFE_METHODS.has(c.req.method)) return next();
+  if (!UNSAFE_METHODS.has(c.req.method)) {
+    return next();
+  }
 
   const origin = c.req.header("origin");
   if (!origin || !adminOrigins().includes(origin)) {
@@ -72,10 +76,14 @@ export const requireTrustedOrigin: MiddlewareHandler = async (c, next) => {
  */
 export const loadSession: MiddlewareHandler = async (c, next) => {
   const token = readSessionToken(c);
-  if (!token) return c.json({ error: "unauthenticated" }, 401);
+  if (!token) {
+    return c.json({ error: "unauthenticated" }, 401);
+  }
 
   const resolved = await resolveSession(token);
-  if (!resolved) return c.json({ error: "unauthenticated" }, 401);
+  if (!resolved) {
+    return c.json({ error: "unauthenticated" }, 401);
+  }
 
   const session = await rotateIfStale(c, resolved);
 
@@ -101,8 +109,12 @@ export const loadSession: MiddlewareHandler = async (c, next) => {
  * existing session rather than returning 401.
  */
 async function rotateIfStale(c: Context, session: ActiveSession): Promise<ActiveSession> {
-  if (session.pendingTotp) return session;
-  if (Date.now() - session.createdAt.getTime() < ROTATE_AFTER_MS) return session;
+  if (session.pendingTotp) {
+    return session;
+  }
+  if (Date.now() - session.createdAt.getTime() < ROTATE_AFTER_MS) {
+    return session;
+  }
 
   try {
     const issued = await createSession({
@@ -139,7 +151,9 @@ export const requireFullSession: MiddlewareHandler = async (c, next) => {
  * bodies forcing a preflight) is enforced by the route validators.
  */
 export const requireCsrf: MiddlewareHandler = async (c, next) => {
-  if (!UNSAFE_METHODS.has(c.req.method)) return next();
+  if (!UNSAFE_METHODS.has(c.req.method)) {
+    return next();
+  }
 
   const header = c.req.header("x-csrf-token");
   const cookie = readCsrfCookie(c);

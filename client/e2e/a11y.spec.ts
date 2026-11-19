@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 
-import { expect, interactive, settled, test } from "./fixtures";
+import { expect, interactive, runSequentially, settled, test } from "./fixtures";
 
 const PAGES = [
   "/en",
@@ -89,12 +89,15 @@ for (const colorScheme of ["dark", "light"] as const) {
 }
 
 test("a link that opens a new tab says so, in the page's language", async ({ page }) => {
-  for (const [path, name] of [
-    ["/en", /^LinkedIn \(opens in a new tab\)$/],
-    ["/de", /^LinkedIn \(öffnet in einem neuen Tab\)$/],
-  ] as const) {
-    await page.goto(path);
-    await interactive(page);
-    await expect(page.locator("footer").getByRole("link", { name })).toBeVisible();
-  }
+  await runSequentially(
+    [
+      ["/en", /^LinkedIn \(opens in a new tab\)$/],
+      ["/de", /^LinkedIn \(öffnet in einem neuen Tab\)$/],
+    ] as const,
+    async ([path, name]) => {
+      await page.goto(path);
+      await interactive(page);
+      await expect(page.locator("footer").getByRole("link", { name })).toBeVisible();
+    },
+  );
 });

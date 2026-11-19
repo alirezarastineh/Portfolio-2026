@@ -164,6 +164,17 @@ const SECTIONS: Section[] = [
 
 const ALL_FIELDS = SECTIONS.flatMap((section) => section.fields);
 
+function visibleSections(): Section[] {
+  return SECTIONS.map((section) => ({
+    ...section,
+    fields: section.fields.filter((field) => !isHidden("section", "seo", field.key)),
+  }));
+}
+
+function allSectionFields(sections: readonly Section[]): FieldDef[] {
+  return sections.flatMap((section) => section.fields);
+}
+
 type SeoGroup = Record<keyof Seo, FormControl<string>>;
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
@@ -307,11 +318,8 @@ export default class AdminSeoPage implements OnInit {
   private readonly pulse = inject(AdminPulseService, { optional: true });
   private readonly previewPanel = inject(LivePreviewService, { optional: true });
 
-  protected readonly sections = SECTIONS.map((section) => ({
-    ...section,
-    fields: section.fields.filter((field) => !isHidden("section", "seo", field.key)),
-  }));
-  private readonly shown = this.sections.flatMap((section) => section.fields);
+  protected readonly sections = visibleSections();
+  private readonly shown = allSectionFields(this.sections);
   private readonly setOnce = new Set(
     this.sections.filter((s) => s.setOnce).flatMap((s) => s.fields.map((f) => f.key)),
   );
@@ -399,14 +407,18 @@ export default class AdminSeoPage implements OnInit {
 
   /** Fields saved to the draft and not live; null until the review or a save here says. */
   protected readonly notLive = computed(() => {
-    if (!this.pulse?.marks() && this.savedHere().size === 0) return null;
+    if (!this.pulse?.marks() && this.savedHere().size === 0) {
+      return null;
+    }
     return Object.values(this.trace()).filter((state) => state === "draft").length;
   });
 
   /** A section per entry, its dot the trace rolled up, its count the save's problems. */
   protected readonly outline = computed<OutlineItem[]>(() => {
     this.formVersion();
-    if (!this.loaded()) return [];
+    if (!this.loaded()) {
+      return [];
+    }
     const trace = this.trace();
     const flagged = (key: keyof Seo) =>
       (["en", "de"] as const).filter((l) => this.form.controls[l].controls[key].hasError("server"))
@@ -447,7 +459,9 @@ export default class AdminSeoPage implements OnInit {
 
   ngOnInit(): void {
     const stored = storedView("seo");
-    if (stored) this.view.set(stored);
+    if (stored) {
+      this.view.set(stored);
+    }
     void this.load();
   }
 
@@ -484,10 +498,14 @@ export default class AdminSeoPage implements OnInit {
     const result = await this.api.getSection<Seo>("seo");
     this.loading.set(false);
     // A failed reload after "Saved elsewhere" keeps the form: only a first load shows the error.
-    if (!this.loaded()) this.loadError.set(result.ok ? null : result.error);
+    if (!this.loaded()) {
+      this.loadError.set(result.ok ? null : result.error);
+    }
 
     if (!result.ok) {
-      if (this.loaded()) toast.error("Could not load SEO", { description: result.error });
+      if (this.loaded()) {
+        toast.error("Could not load SEO", { description: result.error });
+      }
       return;
     }
 
@@ -502,7 +520,9 @@ export default class AdminSeoPage implements OnInit {
   }
 
   protected reset(): void {
-    if (!this.pristine) return;
+    if (!this.pristine) {
+      return;
+    }
     const edits = this.form.getRawValue();
     this.form.reset({ en: this.pristine.en, de: this.pristine.de });
     this.form.markAsPristine();
@@ -515,7 +535,9 @@ export default class AdminSeoPage implements OnInit {
   }
 
   protected async save(): Promise<void> {
-    if (this.saving()) return;
+    if (this.saving()) {
+      return;
+    }
 
     const raw = this.form.getRawValue() as Record<Locale, Seo>;
     const changed = Object.entries(this.trace())
@@ -566,7 +588,9 @@ export default class AdminSeoPage implements OnInit {
       .filter((key) => this.setOnce.has(key) && !this.opened().has(key));
     if (closed.length) {
       this.changing.update((keys) => new Set([...keys, ...closed]));
-      if (!this.gone) afterNextRender(() => this.handleIssues(issues), { injector: this.injector });
+      if (!this.gone) {
+        afterNextRender(() => this.handleIssues(issues), { injector: this.injector });
+      }
       return;
     }
     // `[locale, field]`, straight onto the pair's control.
@@ -581,7 +605,9 @@ export default class AdminSeoPage implements OnInit {
     const hidden = issues
       .map((i) => i.path[0])
       .find((l): l is Locale => isLocale(l) && shown !== "both" && l !== shown);
-    if (hidden) this.view.set(this.wide() ? "both" : hidden);
+    if (hidden) {
+      this.view.set(this.wide() ? "both" : hidden);
+    }
     toastIssues(unplaced.length ? unplaced : issues);
     focusFirstInvalid(this.host.nativeElement);
   }

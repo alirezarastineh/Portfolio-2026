@@ -19,7 +19,9 @@ export default defineEventHandler(async (event) => {
     getRequestHeader(event, "cookie"),
     getRequestHeader(event, "accept-language"),
   );
-  if (!redirect) return;
+  if (!redirect) {
+    return;
+  }
 
   if (redirect.negotiated) {
     setResponseHeader(event, "Vary", "Cookie, Accept-Language");

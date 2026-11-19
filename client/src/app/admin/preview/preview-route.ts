@@ -83,7 +83,9 @@ function inBrowser(): boolean {
  */
 export const previewContentResolver: ResolveFn<boolean> = async (route) => {
   const state = inject(PreviewState);
-  if (!inBrowser()) return false;
+  if (!inBrowser()) {
+    return false;
+  }
   // Everything injected before the first await: the injection context ends there.
   const store = inject(ContentStore);
   const language = inject(LanguageService);
@@ -107,7 +109,9 @@ export const previewContentResolver: ResolveFn<boolean> = async (route) => {
     const body = (error as { error?: { error?: string; issues?: ApiIssue[] } }).error;
     state.issues.set(body?.issues ?? []);
     state.error.set(body?.error ?? `http_${statusOf(error) ?? "error"}`);
-    if (!body?.error) console.error("[preview] could not load the draft", error);
+    if (!body?.error) {
+      console.error("[preview] could not load the draft", error);
+    }
     return false;
   }
 };

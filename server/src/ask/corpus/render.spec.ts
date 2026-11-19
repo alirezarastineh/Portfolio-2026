@@ -22,27 +22,42 @@ const doc = (d: Partial<CorpusDocument> & Pick<CorpusDocument, "id">): CorpusDoc
   ...d,
 });
 
+const partCClip = (text: string, limit: number | undefined, id: string) => {
+  if (!limit || text.length <= limit) {
+    return text;
+  }
+  const cut = text.lastIndexOf("\n", limit);
+  return `${text.slice(0, cut > limit / 2 ? cut : limit)}\n[… continues: get_document("${id}")]`;
+};
+
+const longProjectDoc = (id: string) => doc({ id, text: "line of a case study\n".repeat(400) });
+
+function coreLimitOf(kind: CorpusDocument["kind"]): number {
+  const limit = CORE_LIMIT[kind];
+  if (limit === undefined) {
+    throw new Error(`Missing CORE_LIMIT for ${kind}`);
+  }
+  return limit;
+}
+
 /** Part C's renderer, verbatim: the oracle for layout "both". */
 function partC(documents: CorpusDocument[]): { core: string; compact: string } {
   const header = (d: CorpusDocument) =>
     ["---", `id: ${d.id}`, `title: ${d.title}`, `url: ${d.url}`, "---"].join("\n");
-  const clip = (text: string, limit: number | undefined, id: string) => {
-    if (!limit || text.length <= limit) return text;
-    const cut = text.lastIndexOf("\n", limit);
-    return `${text.slice(0, cut > limit / 2 ? cut : limit)}\n[… continues: get_document("${id}")]`;
-  };
   const parts: string[] = [];
   let total = 0;
   for (const d of documents) {
     const body = d.text.length > 420 ? `${d.text.slice(0, 420)}…` : d.text;
     const part = `[${d.id}] ${d.title} (${d.url})\n${body}`;
-    if (total + part.length > 40_000) break;
+    if (total + part.length > 40_000) {
+      break;
+    }
     parts.push(part);
     total += part.length;
   }
   return {
     core: documents
-      .map((d) => `${header(d)}\n${clip(d.text, CORE_LIMIT[d.kind], d.id)}`)
+      .map((d) => `${header(d)}\n${partCClip(d.text, CORE_LIMIT[d.kind], d.id)}`)
       .join("\n\n"),
     compact: parts.join("\n\n"),
   };
@@ -161,19 +176,22 @@ describe("the core per reading locale", () => {
   });
 
   it("clips long documents at their kind's limit", () => {
-    const long = doc({ id: "project:long@en", text: "line\n".repeat(1_000) });
+    const long = doc({ id: "project:long@en", text: "line\n".repeat(1000) });
     const core = renderCore([long], "en");
     expect(core).toContain('[… continues: get_document("project:long@en")]');
-    expect(core.length).toBeLessThan(CORE_LIMIT.project! + 200);
+    expect(core.length).toBeLessThan(coreLimitOf("project") + 200);
   });
 });
 
 describe("tiers", () => {
-  const long = (id: string) => doc({ id, text: "line of a case study\n".repeat(400) });
-
   it("hold a promoted document whole at the front, in either language, and cut a demoted one shorter", () => {
     const documents = applyTiers(
-      [...corpus, long("project:big@en"), long("project:big@de"), long("project:small@en")],
+      [
+        ...corpus,
+        longProjectDoc("project:big@en"),
+        longProjectDoc("project:big@de"),
+        longProjectDoc("project:small@en"),
+      ],
       { promoted: ["project:big@de", "skills@en", "nothing@en"], demoted: ["project:small@en"] },
     );
     const view = coreView(documents, "en");
@@ -181,11 +199,11 @@ describe("tiers", () => {
     expect(ids(view.handles)).not.toContain("project:big@de");
 
     const core = renderCore(documents, "en");
-    const block = (id: string) => core.slice(core.indexOf(`id: ${id}\n`)).split("\n\n---")[0]!;
+    const block = (id: string) => core.slice(core.indexOf(`id: ${id}\n`)).split("\n\n---")[0];
     expect(block("project:big@de")).not.toContain("continues: get_document");
-    expect(block("project:big@de").length).toBeGreaterThan(8_000);
+    expect(block("project:big@de").length).toBeGreaterThan(8000);
     expect(block("project:big@en")).toContain("continues: get_document");
-    expect(block("project:small@en").length).toBeLessThan(CORE_LIMIT.project! / 2 + 200);
+    expect(block("project:small@en").length).toBeLessThan(coreLimitOf("project") / 2 + 200);
     expect(PROMOTED_CHARS).toBe(12_000);
   });
 
@@ -209,7 +227,7 @@ describe("the compact corpus", () => {
 
 describe("Part C's layout", () => {
   it("is kept byte for byte, for the pairwise gate and older answers", () => {
-    const documents = [...corpus, doc({ id: "project:long@en", text: "line\n".repeat(1_000) })];
+    const documents = [...corpus, doc({ id: "project:long@en", text: "line\n".repeat(1000) })];
     for (const reading of ["en", "de"] as const) {
       expect(renderCore(documents, reading, "both")).toBe(partC(documents).core);
       expect(renderCompact(documents, reading, "both")).toBe(partC(documents).compact);
@@ -224,15 +242,15 @@ describe("Part C's layout", () => {
 describe("the format sample prompt.ts hashes", () => {
   it("reaches every limit, so a change to any of them changes the hash", () => {
     const core = renderCore(FORMAT_SAMPLE, "en");
-    const block = (id: string) => core.slice(core.indexOf(`id: ${id}\n`)).split("\n\n---")[0]!;
+    const block = (id: string) => core.slice(core.indexOf(`id: ${id}\n`)).split("\n\n---")[0];
     // Promoted: past the kind's limit, cut only at PROMOTED_CHARS.
     expect(block("post:one@en")).toContain('[… continues: get_document("post:one@en")]');
     expect(block("post:one@en").length).toBeGreaterThan(PROMOTED_CHARS - 100);
     expect(block("post:one@en").length).toBeLessThan(PROMOTED_CHARS + 200);
     // Demoted: cut at half the kind's limit; the plain long project at the whole limit.
     expect(block("project:cut@en")).toContain("continues: get_document");
-    expect(block("project:cut@en").length).toBeLessThan(CORE_LIMIT.project! / 2 + 200);
-    expect(block("project:long@en").length).toBeGreaterThan(CORE_LIMIT.project! - 100);
+    expect(block("project:cut@en").length).toBeLessThan(coreLimitOf("project") / 2 + 200);
+    expect(block("project:long@en").length).toBeGreaterThan(coreLimitOf("project") - 100);
     // Every placement rule: handles, both versions of an incomplete translation, one language only.
     const german = renderCore(FORMAT_SAMPLE, "de");
     expect(core).toContain("## Also in German\n");
@@ -242,9 +260,9 @@ describe("the format sample prompt.ts hashes", () => {
       "id: profile@en\ntitle: P\nurl: /en\nupdated: 2026-10-01\nrelated: faq:1@en\n---",
     );
     expect(core).toContain("url: /en#experience\nrelated: project:short@en\n---");
-    const partC = renderCore(FORMAT_SAMPLE, "en", "both");
-    expect(partC).not.toContain("updated:");
-    expect(partC).not.toContain("related:");
+    const legacyCore = renderCore(FORMAT_SAMPLE, "en", "both");
+    expect(legacyCore).not.toContain("updated:");
+    expect(legacyCore).not.toContain("related:");
     expect(german).toContain("---\nid: project:short@de\n");
     expect(german).toContain("---\nid: project:short@en\n");
     expect(core).toContain("---\nid: post:nur-de@de\n");

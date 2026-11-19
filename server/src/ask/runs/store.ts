@@ -48,13 +48,15 @@ export async function createRun(
       if (keys.length) {
         await tx
           .insert(aiRunItems)
-          .values(keys.map((key, position) => ({ runId: run!.id, key, position })));
+          .values(keys.map((key, position) => ({ runId: run.id, key, position })));
       }
-      return run!;
+      return run;
     });
   } catch (error) {
     // The partial unique index: one queued or running run per kind.
-    if (pgErrorCode(error) === "23505") return null;
+    if (pgErrorCode(error) === "23505") {
+      return null;
+    }
     throw error;
   }
 }
@@ -69,7 +71,9 @@ export async function reopenRun(id: string): Promise<RunRow | null> {
       .returning();
     return run ?? null;
   } catch (error) {
-    if (pgErrorCode(error) === "23505") return null;
+    if (pgErrorCode(error) === "23505") {
+      return null;
+    }
     throw error;
   }
 }
@@ -189,7 +193,9 @@ export async function listRuns(limit = 20): Promise<RunRow[]> {
 
 export async function getRun(id: string): Promise<{ run: RunRow; items: ItemRow[] } | null> {
   const [run] = await getDb().select().from(aiRuns).where(eq(aiRuns.id, id));
-  if (!run) return null;
+  if (!run) {
+    return null;
+  }
   const items = await getDb()
     .select()
     .from(aiRunItems)

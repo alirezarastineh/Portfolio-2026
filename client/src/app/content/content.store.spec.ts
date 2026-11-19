@@ -45,7 +45,7 @@ describe("ContentStore", () => {
   });
 
   it("refuses a payload that does not match the schema, and can retry", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     const failing = store.ensure("en");
     backend.expectOne("/api/v2/content/en").flush({ version: 1, nonsense: true });
     await expect(failing).rejects.toThrow(/invalid content payload/);

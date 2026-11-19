@@ -60,7 +60,9 @@ export async function loadAnswer(messageId: string): Promise<DiagnosisAnswer | n
     .from(aiMessages)
     .leftJoin(aiFeedback, eq(aiFeedback.messageId, aiMessages.id))
     .where(and(eq(aiMessages.id, messageId), VISITOR_ANSWER));
-  if (!row) return null;
+  if (!row) {
+    return null;
+  }
 
   // The session's answers in the window after it: did the visitor ask again? Compared in SQL,
   // which keeps the timestamps' microseconds.
@@ -150,14 +152,15 @@ export async function getEntry(id: string): Promise<JournalRow | undefined> {
 export const namedIn = (diagnosis: JournalDiagnosis): string | null =>
   diagnosis.located?.named ? diagnosis.located.id : null;
 
+const unlessEdited = (column: AnyColumn, was: string | null, now: string | null) =>
+  sql`case when ${column} is not distinct from ${was}::text then ${now}::text else ${column} end`;
+
 /**
  * The admin's fields after a new analysis, decided in the database at the
  * moment of writing: each takes the new proposal's value only while it still
  * holds the previous proposal's, so an edit saved meanwhile is never lost.
  */
 function proposalUnlessEdited(before: Proposal, next: Proposal) {
-  const unlessEdited = (column: AnyColumn, was: string | null, now: string | null) =>
-    sql`case when ${column} is not distinct from ${was}::text then ${now}::text else ${column} end`;
   return {
     rootCause: unlessEdited(aiJournal.rootCause, before.rootCause, next.rootCause),
     fixType: unlessEdited(aiJournal.fixType, before.fixType, next.fixType),
@@ -185,7 +188,7 @@ export async function createEntry(
       heuristic: proposal.heuristic,
     })
     .returning();
-  return row!;
+  return row;
 }
 
 /**
@@ -218,6 +221,35 @@ export async function reanalysed(
 /** Statuses a replay may still add evidence to: an entry fixed or retired is the admin's record. */
 export const REPLAYABLE: readonly JournalRow["status"][] = ["proposed", "accepted"];
 
+async function tryApplyReplay(
+  entryId: string,
+  replay: ReplayRecord,
+  write: typeof reanalysed,
+  attemptsLeft: number,
+): Promise<JournalRow | "answer_gone" | "entry_gone" | "entry_decided"> {
+  if (attemptsLeft <= 0) {
+    return "entry_decided";
+  }
+  const row = await getEntry(entryId);
+  if (!row) {
+    return "entry_gone";
+  }
+  if (!REPLAYABLE.includes(row.status)) {
+    return "entry_decided";
+  }
+  const answer = await loadAnswer(row.messageIds[0] ?? "");
+  if (!answer) {
+    return "answer_gone";
+  }
+  const corpora = await loadCorpora(answer);
+  if (!corpora.snapshot && !corpora.live) {
+    throw new Error("no corpus to analyse the replay with");
+  }
+  const diagnosis = diagnose({ answer, ...corpora, expected: namedIn(row.diagnosis), replay });
+  const updated = await write(row, diagnosis, replay);
+  return updated ?? tryApplyReplay(entryId, replay, write, attemptsLeft - 1);
+}
+
 /**
  * A finished replay joins its entry's evidence: the answer analysed again
  * with it. `answer_gone` when the answer was pruned meanwhile, `entry_gone`
@@ -230,21 +262,7 @@ export async function applyReplay(
   /** The write (tests put a status change in front of it). */
   write: typeof reanalysed = reanalysed,
 ): Promise<JournalRow | "answer_gone" | "entry_gone" | "entry_decided"> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const row = await getEntry(entryId);
-    if (!row) return "entry_gone";
-    if (!REPLAYABLE.includes(row.status)) return "entry_decided";
-    const answer = await loadAnswer(row.messageIds[0] ?? "");
-    if (!answer) return "answer_gone";
-    const corpora = await loadCorpora(answer);
-    if (!corpora.snapshot && !corpora.live) {
-      throw new Error("no corpus to analyse the replay with");
-    }
-    const diagnosis = diagnose({ answer, ...corpora, expected: namedIn(row.diagnosis), replay });
-    const updated = await write(row, diagnosis, replay);
-    if (updated) return updated;
-  }
-  return "entry_decided";
+  return tryApplyReplay(entryId, replay, write, 2);
 }
 
 export async function views(rows: readonly JournalRow[]): Promise<JournalView[]> {

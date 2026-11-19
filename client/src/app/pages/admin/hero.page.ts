@@ -89,6 +89,9 @@ interface CopyField {
   multiline?: boolean;
 }
 
+const copyKeys = (fields: readonly CopyField[]): string[] =>
+  fields.map((f) => `${f.group}.${f.key}`);
+
 type IdentityKey = Exclude<keyof ProfileInput, "avatarId">;
 
 /** A field in one language: the identity row's. */
@@ -627,7 +630,7 @@ export default class AdminHeroPage implements OnInit {
     primaryCtaHref: "",
     secondaryCtaHref: "",
     siteUrl: "",
-    availability: "open" as Availability,
+    availability: this.fb.nonNullable.control<Availability>("open"),
     locationCity: "",
     locationCountry: "",
     timezone: "",
@@ -704,8 +707,7 @@ export default class AdminHeroPage implements OnInit {
     for (const { group, key } of [...this.aboutYou, ...this.heroCopy]) {
       const [en, de] = [`${group}En`, `${group}De`] as const;
       const copy = (side: typeof en | typeof de) =>
-        (now.copy[side] as Record<string, string>)[key] !==
-        (base?.copy[side] as Record<string, string> | undefined)?.[key];
+        (now.copy[side] as Record<string, string>)[key] !== base?.copy[side]?.[key];
       of(`${group}.${key}`, `ui.${group}.${key}`, !!base && (copy(en) || copy(de)));
     }
     for (const locale of this.locales) {
@@ -754,7 +756,9 @@ export default class AdminHeroPage implements OnInit {
 
   /** Fields saved to the draft and not live; null until the review or a save here says. */
   protected readonly notLive = computed(() => {
-    if (!this.pulse?.marks() && this.savedHere().size === 0) return null;
+    if (!this.pulse?.marks() && this.savedHere().size === 0) {
+      return null;
+    }
     const states = [...Object.values(this.trace()), ...this.linkTrace().values()];
     return states.filter((state) => state === "draft").length;
   });
@@ -762,10 +766,11 @@ export default class AdminHeroPage implements OnInit {
   /** The page's four sections, each with its trace rolled up and the last save's problems. */
   protected readonly outline = computed<OutlineItem[]>(() => {
     this.revision();
-    if (!this.loaded()) return [];
+    if (!this.loaded()) {
+      return [];
+    }
     const trace = this.trace();
     const states = (keys: string[]) => keys.map((key) => trace[key] ?? "live");
-    const copyKeys = (fields: CopyField[]) => fields.map((f) => `${f.group}.${f.key}`);
     const flagged = (fields: CopyField[]) =>
       fields.reduce(
         (sum, { group, key }) =>
@@ -812,7 +817,9 @@ export default class AdminHeroPage implements OnInit {
   /** The hero as it would be published with these edits: identity and copy over the draft. */
   protected readonly livePreview = computed<LiveCompose | null>(() => {
     this.revision();
-    if (!this.loaded()) return null;
+    if (!this.loaded()) {
+      return null;
+    }
     const identity = { ...this.identity.getRawValue(), avatarId: this.avatarId() };
     const copy = this.form.getRawValue();
     const savedAvatar = this.pristine?.avatar.id ?? null;
@@ -866,7 +873,9 @@ export default class AdminHeroPage implements OnInit {
 
   ngOnInit(): void {
     const stored = storedView("profile");
-    if (stored) this.view.set(stored);
+    if (stored) {
+      this.view.set(stored);
+    }
     void this.load();
     void this.loadLinks();
   }
@@ -925,8 +934,12 @@ export default class AdminHeroPage implements OnInit {
     this.loading.set(false);
 
     // The page says so, with a retry; `loaded` stays false.
-    if (!profileResult.ok || !profileGroup) return;
-    if (resumes.ok) this.resumes.set(resumes.data.resumes);
+    if (!profileResult.ok || !profileGroup) {
+      return;
+    }
+    if (resumes.ok) {
+      this.resumes.set(resumes.data.resumes);
+    }
 
     const p = profileResult.data.profile;
     this.uiUpdatedAt = profileGroup.updatedAt;
@@ -953,7 +966,9 @@ export default class AdminHeroPage implements OnInit {
   }
 
   private applyPristine(): void {
-    if (!this.pristine) return;
+    if (!this.pristine) {
+      return;
+    }
 
     this.identity.reset(this.pristine.identity);
     this.avatarId.set(this.pristine.avatar.id);
@@ -971,7 +986,9 @@ export default class AdminHeroPage implements OnInit {
   private async loadLinks(): Promise<void> {
     const result = await this.api.listSocials();
     this.linksError.set(result.ok ? null : result.error);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     this.rows.set(result.data.socials);
     this.savedRows.set(new Map(result.data.socials.map((row) => [row.id, structuredClone(row)])));
     this.versions.remember(result.data.socials);
@@ -1021,9 +1038,13 @@ export default class AdminHeroPage implements OnInit {
         cancelLabel: "Keep it",
         destructive: true,
       });
-      if (!remove) return;
+      if (!remove) {
+        return;
+      }
     }
-    if (!(await this.putResume(locale, asset?.id ?? null))) return;
+    if (!(await this.putResume(locale, asset?.id ?? null))) {
+      return;
+    }
     const name = `CV (${locale.toUpperCase()})`;
     // Saved at once, so the way back is a step of its own: the file before it, or none.
     toastUndo(
@@ -1044,7 +1065,9 @@ export default class AdminHeroPage implements OnInit {
     }
     this.markSaved([`cv-${locale}`]);
     const refreshed = await this.api.getResumes();
-    if (refreshed.ok) this.resumes.set(refreshed.data.resumes);
+    if (refreshed.ok) {
+      this.resumes.set(refreshed.data.resumes);
+    }
     return true;
   }
 
@@ -1058,12 +1081,20 @@ export default class AdminHeroPage implements OnInit {
 
   /** Profile, then the changed links: one Save for both, each keeping its own way of failing. */
   protected async save(): Promise<void> {
-    if (this.busy) return;
+    if (this.busy) {
+      return;
+    }
     this.busy = true;
     try {
-      if (this.heroChanges()) await this.saveHero();
-      if (this.linkChanges()) await this.saveLinks();
-      if (!this.changes() && !this.problems()) this.savedAt.set(Date.now());
+      if (this.heroChanges()) {
+        await this.saveHero();
+      }
+      if (this.linkChanges()) {
+        await this.saveLinks();
+      }
+      if (!this.changes() && !this.problems()) {
+        this.savedAt.set(Date.now());
+      }
     } finally {
       this.busy = false;
     }
@@ -1124,7 +1155,9 @@ export default class AdminHeroPage implements OnInit {
    */
   private async afterConflict(retried: boolean): Promise<void> {
     const saved = this.pristine;
-    if (!saved) return;
+    if (!saved) {
+      return;
+    }
     const [latest, profile] = await Promise.all([
       this.ui.latest({ profile: saved.profile }),
       this.api.getProfile(),
@@ -1134,9 +1167,15 @@ export default class AdminHeroPage implements OnInit {
       this.uiUpdatedAt = latest.updatedAt;
       return this.saveHero(true);
     }
-    if (await askStale(this.confirm, "This page")) return this.reload();
-    if (latest) this.uiUpdatedAt = latest.updatedAt;
-    if (identityAt) this.profileUpdatedAt = identityAt;
+    if (await askStale(this.confirm, "This page")) {
+      return this.reload();
+    }
+    if (latest) {
+      this.uiUpdatedAt = latest.updatedAt;
+    }
+    if (identityAt) {
+      this.profileUpdatedAt = identityAt;
+    }
   }
 
   /** `profile.<field>` → an identity control; `ui.<group>.<locale>.<field>` → a copy control. */
@@ -1159,13 +1198,15 @@ export default class AdminHeroPage implements OnInit {
     const hidden = issues
       .map((i) => i.path[2])
       .find((l): l is Locale => isLocale(l) && shown !== "both" && l !== shown);
-    if (hidden) this.view.set(this.wide() ? "both" : hidden);
+    if (hidden) {
+      this.view.set(this.wide() ? "both" : hidden);
+    }
     toastIssues(unplaced.length ? unplaced : issues);
     focusFirstInvalid(this.host.nativeElement);
   }
 
   protected identityControl(key: IdentityKey): FormControl<string> {
-    return this.identity.controls[key] as FormControl<string>;
+    return this.identity.controls[key];
   }
 
   protected identityIssue(key: IdentityKey): string | null {
@@ -1183,14 +1224,18 @@ export default class AdminHeroPage implements OnInit {
 
   protected patch(id: string, change: Partial<SocialInput>): void {
     this.rows.update((list) => list.map((r) => (r.id === id ? { ...r, ...change } : r)));
-    for (const key of Object.keys(change)) this.issues.resolve(`${id}.${key}`);
+    for (const key of Object.keys(change)) {
+      this.issues.resolve(`${id}.${key}`);
+    }
   }
 
   /** Every changed link. One that fails keeps its edits and says why. */
   private async saveLinks(): Promise<void> {
     const changedRows = this.rows().filter((row) => this.changedIds().has(row.id));
     const ids = changedRows.map((row) => row.id);
-    if (!(await this.versions.mayOverwrite(ids, "A link on this page"))) return;
+    if (!(await this.versions.mayOverwrite(ids, "A link on this page"))) {
+      return;
+    }
     this.saving.set(true);
     const results = await Promise.all(
       changedRows.map(async (row) => ({
@@ -1198,7 +1243,9 @@ export default class AdminHeroPage implements OnInit {
         result: await this.api.updateSocial(row.id, toInput(row)),
       })),
     );
-    if (ids.length) await this.versions.refresh();
+    if (ids.length) {
+      await this.versions.refresh();
+    }
 
     const failed: ApiIssue[] = [];
     let error = "";
@@ -1264,7 +1311,9 @@ export default class AdminHeroPage implements OnInit {
       confirmLabel: "Delete link",
       destructive: true,
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
 
     const previous = this.rows();
     this.rows.update((list) => list.filter((r) => r.id !== row.id));

@@ -51,8 +51,12 @@ export class MediaLibraryService {
 
   /** Loads once; `force` fetches again (after an upload, a delete or a cleanup). */
   load(force = false): Promise<void> {
-    if (this.loaded() && !force) return Promise.resolve();
-    if (this.inFlight && !force) return this.inFlight;
+    if (this.loaded() && !force) {
+      return Promise.resolve();
+    }
+    if (this.inFlight && !force) {
+      return this.inFlight;
+    }
     this.inFlight = this.fetch().finally(() => {
       this.inFlight = null;
     });
@@ -61,7 +65,9 @@ export class MediaLibraryService {
 
   private async fetch(): Promise<void> {
     const result = await this.api.listMedia();
-    if (result.ok) this.assets.set(result.data.media);
+    if (result.ok) {
+      this.assets.set(result.data.media);
+    }
     this.error.set(result.ok ? null : result.error);
     this.loaded.set(true);
   }
@@ -72,10 +78,12 @@ export class MediaLibraryService {
    */
   async upload(file: File, onProgress?: (percent: number) => void): Promise<Uploaded> {
     if (file.size > MAX_UPLOAD_BYTES) {
-      return { ok: false, message: UPLOAD_ERRORS["file_too_large"]! };
+      return { ok: false, message: UPLOAD_ERRORS["file_too_large"] };
     }
     const result = await this.api.uploadMedia(file, onProgress);
-    if (!result.ok) return { ok: false, message: UPLOAD_ERRORS[result.error] ?? result.error };
+    if (!result.ok) {
+      return { ok: false, message: UPLOAD_ERRORS[result.error] ?? result.error };
+    }
     await this.load(true);
     return { ok: true, asset: result.data.media, deduped: result.data.deduped ?? false };
   }
@@ -86,16 +94,22 @@ export class MediaLibraryService {
    */
   thumbnailOf(asset: MediaAsset): string {
     const small = asset.variants.find((v) => v.format === "webp");
-    if (!small) return asset.url;
+    if (!small) {
+      return asset.url;
+    }
     const file = small.path.slice(small.path.lastIndexOf("/") + 1);
     return asset.url.slice(0, asset.url.lastIndexOf("/") + 1) + file;
   }
 
   /** A preview for a stored `/media/<file>` path: its thumbnail once the library has loaded. */
   thumbnail(path: string | null): string {
-    if (!path) return "";
+    if (!path) {
+      return "";
+    }
     const asset = this.byPath().get(path);
-    if (asset) return this.thumbnailOf(asset);
+    if (asset) {
+      return this.thumbnailOf(asset);
+    }
     return path.startsWith("/media/") ? this.api.baseUrl + path : path;
   }
 }

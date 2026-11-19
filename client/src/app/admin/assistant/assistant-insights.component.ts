@@ -42,7 +42,7 @@ import { LessonFormComponent } from "./lesson-form.component";
     <section class="flex flex-col gap-4" aria-labelledby="insights-heading">
       <h2 id="insights-heading" class="m-0 text-base font-semibold">What visitors ask</h2>
       <div class="flex flex-wrap items-center gap-3">
-        <button hlmBtn size="sm" [disabled]="loading()" (click)="analyse(false)">
+        <button hlmBtn type="button" size="sm" [disabled]="loading()" (click)="analyse(false)">
           @if (loading()) {
             <hlm-spinner class="size-4" />
           } @else {
@@ -50,7 +50,14 @@ import { LessonFormComponent } from "./lesson-form.component";
           }
         </button>
         @if (topics() !== null) {
-          <button hlmBtn variant="ghost" size="sm" [disabled]="loading()" (click)="analyse(true)">
+          <button
+            hlmBtn
+            type="button"
+            variant="ghost"
+            size="sm"
+            [disabled]="loading()"
+            (click)="analyse(true)"
+          >
             Refresh
           </button>
           <span class="text-hint text-muted-foreground">
@@ -98,6 +105,7 @@ import { LessonFormComponent } from "./lesson-form.component";
               <div class="flex flex-wrap gap-2">
                 <button
                   hlmBtn
+                  type="button"
                   variant="outline"
                   size="sm"
                   [attr.aria-describedby]="'insight-topic-' + $index"
@@ -108,6 +116,7 @@ import { LessonFormComponent } from "./lesson-form.component";
                 @if (snapshotId()) {
                   <button
                     hlmBtn
+                    type="button"
                     variant="outline"
                     size="sm"
                     [attr.aria-describedby]="'insight-topic-' + $index"
@@ -120,6 +129,7 @@ import { LessonFormComponent } from "./lesson-form.component";
                 @if (lessonReady()[$index] && lessonFor() !== $index) {
                   <button
                     hlmBtn
+                    type="button"
                     variant="outline"
                     size="sm"
                     [id]="'insight-make-' + $index"
@@ -146,6 +156,7 @@ import { LessonFormComponent } from "./lesson-form.component";
                   <button
                     #journalLink
                     hlmBtn
+                    type="button"
                     variant="link"
                     size="sm"
                     class="h-auto p-0 text-xs"
@@ -169,7 +180,7 @@ import { LessonFormComponent } from "./lesson-form.component";
 export class AssistantInsightsComponent implements OnInit {
   readonly toFaq = output<string>();
   /** A lesson was made: it lives in the Journal tab. */
-  readonly toJournal = output<void>();
+  readonly toJournal = output();
   /** An FAQ proposal drafted from a topic (plan phase 31): it waits in the FAQ tab. */
   readonly toFaqProposal = output<string>();
 
@@ -206,7 +217,9 @@ export class AssistantInsightsComponent implements OnInit {
 
   protected readonly runLine = computed(() => {
     const run = this.view()?.snapshot;
-    if (!run) return null;
+    if (!run) {
+      return null;
+    }
     const at = this.when(run.createdAt);
     return run.trigger === "auto"
       ? `Run by the nightly check, ${at}, because ${run.reason}.`
@@ -230,12 +243,18 @@ export class AssistantInsightsComponent implements OnInit {
   private async load(): Promise<void> {
     const mine = ++this.latest;
     const result = await this.api.latestInsights();
-    if (mine !== this.latest) return;
+    if (mine !== this.latest) {
+      return;
+    }
     this.loadError.set(!result.ok);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     this.view.set(result.data);
     const run = result.data.snapshot;
-    if (run) this.show(run.topics, run.analysed, false);
+    if (run) {
+      this.show(run.topics, run.analysed, false);
+    }
     await this.seen(run);
   }
 
@@ -251,9 +270,13 @@ export class AssistantInsightsComponent implements OnInit {
 
   /** Shown here, the nightly check's run is seen, and every run before it: the notice goes. */
   private async seen(run: InsightSnapshot | null): Promise<void> {
-    if (run?.trigger !== "auto" || run.seenAt) return;
+    if (run?.trigger !== "auto" || run.seenAt) {
+      return;
+    }
     const seen = await this.api.insightsSeen(run.id);
-    if (!seen.ok) return;
+    if (!seen.ok) {
+      return;
+    }
     this.view.update((v) =>
       v?.snapshot?.id === run.id
         ? { ...v, snapshot: { ...run, seenAt: new Date().toISOString() } }
@@ -267,7 +290,9 @@ export class AssistantInsightsComponent implements OnInit {
     this.lessonFor.set(null);
     this.made.set(null);
     const result = await this.api.assistantInsights(refresh);
-    if (mine !== this.latest) return;
+    if (mine !== this.latest) {
+      return;
+    }
     this.loading.set(false);
     if (!result.ok) {
       toast.error("No insights", { description: result.error });
@@ -287,7 +312,9 @@ export class AssistantInsightsComponent implements OnInit {
    */
   protected async draftProposal(topic: number): Promise<void> {
     const snapshotId = this.snapshotId();
-    if (!snapshotId || this.drafting() !== null) return;
+    if (!snapshotId || this.drafting() !== null) {
+      return;
+    }
     this.drafting.set(topic);
     this.said.set("Drafting an FAQ proposal: this takes up to a minute.");
     const result = await this.api.draftFaqProposal({ source: "insight", snapshotId, topic });

@@ -22,7 +22,9 @@ describe("runMigrations production-tunnel guard", () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("DATABASE_URL", TUNNEL_URL);
     vi.stubEnv("ALLOW_REMOTE_MIGRATIONS", "");
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {
+      /* silenced in tests */
+    });
 
     await runMigrations();
     expect(client.getPool).not.toHaveBeenCalled();
@@ -35,7 +37,9 @@ describe("runMigrations production-tunnel guard", () => {
     vi.stubEnv("DATABASE_URL", "postgresql://app@127.0.0.1:5433/portfolio");
     vi.stubEnv("MIGRATION_DATABASE_URL", TUNNEL_URL);
     vi.stubEnv("ALLOW_REMOTE_MIGRATIONS", "");
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {
+      /* silenced in tests */
+    });
 
     await runMigrations();
     expect(client.getPool).not.toHaveBeenCalled();

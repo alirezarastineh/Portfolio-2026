@@ -35,6 +35,9 @@ export type LocaleView = "en" | "de" | "both";
 /** Each field pair's drafts are told apart in the ledger by its own number. */
 let fieldPairs = 0;
 
+const serverError = (control: FormControl<string>): string | null =>
+  (control.errors?.["server"] as string | undefined) ?? null;
+
 /**
  * One label, two locales. Every section editor is a stack of these plus a save
  * bar, which is what keeps the admin small.
@@ -335,22 +338,26 @@ export class FieldPairComponent {
       this.editedDe.set(0);
 
       const a = en.valueChanges.subscribe((v) => {
-        this.textEn.set(v ?? "");
+        this.textEn.set(typeof v === "string" ? v : "");
         // Programmatic resets (load, discard) leave the control pristine; only
         // real edits mark a locale as touched.
-        if (en.dirty) this.editedEn.set(++this.tick);
-        else this.editedEn.set(0);
+        if (en.dirty) {
+          this.editedEn.set(++this.tick);
+        } else {
+          this.editedEn.set(0);
+        }
       });
       const b = de.valueChanges.subscribe((v) => {
-        this.textDe.set(v ?? "");
-        if (de.dirty) this.editedDe.set(++this.tick);
-        else this.editedDe.set(0);
+        this.textDe.set(typeof v === "string" ? v : "");
+        if (de.dirty) {
+          this.editedDe.set(++this.tick);
+        } else {
+          this.editedDe.set(0);
+        }
       });
 
       // A save's `server` error arrives through setErrors, which emits a
       // status change; the next edit recomputes the errors and clears it.
-      const serverError = (control: FormControl<string>) =>
-        (control.errors?.["server"] as string | undefined) ?? null;
       this.errorEn.set(serverError(en));
       this.errorDe.set(serverError(de));
       const c = en.statusChanges.subscribe(() => this.errorEn.set(serverError(en)));
@@ -395,7 +402,9 @@ export class FieldPairComponent {
   protected async aiTranslate(from: "en" | "de"): Promise<void> {
     const to = from === "en" ? "de" : "en";
     const source = this.controlFor(from).value ?? "";
-    if (!source.trim() || !this.api) return;
+    if (!source.trim() || !this.api) {
+      return;
+    }
     this.aiBusy.set(to);
     const result = await this.api.copilot({
       task: "translate",
@@ -413,22 +422,34 @@ export class FieldPairComponent {
     }
     const undo = this.undoOf(to);
     this.apply(to, result.data);
-    if (undo && !this.gone)
+    if (undo && !this.gone) {
       this.offerUndo(`${this.label()} translated`, undo, `#${this.id()}-${to}`);
+    }
   }
 
   protected async aiTighten(): Promise<void> {
-    if (!this.api) return;
+    if (!this.api) {
+      return;
+    }
     const view = this.view();
     const locales: ("en" | "de")[] = view === "both" ? ["en", "de"] : [view];
     const undos: (() => void)[] = [];
     this.aiBusy.set("tighten");
-    for (const locale of locales) {
-      if (this.gone) break;
+    const runNext = async (index: number): Promise<void> => {
+      const locale = locales[index];
+      if (!locale || this.gone) {
+        return;
+      }
       const step = await this.tightenLocale(locale);
-      if (!step.ok) break;
-      if (step.undo) undos.push(step.undo);
-    }
+      if (!step.ok) {
+        return;
+      }
+      if (step.undo) {
+        undos.push(step.undo);
+      }
+      await runNext(index + 1);
+    };
+    await runNext(0);
     this.aiBusy.set(null);
     // Over one Undo: both languages went with one press.
     if (undos.length && !this.gone) {
@@ -442,7 +463,9 @@ export class FieldPairComponent {
 
   private async tightenLocale(locale: "en" | "de"): Promise<{ ok: boolean; undo?: () => void }> {
     const text = this.controlFor(locale).value ?? "";
-    if (!text.trim() || !this.api) return { ok: true };
+    if (!text.trim() || !this.api) {
+      return { ok: true };
+    }
     const result = await this.api.copilot({
       task: "tighten",
       text,
@@ -490,7 +513,9 @@ export class FieldPairComponent {
     const edited = locale === "en" ? this.editedEn : this.editedDe;
     const text = control.value ?? "";
     const tick = edited();
-    if (!text.trim()) return null;
+    if (!text.trim()) {
+      return null;
+    }
     return () => {
       this.ledger?.abandon(this.drafts + locale);
       this.clearOffer(locale);
@@ -508,8 +533,11 @@ export class FieldPairComponent {
     const before = control.value ?? "";
     control.setValue(text);
     control.markAsDirty();
-    if (locale === "en") this.editedEn.set(++this.tick);
-    else this.editedDe.set(++this.tick);
+    if (locale === "en") {
+      this.editedEn.set(++this.tick);
+    } else {
+      this.editedDe.set(++this.tick);
+    }
     return { control, before };
   }
 
@@ -517,24 +545,27 @@ export class FieldPairComponent {
   protected useDraft(locale: "en" | "de", index: number): void {
     const offer = this.offers()[locale];
     const draft = offer?.drafts[index];
-    if (!offer || !draft) return;
+    if (!offer || !draft) {
+      return;
+    }
     this.setField(locale, draft.text);
     this.ledger?.use(this.drafts + locale, index);
     this.offers.update((offers) => ({ ...offers, [locale]: { ...offer, chosen: index } }));
   }
 
   private clearOffer(locale: "en" | "de"): void {
-    if (this.offers()[locale]) this.offers.update((offers) => ({ ...offers, [locale]: null }));
+    if (this.offers()[locale]) {
+      this.offers.update((offers) => ({ ...offers, [locale]: null }));
+    }
   }
 
   /** The field's description: a save's problem, and the draft's notes. */
   protected describedBy(locale: "en" | "de"): string | null {
     const error = locale === "en" ? this.errorEn() : this.errorDe();
+    const offer = this.offers()[locale];
     const ids = [
       error ? `${this.id()}-${locale}-issue` : null,
-      this.offers()[locale]?.drafts[this.offers()[locale]!.chosen]?.notes.length
-        ? `${this.id()}-${locale}-draft`
-        : null,
+      offer?.drafts[offer.chosen]?.notes.length ? `${this.id()}-${locale}-draft` : null,
     ].filter(Boolean);
     return ids.length ? ids.join(" ") : null;
   }
@@ -546,16 +577,22 @@ export class FieldPairComponent {
     // so the save bar would not light up.
     this.controlDe().markAsDirty();
     this.editedDe.set(++this.tick);
-    if (undo) this.offerUndo(`${this.label()} copied to German`, undo, `#${this.id()}-de`);
+    if (undo) {
+      this.offerUndo(`${this.label()} copied to German`, undo, `#${this.id()}-de`);
+    }
   }
 
   /** The toast's Undo, as before; the newest step's is also the menu's, each taken once. */
   private offerUndo(message: string, undo: () => void, focusOn: string): void {
     let done = false;
     const once = (): void => {
-      if (done) return;
+      if (done) {
+        return;
+      }
       done = true;
-      if (this.lastUndo() === once) this.lastUndo.set(null);
+      if (this.lastUndo() === once) {
+        this.lastUndo.set(null);
+      }
       undo();
     };
     this.lastUndo.set(once);

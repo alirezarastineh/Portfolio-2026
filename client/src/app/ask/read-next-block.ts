@@ -66,7 +66,9 @@ export interface ReadNextDeps {
 
 /** How the block names a page's kind: a project with a case study is one. */
 export function kindOf(page: Pick<MapPage, "kind" | "url">): Kind {
-  if (page.kind === "project") return page.url.includes("/work/") ? "case-study" : "project";
+  if (page.kind === "project") {
+    return page.url.includes("/work/") ? "case-study" : "project";
+  }
   return page.kind;
 }
 
@@ -115,10 +117,10 @@ export function readNextBlock(
     const kind = kindOf(page);
     const meta = doc.createElement("span");
     meta.className = "read-next-kind";
-    const dated = page.updated && (kind === "case-study" || kind === "post");
+    const updated = kind === "case-study" || kind === "post" ? page.updated : undefined;
     meta.textContent = [
       copy.kinds[kind],
-      dated ? fmt(copy.updated, { date: formatMonth(page.updated!, locale) }) : "",
+      updated ? fmt(copy.updated, { date: formatMonth(updated, locale) }) : "",
     ]
       .filter(Boolean)
       .join(", ");
@@ -130,7 +132,9 @@ export function readNextBlock(
     link.append(name, meta);
     link.addEventListener("click", (event) => {
       track("map_read_next", { action: "open" });
-      if (!plainClick(event)) return;
+      if (!plainClick(event)) {
+        return;
+      }
       event.preventDefault();
       deps.open(page.url);
     });
@@ -157,9 +161,13 @@ export function readNextBlock(
 /** Fetches the map and puts the block before the article's footer; nothing when no page relates. */
 export async function showReadNext(page: ReadNextPage, deps: ReadNextDeps): Promise<void> {
   const pages = await fetchMap(deps.locale);
-  if (!pages || !deps.still()) return;
+  if (!pages || !deps.still()) {
+    return;
+  }
   const next = readNext(pages, page.id);
-  if (!next.length) return;
+  if (!next.length) {
+    return;
+  }
   page.article.querySelector(":scope > .read-next")?.remove();
   page.article.insertBefore(
     readNextBlock(page.article.ownerDocument, next, page, deps.locale, deps),

@@ -59,7 +59,9 @@ const SOURCE_NAMES: Record<Source | "messages" | "assistant", string> = {
 
 /** Dollars, to the cent; a sliver of a cent still shows as spent. */
 function usd(value: number): string {
-  if (value > 0 && value < 0.01) return "<$0.01";
+  if (value > 0 && value < 0.01) {
+    return "<$0.01";
+  }
   return `$${value.toFixed(2)}`;
 }
 
@@ -280,7 +282,9 @@ export default class AdminDashboardPage implements OnInit {
 
   /** What publishing now would change, as the top bar's Publish counts it. */
   protected readonly draftWords = computed(() => {
-    if (!this.pulse.status()?.hasUnpublishedChanges) return "Everything is live.";
+    if (!this.pulse.status()?.hasUnpublishedChanges) {
+      return "Everything is live.";
+    }
     const review = this.pulse.review();
     if (review?.issues) {
       return `${review.issues} ${review.issues === 1 ? "problem stops" : "problems stop"} the next publish.`;
@@ -292,7 +296,9 @@ export default class AdminDashboardPage implements OnInit {
   });
 
   protected readonly inboxWords = computed(() => {
-    if (this.pulse.messages() === null) return "";
+    if (this.pulse.messages() === null) {
+      return "";
+    }
     const fresh = this.pulse.newMessages();
     return fresh ? `Inbox: ${fresh} new.` : "Inbox: nothing new.";
   });
@@ -300,7 +306,9 @@ export default class AdminDashboardPage implements OnInit {
   /** Today's spend against the budget, while the assistant is on. */
   protected readonly spend = computed(() => {
     const state = this.pulse.assistant()?.state;
-    if (!state || state.state === "off") return null;
+    if (!state || state.state === "off") {
+      return null;
+    }
     return {
       word: state.state === "resting" ? "resting" : "answering",
       spent: usd(state.spentUsd),
@@ -316,7 +324,9 @@ export default class AdminDashboardPage implements OnInit {
   constructor() {
     // A publish from the dialog moves the live number.
     effect(() => {
-      if (this.pulse.publishes() > 0) untracked(() => void this.loadLive());
+      if (this.pulse.publishes() > 0) {
+        untracked(() => void this.loadLive());
+      }
     });
   }
 
@@ -339,8 +349,9 @@ export default class AdminDashboardPage implements OnInit {
   protected async retry(): Promise<void> {
     const parts = (["messages", "assistant"] as const).filter((part) => this.isFailed(part));
     await Promise.all([this.pulse.refresh(parts), this.load(Array.from(this.failed()))]);
-    if (!this.failedNames())
+    if (!this.failedNames()) {
       this.host.nativeElement.querySelector<HTMLElement>("#needs-title")?.focus();
+    }
   }
 
   private load(sources: readonly Source[]): Promise<unknown> {
@@ -378,27 +389,37 @@ export default class AdminDashboardPage implements OnInit {
     apply: (data: T) => void,
   ): Promise<void> {
     const result = await request;
-    if (result.ok) apply(result.data);
+    if (result.ok) {
+      apply(result.data);
+    }
     this.failed.update((failed) => {
       const next = new Set(failed);
-      if (result.ok) next.delete(source);
-      else next.add(source);
+      if (result.ok) {
+        next.delete(source);
+      } else {
+        next.add(source);
+      }
       return next;
     });
   }
 
   private async loadCopies(): Promise<void> {
     const newest = new Map<string, RecoveryCopy>();
-    for (const copy of (await this.recovery.list()).map((found) => copyHome(found))) {
+    const copies = await this.recovery.list();
+    for (const copy of copies.map((found) => copyHome(found))) {
       const seen = newest.get(copy.href);
-      if (!seen || copy.at > seen.at) newest.set(copy.href, copy);
+      if (!seen || copy.at > seen.at) {
+        newest.set(copy.href, copy);
+      }
     }
     this.copies.set([...newest.values()].sort((a, b) => b.at - a.at));
   }
 
   private async loadLive(): Promise<void> {
     const result = await this.api.publications();
-    if (result.ok) this.live.set(result.data.publications.find((p) => p.live)?.id ?? null);
+    if (result.ok) {
+      this.live.set(result.data.publications.find((p) => p.live)?.id ?? null);
+    }
   }
 
   protected relative(iso: string): string {

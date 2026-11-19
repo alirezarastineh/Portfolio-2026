@@ -40,7 +40,11 @@ async function view(): Promise<OutcomesView> {
 /** Five visitor answers in the last complete week, one playground answer, two contact messages. */
 async function seed(): Promise<string[]> {
   const weeks = completedWeeks(4);
-  const start = weekBounds(weeks[3]!)!.start.getTime() + 24 * 60 * 60 * 1000;
+  const bounds = weekBounds(weeks[3]);
+  if (!bounds) {
+    throw new Error("expected week bounds");
+  }
+  const start = bounds.start.getTime() + 24 * 60 * 60 * 1000;
   const at = (minutes: number) => new Date(start + minutes * 60 * 1000);
   const base = {
     locale: "en" as const,
@@ -163,7 +167,7 @@ describe("the assistant's outcomes", () => {
     await db
       .update(aiMessages)
       .set({
-        signals: { v: 1, shownMs: 600, doneMs: 1_500, followups: 1 },
+        signals: { v: 1, shownMs: 600, doneMs: 1500, followups: 1 },
         ttftMs: 400,
         toolCalls: ["suggest_followups"],
       })
@@ -171,7 +175,7 @@ describe("the assistant's outcomes", () => {
     await db
       .update(aiMessages)
       .set({
-        signals: { v: 1, shownMs: 1_200, doneMs: 3_000, stopped: true },
+        signals: { v: 1, shownMs: 1200, doneMs: 3000, stopped: true },
         ttftMs: 800,
         toolCalls: ["suggest_followups"],
         citedIds: ["profile@en"],
@@ -179,10 +183,11 @@ describe("the assistant's outcomes", () => {
       .where(eq(aiMessages.id, "m_flagged"));
     await db.insert(aiFeedback).values({ messageId: "m_flagged", value: -1, reason: "wrong" });
 
-    expect((await view()).browser).toEqual({
+    const current = await view();
+    expect(current.browser).toEqual({
       reported: 2,
       shownP50Ms: 600,
-      shownP95Ms: 1_200,
+      shownP95Ms: 1200,
       serverP50Ms: 400,
       serverP95Ms: 800,
       stopRate: 0.5,
@@ -196,7 +201,8 @@ describe("the assistant's outcomes", () => {
 
   it("counts the guided tours and the share finished, and never as answers (visitor plan V16)", async () => {
     await seed();
-    const before = (await view()).outcomes;
+    const beforeView = await view();
+    const before = beforeView.outcomes;
     const tour = {
       locale: "en" as const,
       route: "tour",
@@ -223,7 +229,8 @@ describe("the assistant's outcomes", () => {
 
   it("counts matched briefs per kind with their hand-offs and downgrades, never as answers (visitor plan V19, V20)", async () => {
     await seed();
-    const before = (await view()).outcomes;
+    const beforeView = await view();
+    const before = beforeView.outcomes;
     await getDb()
       .insert(aiMessages)
       .values({
@@ -278,19 +285,18 @@ describe("the assistant's outcomes", () => {
 
   it("switches the primary metric, and refuses one it does not know", async () => {
     await seed();
-    expect(
-      (await admin.put("/admin/assistant/primary-metric", { metric: "unknownRate" })).status,
-    ).toBe(200);
+    const switched = await admin.put("/admin/assistant/primary-metric", { metric: "unknownRate" });
+    expect(switched.status).toBe(200);
     const result = await view();
     expect(result.primary.metric).toBe("unknownRate");
     expect(result.primary.weeks.at(-1)).toMatchObject({ value: 0.25 });
-    expect((await admin.put("/admin/assistant/primary-metric", { metric: "revenue" })).status).toBe(
-      400,
-    );
+    const refused = await admin.put("/admin/assistant/primary-metric", { metric: "revenue" });
+    expect(refused.status).toBe(400);
   });
 
   it("is admin-only", async () => {
     const anonymous = new TestClient(app);
-    expect((await anonymous.get("/admin/assistant/outcomes")).status).toBe(401);
+    const res = await anonymous.get("/admin/assistant/outcomes");
+    expect(res.status).toBe(401);
   });
 });

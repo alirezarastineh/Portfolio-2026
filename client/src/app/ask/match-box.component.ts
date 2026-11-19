@@ -107,7 +107,7 @@ export class MatchBoxComponent {
   /** The brief, trimmed, once the visitor sends it. */
   readonly sent = output<string>();
   /** Put away, nothing sent. */
-  readonly dismissed = output<void>();
+  readonly dismissed = output();
 
   private readonly lang = inject(LanguageService);
   private readonly launcher = inject(AskLauncherService);
@@ -137,12 +137,16 @@ export class MatchBoxComponent {
   constructor() {
     afterNextRender(() => {
       // On a phone it waits for a tap: a focused field would raise a keyboard over the log.
-      if (!this.page() && !this.launcher.narrow()) this.box().nativeElement.focus();
+      if (!this.page() && !this.launcher.narrow()) {
+        this.box().nativeElement.focus();
+      }
     });
   }
 
   protected send(): void {
-    if (this.ready()) this.sent.emit(this.text().trim());
+    if (this.ready()) {
+      this.sent.emit(this.text().trim());
+    }
   }
 
   protected onKey(event: KeyboardEvent): void {

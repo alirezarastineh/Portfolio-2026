@@ -19,7 +19,9 @@ type Palette = Record<Theme, string>;
 
 function palette(css: string, lightBlock: string): Palette {
   const start = css.indexOf(lightBlock);
-  if (start === -1) throw new Error(`no ${lightBlock}`);
+  if (start === -1) {
+    throw new Error(`no ${lightBlock}`);
+  }
   return { dark: css.slice(0, start), light: css.slice(start) };
 }
 
@@ -29,7 +31,9 @@ const admin = palette(read("./admin-theme.css"), ':root:root[data-theme="light"]
 function raw(from: Palette, theme: Theme, name: string): string {
   const pattern = new RegExp(String.raw`--${name}:\s*([^;]+);`);
   const value = pattern.exec(from[theme]) ?? pattern.exec(from.dark);
-  if (!value?.[1]) throw new Error(`no --${name}`);
+  if (!value?.[1]) {
+    throw new Error(`no --${name}`);
+  }
   return value[1];
 }
 
@@ -37,16 +41,20 @@ function raw(from: Palette, theme: Theme, name: string): string {
 function colour(from: Palette, theme: Theme, name: string, under?: Rgb): Rgb {
   const value = raw(from, theme, name);
   const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/.exec(value);
-  if (hex) return hex.slice(1).map((part) => Number.parseInt(part, 16)) as Rgb;
+  if (hex) {
+    return hex.slice(1).map((part) => Number.parseInt(part, 16)) as Rgb;
+  }
 
   const rgba = /^rgb\((\d+) (\d+) (\d+) \/ (\d+)%\)$/.exec(value);
-  if (!rgba || !under) throw new Error(`cannot read --${name}: ${value}`);
+  if (!rgba || !under) {
+    throw new Error(`cannot read --${name}: ${value}`);
+  }
   return over([1, 2, 3].map((i) => Number(rgba[i])) as Rgb, Number(rgba[4]) / 100, under);
 }
 
 /** `top` at `alpha` over `under`: what Tailwind's `bg-x/10` paints on a surface. */
 function over(top: Rgb, alpha: number, under: Rgb): Rgb {
-  return top.map((channel, i) => channel * alpha + under[i]! * (1 - alpha)) as Rgb;
+  return top.map((channel, i) => channel * alpha + under[i] * (1 - alpha)) as Rgb;
 }
 
 function luminance(rgb: Rgb): number {
@@ -76,8 +84,8 @@ describe.each([
   };
 
   describe.each([
-    ["dark", { foreground: 17.9, muted: 10.2, faint: 6.2, text: 9.0, signal: 6.4, edge: 3.9 }],
-    ["light", { foreground: 19.8, muted: 8.8, faint: 5.4, text: 5.8, signal: 3.3, edge: 4.0 }],
+    ["dark", { foreground: 17.9, muted: 10.2, faint: 6.2, text: 9, signal: 6.4, edge: 3.9 }],
+    ["light", { foreground: 19.8, muted: 8.8, faint: 5.4, text: 5.8, signal: 3.3, edge: 4 }],
   ] as const)("%s theme, on the page", (theme, expected) => {
     it("keeps the promised values", () => {
       expect(on(theme, "foreground")).toBeCloseTo(expected.foreground, 1);
@@ -152,7 +160,10 @@ describe("the admin's pairs", () => {
       const draft = token(String.raw`\.change-trace::before`);
       const unsaved = token(String.raw`\.change-trace\[data-change="unsaved"\]::before`);
       expect([draft, unsaved]).toEqual(["input-line", "signal"]);
-      for (const name of [draft!, unsaved!]) {
+      if (!draft || !unsaved) {
+        throw new Error("Expected change-trace tokens in admin.css");
+      }
+      for (const name of [draft, unsaved]) {
         expect(ratio(colour(admin, theme, name, page), page), name).toBeGreaterThanOrEqual(GRAPHIC);
       }
     });
@@ -173,9 +184,12 @@ describe("the admin's pairs", () => {
       const button = /class="([^"]*)"\s*\[attr\.aria-label\]="'Remove '/.exec(field)?.[1] ?? "";
       const remove = /\btext-([\w-]+)/.exec(button)?.[1];
       expect([chip, remove]).toEqual(["surface-2", "muted-foreground"]);
-      const surface = colour(admin, theme, chip!);
+      if (!chip || !remove) {
+        throw new Error("Expected chip and remove classes in token-field");
+      }
+      const surface = colour(admin, theme, chip);
       expect(ratio(colour(admin, theme, "foreground"), surface)).toBeGreaterThanOrEqual(AA);
-      expect(ratio(colour(admin, theme, remove!), surface)).toBeGreaterThanOrEqual(GRAPHIC);
+      expect(ratio(colour(admin, theme, remove), surface)).toBeGreaterThanOrEqual(GRAPHIC);
     });
 
     it("reads the rich text's code block: its surface is a token, under the page's text", () => {
@@ -183,7 +197,10 @@ describe("the admin's pairs", () => {
       const block = /\.admin-prose pre \{[^}]*?background: ([^;]+);/.exec(editor)?.[1];
       const token = /^var\(--([\w-]+)\)$/.exec(block ?? "")?.[1];
       expect(token, `the code block's background, ${block}, follows the theme`).toBeDefined();
-      const surface = colour(admin, theme, token!);
+      if (!token) {
+        throw new Error("Expected code block background token");
+      }
+      const surface = colour(admin, theme, token);
       expect(ratio(colour(admin, theme, "foreground"), surface)).toBeGreaterThanOrEqual(AA);
     });
   });

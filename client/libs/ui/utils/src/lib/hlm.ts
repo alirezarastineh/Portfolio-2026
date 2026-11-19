@@ -61,7 +61,7 @@ let sourceCounter = 0;
  */
 export function classes(computed: () => ClassValue[] | string, options: ClassesOptions = {}) {
   runInInjectionContext(options.injector ?? inject(Injector), () => {
-    const elementRef = options.elementRef ?? inject(ElementRef);
+    const elementRef = options.elementRef ?? inject<ElementRef<HTMLElement>>(ElementRef);
     const platformId = inject(PLATFORM_ID);
     const destroyRef = inject(DestroyRef);
     const baseClasses = inject(new HostAttributeToken("class"), { optional: true });
@@ -97,7 +97,7 @@ export function classes(computed: () => ClassValue[] | string, options: ClassesO
       elementClassManagers.set(element, mgr);
 
       // Setup global observer if needed and register this element
-      setupGlobalObserver(platformId);
+      setupGlobalObserver(isPlatformBrowser(platformId));
       observedElements.add(element);
 
       // Suppress transitions until the first effect writes correct classes and
@@ -180,7 +180,7 @@ function restoreTransitionSuppression(manager: ElementClassManager): void {
     manager.element.style.setProperty(
       "transition",
       prev,
-      manager.previousTransitionPriority || undefined,
+      manager.previousTransitionPriority === "" ? undefined : manager.previousTransitionPriority,
     );
   } else {
     manager.element.style.removeProperty("transition");
@@ -206,21 +206,28 @@ function syncBaseClassesFromDom(manager: ElementClassManager): void {
 }
 
 function handleClassMutation(mutation: MutationRecord): void {
-  if (mutation.type !== "attributes" || mutation.attributeName !== "class") return;
+  if (mutation.type !== "attributes" || mutation.attributeName !== "class") {
+    return;
+  }
 
   const element = mutation.target as HTMLElement;
   const manager = elementClassManagers.get(element);
 
-  if (!manager || !observedElements.has(element)) return;
-  if (manager.isUpdating) return;
+  if (!manager || !observedElements.has(element)) {
+    return;
+  }
+  if (manager.isUpdating) {
+    return;
+  }
 
   syncBaseClassesFromDom(manager);
   updateElement(manager);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
-function setupGlobalObserver(platformId: Object): void {
-  if (!isPlatformBrowser(platformId) || globalObserver) return;
+function setupGlobalObserver(isBrowser: boolean): void {
+  if (!isBrowser || globalObserver) {
+    return;
+  }
 
   globalObserver = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
@@ -236,7 +243,9 @@ function setupGlobalObserver(platformId: Object): void {
 }
 
 function updateElement(manager: ElementClassManager): void {
-  if (manager.isUpdating) return; // Prevent recursive updates
+  if (manager.isUpdating) {
+    return;
+  } // Prevent recursive updates
 
   manager.isUpdating = true;
 
@@ -308,8 +317,11 @@ const classListCache = new Map<string, string[]>();
 
 function toClassList(className: string | ClassValue[]): string[] {
   // For simple string inputs, use cache to avoid repeated parsing
-  if (typeof className === "string" && classListCache.has(className)) {
-    return classListCache.get(className)!;
+  if (typeof className === "string") {
+    const cached = classListCache.get(className);
+    if (cached !== undefined) {
+      return cached;
+    }
   }
 
   const result = clsx(className)

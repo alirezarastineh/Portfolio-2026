@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { eq, sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 
 import { backfillContentV2 } from "../content/backfill.js";
 import { publishAll } from "../content/publish.js";
@@ -81,75 +81,89 @@ async function seedSocials(db: Database, socialsData: SeedFile["socials"]): Prom
 }
 
 async function seedSkills(db: Database, skillsData: SeedFile["skills"]): Promise<void> {
-  for (const skill of skillsData) {
-    await db
-      .insert(skills)
-      .values({
+  if (skillsData.length === 0) {
+    return;
+  }
+  await db
+    .insert(skills)
+    .values(
+      skillsData.map((skill) => ({
         id: skill.id,
         icon: skill.icon,
         span: skill.span,
         items: skill.items,
         position: skill.position,
-      })
-      .onConflictDoNothing();
+      })),
+    )
+    .onConflictDoNothing();
 
-    for (const locale of LOCALES) {
-      await db
-        .insert(skillTranslations)
-        .values({ skillId: skill.id, locale, ...skill.translations[locale] })
-        .onConflictDoNothing();
-    }
-  }
+  await db
+    .insert(skillTranslations)
+    .values(
+      skillsData.flatMap((skill) =>
+        LOCALES.map((locale) => ({
+          skillId: skill.id,
+          locale,
+          ...skill.translations[locale],
+        })),
+      ),
+    )
+    .onConflictDoNothing();
 }
 
 async function seedProjects(db: Database, projectsData: SeedFile["projects"]): Promise<void> {
-  for (const project of projectsData) {
-    const [inserted] = await db
-      .insert(projects)
-      .values({
+  if (projectsData.length === 0) {
+    return;
+  }
+  await db
+    .insert(projects)
+    .values(
+      projectsData.map((project) => ({
         slug: project.slug,
         stack: project.stack,
         linkLive: project.linkLive,
         linkRepo: project.linkRepo,
         linkCaseStudy: project.linkCaseStudy,
         position: project.position,
-      })
-      .onConflictDoNothing()
-      .returning({ id: projects.id });
+      })),
+    )
+    .onConflictDoNothing();
 
-    // onConflictDoNothing returns nothing when the slug already exists.
-    const projectId =
-      inserted?.id ??
-      (
-        await db
-          .select({ id: projects.id })
-          .from(projects)
-          .where(eq(projects.slug, project.slug))
-          .limit(1)
-      )[0]?.id;
+  const rows = await db
+    .select({ id: projects.id, slug: projects.slug })
+    .from(projects)
+    .where(
+      inArray(
+        projects.slug,
+        projectsData.map((project) => project.slug),
+      ),
+    );
+  const idBySlug = new Map(rows.map((row) => [row.slug, row.id]));
 
+  const translationRows = projectsData.flatMap((project) => {
+    const projectId = idBySlug.get(project.slug);
     if (!projectId) {
       throw new Error(`could not resolve project id for slug "${project.slug}"`);
     }
+    return LOCALES.map((locale) => ({
+      projectId,
+      locale,
+      ...project.translations[locale],
+    }));
+  });
 
-    for (const locale of LOCALES) {
-      await db
-        .insert(projectTranslations)
-        .values({ projectId, locale, ...project.translations[locale] })
-        .onConflictDoNothing();
-    }
-  }
+  await db.insert(projectTranslations).values(translationRows).onConflictDoNothing();
 }
 
 async function seedDocuments(db: Database, documentsData: SeedFile["documents"]): Promise<void> {
-  for (const section of ["ui", "seo"] as const) {
-    for (const locale of LOCALES) {
-      await db
-        .insert(contentDocuments)
-        .values({ section, locale, data: documentsData[section][locale] })
-        .onConflictDoNothing();
-    }
-  }
+  const rows = (["ui", "seo"] as const).flatMap((section) =>
+    LOCALES.map((locale) => ({
+      section,
+      locale,
+      data: documentsData[section][locale],
+    })),
+  );
+  await db.insert(contentDocuments).values(rows).onConflictDoNothing();
 }
 
 /**

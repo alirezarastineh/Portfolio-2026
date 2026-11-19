@@ -91,7 +91,9 @@ export class CopilotSuggestComponent {
   /** Shown while its draft waits for the editor's save: gone once it is saved or discarded. */
   protected readonly shownOffer = computed(() => {
     const offer = this.offer();
-    if (!offer) return null;
+    if (!offer) {
+      return null;
+    }
     return !offer.tracked || this.ledger.waits(this.target()) ? offer.value : null;
   });
 
@@ -129,7 +131,9 @@ export class CopilotSuggestComponent {
   protected use(index: number): void {
     const offer = this.offer();
     const draft = offer?.value.drafts[index];
-    if (!offer || !draft) return;
+    if (!offer || !draft) {
+      return;
+    }
     this.suggested.emit(draft.text);
     this.ledger.use(this.target(), index);
     this.offer.set({ ...offer, value: { ...offer.value, chosen: index } });

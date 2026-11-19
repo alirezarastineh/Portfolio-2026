@@ -25,7 +25,9 @@ export function injectMarkNotFound(): () => void {
   const meta = inject(Meta);
   const document = inject(DOCUMENT);
   return () => {
-    if (response && !response.headersSent) response.statusCode = 404;
+    if (response && !response.headersSent) {
+      response.statusCode = 404;
+    }
     meta.updateTag({ name: "robots", content: "noindex" });
     applyHead(document, {});
   };

@@ -141,7 +141,11 @@ describe("pageDocument", () => {
 
   it("says how the reading language's core holds the page: whole, cut short, or a handle", () => {
     expect(pageDocument(corpus, "/en/writing/notes", "en")?.held).toBe("whole");
-    expect(LONG.length).toBeGreaterThan(CORE_LIMIT.project!);
+    const projectLimit = CORE_LIMIT.project;
+    if (projectLimit === undefined) {
+      throw new Error("expected project core limit");
+    }
+    expect(LONG.length).toBeGreaterThan(projectLimit);
     expect(pageDocument(corpus, "/en/work/atlas", "en")?.held).toBe("clipped");
     // Read in German, the English case study is the other language's complete translation.
     expect(pageDocument(corpus, "/en/work/atlas", "de")?.held).toBe("handle");

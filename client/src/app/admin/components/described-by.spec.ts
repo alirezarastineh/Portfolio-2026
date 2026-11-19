@@ -23,7 +23,7 @@ class Fields {
 }
 
 /** An element's opening tag, its quoted attribute values read whole (a `>` or `<` inside one is no end). */
-const TAG = /<[a-z][\w-]*(?:[^<>"']|"[^"]*"|'[^']*')*>/g;
+const TAG = /<[a-z](?:[^<>"']|"[^"]*"|'[^']*')*>/g;
 /** The old binding, bracketed or interpolated. */
 const OLD_BINDING = /\battr\.aria-describedby\b/;
 
@@ -37,7 +37,9 @@ const offendersIn = (text: string): string[] =>
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) return sources(path);
+    if (entry.isDirectory()) {
+      return sources(path);
+    }
     return entry.name.endsWith(".ts") && !entry.name.endsWith(".spec.ts") ? [path] : [];
   });
 }
@@ -55,9 +57,12 @@ describe("hlmInput and hlmTextarea", () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const root: HTMLElement = fixture.nativeElement;
-    const input = root.querySelector("input")!;
-    const textarea = root.querySelector("textarea")!;
+    const root = fixture.nativeElement as HTMLElement;
+    const input = root.querySelector("input");
+    const textarea = root.querySelector("textarea");
+    if (!input || !textarea) {
+      throw new Error("Expected input and textarea");
+    }
     expect(input.getAttribute("aria-describedby")).toBe("date-hint");
     expect(textarea.getAttribute("aria-describedby")).toBe("answer-draft");
 
@@ -82,7 +87,7 @@ describe("hlmInput and hlmTextarea", () => {
     const app = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
     const offenders = sources(app).flatMap((file) =>
       offendersIn(readFileSync(file, "utf8")).map(
-        (tag) => `${file}: ${tag.replace(/\s+/g, " ").slice(0, 120)}`,
+        (tag) => `${file}: ${tag.replaceAll(/\s+/g, " ").slice(0, 120)}`,
       ),
     );
     expect(offenders).toEqual([]);

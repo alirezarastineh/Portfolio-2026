@@ -25,7 +25,9 @@ export function emptyLabels(): ReviewLabels {
 
 /** Not set → good → not good → not set. */
 export function cycleLabel(value: boolean | null): boolean | null {
-  if (value === null) return true;
+  if (value === null) {
+    return true;
+  }
   return value ? false : null;
 }
 

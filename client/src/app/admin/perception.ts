@@ -110,7 +110,9 @@ function groupLine(group: AnswerGroup, note = ""): string {
  */
 export function pagesLine(view: PerceptionView): string | null {
   const p = view.pages;
-  if (!p?.pageAware.answers) return null;
+  if (!p?.pageAware.answers) {
+    return null;
+  }
   const promoted = ` (${p.pageAware.promoted} with its text)`;
   const parts = [`Asked on a case study or post: ${groupLine(p.pageAware, promoted)}`];
   if (p.focused?.answers) {
@@ -127,9 +129,13 @@ export function pagesLine(view: PerceptionView): string | null {
  */
 export function windowLine(view: PerceptionView): string | null {
   const w = view.window;
-  if (!w?.sessions) return null;
+  if (!w?.sessions) {
+    return null;
+  }
   const trimmed = `${w.sessionsTrimmed} of ${w.sessions} sessions trimmed (${percent(w.sessionsTrimmed, w.sessions)})`;
-  if (!w.afterTrim.answers) return `Conversation window: ${trimmed}`;
+  if (!w.afterTrim.answers) {
+    return `Conversation window: ${trimmed}`;
+  }
   const after = `${w.afterTrim.rephrased} of ${w.afterTrim.answers} (${percent(w.afterTrim.rephrased, w.afterTrim.answers)})`;
   const other = `${w.otherwise.rephrased} of ${w.otherwise.answers} (${percent(w.otherwise.rephrased, w.otherwise.answers)})`;
   return `Conversation window: ${trimmed}; rephrased after a trim ${after}, otherwise ${other}`;
@@ -188,7 +194,9 @@ const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
 
 /** A share as a whole percentage, or a dash with nothing to divide by. */
 export function percent(part: number | null, whole = 1): string {
-  if (part === null || !whole) return "–";
+  if (part === null || !whole) {
+    return "–";
+  }
   return `${Math.round((part / whole) * 100)} %`;
 }
 
@@ -209,7 +217,9 @@ export function localeMixLine(mix: PerceptionView["localeMix"]): string {
 
 /** The tier a document has now, if any. */
 export function tierOf(tiers: CorpusTiers, id: string): Tier | null {
-  if (tiers.promoted.includes(id)) return "promoted";
+  if (tiers.promoted.includes(id)) {
+    return "promoted";
+  }
   return tiers.demoted.includes(id) ? "demoted" : null;
 }
 
@@ -219,7 +229,9 @@ export function withTier(tiers: CorpusTiers, id: string, tier: Tier | null): Cor
     promoted: tiers.promoted.filter((x) => x !== id),
     demoted: tiers.demoted.filter((x) => x !== id),
   };
-  if (tier) without[tier] = [...without[tier], id];
+  if (tier) {
+    without[tier] = [...without[tier], id];
+  }
   return without;
 }
 
@@ -280,18 +292,24 @@ export function layoutRows(view: PerceptionView): LayoutRow[] {
   });
 }
 
+function searchPart(label: string, s: { answers: number; converted: number }): string | null {
+  return s.answers ? `${label}: ${s.converted} of ${s.answers} led to a citation` : null;
+}
+
 /** "By meaning: 4 of 6 led to a citation · By words alone: 2 of 5 …", or null without searches. */
 export function searchLine(search: PerceptionView["search"]): string | null {
-  if (!search || !(search.semantic.answers + search.words.answers)) return null;
-  const part = (label: string, s: { answers: number; converted: number }) =>
-    s.answers ? `${label}: ${s.converted} of ${s.answers} led to a citation` : null;
-  return [part("By meaning", search.semantic), part("By words alone", search.words)]
+  if (!search || !(search.semantic.answers + search.words.answers)) {
+    return null;
+  }
+  return [searchPart("By meaning", search.semantic), searchPart("By words alone", search.words)]
     .filter(Boolean)
     .join(" · ");
 }
 
 /** The re-read ratio against the book's healthy ceiling (a heuristic). */
 export function rereadVerdict(view: PerceptionView): "healthy" | "high" | null {
-  if (view.rereadRatio === null) return null;
+  if (view.rereadRatio === null) {
+    return null;
+  }
   return view.rereadRatio < view.healthyReread ? "healthy" : "high";
 }

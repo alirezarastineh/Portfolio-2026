@@ -181,7 +181,9 @@ export default defineConfig(({ mode }) => {
               req.headers.cookie,
               Array.isArray(accept) ? accept.join(",") : accept,
             );
-            if (!redirect) return next();
+            if (!redirect) {
+              return next();
+            }
 
             res.statusCode = redirect.status;
             res.setHeader("Location", redirect.location);

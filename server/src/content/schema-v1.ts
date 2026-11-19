@@ -24,7 +24,7 @@ const withToken = (token: string) =>
  * Sanitizing happens on write (see `sanitizeRichText`), not only at render —
  * the content endpoint is public, and anything could consume it.
  */
-export const richText = z.string().max(20000);
+export const richText = z.string().max(20_000);
 
 export const LOCALES = ["en", "de"] as const;
 export const localeSchema = z.enum(LOCALES);

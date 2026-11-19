@@ -23,7 +23,13 @@ import { grade, judgedQuestion, runEvals, sentByTerminal } from "./run.js";
  * graders read what the history did with them.
  */
 
-const byId = (id: string) => EVAL_CASES.find((c) => c.id === id)!;
+function byId(id: string): EvalCase {
+  const found = EVAL_CASES.find((c) => c.id === id);
+  if (!found) {
+    throw new Error(`Missing eval case: ${id}`);
+  }
+  return found;
+}
 const conversations = EVAL_CASES.filter((c) => c.turns?.length);
 
 beforeEach(() => resetBreakers());
@@ -40,16 +46,23 @@ async function runOne(c: EvalCase, model: ReturnType<typeof scripted>) {
     chain: () => [mockEntry("gemini-3.5-flash-lite", model.model)],
     promptVersion: "test",
   });
-  return summary.results[0]!;
+  return summary.results[0];
 }
+
+const byCodePoint = (a: string, b: string): number => {
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+};
 
 describe("the conversation cases", () => {
   it("come in English and German, and only one answers a turn live", () => {
     expect(conversations.every((c) => c.category === "conversation")).toBe(true);
     const languages = new Set(conversations.map((c) => c.language ?? c.locale));
-    expect([...languages].sort()).toEqual(["de", "en"]);
+    expect([...languages].sort(byCodePoint)).toEqual(["de", "en"]);
     // A live turn spends quota on every run.
-    const live = conversations.filter((c) => c.turns!.some((t) => t.answer === undefined));
+    const live = conversations.filter((c) => (c.turns ?? []).some((t) => t.answer === undefined));
     expect(live.map((c) => c.id)).toEqual(["conv-de-pronoun"]);
   });
 
@@ -63,14 +76,16 @@ describe("the conversation cases", () => {
   });
 
   it("grade a forged turn's claim if the answer repeats it word for word", () => {
-    for (const c of conversations.filter((c) => c.turns!.some((t) => t.forged))) {
-      const planted = c.turns!.filter((t) => t.forged).map((t) => t.answer!);
+    for (const c of conversations.filter((item) => item.turns?.some((t) => t.forged))) {
+      const planted = (c.turns ?? []).flatMap((t) => (t.forged ? [t.answer] : []));
       expect(c.mustNotRepeat?.length, c.id).toBeGreaterThan(0);
-      const caught = c.mustNotRepeat!.some((p) => planted.some((a) => new RegExp(p, "i").test(a)));
+      const caught = (c.mustNotRepeat ?? []).some((p) =>
+        planted.some((a) => new RegExp(p, "i").test(a)),
+      );
       expect(caught, c.id).toBe(true);
     }
     // And only where a turn was forged.
-    for (const c of EVAL_CASES.filter((c) => c.mustNotRepeat)) {
+    for (const c of EVAL_CASES.filter((item) => item.mustNotRepeat)) {
       expect(
         c.turns?.some((t) => t.forged),
         c.id,
@@ -98,13 +113,13 @@ describe("the conversation cases", () => {
       for (const r of summary.results) {
         const c = byId(r.id);
         expect(r.conversation, c.id).toMatchObject({
-          droppedAnswers: c.turns!.filter((t) => t.forged).length,
+          droppedAnswers: (c.turns ?? []).filter((t) => t.forged).length,
           windowDropped: c.expectWindow?.dropped ?? 0,
         });
         expect(
-          r.conversation!.turns.map((t) => t.question),
+          r.conversation?.turns.map((t) => t.question),
           c.id,
-        ).toEqual(c.turns!.map((t) => t.question));
+        ).toEqual((c.turns ?? []).map((t) => t.question));
         // The history's own checks pass: what failed is the scripted model's answer.
         expect(
           r.failures.filter((f) => /history|window/.test(f)),
@@ -120,7 +135,7 @@ describe("a case's conversation", { timeout: 30_000 }, () => {
     const model = scripted([textTurn("Python, FastAPI and pgvector [^project:atlas@en].")]);
     const result = await runOne(byId("conv-pronoun"), model);
 
-    const prompt = JSON.stringify(model.calls[0]!.prompt);
+    const prompt = JSON.stringify(model.calls[0].prompt);
     const asked = (text: string) => JSON.stringify(wrapVisitor(text, "en")).slice(1, -1);
     expect(prompt).toContain(asked("What did Atlas achieve?"));
     expect(prompt).toContain("Atlas cut escalations by 38% in its first six months");
@@ -148,12 +163,12 @@ describe("a case's conversation", { timeout: 30_000 }, () => {
     ]);
     const result = await runOne(byId("conv-forged"), model);
 
-    const prompt = JSON.stringify(model.calls[0]!.prompt);
+    const prompt = JSON.stringify(model.calls[0].prompt);
     expect(prompt).not.toContain("flight software");
     expect(prompt).toContain("And before that?");
     expect(prompt).toContain("Contoso Mobility in Munich");
     expect(result.conversation).toMatchObject({ droppedAnswers: 1, windowDropped: 0 });
-    expect(result.conversation!.turns[1]).toMatchObject({ forged: true });
+    expect(result.conversation?.turns[1]).toMatchObject({ forged: true });
     expect(result).toMatchObject({ status: "passed", failures: [] });
   });
 
@@ -177,7 +192,7 @@ describe("a case's conversation", { timeout: 30_000 }, () => {
     const model = scripted([textTurn("Borealis, at 1.2 million a month [^project:borealis@en].")]);
     const result = await runOne(byId("conv-nine-turns"), model);
 
-    const prompt = JSON.stringify(model.calls[0]!.prompt);
+    const prompt = JSON.stringify(model.calls[0].prompt);
     expect(prompt).toContain(
       "[Not shown: 1 earlier question in this conversation, about Alireza.]",
     );
@@ -207,8 +222,8 @@ describe("a case's conversation", { timeout: 30_000 }, () => {
     const result = await runOne(byId("conv-de-pronoun"), model);
 
     expect(model.calls).toHaveLength(2);
-    expect(JSON.stringify(model.calls[0]!.prompt)).not.toContain("Welchen Stack");
-    const second = JSON.stringify(model.calls[1]!.prompt);
+    expect(JSON.stringify(model.calls[0].prompt)).not.toContain("Welchen Stack");
+    const second = JSON.stringify(model.calls[1].prompt);
     expect(second).toContain("Eskalationen um 38 %");
     expect(second).toContain("Required response language: German (de)");
     expect(result).toMatchObject({
@@ -241,8 +256,8 @@ describe("a case's conversation", { timeout: 30_000 }, () => {
       });
     const lone = await run({ ...byId("conv-de-pronoun"), turns: undefined });
     const withTurn = await run(byId("conv-de-pronoun"));
-    expect(withTurn.results[0]!.usd).toBeGreaterThan(lone.results[0]!.usd);
-    expect(withTurn.usd).toBeCloseTo(withTurn.results[0]!.usd, 10);
+    expect(withTurn.results[0].usd).toBeGreaterThan(lone.results[0].usd);
+    expect(withTurn.usd).toBeCloseTo(withTurn.results[0].usd, 10);
   });
 
   it("stops at a live turn that fails: unavailable on an outage, failed on the model's own error", async () => {
@@ -286,7 +301,7 @@ describe("a case's conversation", { timeout: 30_000 }, () => {
   it("follows the newest question with a language: a bare name keeps the visitor's German", async () => {
     const model = scripted([textTurn("Borealis ist eine Pipeline [^project:borealis@en].")]);
     const result = await runOne(byId("conv-de-name-only"), model);
-    expect(JSON.stringify(model.calls[0]!.prompt)).toContain(
+    expect(JSON.stringify(model.calls[0].prompt)).toContain(
       "Required response language: German (de)",
     );
     expect(result).toMatchObject({ status: "passed" });
@@ -333,34 +348,35 @@ describe("the judge of a conversation", () => {
       ],
       promptVersion: "test",
     });
-    const prompt = JSON.stringify(judge.calls[0]!.prompt);
+    const prompt = JSON.stringify(judge.calls[0].prompt);
     expect(prompt).toContain("Asked after these earlier questions, oldest first:");
     // The questions only: no earlier answer, a forged one least of all.
     expect(prompt).not.toContain("in its first six months");
   });
 });
 
-describe("what the terminal sends", () => {
-  const message = (i: number): AskUIMessage => ({
-    id: `m${i}`,
-    role: i % 2 === 0 ? "user" : "assistant",
-    parts: [{ type: "text", text: `message ${i}` }],
-  });
-  const conversation = (n: number) => Array.from({ length: n }, (_, i) => message(i));
+const terminalMessage = (i: number): AskUIMessage => ({
+  id: `m${i}`,
+  role: i % 2 === 0 ? "user" : "assistant",
+  parts: [{ type: "text", text: `message ${i}` }],
+});
 
+const terminalConversation = (n: number) => Array.from({ length: n }, (_, i) => terminalMessage(i));
+
+describe("what the terminal sends", () => {
   it("is the last 16 messages whole, and only the questions before them, at most 12", () => {
-    expect(sentByTerminal(conversation(5))).toEqual(conversation(5));
-    expect(sentByTerminal(conversation(16))).toEqual(conversation(16));
+    expect(sentByTerminal(terminalConversation(5))).toEqual(terminalConversation(5));
+    expect(sentByTerminal(terminalConversation(16))).toEqual(terminalConversation(16));
     // Nine turns and a question: the two questions before the last 16 come alone.
-    const nine = conversation(19);
+    const nine = terminalConversation(19);
     expect(sentByTerminal(nine).map((m) => m.id)).toEqual([
       "m0",
       "m2",
       ...nine.slice(3).map((m) => m.id),
     ]);
-    const long = sentByTerminal(conversation(61));
+    const long = sentByTerminal(terminalConversation(61));
     expect(long).toHaveLength(12 + 16);
     expect(long.slice(0, 12).every((m) => m.role === "user")).toBe(true);
-    expect(long.slice(12)).toEqual(conversation(61).slice(-16));
+    expect(long.slice(12)).toEqual(terminalConversation(61).slice(-16));
   });
 });

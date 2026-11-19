@@ -17,8 +17,12 @@ const SCRIPT_ID = "umami-tracker";
  * browser asks not to be tracked. Off unless both env values are set.
  */
 export function injectUmami(doc: Document, config: UmamiConfig): void {
-  if (!config.src || !config.websiteId) return;
-  if (doc.getElementById(SCRIPT_ID)) return;
+  if (!config.src || !config.websiteId) {
+    return;
+  }
+  if (doc.getElementById(SCRIPT_ID)) {
+    return;
+  }
 
   const script = doc.createElement("script");
   script.id = SCRIPT_ID;

@@ -115,14 +115,14 @@ const COPY = {
         { id: "what-i-would-do-differently", text: "What I would do differently", level: 2 },
       ],
       body:
-        '<h2 id="architecture-decisions">Architecture decisions</h2>' +
-        "<p>Retrieval runs next to the API, so a request never leaves the private network.</p>" +
-        '<h3 id="retrieval">Retrieval</h3>' +
-        "<p>Hybrid search: BM25 for names, embeddings for meaning.</p>" +
-        CODE +
-        "<blockquote><p>Evals gate every prompt change.</p></blockquote>" +
-        '<h2 id="what-i-would-do-differently">What I would do differently</h2>' +
-        "<p>Start the eval set on day one.</p>",
+        `<h2 id="architecture-decisions">Architecture decisions</h2>` +
+        `<p>Retrieval runs next to the API, so a request never leaves the private network.</p>` +
+        `<h3 id="retrieval">Retrieval</h3>` +
+        `<p>Hybrid search: BM25 for names, embeddings for meaning.</p>${
+          CODE
+        }<blockquote><p>Evals gate every prompt change.</p></blockquote>` +
+        `<h2 id="what-i-would-do-differently">What I would do differently</h2>` +
+        `<p>Start the eval set on day one.</p>`,
       seo: "How a retrieval platform got 42% faster at the 95th percentile.",
       captions: ["The ingestion dashboard", "Latency before and after caching"],
     },
@@ -172,9 +172,8 @@ const COPY = {
         { id: "caching", text: "Caching", level: 2 },
       ],
       body:
-        '<h2 id="the-demo-lies">The demo lies</h2><p>A demo has one user and no traffic.</p>' +
-        '<h2 id="caching">Caching</h2><p>Cache the retrieval, not only the answer.</p>' +
-        CODE,
+        `<h2 id="the-demo-lies">The demo lies</h2><p>A demo has one user and no traffic.</p>` +
+        `<h2 id="caching">Caching</h2><p>Cache the retrieval, not only the answer.</p>${CODE}`,
     },
   },
   de: {
@@ -257,13 +256,13 @@ const COPY = {
         { id: "was-ich-anders-machen-wurde", text: "Was ich anders machen würde", level: 2 },
       ],
       body:
-        '<h2 id="architekturentscheidungen">Architekturentscheidungen</h2>' +
-        "<p>Das Retrieval läuft neben der API; keine Anfrage verlässt das private Netz.</p>" +
-        '<h3 id="retrieval">Retrieval</h3>' +
-        "<p>Hybride Suche: BM25 für Namen, Embeddings für Bedeutung.</p>" +
-        CODE +
-        '<h2 id="was-ich-anders-machen-wurde">Was ich anders machen würde</h2>' +
-        "<p>Das Eval-Set ab dem ersten Tag pflegen.</p>",
+        `<h2 id="architekturentscheidungen">Architekturentscheidungen</h2>` +
+        `<p>Das Retrieval läuft neben der API; keine Anfrage verlässt das private Netz.</p>` +
+        `<h3 id="retrieval">Retrieval</h3>` +
+        `<p>Hybride Suche: BM25 für Namen, Embeddings für Bedeutung.</p>${
+          CODE
+        }<h2 id="was-ich-anders-machen-wurde">Was ich anders machen würde</h2>` +
+        `<p>Das Eval-Set ab dem ersten Tag pflegen.</p>`,
       seo: "Wie eine Retrieval-Plattform im 95. Perzentil 42 % schneller wurde.",
       captions: ["Das Ingestion-Dashboard", "Latenz vor und nach dem Caching"],
     },
@@ -313,9 +312,8 @@ const COPY = {
         { id: "caching", text: "Caching", level: 2 },
       ],
       body:
-        '<h2 id="die-demo-lugt">Die Demo lügt</h2><p>Eine Demo hat einen Nutzer und keinen Traffic.</p>' +
-        '<h2 id="caching">Caching</h2><p>Das Retrieval cachen, nicht nur die Antwort.</p>' +
-        CODE,
+        `<h2 id="die-demo-lugt">Die Demo lügt</h2><p>Eine Demo hat einen Nutzer und keinen Traffic.</p>` +
+        `<h2 id="caching">Caching</h2><p>Das Retrieval cachen, nicht nur die Antwort.</p>${CODE}`,
     },
   },
 };
@@ -350,50 +348,51 @@ function sharedPost(locale) {
   };
 }
 
+const experienceEntry = (id, kind, text, rest) => ({
+  id,
+  kind,
+  title: text.title,
+  summary: text.summary,
+  highlights: text.highlights,
+  credential: null,
+  skills: [],
+  location: "",
+  employmentType: "",
+  ...rest,
+});
+
 function experiences(locale) {
   const copy = COPY[locale].experiences;
-  const entry = (id, kind, text, rest) => ({
-    id,
-    kind,
-    title: text.title,
-    summary: text.summary,
-    highlights: text.highlights,
-    credential: null,
-    skills: [],
-    location: "",
-    employmentType: "",
-    ...rest,
-  });
   return [
-    entry("11111111-1111-4111-8111-111111111111", "work", copy.senior, {
+    experienceEntry("11111111-1111-4111-8111-111111111111", "work", copy.senior, {
       org: { name: "Example GmbH", url: "https://example.com", logo: null },
       location: "Berlin",
       employmentType: "full-time",
       period: { start: "2024-03-01", end: null, precision: "month" },
       skills: ["TypeScript", "Python", "Postgres"],
     }),
-    entry("22222222-2222-4222-8222-222222222222", "work", copy.fullStack, {
+    experienceEntry("22222222-2222-4222-8222-222222222222", "work", copy.fullStack, {
       org: { name: "Sample AG", url: "", logo: null },
       employmentType: "contract",
       period: { start: "2021-01-01", end: "2024-02-01", precision: "month" },
     }),
-    entry("55555555-5555-4555-8555-555555555555", "work", copy.aiEngineer, {
+    experienceEntry("55555555-5555-4555-8555-555555555555", "work", copy.aiEngineer, {
       org: { name: "Muster Logistik GmbH", url: "", logo: null },
       location: "Hamburg",
       employmentType: "full-time",
       period: { start: "2020-02-01", end: "2020-12-01", precision: "month" },
       skills: ["Python", "scikit-learn"],
     }),
-    entry("66666666-6666-4666-8666-666666666666", "work", copy.student, {
+    experienceEntry("66666666-6666-4666-8666-666666666666", "work", copy.student, {
       org: { name: "Example Research Lab", url: "", logo: null },
       employmentType: "part-time",
       period: { start: "2018-04-01", end: "2019-12-01", precision: "month" },
     }),
-    entry("33333333-3333-4333-8333-333333333333", "education", copy.degree, {
+    experienceEntry("33333333-3333-4333-8333-333333333333", "education", copy.degree, {
       org: { name: "TU Example", url: "", logo: null },
       period: { start: "2018-01-01", end: "2020-01-01", precision: "year" },
     }),
-    entry("44444444-4444-4444-8444-444444444444", "certification", copy.cert, {
+    experienceEntry("44444444-4444-4444-8444-444444444444", "certification", copy.cert, {
       org: { name: "Cloud Co", url: "", logo: null },
       period: { start: "2023-05-01", end: null, precision: "month" },
       credential: { id: "ABC-123", url: "https://example.com/credential/abc-123" },

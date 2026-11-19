@@ -9,7 +9,9 @@ export const ADMIN_STYLES_ID = "admin-styles";
  * with it; the browser then finds it by id and does not add a second copy.
  */
 export function addAdminStyles(doc: Document): void {
-  if (doc.getElementById(ADMIN_STYLES_ID)) return;
+  if (doc.getElementById(ADMIN_STYLES_ID)) {
+    return;
+  }
   const style = doc.createElement("style");
   style.id = ADMIN_STYLES_ID;
   style.textContent = adminCss;

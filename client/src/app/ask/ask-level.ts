@@ -30,8 +30,11 @@ export function storeLevel(
   storage: Pick<Storage, "setItem" | "removeItem"> | null = localStorageOrNull(),
 ): void {
   try {
-    if (level === "standard") storage?.removeItem(LEVEL_STORAGE_KEY);
-    else storage?.setItem(LEVEL_STORAGE_KEY, level);
+    if (level === "standard") {
+      storage?.removeItem(LEVEL_STORAGE_KEY);
+    } else {
+      storage?.setItem(LEVEL_STORAGE_KEY, level);
+    }
   } catch {
     // Storage may be blocked: the level then lasts for this page view.
   }

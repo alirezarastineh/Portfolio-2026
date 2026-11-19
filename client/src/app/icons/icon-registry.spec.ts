@@ -10,7 +10,9 @@ describe("icon registry", () => {
   });
 
   it("offers only keys the content schema accepts", () => {
-    for (const key of ICON_KEYS) expect(iconKeySchema.safeParse(key).success, key).toBe(true);
+    for (const key of ICON_KEYS) {
+      expect(iconKeySchema.safeParse(key).success, key).toBe(true);
+    }
   });
 
   it("still draws an icon for a key this build does not know", () => {

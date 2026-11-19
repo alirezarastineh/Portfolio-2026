@@ -99,7 +99,7 @@ export function scripted(turns: LanguageModelV4StreamPart[][], modelId = "mock")
     modelId,
     doStream: (options) => {
       calls.push(options);
-      const chunks = turns[Math.min(i++, turns.length - 1)]!;
+      const chunks = turns[Math.min(i++, turns.length - 1)];
       return Promise.resolve({ stream: simulateReadableStream({ chunks, chunkDelayInMs: null }) });
     },
   });
@@ -124,7 +124,7 @@ export function failing(error: unknown, modelId = "failing"): ScriptedModel {
     modelId,
     doStream: (options) => {
       calls.push(options);
-      return Promise.reject(error);
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
     },
   });
   return { model, calls };
@@ -139,7 +139,10 @@ export function silent(modelId = "silent"): ScriptedModel {
       calls.push(options);
       return Promise.resolve({
         stream: new ReadableStream<LanguageModelV4StreamPart>({
-          pull: () => new Promise(() => {}),
+          pull: () =>
+            new Promise(() => {
+              /* intentionally never settles until aborted */
+            }),
         }),
       });
     },
@@ -191,11 +194,15 @@ export function mockEntry(
 export async function drain<T>(stream: ReadableStream<T>): Promise<T[]> {
   const out: T[] = [];
   const reader = stream.getReader();
-  for (;;) {
+  async function step(): Promise<T[]> {
     const { done, value } = await reader.read();
-    if (done) return out;
+    if (done) {
+      return out;
+    }
     out.push(value);
+    return step();
   }
+  return step();
 }
 
 /** A reply's text, or its text and how the model stopped (cut at its limit, filtered). */
@@ -236,7 +243,7 @@ export function generating(texts: string[], modelId = "gen"): ScriptedModel {
     modelId,
     doGenerate: (options) => {
       calls.push(options);
-      const text = texts[Math.min(i++, texts.length - 1)]!;
+      const text = texts[Math.min(i++, texts.length - 1)];
       return Promise.resolve({
         content: [{ type: "text", text }],
         finishReason: { unified: "stop", raw: "stop" },

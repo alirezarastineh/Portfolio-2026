@@ -41,7 +41,7 @@ describe("image descriptions in the corpus", () => {
   it("follow a picture whose alt reads like a tag, as the corpus text shows it", () => {
     const html = '<img src="/media/t.png" alt="The &lt;AskTerminal&gt; component">';
     const [picture] = mediaImages(html);
-    const d = doc(htmlToText(html, { images: true }), [{ file: "t.png", alt: picture!.alt }]);
+    const d = doc(htmlToText(html, { images: true }), [{ file: "t.png", alt: picture.alt }]);
     expect(describeImages(d, new Map([["t.png", { en: "Input → agent" }]])).text).toBe(
       "[image: The <AskTerminal> component]\n[image description: Input → agent]",
     );

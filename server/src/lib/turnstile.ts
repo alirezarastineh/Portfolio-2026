@@ -22,14 +22,18 @@ export async function verifyTurnstile(
   fetchImpl: typeof fetch = fetch,
 ): Promise<boolean> {
   const secret = process.env.TURNSTILE_SECRET_KEY?.trim();
-  if (!secret) return true;
-  if (!token || token.length > 2048) return false;
+  if (!secret) {
+    return true;
+  }
+  if (!token || token.length > 2048) {
+    return false;
+  }
 
   try {
     const response = await fetchImpl(VERIFY_URL, {
       method: "POST",
       body: new URLSearchParams({ secret, response: token, remoteip: ip }),
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) {
       console.warn(`[turnstile] siteverify answered ${response.status}; letting it through`);
@@ -58,8 +62,12 @@ export class VerifiedSessions {
 
   has(key: string, now = Date.now()): boolean {
     const expires = this.until.get(key);
-    if (expires === undefined) return false;
-    if (expires > now) return true;
+    if (expires === undefined) {
+      return false;
+    }
+    if (expires > now) {
+      return true;
+    }
     this.until.delete(key);
     return false;
   }
@@ -70,7 +78,9 @@ export class VerifiedSessions {
     // Maps keep insertion order: the first key is the oldest.
     while (this.until.size > this.max) {
       const oldest = this.until.keys().next().value;
-      if (oldest === undefined) break;
+      if (oldest === undefined) {
+        break;
+      }
       this.until.delete(oldest);
     }
   }

@@ -51,7 +51,7 @@ function recordedLines(raw: unknown, t: AskCopy["evals"], locale: Locale): OutLi
   }
   const at = str(run["at"]);
   const categories = arr(run["categories"])
-    .map(obj)
+    .map((item) => obj(item))
     .map((c) => `${str(c["name"])} ${num(c["passed"]) ?? 0}/${num(c["completed"]) ?? 0}`);
   return [
     {
@@ -156,12 +156,16 @@ export async function fetchScorecard(
   } catch {
     return { ok: false, reason: "failed" };
   }
-  if (res.status === 404) return { ok: false, reason: "off" };
+  if (res.status === 404) {
+    return { ok: false, reason: "off" };
+  }
   if (res.status === 429) {
     const body: unknown = await res.json().catch(() => ({}));
     return { ok: false, reason: "limited", retryAfter: num(obj(body)["retryAfter"]) ?? 60 };
   }
-  if (!res.ok) return { ok: false, reason: "failed" };
+  if (!res.ok) {
+    return { ok: false, reason: "failed" };
+  }
   return res.json().then(
     (card: unknown) => ({ ok: true as const, card }),
     () => ({ ok: false as const, reason: "failed" as const }),

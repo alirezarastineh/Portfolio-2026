@@ -36,18 +36,20 @@ import {
  * then the result is sanitized like any save.
  */
 export function unrenderBody(html: string): string {
-  if (!html) return "";
+  if (!html) {
+    return "";
+  }
   const plain = html
-    .replace(/<h([23]) id="[^"]*">/g, "<h$1>")
-    .replace(
+    .replaceAll(/<h([23]) id="[^"]*">/g, "<h$1>")
+    .replaceAll(
       /<pre class="code-block(?: code-lang-([a-z0-9+#-]+))?"><code>([\s\S]*?)<\/code><\/pre>/g,
       (_whole, lang: string | undefined, code: string) => {
-        const text = code.replaceAll('<span class="line">', "").replace(/<\/?span[^<>]*>/g, "");
+        const text = code.replaceAll('<span class="line">', "").replaceAll(/<\/?span[^<>]*>/g, "");
         const langAttr = lang ? ` class="language-${lang}"` : "";
         return `<pre><code${langAttr}>${text}</code></pre>`;
       },
     )
-    .replace(/<picture>[\s\S]*?(<img [^>]*>)[\s\S]*?<\/picture>/g, (_whole, img: string) => {
+    .replaceAll(/<picture>[\s\S]*?(<img [^>]*>)[\s\S]*?<\/picture>/g, (_whole, img: string) => {
       const src = /\ssrc="([^"]*)"/.exec(img)?.[1] ?? "";
       const alt = /\salt="([^"]*)"/.exec(img)?.[1] ?? "";
       const title = /\stitle="([^"]*)"/.exec(img)?.[1];
@@ -69,7 +71,9 @@ async function assetIdsByPath(
         .filter((name): name is string => Boolean(name)),
     ),
   ];
-  if (filenames.length === 0) return new Map();
+  if (filenames.length === 0) {
+    return new Map();
+  }
   const rows = await tx
     .select({ id: mediaAssets.id, filename: mediaAssets.filename })
     .from(mediaAssets)
@@ -92,10 +96,11 @@ function toSources(loaded: LoadedVersion[]): Sources {
   }
   // Translations exist per locale; restoring from a publication that holds
   // only one (the old single-locale rollbacks) would have to invent the other.
-  if (LOCALES.some((locale) => !byLocale.has(locale))) {
+  const base = byLocale.get(LOCALES[0]);
+  if (!base || LOCALES.some((locale) => !byLocale.has(locale))) {
     throw new PublicationError(422, "incomplete_publication");
   }
-  return { base: byLocale.get(LOCALES[0])!, byLocale, docs };
+  return { base, byLocale, docs };
 }
 
 async function restoreIdentityAndDocs(
@@ -264,7 +269,9 @@ async function restoreSkills(
   for (const skill of base.skills) {
     for (const [locale, content] of byLocale) {
       const translated = content.skills.find((s) => s.id === skill.id);
-      if (!translated) continue;
+      if (!translated) {
+        continue;
+      }
       translationRows.push({
         skillId: skill.id,
         locale,
@@ -318,7 +325,9 @@ async function restoreProjectTranslations(
 ): Promise<void> {
   const operations = [...byLocale.entries()].flatMap(([locale, content]) => {
     const translated = content.projects.find((p) => p.slug === slug);
-    if (!translated) return [];
+    if (!translated) {
+      return [];
+    }
     const doc = projectDoc(locale, slug);
     const text = {
       name: translated.name,
@@ -364,13 +373,17 @@ async function restoreProjectGallery(
   const gallery = projectDoc(LOCALES[0], slug)?.gallery ?? [];
   const items = gallery.flatMap((image, index) => {
     const mediaId = media.get(image.src);
-    if (!mediaId) return [];
+    if (!mediaId) {
+      return [];
+    }
     const caption = Object.fromEntries(
       LOCALES.map((l) => [l, projectDoc(l, slug)?.gallery[index]?.caption ?? ""]),
     );
     return [{ projectId, mediaId, position: index, caption }];
   });
-  if (items.length > 0) await tx.insert(projectGallery).values(items).onConflictDoNothing();
+  if (items.length > 0) {
+    await tx.insert(projectGallery).values(items).onConflictDoNothing();
+  }
 }
 
 async function restoreProjects(
@@ -380,7 +393,7 @@ async function restoreProjects(
 ): Promise<void> {
   const projectDoc = (locale: Locale, slug: string) => {
     const doc = docs.get(locale)?.get(docKey("projects", slug));
-    return doc?.kind === "project" ? (doc as ProjectDoc) : undefined;
+    return doc?.kind === "project" ? doc : undefined;
   };
   const media = await assetIdsByPath(tx, [
     ...base.projects.map((p) => p.cover?.src),
@@ -413,7 +426,9 @@ async function restoreProjects(
         .values({ slug: project.slug, ...shared })
         .onConflictDoUpdate({ target: projects.slug, set: { ...shared, updatedAt: now } })
         .returning({ id: projects.id });
-      if (!row) throw new Error(`failed to restore project "${project.slug}"`);
+      if (!row) {
+        throw new Error(`failed to restore project "${project.slug}"`);
+      }
 
       await Promise.all([
         restoreProjectTranslations(tx, row.id, project.slug, byLocale, projectDoc, now),
@@ -453,8 +468,8 @@ async function restoreExperiences(
     startDate: entry.period.start,
     endDate: entry.period.end,
     datePrecision: entry.period.precision,
-    credentialId: entry.credential?.id || null,
-    credentialUrl: entry.credential?.url || null,
+    credentialId: entry.credential && entry.credential.id !== "" ? entry.credential.id : null,
+    credentialUrl: entry.credential && entry.credential.url !== "" ? entry.credential.url : null,
     skills: entry.skills,
     position,
     isVisible: true,
@@ -472,7 +487,9 @@ async function restoreExperiences(
   for (const entry of base.experiences) {
     for (const [locale, content] of byLocale) {
       const translated = content.experiences.find((e) => e.id === entry.id);
-      if (!translated) continue;
+      if (!translated) {
+        continue;
+      }
       translationRows.push({
         experienceId: entry.id,
         locale,
@@ -523,9 +540,11 @@ async function restorePosts(tx: DbExecutor, { byLocale, docs }: Sources, now: Da
   for (const [locale, content] of byLocale) {
     for (const summary of content.posts) {
       const doc = docs.get(locale)?.get(docKey("posts", summary.slug));
-      if (doc?.kind !== "post") continue;
+      if (doc?.kind !== "post") {
+        continue;
+      }
       const list = shown.get(summary.slug) ?? [];
-      list.push({ locale, doc: doc as PostDoc });
+      list.push({ locale, doc });
       shown.set(summary.slug, list);
     }
   }
@@ -537,7 +556,7 @@ async function restorePosts(tx: DbExecutor, { byLocale, docs }: Sources, now: Da
 
   await Promise.all(
     [...shown.entries()].map(async ([slug, versions]) => {
-      const first = versions[0]!.doc;
+      const first = versions[0].doc;
       const values = {
         status: "published" as const,
         publishedAt: new Date(first.publishedAt),
@@ -551,7 +570,9 @@ async function restorePosts(tx: DbExecutor, { byLocale, docs }: Sources, now: Da
         .values({ slug, ...values })
         .onConflictDoUpdate({ target: posts.slug, set: values })
         .returning({ id: posts.id });
-      if (!row) throw new Error(`failed to restore post "${slug}"`);
+      if (!row) {
+        throw new Error(`failed to restore post "${slug}"`);
+      }
 
       await Promise.all(
         versions.map(({ locale, doc }) => {

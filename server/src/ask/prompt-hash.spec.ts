@@ -28,11 +28,16 @@ describe("the prompt's hash", () => {
   it("covers every fixed text the model reads, the tools' descriptions, inputs and notes included", () => {
     const text = hashedPromptText();
     expect(text).toContain(SYSTEM_PROMPT);
-    for (const block of CAREFUL_BLOCKS) expect(text).toContain(block);
+    for (const block of CAREFUL_BLOCKS) {
+      expect(text).toContain(block);
+    }
     // The tools (plan phase 21): each description and note as the JSON holds it.
-    for (const def of Object.values(TOOL_DEFS))
+    for (const def of Object.values(TOOL_DEFS)) {
       expect(text).toContain(JSON.stringify(def.description));
-    for (const note of Object.values(NOTES)) expect(text).toContain(JSON.stringify(note));
+    }
+    for (const note of Object.values(NOTES)) {
+      expect(text).toContain(JSON.stringify(note));
+    }
     // Their inputs: a field's description and a limit.
     expect(text).toContain("Keywords, e.g. 'RAG evaluation' or 'Kubernetes'");
     expect(text).toContain('"maxLength":800');
@@ -59,10 +64,14 @@ describe("the prompt's hash", () => {
       "unverified",
       "unverified",
     ]);
-    for (const focus of FOCUS_SAMPLES) expect(text).toContain(focusInstruction(focus));
+    for (const focus of FOCUS_SAMPLES) {
+      expect(text).toContain(focusInstruction(focus));
+    }
     expect(text).toContain(withSelection("q", "s", "en"));
     // Both level blocks (V10); standard has none.
     expect(LEVEL_INSTRUCTIONS).toEqual([levelInstruction("plain"), levelInstruction("expert")]);
-    for (const block of LEVEL_INSTRUCTIONS) expect(text).toContain(block);
+    for (const block of LEVEL_INSTRUCTIONS) {
+      expect(text).toContain(block);
+    }
   });
 });

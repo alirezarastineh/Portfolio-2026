@@ -24,8 +24,8 @@ let config: AskConfig;
 let corpus: (config: AskConfig) => AskCorpus;
 
 /** The eval fixture, with a post dated: the corpus dates what it can (plan phase 19). */
-function datedFixture(config: AskConfig): AskCorpus {
-  const base = fixtureAskCorpus(config);
+function datedFixture(cfg: AskConfig): AskCorpus {
+  const base = fixtureAskCorpus(cfg);
   return {
     ...base,
     documents: base.documents.map((d) =>
@@ -41,8 +41,16 @@ const app = createApp({
     chain: () => {
       throw new Error("the map asked for a model");
     },
-    corpus: async (c) => corpus(c),
+    corpus: (c) => Promise.resolve(corpus(c)),
   },
+});
+
+const faqDoc = (id: string, title: string) => ({ id, kind: "faq", title, updated: "2026-09-01" });
+const cardDoc = (locale: string, title: string) => ({
+  id: `system-card@${locale}`,
+  kind: "system-card",
+  title,
+  updated: SYSTEM_CARD_UPDATED,
 });
 
 async function map(
@@ -81,7 +89,13 @@ describe("GET /v1/ask/map (visitor plan V15)", () => {
       "post:llm-in-production@en",
       "skills@en",
     ]);
-    const page = (id: string) => body.pages.find((p) => p.id === id)!;
+    const page = (id: string) => {
+      const found = body.pages.find((p) => p.id === id);
+      if (!found) {
+        throw new Error(`missing page ${id}`);
+      }
+      return found;
+    };
     expect(page("project:atlas@en")).toMatchObject({
       kind: "project",
       title: "Atlas",
@@ -108,24 +122,19 @@ describe("GET /v1/ask/map (visitor plan V15)", () => {
   });
 
   it("lists the assistant's own documents apart, dated, for llms.txt (V21)", async () => {
-    const faq = (id: string, title: string) => ({ id, kind: "faq", title, updated: "2026-09-01" });
-    const card = (locale: string, title: string) => ({
-      id: `system-card@${locale}`,
-      kind: "system-card",
-      title,
-      updated: SYSTEM_CARD_UPDATED,
-    });
-    expect((await map("en")).body.assistant).toEqual([
-      faq("faq:a1c2e3f4@en", "What is his notice period?"),
-      faq("faq:b5d6e7f8@en", "Would he relocate?"),
-      faq("faq:c9d0e1f2@en", "What are his rates?"),
-      card("en", "How this assistant works"),
+    const en = await map("en");
+    expect(en.body.assistant).toEqual([
+      faqDoc("faq:a1c2e3f4@en", "What is his notice period?"),
+      faqDoc("faq:b5d6e7f8@en", "Would he relocate?"),
+      faqDoc("faq:c9d0e1f2@en", "What are his rates?"),
+      cardDoc("en", "How this assistant works"),
     ]);
     // A language's own words only: the second entry has no German ones.
-    expect((await map("de")).body.assistant).toEqual([
-      faq("faq:a1c2e3f4@de", "Wie lang ist seine Kündigungsfrist?"),
-      faq("faq:c9d0e1f2@de", "Wie hoch sind seine Sätze?"),
-      card("de", "Wie dieser Assistent funktioniert"),
+    const de = await map("de");
+    expect(de.body.assistant).toEqual([
+      faqDoc("faq:a1c2e3f4@de", "Wie lang ist seine Kündigungsfrist?"),
+      faqDoc("faq:c9d0e1f2@de", "Wie hoch sind seine Sätze?"),
+      cardDoc("de", "Wie dieser Assistent funktioniert"),
     ]);
   });
 
@@ -142,13 +151,18 @@ describe("GET /v1/ask/map (visitor plan V15)", () => {
   });
 
   it("answers a language it does not know with 400", async () => {
-    expect((await map("fr")).status).toBe(400);
-    expect((await app.request("/v1/ask/map")).status).toBe(400);
+    const unknownLocale = await map("fr");
+    expect(unknownLocale.status).toBe(400);
+    const missingLocale = await app.request("/v1/ask/map");
+    expect(missingLocale.status).toBe(400);
   });
 
   it("is cached by the corpus key: an ETag, a 304 for it, and a new one after a publish", async () => {
     const first = await map("en");
-    const etag = first.res.headers.get("etag")!;
+    const etag = first.res.headers.get("etag");
+    if (!etag) {
+      throw new Error("missing etag header");
+    }
     expect(etag).toBe(mapEtag(fixtureAskCorpus(config).key, "en"));
     expect(etag).toMatch(/^W\/"map-en-[0-9a-f]{16}"$/);
     expect(first.res.headers.get("cache-control")).toBe("public, max-age=300");
@@ -157,8 +171,10 @@ describe("GET /v1/ask/map (visitor plan V15)", () => {
     expect(again.status).toBe(304);
     expect(again.body).toBeNull();
     // A list of validators, as a browser may send, matches too; the other language's does not.
-    expect((await map("en", { "if-none-match": `W/"other", ${etag}` })).status).toBe(304);
-    expect((await map("de", { "if-none-match": etag })).status).toBe(200);
+    const listMatch = await map("en", { "if-none-match": `W/"other", ${etag}` });
+    expect(listMatch.status).toBe(304);
+    const otherLang = await map("de", { "if-none-match": etag });
+    expect(otherLang.status).toBe(200);
 
     // A publish is a new corpus key: the old validator no longer matches.
     corpus = (c) => ({ ...datedFixture(c), key: "eval-fixture-4|published-again" });
@@ -187,7 +203,8 @@ describe("GET /v1/ask/map (visitor plan V15)", () => {
     expect(res.status).toBe(429);
     expect(Number(res.headers.get("retry-after"))).toBeGreaterThan(0);
     // Another address, and the visitors' own buckets, are untouched.
-    expect((await map("en")).status).toBe(200);
+    const other = await map("en");
+    expect(other.status).toBe(200);
     const visitors = await getDb()
       .select()
       .from(aiRateEvents)

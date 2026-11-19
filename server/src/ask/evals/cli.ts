@@ -82,8 +82,10 @@ const values = (name: string) => optionValues(process.argv, name);
 
 /** A percentage flag as a fraction, or `fallback` when it is absent. */
 function percentFlag(name: string, fallback: number | null): number | null {
-  const [raw] = values(name);
-  if (raw === undefined) return fallback;
+  const raw = values(name).at(0);
+  if (raw === undefined) {
+    return fallback;
+  }
   try {
     return parsePercent(raw);
   } catch {
@@ -93,7 +95,8 @@ function percentFlag(name: string, fallback: number | null): number | null {
 }
 
 const limits: GateLimits = {
-  maxCostIncrease: percentFlag("max-cost-increase", DEFAULT_GATE.maxCostIncrease)!,
+  maxCostIncrease:
+    percentFlag("max-cost-increase", DEFAULT_GATE.maxCostIncrease) ?? DEFAULT_GATE.maxCostIncrease,
   maxLatencyIncrease: percentFlag("max-latency-increase", DEFAULT_GATE.maxLatencyIncrease),
 };
 
@@ -143,7 +146,7 @@ if (flag("retrieval")) {
 if (values("suite")[0] === "production") {
   // The frozen visitor cases, each against its own snapshot (read-only); `--on deep`
   // replays them on the deep chain, the router report's false-simple candidates first.
-  const on = values("on")[0];
+  const on = values("on").at(0);
   if (on !== undefined && on !== "deep") {
     console.error("--on takes `deep`: the production cases answered on the deep chain.");
     process.exit(2);
@@ -172,13 +175,17 @@ console.log(
 );
 
 function resultMark(status: string, passed: boolean): string {
-  if (status === "unavailable") return "!";
+  if (status === "unavailable") {
+    return "!";
+  }
   return passed ? "✓" : "✗";
 }
 
 /** The answer's model calls (visitor plan V8's promotion A/B compares them). */
 function roundsNote(r: Pick<CaseResult, "rounds">): string {
-  if (r.rounds === undefined) return "";
+  if (r.rounds === undefined) {
+    return "";
+  }
   return ` · ${r.rounds} ${r.rounds === 1 ? "round" : "rounds"}`;
 }
 
@@ -193,6 +200,11 @@ function resultNotes(r: Pick<CaseResult, "repair" | "handoff">): string {
     notes.push(`hand-off offered by ${by}${r.handoff.replaced ? ", its summary replaced" : ""}`);
   }
   return notes.map((note) => ` · ${note}`).join("");
+}
+
+function excerpt(label: string, text: string): string {
+  const more = text.length > 400 ? " …" : "";
+  return `\n    ${label}: ${text.slice(0, 400).replaceAll(/\s+/g, " ")}${more}`;
 }
 
 const summary = await runEvals({
@@ -214,15 +226,14 @@ const summary = await runEvals({
     const mark = resultMark(r.status, r.passed);
     // The model's own first token, no pacing wait in it: the lookup and promotion A/Bs read
     // this, and the promotion's its rounds.
-    const first = r.modelTtftMs == null ? "" : ` · first token ${r.modelTtftMs} ms`;
+    const first =
+      r.modelTtftMs === null || r.modelTtftMs === undefined
+        ? ""
+        : ` · first token ${r.modelTtftMs} ms`;
     const meta = `${r.model ?? "no model"} · ${(r.totalMs / 1000).toFixed(1)} s${first}${roundsNote(r)}`;
     const failures = r.passed ? "" : `\n    ${r.failures.join("\n    ")}`;
     // A failed case's answer, to read a grader's miss off the run, and its thoughts (plan phase
     // 23): evidence of why, not proof. The first lines of each.
-    const excerpt = (label: string, text: string) => {
-      const more = text.length > 400 ? " …" : "";
-      return `\n    ${label}: ${text.slice(0, 400).replaceAll(/\s+/g, " ")}${more}`;
-    };
     const answer = r.status === "failed" && r.answer ? excerpt("answer", r.answer) : "";
     const thoughts = r.reasoning ? excerpt("thoughts", r.reasoning) : "";
     console.log(
@@ -254,9 +265,13 @@ if (summary.incomplete) {
 } else if (!filters.length) {
   const baseline = readBaseline();
   const comparison = compareToBaseline(summary, baseline, limits);
-  for (const line of comparison.lines) console.log(line);
+  for (const line of comparison.lines) {
+    console.log(line);
+  }
   failures = comparison.failures;
-  if (!comparison.compared && baseline.passRate !== null) incomparable = comparison.lines[0]!;
+  if (!comparison.compared && baseline.passRate !== null) {
+    incomparable = comparison.lines.at(0) ?? null;
+  }
   if (failures.length) {
     console.error(
       `\nBelow the baseline: ${failures.join("; ")}. This change must not ship as it is.`,
@@ -280,7 +295,8 @@ if (flag("update-baseline")) {
   } else {
     // What the reason excuses: the gate's failures, or that no comparison was possible.
     const excused = failures.length || !incomparable ? failures : [incomparable];
-    const acceptedRegression = excused.length ? { reason: acceptReason!, failures: excused } : null;
+    const acceptedRegression =
+      excused.length && acceptReason ? { reason: acceptReason, failures: excused } : null;
     writeBaseline(baselineFrom(summary, { acceptedRegression }));
     const accepted = acceptedRegression ? ", with the regression accepted" : "";
     console.log(`\nBaseline updated${accepted}: ${BASELINE_PATH}`);

@@ -3,13 +3,16 @@ import { defineEventHandler, getHeader, readBody, setResponseStatus } from "h3";
 
 import { invalidate } from "../../../../utils/content-upstream";
 
+function digest(value: string): Buffer {
+  return createHash("sha256").update(value).digest();
+}
+
 /**
  * Constant-time, so response timing cannot be used to recover the token byte
  * by byte. Both sides are hashed first because timingSafeEqual needs equal
  * lengths, and comparing lengths directly would leak the token's length.
  */
 function sameToken(provided: string, expected: string): boolean {
-  const digest = (value: string) => createHash("sha256").update(value).digest();
   return timingSafeEqual(digest(provided), digest(expected));
 }
 

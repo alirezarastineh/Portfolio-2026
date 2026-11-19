@@ -27,7 +27,7 @@ const app = createApp({
     chain: () => {
       throw new Error("the scorecard asked for a model");
     },
-    corpus: async (c) => fixtureCorpus(c),
+    corpus: (c) => Promise.resolve(fixtureCorpus(c)),
   },
 });
 
@@ -50,7 +50,7 @@ async function answers(
         route: "lite",
         questionRedacted: `QUESTION-SENTINEL ${i}`,
         answerExcerpt: "ANSWER-TEXT-SENTINEL [^profile@en].",
-        totalMs: 1_000,
+        totalMs: 1000,
         tokens: { input: 1, cached: 0, output: 1, thoughts: 0 },
         finishReason: "stop",
         promptVersion: "p",
@@ -71,6 +71,42 @@ async function card(ip = "203.0.113.7"): Promise<{ status: number; body: Scoreca
   const res = await app.request("/v1/ask/scorecard", { headers: { "x-forwarded-for": ip } });
   return { status: res.status, body: (await res.json()) as Scorecard };
 }
+
+const byCodePoint = (a: string, b: string): number => {
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+};
+
+async function readScorecardConfig(): Promise<boolean> {
+  const res = await app.request("/v1/ask/config");
+  const body = (await res.json()) as { scorecard: boolean };
+  return body.scorecard;
+}
+
+const judged = (i: number, pick: "sample" | "flagged") => ({
+  judge: {
+    v: 1 as const,
+    model: "gemini-3.5-flash-lite",
+    faithfulness: 0.5 + i * 0.025,
+    helpfulness: 4,
+    unsupported: [],
+    at: new Date().toISOString(),
+    source: "nightly" as const,
+    pick,
+  },
+});
+
+const scorecardChecks = (i: number) => {
+  if (i === 22) {
+    return { v: 1 as const, flags: ["repaired" as const] };
+  }
+  if (i === 23) {
+    return { v: 1 as const, flags: ["ungrounded-figure" as const] };
+  }
+  return { v: 1 as const, flags: [] };
+};
 
 beforeEach(async () => {
   await resetDb();
@@ -105,15 +141,18 @@ describe("migration 0030: the scorecard's switch", () => {
       suggestedQuestions: { en: [], de: [] },
       systemCard: { en: "", de: "" },
     };
-    expect(
-      (await admin.put("/admin/assistant/settings", { ...body, publicScorecard: true })).status,
-    ).toBe(200);
+    const enabledRes = await admin.put("/admin/assistant/settings", {
+      ...body,
+      publicScorecard: true,
+    });
+    expect(enabledRes.status).toBe(200);
     const audits = await getDb().select().from(aiAudit);
     expect(audits.map((a) => a.reason)).toContain("publicScorecard false → true");
     // The admin from before the scorecard sends no switch: it stays as stored.
-    expect((await admin.put("/admin/assistant/settings", body)).status).toBe(200);
+    const keptRes = await admin.put("/admin/assistant/settings", body);
+    expect(keptRes.status).toBe(200);
     const [row] = await getDb().select().from(aiSettings);
-    expect(row!.publicScorecard).toBe(true);
+    expect(row.publicScorecard).toBe(true);
   });
 });
 
@@ -121,12 +160,11 @@ describe("GET /v1/ask/scorecard (visitor plan V13)", () => {
   it("answers 404 while unpublished, and the terminal's config says whether it is", async () => {
     const off = await card();
     expect(off).toEqual({ status: 404, body: { error: "not_published" } });
-    const config = async () =>
-      ((await (await app.request("/v1/ask/config")).json()) as { scorecard: boolean }).scorecard;
-    expect(await config()).toBe(false);
+    expect(await readScorecardConfig()).toBe(false);
     await publish();
-    expect(await config()).toBe(true);
-    expect((await card()).status).toBe(200);
+    expect(await readScorecardConfig()).toBe(true);
+    const on = await card();
+    expect(on.status).toBe(200);
   });
 
   it("shows the deployed prompt's recorded run and 30 days of live checks: listed fields, aggregates only", async () => {
@@ -134,12 +172,9 @@ describe("GET /v1/ask/scorecard (visitor plan V13)", () => {
       // 22 cite; 2 of them had a reference removed.
       citedIds: i < 22 ? ["profile@en"] : [],
       droppedCitations: i === 20 || i === 21 ? ["made-up@en"] : [],
-      checks: {
-        v: 1 as const,
-        flags: i === 22 ? ["repaired"] : i === 23 ? ["ungrounded-figure"] : [],
-      },
+      checks: scorecardChecks(i),
       finishReason: i === 24 ? "error:unavailable" : "stop",
-      signals: i < 21 ? { v: 1 as const, shownMs: 1_000 + i * 100 } : null,
+      signals: i < 21 ? { v: 1 as const, shownMs: 1000 + i * 100 } : null,
     }));
     // Outside the window, and not a visitor's: neither counts.
     await answers(1, () => ({ createdAt: new Date(Date.now() - 31 * DAY_MS) }));
@@ -158,8 +193,15 @@ describe("GET /v1/ask/scorecard (visitor plan V13)", () => {
     const { status, body } = await card();
     expect(status).toBe(200);
     // Every field the scorecard carries, listed: a new one fails here until it is.
-    expect(Object.keys(body).sort()).toEqual(["at", "judge", "live", "prompt", "recorded", "v"]);
-    expect(Object.keys(body.live).sort()).toEqual([
+    expect(Object.keys(body).sort(byCodePoint)).toEqual([
+      "at",
+      "judge",
+      "live",
+      "prompt",
+      "recorded",
+      "v",
+    ]);
+    expect(Object.keys(body.live).sort(byCodePoint)).toEqual([
       "answers",
       "citationsVerified",
       "days",
@@ -180,7 +222,7 @@ describe("GET /v1/ask/scorecard (visitor plan V13)", () => {
       repaired: { share: 1 / 24, n: 24 },
       figuresFlagged: { share: 1 / 24, n: 24 },
       // The median of 1.0 s, 1.1 s … 3.0 s.
-      firstWordMs: { median: 2_000, n: 21 },
+      firstWordMs: { median: 2000, n: 21 },
       refusals: { invalid_input: 3, rate_limited: 2 },
     });
     // The recorded run is the one CI ties to this prompt; while a waiver stands, there is none.
@@ -188,10 +230,8 @@ describe("GET /v1/ask/scorecard (visitor plan V13)", () => {
     const baseline = readBaseline();
     const deployed = `${PROMPT_VERSION}+${PROMPT_HASH}`;
     expect(recorded.measured).toBe(baseline.promptVersion === deployed);
-    if (!recorded.measured) {
-      expect(recorded).toEqual({ measured: false, reason: baseline.waivers[deployed] });
-    } else {
-      expect(Object.keys(recorded).sort()).toEqual([
+    if (recorded.measured) {
+      expect(Object.keys(recorded).sort(byCodePoint)).toEqual([
         "at",
         "cases",
         "categories",
@@ -201,13 +241,15 @@ describe("GET /v1/ask/scorecard (visitor plan V13)", () => {
         "passRate",
         "passed",
       ]);
-      expect(Object.keys(recorded.categories[0]!).sort()).toEqual([
+      expect(Object.keys(recorded.categories[0]).sort(byCodePoint)).toEqual([
         "cases",
         "completed",
         "name",
         "passed",
       ]);
       expect(recorded.passed).toBe(recorded.categories.reduce((sum, c) => sum + c.passed, 0));
+    } else {
+      expect(recorded).toEqual({ measured: false, reason: baseline.waivers[deployed] });
     }
     // The nightly judge is off: no judge section.
     expect(body.judge).toBeNull();
@@ -241,18 +283,6 @@ describe("GET /v1/ask/scorecard (visitor plan V13)", () => {
   });
 
   it("shows the nightly judge's random sample while it runs: its median, with 20 judged", async () => {
-    const judged = (i: number, pick: "sample" | "flagged") => ({
-      judge: {
-        v: 1 as const,
-        model: "gemini-3.5-flash-lite",
-        faithfulness: 0.5 + i * 0.025,
-        helpfulness: 4,
-        unsupported: [],
-        at: new Date().toISOString(),
-        source: "nightly" as const,
-        pick,
-      },
-    });
     await answers(20, (i) => judged(i, "sample"));
     // A flagged pick leans toward bad answers: never in the figure.
     await answers(1, () => judged(0, "flagged"));
@@ -268,18 +298,22 @@ describe("GET /v1/ask/scorecard (visitor plan V13)", () => {
   it("holds its figures ten minutes", async () => {
     await answers(20);
     await publish();
-    expect((await card()).body.live.answers).toBe(20);
+    const first = await card();
+    expect(first.body.live.answers).toBe(20);
     await answers(5);
-    expect((await card()).body.live.answers).toBe(20);
+    const cached = await card();
+    expect(cached.body.live.answers).toBe(20);
     resetScorecardCache();
-    expect((await card()).body.live.answers).toBe(25);
+    const refreshed = await card();
+    expect(refreshed.body.live.answers).toBe(25);
   });
 
   it("works with the assistant off, calling no model", async () => {
     config = fixtureConfig({ enabled: false });
     await getDb().insert(aiSettings).values({ id: 1, enabled: false, publicScorecard: true });
     invalidateAssistantCache();
-    expect((await card()).status).toBe(200);
+    const res = await card();
+    expect(res.status).toBe(200);
   });
 
   it("limits each address in a bucket of its own", async () => {
@@ -294,7 +328,8 @@ describe("GET /v1/ask/scorecard (visitor plan V13)", () => {
     expect(res.status).toBe(429);
     expect(Number(res.headers.get("retry-after"))).toBeGreaterThan(0);
     // Another address, and the visitors' own buckets, are untouched.
-    expect((await card("203.0.113.10")).status).toBe(200);
+    const other = await card("203.0.113.10");
+    expect(other.status).toBe(200);
     const visitors = await getDb()
       .select()
       .from(aiRateEvents)

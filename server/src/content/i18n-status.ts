@@ -38,16 +38,18 @@ export interface I18nItem {
  * Edits land in the same second when both languages are saved together; only
  * a real gap means one language moved on without the other.
  */
-const STALE_AFTER_MS = 1_000;
+const STALE_AFTER_MS = 1000;
 
 /** No text: empty, `<p></p>`, only spaces; an array or object only of such. The content agent reads gaps the same way. */
 export function isEmpty(value: unknown): boolean {
-  if (Array.isArray(value)) return value.every((item) => isEmpty(item));
+  if (Array.isArray(value)) {
+    return value.every((item) => isEmpty(item));
+  }
   if (typeof value === "string") {
     // Rich text: `<p></p>` is empty too.
     return (
       value
-        .replace(/<[^<>]*>/g, "")
+        .replaceAll(/<[^<>]*>/g, "")
         .replaceAll("&nbsp;", " ")
         .trim() === ""
     );
@@ -69,7 +71,9 @@ function compare(
 ): I18nItem | null {
   const en = rows.find((r) => r.locale === "en");
   const de = rows.find((r) => r.locale === "de");
-  if (!en && !de) return null;
+  if (!en && !de) {
+    return null;
+  }
   if (!en || !de) {
     return {
       kind,
@@ -89,7 +93,9 @@ function compare(
     de.updatedAt instanceof Date &&
     en.updatedAt.getTime() - de.updatedAt.getTime() > STALE_AFTER_MS;
 
-  if (missingDe.length === 0 && missingEn.length === 0 && !stale) return null;
+  if (missingDe.length === 0 && missingEn.length === 0 && !stale) {
+    return null;
+  }
   return { kind, id, label, missingDe, missingEn, stale, absent: null };
 }
 
@@ -144,7 +150,9 @@ function leaves(
 export async function i18nStatus(db: DbExecutor): Promise<I18nItem[]> {
   const items: I18nItem[] = [];
   const push = (item: I18nItem | null) => {
-    if (item) items.push(item);
+    if (item) {
+      items.push(item);
+    }
   };
 
   const sectionRows = await db

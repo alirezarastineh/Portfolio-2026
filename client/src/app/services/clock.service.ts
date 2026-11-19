@@ -23,7 +23,9 @@ export class ClockService {
 
   /** Starts the clock, ticking on the minute; once started, a no-op. */
   start(): void {
-    if (!this.isBrowser || this.timer !== undefined) return;
+    if (!this.isBrowser || this.timer !== undefined) {
+      return;
+    }
     const tick = () => {
       const now = new Date();
       this.now.set(now);

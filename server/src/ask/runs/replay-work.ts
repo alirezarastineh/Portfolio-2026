@@ -54,8 +54,12 @@ export async function planReplay(
   { params: Record<string, unknown>; keys: string[] } | { error: string; status: 400 | 409 }
 > {
   const entry = await getEntry(entryId);
-  if (!entry) return { error: "unknown_entry", status: 400 };
-  if (!REPLAYABLE.includes(entry.status)) return { error: "not_replayable", status: 409 };
+  if (!entry) {
+    return { error: "unknown_entry", status: 400 };
+  }
+  if (!REPLAYABLE.includes(entry.status)) {
+    return { error: "not_replayable", status: 409 };
+  }
   const messageId = entry.messageIds[0];
   const [message] = messageId
     ? await getDb()
@@ -63,10 +67,14 @@ export async function planReplay(
         .from(aiMessages)
         .where(and(eq(aiMessages.id, messageId), VISITOR_ANSWER))
     : [];
-  if (!message) return { error: "answer_gone", status: 409 };
+  if (!message) {
+    return { error: "answer_gone", status: 409 };
+  }
   const config = askConfig();
   const keys = REPLAY_CHAINS.filter((chain) => askChain(config, chain).length);
-  if (!keys.length) return { error: "no_chain", status: 400 };
+  if (!keys.length) {
+    return { error: "no_chain", status: 400 };
+  }
   const params: ReplayParams = { task: "replay", entry: entry.id, messageId: message.id };
   return { params: { ...params }, keys };
 }
@@ -110,6 +118,24 @@ async function answerOn(
   );
 }
 
+async function replayKeys(
+  keys: readonly string[],
+  entry: string,
+  options: EvalOptions,
+  message: { question: string; locale: Locale },
+  paid: ReturnType<typeof paidItems>,
+  index = 0,
+): Promise<WorkOutcome | null> {
+  if (index >= keys.length || paid.signal.aborted) {
+    return null;
+  }
+  const halt = await replayOne(keys[index], entry, options, message, paid);
+  if (halt) {
+    return halt;
+  }
+  return replayKeys(keys, entry, options, message, paid, index + 1);
+}
+
 export const replayWork: WorkFn = async (work) => {
   const params = work.run.params as Partial<ReplayParams>;
   if (params.task !== "replay" || !params.entry || !params.messageId) {
@@ -119,7 +145,9 @@ export const replayWork: WorkFn = async (work) => {
     .select({ question: aiMessages.questionRedacted, locale: aiMessages.locale })
     .from(aiMessages)
     .where(eq(aiMessages.id, params.messageId));
-  if (!message) return { status: "failed", error: ANSWER_GONE };
+  if (!message) {
+    return { status: "failed", error: ANSWER_GONE };
+  }
 
   const config = askConfig();
   const corpus = await askCorpus(config);
@@ -140,10 +168,9 @@ export const replayWork: WorkFn = async (work) => {
     beforeModelCall: pacing ? createModelCallGate(pacing) : undefined,
   };
 
-  for (const key of work.keys) {
-    if (paid.signal.aborted) break;
-    const halt = await replayOne(key, params.entry, options, message, paid);
-    if (halt) return halt;
+  const halt = await replayKeys(work.keys, params.entry, options, message, paid);
+  if (halt) {
+    return halt;
   }
   return written(work, paid, params.entry, snapshotKey(corpus));
 };
@@ -157,9 +184,13 @@ async function replayOne(
 ): Promise<WorkOutcome | null> {
   // Checked before each chain spends: an entry deleted, fixed or retired gets no more.
   const halt = await halted(entry);
-  if (halt) return halt;
+  if (halt) {
+    return halt;
+  }
   await paid.start(key);
-  if (paid.signal.aborted) return null;
+  if (paid.signal.aborted) {
+    return null;
+  }
   const result = await answerOn(key === "deep" ? "deep" : "lite", options, message);
   await paid.finish(key, result.unavailable ? "unavailable" : "done", result);
   return null;
@@ -171,8 +202,12 @@ export const ENTRY_DECIDED =
 /** How the run ends when its entry is gone or decided; null while it may go on. */
 async function halted(entryId: string): Promise<WorkOutcome | null> {
   const entry = await getEntry(entryId);
-  if (!entry) return { status: "done", summary: { note: "The entry was deleted meanwhile." } };
-  if (!REPLAYABLE.includes(entry.status)) return { status: "failed", error: ENTRY_DECIDED };
+  if (!entry) {
+    return { status: "done", summary: { note: "The entry was deleted meanwhile." } };
+  }
+  if (!REPLAYABLE.includes(entry.status)) {
+    return { status: "failed", error: ENTRY_DECIDED };
+  }
   return null;
 }
 
@@ -183,7 +218,8 @@ async function written(
   entry: string,
   corpusKey: string,
 ): Promise<WorkOutcome> {
-  const items = (await getRun(work.run.id))?.items ?? [];
+  const run = await getRun(work.run.id);
+  const items = run?.items ?? [];
   const results = items.flatMap((i) =>
     (i.status === "done" || i.status === "unavailable") && i.result
       ? [i.result as ReplayResult]
@@ -197,13 +233,18 @@ async function written(
     })),
   };
   const stopped = paid.stoppedBy();
-  if (stopped) return { status: "failed", error: stopped, summary };
+  if (stopped) {
+    return { status: "failed", error: stopped, summary };
+  }
   // Cancelled or interrupted: the runner records it; a resume answers the chains left.
-  if (paid.signal.aborted) return { status: "done", summary };
+  if (paid.signal.aborted) {
+    return { status: "done", summary };
+  }
   // A chain with no model answering: no evidence yet. A resume asks it again; until every
   // chain has answered, the entry gets nothing, so an outage cannot pass for a cause.
-  if (results.some((r) => r.unavailable))
+  if (results.some((r) => r.unavailable)) {
     return { status: "failed", error: PROVIDER_DOWN, summary };
+  }
   if (results.length < items.length) {
     return { status: "failed", error: "Not every chain answered; resume the run.", summary };
   }
@@ -214,8 +255,12 @@ async function written(
     corpusKey,
     results,
   });
-  if (applied === "answer_gone") return { status: "failed", error: ANSWER_GONE, summary };
-  if (applied === "entry_decided") return { status: "failed", error: ENTRY_DECIDED, summary };
+  if (applied === "answer_gone") {
+    return { status: "failed", error: ANSWER_GONE, summary };
+  }
+  if (applied === "entry_decided") {
+    return { status: "failed", error: ENTRY_DECIDED, summary };
+  }
   if (applied === "entry_gone") {
     return { status: "done", summary: { ...summary, note: "The entry was deleted meanwhile." } };
   }

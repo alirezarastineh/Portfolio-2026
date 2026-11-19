@@ -31,7 +31,9 @@ const str = (value: unknown): string => (typeof value === "string" ? value : "")
 
 /** A page as the response lists it, or null when anything about it is off. */
 function pageOf(raw: unknown): MapPage | null {
-  if (!raw || typeof raw !== "object") return null;
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
   const r = raw as Raw;
   const id = str(r["id"]);
   const kind = str(r["kind"]);
@@ -75,7 +77,9 @@ export function fetchMap(
       .catch(() => null);
     // A failure is not kept: the next block or terminal tries again.
     void request.then((pages) => {
-      if (!pages && fetched.get(locale) === request) fetched.delete(locale);
+      if (!pages && fetched.get(locale) === request) {
+        fetched.delete(locale);
+      }
     });
     fetched.set(locale, request);
     pending = request;
@@ -109,6 +113,9 @@ const NEWS_KINDS: ReadonlySet<MapKind> = new Set<MapKind>(["project", "post"]);
 /** Projects and posts changed after the day `since`, newest first. */
 export function updatesSince(pages: readonly MapPage[], since: string): MapPage[] {
   return pages
-    .filter((p) => NEWS_KINDS.has(p.kind) && p.updated !== undefined && p.updated > since)
-    .sort((a, b) => b.updated!.localeCompare(a.updated!));
+    .filter(
+      (p): p is MapPage & { updated: string } =>
+        NEWS_KINDS.has(p.kind) && p.updated !== undefined && p.updated > since,
+    )
+    .sort((a, b) => b.updated.localeCompare(a.updated));
 }

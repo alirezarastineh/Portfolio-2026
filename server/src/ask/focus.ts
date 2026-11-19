@@ -17,7 +17,7 @@ import type { FocusBlock } from "./prompt.js";
 export const SELECTION_CHARS = 600;
 
 /** Where a section, code block or selection is cut in its block. */
-export const EXCERPT_CHARS = 2_000;
+export const EXCERPT_CHARS = 2000;
 
 export const focusSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("section"), id: z.string().min(1).max(100) }),
@@ -39,13 +39,15 @@ export interface Focus {
 
 /** Text as compared and quoted: one form of each character, runs of space as one. */
 function squash(text: string): string {
-  return text.normalize("NFKC").replace(/\s+/g, " ").trim();
+  return text.normalize("NFKC").replaceAll(/\s+/g, " ").trim();
 }
 
 /** Whether `document` holds `selection`: in its text, a section's or a code block's. */
 function holds(document: CorpusDocument, selection: string): boolean {
   const wanted = squash(selection).toLowerCase();
-  if (!wanted) return false;
+  if (!wanted) {
+    return false;
+  }
   const texts = [
     document.text,
     ...(document.sections ?? []).map((s) => s.text),
@@ -71,7 +73,9 @@ export function focusOf(request: FocusRequest, page: PageDocument | null): Focus
 
   if (request.kind === "section") {
     const section = document?.sections?.find((s) => s.id === request.id);
-    if (!ref || !section) return ignored();
+    if (!ref || !section) {
+      return ignored();
+    }
     return {
       block: { kind: "section", page: ref, title: section.title, text: excerpt(section.text) },
       fenced: null,
@@ -80,7 +84,9 @@ export function focusOf(request: FocusRequest, page: PageDocument | null): Focus
   }
   if (request.kind === "code") {
     const code = document?.code?.[request.index];
-    if (!ref || code === undefined) return ignored();
+    if (!ref || code === undefined) {
+      return ignored();
+    }
     return {
       block: { kind: "code", page: ref, index: request.index, text: excerpt(code) },
       fenced: null,
@@ -88,7 +94,9 @@ export function focusOf(request: FocusRequest, page: PageDocument | null): Focus
     };
   }
   const selection = squash(request.text);
-  if (!selection) return ignored();
+  if (!selection) {
+    return ignored();
+  }
   if (ref && document && holds(document, selection)) {
     return {
       block: { kind: "selection", page: ref, text: excerpt(selection) },

@@ -43,7 +43,9 @@ export class HlmSidebarService {
     const onPhone = (e: MediaQueryListEvent) => {
       this._isMobile.set(e.matches);
       // A phone's sheet does not stay open behind a wider layout.
-      if (!e.matches) this._openMobile.set(false);
+      if (!e.matches) {
+        this._openMobile.set(false);
+      }
     };
     const onWide = (e: MediaQueryListEvent) => this._isWide.set(e.matches);
     this._phone?.addEventListener("change", onPhone);

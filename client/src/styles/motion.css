@@ -222,19 +222,6 @@ article:has(.card-link:is(:focus-visible, :active)) .title-draw {
   scale: 1;
 }
 
-/* A button, or a link drawn as one: its colours change on hover, and a press
-   sinks it a little, springing back on release. In place of Tailwind's
-   `transition-colors`, which would drop the scale. */
-.press {
-  transition:
-    color var(--dur-2) var(--ease-out),
-    background-color var(--dur-2) var(--ease-out),
-    border-color var(--dur-2) var(--ease-out),
-    text-decoration-color var(--dur-3) var(--ease-out),
-    background-size var(--underline-draw, 0s) var(--ease-out),
-    scale var(--dur-1) var(--ease-spring);
-}
-
 @media (prefers-reduced-motion: no-preference) {
   .nav-link::after,
   .field-line::after {
@@ -243,6 +230,13 @@ article:has(.card-link:is(:focus-visible, :active)) .title-draw {
 
   .press {
     --underline-draw: var(--dur-3);
+    transition:
+      color var(--dur-2) var(--ease-out),
+      background-color var(--dur-2) var(--ease-out),
+      border-color var(--dur-2) var(--ease-out),
+      text-decoration-color var(--dur-3) var(--ease-out),
+      background-size var(--underline-draw, 0s) var(--ease-out),
+      scale var(--dur-1) var(--ease-spring);
   }
 
   .press:active {

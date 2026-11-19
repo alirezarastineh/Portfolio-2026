@@ -2,7 +2,9 @@ import type { Locale } from "./locale";
 
 /** `DE` → `Germany` / `Deutschland`; the code itself if the runtime cannot name it. */
 export function regionName(code: string, locale: Locale): string {
-  if (!/^[A-Za-z]{2}$/.test(code)) return code;
+  if (!/^[A-Za-z]{2}$/.test(code)) {
+    return code;
+  }
   try {
     return new Intl.DisplayNames([locale], { type: "region" }).of(code.toUpperCase()) ?? code;
   } catch {
@@ -19,7 +21,9 @@ export function placeName(location: { city: string; country: string }, locale: L
 
 /** The time in an IANA zone as a 24-hour `09:05`; empty for an unknown zone. */
 export function clockTime(timeZone: string, locale: Locale, at = new Date()): string {
-  if (!timeZone) return "";
+  if (!timeZone) {
+    return "";
+  }
   try {
     return new Intl.DateTimeFormat(locale === "de" ? "de-DE" : "en-GB", {
       timeZone,
@@ -38,7 +42,9 @@ export function clockTime(timeZone: string, locale: Locale, at = new Date()): st
  * `GMT+2` for Berlin), so English uses it. Empty for an unknown zone.
  */
 export function timeZoneLabel(timeZone: string, locale: Locale, at = new Date()): string {
-  if (!timeZone) return "";
+  if (!timeZone) {
+    return "";
+  }
   try {
     const parts = new Intl.DateTimeFormat(locale === "de" ? "de-DE" : "en-GB", {
       timeZone,

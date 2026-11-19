@@ -26,7 +26,7 @@ export interface HlmDatePickerMultiConfig<T> {
 function getDefaultConfig<T>(): HlmDatePickerMultiConfig<T> {
   return {
     formatDates: (dates) =>
-      dates.map((date) => (date instanceof Date ? date.toDateString() : `${date}`)).join(", "),
+      dates.map((date) => (date instanceof Date ? date.toDateString() : String(date))).join(", "),
     transformDates: (dates) => dates,
     autoCloseOnMaxSelection: false,
   };

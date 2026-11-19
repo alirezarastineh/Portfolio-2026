@@ -25,7 +25,7 @@ describe("hlm-switch", () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const root: HTMLElement = fixture.nativeElement;
+    const root = fixture.nativeElement as HTMLElement;
     const names = Array.from(root.querySelectorAll('[role="switch"]'), (button) =>
       (button.getAttribute("aria-labelledby") ?? "")
         .split(" ")

@@ -85,8 +85,9 @@ for (const file of files) {
   }
 }
 for (const tag of tags) {
-  if (!files.includes(`${tag}.sql`))
+  if (!files.includes(`${tag}.sql`)) {
     problems.push(`meta/_journal.json lists ${tag}, which has no .sql file`);
+  }
 }
 
 let additive = 0;
@@ -108,10 +109,13 @@ for (const file of files) {
     const body = code(statement);
     const found = RULES.filter(([rule]) => rule.test(body)).map(([, label]) => label);
     for (const [clause] of body.matchAll(ADD_COLUMN)) {
-      if (NOT_NULL.test(clause) && !FILLED.test(clause))
+      if (NOT_NULL.test(clause) && !FILLED.test(clause)) {
         found.push("adds a NOT NULL column with no default");
+      }
     }
-    if (found.length === 0) return;
+    if (found.length === 0) {
+      return;
+    }
     const waiver = statement.match(WAIVER);
     if (waiver) {
       notes.push(`waived: ${file}, statement ${i + 1} (non-additive: ${waiver[1].trim()})`);
@@ -122,38 +126,50 @@ for (const file of files) {
       `${file}, statement ${i + 1}, ${found.join(", ")}:\n    ${statement.trim().replaceAll("\n", "\n    ")}`,
     );
   });
-  if (clean) additive++;
+  if (clean) {
+    additive++;
+  }
 }
 
 const script = readFileSync(verifyDeploy, "utf8");
 const verified = [];
 for (const tag of tags) {
   const number = tag.match(/^(\d+)_/)?.[1];
-  if (!number || Number(number) < FIRST_VERIFIED) continue;
+  if (!number || Number(number) < FIRST_VERIFIED) {
+    continue;
+  }
   // As its pass and fail messages name them: "migration 0027", "migration 0027_mcp_usage".
   const named = new RegExp(String.raw`\b(?:pass|fail|check)\s+"[^"\n]*\bmigration ${number}(?!\d)`);
-  if (named.test(script)) verified.push(number);
-  else
+  if (named.test(script)) {
+    verified.push(number);
+  } else {
     problems.push(
       `verify-deploy.sh has no check naming migration ${number} (the new-migration skill, step 7)`,
     );
+  }
 }
 
 console.log(`journal: ${tags.length} migrations, ${files.length} .sql files`);
 console.log(`additive: ${additive} of ${files.length} files`);
-for (const note of notes) console.log(`  ${note}`);
+for (const note of notes) {
+  console.log(`  ${note}`);
+}
 if (verified.length > 0) {
   console.log(`verify-deploy.sh: checks each of migrations ${verified[0]} to ${verified.at(-1)}`);
 }
 if (problems.length > 0) {
-  for (const problem of problems) console.error(`FAIL ${problem}`);
+  for (const problem of problems) {
+    console.error(`FAIL ${problem}`);
+  }
   console.error(`check-migrations: ${problems.length} problem(s)`);
   // On GitHub Actions, each problem also goes on the run's page, which shows
   // annotations to readers without a login (the GitHub Actions plan, Phase 3).
   if (process.env.GITHUB_ACTIONS === "true") {
     const escape = (text) =>
       text.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
-    for (const problem of problems) console.log(`::error title=migrations::${escape(problem)}`);
+    for (const problem of problems) {
+      console.log(`::error title=migrations::${escape(problem)}`);
+    }
   }
   process.exit(1);
 }

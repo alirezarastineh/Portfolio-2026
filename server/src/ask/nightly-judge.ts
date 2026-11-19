@@ -84,7 +84,7 @@ export function isFlagged(flags: readonly string[], thumbsDown: boolean): boolea
  * judged yet. A verdict already there (a calibration run's, by whichever
  * model of the judge chain answered) is never written over.
  */
-async function candidates(bounds: { start: Date; end: Date }): Promise<NightlyCandidate[]> {
+async function loadCandidates(bounds: { start: Date; end: Date }): Promise<NightlyCandidate[]> {
   const rows = await getDb()
     .select({
       id: aiMessages.id,
@@ -142,23 +142,34 @@ export async function startNightly(
   };
 
   const blocked = await spendBlocked("nightlyJudge");
-  if (blocked) return refuse(blocked);
+  if (blocked) {
+    return refuse(blocked);
+  }
   const judge = askVisitorJudges(config)[0]?.id;
-  if (!judge) return refuse("no_visitor_judge");
-  const picks = pickNightly(bounds.day, await candidates(bounds));
-  if (!picks.length) return refuse("nothing_to_judge");
+  if (!judge) {
+    return refuse("no_visitor_judge");
+  }
+  const picks = pickNightly(bounds.day, await loadCandidates(bounds));
+  if (!picks.length) {
+    return refuse("nothing_to_judge");
+  }
 
   const params: NightlyParams = { nightly: true, day: bounds.day, judge, picks };
   const started = await whileStarting(async () => {
     // One paid run at a time, whatever its kind: they share the providers' quota.
-    if ((await activeRuns()).length) return null;
+    const active = await activeRuns();
+    if (active.length) {
+      return null;
+    }
     return startRun(
       "judge",
       { ...params },
       picks.map((p) => p.id),
     );
   });
-  if (started === "busy" || !started) return refuse("already_running");
+  if (started === "busy" || !started) {
+    return refuse("already_running");
+  }
 
   const sampled = picks.filter((p) => p.pick === "sample").length;
   await audit({
@@ -177,7 +188,9 @@ let timer: NodeJS.Timeout | undefined;
 export function nextNightlyJudgeAt(now: Date): Date {
   const next = new Date(now);
   next.setUTCHours(2, 30, 0, 0);
-  if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
+  if (next <= now) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
   return next;
 }
 
@@ -193,7 +206,9 @@ export function startNightlyJudge(
     config?: () => AskConfig;
   } = {},
 ): void {
-  if (timer) return;
+  if (timer) {
+    return;
+  }
   const { now = new Date(), start = startNightly, config: read = askConfig } = options;
   const tick = () => {
     const config = read();

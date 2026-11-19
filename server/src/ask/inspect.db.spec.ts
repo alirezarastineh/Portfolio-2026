@@ -24,7 +24,11 @@ let config: AskConfig;
 let chain: ModelEntry[] = [];
 
 const app = createApp({
-  ask: { config: () => config, chain: () => chain, corpus: async (c) => fixtureCorpus(c) },
+  ask: {
+    config: () => config,
+    chain: () => chain,
+    corpus: (c) => Promise.resolve(fixtureCorpus(c)),
+  },
 });
 
 const SESSION = "inspect-session-0000001";
@@ -42,7 +46,11 @@ async function ask(text: string, session = SESSION): Promise<string> {
     }),
   });
   const chunks = await readUiChunks(res);
-  const id = chunks.find((c) => c["type"] === "start")!["messageId"] as string;
+  const start = chunks.find((c) => c["type"] === "start");
+  const id = start?.["messageId"];
+  if (typeof id !== "string") {
+    throw new TypeError("Expected start chunk with string messageId");
+  }
   await eventually(async () => {
     const [row] = await getDb().select().from(aiMessages).where(eq(aiMessages.id, id));
     return row;
@@ -55,6 +63,14 @@ function inspect(messageId: string, sessionId = SESSION) {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ sessionId, messageId }),
+  });
+}
+
+function badInspectRequest(body: unknown) {
+  return app.request("/v1/ask/inspect", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
   });
 }
 
@@ -90,8 +106,8 @@ describe("POST /v1/ask/inspect", () => {
       model: "nemotron-3-ultra",
       citations: { kept: ["project:atlas@en"], removed: 1 },
       guard: {},
-      flags: expect.arrayContaining(["invented-citation", "degraded"]),
     });
+    expect(view.flags).toEqual(expect.arrayContaining(["invented-citation", "degraded"]));
     expect(view.prompt).toMatch(/^ask-/);
     expect(view.steps[0]).toMatchObject({
       model: "nemotron-3-ultra",
@@ -107,21 +123,24 @@ describe("POST /v1/ask/inspect", () => {
     chain = [mockEntry("gemini-3.5-flash-lite", scripted([textTurn("ok")]).model)];
     const id = await ask("Hi");
 
-    expect((await inspect(id, "some-other-session-000")).status).toBe(404);
-    expect((await inspect("m_never_logged_00001")).status).toBe(404);
+    const otherSession = await inspect(id, "some-other-session-000");
+    expect(otherSession.status).toBe(404);
+    const unknownId = await inspect("m_never_logged_00001");
+    expect(unknownId.status).toBe(404);
     await getDb().update(aiMessages).set({ source: "playground" }).where(eq(aiMessages.id, id));
-    expect((await inspect(id)).status).toBe(404);
+    const nonVisitor = await inspect(id);
+    expect(nonVisitor.status).toBe(404);
   });
 
   it("refuses what no terminal sends", async () => {
-    const bad = (body: unknown) =>
-      app.request("/v1/ask/inspect", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    expect((await bad({ sessionId: SESSION })).status).toBe(400);
-    expect((await bad({ sessionId: "short", messageId: "m_atlas000001" })).status).toBe(400);
-    expect((await bad({ sessionId: SESSION, messageId: "m_atlas" })).status).toBe(400);
+    const missingId = await badInspectRequest({ sessionId: SESSION });
+    expect(missingId.status).toBe(400);
+    const shortSession = await badInspectRequest({
+      sessionId: "short",
+      messageId: "m_atlas000001",
+    });
+    expect(shortSession.status).toBe(400);
+    const shortMessage = await badInspectRequest({ sessionId: SESSION, messageId: "m_atlas" });
+    expect(shortMessage.status).toBe(400);
   });
 });

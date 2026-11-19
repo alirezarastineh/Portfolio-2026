@@ -35,9 +35,11 @@ const STOP_GATES = new Set<string>(Object.values(STOPS).map((stop) => stop.gate)
 
 /** How a draft ranks, lower first: an empty one last, then one stopped short, then by failures. */
 export function rankOf(draft: { text: string; failures: readonly Failure[] }): number {
-  if (!draft.text) return 2_000;
+  if (!draft.text) {
+    return 2000;
+  }
   const stopped = draft.failures.some((f) => STOP_GATES.has(f.gate));
-  return (stopped ? 1_000 : 0) + draft.failures.length;
+  return (stopped ? 1000 : 0) + draft.failures.length;
 }
 
 /** How the judge chain is called, to rank drafts and to read a translation. */

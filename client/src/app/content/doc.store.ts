@@ -11,9 +11,13 @@ import { docSchema, type Doc, type DocKind, type Locale } from "./schema";
  * Nitro in-process with ofetch, which rejects with its own `FetchError`.
  */
 export function statusOf(error: unknown): number | null {
-  if (error instanceof HttpErrorResponse) return error.status;
+  if (error instanceof HttpErrorResponse) {
+    return error.status;
+  }
   const { status, statusCode } = (error ?? {}) as { status?: unknown; statusCode?: unknown };
-  if (typeof status === "number") return status;
+  if (typeof status === "number") {
+    return status;
+  }
   return typeof statusCode === "number" ? statusCode : null;
 }
 
@@ -35,10 +39,14 @@ export class DocStore {
   /** The doc, or null when this locale has none by that slug. Rejects only on a real failure. */
   ensure(locale: Locale, kind: DocKind, slug: string): Promise<Doc | null> {
     const url = this.source.doc(locale, kind, slug);
-    if (this.loaded.has(url)) return Promise.resolve(this.loaded.get(url) ?? null);
+    if (this.loaded.has(url)) {
+      return Promise.resolve(this.loaded.get(url) ?? null);
+    }
 
     const existing = this.inFlight.get(url);
-    if (existing) return existing;
+    if (existing) {
+      return existing;
+    }
 
     const request = this.fetch(url).finally(() => this.inFlight.delete(url));
     this.inFlight.set(url, request);

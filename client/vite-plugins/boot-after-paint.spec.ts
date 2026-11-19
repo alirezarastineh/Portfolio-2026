@@ -1,3 +1,5 @@
+import { compileFunction } from "node:vm";
+
 import { describe, expect, it } from "vitest";
 
 import { APP_BOOT_SCRIPT_ID as NONCED_ID } from "../src/app/security/csp-nonce";
@@ -45,9 +47,15 @@ describe("bootAfterPaint", () => {
     expect(run.frames).toHaveLength(0);
 
     run.paint();
-    run.frames.shift()!();
+    const frame = run.frames.shift();
+    if (!frame) {
+      throw new Error("Expected requestAnimationFrame callback");
+    }
+    frame();
     // The frame's task boots; the fallback timer then finds it started.
-    for (const timer of [...run.timers].reverse()) timer.f();
+    for (const timer of [...run.timers].reverse()) {
+      timer.f();
+    }
     expect(run.appended).toEqual(["/a.js", "/b.js"]);
     expect(run.imported).toEqual(["/e.js"]);
   });
@@ -81,28 +89,35 @@ function runLoader(rootText: string) {
     constructor(callback: typeof onPaint) {
       onPaint = callback;
     }
-    observe() {}
-    disconnect() {}
+    observe = () => undefined;
+    disconnect = () => undefined;
   }
   const source = loaderSource("/e.js", ["/a.js", "/b.js"]).replace(
     "import(entry)",
     "__import(entry)",
   );
-  new Function(
+  const runScript = compileFunction(source, [
     "document",
     "requestAnimationFrame",
     "setTimeout",
     "performance",
     "PerformanceObserver",
     "__import",
-    source,
-  )(
+  ]) as (
+    doc: unknown,
+    raf: (f: () => void) => number,
+    timeout: (f: () => void, ms: number) => number,
+    perf: unknown,
+    observer: unknown,
+    importer: (url: string) => Promise<void>,
+  ) => void;
+  runScript(
     document,
-    (f: () => void) => frames.push(f),
-    (f: () => void, ms: number) => timers.push({ f, ms }),
+    (f) => frames.push(f),
+    (f, ms) => timers.push({ f, ms }),
     performance,
     PerformanceObserver,
-    (url: string) => {
+    (url) => {
       imported.push(url);
       return Promise.resolve();
     },
@@ -113,7 +128,11 @@ function runLoader(rootText: string) {
     imported,
     frames,
     timers,
-    paint: () =>
-      onPaint!({ getEntriesByName: (name) => (name === "first-contentful-paint" ? [{}] : []) }),
+    paint: () => {
+      if (!onPaint) {
+        throw new Error("Expected PerformanceObserver to be constructed");
+      }
+      onPaint({ getEntriesByName: (name) => (name === "first-contentful-paint" ? [{}] : []) });
+    },
   };
 }

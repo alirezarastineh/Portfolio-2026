@@ -52,9 +52,13 @@ export function calibrate(pairs: readonly CalibrationPair[]): Calibration {
   let judgeStrict = 0;
   for (const pair of pairs) {
     const faithful = pair.faithfulness >= FAITHFUL_AT;
-    if (faithful === pair.grounded) agree++;
-    else if (faithful) judgeLenient++;
-    else judgeStrict++;
+    if (faithful === pair.grounded) {
+      agree++;
+    } else if (faithful) {
+      judgeLenient++;
+    } else {
+      judgeStrict++;
+    }
   }
   const agreement = pairs.length ? agree / pairs.length : null;
   return {

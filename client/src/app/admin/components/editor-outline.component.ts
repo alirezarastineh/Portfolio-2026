@@ -153,22 +153,30 @@ export class EditorOutlineComponent {
     effect((onCleanup) => {
       const ids = this.ids();
       const win = this.doc.defaultView;
-      if (!ready() || !win) return;
+      if (!ready() || !win) {
+        return;
+      }
       untracked(() => {
         const order = ids.split(" ");
         let frame = 0;
         const measure = () => {
           frame = 0;
-          if (Date.now() < this.holdUntil) return;
+          if (Date.now() < this.holdUntil) {
+            return;
+          }
           let reading = order[0] ?? null;
           for (const id of order) {
             const top = this.doc.getElementById(id)?.getBoundingClientRect().top;
-            if (top !== undefined && top <= READING_LINE) reading = id;
+            if (top !== undefined && top <= READING_LINE) {
+              reading = id;
+            }
           }
           this.current.set(reading);
         };
         const schedule = () => {
-          if (!frame) frame = win.requestAnimationFrame(measure);
+          if (!frame) {
+            frame = win.requestAnimationFrame(measure);
+          }
         };
         win.addEventListener("scroll", schedule, { passive: true });
         win.addEventListener("resize", schedule, { passive: true });
@@ -176,7 +184,9 @@ export class EditorOutlineComponent {
         onCleanup(() => {
           win.removeEventListener("scroll", schedule);
           win.removeEventListener("resize", schedule);
-          if (frame) win.cancelAnimationFrame(frame);
+          if (frame) {
+            win.cancelAnimationFrame(frame);
+          }
         });
       });
     });
@@ -193,13 +203,17 @@ export class EditorOutlineComponent {
       return;
     }
     const section = this.doc.getElementById(id);
-    if (!section) return;
+    if (!section) {
+      return;
+    }
     event.preventDefault();
     const still = this.doc.defaultView?.matchMedia("(prefers-reduced-motion: reduce)").matches;
     // The page's scroll padding keeps it clear of the sticky header.
     section.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
     const heading = section.querySelector<HTMLElement>("h2, h3") ?? section;
-    if (!heading.hasAttribute("tabindex")) heading.setAttribute("tabindex", "-1");
+    if (!heading.hasAttribute("tabindex")) {
+      heading.setAttribute("tabindex", "-1");
+    }
     heading.focus({ preventScroll: true });
     this.current.set(id);
     // A short section near the end cannot reach the line: it stays marked anyway.

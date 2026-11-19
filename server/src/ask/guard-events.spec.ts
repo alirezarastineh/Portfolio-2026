@@ -9,8 +9,16 @@ import {
   type GuardEventRow,
 } from "./guard-events.js";
 
+const sorted = (items: readonly string[]) =>
+  items.toSorted((a, b) => {
+    if (a < b) {
+      return -1;
+    }
+    return a > b ? 1 : 0;
+  });
+
 beforeEach(async () => {
-  await flushGuardEvents(async () => undefined);
+  await flushGuardEvents(() => Promise.resolve());
 });
 
 describe("guard events", () => {
@@ -22,8 +30,9 @@ describe("guard events", () => {
     countGuardEvent("rate_limited", new Date("2026-10-01T00:01:00Z"));
 
     const writes: GuardEventRow[][] = [];
-    await flushGuardEvents(async (rows) => {
+    await flushGuardEvents((rows) => {
       writes.push(rows);
+      return Promise.resolve();
     });
     expect(writes).toHaveLength(1);
     expect(writes[0]).toEqual([
@@ -36,8 +45,9 @@ describe("guard events", () => {
 
   it("does not write when nothing was counted", async () => {
     let wrote = false;
-    await flushGuardEvents(async () => {
+    await flushGuardEvents(() => {
       wrote = true;
+      return Promise.resolve();
     });
     expect(wrote).toBe(false);
   });
@@ -46,9 +56,9 @@ describe("guard events", () => {
     const day = new Date("2026-09-30T12:00:00Z");
     countGuardEvent("busy", day);
     await expect(
-      flushGuardEvents(async () => {
+      flushGuardEvents(() => {
         countGuardEvent("busy", day);
-        throw new Error("database down");
+        return Promise.reject(new Error("database down"));
       }),
     ).rejects.toThrow("database down");
     expect(pendingGuardEvents()).toEqual([{ day: "2026-09-30", kind: "busy", count: 2 }]);
@@ -57,6 +67,6 @@ describe("guard events", () => {
   it("counts a visitor's forget beside the refusals, never as one (visitor plan V13, V14)", () => {
     expect(GUARD_EVENT_KINDS).toContain("forgotten");
     expect(REFUSAL_KINDS).not.toContain("forgotten");
-    expect([...REFUSAL_KINDS, "forgotten"].sort()).toEqual([...GUARD_EVENT_KINDS].sort());
+    expect(sorted([...REFUSAL_KINDS, "forgotten"])).toEqual(sorted(GUARD_EVENT_KINDS));
   });
 });

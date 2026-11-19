@@ -19,17 +19,17 @@ class StubApi {
   totpResult: ApiResult<unknown> = { ok: true, data: { ok: true, user: {} } };
   calls: string[] = [];
 
-  async login(email: string) {
+  login(email: string): Promise<ApiResult<LoginPayload>> {
     this.calls.push(`login:${email}`);
-    return this.loginResult;
+    return Promise.resolve(this.loginResult);
   }
-  async verifyTotp(code: string) {
+  verifyTotp(code: string): Promise<ApiResult<unknown>> {
     this.calls.push(`totp:${code}`);
-    return this.totpResult;
+    return Promise.resolve(this.totpResult);
   }
-  async logout() {
+  logout(): Promise<ApiResult<{ ok: true }>> {
     this.calls.push("logout");
-    return { ok: true as const, data: { ok: true as const } };
+    return Promise.resolve({ ok: true, data: { ok: true } });
   }
 }
 
@@ -49,7 +49,10 @@ function setup() {
   return { fixture, api };
 }
 
-const text = (fixture: { nativeElement: HTMLElement }) => fixture.nativeElement.textContent ?? "";
+const host = (fixture: ComponentFixture<AdminLoginPage>): HTMLElement =>
+  fixture.nativeElement as HTMLElement;
+
+const text = (fixture: ComponentFixture<AdminLoginPage>): string => host(fixture).textContent ?? "";
 
 /** The two steps live in the form the page holds. */
 const form = (fixture: ComponentFixture<AdminLoginPage>): SignInFormComponent =>
@@ -72,11 +75,11 @@ describe("AdminLoginPage", () => {
    */
   it("renders the credentials form immediately", () => {
     const { fixture } = setup();
-    const inputs = fixture.nativeElement.querySelectorAll("input");
+    const inputs = host(fixture).querySelectorAll("input");
 
     expect(inputs).toHaveLength(2);
-    expect(fixture.nativeElement.querySelector("#email")).toBeTruthy();
-    expect(fixture.nativeElement.querySelector("#password")).toBeTruthy();
+    expect(host(fixture).querySelector("#email")).toBeTruthy();
+    expect(host(fixture).querySelector("#password")).toBeTruthy();
   });
 
   it("does not call the API until the form is valid", async () => {
@@ -99,7 +102,7 @@ describe("AdminLoginPage", () => {
 
     expect(fixture.componentInstance["step"]()).toBe("totp");
     expect(text(fixture)).toContain("Two-factor code");
-    expect(fixture.nativeElement.querySelector("#code")).toBeTruthy();
+    expect(host(fixture).querySelector("#code")).toBeTruthy();
   });
 
   it("surfaces a readable message instead of a raw error code", async () => {
@@ -119,10 +122,10 @@ describe("AdminLoginPage", () => {
 
   it("is one plain form under the wordmark, its heading named for the step it is on", async () => {
     const { fixture, api } = setup();
-    const heading = () => fixture.nativeElement.querySelector("h1")?.textContent?.trim();
+    const heading = () => host(fixture).querySelector("h1")?.textContent?.trim();
     expect(heading()).toBe("Sign in");
     expect(text(fixture)).toContain("Alireza Rastineh");
-    expect(fixture.nativeElement.querySelector("app-terminal-window")).toBeNull();
+    expect(host(fixture).querySelector("app-terminal-window")).toBeNull();
 
     api.loginResult = { ok: true, data: { ok: true, totpRequired: true, user: null } };
     form(fixture)["credentials"].setValue({

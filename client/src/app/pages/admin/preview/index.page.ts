@@ -82,7 +82,9 @@ function pagesOf(locale: Locale, content: AppContent, livePosts: Set<string>) {
         title="Preview draft"
         description="The site as the next publish would make it: the real pages, draft posts included. Each opens in a new tab; refresh it there after saving an edit."
       >
-        <button headerActions hlmBtn variant="outline" size="sm" (click)="load()">Refresh</button>
+        <button headerActions hlmBtn variant="outline" size="sm" type="button" (click)="load()">
+          Refresh
+        </button>
       </app-page-header>
 
       @if (loading()) {

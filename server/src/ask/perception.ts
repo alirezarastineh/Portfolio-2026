@@ -164,7 +164,7 @@ export function resolveRequested(
 ): CorpusDocument | undefined {
   const other = reading === "en" ? "de" : "en";
   if (!raw.includes(REDACTED_NUMBER)) {
-    const id = raw.trim().replace(/^\[\^?|\]$/g, "");
+    const id = raw.trim().replaceAll(/^\[\^?|\]$/g, "");
     const base = baseId(id);
     return (
       documents.find((d) => d.id === id) ??
@@ -178,7 +178,9 @@ export function resolveRequested(
   const matches = documents.filter((d) => namesDocument(id, d.id));
   for (const locale of [wanted ?? reading, wanted ? null : other]) {
     const inLocale = matches.filter((d) => d.locale === locale);
-    if (inLocale.length === 1) return inLocale[0];
+    if (inLocale.length === 1) {
+      return inLocale[0];
+    }
   }
   return undefined;
 }
@@ -190,7 +192,9 @@ export function resolveRequested(
 export function namesDocument(requested: string, id: string): boolean {
   const raw = requested.trim();
   // Not unbracketed when redacted: the `]` would be the redaction's own.
-  if (!raw.includes(REDACTED_NUMBER)) return baseId(raw.replace(/^\[\^?|\]$/g, "")) === baseId(id);
+  if (!raw.includes(REDACTED_NUMBER)) {
+    return baseId(raw.replaceAll(/^\[\^?|\]$/g, "")) === baseId(id);
+  }
   const digits = String.raw`[\d\s()./-]+`;
   const pattern = escapeRegex(baseId(raw)).replaceAll(escapeRegex(REDACTED_NUMBER), digits);
   return new RegExp(`^${pattern}$`).test(baseId(id));
@@ -203,7 +207,9 @@ export function fetchKind(
   reading: Locale,
   layout: CoreLayout,
 ): Exclude<FetchKind, "unknown"> {
-  if (coreView(documents, reading, layout).handles.some((d) => d.id === doc.id)) return "handle";
+  if (coreView(documents, reading, layout).handles.some((d) => d.id === doc.id)) {
+    return "handle";
+  }
   const limit = coreLimit(doc, layout);
   return limit !== undefined && doc.text.length > limit ? "rest" : "whole";
 }
@@ -232,20 +238,28 @@ function addRowToTallies(tallies: readonly Tally[], row: PerceptionRow): void {
     t.input += row.tokens.input;
     t.output += row.tokens.output;
     t.usd += row.usd;
-    if (row.helpful) t.helpful++;
+    if (row.helpful) {
+      t.helpful++;
+    }
   }
 }
 
 function tallyCacheSteps(tallies: readonly Tally[], row: PerceptionRow): void {
-  const steps = (row.trace?.steps ?? []).filter((s) => s.model !== null);
+  const steps = (row.trace?.steps ?? []).flatMap((s) =>
+    s.model === null ? [] : [{ ...s, model: s.model }],
+  );
   for (const [i, step] of steps.entries()) {
-    if (!step.tokens || !capsOf(step.model!).caching) continue;
+    if (!step.tokens || !capsOf(step.model).caching) {
+      continue;
+    }
     for (const t of tallies) {
       const bucket = i === 0 ? t.cache.first : t.cache.later;
       bucket.steps++;
       bucket.input += step.tokens.input;
       bucket.cached += step.tokens.cached;
-      if (step.tokens.cached > 0) bucket.hits++;
+      if (step.tokens.cached > 0) {
+        bucket.hits++;
+      }
     }
   }
 }
@@ -253,13 +267,19 @@ function tallyCacheSteps(tallies: readonly Tally[], row: PerceptionRow): void {
 /** An answer searched by meaning if any of its searches did; it converted if it cited a hit. */
 function tallySearchConversion(search: SearchSides, row: PerceptionRow): void {
   const searches = (row.trace?.steps ?? []).flatMap((s) =>
-    s.tools.filter((t) => t.name === "search_portfolio" && t.hits),
+    s.tools.flatMap((t) =>
+      t.name === "search_portfolio" && t.hits ? [{ hits: t.hits, semantic: t.semantic }] : [],
+    ),
   );
-  if (!searches.length) return;
+  if (!searches.length) {
+    return;
+  }
   const side = searches.some((t) => t.semantic) ? search.semantic : search.words;
   side.answers++;
   const cited = new Set(row.citedIds);
-  if (searches.some((t) => t.hits!.some((id) => cited.has(id)))) side.converted++;
+  if (searches.some((t) => t.hits.some((id) => cited.has(id)))) {
+    side.converted++;
+  }
 }
 
 function classifyFetch(
@@ -268,7 +288,9 @@ function classifyFetch(
   readIn: Locale,
   layout: CoreLayout,
 ): { kind: FetchKind; id: string | null } | null {
-  if (tool.name !== "get_document" || tool.outcome !== "ok") return null;
+  if (tool.name !== "get_document" || tool.outcome !== "ok") {
+    return null;
+  }
   const raw = requestedId(tool.input);
   const doc = raw && documents ? resolveRequested(documents, raw, readIn) : undefined;
   return {
@@ -288,9 +310,15 @@ function tallyDocumentFetches(
   for (const step of row.trace?.steps ?? []) {
     for (const tool of step.tools) {
       const fetch = classifyFetch(tool, documents, readIn, layout);
-      if (!fetch) continue;
-      for (const t of tallies) t.fetches[fetch.kind]++;
-      if (fetch.id) noteAccess(fetchedBy, fetch.id, row.id);
+      if (!fetch) {
+        continue;
+      }
+      for (const t of tallies) {
+        t.fetches[fetch.kind]++;
+      }
+      if (fetch.id) {
+        noteAccess(fetchedBy, fetch.id, row.id);
+      }
     }
   }
 }
@@ -310,7 +338,9 @@ function accumulateRow(
   accum.mix.set(key, entry);
 
   addRowToTallies(tallies, row);
-  for (const id of new Set(row.citedIds)) noteAccess(accum.citedBy, id, row.id);
+  for (const id of new Set(row.citedIds)) {
+    noteAccess(accum.citedBy, id, row.id);
+  }
   tallyCacheSteps(tallies, row);
   tallySearchConversion(accum.search, row);
   tallyDocumentFetches(
@@ -353,7 +383,9 @@ export function measurePerception(
     },
   };
 
-  for (const row of rows) accumulateRow(row, snapshots, accum);
+  for (const row of rows) {
+    accumulateRow(row, snapshots, accum);
+  }
 
   return {
     ...slice(accum.overall),
@@ -414,11 +446,11 @@ export function measurePages(rows: readonly ReaderRow[]): {
   return {
     pageAware: {
       ...answerGroup(onPage),
-      promoted: onPage.filter((row) => row.trace!.page!.promoted).length,
+      promoted: onPage.filter((row) => row.trace?.page?.promoted).length,
     },
     focused: {
       ...answerGroup(focused),
-      verified: focused.filter((row) => row.trace!.focus!.verified).length,
+      verified: focused.filter((row) => row.trace?.focus?.verified).length,
     },
     rest: answerGroup(rows.filter((row) => !row.trace?.page)),
   };
@@ -475,10 +507,14 @@ export function suggestTiers(
     why,
   });
 
-  const room = MAX_PROMOTED - tiers.promoted.length;
+  const promoteRoom = MAX_PROMOTED - tiers.promoted.length;
   const candidates = documents
-    .filter((d) => !tiers.promoted.includes(d.id) && (access.get(d.id)?.fetched ?? 0) > 0)
-    .map((d) => ({ d, share: access.get(d.id)!.fetched / Math.max(answers, 1) }))
+    .flatMap((d) => {
+      const fetched = access.get(d.id)?.fetched ?? 0;
+      return !tiers.promoted.includes(d.id) && fetched > 0
+        ? [{ d, share: fetched / Math.max(answers, 1) }]
+        : [];
+    })
     .sort((a, b) => b.share - a.share || a.d.id.localeCompare(b.d.id));
   for (const { d, share } of candidates) {
     const fetched = `fetched in ${percent(share)} of ${answers} answers`;
@@ -490,7 +526,7 @@ export function suggestTiers(
       suggestions.considered.push(
         entry(d, `${fetched}; promotion needs more than ${percent(TIER_RULES.promoteShare)}`),
       );
-    } else if (suggestions.promote.length >= room) {
+    } else if (suggestions.promote.length >= promoteRoom) {
       suggestions.considered.push(entry(d, `${fetched}; at most ${MAX_PROMOTED} are promoted`));
     } else {
       suggestions.promote.push(entry(d, fetched));
@@ -513,8 +549,8 @@ export function suggestTiers(
       why: `${answers} answers; clipping harder needs ${TIER_RULES.demoteMinAnswers}`,
     });
   } else {
-    const room = MAX_DEMOTED - tiers.demoted.length;
-    for (const d of unused.slice(0, Math.max(room, 0))) {
+    const demoteRoom = MAX_DEMOTED - tiers.demoted.length;
+    for (const d of unused.slice(0, Math.max(demoteRoom, 0))) {
       suggestions.demote.push(entry(d, `never fetched nor cited in ${answers} answers`));
     }
   }

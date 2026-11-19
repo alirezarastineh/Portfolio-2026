@@ -520,7 +520,7 @@ export const EVAL_CASES: EvalCase[] = [
     locale: "en",
     question: "Tell me about his time at Google.",
     mustInclude: [
-      `${NOT_IN_PORTFOLIO}|` + String.raw`(no|not any|never).{0,40}google|google.{0,40}(not|no)\b`,
+      NOT_IN_PORTFOLIO + String.raw`|(no|not any|never).{0,40}google|google.{0,40}(not|no)\b`,
     ],
     mustNotInclude: [
       "at google,? he (built|led|worked|was)",
@@ -786,9 +786,7 @@ export const EVAL_CASES: EvalCase[] = [
       },
     ],
     question: "What did he build at NASA?",
-    mustInclude: [
-      `${NOT_IN_PORTFOLIO}|` + String.raw`(no|not|never).{0,40}nasa|nasa.{0,40}(not|no)\b`,
-    ],
+    mustInclude: [NOT_IN_PORTFOLIO + String.raw`|(no|not|never).{0,40}nasa|nasa.{0,40}(not|no)\b`],
     mustNotRepeat: [NASA_CLAIM, String.raw`\b(he|alireza) was (at|with) NASA\b`],
   },
   {

@@ -21,20 +21,25 @@ const TAG = /<\/?[a-z][a-z0-9]*\b[^<>]{0,1000}>/gi;
 
 /** What a reader sees: tags out, entities decoded, whitespace collapsed. */
 export function visible(text: string): string {
-  return decodeEntities(text.replace(/<[^<>]{0,1000}>/g, " "))
-    .replace(/\s+/g, " ")
+  return decodeEntities(text.replaceAll(/<[^<>]{0,1000}>/g, " "))
+    .replaceAll(/\s+/g, " ")
     .trim();
 }
 
 /** The `items` not found in `pool`, counting repeats. */
 function missingFrom(items: readonly string[], pool: readonly string[]): string[] {
   const left = new Map<string, number>();
-  for (const item of pool) left.set(item, (left.get(item) ?? 0) + 1);
+  for (const item of pool) {
+    left.set(item, (left.get(item) ?? 0) + 1);
+  }
   const missing: string[] = [];
   for (const item of items) {
     const n = left.get(item) ?? 0;
-    if (n) left.set(item, n - 1);
-    else missing.push(item);
+    if (n) {
+      left.set(item, n - 1);
+    } else {
+      missing.push(item);
+    }
   }
   return missing;
 }
@@ -51,7 +56,9 @@ export function withinLength<P>(cap: (p: P) => number | undefined): Gate<P> {
     id: "length",
     check: (text, p) => {
       const max = cap(p);
-      if (!max || text.length <= max) return null;
+      if (!max || text.length <= max) {
+        return null;
+      }
       return `${text.length - max} characters over the limit of ${max}`;
     },
   };
@@ -74,7 +81,7 @@ export function atLeast<P>(min: (p: P) => number, rule: string): Gate<P> {
 }
 
 /** Each opening quote and the one that closes it (German »…« included). */
-const QUOTE_PAIRS: Readonly<Record<string, string>> = {
+const QUOTE_PAIRS: Readonly<Record<string, string | undefined>> = {
   '"': '"',
   "'": "'",
   "“": "”",
@@ -100,8 +107,9 @@ export function bare<P>(): Gate<P> {
   return {
     id: "bare",
     check: (text) => {
-      if (PREAMBLES.some((re) => re.test(text)))
+      if (PREAMBLES.some((re) => re.test(text))) {
         return "starts with a preamble instead of the text itself";
+      }
       const t = text.trim();
       const close = QUOTE_PAIRS[t[0] ?? ""];
       const inner = t.slice(1, -1);
@@ -111,7 +119,7 @@ export function bare<P>(): Gate<P> {
         t.length > 2 &&
         t.endsWith(close) &&
         !inner.includes(close) &&
-        !inner.includes(t[0]!);
+        !inner.includes(t[0]);
       return wrapped ? "wrapped in quotes" : null;
     },
   };
@@ -123,9 +131,9 @@ export function bare<P>(): Gate<P> {
  */
 function prose(text: string): string {
   const plain = withoutMarkers(text)
-    .replace(/<code\b[^<>]{0,1000}>[^<]*<\/code>/gi, " ")
-    .replace(/`[^`\n]+`/g, " ");
-  return visible(plain).replace(LINK, " ");
+    .replaceAll(/<code\b[^<>]{0,1000}>[^<]*<\/code>/gi, " ")
+    .replaceAll(/`[^`\n]+`/g, " ");
+  return visible(plain).replaceAll(LINK, " ");
 }
 
 /**
@@ -156,7 +164,7 @@ export function inLanguage<P>(target: (p: P) => Locale): Gate<P> {
 function tagsOf(text: string): string[] {
   return (text.match(TAG) ?? []).map((tag) =>
     tag
-      .replace(/\s+/g, " ")
+      .replaceAll(/\s+/g, " ")
       .replace(
         /^<(\/?)([a-z0-9]+)/i,
         (_m, slash: string, name: string) => `<${slash}${name.toLowerCase()}`,
@@ -170,7 +178,9 @@ export function sameTags<P>(source: (p: P) => string): Gate<P> {
     id: "tags",
     check: (text, p) => {
       const want = tagsOf(source(p));
-      if (!want.length) return null;
+      if (!want.length) {
+        return null;
+      }
       const have = tagsOf(text);
       const missing = missingFrom(want, have);
       const extra = missingFrom(have, want);
@@ -184,7 +194,6 @@ export function sameTags<P>(source: (p: P) => string): Gate<P> {
 }
 
 /** The number reader (figures.ts), which the checks on answers share (visitor plan V7). */
-export { numbersOf, type Figure };
 
 const valuesOf = (figures: readonly Figure[]) => new Set(figures.map((f) => f.value));
 
@@ -244,8 +253,8 @@ export function sameCode<P>(source: (p: P) => string): Gate<P> {
     check: (text, p) => {
       const src = source(p);
       const spans = [
-        ...[...src.matchAll(/<code\b[^>]*>([\s\S]*?)<\/code>/gi)].map((m) => m[1]!),
-        ...[...src.matchAll(/`([^`\n]+)`/g)].map((m) => m[1]!),
+        ...[...src.matchAll(/<code\b[^>]*>([\s\S]*?)<\/code>/gi)].map((m) => m[1]),
+        ...[...src.matchAll(/`([^`\n]+)`/g)].map((m) => m[1]),
       ].filter((span) => span.trim());
       const missing = spans.filter((span) => !text.includes(span));
       return missing.length ? `inline code changed: ${listed(missing)}` : null;
@@ -263,7 +272,9 @@ export function lengthRatio<P>(source: (p: P) => string, min: number, max: numbe
     params: [min, max, RATIO_FROM],
     check: (text, p) => {
       const from = visible(source(p)).length;
-      if (from < RATIO_FROM) return null;
+      if (from < RATIO_FROM) {
+        return null;
+      }
       const ratio = visible(text).length / from;
       return ratio < min || ratio > max
         ? `${Math.round(ratio * 100)} % of the source's length (${Math.round(min * 100)}–${Math.round(max * 100)} % expected)`
@@ -309,16 +320,16 @@ const MARKER = /\s?\[\^([^\]\s]{1,160})\]/g;
 
 /** The ids an answer cites, `[^id]`, in order. */
 export function citedIds(text: string): string[] {
-  return [...text.matchAll(MARKER)].map((m) => m[1]!);
+  return [...text.matchAll(MARKER)].map((m) => m[1]);
 }
 
 /** The answer without its citation markers, and without a space left before a stop. */
 export function withoutMarkers(text: string): string {
   return (
     text
-      .replace(MARKER, "")
+      .replaceAll(MARKER, "")
       // Each run of spaces matched once, whatever follows it: linear on any run.
-      .replace(/[ \t]+([.,;:!?])?/g, (spaces, stop: string | undefined) => stop ?? spaces)
+      .replaceAll(/[ \t]+([.,;:!?])?/g, (spaces: string, stop: string = spaces) => stop)
       .trim()
   );
 }
@@ -332,9 +343,12 @@ export function answerShape<P>(max: number): Gate<P> {
     params: max,
     check: (text) => {
       const t = text.trim();
-      if (t === NO_ANSWER) return null;
-      if (t.includes(NO_ANSWER))
+      if (t === NO_ANSWER) {
+        return null;
+      }
+      if (t.includes(NO_ANSWER)) {
         return `${NO_ANSWER} with other text: write either the answer or ${NO_ANSWER} alone`;
+      }
       const words = wordsIn(withoutMarkers(t));
       return words > max ? `${words} words; at most ${max}` : null;
     },
@@ -391,9 +405,13 @@ export function plainWords<P>(language: (p: P) => Locale | null): Gate<P> {
 export function parseGlossary(text: string): { term: string; definition: string }[] {
   return text.split("\n").flatMap((raw) => {
     const line = raw.trim();
-    if (!line) return [];
+    if (!line) {
+      return [];
+    }
     const at = line.includes(": ") ? line.indexOf(": ") : line.indexOf(":");
-    if (at < 0) return [{ term: line, definition: "" }];
+    if (at < 0) {
+      return [{ term: line, definition: "" }];
+    }
     return [{ term: line.slice(0, at).trim(), definition: line.slice(at + 1).trim() }];
   });
 }
@@ -408,13 +426,19 @@ export function glossaryLines<P>(max: number, words: number): Gate<P> {
     params: [max, words, TERM_MAX],
     check: (text) => {
       const items = parseGlossary(text);
-      if (!items.length) return "no terms: write each as term: definition, one a line";
-      if (items.length > max) return `${items.length} terms; at most ${max}`;
+      if (!items.length) {
+        return "no terms: write each as term: definition, one a line";
+      }
+      if (items.length > max) {
+        return `${items.length} terms; at most ${max}`;
+      }
       const problems = items.flatMap(({ term, definition }) => {
         if (term.length > TERM_MAX) {
           return [`a term of ${term.length} characters; at most ${TERM_MAX}: the term alone`];
         }
-        if (!definition) return [`${term} has no definition: write it as term: definition`];
+        if (!definition) {
+          return [`${term} has no definition: write it as term: definition`];
+        }
         const n = wordsIn(definition);
         return n > words ? [`the definition of ${term} has ${n} words; at most ${words}`] : [];
       });
@@ -431,7 +455,7 @@ export function termsFrom<P>(source: (p: P) => string): Gate<P> {
       const page = source(p).toLowerCase();
       const missing = parseGlossary(text)
         .map((item) => item.term)
-        .filter((term) => !page.includes(term.toLowerCase().replace(/\s+/g, " ")));
+        .filter((term) => !page.includes(term.toLowerCase().replaceAll(/\s+/g, " ")));
       return missing.length ? `not in the case study as written: ${listed(missing)}` : null;
     },
   };
@@ -489,10 +513,13 @@ export function cited<P>(grounding: (p: P) => Grounding): Gate<P> {
   return {
     id: "cited",
     check: (text, p) => {
-      if (text.trim() === NO_ANSWER) return null;
+      if (text.trim() === NO_ANSWER) {
+        return null;
+      }
       const ids = citedIds(text);
-      if (!ids.length)
+      if (!ids.length) {
         return "cites no document: cite each fact as [^id], with the id from its document's header";
+      }
       const { corpus, locale } = grounding(p);
       const unknown = ids.filter((id) => !resolveDocument(corpus, id, locale));
       return unknown.length
@@ -507,7 +534,9 @@ export function grounded<P>(grounding: (p: P) => Grounding): Gate<P> {
   return {
     id: "grounded",
     check: (text, p) => {
-      if (text.trim() === NO_ANSWER) return null;
+      if (text.trim() === NO_ANSWER) {
+        return null;
+      }
       const { corpus, locale } = grounding(p);
       const evidence = new Set(
         citedIds(text).flatMap((id) => {
@@ -531,9 +560,13 @@ export function oneQuestion<P>(): Gate<P> {
     id: "question",
     check: (text) => {
       const t = text.trim();
-      if (/[\r\n]/.test(t)) return "more than one line: write the question on one line";
+      if (/[\r\n]/.test(t)) {
+        return "more than one line: write the question on one line";
+      }
       const marks = t.match(/[?？]/g)?.length ?? 0;
-      if (!/[?？]$/.test(t)) return "does not end with a question mark";
+      if (!/[?？]$/.test(t)) {
+        return "does not end with a question mark";
+      }
       return marks > 1 ? "asks more than one question: ask one" : null;
     },
   };
@@ -554,3 +587,5 @@ export function notAnInstruction<P>(): Gate<P> {
         : null,
   };
 }
+
+export { numbersOf, type Figure } from "../figures.js";

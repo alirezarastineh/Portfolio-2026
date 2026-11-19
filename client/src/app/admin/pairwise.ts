@@ -102,7 +102,9 @@ export function percent(share: number | null): string {
 
 function leader(summary: PairwiseSummary): string {
   const { a, b } = summary.tally;
-  if (a === b) return "Even";
+  if (a === b) {
+    return "Even";
+  }
   return a > b ? `A (${summary.a}) ahead` : `B (${summary.b}) ahead`;
 }
 
@@ -117,10 +119,16 @@ export function verdictLine(summary: PairwiseSummary): string {
  * visitor answers (the only one their labels can measure), or that it is not.
  */
 export function judgeMark(judge: string | null, status: JudgeStatus | null): string | null {
-  if (!judge || !status) return null;
-  if (judge !== status.visitorJudge) return "not calibrated against reviewers";
+  if (!judge || !status) {
+    return null;
+  }
+  if (judge !== status.visitorJudge) {
+    return "not calibrated against reviewers";
+  }
   const { calibrated } = status.calibration;
-  if (calibrated === null) return "calibration: too few reviews";
+  if (calibrated === null) {
+    return "calibration: too few reviews";
+  }
   return calibrated ? "calibrated" : "uncalibrated";
 }
 

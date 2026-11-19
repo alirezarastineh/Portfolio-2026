@@ -206,7 +206,9 @@ const ENTRY_MARGIN = 40;
 function revealCurrentEntry(doc: Document): void {
   const list = doc.querySelector<HTMLElement>('[data-slot="sidebar-content"]');
   const entry = list?.querySelector<HTMLElement>('[aria-current="true"]');
-  if (!list || !entry) return;
+  if (!list || !entry) {
+    return;
+  }
   const area = list.getBoundingClientRect();
   const box = entry.getBoundingClientRect();
   if (box.top < area.top + ENTRY_MARGIN) {
@@ -216,24 +218,41 @@ function revealCurrentEntry(doc: Document): void {
   }
 }
 
+function firstNonEmpty(fallback: string, ...values: (string | undefined)[]): string {
+  return values.find((value) => value !== undefined && value !== "") ?? fallback;
+}
+
 /** A new tab that cannot reach back into the admin. */
 function openTab(href: string): void {
   const opened = window.open(href, "_blank");
-  if (opened) opened.opener = null;
+  if (opened) {
+    opened.opener = null;
+  }
+}
+
+function isUnknownArray(value: unknown): value is unknown[] {
+  return Array.isArray(value);
 }
 
 /** Find's recent entries, as stored; anything else in storage is left out. */
 function readRecent(): RecentEntry[] {
   try {
     const stored: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
-    if (!Array.isArray(stored)) return [];
+    if (!isUnknownArray(stored)) {
+      return [];
+    }
     // A page that went since (Contact copy, Page copy, Socials) drops out: it would open the 404.
-    return stored.filter(
-      (entry: RecentEntry) =>
-        typeof entry?.key === "string" &&
-        ((typeof entry.path === "string" && navItemFor(entry.path) !== null) ||
-          (entry.action !== undefined && ACTION_IDS.has(entry.action))),
-    );
+    return stored.filter((entry): entry is RecentEntry => {
+      if (typeof entry !== "object" || entry === null) {
+        return false;
+      }
+      const candidate = entry as { key?: unknown; path?: unknown; action?: unknown };
+      return (
+        typeof candidate.key === "string" &&
+        ((typeof candidate.path === "string" && navItemFor(candidate.path) !== null) ||
+          (typeof candidate.action === "string" && ACTION_IDS.has(candidate.action)))
+      );
+    });
   } catch {
     return [];
   }
@@ -439,6 +458,7 @@ function readRecent(): RecentEntry[] {
                   </a>
                   <button
                     hlmSidebarMenuButton
+                    type="button"
                     class="w-8 shrink-0 justify-center pointer-coarse:w-11"
                     [closeMobileSidebarOnClick]="false"
                     [tooltip]="themeLabel()"
@@ -450,6 +470,7 @@ function readRecent(): RecentEntry[] {
                   </button>
                   <button
                     hlmSidebarMenuButton
+                    type="button"
                     class="w-8 shrink-0 justify-center pointer-coarse:w-11"
                     tooltip="Sign out"
                     title="Sign out"
@@ -471,6 +492,7 @@ function readRecent(): RecentEntry[] {
           >
             <button
               hlmSidebarTrigger
+              type="button"
               aria-label="Navigation"
               aria-keyshortcuts="["
               title="Navigation ([)"
@@ -511,6 +533,7 @@ function readRecent(): RecentEntry[] {
             <!-- Find at every width: the word and its key from 768, the icon on a phone. -->
             <button
               hlmBtn
+              type="button"
               variant="outline"
               size="sm"
               class="w-44 justify-start border-border-strong font-normal text-muted-foreground max-md:w-8 max-md:justify-center max-md:border-transparent max-md:px-0 max-md:pointer-coarse:w-11"
@@ -526,6 +549,7 @@ function readRecent(): RecentEntry[] {
             <!-- On a phone the draft opens from Find. -->
             <button
               hlmBtn
+              type="button"
               variant="outline"
               size="sm"
               class="max-md:hidden"
@@ -538,10 +562,10 @@ function readRecent(): RecentEntry[] {
             </button>
             <ng-template #previewMenu>
               <hlm-dropdown-menu class="w-40">
-                <button hlmDropdownMenuItem (triggered)="previewEn()">
+                <button hlmDropdownMenuItem type="button" (triggered)="previewEn()">
                   English<span class="sr-only">&ngsp;(opens in a new tab)</span>
                 </button>
-                <button hlmDropdownMenuItem (triggered)="previewDe()">
+                <button hlmDropdownMenuItem type="button" (triggered)="previewDe()">
                   German<span class="sr-only">&ngsp;(opens in a new tab)</span>
                 </button>
               </hlm-dropdown-menu>
@@ -550,6 +574,7 @@ function readRecent(): RecentEntry[] {
             <!-- The one orange fill, while changes wait; quiet otherwise. -->
             <button
               hlmBtn
+              type="button"
               size="sm"
               class="shrink-0"
               [variant]="publishState() === 'publish' ? 'signal' : 'outline'"
@@ -607,6 +632,7 @@ function readRecent(): RecentEntry[] {
                 @for (entry of recent(); track entry.key) {
                   <button
                     hlmCommandItem
+                    type="button"
                     [value]="'recent ' + entry.key"
                     [disabled]="entry.disabled"
                     (selected)="openRecent(entry)"
@@ -624,6 +650,7 @@ function readRecent(): RecentEntry[] {
               @for (action of actions(); track action.id) {
                 <button
                   hlmCommandItem
+                  type="button"
                   [value]="action.label"
                   [disabled]="!!action.disabled"
                   (selected)="run(action.id)"
@@ -646,7 +673,12 @@ function readRecent(): RecentEntry[] {
             <hlm-command-group>
               <hlm-command-group-label>Pages</hlm-command-group-label>
               @for (item of pages; track item.path) {
-                <button hlmCommandItem [value]="item.label" (selected)="go(item.path)">
+                <button
+                  hlmCommandItem
+                  type="button"
+                  [value]="item.label"
+                  (selected)="go(item.path)"
+                >
                   <ng-icon [name]="item.icon" size="14" aria-hidden="true" />
                   <span>{{ item.label }}</span>
                 </button>
@@ -659,7 +691,12 @@ function readRecent(): RecentEntry[] {
                 <hlm-command-group>
                   <hlm-command-group-label>{{ group.label }}</hlm-command-group-label>
                   @for (item of group.items; track item.key) {
-                    <button hlmCommandItem [value]="item.search" (selected)="go(item.path)">
+                    <button
+                      hlmCommandItem
+                      type="button"
+                      [value]="item.search"
+                      (selected)="go(item.path)"
+                    >
                       <ng-icon [name]="group.icon" size="14" aria-hidden="true" />
                       <span class="truncate" translate="no">{{ item.label }}</span>
                     </button>
@@ -737,7 +774,9 @@ export default class AdminLayout {
     // brought into it after each navigation (Media, say, is near the end).
     effect(() => {
       this.url();
-      if (!this.ready()) return;
+      if (!this.ready()) {
+        return;
+      }
       afterNextRender({ read: () => revealCurrentEntry(this.doc) }, { injector: this.injector });
     });
 
@@ -746,9 +785,13 @@ export default class AdminLayout {
     let previous: string | null = null;
     effect(() => {
       const path = this.url();
-      if (!this.ready() || this.isLogin() || this.isPreviewFrame()) return;
+      if (!this.ready() || this.isLogin() || this.isPreviewFrame()) {
+        return;
+      }
       untracked(() => {
-        if (previous !== null && path !== previous) this.arrive();
+        if (previous !== null && path !== previous) {
+          this.arrive();
+        }
         previous = path;
         this.rememberPage(path);
       });
@@ -758,7 +801,9 @@ export default class AdminLayout {
     // first opening. The entries were made with this layout, before any page was visited, so
     // the first is chosen again here: the newest recent page, or the first action.
     effect(() => {
-      if (!this.paletteOpen()) return;
+      if (!this.paletteOpen()) {
+        return;
+      }
       untracked(() => {
         this.paletteSearch.set("");
         this.command()?.keyManager.setFirstItemActive();
@@ -774,7 +819,9 @@ export default class AdminLayout {
       afterNextRender(
         () => {
           const keys = this.command()?.keyManager;
-          if (keys && !keys.activeItem?.visible()) keys.setFirstItemActive();
+          if (keys && !keys.activeItem?.visible()) {
+            keys.setFirstItemActive();
+          }
         },
         { injector: this.injector },
       );
@@ -785,8 +832,11 @@ export default class AdminLayout {
       const login = this.isLogin();
       const chrome = this.ready() && !login && !this.isPreviewFrame();
       untracked(() => {
-        if (chrome) this.pulse.start();
-        else if (login) this.pulse.reset();
+        if (chrome) {
+          this.pulse.start();
+        } else if (login) {
+          this.pulse.reset();
+        }
       });
     });
 
@@ -808,16 +858,22 @@ export default class AdminLayout {
       };
     }
     const fresh = this.pulse.newMessages();
-    if (fresh) badges["/admin/inbox"] = { count: fresh, alert: false, words: `${fresh} new` };
+    if (fresh) {
+      badges["/admin/inbox"] = { count: fresh, alert: false, words: `${fresh} new` };
+    }
     const alert = this.pulse.assistantAlert();
-    if (alert) badges["/admin/assistant"] = { count: 0, alert: true, words: alert };
+    if (alert) {
+      badges["/admin/assistant"] = { count: 0, alert: true, words: alert };
+    }
     return badges;
   });
 
   /** The number on Publish: changes, or the problems that stop them. */
   protected readonly pendingCount = computed(() => {
     const review = this.pulse.review();
-    if (!review) return 0;
+    if (!review) {
+      return 0;
+    }
     return review.issues || review.total;
   });
 
@@ -843,8 +899,12 @@ export default class AdminLayout {
 
   protected readonly publishName = computed(() => {
     const state = this.publishState();
-    if (state === "failed") return "Could not check what is unpublished: try again";
-    if (state !== "publish") return PUBLISH[state].word;
+    if (state === "failed") {
+      return "Could not check what is unpublished: try again";
+    }
+    if (state !== "publish") {
+      return PUBLISH[state].word;
+    }
     const review = this.pulse.review();
     if (review?.issues) {
       return `Publish: ${review.issues} ${review.issues === 1 ? "problem" : "problems"} to fix first`;
@@ -886,14 +946,18 @@ export default class AdminLayout {
   /** How many entries a search finds, matched as Find matches them (brain's default filter). */
   protected readonly paletteStatus = computed(() => {
     const search = this.paletteSearch().toLowerCase();
-    if (!search) return "";
+    if (!search) {
+      return "";
+    }
     const values = [
       ...this.actions().map((action) => action.label),
       ...PAGES.map((page) => page.label),
       ...this.found().groups.flatMap((group) => group.items.map((item) => item.search)),
     ];
     const count = values.filter((value) => value.toLowerCase().includes(search)).length;
-    if (count) return `${count} ${count === 1 ? "match" : "matches"}`;
+    if (count) {
+      return `${count} ${count === 1 ? "match" : "matches"}`;
+    }
     return this.found().state === "loading" ? "Looking through the content…" : "No matches";
   });
 
@@ -904,14 +968,18 @@ export default class AdminLayout {
     return this.recentEntries()
       .flatMap((entry) => {
         if (entry.path) {
-          if (entry.path === here) return [];
+          if (entry.path === here) {
+            return [];
+          }
           const icon = navItemFor(entry.path)?.icon ?? "lucideFileText";
           return [
             { key: entry.key, label: entry.label ?? entry.path, icon, disabled: false, entry },
           ];
         }
         const action = actions.find((a) => a.id === entry.action);
-        if (!action) return [];
+        if (!action) {
+          return [];
+        }
         return [
           {
             key: entry.key,
@@ -932,9 +1000,15 @@ export default class AdminLayout {
     draft: boolean,
   ): string {
     const parts = [label];
-    if (badge) parts.push(badge.words);
-    if (dirty) parts.push("unsaved changes");
-    if (draft) parts.push("changes not live");
+    if (badge) {
+      parts.push(badge.words);
+    }
+    if (dirty) {
+      parts.push("unsaved changes");
+    }
+    if (draft) {
+      parts.push("changes not live");
+    }
     return parts.join(", ");
   }
 
@@ -981,13 +1055,19 @@ export default class AdminLayout {
    * one is signed in, so the page needs no second wait here.
    */
   protected readonly ready = computed(() => {
-    if (!this.isBrowser) return false;
-    if (this.isLogin()) return true;
+    if (!this.isBrowser) {
+      return false;
+    }
+    if (this.isLogin()) {
+      return true;
+    }
     return this.session.checked() && this.session.user() !== null;
   });
 
   protected onKeydown(event: KeyboardEvent): void {
-    if (this.isLogin() || this.isPreviewFrame() || !this.ready()) return;
+    if (this.isLogin() || this.isPreviewFrame() || !this.ready()) {
+      return;
+    }
     // Ctrl+S / ⌘S saves in an editor (its save bar handles it); elsewhere in
     // the admin it does nothing rather than offer to save the page as HTML.
     if (isSaveShortcut(event)) {
@@ -995,7 +1075,9 @@ export default class AdminLayout {
       return;
     }
     // The sign-in dialog holds the keyboard: no palette or sheet over it.
-    if (this.session.lost()) return;
+    if (this.session.lost()) {
+      return;
+    }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
       this.paletteOpen.update((open) => !open);
@@ -1015,7 +1097,9 @@ export default class AdminLayout {
   /** Into the page itself: its heading, or the page while it has none yet. */
   protected skipToContent(event: Event): void {
     const main = this.doc.getElementById("main");
-    if (!main) return;
+    if (!main) {
+      return;
+    }
     event.preventDefault();
     const heading = main.querySelector<HTMLElement>("h1");
     if (heading) {
@@ -1038,8 +1122,11 @@ export default class AdminLayout {
 
   protected openRecent(row: { entry: RecentEntry }): void {
     const { path, action } = row.entry;
-    if (path) this.go(path);
-    else if (action) this.run(action);
+    if (path) {
+      this.go(path);
+    } else if (action) {
+      this.run(action);
+    }
   }
 
   protected run(id: ActionId): void {
@@ -1068,8 +1155,11 @@ export default class AdminLayout {
 
   /** Publish opens the review; after a failed check it asks the server again. */
   protected onPublish(): void {
-    if (this.publishState() === "failed") void this.pulse.refresh(["status", "review"]);
-    else this.pulse.publishOpen.set(true);
+    if (this.publishState() === "failed") {
+      void this.pulse.refresh(["status", "review"]);
+    } else {
+      this.pulse.publishOpen.set(true);
+    }
   }
 
   protected readonly publish = (): void => this.pulse.publishOpen.set(true);
@@ -1102,8 +1192,9 @@ export default class AdminLayout {
   /** Opens what was just created, unless leaving the page was refused (unsaved edits). */
   private async openCreated(path: string[], done: string): Promise<void> {
     const went = await this.router.navigate(path);
-    if (!went)
+    if (!went) {
       toast.success(done, { description: "It is in the list for when you are done here." });
+    }
   }
 
   protected async logout(): Promise<void> {
@@ -1115,7 +1206,9 @@ export default class AdminLayout {
         cancelLabel: "Stay",
         destructive: true,
       });
-      if (!leave) return;
+      if (!leave) {
+        return;
+      }
       this.unsaved.clearAll();
     }
     // A deliberate sign-out: no unsaved copy stays on this device.
@@ -1135,7 +1228,9 @@ export default class AdminLayout {
     this.stopArrival();
     this.doc.defaultView?.scrollTo(0, 0);
     const main = this.doc.getElementById("main");
-    if (!main) return;
+    if (!main) {
+      return;
+    }
     let watch: MutationObserver | null = null;
     const stop = (): void => {
       watch?.disconnect();
@@ -1145,7 +1240,9 @@ export default class AdminLayout {
     };
     const land = (): boolean => {
       const heading = main.querySelector<HTMLElement>("h1");
-      if (!heading) return false;
+      if (!heading) {
+        return false;
+      }
       stop();
       heading.focus({ preventScroll: true });
       return true;
@@ -1156,7 +1253,9 @@ export default class AdminLayout {
     afterNextRender(
       {
         read: () => {
-          if (this.stopArrival !== stop || land()) return;
+          if (this.stopArrival !== stop || land()) {
+            return;
+          }
           watch = new MutationObserver(() => land());
           watch.observe(main, { childList: true, subtree: true });
         },
@@ -1168,7 +1267,9 @@ export default class AdminLayout {
   /** A page in Find's recent list, under the words its breadcrumb uses. */
   private rememberPage(path: string): void {
     const crumbs = crumbsFor(path);
-    if (!crumbs.length) return;
+    if (!crumbs.length) {
+      return;
+    }
     const label = crumbs.map((crumb) => crumb.label).join(" › ");
     this.recentEntries.update((list) => remember(list, { key: path, path, label }));
     this.storeRecent();
@@ -1185,7 +1286,9 @@ export default class AdminLayout {
   /** Projects, posts, experience, Profile's links, media and Words' rows, loaded when Find first opens. */
   private async loadFound(): Promise<void> {
     const { state } = this.found();
-    if (state === "loading" || state === "ready") return;
+    if (state === "loading" || state === "ready") {
+      return;
+    }
     this.found.set({ state: "loading", groups: [] });
     const [projects, posts, experiences, links, media, ui] = await Promise.all([
       this.api.listProjects(),
@@ -1195,14 +1298,16 @@ export default class AdminLayout {
       this.api.listMedia(),
       this.api.getSection<AppTranslations>("ui"),
     ]);
-    if (this.destroyed) return;
+    if (this.destroyed) {
+      return;
+    }
     const groups: FoundGroup[] = [];
     if (projects.ok) {
       groups.push({
         label: "Work",
         icon: "lucideBriefcase",
         items: projects.data.projects.map((p) => {
-          const name = p.translations.en?.name || p.slug;
+          const name = firstNonEmpty(p.slug, p.translations.en?.name);
           return {
             key: p.id,
             label: name,
@@ -1217,7 +1322,7 @@ export default class AdminLayout {
         label: "Writing",
         icon: "lucideNewspaper",
         items: posts.data.posts.map((p) => {
-          const title = p.translations.en?.title || p.translations.de?.title || p.slug;
+          const title = firstNonEmpty(p.slug, p.translations.en?.title, p.translations.de?.title);
           return {
             key: p.id,
             label: title,
@@ -1271,8 +1376,9 @@ export default class AdminLayout {
       });
     }
     // Each label by its English; Enter lands on its row in Words.
-    if (ui.ok)
+    if (ui.ok) {
       groups.push({ label: "Words", icon: "lucidePenLine", items: foundWords(ui.data.data) });
+    }
     const failed = !projects.ok || !posts.ok || !experiences.ok || !links.ok || !media.ok || !ui.ok;
     this.found.set({ state: failed ? "failed" : "ready", groups });
   }

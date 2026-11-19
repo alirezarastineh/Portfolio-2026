@@ -30,13 +30,17 @@ import { LanguageService } from "../services/language.service";
 export function restoreHeadingIds(root: Element, toc: readonly TocEntry[]): void {
   const pending = [...toc];
   for (const heading of Array.from(root.querySelectorAll("h2, h3"))) {
-    const text = (heading.textContent ?? "").replace(/\s+/g, " ").trim();
+    const text = (heading.textContent ?? "").replaceAll(/\s+/g, " ").trim();
     const level = heading.tagName.toLowerCase() === "h2" ? 2 : 3;
     const index = pending.findIndex((entry) => entry.level === level && entry.text === text);
-    if (index === -1) continue;
+    if (index === -1) {
+      continue;
+    }
     const [entry] = pending.splice(index, 1);
     // Not `heading.id =`: the server renders with Domino, where attributes are the safe path.
-    if (entry && heading.getAttribute("id") !== entry.id) heading.setAttribute("id", entry.id);
+    if (entry && heading.getAttribute("id") !== entry.id) {
+      heading.setAttribute("id", entry.id);
+    }
   }
 }
 
@@ -48,7 +52,9 @@ export function restoreHeadingIdsInOrder(root: Element, html: string): void {
   const ids = [...html.matchAll(/<h[23](?:\s+id="([^"<>]*)")?[\s>]/g)].map((match) => match[1]);
   Array.from(root.querySelectorAll("h2, h3")).forEach((heading, index) => {
     const id = ids[index];
-    if (id && heading.getAttribute("id") !== id) heading.setAttribute("id", id);
+    if (id && heading.getAttribute("id") !== id) {
+      heading.setAttribute("id", id);
+    }
   });
 }
 
@@ -59,7 +65,7 @@ export function restoreHeadingIdsInOrder(root: Element, html: string): void {
  * it warns on every body otherwise.
  */
 export function withoutHeadingIds(html: string): string {
-  return html.replace(/<(h[23])\s+id="[^"<>]*"/g, "<$1");
+  return html.replaceAll(/<(h[23])\s+id="[^"<>]*"/g, "<$1");
 }
 
 /**
@@ -71,7 +77,9 @@ export function withoutHeadingIds(html: string): string {
 export function frameCodeBlocks(root: Element, copyLabel: string): void {
   const doc = root.ownerDocument;
   for (const pre of Array.from(root.querySelectorAll("pre.code-block"))) {
-    if (pre.parentElement?.classList.contains("code-frame")) continue;
+    if (pre.parentElement?.classList.contains("code-frame")) {
+      continue;
+    }
     const frame = doc.createElement("div");
     frame.className = "code-frame";
     pre.replaceWith(frame);
@@ -123,12 +131,11 @@ export class ProseBodyComponent implements AfterViewChecked {
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   constructor() {
-    if (!this.isBrowser) return;
+    if (!this.isBrowser) {
+      return;
+    }
     const timers = new Set<ReturnType<typeof setTimeout>>();
-    const onClick = async (event: MouseEvent) => {
-      const button = (event.target as Element | null)?.closest?.("button.code-copy");
-      const code = button?.closest(".code-frame")?.querySelector("code");
-      if (!button || !code) return;
+    const copyBlock = async (button: Element, code: Element): Promise<void> => {
       const labels = CHROME[this.lang.lang()].code;
       const result = labels[await copyText(code.textContent ?? "")];
       button.textContent = result;
@@ -140,6 +147,14 @@ export class ProseBodyComponent implements AfterViewChecked {
       }, COPIED_MS);
       timers.add(timer);
     };
+    const onClick = (event: MouseEvent): void => {
+      const button = (event.target as Element | null)?.closest?.("button.code-copy");
+      const code = button?.closest(".code-frame")?.querySelector("code");
+      if (!button || !code) {
+        return;
+      }
+      void copyBlock(button, code);
+    };
     let el: HTMLElement | undefined;
     afterNextRender(() => {
       el = this.body().nativeElement;
@@ -147,15 +162,22 @@ export class ProseBodyComponent implements AfterViewChecked {
     });
     inject(DestroyRef).onDestroy(() => {
       el?.removeEventListener("click", onClick);
-      for (const timer of timers) clearTimeout(timer);
+      for (const timer of timers) {
+        clearTimeout(timer);
+      }
     });
   }
 
   /** After every check: a new `html` replaces the headings and code blocks, ids and all. */
   ngAfterViewChecked(): void {
     const root = this.body().nativeElement;
-    if (this.toc().length > 0) restoreHeadingIds(root, this.toc());
-    else restoreHeadingIdsInOrder(root, this.html());
-    if (this.isBrowser) frameCodeBlocks(root, CHROME[this.lang.lang()].code.copy);
+    if (this.toc().length > 0) {
+      restoreHeadingIds(root, this.toc());
+    } else {
+      restoreHeadingIdsInOrder(root, this.html());
+    }
+    if (this.isBrowser) {
+      frameCodeBlocks(root, CHROME[this.lang.lang()].code.copy);
+    }
   }
 }

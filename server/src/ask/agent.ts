@@ -280,9 +280,13 @@ export function errorCode(error: unknown): "unavailable" | "timeout" | "error" {
   if (error instanceof AllModelsFailedError || error instanceof ProviderStreamError) {
     return "unavailable";
   }
-  if (error instanceof AttemptTimeoutError) return "timeout";
+  if (error instanceof AttemptTimeoutError) {
+    return "timeout";
+  }
   const name = (error as { name?: string } | null)?.name ?? "";
-  if (/timeout/i.test(name)) return "timeout";
+  if (/timeout/i.test(name)) {
+    return "timeout";
+  }
   return "error";
 }
 
@@ -339,7 +343,9 @@ function instructionsFor(
   let memo = instructionsMemo.get(key);
   if (!memo) {
     // A few language pairs, pages and topics per corpus; a new corpus pushes the old out.
-    if (instructionsMemo.size >= 64) instructionsMemo.clear();
+    if (instructionsMemo.size >= 64) {
+      instructionsMemo.clear();
+    }
     memo = make();
     instructionsMemo.set(key, memo);
   }
@@ -384,7 +390,7 @@ function guardFor(corpus: AskCorpus, config: AskConfig, systemPrompt?: string): 
         REPAIR_LINE,
         CONTACT_BLOCK,
         pageInstruction(PAGE_SAMPLE),
-        ...FOCUS_SAMPLES.map(focusInstruction),
+        ...FOCUS_SAMPLES.map((sample) => focusInstruction(sample)),
         ...LEVEL_INSTRUCTIONS,
       ].join("\n\n"),
       corpusTexts: corpus.documents.map((d) => d.text),
@@ -393,10 +399,14 @@ function guardFor(corpus: AskCorpus, config: AskConfig, systemPrompt?: string): 
       secrets: deploySecrets(config),
     });
   // A pairwise eval's candidate prompt: built each time, never memoised.
-  if (systemPrompt !== undefined) return build();
+  if (systemPrompt !== undefined) {
+    return build();
+  }
   let memo = guardMemo.get(corpus.key);
   if (!memo) {
-    if (guardMemo.size >= 8) guardMemo.clear();
+    if (guardMemo.size >= 8) {
+      guardMemo.clear();
+    }
     memo = build();
     guardMemo.set(corpus.key, memo);
   }
@@ -419,16 +429,22 @@ export function answerOnlyOptions(
 ): LanguageModelV4CallOptions {
   const turns: LanguageModelV4Prompt = [];
   for (const message of options.prompt) {
-    if (message.role === "system" || message.role === "tool") continue;
+    if (message.role === "system" || message.role === "tool") {
+      continue;
+    }
     if (message.role === "assistant") {
       const content = message.content.filter((p) => p.type === "text");
-      if (content.length) turns.push({ ...message, content });
+      if (content.length) {
+        turns.push({ ...message, content });
+      }
       continue;
     }
     turns.push(message);
   }
   let recent = turns.slice(-5);
-  while (recent[0] && recent[0].role !== "user") recent = recent.slice(1);
+  while (recent[0] && recent[0].role !== "user") {
+    recent = recent.slice(1);
+  }
   return {
     ...options,
     tools: undefined,
@@ -450,7 +466,9 @@ export function answerOnlyOptions(
 
 /** The route the log keeps: answer-only, a mid-answer escalation, or the router's. */
 function loggedRoute(answerOnly: boolean, route: RouteDecision, escalated: boolean): string {
-  if (answerOnly) return "answer-only";
+  if (answerOnly) {
+    return "answer-only";
+  }
   return escalated ? ESCALATED_ROUTE : route.route;
 }
 
@@ -475,7 +493,9 @@ function withSelectionIn(
   selection: string,
   locale: Locale,
 ): ModelMessage[] {
-  if (messages.at(-1)?.role !== "user") return messages;
+  if (messages.at(-1)?.role !== "user") {
+    return messages;
+  }
   return [
     ...messages.slice(0, -1),
     { role: "user", content: withSelection(question, selection, locale) },
@@ -493,7 +513,9 @@ function openedContact(calls: AnswerRecord["toolCalls"]): boolean {
 /** Stop once the model has answered and offered follow-ups: nothing is left to say. */
 const answeredWithFollowups: StopCondition<AskTools> = ({ steps }) => {
   const last = steps.at(-1);
-  if (!last?.toolCalls.some((call) => call.toolName === "suggest_followups")) return false;
+  if (!last?.toolCalls.some((call) => call.toolName === "suggest_followups")) {
+    return false;
+  }
   return steps.some((step) => step.text.trim().length > 0);
 };
 
@@ -609,7 +631,7 @@ export function streamAnswer(request: AnswerRequest): {
     ],
     prepareStep: ({ stepNumber, steps }) => {
       const reason = escalation && !escalated ? escalationOf(steps) : null;
-      const deepChain = reason ? thinking(escalation!()) : [];
+      const deepChain = escalation && reason ? thinking(escalation()) : [];
       if (reason && deepChain.length) {
         escalated = { step: stepNumber, reason, chain: deepChain };
         deepModel = fallbackModel(deepChain);
@@ -623,9 +645,13 @@ export function streamAnswer(request: AnswerRequest): {
     // A stuttered tool name would fail the whole answer: call the tool it can only mean.
     // An invalid input is never repaired.
     repairToolCall: ({ toolCall, tools, error }) => {
-      if (!NoSuchToolError.isInstance(error)) return Promise.resolve(null);
+      if (!NoSuchToolError.isInstance(error)) {
+        return Promise.resolve(null);
+      }
       const name = repairToolName(toolCall.toolName, Object.keys(tools));
-      if (!name) return Promise.resolve(null);
+      if (!name) {
+        return Promise.resolve(null);
+      }
       console.warn(`[ask] repaired the tool name ${toolCall.toolName} → ${name}`);
       return Promise.resolve({ ...toolCall, toolName: name });
     },
@@ -734,7 +760,9 @@ export function streamAnswer(request: AnswerRequest): {
         { keep: (chunk) => chunk.type !== "error", onFailure: "end" },
       );
     }
-    if (own.reasoning && record.reasoning !== null) record.reasoning += own.reasoning;
+    if (own.reasoning && record.reasoning !== null) {
+      record.reasoning += own.reasoning;
+    }
     const words = answerShape(record, request.question).words;
     repair = { reason, by: words || end === "cancelled" ? "model" : "fixed-line" };
     if (end === "cancelled" || own.aborted) {
@@ -743,7 +771,9 @@ export function streamAnswer(request: AnswerRequest): {
     }
     if (!words) {
       const line = closingLine(reading);
-      for (const chunk of closingChunks("closing", line)) writer.write(chunk);
+      for (const chunk of closingChunks("closing", line)) {
+        writer.write(chunk);
+      }
       record.textOrder.push("closing");
       record.texts.set("closing", line);
     }
@@ -785,13 +815,17 @@ export function streamAnswer(request: AnswerRequest): {
         }),
         {
           keep: (chunk) => {
-            if (chunk.type !== "finish") return true;
+            if (chunk.type !== "finish") {
+              return true;
+            }
             held.finish = chunk;
             return false;
           },
         },
       );
-      if (end !== "done") return;
+      if (end !== "done") {
+        return;
+      }
       const reason = repairReason(answerShape(record, request.question));
       if (reason) {
         agentCalls = trace.calls.length;
@@ -819,7 +853,9 @@ export function streamAnswer(request: AnswerRequest): {
   });
 
   let resolveDone!: (outcome: AnswerOutcome) => void;
-  const done = new Promise<AnswerOutcome>((resolve) => (resolveDone = resolve));
+  const done = new Promise<AnswerOutcome>((resolve) => {
+    resolveDone = resolve;
+  });
   let finished = false;
 
   const traceDetails = () => ({
@@ -855,10 +891,14 @@ export function streamAnswer(request: AnswerRequest): {
       secrets: string[];
     },
   ) => {
-    if (request.persist === false) return;
+    if (request.persist === false) {
+      return;
+    }
     try {
       // The source names the feature that spent: the terminal, the playground, an eval.
-      if (trace.calls.length) await recordUsage(trace.calls, request.source);
+      if (trace.calls.length) {
+        await recordUsage(trace.calls, request.source);
+      }
       // Its visitor had this session forgotten while it was being written (visitor plan V14):
       // it is not logged. Its spend, an aggregate, still counts, and a leak still alerts.
       if (!wasForgotten(request.sessionHash)) {
@@ -891,7 +931,9 @@ export function streamAnswer(request: AnswerRequest): {
         });
         // The corpus this visitor's answer saw, kept so a case frozen from it
         // re-runs against the same documents (playground drafts are not kept).
-        if (request.source === "terminal") await recordSnapshot(corpus);
+        if (request.source === "terminal") {
+          await recordSnapshot(corpus);
+        }
       }
     } catch (error) {
       console.error("[ask] could not record the answer", error);
@@ -913,7 +955,9 @@ export function streamAnswer(request: AnswerRequest): {
   };
 
   const finish = async (ending: "finished" | "aborted") => {
-    if (finished) return;
+    if (finished) {
+      return;
+    }
     finished = true;
     request.onClose?.();
 
@@ -925,6 +969,7 @@ export function streamAnswer(request: AnswerRequest): {
     // The tools' inputs reach the visitor too (follow-ups, the hand-off summary): checked, not filtered.
     const toolText = record.toolCalls.map((c) => JSON.stringify(c.input ?? "")).join("\n");
     const secrets = deploySecrets(config);
+    const trimmedReasoning = record.reasoning?.trim();
     const outcome: AnswerOutcome = {
       messageId,
       text,
@@ -963,7 +1008,7 @@ export function streamAnswer(request: AnswerRequest): {
       searchCalls,
       escalation: escalated?.reason ?? null,
       // Never logged: the eval runner keeps an excerpt of a failed case's (evals/run.ts).
-      reasoning: record.reasoning?.trim() || null,
+      reasoning: trimmedReasoning?.length ? trimmedReasoning : null,
       repair,
       handoff,
     };

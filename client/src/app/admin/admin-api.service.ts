@@ -180,22 +180,24 @@ export class AdminApiService {
           responseType: "json",
         }),
       );
-      if (method !== "GET" && !READ_ONLY_POSTS.test(path)) this.writes.update((n) => n + 1);
+      if (method !== "GET" && !READ_ONLY_POSTS.test(path)) {
+        this.writes.update((n) => n + 1);
+      }
       return { ok: true, data: data as T };
     } catch (error) {
       if (error instanceof HttpErrorResponse) {
-        const body = error.error as {
+        const errorBody = error.error as {
           error?: string;
           issues?: ApiIssue[];
           detail?: unknown;
         } | null;
-        const code = body?.error ?? (error.status ? `http_${error.status}` : "request_failed");
+        const code = errorBody?.error ?? (error.status ? `http_${error.status}` : "request_failed");
         return {
           ok: false,
           error: code,
           status: error.status,
-          ...(Array.isArray(body?.issues) ? { issues: body.issues } : {}),
-          ...(body?.detail !== undefined ? { detail: body.detail } : {}),
+          ...(Array.isArray(errorBody?.issues) ? { issues: errorBody.issues } : {}),
+          ...(errorBody?.detail === undefined ? {} : { detail: errorBody.detail }),
         };
       }
       return { ok: false, error: "network_error", status: 0 };

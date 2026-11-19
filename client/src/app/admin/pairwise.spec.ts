@@ -28,6 +28,21 @@ const summary: PairwiseSummary = {
   usd: 0.01,
 };
 
+const judgeStatus = (calibrated: boolean | null): JudgeStatus => ({
+  fixtureJudge: "judge-x",
+  visitorJudge: "judge-x",
+  calibration: {
+    pairs: 12,
+    agree: 6,
+    agreement: 0.5,
+    calibrated,
+    judgeLenient: 3,
+    judgeStrict: 3,
+  },
+  unjudged: 0,
+  answerers: ["lite", "deep"],
+});
+
 describe("pairwise runs in the admin", () => {
   it("reads a pairwise run's summary, and nothing from an eval run", () => {
     const run = { kind: "pairwise", summary } as unknown as RunRow;
@@ -64,25 +79,11 @@ describe("pairwise runs in the admin", () => {
   });
 
   it("marks a judge by what the reviews say of it", () => {
-    const status = (calibrated: boolean | null): JudgeStatus => ({
-      fixtureJudge: "judge-x",
-      visitorJudge: "judge-x",
-      calibration: {
-        pairs: 12,
-        agree: 6,
-        agreement: 0.5,
-        calibrated,
-        judgeLenient: 3,
-        judgeStrict: 3,
-      },
-      unjudged: 0,
-      answerers: ["lite", "deep"],
-    });
-    expect(judgeMark("judge-x", status(false))).toBe("uncalibrated");
-    expect(judgeMark("judge-x", status(true))).toBe("calibrated");
-    expect(judgeMark("judge-x", status(null))).toBe("calibration: too few reviews");
+    expect(judgeMark("judge-x", judgeStatus(false))).toBe("uncalibrated");
+    expect(judgeMark("judge-x", judgeStatus(true))).toBe("calibrated");
+    expect(judgeMark("judge-x", judgeStatus(null))).toBe("calibration: too few reviews");
     // Reviewers label visitor answers: they cannot speak for another judge.
-    expect(judgeMark("judge-y", status(true))).toBe("not calibrated against reviewers");
-    expect(judgeMark(null, status(true))).toBeNull();
+    expect(judgeMark("judge-y", judgeStatus(true))).toBe("not calibrated against reviewers");
+    expect(judgeMark(null, judgeStatus(true))).toBeNull();
   });
 });

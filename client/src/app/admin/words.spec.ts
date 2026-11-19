@@ -14,6 +14,15 @@ import {
 } from "./words";
 
 const ALL: WordFilters = { q: "", section: "", missing: false, unsaved: false };
+const byCodePoint = (a: string, b: string): number => {
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+};
+const emptyUi = () =>
+  Object.fromEntries(WORD_GROUPS.map((group) => [group, {}])) as unknown as AppTranslations &
+    Record<string, Record<string, string>>;
 const row = (change: Partial<WordRow> = {}): WordRow => ({
   group: "contact",
   key: "submit",
@@ -32,7 +41,7 @@ describe("Words' rows", () => {
       Object.keys(uiSchema.shape[group].shape).map((key) => `${group}.${key}`),
     );
     const shown = keys.filter((key) => !isHidden("section", "ui", key));
-    expect([...rows].sort()).toEqual([...shown].sort());
+    expect(rows.toSorted(byCodePoint)).toEqual(shown.toSorted(byCodePoint));
     expect(keys.length - shown.length).toBe(6);
   });
 
@@ -42,7 +51,7 @@ describe("Words' rows", () => {
         string,
         { safeParse(v: string): { success: boolean } }
       >;
-      const field = shape[r.key]!;
+      const field = shape[r.key];
       // A text without its token is refused; with it, it passes.
       const refused =
         !field.safeParse("text").success && field.safeParse(`text ${r.token}`).success;
@@ -96,7 +105,7 @@ describe("the token check", () => {
   it("names each text that lost its token by its row and language, as the server would refuse it", () => {
     const years = row({ group: "experience", key: "years", label: "Years", token: "{n}" });
     const texts: Record<string, string> = { en: "{n} yr", de: "Jahre" };
-    expect(tokenIssues([row(), years], (_, locale) => texts[locale]!)).toEqual([
+    expect(tokenIssues([row(), years], (_, locale) => texts[locale])).toEqual([
       {
         path: ["experience", "de", "years"],
         message: "Keep {n}: the number goes there.",
@@ -110,11 +119,8 @@ describe("the token check", () => {
 describe("Find's entries for Words", () => {
   it("name each shown key by its heading and English, search key and both texts, and land on its row", () => {
     // Every group empty but the two below.
-    const ui = () =>
-      Object.fromEntries(WORD_GROUPS.map((group) => [group, {}])) as unknown as AppTranslations &
-        Record<string, Record<string, string>>;
-    const en = ui();
-    const de = ui();
+    const en = emptyUi();
+    const de = emptyUi();
     en.contact = { submit: "Send message", heading: "" } as never;
     de.contact = { submit: "Nachricht senden", heading: "Kontakt" } as never;
     en.nav = { skills: "Skills", about: "About" } as never;
@@ -129,6 +135,6 @@ describe("Find's entries for Words", () => {
       path: "/admin/words?row=contact.submit",
     });
     // No English: the German names it.
-    expect(found[2]!.label).toBe("Contact › Kontakt");
+    expect(found[2].label).toBe("Contact › Kontakt");
   });
 });

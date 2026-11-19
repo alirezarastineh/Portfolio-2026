@@ -11,12 +11,20 @@ import type { AskMessage } from "./ask-types";
  */
 export function handoffSummary(message: Pick<AskMessage, "metadata" | "parts">): string | null {
   const offered = message.metadata?.handoff?.summary?.trim();
-  if (offered) return offered;
+  if (offered) {
+    return offered;
+  }
   for (const part of message.parts) {
-    if (!isToolUIPart(part) || part.type !== "tool-handoff_contact") continue;
-    if (part.state !== "output-available") continue;
+    if (!isToolUIPart(part) || part.type !== "tool-handoff_contact") {
+      continue;
+    }
+    if (part.state !== "output-available") {
+      continue;
+    }
     const summary = (part.input as { summary?: unknown } | undefined)?.summary;
-    if (typeof summary === "string" && summary.trim()) return summary.trim();
+    if (typeof summary === "string" && summary.trim()) {
+      return summary.trim();
+    }
   }
   return null;
 }

@@ -23,6 +23,7 @@ function review(en: LocaleReview, de: LocaleReview): PublishReview {
 }
 
 const about = (bio: string, heading = "About") => ({ ui: { about: { heading, bio } } });
+const hiddenAbout = (subtitle: string) => ({ ui: { about: { subtitle, bio: "Bio" } } });
 
 describe("draftMarks", () => {
   it("lists, per language, the paths publishing would change, and keeps what is live", () => {
@@ -31,11 +32,11 @@ describe("draftMarks", () => {
         side("en", about("Live bio"), about("Draft bio")),
         side("de", about("Bio"), about("Bio")),
       ),
-      1_000,
+      1000,
     );
     expect(marks.paths).toEqual({ en: ["ui.about.bio"], de: [] });
     expect(marks.live.en).toEqual(about("Live bio"));
-    expect(marks.asked).toBe(1_000);
+    expect(marks.asked).toBe(1000);
   });
 
   it("before the first publish, every field is in the draft", () => {
@@ -45,9 +46,8 @@ describe("draftMarks", () => {
   });
 
   it("leaves hidden fields out: no editor shows them, so nothing marks them", () => {
-    const hidden = (subtitle: string) => ({ ui: { about: { subtitle, bio: "Bio" } } });
     const marks = draftMarks(
-      review(side("en", hidden("Old"), hidden("New")), side("de", {}, {})),
+      review(side("en", hiddenAbout("Old"), hiddenAbout("New")), side("de", {}, {})),
       0,
     );
     expect(marks.paths.en).toEqual([]);
@@ -107,7 +107,7 @@ describe("inDraft", () => {
 describe("traceOf", () => {
   const marks = draftMarks(
     review(side("en", about("Live"), about("Draft")), side("de", about("x"), about("x"))),
-    1_000,
+    1000,
   );
 
   it("is unsaved first, whatever the review says", () => {
@@ -116,8 +116,8 @@ describe("traceOf", () => {
 
   it("is in the draft when the review says so, or when it was saved here after the review was asked", () => {
     expect(traceOf(false, marks, "ui.about.bio")).toBe("draft");
-    expect(traceOf(false, marks, "ui.about.heading", 2_000)).toBe("draft");
-    expect(traceOf(false, null, "ui.about.heading", 2_000)).toBe("draft");
+    expect(traceOf(false, marks, "ui.about.heading", 2000)).toBe("draft");
+    expect(traceOf(false, null, "ui.about.heading", 2000)).toBe("draft");
   });
 
   it("is live otherwise: a save the review already saw is in it", () => {

@@ -21,7 +21,7 @@ function content(): AppContent {
     ...base,
     projects: [
       {
-        ...first!,
+        ...first,
         hasCaseStudy: true,
         metrics: [
           { value: "−42%", label: "p95 latency" },
@@ -48,8 +48,11 @@ function content(): AppContent {
   };
 }
 
+function font(file: string): Buffer {
+  return readFileSync(resolve(here, `../assets/og/${file}`));
+}
+
 function fonts(): OgFonts {
-  const font = (file: string) => readFileSync(resolve(here, `../assets/og/${file}`));
   return {
     regular: font("instrument-sans-latin-400-normal.woff"),
     semibold: font("instrument-sans-latin-600-normal.woff"),
@@ -60,10 +63,10 @@ function fonts(): OgFonts {
 describe("ogCardFor", () => {
   it("draws a case study from its project: name, hook and the first three metrics", () => {
     const c = content();
-    const card = ogCardFor(c, "en", "work", c.projects[0]!.slug);
+    const card = ogCardFor(c, "en", "work", c.projects[0].slug);
     expect(card).toMatchObject({
-      title: c.projects[0]!.name,
-      summary: c.projects[0]!.hook,
+      title: c.projects[0].name,
+      summary: c.projects[0].hook,
       author: "Alireza Rastineh",
       site: "alirezarastineh.me",
     });
@@ -80,12 +83,15 @@ describe("ogCardFor", () => {
   it("has no card for an unknown slug or a project without a case study", () => {
     const c = content();
     expect(ogCardFor(c, "en", "writing", "nope")).toBeNull();
-    expect(ogCardFor(c, "en", "work", c.projects[1]!.slug)).toBeNull();
+    expect(ogCardFor(c, "en", "work", c.projects[1].slug)).toBeNull();
   });
 
   it("keys a card by what it shows", () => {
     const c = content();
-    const card = ogCardFor(c, "en", "work", c.projects[0]!.slug)!;
+    const card = ogCardFor(c, "en", "work", c.projects[0].slug);
+    if (!card) {
+      throw new Error("Expected OG card for case study");
+    }
     expect(ogCardKey(card)).toBe(ogCardKey({ ...card }));
     expect(ogCardKey(card)).not.toBe(ogCardKey({ ...card, title: "Renamed" }));
   });
@@ -106,16 +112,19 @@ describe("ogSiteCard", () => {
   });
 });
 
-describe("renderOgPng", () => {
-  /** The PNG's signature, then IHDR's width and height (big-endian, after its length and type). */
-  function expectCard(png: Buffer): void {
-    expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-    expect(png.readUInt32BE(16)).toBe(OG_SIZE.width);
-    expect(png.readUInt32BE(20)).toBe(OG_SIZE.height);
-  }
+/** The PNG's signature, then IHDR's width and height (big-endian, after its length and type). */
+function expectCard(png: Buffer): void {
+  expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  expect(png.readUInt32BE(16)).toBe(OG_SIZE.width);
+  expect(png.readUInt32BE(20)).toBe(OG_SIZE.height);
+}
 
+describe("renderOgPng", () => {
   it("renders a 1200×630 PNG", async () => {
-    const card = ogCardFor(content(), "en", "writing", "shipping-rag")!;
+    const card = ogCardFor(content(), "en", "writing", "shipping-rag");
+    if (!card) {
+      throw new Error("Expected OG card for post");
+    }
     expectCard(await renderOgPng(card, fonts()));
   }, 20_000);
 
@@ -123,7 +132,10 @@ describe("renderOgPng", () => {
     const c = content();
     expectCard(await renderOgPng(ogSiteCard(c, "en"), fonts()));
 
-    const study = ogCardFor(c, "en", "work", c.projects[0]!.slug)!;
+    const study = ogCardFor(c, "en", "work", c.projects[0].slug);
+    if (!study) {
+      throw new Error("Expected OG card for case study");
+    }
     const longest = {
       ...study,
       eyebrow: "A descriptor long enough to need more than the one line it gets",

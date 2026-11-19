@@ -32,7 +32,10 @@ const once = async (post: () => Promise<{ status: number }>) => {
   return status >= 200 && status < 300;
 };
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+const tick = () =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
 
 describe("the browser's signals (visitor plan V2)", () => {
   it("keep times and counts within the server's bounds", () => {
@@ -40,7 +43,9 @@ describe("the browser's signals (visitor plan V2)", () => {
     expect(signalMs(-3)).toBe(0);
     expect(signalMs(MAX_SIGNAL_MS + 1)).toBe(MAX_SIGNAL_MS);
     let totals: SignalTotals = {};
-    for (let i = 0; i < MAX_SIGNAL_COUNT + 5; i++) totals = bump(totals, "copies");
+    for (let i = 0; i < MAX_SIGNAL_COUNT + 5; i++) {
+      totals = bump(totals, "copies");
+    }
     expect(totals).toEqual({ copies: MAX_SIGNAL_COUNT });
   });
 
@@ -53,11 +58,11 @@ describe("the browser's signals (visitor plan V2)", () => {
     signals.report("s", "m_1", (t) => bump(t, "citations"));
     expect(calls).toEqual([{ messageId: "m_1", totals: { doneMs: 2000 }, keepalive: false }]);
 
-    resolvers[0]!(200);
+    resolvers[0](200);
     await tick();
     expect(calls).toHaveLength(2);
-    expect(calls[1]!.totals).toEqual({ doneMs: 2000, followups: 1, citations: 1 });
-    resolvers[1]!(200);
+    expect(calls[1].totals).toEqual({ doneMs: 2000, followups: 1, citations: 1 });
+    resolvers[1](200);
     await tick();
 
     // Everything landed: leaving the page sends nothing.
@@ -70,8 +75,8 @@ describe("the browser's signals (visitor plan V2)", () => {
     const signals = new AnswerSignals(send, once);
     signals.report("s", "m_1", () => ({ doneMs: 900, stopped: true }));
     signals.report("s", "m_2", () => ({ copies: 1 }));
-    resolvers[0]!(404);
-    resolvers[1]!(200);
+    resolvers[0](404);
+    resolvers[1](200);
     await tick();
 
     signals.flush();
@@ -156,9 +161,9 @@ describe("the browser's signals (visitor plan V2)", () => {
 
   it("keep each answer's totals apart, and on the session that got the answer", async () => {
     const sessions: string[] = [];
-    const signals = new AnswerSignals(async (session) => {
+    const signals = new AnswerSignals((session) => {
       sessions.push(session);
-      return { status: 200 };
+      return Promise.resolve({ status: 200 });
     }, once);
     signals.report("s1", "m_1", (t) => bump(t, "copies"));
     signals.report("s2", "m_2", (t) => bump(t, "followups"));

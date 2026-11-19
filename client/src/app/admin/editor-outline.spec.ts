@@ -45,7 +45,7 @@ function project(fill: boolean): ProjectRow {
     position: 0,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
-  } as ProjectRow;
+  };
 }
 
 describe("hasText", () => {
@@ -138,7 +138,11 @@ describe("postOutline", () => {
     expect(states["post-search"]).toMatchObject({ state: "optional", problems: 1 });
     expect(states["post-details"]).toMatchObject({ state: "done", problems: 1 });
 
-    const written = { ...post.translations.en!, body: "<p>Hi.</p>" };
+    const en = post.translations.en;
+    if (!en) {
+      throw new Error("expected en translation");
+    }
+    const written = { ...en, body: "<p>Hi.</p>" };
     const done = postOutline({ ...post, translations: { en: written, de: null } }, []);
     expect(done.find((i) => i.id === "post-text")?.state).toBe("done");
   });

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { compileFunction } from "node:vm";
 
 import { DOCUMENT } from "@angular/common";
 import { TestBed } from "@angular/core/testing";
@@ -28,7 +29,9 @@ function systemTheme(light: boolean) {
   return {
     change(nextLight: boolean) {
       query.matches = nextLight;
-      for (const fn of listeners) fn({ matches: nextLight } as MediaQueryListEvent);
+      for (const fn of listeners) {
+        fn({ matches: nextLight } as MediaQueryListEvent);
+      }
     },
   };
 }
@@ -108,7 +111,11 @@ describe("index.html's theme-init script", () => {
     resolve(dirname(fileURLToPath(import.meta.url)), "../../../index.html"),
     "utf8",
   );
-  const source = /<script id="theme-init">([\s\S]*?)<\/script>/.exec(html)![1]!;
+  const scriptMatch = /<script id="theme-init">([\s\S]*?)<\/script>/.exec(html);
+  if (!scriptMatch?.[1]) {
+    throw new Error("Expected theme-init script in index.html");
+  }
+  const source = scriptMatch[1];
 
   /** Runs the script before the first paint, as the browser would, against stand-ins. */
   function run(saved: string | null | Error, systemLight: boolean) {
@@ -122,23 +129,25 @@ describe("index.html's theme-init script", () => {
     const meta = { content: THEME_COLOR.dark };
     const storage = {
       getItem: (key: string) => {
-        if (saved instanceof Error) throw saved;
+        if (saved instanceof Error) {
+          throw saved;
+        }
         return key === THEME_STORAGE_KEY ? saved : null;
       },
     };
     const matchMedia = (query: string) => ({
       matches: systemLight && query === "(prefers-color-scheme: light)",
     });
-    new Function("localStorage", "window", "matchMedia", "document", source)(
-      storage,
-      { matchMedia },
-      matchMedia,
-      {
-        documentElement: root,
-        querySelector: (selector: string) =>
-          selector === 'meta[name="theme-color"]' ? meta : null,
-      },
-    );
+    const runScript = compileFunction(source, [
+      "localStorage",
+      "window",
+      "matchMedia",
+      "document",
+    ]) as (storage: unknown, win: unknown, matchMediaFn: unknown, doc: unknown) => void;
+    runScript(storage, { matchMedia }, matchMedia, {
+      documentElement: root,
+      querySelector: (selector: string) => (selector === 'meta[name="theme-color"]' ? meta : null),
+    });
     return {
       theme: root.dataset["theme"] as Theme,
       dark: classes.has("dark"),
@@ -171,47 +180,47 @@ describe("revealCircle", () => {
   });
 });
 
+/** What a browser with typed view transitions offers, recorded. */
+function viewTransitions() {
+  const starts: { types: string[]; update: () => Promise<void> }[] = [];
+  vi.stubGlobal(
+    "ViewTransition",
+    class {
+      get types() {
+        return new Set<string>();
+      }
+    },
+  );
+  Object.defineProperty(document, "startViewTransition", {
+    configurable: true,
+    value: (options: { types: string[]; update: () => Promise<void> }) => {
+      starts.push(options);
+      return { ready: Promise.resolve() };
+    },
+  });
+  const animate = vi.fn();
+  Object.defineProperty(document.documentElement, "animate", {
+    configurable: true,
+    value: animate,
+  });
+  return { starts, animate };
+}
+
+function button(): HTMLElement {
+  const el = document.createElement("button");
+  el.getBoundingClientRect = () => ({ left: 100, top: 20, width: 40, height: 40 }) as DOMRect;
+  return el;
+}
+
+function motion(reduced: boolean) {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: reduced && query.includes("reduced-motion"),
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+}
+
 describe("ThemeService, switching from a button", () => {
-  /** What a browser with typed view transitions offers, recorded. */
-  function viewTransitions() {
-    const starts: { types: string[]; update: () => Promise<void> }[] = [];
-    vi.stubGlobal(
-      "ViewTransition",
-      class {
-        get types() {
-          return new Set<string>();
-        }
-      },
-    );
-    Object.defineProperty(document, "startViewTransition", {
-      configurable: true,
-      value: (options: { types: string[]; update: () => Promise<void> }) => {
-        starts.push(options);
-        return { ready: Promise.resolve() };
-      },
-    });
-    const animate = vi.fn();
-    Object.defineProperty(document.documentElement, "animate", {
-      configurable: true,
-      value: animate,
-    });
-    return { starts, animate };
-  }
-
-  function button(): HTMLElement {
-    const el = document.createElement("button");
-    el.getBoundingClientRect = () => ({ left: 100, top: 20, width: 40, height: 40 }) as DOMRect;
-    return el;
-  }
-
-  function motion(reduced: boolean) {
-    vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: reduced && query.includes("reduced-motion"),
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    }));
-  }
-
   beforeEach(() => {
     TestBed.resetTestingModule();
     localStorage.clear();
@@ -233,12 +242,12 @@ describe("ThemeService, switching from a button", () => {
 
     theme.toggle(button());
     expect(starts).toHaveLength(1);
-    expect(starts[0]!.types).toEqual(["theme"]);
+    expect(starts[0].types).toEqual(["theme"]);
     // Remembered at once; shown once the old picture is taken.
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("light");
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
 
-    void starts[0]!.update();
+    void starts[0].update();
     expect(theme.theme()).toBe("light");
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
 
@@ -291,7 +300,14 @@ describe("ThemeService, switching from a button", () => {
   it("switches at once where view transitions have no types", () => {
     motion(false);
     const { starts } = viewTransitions();
-    vi.stubGlobal("ViewTransition", class {});
+    vi.stubGlobal(
+      "ViewTransition",
+      class {
+        skipTransition(): undefined {
+          return undefined;
+        }
+      },
+    );
     const theme = TestBed.inject(ThemeService);
 
     theme.toggle(button());

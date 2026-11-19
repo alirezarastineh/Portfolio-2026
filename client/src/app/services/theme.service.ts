@@ -77,11 +77,17 @@ export class ThemeService {
   private switchingTo: Theme | null = null;
 
   constructor() {
-    if (!this.isBrowser) return;
+    if (!this.isBrowser) {
+      return;
+    }
     const query = globalThis.matchMedia?.(LIGHT_QUERY);
-    if (!query) return;
+    if (!query) {
+      return;
+    }
     const follow = (event: MediaQueryListEvent) => {
-      if (this.saved() === null) this.apply(event.matches ? "light" : "dark");
+      if (this.saved() === null) {
+        this.apply(event.matches ? "light" : "dark");
+      }
     };
     query.addEventListener("change", follow);
     inject(DestroyRef).onDestroy(() => query.removeEventListener("change", follow));
@@ -95,7 +101,9 @@ export class ThemeService {
 
   /** An explicit choice: applied now (growing from `from`) and remembered for later visits. */
   set(theme: Theme, from?: Element): void {
-    if (theme !== (this.switchingTo ?? this._theme())) this.switchTo(theme, from);
+    if (theme !== (this.switchingTo ?? this._theme())) {
+      this.switchTo(theme, from);
+    }
     try {
       localStorage.setItem(THEME_STORAGE_KEY, theme);
     } catch {
@@ -150,7 +158,9 @@ export class ThemeService {
   }
 
   private apply(theme: Theme): void {
-    if (this.isBrowser) applyTheme(this.doc, theme);
+    if (this.isBrowser) {
+      applyTheme(this.doc, theme);
+    }
     this._theme.set(theme);
   }
 

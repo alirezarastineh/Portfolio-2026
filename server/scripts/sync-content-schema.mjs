@@ -64,4 +64,6 @@ for (const { canonical, mirror, marker, rewriteImports } of MIRRORS) {
   console.log(`[sync] wrote ${mirror} (${body.length} shared bytes)`);
 }
 
-if (failed) process.exit(1);
+if (failed) {
+  process.exit(1);
+}

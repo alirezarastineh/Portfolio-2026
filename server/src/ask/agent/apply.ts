@@ -87,7 +87,9 @@ function leafSchema(section: string, path: string): z.ZodType | null {
   let node: unknown = Object.hasOwn(SECTION_SCHEMAS, section) ? SECTION_SCHEMAS[section] : null;
   for (const key of path.split(".")) {
     node = unwrapped(node);
-    if (!(node instanceof z.ZodObject) || !Object.hasOwn(node.shape, key)) return null;
+    if (!(node instanceof z.ZodObject) || !Object.hasOwn(node.shape, key)) {
+      return null;
+    }
     node = node.shape[key];
   }
   return node instanceof z.ZodType ? node : null;
@@ -114,18 +116,28 @@ function checked(
   if (p.kind === "section") {
     // The leaf's own rule: required text, and its token where it has one (`{n}` in "{n} years").
     const schema = leafSchema(p.entityId, p.field);
-    if (!schema) return notText(p.field, text);
+    if (!schema) {
+      return notText(p.field, text);
+    }
     const result = schema.safeParse(text.trim());
-    if (!result.success) return { ok: false, issues: result.error.issues };
+    if (!result.success) {
+      return { ok: false, issues: result.error.issues };
+    }
     return typeof result.data === "string"
       ? { ok: true, text: result.data }
       : notText(p.field, text);
   }
   const fields = TEXT_FIELDS[p.kind];
-  if (!fields.fields.includes(p.field)) return notText(p.field, text);
+  if (!fields.fields.includes(p.field)) {
+    return notText(p.field, text);
+  }
   const result = (fields.schema.shape[p.field] as z.ZodType).safeParse(text);
-  if (!result.success) return { ok: false, issues: result.error.issues };
-  if (typeof result.data !== "string") return notText(p.field, text);
+  if (!result.success) {
+    return { ok: false, issues: result.error.issues };
+  }
+  if (typeof result.data !== "string") {
+    return notText(p.field, text);
+  }
   const value = result.data;
   return { ok: true, text: RICH[p.kind]?.includes(p.field) ? sanitizeRichText(value) : value };
 }
@@ -151,10 +163,16 @@ function withLeaf(
   let node = next;
   for (const key of keys.slice(0, -1)) {
     const child = node[key];
-    if (!child || typeof child !== "object") throw new Moved();
+    if (!child || typeof child !== "object") {
+      throw new Moved();
+    }
     node = child as Record<string, unknown>;
   }
-  node[keys.at(-1)!] = value;
+  const leafKey = keys.at(-1);
+  if (leafKey === undefined) {
+    throw new Moved();
+  }
+  node[leafKey] = value;
   return next;
 }
 
@@ -193,7 +211,9 @@ async function swapAlt(tx: Tx, p: Proposal, expected: string, next: string): Pro
     .set(en ? { altEn: next } : { altDe: next })
     .where(and(eq(mediaAssets.id, p.entityId), sql`coalesce(${column}, '') = ${expected}`))
     .returning({ id: mediaAssets.id });
-  if (!rows.length) throw new Moved();
+  if (!rows.length) {
+    throw new Moved();
+  }
 }
 
 /** A section's leaf in one language, inside `saveSection`'s row lock (its token moves). */
@@ -204,15 +224,19 @@ async function swapLeaf(
   next: string,
   adminId: string,
 ): Promise<void> {
-  const locale = p.locale as Locale;
+  const locale = p.locale;
   const other: Locale = locale === "en" ? "de" : "en";
   await saveSection(
     tx,
     p.entityId,
     (current) => {
       const doc = current[locale];
-      if (!doc || typeof doc !== "object" || !(other in current)) throw new Moved();
-      if ((leafOf(doc, p.field) ?? "") !== expected) throw new Moved();
+      if (!doc || typeof doc !== "object" || !(other in current)) {
+        throw new Moved();
+      }
+      if ((leafOf(doc, p.field) ?? "") !== expected) {
+        throw new Moved();
+      }
       return {
         [locale]: withLeaf(doc as Record<string, unknown>, p.field, next),
         [other]: current[other],
@@ -237,10 +261,12 @@ async function swapText(
   next: string,
   mode: "apply" | "revert",
 ): Promise<SQL> {
-  const locale = p.locale as Locale;
+  const locale = p.locale;
   const { texts, owner, stamped } = TABLES[p.kind];
-  if (!TEXT_FIELDS[p.kind].fields.includes(p.field)) throw new Moved();
-  const column = (texts as unknown as Record<string, AnyColumn>)[p.field]!;
+  if (!TEXT_FIELDS[p.kind].fields.includes(p.field)) {
+    throw new Moved();
+  }
+  const column = (texts as unknown as Record<string, AnyColumn>)[p.field];
   const row = sql`from ${texts} as t
     where t.${sql.identifier(owner.name)} = ${p.entityId} and t.locale = ${locale}`;
   if (stamped && mode === "apply") {
@@ -259,7 +285,9 @@ async function swapText(
     .set({ [p.field]: next, ...(stamped ? { updatedAt: stamp } : {}) } as never)
     .where(and(eq(owner, p.entityId), eq(texts.locale, locale), eq(column, expected)))
     .returning({ id: owner });
-  if (!rows.length) throw new Moved();
+  if (!rows.length) {
+    throw new Moved();
+  }
   return stamped ? sql`(select t.updated_at ${row})` : appliedStamp();
 }
 
@@ -304,7 +332,7 @@ async function settle(
     .set({ ...change, updatedAt: new Date() })
     .where(eq(aiProposals.id, id))
     .returning();
-  return row!;
+  return row;
 }
 
 /**
@@ -314,18 +342,27 @@ async function settle(
 export async function applyProposal(id: string, adminId: string, text?: string): Promise<Decided> {
   const outcome = await getDb().transaction(async (tx) => {
     const p = await locked(tx, id);
-    if (!p) return { ok: false as const, error: "not_found" as const };
-    if (!isOpen(p)) return { ok: false as const, error: "not_open" as const };
+    if (!p) {
+      return { ok: false as const, error: "not_found" as const };
+    }
+    if (!isOpen(p)) {
+      return { ok: false as const, error: "not_open" as const };
+    }
     const wanted = text ?? p.after;
-    if (wanted === null) return { ok: false as const, error: "no_text" as const };
+    if (wanted === null) {
+      return { ok: false as const, error: "no_text" as const };
+    }
     const value = checked(p, wanted);
-    if (!value.ok)
+    if (!value.ok) {
       return { ok: false as const, error: "invalid_input" as const, issues: value.issues };
+    }
     let at: SQL;
     try {
       at = await swap(tx, p, p.before, value.text, adminId, "apply");
     } catch (error) {
-      if (!(error instanceof Moved)) throw error;
+      if (!(error instanceof Moved)) {
+        throw error;
+      }
       const stale = await settle(tx, id, { status: "stale", stampedBefore: null });
       await audit(
         {
@@ -362,8 +399,9 @@ export async function applyProposal(id: string, adminId: string, text?: string):
   if (outcome.ok) {
     // Judged on what the admin sent, before sanitizing: a draft applied as it was is kept,
     // even where the sanitizer rewrites its markup (`&` → `&amp;`).
-    if (outcome.draft !== null)
+    if (outcome.draft !== null) {
       await decideUse(outcome.proposal.useId, verdictOn(outcome.draft, outcome.wanted));
+    }
     return { ok: true, proposal: outcome.proposal };
   }
   if (outcome.error === "stale") {
@@ -378,8 +416,12 @@ export async function applyProposal(id: string, adminId: string, text?: string):
 export async function rejectProposal(id: string): Promise<Decided> {
   const outcome = await getDb().transaction(async (tx) => {
     const p = await locked(tx, id);
-    if (!p) return { ok: false as const, error: "not_found" as const };
-    if (!isOpen(p)) return { ok: false as const, error: "not_open" as const };
+    if (!p) {
+      return { ok: false as const, error: "not_found" as const };
+    }
+    if (!isOpen(p)) {
+      return { ok: false as const, error: "not_open" as const };
+    }
     const rejected = await settle(tx, id, { status: "rejected", decidedAt: new Date() });
     await audit(
       { actor: "admin", action: "agent.reject", target: id, decision: "allowed", reason: p.label },
@@ -387,7 +429,9 @@ export async function rejectProposal(id: string): Promise<Decided> {
     );
     return { ok: true as const, proposal: rejected };
   });
-  if (outcome.ok) await decideUse(outcome.proposal.useId, { outcome: "discarded", distance: null });
+  if (outcome.ok) {
+    await decideUse(outcome.proposal.useId, { outcome: "discarded", distance: null });
+  }
   return outcome;
 }
 
@@ -399,14 +443,18 @@ export async function rejectProposal(id: string): Promise<Decided> {
 export async function revertProposal(id: string, adminId: string): Promise<Decided> {
   return getDb().transaction(async (tx) => {
     const p = await locked(tx, id);
-    if (!p) return { ok: false as const, error: "not_found" as const };
+    if (!p) {
+      return { ok: false as const, error: "not_found" as const };
+    }
     if (p.status !== "applied" || p.after === null) {
       return { ok: false as const, error: "not_applied" as const };
     }
     try {
       await swap(tx, p, p.after, p.before, adminId, "revert");
     } catch (error) {
-      if (!(error instanceof Moved)) throw error;
+      if (!(error instanceof Moved)) {
+        throw error;
+      }
       await audit(
         {
           actor: "admin",

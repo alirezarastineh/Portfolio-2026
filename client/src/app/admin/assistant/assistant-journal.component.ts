@@ -40,6 +40,9 @@ type Filter = "all" | JournalStatus;
 /** Entries a lesson may come from. */
 const decided = (entry: JournalEntry) => entry.status === "accepted" || entry.status === "fixed";
 
+const formatCount = (n: number | null | undefined): string =>
+  n === null || n === undefined ? "" : ` ${n}`;
+
 /**
  * The failure journal (plan phase 24): why visitors' answers failed, worked
  * out by experiment with no model (Conversations → Diagnose), and what was
@@ -193,13 +196,12 @@ export class AssistantJournalComponent implements OnInit {
   }));
   protected readonly promoteScope = computed(() => scopeFromEntries(this.chosen()));
 
-  protected readonly filters = computed(() => {
+  protected readonly filters = computed<{ id: Filter; label: string }[]>(() => {
     const counts = this.data()?.counts;
     const total = counts ? Object.values(counts).reduce((sum, n) => sum + n, 0) : null;
-    const count = (n: number | null | undefined) => (n === null || n === undefined ? "" : ` ${n}`);
     return [
-      { id: "all" as Filter, label: `All${count(total)}` },
-      ...STATUSES.map((s) => ({ id: s.id as Filter, label: `${s.label}${count(counts?.[s.id])}` })),
+      { id: "all", label: `All${formatCount(total)}` },
+      ...STATUSES.map((s) => ({ id: s.id, label: `${s.label}${formatCount(counts?.[s.id])}` })),
     ];
   });
 
@@ -214,7 +216,9 @@ export class AssistantJournalComponent implements OnInit {
     // Nothing left to promote (unticked, or filtered out of the list): the form closes, and a
     // later tick or filter shows the button again without reopening the form under focus.
     effect(() => {
-      if (!this.chosen().length) this.promoting.set(false);
+      if (!this.chosen().length) {
+        this.promoting.set(false);
+      }
     });
   }
 
@@ -224,7 +228,9 @@ export class AssistantJournalComponent implements OnInit {
 
   protected onFilter(value: unknown): void {
     const filter = this.filters().find((f) => f.id === value)?.id;
-    if (!filter) return;
+    if (!filter) {
+      return;
+    }
     this.filter.set(filter);
     void this.load();
   }
@@ -238,15 +244,24 @@ export class AssistantJournalComponent implements OnInit {
       this.api.assistantLessons(),
     ]);
     this.loading.set(false);
-    if (runs.ok) this.resumable.set(stoppedReplays(runs.data.runs));
-    if (lessons.ok) this.lessons.set(lessons.data);
-    if (result.ok) this.data.set(result.data);
-    else toast.error("Could not load the journal", { description: result.error });
+    if (runs.ok) {
+      this.resumable.set(stoppedReplays(runs.data.runs));
+    }
+    if (lessons.ok) {
+      this.lessons.set(lessons.data);
+    }
+    if (result.ok) {
+      this.data.set(result.data);
+    } else {
+      toast.error("Could not load the journal", { description: result.error });
+    }
   }
 
   protected replace(entry: JournalEntry): void {
     const current = this.data();
-    if (!current) return;
+    if (!current) {
+      return;
+    }
     const before = current.entries.find((e) => e.id === entry.id);
     const counts = { ...current.counts };
     if (before && before.status !== entry.status) {
@@ -261,10 +276,14 @@ export class AssistantJournalComponent implements OnInit {
 
   protected drop(id: string): void {
     const current = this.data();
-    if (!current) return;
+    if (!current) {
+      return;
+    }
     const gone = current.entries.find((e) => e.id === id);
     const counts = { ...current.counts };
-    if (gone) counts[gone.status]--;
+    if (gone) {
+      counts[gone.status]--;
+    }
     this.data.set({ counts, entries: current.entries.filter((e) => e.id !== id) });
     toast.success("Entry deleted");
   }
@@ -272,8 +291,11 @@ export class AssistantJournalComponent implements OnInit {
   protected toggle(id: string): void {
     this.selected.update((current) => {
       const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   }
@@ -304,7 +326,9 @@ export class AssistantJournalComponent implements OnInit {
 
   protected replaceLesson(lesson: Lesson): void {
     const view = this.lessons();
-    if (!view) return;
+    if (!view) {
+      return;
+    }
     const before = view.lessons.find((l) => l.id === lesson.id);
     const counts = { ...view.counts };
     if (before && before.status !== lesson.status) {
@@ -319,10 +343,14 @@ export class AssistantJournalComponent implements OnInit {
 
   protected dropLesson(id: string): void {
     const view = this.lessons();
-    if (!view) return;
+    if (!view) {
+      return;
+    }
     const gone = view.lessons.find((l) => l.id === id);
     const counts = { ...view.counts };
-    if (gone) counts[gone.status]--;
+    if (gone) {
+      counts[gone.status]--;
+    }
     this.lessons.set({ counts, lessons: view.lessons.filter((l) => l.id !== id) });
     toast.success("Lesson deleted");
   }

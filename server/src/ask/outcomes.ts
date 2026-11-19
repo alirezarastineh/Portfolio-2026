@@ -68,9 +68,15 @@ export function questionWords(text: string): Set<string> {
 export function similarity(a: string, b: string): number {
   const x = questionWords(a);
   const y = questionWords(b);
-  if (!x.size || !y.size) return 0;
+  if (!x.size || !y.size) {
+    return 0;
+  }
   let shared = 0;
-  for (const word of x) if (y.has(word)) shared++;
+  for (const word of x) {
+    if (y.has(word)) {
+      shared++;
+    }
+  }
   return shared / (x.size + y.size - shared);
 }
 
@@ -86,7 +92,7 @@ export function rephrased(rows: readonly OutcomeRow[]): Set<string> {
   for (const session of bySession.values()) {
     session.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     for (let i = 1; i < session.length; i++) {
-      const [before, after] = [session[i - 1]!, session[i]!];
+      const [before, after] = [session[i - 1], session[i]];
       const soon = after.createdAt.getTime() - before.createdAt.getTime() <= REPHRASE_WINDOW_MS;
       if (soon && similarity(before.question, after.question) >= REPHRASE_SIMILARITY) {
         ids.add(before.id);
@@ -136,7 +142,7 @@ const share = (part: number, whole: number) => (whole ? part / whole : null);
 
 export function outcomes(rows: readonly OutcomeRow[], sent: number): Outcomes {
   const again = rephrased(rows);
-  const answered = rows.filter(isAnswered);
+  const answered = rows.filter((row) => isAnswered(row));
   const helpful = answered.filter((row) => isHelpful(row, again)).length;
   const up = rows.filter((row) => row.feedback === 1).length;
   const down = rows.filter((row) => row.feedback === -1).length;
@@ -163,9 +169,11 @@ export function outcomes(rows: readonly OutcomeRow[], sent: number): Outcomes {
 
 /** The `p`-th percentile (0–1) by nearest rank; null for none. */
 export function percentile(values: readonly number[], p: number): number | null {
-  if (!values.length) return null;
+  if (!values.length) {
+    return null;
+  }
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1))]!;
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1))];
 }
 
 /**
@@ -199,12 +207,15 @@ export interface BrowserView {
   downReasons: Record<FeedbackReason | "none", number>;
 }
 
+const countedSignals = (
+  pick: (signals: AnswerSignals) => boolean,
+  of: readonly { signals: AnswerSignals }[],
+) => share(of.filter((row) => pick(row.signals)).length, of.length);
+
 export function browserView(rows: readonly OutcomeRow[]): BrowserView {
-  const reported = rows.filter((row) => row.signals);
-  const counted = (pick: (signals: AnswerSignals) => boolean, of: readonly OutcomeRow[]) =>
-    share(of.filter((row) => pick(row.signals!)).length, of.length);
+  const reported = rows.flatMap((row) => (row.signals ? [{ ...row, signals: row.signals }] : []));
   const shown = reported
-    .map((row) => row.signals!.shownMs)
+    .map((row) => row.signals.shownMs)
     .filter((ms): ms is number => typeof ms === "number");
   const server = reported
     .map((row) => row.ttftMs)
@@ -213,7 +224,9 @@ export function browserView(rows: readonly OutcomeRow[]): BrowserView {
     [...FEEDBACK_REASONS, "none"].map((reason) => [reason, 0]),
   ) as BrowserView["downReasons"];
   for (const row of rows) {
-    if (row.feedback !== -1) continue;
+    if (row.feedback !== -1) {
+      continue;
+    }
     const reason = (FEEDBACK_REASONS as readonly string[]).includes(row.downReason ?? "")
       ? (row.downReason as FeedbackReason)
       : "none";
@@ -225,17 +238,17 @@ export function browserView(rows: readonly OutcomeRow[]): BrowserView {
     shownP95Ms: percentile(shown, 0.95),
     serverP50Ms: percentile(server, 0.5),
     serverP95Ms: percentile(server, 0.95),
-    stopRate: counted((s) => s.stopped === true, reported),
-    copyRate: counted((s) => (s.copies ?? 0) > 0, reported),
-    followupRate: counted(
+    stopRate: countedSignals((s) => s.stopped === true, reported),
+    copyRate: countedSignals((s) => (s.copies ?? 0) > 0, reported),
+    followupRate: countedSignals(
       (s) => (s.followups ?? 0) > 0,
       reported.filter((row) => row.followupsOffered),
     ),
-    citationRate: counted(
+    citationRate: countedSignals(
       (s) => (s.citations ?? 0) > 0,
       reported.filter((row) => row.cited),
     ),
-    retried: reported.filter((row) => (row.signals!.retries ?? 0) > 0).length,
+    retried: reported.filter((row) => (row.signals.retries ?? 0) > 0).length,
     downReasons,
   };
 }
@@ -272,23 +285,43 @@ export interface MatchCounts {
   gaps: number;
 }
 
+interface MatchItemCounts {
+  shown: number;
+  downgraded: number;
+  gaps: number;
+}
+
+function tallyMatchItems(
+  items: readonly NonNullable<AnswerTrace["match"]>["items"][number][],
+  counts: MatchItemCounts,
+): void {
+  for (const item of items) {
+    if (item.status !== null) {
+      counts.shown++;
+    }
+    if (item.downgraded) {
+      counts.downgraded++;
+    } else if (item.status === "not-published" && !item.careful) {
+      counts.gaps++;
+    }
+  }
+}
+
 export function matchCounts(
   rows: readonly { match: AnswerTrace["match"] | null; handoffConfirmed: boolean }[],
 ): MatchCounts {
   const tally = new Map(MATCH_KINDS.map((kind) => [kind, { runs: 0, handoffs: 0 }]));
-  let shown = 0;
-  let downgraded = 0;
-  let gaps = 0;
+  const counts: MatchItemCounts = { shown: 0, downgraded: 0, gaps: 0 };
   for (const { match, handoffConfirmed } of rows) {
     const kind = match && tally.get(match.kind);
-    if (!kind) continue;
-    kind.runs++;
-    if (handoffConfirmed) kind.handoffs++;
-    for (const item of match.items) {
-      if (item.status !== null) shown++;
-      if (item.downgraded) downgraded++;
-      else if (item.status === "not-published" && !item.careful) gaps++;
+    if (!kind) {
+      continue;
     }
+    kind.runs++;
+    if (handoffConfirmed) {
+      kind.handoffs++;
+    }
+    tallyMatchItems(match.items, counts);
   }
   const byKind = Object.fromEntries(
     [...tally].map(([kind, t]) => [kind, { ...t, handoffRate: share(t.handoffs, t.runs) }]),
@@ -296,10 +329,10 @@ export function matchCounts(
   return {
     runs: [...tally.values()].reduce((sum, t) => sum + t.runs, 0),
     byKind,
-    rows: shown,
-    downgraded,
-    downgradedRate: share(downgraded, shown),
-    gaps,
+    rows: counts.shown,
+    downgraded: counts.downgraded,
+    downgradedRate: share(counts.downgraded, counts.shown),
+    gaps: counts.gaps,
   };
 }
 
@@ -311,14 +344,22 @@ export const PRIMARY_METRICS = [
 ] as const;
 export type PrimaryMetric = (typeof PRIMARY_METRICS)[number];
 
+function weekStart(week: string): Date {
+  const bounds = weekBounds(week);
+  if (!bounds) {
+    throw new Error(`Invalid ISO week: ${week}`);
+  }
+  return bounds.start;
+}
+
 /** The `count` complete ISO weeks before the current one, oldest first: the weekly reviews. */
 export function completedWeeks(count: number, now = new Date()): string[] {
   const weeks: string[] = [];
-  let start = weekBounds(isoWeek(now))!.start;
+  let start = weekStart(isoWeek(now));
   for (let i = 0; i < count; i++) {
     const week = isoWeek(new Date(start.getTime() - 1));
     weeks.unshift(week);
-    start = weekBounds(week)!.start;
+    start = weekStart(week);
   }
   return weeks;
 }
@@ -342,7 +383,9 @@ export function weeklyValues(
  */
 export function shouldRotate(values: readonly (number | null)[]): boolean {
   const last = values.slice(-3);
-  if (last.length < 3 || last.includes(null)) return false;
+  if (last.length < 3 || last.includes(null)) {
+    return false;
+  }
   const [a, b, c] = last as [number, number, number];
   return Math.abs(c - b) < FLAT_WITHIN && Math.abs(b - a) < FLAT_WITHIN;
 }

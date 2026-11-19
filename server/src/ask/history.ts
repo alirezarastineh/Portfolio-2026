@@ -35,7 +35,9 @@ const metadataSchema = z.looseObject({ sig: z.string().max(200).optional() }).op
 const processKey = randomBytes(32);
 
 function signingKey(): Buffer {
-  const secret = process.env.ASK_SIGNING_KEY?.trim() || process.env.IP_HASH_SALT?.trim();
+  const askKey = process.env.ASK_SIGNING_KEY?.trim() ?? "";
+  const ipSalt = process.env.IP_HASH_SALT?.trim() ?? "";
+  const secret = askKey === "" ? ipSalt : askKey;
   // Without a secret, signatures last until the next restart: older answers
   // then simply stop being replayed.
   return secret ? createHash("sha256").update(`ask-signing:${secret}`).digest() : processKey;
@@ -100,7 +102,7 @@ export function messageText(message: Pick<UIMessage, "parts">): string {
 const UNSAFE_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/g;
 
 export function cleanVisitorText(text: string): string {
-  return text.replace(UNSAFE_CHARS, "").replace(/\r\n?/g, "\n").trim();
+  return text.replaceAll(UNSAFE_CHARS, "").replaceAll(/\r\n?/g, "\n").trim();
 }
 
 export type HistoryResult =
@@ -121,7 +123,9 @@ function verifyAssistantTurn(
   sessionId: string,
 ): { text: string; valid: boolean } | null {
   const text = messageText(message);
-  if (!text) return null;
+  if (!text) {
+    return null;
+  }
   const sig = message.metadata?.sig;
   const valid = Boolean(
     sig && ASK_MESSAGE_ID.test(message.id) && verifyAnswer(sessionId, message.id, text, sig),
@@ -139,12 +143,16 @@ function replayTurns(
   for (const message of incoming.slice(0, -1)) {
     if (message.role === "user") {
       const text = cleanVisitorText(messageText(message)).slice(0, options.maxChars);
-      if (text) turns.push({ role: "user", content: wrapVisitor(text, options.locale) });
+      if (text) {
+        turns.push({ role: "user", content: wrapVisitor(text, options.locale) });
+      }
       continue;
     }
     if (message.role === "assistant") {
       const verified = verifyAssistantTurn(message, options.sessionId);
-      if (!verified) continue;
+      if (!verified) {
+        continue;
+      }
       if (verified.valid) {
         turns.push({ role: "assistant", content: verified.text });
       } else {
@@ -185,7 +193,9 @@ export function trimHistory(
   // The history must open with the visitor: drop any answers left at the front.
   const fromVisitor = (list: ModelMessage[]) => {
     let from = 0;
-    while (list[from]?.role === "assistant") from++;
+    while (list[from]?.role === "assistant") {
+      from++;
+    }
     return list.slice(from);
   };
   let kept = fromVisitor(turns.slice(-options.historyTurns * 2));
@@ -206,7 +216,7 @@ export function historyLimits(
   return {
     historyTurns: config.historyTurns,
     // The corpus prefix takes its share first; history gets the rest.
-    maxInputTokens: Math.max(2_000, Math.floor(config.maxInputTokens * 0.25)),
+    maxInputTokens: Math.max(2000, Math.floor(config.maxInputTokens * 0.25)),
     maxChars: config.maxMessageChars,
   };
 }
@@ -223,15 +233,23 @@ export async function buildHistory(options: {
     messages: options.messages,
     metadataSchema,
   });
-  if (!validated.success) return { ok: false, error: "invalid_input" };
+  if (!validated.success) {
+    return { ok: false, error: "invalid_input" };
+  }
 
   const incoming = validated.data;
   const last = incoming.at(-1);
-  if (last?.role !== "user") return { ok: false, error: "invalid_input" };
+  if (last?.role !== "user") {
+    return { ok: false, error: "invalid_input" };
+  }
 
   const question = cleanVisitorText(messageText(last));
-  if (!question) return { ok: false, error: "invalid_input" };
-  if (question.length > options.maxChars) return { ok: false, error: "too_long" };
+  if (!question) {
+    return { ok: false, error: "invalid_input" };
+  }
+  if (question.length > options.maxChars) {
+    return { ok: false, error: "too_long" };
+  }
 
   const { turns, droppedAnswers } = replayTurns(incoming, options);
   const current: ModelMessage = { role: "user", content: wrapVisitor(question, options.locale) };
@@ -251,7 +269,7 @@ export async function buildHistory(options: {
   const dropped = droppedQuestions(turns, kept);
   const messages = [...kept, current];
   if (dropped.length) {
-    const first = messages[0]!;
+    const first = messages[0];
     const note = windowNote(dropped.length, windowTopics(dropped));
     messages[0] = { role: "user", content: `${note}\n${first.content as string}` };
   }

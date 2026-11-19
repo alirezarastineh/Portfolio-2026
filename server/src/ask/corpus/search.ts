@@ -53,11 +53,15 @@ export function chunkDocument(doc: CorpusDocument): Chunk[] {
     current = "";
   };
   for (const line of doc.text.split("\n")) {
-    if (current.length + line.length > CHUNK_CHARS && current) push();
+    if (current.length + line.length > CHUNK_CHARS && current) {
+      push();
+    }
     // A single line longer than a chunk is split on its own.
     for (let rest = line; rest.length; rest = rest.slice(CHUNK_CHARS)) {
       current += `${rest.slice(0, CHUNK_CHARS)}\n`;
-      if (rest.length > CHUNK_CHARS) push();
+      if (rest.length > CHUNK_CHARS) {
+        push();
+      }
     }
   }
   push();
@@ -92,7 +96,7 @@ export class CorpusSearch {
   private readonly related: ReadonlyMap<string, readonly string[]>;
 
   constructor(documents: CorpusDocument[]) {
-    this.chunks = documents.flatMap(chunkDocument);
+    this.chunks = documents.flatMap((d) => chunkDocument(d));
     this.byId = new Map(this.chunks.map((c) => [c.id, c]));
     this.related = new Map(documents.flatMap((d) => (d.related ? [[d.id, d.related]] : [])));
     this.index.addAll([...this.chunks]);
@@ -116,10 +120,14 @@ export class CorpusSearch {
     const hits: SearchHit[] = [];
     for (const id of ranked) {
       const chunk = this.byId.get(id);
-      if (!chunk || seen.has(chunk.docId)) continue;
+      if (!chunk || seen.has(chunk.docId)) {
+        continue;
+      }
       seen.add(chunk.docId);
       hits.push(toHit(chunk, this.related.get(chunk.docId)));
-      if (hits.length >= limit) break;
+      if (hits.length >= limit) {
+        break;
+      }
     }
     return hits;
   }
@@ -142,9 +150,13 @@ export class CorpusSearch {
       const seen = new Set<string>();
       const hits: SearchHit[] = [];
       for (const r of results) {
-        if (locale && r["locale"] !== locale) continue;
+        if (locale && r["locale"] !== locale) {
+          continue;
+        }
         const docId = r["docId"] as string;
-        if (seen.has(docId)) continue;
+        if (seen.has(docId)) {
+          continue;
+        }
         seen.add(docId);
         hits.push(
           toHit(
@@ -157,7 +169,9 @@ export class CorpusSearch {
             this.related.get(docId),
           ),
         );
-        if (hits.length >= limit) break;
+        if (hits.length >= limit) {
+          break;
+        }
       }
       return hits;
     };

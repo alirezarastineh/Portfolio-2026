@@ -101,8 +101,12 @@ export function filterProposals(
   proposals: readonly Proposal[],
   filter: ProposalFilter,
 ): Proposal[] {
-  if (filter === "all") return [...proposals];
-  if (filter === "open") return proposals.filter(isOpen);
+  if (filter === "all") {
+    return [...proposals];
+  }
+  if (filter === "open") {
+    return proposals.filter((p) => isOpen(p));
+  }
   return proposals.filter((p) => p.status === filter);
 }
 
@@ -141,7 +145,9 @@ export function runSummary(run: Pick<RunRow, "summary">): ContentSummary | null 
 /** "3 proposed, 1 needs you, 2 stale". */
 export function summaryLine(summary: ContentSummary): string {
   const parts = [`${summary.proposed} proposed`, `${summary.needsYou} need you`];
-  if (summary.stale) parts.push(`${summary.stale} stale`);
+  if (summary.stale) {
+    parts.push(`${summary.stale} stale`);
+  }
   return parts.join(", ");
 }
 
@@ -201,7 +207,9 @@ export interface TextIssue {
 export function textWords(issues: readonly TextIssue[] | undefined): string {
   const issue = issues?.[0];
   const refused = "The text does not fit the field";
-  if (!issue) return `${refused}.`;
+  if (!issue) {
+    return `${refused}.`;
+  }
   if (issue.code === "too_big" && typeof issue.maximum === "number") {
     return `${refused}: at most ${issue.maximum} characters.`;
   }
@@ -214,13 +222,13 @@ export function textWords(issues: readonly TextIssue[] | undefined): string {
 /** A field's text as a reader sees it: tags out, the common entities decoded. */
 export function plainText(value: string): string {
   return value
-    .replace(/<[^<>]{0,1000}>/g, " ")
+    .replaceAll(/<[^<>]{0,1000}>/g, " ")
     .replaceAll("&nbsp;", " ")
     .replaceAll("&lt;", "<")
     .replaceAll("&gt;", ">")
     .replaceAll("&quot;", '"')
     .replaceAll("&#39;", "'")
     .replaceAll("&amp;", "&")
-    .replace(/\s+/g, " ")
+    .replaceAll(/\s+/g, " ")
     .trim();
 }

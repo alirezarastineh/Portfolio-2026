@@ -96,7 +96,9 @@ export class PublicShellComponent {
     if (isPlatformBrowser(inject(PLATFORM_ID))) {
       afterNextRender(() => {
         const question = takeLinkQuestion();
-        if (question) this.launcher.prefill(question, "link");
+        if (question) {
+          this.launcher.prefill(question, "link");
+        }
       });
     }
   }
@@ -111,8 +113,12 @@ export class PublicShellComponent {
       this.palette.toggle();
       return;
     }
-    if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
-    if (event.defaultPrevented || isTyping(event.target) || this.palette.open()) return;
+    if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) {
+      return;
+    }
+    if (event.defaultPrevented || isTyping(event.target) || this.palette.open()) {
+      return;
+    }
     event.preventDefault();
     this.launcher.openSheet("shortcut");
   }

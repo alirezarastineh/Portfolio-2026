@@ -28,11 +28,11 @@ class StubContentStore {
   content(locale: Locale): Signal<AppContent | null> {
     return this.state[locale].asReadonly();
   }
-  async ensure(locale: Locale): Promise<AppContent> {
+  ensure(locale: Locale): Promise<AppContent> {
     this.ensured.push(locale);
     const content = fallback(locale);
     this.state[locale].set(content);
-    return content;
+    return Promise.resolve(content);
   }
 }
 
@@ -60,37 +60,41 @@ let homeLoads = 0;
  */
 function fileRoutes(): Routes {
   const routes: Routes = [
-    { path: "admin", loadChildren: async () => [{ path: "", component: Admin }] },
+    { path: "admin", loadChildren: () => Promise.resolve([{ path: "", component: Admin }]) },
     {
       path: ":locale",
-      loadChildren: async () => [
-        {
-          path: "",
-          component: Layout,
-          resolve: { content: localeContentResolver },
-          children: [
-            {
-              path: "",
-              loadChildren: async () => {
-                homeLoads += 1;
-                return [{ path: "", component: Home }];
-              },
-            },
-            {
-              path: "legal",
-              children: [
-                {
-                  path: "imprint",
-                  loadChildren: async () => [{ path: "", component: Imprint }],
+      loadChildren: () =>
+        Promise.resolve([
+          {
+            path: "",
+            component: Layout,
+            resolve: { content: localeContentResolver },
+            children: [
+              {
+                path: "",
+                loadChildren: () => {
+                  homeLoads += 1;
+                  return Promise.resolve([{ path: "", component: Home }]);
                 },
-              ],
-            },
-            { path: "**", loadChildren: async () => [{ path: "", component: LocaleNotFound }] },
-          ],
-        },
-      ],
+              },
+              {
+                path: "legal",
+                children: [
+                  {
+                    path: "imprint",
+                    loadChildren: () => Promise.resolve([{ path: "", component: Imprint }]),
+                  },
+                ],
+              },
+              {
+                path: "**",
+                loadChildren: () => Promise.resolve([{ path: "", component: LocaleNotFound }]),
+              },
+            ],
+          },
+        ]),
     },
-    { path: "**", loadChildren: async () => [{ path: "", component: RootNotFound }] },
+    { path: "**", loadChildren: () => Promise.resolve([{ path: "", component: RootNotFound }]) },
   ];
   guardLocaleRoute(routes);
   return routes;

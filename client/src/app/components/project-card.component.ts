@@ -231,9 +231,15 @@ export class ProjectCardComponent {
     const l = this.project().links;
     const c = this.lang.t().projectCard;
     const out: ExternalLink[] = [];
-    if (l.live) out.push({ label: c.live, href: l.live, icon: "lucideExternalLink" });
-    if (l.repo) out.push({ label: c.repo, href: l.repo, icon: "brandGithub" });
-    if (l.caseStudy) out.push({ label: c.caseStudy, href: l.caseStudy, icon: "lucideFileText" });
+    if (l.live) {
+      out.push({ label: c.live, href: l.live, icon: "lucideExternalLink" });
+    }
+    if (l.repo) {
+      out.push({ label: c.repo, href: l.repo, icon: "brandGithub" });
+    }
+    if (l.caseStudy) {
+      out.push({ label: c.caseStudy, href: l.caseStudy, icon: "lucideFileText" });
+    }
     return out;
   });
 }
@@ -244,12 +250,18 @@ function hasText(html: string): boolean {
 
   while (cursor < html.length) {
     const tagStart = html.indexOf("<", cursor);
-    if (tagStart === -1) return html.slice(cursor).trim().length > 0;
+    if (tagStart === -1) {
+      return html.slice(cursor).trim().length > 0;
+    }
 
-    if (html.slice(cursor, tagStart).trim().length > 0) return true;
+    if (html.slice(cursor, tagStart).trim().length > 0) {
+      return true;
+    }
 
     const tagEnd = html.indexOf(">", tagStart + 1);
-    if (tagEnd === -1) return html.slice(tagStart).trim().length > 0;
+    if (tagEnd === -1) {
+      return html.slice(tagStart).trim().length > 0;
+    }
 
     cursor = tagEnd + 1;
   }

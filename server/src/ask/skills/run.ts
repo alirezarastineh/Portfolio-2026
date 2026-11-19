@@ -72,8 +72,12 @@ interface Draft {
 }
 
 function stopOf(reason: FinishReason, text: string): Failure | null {
-  if (reason === "length") return STOPS.length;
-  if (reason === "content-filter") return STOPS.filter;
+  if (reason === "length") {
+    return STOPS.length;
+  }
+  if (reason === "content-filter") {
+    return STOPS.filter;
+  }
   return text ? null : STOPS.empty;
 }
 
@@ -102,37 +106,53 @@ function failuresOf(job: SkillJob, draft: Draft): Failure[] {
   return draft.stop ? [draft.stop, ...gates] : gates;
 }
 
+async function attemptRepair(
+  model: LanguageModel,
+  job: SkillJob,
+  lead: Lead | undefined,
+  signal: AbortSignal | undefined,
+  turns: ModelMessage[],
+  best: Candidate | null,
+  attempt: number,
+): Promise<Candidate> {
+  const draft = await write(model, job, lead, turns, signal);
+  const candidate = { text: draft.text, failures: failuresOf(job, draft) };
+  const { failures } = candidate;
+  // The earliest of equals: a repair that fixes nothing does not replace the draft it repaired.
+  const nextBest =
+    !best || rankOf(candidate) < rankOf(best)
+      ? { ...candidate, drafts: attempt, lead: lead?.id ?? null }
+      : best;
+  const stopLoop =
+    attempt >= MAX_DRAFTS ||
+    !failures.length ||
+    (draft.stop !== null && draft.stop !== STOPS.empty);
+  if (stopLoop) {
+    return { ...nextBest, drafts: attempt };
+  }
+  // An empty draft is asked for again as it was; any other goes back with its failures.
+  const nextTurns: ModelMessage[] = draft.text
+    ? [
+        ...turns,
+        { role: "assistant", content: draft.text },
+        { role: "user", content: repairNote(failures) },
+      ]
+    : turns;
+  return attemptRepair(model, job, lead, signal, nextTurns, nextBest, attempt + 1);
+}
+
 /** A candidate: drafted, gated, repaired from its failures; the best draft when none passes. */
-export async function repaired(
+export function repaired(
   model: LanguageModel,
   job: SkillJob,
   lead?: Lead,
   signal?: AbortSignal,
 ): Promise<Candidate> {
-  const turns: ModelMessage[] = [];
-  let best: Candidate | null = null;
-  let written = 0;
-  while (written < MAX_DRAFTS) {
-    written++;
-    const draft = await write(model, job, lead, turns, signal);
-    const candidate = { text: draft.text, failures: failuresOf(job, draft) };
-    const { failures } = candidate;
-    // The earliest of equals: a repair that fixes nothing does not replace the draft it repaired.
-    if (!best || rankOf(candidate) < rankOf(best)) {
-      best = { ...candidate, drafts: written, lead: lead?.id ?? null };
-    }
-    if (!failures.length) break;
-    // Cut at the output limit or stopped by a filter: another draft would stop the same way.
-    if (draft.stop && draft.stop !== STOPS.empty) break;
-    // An empty draft is asked for again as it was; any other goes back with its failures.
-    if (draft.text) {
-      turns.push(
-        { role: "assistant", content: draft.text },
-        { role: "user", content: repairNote(failures) },
-      );
-    }
-  }
-  return { ...best!, drafts: written };
+  return attemptRepair(model, job, lead, signal, [], null, 1);
+}
+
+function addPoints(points: Map<Candidate, number>, c: Candidate, delta: number): void {
+  points.set(c, (points.get(c) ?? 0) + delta);
 }
 
 const CHOICE: Record<"1" | "2" | "tie", PairChoice> = {
@@ -160,7 +180,9 @@ async function judgeOnce(
     });
     return CHOICE[result.output.better];
   } catch (error) {
-    if (signal?.aborted) throw error;
+    if (signal?.aborted) {
+      throw error;
+    }
     console.warn("[copilot] the judge could not compare two drafts", (error as Error).message);
     return null;
   }
@@ -181,7 +203,7 @@ export async function explore(models: SkillModels, job: SkillJob): Promise<Candi
   settled.forEach((s, i) => {
     if (s.status === "rejected") {
       console.warn(
-        `[copilot] the ${job.leads[i]!.id} lead could not be drafted`,
+        `[copilot] the ${job.leads[i].id} lead could not be drafted`,
         (s.reason as Error).message,
       );
     }
@@ -189,7 +211,9 @@ export async function explore(models: SkillModels, job: SkillJob): Promise<Candi
   // Aborted (a run's cancel or shutdown): the leads that finished are no draft to offer.
   models.signal?.throwIfAborted();
   const candidates = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
-  if (!candidates.length) throw (settled[0] as PromiseRejectedResult).reason;
+  if (!candidates.length) {
+    throw (settled[0] as PromiseRejectedResult).reason;
+  }
 
   const points = new Map<Candidate, number>(candidates.map((c) => [c, 0]));
   const passing = candidates.filter((c) => !c.failures.length);
@@ -203,12 +227,13 @@ export async function explore(models: SkillModels, job: SkillJob): Promise<Candi
           judgeOnce(judge, job, b.text, a.text, models.signal),
         ]);
         const outcome = aFirst && bFirst ? combineOrders(aFirst, bFirst) : "inconsistent";
-        const add = (c: Candidate, n: number) => points.set(c, points.get(c)! + n);
-        if (outcome === "a") add(a, 1);
-        else if (outcome === "b") add(b, 1);
-        else {
-          add(a, 0.5);
-          add(b, 0.5);
+        if (outcome === "a") {
+          addPoints(points, a, 1);
+        } else if (outcome === "b") {
+          addPoints(points, b, 1);
+        } else {
+          addPoints(points, a, 0.5);
+          addPoints(points, b, 0.5);
         }
       }),
     );
@@ -216,7 +241,7 @@ export async function explore(models: SkillModels, job: SkillJob): Promise<Candi
   return [...candidates].sort(
     (x, y) =>
       Number(x.failures.length > 0) - Number(y.failures.length > 0) ||
-      points.get(y)! - points.get(x)! ||
+      (points.get(y) ?? 0) - (points.get(x) ?? 0) ||
       rankOf(x) - rankOf(y) ||
       x.drafts - y.drafts,
   );
@@ -233,7 +258,9 @@ export async function critique(
   draft: Candidate,
 ): Promise<{ candidate: Candidate; critic: SkillRun["critic"] }> {
   const { judge } = models;
-  if (!job.critic || !judge || draft.failures.length) return { candidate: draft, critic: null };
+  if (!job.critic || !judge || draft.failures.length) {
+    return { candidate: draft, critic: null };
+  }
   let problems: string[];
   try {
     const result = await generateText({
@@ -246,11 +273,15 @@ export async function critique(
     });
     problems = result.output.ok ? [] : result.output.problems;
   } catch (error) {
-    if (models.signal?.aborted) throw error;
+    if (models.signal?.aborted) {
+      throw error;
+    }
     console.warn("[copilot] the critic could not read the draft", (error as Error).message);
     return { candidate: draft, critic: null };
   }
-  if (!problems.length) return { candidate: draft, critic: { result: "ok", notes: [] } };
+  if (!problems.length) {
+    return { candidate: draft, critic: { result: "ok", notes: [] } };
+  }
 
   const turns: ModelMessage[] = [
     { role: "assistant", content: draft.text },
@@ -260,7 +291,9 @@ export async function critique(
   try {
     revision = await write(models.writer, job, undefined, turns, models.signal);
   } catch (error) {
-    if (models.signal?.aborted) throw error;
+    if (models.signal?.aborted) {
+      throw error;
+    }
     console.warn("[copilot] the revision could not be written", (error as Error).message);
     return { candidate: draft, critic: { result: "refused", notes: problems } };
   }
@@ -296,8 +329,8 @@ export async function runSkill(models: SkillModels, job: SkillJob): Promise<Skil
   const offered = finished.filter((c) => c.text);
   const shown = offered.length ? offered : finished.slice(0, 1);
   return {
-    text: shown[0]!.text,
-    failures: shown[0]!.failures,
+    text: shown[0].text,
+    failures: shown[0].failures,
     candidates: shown,
     repairs,
     critic,

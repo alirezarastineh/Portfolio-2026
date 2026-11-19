@@ -14,6 +14,13 @@ import {
 
 const options = { forceDeep: false, deepAllowed: true, projectNames: ["Atlas", "Borealis"] };
 
+const byCodePoint = (a: string, b: string): number => {
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+};
+
 describe("sensitivityOf (the newspaper test)", () => {
   it.each([
     ["What salary does he expect?", "compensation"],
@@ -176,7 +183,8 @@ describe("contactIntentOf (visitor plan V6)", () => {
 
   it("flags exactly the eval cases that ask to reach him, and not the near miss", () => {
     const flagged = EVAL_CASES.filter((c) => contactIntentOf(c.question)).map((c) => c.id);
-    expect(flagged.sort()).toEqual([
+    flagged.sort(byCodePoint);
+    expect(flagged).toEqual([
       "conv-handoff",
       "pii-send",
       "tool-hire",
@@ -184,7 +192,7 @@ describe("contactIntentOf (visitor plan V6)", () => {
       "tool-interview",
     ]);
     // Every case that expects the offer asks for it.
-    for (const c of EVAL_CASES.filter((c) => c.expectTool?.name === "handoff_contact")) {
+    for (const c of EVAL_CASES.filter((entry) => entry.expectTool?.name === "handoff_contact")) {
       expect(flagged, c.id).toContain(c.id);
     }
   });
@@ -296,16 +304,17 @@ describe("routeQuestion", () => {
   });
 });
 
-describe("escalationOf", () => {
-  const fetched = (id: string | undefined): StepToolResults => ({
-    toolResults: [
-      { toolName: "get_document", output: id ? { id, text: "…" } : { error: "not_found" } },
-    ],
-  });
-  const searched = (...ids: string[]): StepToolResults => ({
-    toolResults: [{ toolName: "search_portfolio", output: { results: ids.map((id) => ({ id })) } }],
-  });
+const fetched = (id: string | undefined): StepToolResults => ({
+  toolResults: [
+    { toolName: "get_document", output: id ? { id, text: "…" } : { error: "not_found" } },
+  ],
+});
 
+const searched = (...ids: string[]): StepToolResults => ({
+  toolResults: [{ toolName: "search_portfolio", output: { results: ids.map((id) => ({ id })) } }],
+});
+
+describe("escalationOf", () => {
   it("stays put until two projects are fetched, whichever the language", () => {
     expect(escalationOf([])).toBeNull();
     expect(escalationOf([fetched("project:atlas@en")])).toBeNull();
@@ -345,26 +354,27 @@ describe("escalationOf", () => {
 describe("the eval cases' routes", () => {
   it("are what each case expects, before any model answers (lite→deep needs the answer)", () => {
     const projectNames = fixtureAskCorpus(fixtureConfig()).projects.map((p) => p.name);
-    const wrong = EVAL_CASES.filter((c) => c.expectRoute && c.expectRoute !== "lite→deep")
-      .map((c) => {
-        const labels = routeLabels(
-          routeQuestion(c.question, { forceDeep: false, deepAllowed: true, projectNames }),
-          false,
-        );
-        return labels.includes(c.expectRoute!) ? null : `${c.id}: ${labels.join("+")}`;
-      })
-      .filter(Boolean);
+    const wrong = EVAL_CASES.flatMap((c) => {
+      if (!c.expectRoute || c.expectRoute === "lite→deep") {
+        return [];
+      }
+      const labels = routeLabels(
+        routeQuestion(c.question, { forceDeep: false, deepAllowed: true, projectNames }),
+        false,
+      );
+      return labels.includes(c.expectRoute) ? [] : [`${c.id}: ${labels.join("+")}`];
+    });
     expect(wrong).toEqual([]);
     expect(EVAL_CASES.filter((c) => c.expectRoute === "sensitive").length).toBeGreaterThanOrEqual(
       5,
     );
     // No other case trips the newspaper test by accident.
     const careful = EVAL_CASES.filter((c) => sensitivityOf(c.question)).map((c) => c.id);
-    expect(careful.sort()).toEqual(
-      EVAL_CASES.filter((c) => c.expectRoute === "sensitive")
-        .map((c) => c.id)
-        .sort(),
-    );
+    careful.sort(byCodePoint);
+    const expectedCareful = EVAL_CASES.filter((c) => c.expectRoute === "sensitive")
+      .map((c) => c.id)
+      .sort(byCodePoint);
+    expect(careful).toEqual(expectedCareful);
   });
 });
 

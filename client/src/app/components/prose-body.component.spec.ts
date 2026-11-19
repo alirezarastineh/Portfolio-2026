@@ -72,6 +72,14 @@ describe("frameCodeBlocks", () => {
   });
 });
 
+function render(html: string, toc: TocEntry[]) {
+  const fixture = TestBed.createComponent(ProseBodyComponent);
+  fixture.componentRef.setInput("html", html);
+  fixture.componentRef.setInput("toc", toc);
+  fixture.detectChanges();
+  return fixture;
+}
+
 describe("ProseBodyComponent", () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -82,14 +90,6 @@ describe("ProseBodyComponent", () => {
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
-
-  function render(html: string, toc: TocEntry[]) {
-    const fixture = TestBed.createComponent(ProseBodyComponent);
-    fixture.componentRef.setInput("html", html);
-    fixture.componentRef.setInput("toc", toc);
-    fixture.detectChanges();
-    return fixture;
-  }
 
   it("renders through Angular's sanitizer and still carries the anchors", async () => {
     // Angular says so when it strips something: here, the proof it ran.
@@ -124,8 +124,11 @@ describe("ProseBodyComponent", () => {
     const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     onTestFinished(() => {
-      if (original) Object.defineProperty(navigator, "clipboard", original);
-      else Reflect.deleteProperty(navigator, "clipboard");
+      if (original) {
+        Object.defineProperty(navigator, "clipboard", original);
+      } else {
+        Reflect.deleteProperty(navigator, "clipboard");
+      }
     });
     const fixture = render(
       '<pre class="code-block code-lang-ts"><code><span class="line">const a = 1;</span>\n<span class="line">a;</span></code></pre>',

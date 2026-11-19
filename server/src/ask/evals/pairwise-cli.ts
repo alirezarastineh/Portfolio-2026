@@ -53,15 +53,16 @@ export function pairwiseSides(
       error: `Both sides are "${a}": name two answerers, or add --candidate-prompt, --candidate-reminder or --compare-core.`,
     };
   }
-  const chains = [variantChain(config, a!), variantChain(config, b!)];
-  const missing = [a, b].find((_, i) => !chains[i]?.length);
-  if (missing) {
+  const chainA = variantChain(config, a);
+  const chainB = variantChain(config, b);
+  if (!chainA?.length || !chainB?.length) {
+    const missing = chainA?.length ? b : a;
     return {
       error: `No model for "${missing}": name a route (lite, deep) or a model whose key is set and that does not bill (SERVER_AI_FREE_ONLY).`,
     };
   }
-  const sideA: PairwiseVariant = { label: a!, chain: chains[0]! };
-  const sideB: PairwiseVariant = { label: b!, chain: chains[1]! };
+  const sideA: PairwiseVariant = { label: a, chain: chainA };
+  const sideB: PairwiseVariant = { label: b, chain: chainB };
   if (compareCore) {
     sideA.label += " · one core, both languages";
     sideA.layout = "both";
@@ -79,11 +80,12 @@ export function pairwiseSides(
   return { sides: [sideA, sideB] };
 }
 
+const passMark = (failures: string[]) => (failures.length ? "✗" : "✓");
+
 function line(r: PairwiseCaseResult): string {
-  const pass = (failures: string[]) => (failures.length ? "✗" : "✓");
   const outcome = r.outcome ? MARK[r.outcome] : "!";
   const why = r.status === "unavailable" ? ` (${r.reasons.join("; ")})` : "";
-  return `${outcome} ${r.id.padEnd(22)} A ${pass(r.a.failures)} B ${pass(r.b.failures)}${why}`;
+  return `${outcome} ${r.id.padEnd(22)} A ${passMark(r.a.failures)} B ${passMark(r.b.failures)}${why}`;
 }
 
 export async function pairwiseCli(input: {

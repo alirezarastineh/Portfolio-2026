@@ -56,7 +56,7 @@ async function outcomeOf(run: ReturnType<typeof streamAnswer>) {
 }
 
 const system = (model: ScriptedModel, call = 0) => {
-  const first = model.calls[call]!.prompt[0]!;
+  const first = model.calls[call].prompt[0];
   return first.role === "system" ? first.content : "";
 };
 
@@ -297,24 +297,24 @@ describe("the page block (visitor plan V8: the case study or post asked on)", ()
   });
 });
 
-describe("the level block (visitor plan V10: the level the visitor chose)", () => {
-  const at = async (level?: "plain" | "expert", route: RouteDecision = LITE) => {
-    const model = scripted([textTurn("Atlas helps support agents [^project:atlas@en].")]);
-    const outcome = await outcomeOf(
-      answer(route, [mockEntry("gemini-3.5-flash-lite", model.model)], level ? { level } : {}),
-    );
-    return { system: system(model), outcome };
-  };
+const levelAt = async (level?: "plain" | "expert", route: RouteDecision = LITE) => {
+  const model = scripted([textTurn("Atlas helps support agents [^project:atlas@en].")]);
+  const outcome = await outcomeOf(
+    answer(route, [mockEntry("gemini-3.5-flash-lite", model.model)], level ? { level } : {}),
+  );
+  return { system: system(model), outcome };
+};
 
+describe("the level block (visitor plan V10: the level the visitor chose)", () => {
   it("follows the corpus, before the careful block and the language line, prefix untouched at every level", async () => {
-    const standard = await at();
+    const standard = await levelAt();
     const careful: RouteDecision = {
       route: "lite",
       reason: "default+sensitive:compensation",
       sensitive: "compensation",
     };
-    const plain = await at("plain", careful);
-    const expert = await at("expert");
+    const plain = await levelAt("plain", careful);
+    const expert = await levelAt("expert");
     const language = standard.system.indexOf("\n\n# Required response language");
     // Standard adds nothing: today's bytes.
     expect(standard.system).not.toContain("# Reader's level");
@@ -341,23 +341,20 @@ describe("the level block (visitor plan V10: the level the visitor chose)", () =
   });
 });
 
-describe("the lookup tier", () => {
-  const thinkingOf = (model: ScriptedModel) =>
-    (
-      model.calls[0]!.providerOptions?.["google"] as
-        { thinkingConfig?: { thinkingLevel?: string } } | undefined
-    )?.thinkingConfig?.thinkingLevel;
-  const gemini = (
-    model: ScriptedModel,
-    id = "gemini-3.5-flash-lite",
-    level = "low",
-  ): ModelEntry => ({
-    ...mockEntry(id, model.model),
-    providerOptions: {
-      google: { thinkingConfig: { thinkingLevel: level, includeThoughts: false } },
-    },
-  });
+const thinkingOf = (model: ScriptedModel) =>
+  (
+    model.calls[0].providerOptions?.["google"] as
+      { thinkingConfig?: { thinkingLevel?: string } } | undefined
+  )?.thinkingConfig?.thinkingLevel;
 
+const gemini = (model: ScriptedModel, id = "gemini-3.5-flash-lite", level = "low"): ModelEntry => ({
+  ...mockEntry(id, model.model),
+  providerOptions: {
+    google: { thinkingConfig: { thinkingLevel: level, includeThoughts: false } },
+  },
+});
+
+describe("the lookup tier", () => {
   it("asks the first model for minimal thinking, and only for a lookup", async () => {
     const lookup = scripted([textTurn("Berlin [^profile@en].")]);
     await outcomeOf(
@@ -399,7 +396,7 @@ describe("escalation", () => {
     // The rest of the answer, the step after its own fetch included: never back to lite.
     expect(deep.calls).toHaveLength(2);
     // The deep model reads what the lite steps fetched.
-    expect(deep.calls[0]!.prompt.some((m) => m.role === "tool")).toBe(true);
+    expect(deep.calls[0].prompt.some((m) => m.role === "tool")).toBe(true);
     expect(system(deep)).toBe(system(lite));
     expect(outcome).toMatchObject({
       escalation: "projects-fetched",
@@ -464,14 +461,16 @@ describe("escalation", () => {
   });
 
   it("stays on lite when the deep chain is closed or empty", async () => {
-    for (const escalation of [undefined, () => []]) {
-      const lite = scripted(twoProjects());
-      const outcome = await outcomeOf(
-        answer(LITE, [mockEntry("gemini-3.5-flash-lite", lite.model)], { escalation }),
-      );
-      expect(lite.calls).toHaveLength(3);
-      expect(outcome.escalation).toBeNull();
-      expect(outcome.steps?.escalation).toBeUndefined();
-    }
+    await Promise.all(
+      [undefined, () => []].map(async (escalation) => {
+        const lite = scripted(twoProjects());
+        const outcome = await outcomeOf(
+          answer(LITE, [mockEntry("gemini-3.5-flash-lite", lite.model)], { escalation }),
+        );
+        expect(lite.calls).toHaveLength(3);
+        expect(outcome.escalation).toBeNull();
+        expect(outcome.steps?.escalation).toBeUndefined();
+      }),
+    );
   });
 });

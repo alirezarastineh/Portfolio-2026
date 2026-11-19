@@ -18,7 +18,9 @@ type AssetRow = typeof mediaAssets.$inferSelect;
 
 async function readAssetBuffer(filename: string): Promise<Buffer | null> {
   const path = resolveMediaPath(filename);
-  if (!path) return null;
+  if (!path) {
+    return null;
+  }
   try {
     return await readFile(path);
   } catch {
@@ -33,20 +35,24 @@ async function writeAndPersistVariants(
 ): Promise<void> {
   const written: string[] = [];
   try {
-    const variants: (typeof mediaVariants.$inferInsert)[] = [];
-    for (const variant of result.variants) {
-      const name = variantFilename(asset.filename, variant.width, variant.format);
-      await writeMediaFile(variant.buffer, name);
-      written.push(name);
-      variants.push({
-        assetId: asset.id,
-        format: variant.format,
-        width: variant.width,
-        height: variant.height,
-        filename: name,
-        byteSize: variant.buffer.length,
-      });
-    }
+    const variants = await result.variants.reduce<Promise<(typeof mediaVariants.$inferInsert)[]>>(
+      (chain, variant) =>
+        chain.then(async (acc) => {
+          const name = variantFilename(asset.filename, variant.width, variant.format);
+          await writeMediaFile(variant.buffer, name);
+          written.push(name);
+          acc.push({
+            assetId: asset.id,
+            format: variant.format,
+            width: variant.width,
+            height: variant.height,
+            filename: name,
+            byteSize: variant.buffer.length,
+          });
+          return acc;
+        }),
+      Promise.resolve([]),
+    );
 
     await db.transaction(async (tx) => {
       if (variants.length) {
@@ -67,7 +73,7 @@ async function writeAndPersistVariants(
     // so a visitor gets either the old bytes or the stripped ones.
     await restoreMedia(result.original, asset.filename);
   } catch (error) {
-    for (const name of written) await deleteMedia(name);
+    await Promise.all(written.map((name) => deleteMedia(name)));
     throw error;
   }
 }
@@ -127,16 +133,21 @@ export async function reprocessMedia(
     .where(and(eq(mediaAssets.kind, "image"), isNull(mediaAssets.blurDataUri)))
     .orderBy(asc(mediaAssets.createdAt));
 
-  for (const asset of pending) {
-    const res = await reprocessSingleAsset(asset, options.dryRun ?? false);
-    if (res.status === "processed") {
-      summary.processed.push(asset.filename);
-    } else if (res.status === "missing") {
-      summary.missing.push(asset.filename);
-    } else if (res.status === "failed") {
-      summary.failed.push({ filename: asset.filename, error: res.error });
-    }
-  }
+  const dryRun = options.dryRun ?? false;
+  await pending.reduce<Promise<void>>(
+    (chain, asset) =>
+      chain.then(async () => {
+        const res = await reprocessSingleAsset(asset, dryRun);
+        if (res.status === "processed") {
+          summary.processed.push(asset.filename);
+        } else if (res.status === "missing") {
+          summary.missing.push(asset.filename);
+        } else if (res.status === "failed") {
+          summary.failed.push({ filename: asset.filename, error: res.error });
+        }
+      }),
+    Promise.resolve(),
+  );
 
   return summary;
 }

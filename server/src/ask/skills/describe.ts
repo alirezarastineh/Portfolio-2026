@@ -13,7 +13,7 @@ export const describeInput = z.object({
 type DescribeInput = z.infer<typeof describeInput>;
 
 /** An image description for the assistant (plan phase 17); the field takes 2,000. */
-const DESCRIBE_MAX = 1_200;
+const DESCRIBE_MAX = 1200;
 
 export const describe = defineSkill<DescribeInput, Picture>({
   id: "describe",

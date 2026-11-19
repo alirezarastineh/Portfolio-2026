@@ -100,7 +100,7 @@ export interface PlanCheckContext {
   guard: LeakGuard | null;
 }
 
-const folded = (text: string) => text.trim().toLowerCase().replace(/\s+/g, " ");
+const folded = (text: string) => text.trim().toLowerCase().replaceAll(/\s+/g, " ");
 
 /**
  * The plan's critic: code the planner cannot change. Each failure names its
@@ -120,7 +120,9 @@ export function checkPlan(plan: MatchPlan, ctx: PlanCheckContext): GateFailure[]
   plan.items.forEach((item, i) => {
     const at = i + 1;
     const text = item.text.trim();
-    if (!text) failures.push({ gate: "length", message: `item ${at} is empty` });
+    if (!text) {
+      failures.push({ gate: "length", message: `item ${at} is empty` });
+    }
     if (text.length > MATCH_ITEM_CHARS) {
       failures.push({
         gate: "length",
@@ -128,8 +130,11 @@ export function checkPlan(plan: MatchPlan, ctx: PlanCheckContext): GateFailure[]
       });
     }
     const earlier = seen.get(folded(text));
-    if (earlier === undefined) seen.set(folded(text), at);
-    else failures.push({ gate: "duplicate", message: `item ${at} repeats item ${earlier}` });
+    if (earlier === undefined) {
+      seen.set(folded(text), at);
+    } else {
+      failures.push({ gate: "duplicate", message: `item ${at} repeats item ${earlier}` });
+    }
     if (otherLanguage(text, ctx.language)) {
       failures.push({
         gate: "language",
@@ -137,7 +142,9 @@ export function checkPlan(plan: MatchPlan, ctx: PlanCheckContext): GateFailure[]
       });
     }
     const instruction = instructionIn(text, ctx.guard, ctx.brief);
-    if (instruction) failures.push({ gate: "instruction", message: `item ${at}: ${instruction}` });
+    if (instruction) {
+      failures.push({ gate: "instruction", message: `item ${at}: ${instruction}` });
+    }
   });
   if (ctx.kind === "role" && n && !plan.items.some((item) => item.priority === "must")) {
     failures.push({
@@ -207,7 +214,7 @@ function rowFailures(row: MatchSynthesis["rows"][number], ctx: RowsCheckContext)
   for (const { raw, doc } of cites) {
     if (!doc) {
       failures.push(fail("citation", `item ${item} cites ${raw}, which the site does not have`));
-    } else if (!ctx.sent.get(item)!.has(doc.id) && !ctx.resident.has(doc.id)) {
+    } else if (!ctx.sent.get(item)?.has(doc.id) && !ctx.resident.has(doc.id)) {
       failures.push(
         fail(
           "citation",
@@ -218,7 +225,9 @@ function rowFailures(row: MatchSynthesis["rows"][number], ctx: RowsCheckContext)
   }
   const text = withoutMarkers(row.summary);
   const words = wordCount(text);
-  if (!words) failures.push(fail("length", `item ${item}: its summary is empty`));
+  if (!words) {
+    failures.push(fail("length", `item ${item}: its summary is empty`));
+  }
   if (words > MATCH_ROW_WORDS) {
     failures.push(
       fail("length", `item ${item}: its summary has ${words} words, at most ${MATCH_ROW_WORDS}`),
@@ -240,7 +249,9 @@ function rowFailures(row: MatchSynthesis["rows"][number], ctx: RowsCheckContext)
     );
   }
   const instruction = instructionIn(text, ctx.guard, ctx.brief);
-  if (instruction) failures.push(fail("instruction", `item ${item}: its summary ${instruction}`));
+  if (instruction) {
+    failures.push(fail("instruction", `item ${item}: its summary ${instruction}`));
+  }
   return failures;
 }
 
@@ -264,11 +275,15 @@ export function checkRows(out: MatchSynthesis, ctx: RowsCheckContext): RowFailur
       failures.push({ gate: "rows", message: `item ${row.item} has two rows: write one` });
     } else {
       seen.add(row.item);
-      if (row.status !== "not-published") failures.push(...rowFailures(row, ctx));
+      if (row.status !== "not-published") {
+        failures.push(...rowFailures(row, ctx));
+      }
     }
   }
   for (const n of ctx.sent.keys()) {
-    if (!seen.has(n)) failures.push({ gate: "rows", message: `item ${n} has no row`, item: n });
+    if (!seen.has(n)) {
+      failures.push({ gate: "rows", message: `item ${n} has no row`, item: n });
+    }
   }
   return failures;
 }
@@ -288,7 +303,9 @@ export function checkSummary(
   ctx: RowsCheckContext,
 ): GateFailure[] {
   const text = summary.trim();
-  if (!text) return [];
+  if (!text) {
+    return [];
+  }
   const failures: GateFailure[] = [];
   const words = wordCount(text);
   if (words > MATCH_SUMMARY_WORDS) {
@@ -330,8 +347,9 @@ export function checkSummary(
     });
   }
   const instruction = instructionIn(text, ctx.guard, ctx.brief);
-  if (instruction)
+  if (instruction) {
     failures.push({ gate: "summary-instruction", message: `the summary: ${instruction}` });
+  }
   return failures;
 }
 
@@ -355,7 +373,7 @@ export function settleRows(
     if (row.status === "not-published") {
       return { n, status: "not-published", summary: "", cites: [], downgraded: false };
     }
-    const cites = [...new Set(resolveCites(row, ctx).map(({ doc }) => doc!.id))];
+    const cites = [...new Set(resolveCites(row, ctx).flatMap(({ doc }) => (doc ? [doc.id] : [])))];
     return {
       n,
       status: row.status,
@@ -417,7 +435,7 @@ export interface MatchOutcome {
 }
 
 const PLAN_CALL = { maxOutputTokens: 800, temperature: 0.2, maxRetries: 0 } as const;
-const SYNTH_CALL = { maxOutputTokens: 2_000, temperature: 0.2, maxRetries: 0 } as const;
+const SYNTH_CALL = { maxOutputTokens: 2000, temperature: 0.2, maxRetries: 0 } as const;
 
 /** The output guard for match's texts: both calls' instructions, never to be repeated. */
 export const matchGuard = (corpus: AskCorpus, config: AskConfig): LeakGuard =>
@@ -436,8 +454,12 @@ export const matchGuard = (corpus: AskCorpus, config: AskConfig): LeakGuard =>
 
 /** Why a call failed, as a stop: no parseable answer is nothing to check; anything else, no model. */
 function stopFor(error: unknown, input: MatchInput, phase: string): MatchStop {
-  if (input.abortSignal.aborted) throw error;
-  if (NoObjectGeneratedError.isInstance(error)) return "empty";
+  if (input.abortSignal.aborted) {
+    throw error;
+  }
+  if (NoObjectGeneratedError.isInstance(error)) {
+    return "empty";
+  }
   if (!(error instanceof AllModelsFailedError)) {
     console.error(`[ask] ${phase} failed`, error);
     captureError(error, { phase });
@@ -454,7 +476,9 @@ async function planItems(
   outcome: MatchOutcome,
 ): Promise<MatchPlan["items"] | MatchStop> {
   const chain = structuredChain(input.lite);
-  if (!chain.length) return "unavailable";
+  if (!chain.length) {
+    return "unavailable";
+  }
   const ask = structuredAsk<MatchPlan>({
     chain,
     schema: planSchema,
@@ -471,7 +495,9 @@ async function planItems(
   ];
   try {
     let plan = await ask(messages);
-    if (!plan.items.length) return "empty";
+    if (!plan.items.length) {
+      return "empty";
+    }
     let failures = checkPlan(plan, ctx);
     if (failures.length) {
       outcome.failures.push(...gatesOf(failures));
@@ -518,7 +544,9 @@ async function retrieve(
       const careful = carefulOf(text);
       let hits = careful ? [] : await search(text);
       const terms = item.terms.map((t) => t.trim()).filter(Boolean);
-      if (!careful && !hits.length && terms.length) hits = await search(terms.join(" "));
+      if (!careful && !hits.length && terms.length) {
+        hits = await search(terms.join(" "));
+      }
       const searched: MatchItem = {
         n: i + 1,
         text,
@@ -537,7 +565,7 @@ async function retrieve(
         hits.map((h) => ({
           id: h.id,
           title: h.title,
-          snippet: h.snippet.replace(/\s+/g, " ").trim(),
+          snippet: h.snippet.replaceAll(/\s+/g, " ").trim(),
           ...(h.related?.length ? { related: h.related } : {}),
         })),
       ]),
@@ -568,12 +596,16 @@ async function synthesize(
   }
   const deep = structuredChain(input.deep ?? []);
   const chain = deep.length ? deep : structuredChain(input.lite);
-  if (!chain.length) return "unavailable";
+  if (!chain.length) {
+    return "unavailable";
+  }
 
   const rowsCtx: RowsCheckContext = {
     ...ctx,
     corpus: input.corpus,
-    sent: new Map(sent.map((item) => [item.n, new Set(passages.get(item.n)!.map((p) => p.id))])),
+    sent: new Map(
+      sent.map((item) => [item.n, new Set((passages.get(item.n) ?? []).map((p) => p.id))]),
+    ),
     resident: new Set(
       coreView(input.corpus.documents, input.language, input.corpus.layout).resident.map(
         (d) => d.id,
@@ -598,7 +630,7 @@ async function synthesize(
   const request = synthPrompt(
     input.kind,
     fencedItems,
-    sent.map((item) => ({ n: item.n, passages: passages.get(item.n)! })),
+    sent.map((item) => ({ n: item.n, passages: passages.get(item.n) ?? [] })),
     wrapVisitor(input.brief, input.language),
   );
   const messages: ModelMessage[] = [{ role: "user", content: request }];
@@ -629,7 +661,9 @@ async function synthesize(
       );
       out = repair.value;
       failures = repair.failures;
-      if (failures.length) outcome.failures.push(...gatesOf(failures));
+      if (failures.length) {
+        outcome.failures.push(...gatesOf(failures));
+      }
     } catch (error) {
       // The repair could not be had: the first rows stand, each failing one not-published.
       stopFor(error, input, "match-repair");
@@ -671,7 +705,9 @@ export async function runMatch(input: MatchInput): Promise<MatchOutcome> {
   };
   input.onStep?.({ step: "plan" });
   const planned = await planItems(input, ctx, outcome);
-  if (typeof planned === "string") return { ...outcome, stop: planned };
+  if (typeof planned === "string") {
+    return { ...outcome, stop: planned };
+  }
 
   input.onStep?.({ step: "search", items: planned.length });
   const { items, passages } = await retrieve(planned, input, outcome);

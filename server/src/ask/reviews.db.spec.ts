@@ -53,7 +53,8 @@ function answer(id: string, createdAt: Date, extra: Partial<typeof aiMessages.$i
 }
 
 async function queueOf(week?: string): Promise<Queue> {
-  const res = await admin.get(`/admin/assistant/reviews${week ? `?week=${week}` : ""}`);
+  const query = week ? `?week=${week}` : "";
+  const res = await admin.get(`/admin/assistant/reviews${query}`);
   expect(res.status).toBe(200);
   return (await res.json()) as Queue;
 }
@@ -87,8 +88,10 @@ beforeEach(async () => {
 describe("the review queue API", () => {
   it("is admin-only", async () => {
     const anonymous = new TestClient(app);
-    expect((await anonymous.get("/admin/assistant/reviews")).status).toBe(401);
-    expect((await anonymous.put("/admin/assistant/reviews/m_00", {})).status).toBe(401);
+    const listRes = await anonymous.get("/admin/assistant/reviews");
+    expect(listRes.status).toBe(401);
+    const putRes = await anonymous.put("/admin/assistant/reviews/m_00", {});
+    expect(putRes.status).toBe(401);
   });
 
   it("gives the same queue for the same week: flagged answers first, then the sample", async () => {
@@ -108,7 +111,11 @@ describe("the review queue API", () => {
     expect(first.queue.filter((e) => e.sampled)).toHaveLength(10);
     expect(first.stats.queued).toBe(first.queue.length);
     // An answer as Conversations shows it, the thumbs-down included.
-    expect(flagged.find((e) => e.message.id === "m_02")!.message).toMatchObject({
+    const m02 = flagged.find((e) => e.message.id === "m_02");
+    if (!m02) {
+      throw new Error("expected m_02");
+    }
+    expect(m02.message).toMatchObject({
       question: "question m_02",
       feedback: -1,
     });
@@ -124,10 +131,9 @@ describe("the review queue API", () => {
       .update(aiMessages)
       .set({ signals: { v: 1, doneMs: 900, stopped: true } })
       .where(eq(aiMessages.id, "m_04"));
+    const weekQueue = await queueOf("2026-W39");
     const reasons = Object.fromEntries(
-      (await queueOf("2026-W39")).queue
-        .filter((e) => e.reasons.length)
-        .map((e) => [e.message.id, e.reasons]),
+      weekQueue.queue.filter((e) => e.reasons.length).map((e) => [e.message.id, e.reasons]),
     );
     expect(reasons).toMatchObject({
       m_02: ["thumbs down:unanswered"],
@@ -138,16 +144,20 @@ describe("the review queue API", () => {
   it("keeps a review, updates it in place and counts only the sample in the label shares", async () => {
     await seedWeek();
     const before = await queueOf("2026-W39");
-    const sampled = before.queue.find((e) => e.sampled && !e.reasons.length)!;
+    const sampled = before.queue.find((e) => e.sampled && !e.reasons.length);
     const flaggedOnly = before.queue.find((e) => e.reasons.length && !e.sampled);
-    expect(flaggedOnly).toBeDefined();
+    if (!sampled || !flaggedOnly) {
+      throw new Error("expected sampled and flaggedOnly entries");
+    }
 
     const path = `/admin/assistant/reviews/${sampled.message.id}`;
     const saved = await admin.put(path, { labels: { ...LABELS, correct: false }, note: null });
     expect(saved.status).toBe(200);
     const again = await admin.put(path, { labels: LABELS, note: "  thin on sources " });
-    expect(await again.json()).toEqual({ ok: true, reviewedAt: expect.any(String) });
-    await admin.put(`/admin/assistant/reviews/${flaggedOnly!.message.id}`, {
+    const againBody = (await again.json()) as { ok: boolean; reviewedAt: string };
+    expect(againBody.ok).toBe(true);
+    expect(typeof againBody.reviewedAt).toBe("string");
+    await admin.put(`/admin/assistant/reviews/${flaggedOnly.message.id}`, {
       labels: { ...LABELS, correct: false },
       note: null,
     });
@@ -161,7 +171,11 @@ describe("the review queue API", () => {
 
     const after = await queueOf("2026-W39");
     expect(after.queue.map((e) => e.message.id)).toEqual(before.queue.map((e) => e.message.id));
-    expect(after.queue.find((e) => e.message.id === sampled.message.id)!.review).toMatchObject({
+    const afterSampled = after.queue.find((e) => e.message.id === sampled.message.id);
+    if (!afterSampled) {
+      throw new Error("expected sampled entry after review");
+    }
+    expect(afterSampled.review).toMatchObject({
       labels: LABELS,
       note: "thin on sources",
     });
@@ -190,14 +204,19 @@ describe("the review queue API", () => {
 
   it("refuses a week that does not exist, an answer it does not know and a partial review", async () => {
     await seedWeek();
-    expect((await admin.get("/admin/assistant/reviews?week=2026-39")).status).toBe(400);
-    expect((await admin.get("/admin/assistant/reviews?week=2025-W53")).status).toBe(400);
+    const badWeekFormat = await admin.get("/admin/assistant/reviews?week=2026-39");
+    expect(badWeekFormat.status).toBe(400);
+    const missingWeek = await admin.get("/admin/assistant/reviews?week=2025-W53");
+    expect(missingWeek.status).toBe(400);
     const review = { labels: LABELS, note: null };
-    expect((await admin.put("/admin/assistant/reviews/m_missing", review)).status).toBe(404);
+    const missingAnswer = await admin.put("/admin/assistant/reviews/m_missing", review);
+    expect(missingAnswer.status).toBe(404);
     // Playground answers are the admin's own; they are not reviewed.
-    expect((await admin.put("/admin/assistant/reviews/p_playground", review)).status).toBe(404);
+    const playgroundAnswer = await admin.put("/admin/assistant/reviews/p_playground", review);
+    expect(playgroundAnswer.status).toBe(404);
     const partial = { labels: { correct: true }, note: null };
-    expect((await admin.put("/admin/assistant/reviews/m_00", partial)).status).toBe(400);
+    const partialRes = await admin.put("/admin/assistant/reviews/m_00", partial);
+    expect(partialRes.status).toBe(400);
     expect(await getDb().select().from(aiReviews)).toHaveLength(0);
   });
 });

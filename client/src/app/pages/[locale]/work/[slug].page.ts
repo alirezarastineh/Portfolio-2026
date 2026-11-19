@@ -55,11 +55,15 @@ const SLUG = /^[a-z0-9-]{1,80}$/;
  * Every resolver below asks; the store fetches the doc once.
  */
 async function caseStudy(slug: string | null): Promise<CaseStudy | null> {
-  if (!slug || !SLUG.test(slug)) return null;
+  if (!slug || !SLUG.test(slug)) {
+    return null;
+  }
   const lang = inject(LanguageService);
   const store = inject(DocStore);
   const project = lang.content().projects.find((p) => p.slug === slug);
-  if (!project?.hasCaseStudy) return null;
+  if (!project?.hasCaseStudy) {
+    return null;
+  }
 
   const doc = await store.ensure(lang.lang(), "projects", slug);
   return doc?.kind === "project" ? { project, doc } : null;
@@ -80,7 +84,9 @@ function describe(study: CaseStudy, fallback: string): string {
 const metaResolver: ResolveFn<MetaTag[]> = async (route) => {
   const lang = inject(LanguageService);
   const study = await caseStudy(route.paramMap.get("slug"));
-  if (!study) return [{ name: "robots", content: "noindex" }];
+  if (!study) {
+    return [{ name: "robots", content: "noindex" }];
+  }
 
   const content = lang.content();
   const origin = siteOrigin(content);
@@ -248,7 +254,7 @@ const AID_LABELS = {
             <div class="flex flex-col gap-8">
               @if (aids().plain || aids().expert) {
                 <section
-                  class="case-aids flex max-w-[68ch] flex-col gap-3 rounded border border-border-strong bg-card p-5 sm:p-6"
+                  class="case-aids flex max-w-[68ch] flex-col gap-3 rounded-sm border border-border-strong bg-card p-5 sm:p-6"
                 >
                   <h2 class="m-0 text-subtitle text-foreground">{{ aids().labels.inShort }}</h2>
                   @if (aids().plain) {
@@ -372,7 +378,7 @@ const AID_LABELS = {
               }
               @if (neighbours().next; as next) {
                 <a
-                  [class]="neighbourLink + ' sm:col-start-2 sm:items-end sm:text-right'"
+                  [class]="neighbourLink + 'sm:col-start-2 sm:items-end sm:text-right'"
                   [routerLink]="workLink(next.slug)"
                 >
                   <span class="flex items-center gap-2 text-small text-muted-foreground">
@@ -471,7 +477,9 @@ export default class CaseStudyPageComponent {
 
   protected readonly facts = computed(() => {
     const s = this.study();
-    if (!s) return [];
+    if (!s) {
+      return [];
+    }
     const t = this.lang.t();
     const p = s.project;
     return [
@@ -486,7 +494,9 @@ export default class CaseStudyPageComponent {
 
   protected readonly links = computed(() => {
     const s = this.study();
-    if (!s) return [];
+    if (!s) {
+      return [];
+    }
     const c = this.lang.t().projectCard;
     return [
       { label: c.live, href: s.project.links.live },
@@ -542,7 +552,9 @@ export default class CaseStudyPageComponent {
 
   protected readonly sections = computed<Section[]>(() => {
     const s = this.study();
-    if (!s) return [];
+    if (!s) {
+      return [];
+    }
     const labels = this.labels();
     const ids = this.ids();
     return [
@@ -554,7 +566,9 @@ export default class CaseStudyPageComponent {
 
   protected readonly toc = computed<TocItem[]>(() => {
     const s = this.study();
-    if (!s) return [];
+    if (!s) {
+      return [];
+    }
     const ids = this.ids();
     const t = this.lang.t();
     return [

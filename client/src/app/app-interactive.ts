@@ -6,8 +6,11 @@ export const INTERACTIVE_ATTRIBUTE = "data-hydrated";
 /** Resolves in the browser's next idle period, like Angular's own idle triggers. */
 export function nextIdle(): Promise<void> {
   return new Promise((resolve) => {
-    if (typeof requestIdleCallback === "function") requestIdleCallback(() => resolve());
-    else setTimeout(resolve);
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(() => resolve());
+    } else {
+      setTimeout(resolve);
+    }
   });
 }
 

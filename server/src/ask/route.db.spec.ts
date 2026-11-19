@@ -61,9 +61,53 @@ const app = createApp({
       roles.push(role);
       return chain(role);
     },
-    corpus: async (c) => (corpusOverride ?? fixtureCorpus)(c),
+    corpus: (c) => Promise.resolve((corpusOverride ?? fixtureCorpus)(c)),
   },
 });
+
+type UiChunk = Record<string, unknown>;
+
+function findChunk(chunks: UiChunk[], type: string): UiChunk {
+  const chunk = chunks.find((c) => c["type"] === type);
+  if (!chunk) {
+    throw new Error(`Expected ${type} chunk`);
+  }
+  return chunk;
+}
+
+function messageIdOf(chunks: UiChunk[]): string {
+  return findChunk(chunks, "start")["messageId"] as string;
+}
+
+async function statusOf(req: Response | Promise<Response>): Promise<number> {
+  const res = await req;
+  return res.status;
+}
+
+async function jsonOf(req: Response | Promise<Response>): Promise<Record<string, unknown>> {
+  const res = await req;
+  return (await res.json()) as Record<string, unknown>;
+}
+
+function runSequential<T>(
+  items: readonly T[],
+  fn: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  return items.reduce((acc, item, index) => acc.then(() => fn(item, index)), Promise.resolve());
+}
+
+async function countRemaining(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<number> {
+  const chunk = await reader.read();
+  if (chunk.done) {
+    return 0;
+  }
+  return 1 + (await countRemaining(reader));
+}
+
+const firstSystem = (model: ScriptedModel) => {
+  const first = model.calls[0].prompt[0];
+  return first.role === "system" ? first.content : "";
+};
 
 const SESSION = "tab-session-0000000001";
 let ipCounter = 0;
@@ -96,6 +140,15 @@ function ask(
       ...options.extra,
     }),
   });
+}
+
+async function askChunks(text: string, options?: Parameters<typeof ask>[1]): Promise<UiChunk[]> {
+  const res = await ask(text, options);
+  return readUiChunks(res);
+}
+
+async function askMessageId(text: string, options?: Parameters<typeof ask>[1]): Promise<string> {
+  return messageIdOf(await askChunks(text, options));
 }
 
 function only(model: ScriptedModel, id = "gemini-3.5-flash-lite") {
@@ -139,7 +192,7 @@ describe("POST /v1/ask", () => {
     expect(res.headers.get("cache-control")).toBe("no-cache, no-transform");
 
     const chunks = await readUiChunks(res);
-    const start = chunks.find((c) => c["type"] === "start")!;
+    const start = findChunk(chunks, "start");
     const messageId = start["messageId"] as string;
     const text = uiText(chunks);
     expect(text).toBe("Atlas uses pgvector [^project:atlas@en].");
@@ -169,7 +222,7 @@ describe("POST /v1/ask", () => {
     expect(verifyAnswer(SESSION, messageId, text, metadata["sig"] as string)).toBe(true);
 
     // The search tool ran against the corpus: its result went back to the model.
-    const secondCall = model.calls[1]!;
+    const secondCall = model.calls[1];
     expect(JSON.stringify(secondCall.prompt)).toContain("retrieval-augmented support assistant");
 
     const row = await logged(messageId);
@@ -198,7 +251,7 @@ describe("POST /v1/ask", () => {
       return rows.length ? rows : undefined;
     });
     expect(snapshots.map((s) => s.key)).toEqual([row.corpusKey]);
-    expect(snapshots[0]!.documents.map((d) => d.id)).toContain("project:atlas@en");
+    expect(snapshots[0].documents.map((d) => d.id)).toContain("project:atlas@en");
     expect(row.trace?.steps).toEqual([
       expect.objectContaining({
         model: "gemini-3.5-flash-lite",
@@ -217,24 +270,27 @@ describe("POST /v1/ask", () => {
         tools: [expect.objectContaining({ name: "suggest_followups", outcome: "ok" })],
       }),
     ]);
-    expect(row.trace!.steps[0]!.tools[0]!.resultChars).toBeGreaterThan(100);
+    if (!row.trace) {
+      throw new Error("expected trace on logged row");
+    }
+    expect(row.trace.steps[0].tools[0].resultChars).toBeGreaterThan(100);
     // Which core it read (plan phase 16): the perception figures tell layouts apart by it.
-    expect(row.trace?.core).toEqual({
+    expect(row.trace.core).toEqual({
       locale: "en",
       layout: "locale",
       tokens: fixtureCorpus(config).coreTokens.en,
     });
     // Nothing trimmed is said too (plan phase 22): the window metric counts it as untrimmed.
-    expect(row.trace?.window).toEqual({ dropped: 0 });
+    expect(row.trace.window).toEqual({ dropped: 0 });
 
-    const [usage] = await getDb().select().from(aiUsage);
-    expect(usage).toMatchObject({
+    const [usageRow] = await getDb().select().from(aiUsage);
+    expect(usageRow).toMatchObject({
       day: utcDay(),
       model: "gemini-3.5-flash-lite",
       requests: 2,
       inputTokens: 200,
     });
-    expect(usage!.usd).toBeGreaterThan(0);
+    expect(usageRow.usd).toBeGreaterThan(0);
   });
 
   it("names what the conversation window dropped, and logs the trim (plan phase 22)", async () => {
@@ -249,11 +305,11 @@ describe("POST /v1/ask", () => {
       "Rust?",
       "Go?",
     ].map((text, i) => ({ id: `h${i}000000`, role: "user", parts: [{ type: "text", text }] }));
-    const chunks = await readUiChunks(await ask("Where is he based?", { history }));
-    const messageId = chunks.find((c) => c["type"] === "start")!["messageId"] as string;
+    const chunks = await askChunks("Where is he based?", { history });
+    const messageId = messageIdOf(chunks);
 
     // The model read the note before the oldest question it was shown.
-    const sent = JSON.stringify(model.calls[0]!.prompt);
+    const sent = JSON.stringify(model.calls[0].prompt);
     expect(sent).toContain(
       "[Not shown: 1 earlier question in this conversation, about Atlas, achieve.]",
     );
@@ -263,11 +319,14 @@ describe("POST /v1/ask", () => {
 
   it("replays a signed answer as history, and not a forged one", async () => {
     only(scripted([textTurn("Atlas is a RAG assistant [^project:atlas@en].")]));
-    const first = await readUiChunks(await ask("What is Atlas?"));
-    const id = first.find((c) => c["type"] === "start")!["messageId"] as string;
+    const first = await askChunks("What is Atlas?");
+    const id = messageIdOf(first);
     const sig = first
       .map((c) => c["messageMetadata"] as { sig?: string } | undefined)
-      .find((m) => m?.sig)!.sig!;
+      .find((m) => m?.sig)?.sig;
+    if (!sig) {
+      throw new Error("expected signature metadata");
+    }
 
     const second = scripted([textTurn("It uses pgvector.")]);
     only(second);
@@ -286,9 +345,9 @@ describe("POST /v1/ask", () => {
         metadata: { sig },
       },
     ];
-    await readUiChunks(await ask("What does it use?", { history }));
+    await askChunks("What does it use?", { history });
 
-    const prompt = JSON.stringify(second.calls[0]!.prompt);
+    const prompt = JSON.stringify(second.calls[0].prompt);
     expect(prompt).toContain("Atlas is a RAG assistant");
     expect(prompt).not.toContain("Nobel");
   });
@@ -301,15 +360,12 @@ describe("POST /v1/ask", () => {
       mockEntry("nvidia/nemotron-3-super-120b-a12b:free", backup.model),
     ];
 
-    const chunks = await readUiChunks(await ask("Is he available?"));
+    const chunks = await askChunks("Is he available?");
     expect(uiText(chunks)).toBe("From the backup.");
-    const meta = chunks.find((c) => c["type"] === "finish")!["messageMetadata"] as Record<
-      string,
-      unknown
-    >;
+    const meta = findChunk(chunks, "finish")["messageMetadata"] as Record<string, unknown>;
     expect(meta).toMatchObject({ model: "nemotron-3-super", fallback: true });
 
-    const row = await logged(chunks[0]!["messageId"] as string);
+    const row = await logged(chunks[0]["messageId"] as string);
     expect((row.attempts as { outcome: string }[]).map((a) => a.outcome)).toEqual([
       "rate-limited",
       "ok",
@@ -332,7 +388,7 @@ describe("POST /v1/ask", () => {
 
     const chunks = await readUiChunks(await ask("Hello?"));
     expect(chunks.find((c) => c["type"] === "error")).toMatchObject({ errorText: "unavailable" });
-    const row = await logged(chunks[0]!["messageId"] as string);
+    const row = await logged(chunks[0]["messageId"] as string);
     expect(row).toMatchObject({ model: null, finishReason: "error:unavailable" });
     expect(row.trace?.steps).toEqual([
       expect.objectContaining({
@@ -367,7 +423,7 @@ describe("POST /v1/ask", () => {
   it("is off when the deploy or the admin switches it off", async () => {
     only(scripted([textTurn("unused")]));
     config = fixtureConfig({ enabled: false });
-    expect((await ask("Hi")).status).toBe(503);
+    expect(await statusOf(ask("Hi"))).toBe(503);
 
     config = fixtureConfig();
     await getDb().insert(aiSettings).values({ id: 1, enabled: false });
@@ -381,12 +437,12 @@ describe("POST /v1/ask", () => {
     only(scripted([textTurn("ok")]));
     config = fixtureConfig({ ratePerHour: 2 });
     const ip = "203.0.113.77";
-    for (let i = 0; i < 2; i++) {
+    await runSequential([0, 1], async (i) => {
       const res = await ask("Hi", { ip, session: `tab-session-${i}000000000` });
       expect(res.status).toBe(200);
       // Read to the end: an unread stream keeps its concurrency slot.
       await res.text();
-    }
+    });
     const limited = await ask("Hi", { ip, session: "tab-session-9000000000" });
     expect(limited.status).toBe(429);
     const body = (await limited.json()) as { error: string; retryAfter: number };
@@ -404,7 +460,10 @@ describe("POST /v1/ask", () => {
     expect(busy.status).toBe(429);
     expect(await busy.json()).toMatchObject({ error: "busy" });
 
-    await first.body!.cancel();
+    if (!first.body) {
+      throw new Error("expected response body");
+    }
+    await first.body.cancel();
     const third = await eventually(async () => {
       const res = await ask("three");
       return res.status === 200 ? res : undefined;
@@ -420,8 +479,8 @@ describe("POST /v1/ask", () => {
 
   it("refuses bad input: the honeypot, a malformed body, an overlong question", async () => {
     only(scripted([textTurn("unused")]));
-    expect((await ask("Hi", { extra: { website: "http://spam" } })).status).toBe(400);
-    expect((await ask("x".repeat(601))).status).toBe(413);
+    expect(await statusOf(ask("Hi", { extra: { website: "https://spam" } }))).toBe(400);
+    expect(await statusOf(ask("x".repeat(601)))).toBe(413);
     const malformed = await app.request("/v1/ask", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -432,11 +491,11 @@ describe("POST /v1/ask", () => {
 
   it("counts every request it turns away, per day and kind", async () => {
     // Drop what earlier tests counted: this one checks its own.
-    await flushGuardEvents(async () => undefined);
+    await flushGuardEvents(() => Promise.resolve());
     only(scripted([textTurn("ok")]));
 
-    expect((await ask("Hi", { extra: { website: "http://spam" } })).status).toBe(400);
-    expect((await ask("x".repeat(601))).status).toBe(413);
+    expect(await statusOf(ask("Hi", { extra: { website: "https://spam" } }))).toBe(400);
+    expect(await statusOf(ask("x".repeat(601)))).toBe(413);
     const malformed = await app.request("/v1/ask", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -446,30 +505,31 @@ describe("POST /v1/ask", () => {
 
     config = fixtureConfig({ maxConcurrent: 1 });
     const open = await ask("one");
-    expect((await ask("two")).status).toBe(429);
+    expect(await statusOf(ask("two"))).toBe(429);
     await open.text();
 
     config = fixtureConfig({ ratePerHour: 1 });
     const ip = "203.0.113.90";
-    await (await ask("Hi", { ip, session: "tab-session-a000000000" })).text();
-    expect((await ask("Hi", { ip, session: "tab-session-b000000000" })).status).toBe(429);
+    const firstIpRes = await ask("Hi", { ip, session: "tab-session-a000000000" });
+    await firstIpRes.text();
+    expect(await statusOf(ask("Hi", { ip, session: "tab-session-b000000000" }))).toBe(429);
 
     config = fixtureConfig();
     // Over the body limit: refused before anything is parsed.
-    expect((await ask("Hi", { extra: { padding: "x".repeat(70_000) } })).status).toBe(413);
+    expect(await statusOf(ask("Hi", { extra: { padding: "x".repeat(70_000) } }))).toBe(413);
     // Turnstile on, and no token sent (refused without asking Cloudflare).
     process.env.TURNSTILE_SECRET_KEY = "test-secret";
     try {
-      expect((await ask("Hi", { session: "tab-session-t000000000" })).status).toBe(403);
+      expect(await statusOf(ask("Hi", { session: "tab-session-t000000000" }))).toBe(403);
     } finally {
       delete process.env.TURNSTILE_SECRET_KEY;
     }
     // The day's budget is spent.
     await getDb().insert(aiUsage).values({ day: utcDay(), model: "x", usd: config.dailyBudgetUsd });
-    expect((await ask("Hi")).status).toBe(503);
+    expect(await statusOf(ask("Hi"))).toBe(503);
 
     config = fixtureConfig({ enabled: false });
-    expect((await ask("Hi")).status).toBe(503);
+    expect(await statusOf(ask("Hi"))).toBe(503);
 
     await flushGuardEvents();
     const rows = await getDb().select().from(aiGuardEvents);
@@ -487,7 +547,7 @@ describe("POST /v1/ask", () => {
     expect(new Set(rows.map((r) => r.day))).toEqual(new Set([utcDay()]));
 
     // A second flush adds to the day's row rather than replacing it.
-    expect((await ask("Hi")).status).toBe(503);
+    expect(await statusOf(ask("Hi"))).toBe(503);
     await flushGuardEvents();
     const [off] = await getDb().select().from(aiGuardEvents).where(eq(aiGuardEvents.kind, "off"));
     expect(off?.count).toBe(2);
@@ -497,11 +557,12 @@ describe("POST /v1/ask", () => {
     const embedder = new MockEmbeddingModelV4({
       modelId: "gemini-embedding-2",
       maxEmbeddingsPerCall: 100,
-      doEmbed: async ({ values }) => ({
-        embeddings: values.map(() => [1, 0, 0]),
-        usage: { tokens: values.length },
-        warnings: [],
-      }),
+      doEmbed: ({ values }) =>
+        Promise.resolve({
+          embeddings: values.map(() => [1, 0, 0]),
+          usage: { tokens: values.length },
+          warnings: [],
+        }),
     });
     setEmbeddingDeps({ model: () => embedder });
     allowEmbeddingBackfill(true);
@@ -544,8 +605,8 @@ describe("POST /v1/ask", () => {
         ? [mockEntry("gemini-3.7-flash", deep.model)]
         : [mockEntry("gemini-3.5-flash-lite", lite.model)];
 
-    const chunks = await readUiChunks(await ask("Tell me about his projects"));
-    const messageId = chunks.find((c) => c["type"] === "start")!["messageId"] as string;
+    const chunks = await askChunks("Tell me about his projects");
+    const messageId = messageIdOf(chunks);
     const metadata = chunks
       .filter((c) => c["messageMetadata"])
       .map((c) => c["messageMetadata"] as Record<string, unknown>)
@@ -581,11 +642,15 @@ describe("GET /v1/ask/config", () => {
   });
 });
 
+async function feedbackReason(): Promise<string | null | undefined> {
+  const rows = await getDb().select().from(aiFeedback);
+  return rows[0]?.reason;
+}
+
 describe("POST /v1/ask/feedback", () => {
   it("records a rating from the session that got the answer, and only from it", async () => {
     only(scripted([textTurn("ok")]));
-    const chunks = await readUiChunks(await ask("Hi"));
-    const messageId = chunks[0]!["messageId"] as string;
+    const messageId = await askMessageId("Hi");
     await logged(messageId);
 
     const rate = (sessionId: string, value: number) =>
@@ -595,16 +660,16 @@ describe("POST /v1/ask/feedback", () => {
         body: JSON.stringify({ sessionId, messageId, value }),
       });
 
-    expect((await rate("some-other-session-000", 1)).status).toBe(404);
-    expect((await rate(SESSION, 1)).status).toBe(200);
-    expect((await rate(SESSION, -1)).status).toBe(200);
+    expect(await statusOf(rate("some-other-session-000", 1))).toBe(404);
+    expect(await statusOf(rate(SESSION, 1))).toBe(200);
+    expect(await statusOf(rate(SESSION, -1))).toBe(200);
     const rows = await getDb().select().from(aiFeedback);
     expect(rows).toEqual([expect.objectContaining({ messageId, value: -1, reason: null })]);
   });
 
   it("keeps a -1's reason, refuses a code the terminal does not offer, and a +1 clears it (visitor plan V2)", async () => {
     only(scripted([textTurn("ok")]));
-    const messageId = (await readUiChunks(await ask("Hi")))[0]!["messageId"] as string;
+    const messageId = await askMessageId("Hi");
     await logged(messageId);
     const rate = (body: Record<string, unknown>) =>
       app.request("/v1/ask/feedback", {
@@ -612,57 +677,66 @@ describe("POST /v1/ask/feedback", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ sessionId: SESSION, messageId, ...body }),
       });
-    const reason = async () => (await getDb().select().from(aiFeedback))[0]?.reason;
 
-    expect((await rate({ value: -1, reason: "wrong" })).status).toBe(200);
-    expect(await reason()).toBe("wrong");
-    expect((await rate({ value: -1, reason: "rude" })).status).toBe(400);
-    expect(await reason()).toBe("wrong");
+    expect(await statusOf(rate({ value: -1, reason: "wrong" }))).toBe(200);
+    expect(await feedbackReason()).toBe("wrong");
+    expect(await statusOf(rate({ value: -1, reason: "rude" }))).toBe(400);
+    expect(await feedbackReason()).toBe("wrong");
     // A reason belongs to a -1 only.
-    expect((await rate({ value: 1, reason: "length" })).status).toBe(200);
-    expect(await reason()).toBeNull();
+    expect(await statusOf(rate({ value: 1, reason: "length" }))).toBe(200);
+    expect(await feedbackReason()).toBeNull();
   });
 });
 
-describe("POST /v1/ask/signal (visitor plan V2)", () => {
-  const signal = (
-    sessionId: string,
-    messageId: string,
-    signals: unknown,
-    contentType = "application/json",
-  ) =>
-    app.request("/v1/ask/signal", {
-      method: "POST",
-      headers: { "content-type": contentType },
-      body: JSON.stringify({ sessionId, messageId, signals }),
-    });
-  const stored = async (messageId: string) =>
-    (
-      await getDb()
-        .select({ signals: aiMessages.signals })
-        .from(aiMessages)
-        .where(eq(aiMessages.id, messageId))
-    )[0]!.signals;
-  const answered = async () => {
-    only(scripted([textTurn("ok")]));
-    const messageId = (await readUiChunks(await ask("Hi")))[0]!["messageId"] as string;
-    await logged(messageId);
-    return messageId;
-  };
+const sendSignal = (
+  sessionId: string,
+  messageId: string,
+  signals: unknown,
+  contentType = "application/json",
+) =>
+  app.request("/v1/ask/signal", {
+    method: "POST",
+    headers: { "content-type": contentType },
+    body: JSON.stringify({ sessionId, messageId, signals }),
+  });
 
+async function storedSignals(messageId: string) {
+  const rows = await getDb()
+    .select({ signals: aiMessages.signals })
+    .from(aiMessages)
+    .where(eq(aiMessages.id, messageId));
+  return rows[0].signals;
+}
+
+async function answeredMessageId(): Promise<string> {
+  only(scripted([textTurn("ok")]));
+  const messageId = await askMessageId("Hi");
+  await logged(messageId);
+  return messageId;
+}
+
+describe("POST /v1/ask/signal (visitor plan V2)", () => {
   it("sets the totals the session's browser sends, and only that session's", async () => {
     // Before its answer is logged, the browser is told to try again.
-    expect((await signal(SESSION, "m_not-logged-yet", { doneMs: 100 })).status).toBe(404);
-    const messageId = await answered();
-    expect((await signal("some-other-session-000", messageId, { stopped: true })).status).toBe(404);
-    expect(await stored(messageId)).toBeNull();
+    expect(await statusOf(sendSignal(SESSION, "m_not-logged-yet", { doneMs: 100 }))).toBe(404);
+    const messageId = await answeredMessageId();
+    expect(await statusOf(sendSignal("some-other-session-000", messageId, { stopped: true }))).toBe(
+      404,
+    );
+    expect(await storedSignals(messageId)).toBeNull();
 
-    expect((await signal(SESSION, messageId, { shownMs: 820, doneMs: 2400 })).status).toBe(200);
+    expect(await statusOf(sendSignal(SESSION, messageId, { shownMs: 820, doneMs: 2400 }))).toBe(
+      200,
+    );
     // The same totals again count once; a later batch sets what it carries over the rest.
-    expect((await signal(SESSION, messageId, { shownMs: 820, doneMs: 2400 })).status).toBe(200);
-    expect((await signal(SESSION, messageId, { followups: 1, citations: 2 })).status).toBe(200);
-    expect((await signal(SESSION, messageId, { citations: 3 })).status).toBe(200);
-    expect(await stored(messageId)).toEqual({
+    expect(await statusOf(sendSignal(SESSION, messageId, { shownMs: 820, doneMs: 2400 }))).toBe(
+      200,
+    );
+    expect(await statusOf(sendSignal(SESSION, messageId, { followups: 1, citations: 2 }))).toBe(
+      200,
+    );
+    expect(await statusOf(sendSignal(SESSION, messageId, { citations: 3 }))).toBe(200);
+    expect(await storedSignals(messageId)).toEqual({
       v: 1,
       shownMs: 820,
       doneMs: 2400,
@@ -672,76 +746,74 @@ describe("POST /v1/ask/signal (visitor plan V2)", () => {
   });
 
   it("refuses what no browser sends: nothing, an unknown field, content, a count past 20, a bad time", async () => {
-    const messageId = await answered();
-    for (const signals of [
-      {},
-      { question: "what is Atlas?" },
-      { copies: 21 },
-      { shownMs: -5 },
-      { shownMs: 1.5 },
-      { doneMs: 600_001 },
-      { stopped: "yes" },
-    ]) {
-      expect((await signal(SESSION, messageId, signals)).status, JSON.stringify(signals)).toBe(400);
-    }
-    expect(await stored(messageId)).toBeNull();
+    const messageId = await answeredMessageId();
+    await runSequential(
+      [
+        {},
+        { question: "what is Atlas?" },
+        { copies: 21 },
+        { shownMs: -5 },
+        { shownMs: 1.5 },
+        { doneMs: 600_001 },
+        { stopped: "yes" },
+      ],
+      async (signals) => {
+        const status = await statusOf(sendSignal(SESSION, messageId, signals));
+        expect(status, JSON.stringify(signals)).toBe(400);
+      },
+    );
+    expect(await storedSignals(messageId)).toBeNull();
   });
 
   it("takes the page's last word as plain text, the type a keepalive request sends", async () => {
-    const messageId = await answered();
+    const messageId = await answeredMessageId();
     expect(
-      (await signal(SESSION, messageId, { stopped: true }, "text/plain;charset=UTF-8")).status,
+      await statusOf(sendSignal(SESSION, messageId, { stopped: true }, "text/plain;charset=UTF-8")),
     ).toBe(200);
-    expect(await stored(messageId)).toEqual({ v: 1, stopped: true });
+    expect(await storedSignals(messageId)).toEqual({ v: 1, stopped: true });
   });
 
   it("stops a session past its hourly share with a 429, and only that session", async () => {
     // A session of its own: the limiter lives as long as the module.
     const flood = "signal-flood-session-01";
     const statuses = new Set<number>();
-    for (let i = 0; i < SIGNALS_PER_HOUR; i++) {
-      statuses.add((await signal(flood, "m_not-logged-yet", { copies: 1 })).status);
-    }
+    await runSequential(Array.from({ length: SIGNALS_PER_HOUR }), async () => {
+      statuses.add(await statusOf(sendSignal(flood, "m_not-logged-yet", { copies: 1 })));
+    });
     expect([...statuses]).toEqual([404]);
-    expect((await signal(flood, "m_not-logged-yet", { copies: 1 })).status).toBe(429);
-    expect((await signal(SESSION, "m_not-logged-yet", { copies: 1 })).status).toBe(404);
+    expect(await statusOf(sendSignal(flood, "m_not-logged-yet", { copies: 1 }))).toBe(429);
+    expect(await statusOf(sendSignal(SESSION, "m_not-logged-yet", { copies: 1 }))).toBe(404);
   });
 });
 
 describe("the page asked on (visitor plan V8)", () => {
-  const firstSystem = (model: ScriptedModel) => {
-    const first = model.calls[0]!.prompt[0]!;
-    return first.role === "system" ? first.content : "";
-  };
-
   it("names a published case study in the instructions and the logged trace, and nothing else", async () => {
     const model = scripted([textTurn("Atlas cut escalations by 38% [^project:atlas@en].")]);
     only(model);
-    const chunks = await readUiChunks(
-      await ask("What did it achieve?", { extra: { page: "/en/work/atlas" } }),
-    );
+    const id = await askMessageId("What did it achieve?", { extra: { page: "/en/work/atlas" } });
     expect(firstSystem(model)).toContain("The visitor is reading Atlas (project:atlas@en).");
-    const row = await logged(chunks[0]!["messageId"] as string);
+    const row = await logged(id);
     // The fixture's Atlas is short: the core holds it whole, so none of its text came along.
     expect(row.trace?.page).toEqual({ id: "project:atlas@en", promoted: false });
 
     const elsewhere = scripted([textTurn("Atlas cut escalations by 38% [^project:atlas@en].")]);
     only(elsewhere);
-    const unknown = await readUiChunks(
-      await ask("What did Atlas achieve?", { extra: { page: "/en/work/nebula" } }),
-    );
+    const unknownId = await askMessageId("What did Atlas achieve?", {
+      extra: { page: "/en/work/nebula" },
+    });
     expect(firstSystem(elsewhere)).not.toContain("# The visitor's page");
-    expect((await logged(unknown[0]!["messageId"] as string)).trace).not.toHaveProperty("page");
+    const unknownRow = await logged(unknownId);
+    expect(unknownRow.trace).not.toHaveProperty("page");
   });
 
   it("counts the page's project as named when the route is chosen", async () => {
     corpusOverride = twoProjectCorpus;
     only(scripted([textTurn("Both use Gemini [^project:atlas@en][^project:borealis@en].")]));
-    const chunks = await readUiChunks(
-      await ask("Is this like Borealis?", { extra: { page: "/en/work/atlas" } }),
-    );
+    const id = await askMessageId("Is this like Borealis?", {
+      extra: { page: "/en/work/atlas" },
+    });
     expect(roles).toEqual(["deep"]);
-    const row = await logged(chunks[0]!["messageId"] as string);
+    const row = await logged(id);
     expect(row.trace?.routing?.reason).toBe("multi-project");
   });
 
@@ -755,45 +827,48 @@ describe("the page asked on (visitor plan V8)", () => {
   it("quotes a selection the page holds, logs what was pointed at, and refuses a malformed focus (V9)", async () => {
     const model = scripted([textTurn("Atlas cut escalations by 38% [^project:atlas@en].")]);
     only(model);
-    const chunks = await readUiChunks(
-      await ask("What does this mean?", {
-        extra: {
-          page: "/en/work/atlas",
-          focus: { kind: "selection", text: "38%  fewer\nescalations" },
-        },
-      }),
-    );
+    const id = await askMessageId("What does this mean?", {
+      extra: {
+        page: "/en/work/atlas",
+        focus: { kind: "selection", text: "38%  fewer\nescalations" },
+      },
+    });
     expect(firstSystem(model)).toContain(
       "The visitor points at a passage of Atlas (project:atlas@en)",
     );
-    const row = await logged(chunks[0]!["messageId"] as string);
+    const row = await logged(id);
     expect(row.trace?.focus).toEqual({ kind: "selection", verified: true });
     // The question is logged as asked; the selection is not.
     expect(row.questionRedacted).toBe("What does this mean?");
 
-    for (const focus of [
-      { kind: "paragraph", id: "x" },
-      { kind: "selection", text: "" },
-      { kind: "selection", text: "x".repeat(601) },
-      { kind: "code", index: -1 },
-    ]) {
-      const res = await ask("What is this?", { extra: { page: "/en/work/atlas", focus } });
-      expect(res.status, JSON.stringify(focus)).toBe(400);
-    }
+    await runSequential(
+      [
+        { kind: "paragraph", id: "x" },
+        { kind: "selection", text: "" },
+        { kind: "selection", text: "x".repeat(601) },
+        { kind: "code", index: -1 },
+      ],
+      async (focus) => {
+        const res = await ask("What is this?", { extra: { page: "/en/work/atlas", focus } });
+        expect(res.status, JSON.stringify(focus)).toBe(400);
+      },
+    );
   });
 
   it("answers at the level the visitor chose, standard adding nothing (visitor plan V10)", async () => {
     const plain = scripted([textTurn("Atlas helps support agents [^project:atlas@en].")]);
     only(plain);
-    const chunks = await readUiChunks(await ask("What is Atlas?", { extra: { level: "plain" } }));
+    const plainId = await askMessageId("What is Atlas?", { extra: { level: "plain" } });
     expect(firstSystem(plain)).toContain("The visitor asked for plain answers");
-    expect((await logged(chunks[0]!["messageId"] as string)).trace?.level).toBe("plain");
+    const plainRow = await logged(plainId);
+    expect(plainRow.trace?.level).toBe("plain");
 
     const standard = scripted([textTurn("Atlas helps support agents [^project:atlas@en].")]);
     only(standard);
-    const asked = await readUiChunks(await ask("What is Atlas?", { extra: { level: "standard" } }));
+    const standardId = await askMessageId("What is Atlas?", { extra: { level: "standard" } });
     expect(firstSystem(standard)).not.toContain("# Reader's level");
-    expect((await logged(asked[0]!["messageId"] as string)).trace).not.toHaveProperty("level");
+    const standardRow = await logged(standardId);
+    expect(standardRow.trace).not.toHaveProperty("level");
 
     const res = await ask("What is Atlas?", { extra: { level: "simple" } });
     expect(res.status).toBe(400);
@@ -803,18 +878,31 @@ describe("the page asked on (visitor plan V8)", () => {
 describe("figures checked against their sources (visitor plan V7)", () => {
   it("flags a figure no cited document holds on the logged row, and not one it does", async () => {
     only(scripted([textTurn("Atlas cut escalations by 45% [^project:atlas@en].")]));
-    const wrong = (await readUiChunks(await ask("What did Atlas achieve?")))[0]![
-      "messageId"
-    ] as string;
-    expect((await logged(wrong))!.checks?.flags).toContain("ungrounded-figure");
+    const wrong = await askMessageId("What did Atlas achieve?");
+    const wrongRow = await logged(wrong);
+    expect(wrongRow.checks?.flags).toContain("ungrounded-figure");
 
     only(scripted([textTurn("Atlas cut escalations by 38% [^project:atlas@en].")]));
-    const right = (await readUiChunks(await ask("What did Atlas achieve?")))[0]![
-      "messageId"
-    ] as string;
-    expect((await logged(right))!.checks?.flags).not.toContain("ungrounded-figure");
+    const right = await askMessageId("What did Atlas achieve?");
+    const rightRow = await logged(right);
+    expect(rightRow.checks?.flags).not.toContain("ungrounded-figure");
   });
 });
+
+const confirmHandoff = (sessionId: string, messageId: string) =>
+  app.request("/v1/ask/handoff", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sessionId, messageId }),
+  });
+
+async function handoffConfirmedAt(messageId: string) {
+  const rows = await getDb()
+    .select({ at: aiMessages.handoffConfirmedAt })
+    .from(aiMessages)
+    .where(eq(aiMessages.id, messageId));
+  return rows[0].at;
+}
 
 describe("POST /v1/ask/handoff", () => {
   it("records the visitor's yes to an answer's offer: that session, an offer, the first yes", async () => {
@@ -824,61 +912,41 @@ describe("POST /v1/ask/handoff", () => {
         textTurn("Happy to connect you."),
       ]),
     );
-    const offered = (await readUiChunks(await ask("I want to hire him")))[0]![
-      "messageId"
-    ] as string;
+    const offered = await askMessageId("I want to hire him");
     await logged(offered);
     only(scripted([textTurn("ok")]));
-    const plain = (await readUiChunks(await ask("Hi")))[0]!["messageId"] as string;
+    const plain = await askMessageId("Hi");
     await logged(plain);
 
-    const confirm = (sessionId: string, messageId: string) =>
-      app.request("/v1/ask/handoff", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sessionId, messageId }),
-      });
-    const confirmedAt = async () =>
-      (
-        await getDb()
-          .select({ at: aiMessages.handoffConfirmedAt })
-          .from(aiMessages)
-          .where(eq(aiMessages.id, offered))
-      )[0]!.at;
-
-    expect((await confirm("some-other-session-000", offered)).status).toBe(404);
+    expect(await statusOf(confirmHandoff("some-other-session-000", offered))).toBe(404);
     // An answer that made no offer cannot be confirmed.
-    expect((await confirm(SESSION, plain)).status).toBe(404);
-    expect(await confirmedAt()).toBeNull();
+    expect(await statusOf(confirmHandoff(SESSION, plain))).toBe(404);
+    expect(await handoffConfirmedAt(offered)).toBeNull();
 
-    expect((await confirm(SESSION, offered)).status).toBe(200);
-    const first = await confirmedAt();
+    expect(await statusOf(confirmHandoff(SESSION, offered))).toBe(200);
+    const first = await handoffConfirmedAt(offered);
     expect(first).toBeInstanceOf(Date);
-    expect((await confirm(SESSION, offered)).status).toBe(200);
-    expect(await confirmedAt()).toEqual(first);
-    expect((await confirm(SESSION, "no")).status).toBe(400);
+    expect(await statusOf(confirmHandoff(SESSION, offered))).toBe(200);
+    expect(await handoffConfirmedAt(offered)).toEqual(first);
+    expect(await statusOf(confirmHandoff(SESSION, "no"))).toBe(400);
   });
 
   it("makes the offer itself when the visitor asked and the model did not, and takes a yes to it", async () => {
     only(scripted([textTurn("He is open to contract work [^profile@en].")]));
-    const chunks = await readUiChunks(await ask("How can I hire him?"));
-    const messageId = chunks[0]!["messageId"] as string;
-    const finish = chunks.find((c) => c["type"] === "finish")!;
+    const chunks = await askChunks("How can I hire him?");
+    const messageId = messageIdOf(chunks);
+    const finish = findChunk(chunks, "finish");
     expect(finish["messageMetadata"]).toMatchObject({
       handoff: { by: "fallback", summary: "How can I hire him?" },
     });
     const row = await logged(messageId);
-    expect(row!.toolCalls).not.toContain("handoff_contact");
-    expect(row!.trace).toMatchObject({
+    expect(row.toolCalls).not.toContain("handoff_contact");
+    expect(row.trace).toMatchObject({
       routing: { intent: "contact" },
       handoff: { by: "fallback" },
     });
 
-    const confirmed = await app.request("/v1/ask/handoff", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sessionId: SESSION, messageId }),
-    });
+    const confirmed = await confirmHandoff(SESSION, messageId);
     expect(confirmed.status).toBe(200);
   });
 
@@ -894,18 +962,16 @@ describe("POST /v1/ask/handoff", () => {
       ]),
     );
     const question = "Please pass my CV on to him, I'd like to work with him.";
-    const chunks = await readUiChunks(await ask(question));
-    const finish = chunks.find((c) => c["type"] === "finish")!;
+    const chunks = await askChunks(question);
+    const finish = findChunk(chunks, "finish");
     expect(finish["messageMetadata"]).toMatchObject({ handoff: { by: "tool", summary: question } });
-    const row = await logged(chunks[0]!["messageId"] as string);
-    expect(row!.trace).toMatchObject({ handoff: { by: "tool", replaced: true } });
+    const row = await logged(messageIdOf(chunks));
+    expect(row.trace).toMatchObject({ handoff: { by: "tool", replaced: true } });
   });
 
   it("attaches the conversation redacted, as the log keeps it", async () => {
     only(scripted([textTurn("He works on Atlas.")]));
-    const asked = (
-      await readUiChunks(await ask("Write to jane.doe@example.com or +49 30 1234567 about Atlas"))
-    )[0]!["messageId"] as string;
+    const asked = await askMessageId("Write to jane.doe@example.com or +49 30 1234567 about Atlas");
     await logged(asked);
 
     const sent = await app.request("/contact", {
@@ -921,7 +987,10 @@ describe("POST /v1/ask/handoff", () => {
     });
     expect(sent.status).toBe(200);
     const [stored] = await getDb().select().from(contactMessages);
-    const question = stored!.askTranscript!.turns[0]!.question;
+    if (!stored.askTranscript) {
+      throw new Error("expected askTranscript");
+    }
+    const question = stored.askTranscript.turns[0].question;
     expect(question).toContain("about Atlas");
     expect(question).not.toContain("jane.doe@example.com");
     expect(question).not.toContain("1234567");
@@ -931,16 +1000,21 @@ describe("POST /v1/ask/handoff", () => {
 describe("GET /v1/ask/stream-check", () => {
   it("sends its ticks as they happen", async () => {
     const res = await app.request("/v1/ask/stream-check");
-    const reader = res.body!.getReader();
+    if (!res.body) {
+      throw new Error("expected stream-check body");
+    }
+    const reader = res.body.getReader();
     const started = Date.now();
     await reader.read();
     const firstAt = Date.now() - started;
-    let rest = 0;
-    while (!(await reader.read()).done) rest++;
+    const rest = await countRemaining(reader);
     expect(firstAt).toBeLessThan(300);
     expect(rest).toBe(2);
   });
 });
+
+const sendTour = (tourBody: object | undefined, session = SESSION) =>
+  ask("tour data platforms", { session, extra: { mode: "tour", tour: tourBody } });
 
 describe("a guided tour (visitor plan V16)", () => {
   const PLAN = {
@@ -960,22 +1034,19 @@ describe("a guided tour (visitor plan V16)", () => {
     const calls: unknown[] = [];
     const model = new MockLanguageModelV4({
       modelId: "gemini-3.5-flash-lite",
-      doGenerate: async (call) => {
+      doGenerate: (call) => {
         calls.push(call);
-        return {
+        return Promise.resolve({
           content: [{ type: "text", text: JSON.stringify(PLAN) }],
           finishReason: { unified: "stop", raw: "stop" },
           usage: usage(300, 60),
           warnings: [],
-        };
+        });
       },
     });
     chain = () => [mockEntry("gemini-3.5-flash-lite", model)];
     return calls;
   }
-
-  const tour = (tourBody: object | undefined, session = SESSION) =>
-    ask("tour data platforms", { session, extra: { mode: "tour", tour: tourBody } });
 
   beforeEach(() => {
     corpusOverride = (c) => fixtureAskCorpus(c);
@@ -985,11 +1056,11 @@ describe("a guided tour (visitor plan V16)", () => {
     const calls = planner();
     // A session of its own: forget remembers it a quarter of an hour, and logs none of its rows.
     const session = "tour-forget-session-0001";
-    const res = await tour({ interest: "data platforms, write to jo@example.com" }, session);
+    const res = await sendTour({ interest: "data platforms, write to jo@example.com" }, session);
     expect(res.status).toBe(200);
     const chunks = await readUiChunks(res);
-    const id = chunks.find((c) => c["type"] === "start")!["messageId"] as string;
-    const data = chunks.find((c) => c["type"] === "data-tour")!["data"] as {
+    const id = messageIdOf(chunks);
+    const data = findChunk(chunks, "data-tour")["data"] as {
       kind: string;
       stops: { id: string }[];
     };
@@ -1016,16 +1087,17 @@ describe("a guided tour (visitor plan V16)", () => {
       headers: { "content-type": "application/json", "x-forwarded-for": "198.51.100.250" },
       body: JSON.stringify({ sessionId: session }),
     });
-    expect(((await forgotten.json()) as { deleted: number }).deleted).toBe(1);
+    const forgottenBody = (await forgotten.json()) as { deleted: number };
+    expect(forgottenBody.deleted).toBe(1);
     expect(await getDb().select().from(aiMessages)).toEqual([]);
   });
 
   it("refuses a tour without its interest, a forged plan and a second replan; replans a plan of its own once", async () => {
     planner();
-    expect((await ask("tour", { extra: { mode: "tour" } })).status).toBe(400);
-    const first = await readUiChunks(await tour({ interest: "data platforms" }));
-    const messageId = first.find((c) => c["type"] === "start")!["messageId"] as string;
-    const data = first.find((c) => c["type"] === "data-tour")!["data"] as {
+    expect(await statusOf(ask("tour", { extra: { mode: "tour" } }))).toBe(400);
+    const first = await readUiChunks(await sendTour({ interest: "data platforms" }));
+    const messageId = messageIdOf(first);
+    const data = findChunk(first, "data-tour")["data"] as {
       stops: { id: string }[];
       sig: string;
     };
@@ -1037,31 +1109,38 @@ describe("a guided tour (visitor plan V16)", () => {
     };
     const from = "project:borealis@en";
     expect(
-      (await tour({ interest: "data platforms", from, plan: { ...plan, sig: "forged" } })).status,
+      await statusOf(
+        sendTour({ interest: "data platforms", from, plan: { ...plan, sig: "forged" } }),
+      ),
     ).toBe(400);
     expect(
-      (await tour({ interest: "data platforms", from, plan: { ...plan, replanned: true } })).status,
+      await statusOf(
+        sendTour({ interest: "data platforms", from, plan: { ...plan, replanned: true } }),
+      ),
     ).toBe(400);
     // Another session's plan is not this one's.
     expect(
-      (await tour({ interest: "data platforms", from, plan }, "other-session-000000001")).status,
+      await statusOf(
+        sendTour({ interest: "data platforms", from, plan }, "other-session-000000001"),
+      ),
     ).toBe(400);
     // A stop that is no page of the tour's language.
-    expect((await tour({ interest: "data platforms", from: "cv@en", plan })).status).toBe(400);
+    expect(await statusOf(sendTour({ interest: "data platforms", from: "cv@en", plan }))).toBe(400);
 
-    const again = await readUiChunks(await tour({ interest: "data platforms", from, plan }));
-    const replanned = again.find((c) => c["type"] === "data-tour")!["data"] as {
+    const again = await readUiChunks(await sendTour({ interest: "data platforms", from, plan }));
+    const replanned = findChunk(again, "data-tour")["data"] as {
       replanned: boolean;
     };
     expect(replanned.replanned).toBe(true);
-    const id = again.find((c) => c["type"] === "start")!["messageId"] as string;
-    expect((await logged(id)).trace?.tour).toMatchObject({ replanned: true });
+    const id = messageIdOf(again);
+    const againRow = await logged(id);
+    expect(againRow.trace?.tour).toMatchObject({ replanned: true });
   });
 
   it("takes a tour's steps and its end as the browser's signals", async () => {
     planner();
-    const chunks = await readUiChunks(await tour({ interest: "data platforms" }));
-    const messageId = chunks.find((c) => c["type"] === "start")!["messageId"] as string;
+    const chunks = await readUiChunks(await sendTour({ interest: "data platforms" }));
+    const messageId = messageIdOf(chunks);
     await logged(messageId);
     const res = await app.request("/v1/ask/signal", {
       method: "POST",
@@ -1073,9 +1152,27 @@ describe("a guided tour (visitor plan V16)", () => {
       }),
     });
     expect(res.status).toBe(200);
-    expect((await logged(messageId)).signals).toEqual({ v: 1, tourSteps: 3, tourDone: true });
+    const signalRow = await logged(messageId);
+    expect(signalRow.signals).toEqual({ v: 1, tourSteps: 3, tourDone: true });
   });
 });
+
+const sendMatch = (
+  brief: unknown,
+  options: { session?: string; ip?: string; kind?: string } = {},
+) =>
+  ask("match role", {
+    ...(options.session ? { session: options.session } : {}),
+    ...(options.ip ? { ip: options.ip } : {}),
+    extra: { mode: "match", match: { kind: options.kind ?? "role", brief } },
+  });
+
+async function switchMatchOn() {
+  await getDb()
+    .insert(aiSettings)
+    .values({ id: 1, featureSwitches: { match: true } });
+  invalidateAssistantCache();
+}
 
 describe("a matched brief (visitor plan V19)", () => {
   const PLAN = {
@@ -1098,33 +1195,19 @@ describe("a matched brief (visitor plan V19)", () => {
     const calls: unknown[] = [];
     const model = new MockLanguageModelV4({
       modelId: "gemini-3.5-flash-lite",
-      doGenerate: async (call) => {
+      doGenerate: (call) => {
         calls.push(call);
         const rows = JSON.stringify(call.prompt).includes("to check, numbered:");
-        return {
+        return Promise.resolve({
           content: [{ type: "text", text: JSON.stringify(rows ? ROWS : PLAN) }],
           finishReason: { unified: "stop", raw: "stop" },
           usage: usage(300, 60),
           warnings: [],
-        };
+        });
       },
     });
     chain = () => [mockEntry("gemini-3.5-flash-lite", model)];
     return calls;
-  }
-
-  const match = (brief: unknown, options: { session?: string; ip?: string; kind?: string } = {}) =>
-    ask("match role", {
-      ...(options.session ? { session: options.session } : {}),
-      ...(options.ip ? { ip: options.ip } : {}),
-      extra: { mode: "match", match: { kind: options.kind ?? "role", brief } },
-    });
-
-  async function switchOn() {
-    await getDb()
-      .insert(aiSettings)
-      .values({ id: 1, featureSwitches: { match: true } });
-    invalidateAssistantCache();
   }
 
   beforeEach(() => {
@@ -1133,35 +1216,38 @@ describe("a matched brief (visitor plan V19)", () => {
 
   it("is off until the admin switches it on: feature_off, no model asked, and the config says so", async () => {
     const calls = matcher();
-    const off = await match("We need RAG in production.");
+    const off = await sendMatch("We need RAG in production.");
     expect(off.status).toBe(503);
     expect(await off.json()).toEqual({ error: "feature_off" });
     expect(calls).toHaveLength(0);
-    expect(await (await app.request("/v1/ask/config")).json()).toMatchObject({ match: false });
+    expect(await jsonOf(app.request("/v1/ask/config"))).toMatchObject({ match: false });
 
-    await switchOn();
-    expect(await (await app.request("/v1/ask/config")).json()).toMatchObject({ match: true });
+    await switchMatchOn();
+    expect(await jsonOf(app.request("/v1/ask/config"))).toMatchObject({ match: true });
   });
 
   it("matches a brief, logged apart from the answers with the brief redacted and cut; the hand-off and forget reach it", async () => {
     const calls = matcher();
-    await switchOn();
+    await switchMatchOn();
     const session = "match-forget-session-0001";
     const brief = `Senior AI engineer. Must: retrieval-augmented generation. Apply to jo@example.com. ${"Benefits. ".repeat(300)}`;
-    const res = await match(brief, { session });
+    const res = await sendMatch(brief, { session });
     expect(res.status).toBe(200);
     const chunks = await readUiChunks(res);
     expect(chunks.filter((c) => c["type"] === "data-match-progress").length).toBeGreaterThan(0);
-    const messageId = chunks.find((c) => c["type"] === "start")!["messageId"] as string;
-    const finish = chunks.find((c) => c["type"] === "finish")!;
-    expect(finish["messageMetadata"]).toMatchObject({
-      handoff: { by: "fallback", summary: expect.stringMatching(/^Role: Senior AI engineer/) },
-      receipt: {
-        lookups: 1,
-        sources: 1,
-        removed: 0,
-        match: { kind: "role", rows: 1, downgraded: 0 },
-      },
+    const messageId = messageIdOf(chunks);
+    const finish = findChunk(chunks, "finish");
+    const metadata = finish["messageMetadata"] as {
+      handoff: { by: string; summary: string };
+      receipt: unknown;
+    };
+    expect(metadata.handoff.by).toBe("fallback");
+    expect(metadata.handoff.summary).toMatch(/^Role: Senior AI engineer/);
+    expect(metadata.receipt).toEqual({
+      lookups: 1,
+      sources: 1,
+      removed: 0,
+      match: { kind: "role", rows: 1, downgraded: 0 },
     });
     expect(uiText(chunks)).toContain("- ✓ **Retrieval-augmented generation** (must) · evidence:");
     expect(calls).toHaveLength(2);
@@ -1173,7 +1259,7 @@ describe("a matched brief (visitor plan V19)", () => {
       citedIds: ["project:atlas@en"],
       finishReason: "stop",
     });
-    expect(row.questionRedacted).toHaveLength(2_000);
+    expect(row.questionRedacted).toHaveLength(2000);
     expect(row.questionRedacted).toContain("Apply to [email].");
     expect(row.trace?.match).toEqual({
       kind: "role",
@@ -1195,50 +1281,48 @@ describe("a matched brief (visitor plan V19)", () => {
       .where(eq(aiUsageFeatures.feature, "match"));
     expect(own.length).toBeGreaterThan(0);
 
-    const confirmed = await app.request("/v1/ask/handoff", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sessionId: session, messageId }),
-    });
+    const confirmed = await confirmHandoff(session, messageId);
     expect(confirmed.status).toBe(200);
     const forgotten = await app.request("/v1/ask/forget", {
       method: "POST",
       headers: { "content-type": "application/json", "x-forwarded-for": "198.51.100.251" },
       body: JSON.stringify({ sessionId: session }),
     });
-    expect(((await forgotten.json()) as { deleted: number }).deleted).toBe(1);
+    const forgottenBody = (await forgotten.json()) as { deleted: number };
+    expect(forgottenBody.deleted).toBe(1);
   });
 
   it("stops at its cap, and refuses a match without its brief, an empty brief or an unknown kind", async () => {
     matcher();
-    await switchOn();
-    expect((await ask("match role", { extra: { mode: "match" } })).status).toBe(400);
-    expect((await match("  \u0000 ")).status).toBe(400);
-    expect((await match("RAG", { kind: "essay" })).status).toBe(400);
-    expect((await match("x".repeat(4_001))).status).toBe(400);
+    await switchMatchOn();
+    expect(await statusOf(ask("match role", { extra: { mode: "match" } }))).toBe(400);
+    expect(await statusOf(sendMatch("  \u0000 "))).toBe(400);
+    expect(await statusOf(sendMatch("RAG", { kind: "essay" }))).toBe(400);
+    expect(await statusOf(sendMatch("x".repeat(4001)))).toBe(400);
     await getDb()
       .insert(aiUsageFeatures)
       .values({ day: utcDay(), feature: "match", model: "x", usd: 0.1 });
-    const capped = await match("We need RAG in production.");
+    const capped = await sendMatch("We need RAG in production.");
     expect(capped.status).toBe(503);
     expect(await capped.json()).toEqual({ error: "cap_reached" });
   });
 
   it("limits a session to 3 an hour in buckets of its own, apart from its questions", async () => {
     matcher();
-    await switchOn();
+    await switchMatchOn();
     const session = "match-rate-session-00001";
-    for (let i = 0; i < 3; i++) {
-      const res = await match("We need RAG in production.", { session });
+    await runSequential([0, 1, 2], async () => {
+      const res = await sendMatch("We need RAG in production.", { session });
       expect(res.status).toBe(200);
       // Read to the end: an unread stream keeps its concurrency slot.
       await res.text();
-    }
-    const limited = await match("We need RAG in production.", { session });
+    });
+    const limited = await sendMatch("We need RAG in production.", { session });
     expect(limited.status).toBe(429);
-    expect(((await limited.json()) as { error: string }).error).toBe("rate_limited");
+    const limitedBody = (await limited.json()) as { error: string };
+    expect(limitedBody.error).toBe("rate_limited");
     // The session's questions are not used up by its matches.
     only(scripted([textTurn("Atlas answers support questions [^project:atlas@en].")]));
-    expect((await ask("What is Atlas?", { session })).status).toBe(200);
+    expect(await statusOf(ask("What is Atlas?", { session }))).toBe(200);
   });
 });

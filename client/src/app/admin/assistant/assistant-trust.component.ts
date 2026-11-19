@@ -225,9 +225,13 @@ export class AssistantTrustComponent implements OnInit {
 
   private async load(): Promise<void> {
     const result = await this.api.assistantTrust();
-    if (result.ok) this.view.set(result.data);
-    else if (this.view()) toast.error("Could not load trust", { description: result.error });
-    else this.loadError.set(result.error);
+    if (result.ok) {
+      this.view.set(result.data);
+    } else if (this.view()) {
+      toast.error("Could not load trust", { description: result.error });
+    } else {
+      this.loadError.set(result.error);
+    }
   }
 
   /** After an action: this view again, and the pulse, so the badges clear with it. */
@@ -240,7 +244,9 @@ export class AssistantTrustComponent implements OnInit {
     this.busy.set(true);
     const result = await this.api.trustAlertSeen(row.id);
     this.busy.set(false);
-    if (!result.ok) toast.error("Not marked seen", { description: result.error });
+    if (!result.ok) {
+      toast.error("Not marked seen", { description: result.error });
+    }
     await this.changed();
   }
 
@@ -250,7 +256,9 @@ export class AssistantTrustComponent implements OnInit {
       description: `Visitors get it again at once. It was demoted because: ${demotion.reason}.`,
       confirmLabel: "Reinstate",
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
     this.busy.set(true);
     const result = await this.api.trustReinstate(demotion.subject);
     this.busy.set(false);

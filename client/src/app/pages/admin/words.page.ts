@@ -79,8 +79,11 @@ interface Section {
 const SECTIONS = ROWS.reduce<Section[]>((sections, row) => {
   const title = WORD_HEADINGS[row.group];
   const last = sections.at(-1);
-  if (last?.title === title) last.rows.push(row);
-  else sections.push({ id: sectionId(title), title, note: NOTES[title], rows: [row] });
+  if (last?.title === title) {
+    last.rows.push(row);
+  } else {
+    sections.push({ id: sectionId(title), title, note: NOTES[title], rows: [row] });
+  }
   return sections;
 }, []);
 
@@ -332,7 +335,7 @@ export default class AdminWordsPage implements OnInit {
       (["en", "de"] as const).some(
         (l) => raw[l][row.group][row.key] !== base?.[l][row.group][row.key],
       );
-    return new Set(base ? ROWS.filter(differs).map(rowKey) : []);
+    return new Set(base ? ROWS.filter((row) => differs(row)).map((row) => rowKey(row)) : []);
   });
 
   /** Each row's trace: unsaved over what is saved, else the review's draft against live. */
@@ -358,7 +361,9 @@ export default class AdminWordsPage implements OnInit {
 
   /** Rows saved to the draft and not live; null until the review or a save here says. */
   protected readonly notLive = computed(() => {
-    if (!this.pulse?.marks() && this.savedHere().size === 0) return null;
+    if (!this.pulse?.marks() && this.savedHere().size === 0) {
+      return null;
+    }
     return Object.values(this.trace()).filter((state) => state === "draft").length;
   });
 
@@ -381,7 +386,9 @@ export default class AdminWordsPage implements OnInit {
    */
   protected readonly shown = computed(() => {
     const filters = this.filters();
-    if (!this.loaded()) return new Set<string>();
+    if (!this.loaded()) {
+      return new Set<string>();
+    }
     return untracked(() => {
       const raw = this.raw();
       const changed = this.changed();
@@ -391,7 +398,7 @@ export default class AdminWordsPage implements OnInit {
       });
       return new Set(
         ROWS.filter((row) => matchesWord(row, text(row), changed.has(rowKey(row)), filters)).map(
-          rowKey,
+          (row) => rowKey(row),
         ),
       );
     });
@@ -399,7 +406,9 @@ export default class AdminWordsPage implements OnInit {
 
   protected readonly countWords = computed(() => {
     const shown = this.shown().size;
-    if (!this.loaded()) return "";
+    if (!this.loaded()) {
+      return "";
+    }
     return shown === ROWS.length ? `${shown} words` : `${shown} of ${ROWS.length} words`;
   });
 
@@ -426,7 +435,9 @@ export default class AdminWordsPage implements OnInit {
           return base ? { en: base.en[group], de: base.de[group] } : null;
         },
         current: () => {
-          if (!this.loaded()) return null;
+          if (!this.loaded()) {
+            return null;
+          }
           const raw = this.raw();
           return { en: raw.en[group], de: raw.de[group] };
         },
@@ -439,7 +450,9 @@ export default class AdminWordsPage implements OnInit {
     // Find's way in (`?row=contact.submit`): the row in sight, the focus in it.
     effect(() => {
       const row = this.params().get("row");
-      if (row && this.loaded()) untracked(() => void this.land(row));
+      if (row && this.loaded()) {
+        untracked(() => void this.land(row));
+      }
     });
   }
 
@@ -448,7 +461,7 @@ export default class AdminWordsPage implements OnInit {
   }
 
   protected control(locale: Locale, row: WordRow): FormControl<string> {
-    return this.form.controls[locale].controls[row.group]!.controls[row.key]!;
+    return this.form.controls[locale].controls[row.group].controls[row.key];
   }
 
   protected sectionShown(section: Section): boolean {
@@ -492,7 +505,9 @@ export default class AdminWordsPage implements OnInit {
   private async load(): Promise<void> {
     const loaded = await this.ui.loadGroups(WORD_GROUPS);
     this.loading.set(false);
-    if (!loaded || this.gone) return;
+    if (!loaded || this.gone) {
+      return;
+    }
     const pick = (locale: Locale) =>
       Object.fromEntries(
         WORD_GROUPS.map((group) => [
@@ -500,7 +515,8 @@ export default class AdminWordsPage implements OnInit {
           { ...(loaded.value[locale][group] as unknown as Record<string, string>) },
         ]),
       ) as Record<WordGroup, Record<string, string>>;
-    this.pristine = { en: pick("en"), de: pick("de") };
+    const loadedPristine = { en: pick("en"), de: pick("de") };
+    this.pristine = loadedPristine;
     this.updatedAt = loaded.updatedAt;
     const rows = (locale: Locale) =>
       Object.fromEntries(
@@ -509,7 +525,7 @@ export default class AdminWordsPage implements OnInit {
           Object.fromEntries(
             ROWS.filter((row) => row.group === group).map((row) => [
               row.key,
-              this.pristine![locale][group][row.key] ?? "",
+              loadedPristine[locale][group][row.key] ?? "",
             ]),
           ),
         ]),
@@ -523,7 +539,9 @@ export default class AdminWordsPage implements OnInit {
 
   /** The way back from Discard: the toast's Undo, its focus on Save. */
   protected discard(): void {
-    if (!this.baseline) return;
+    if (!this.baseline) {
+      return;
+    }
     const edits = this.form.getRawValue();
     this.form.reset(this.baseline);
     this.revision.update((v) => v + 1);
@@ -537,10 +555,14 @@ export default class AdminWordsPage implements OnInit {
   /** Every changed group, whole, in one request on the one version; a lost token stops it first. */
   protected async save(): Promise<void> {
     const pristine = this.pristine;
-    if (this.saving() || !pristine || !this.changes()) return;
+    if (this.saving() || !pristine || !this.changes()) {
+      return;
+    }
     const raw = this.raw();
     const lost = tokenIssues(ROWS, (row, locale) => raw[locale][row.group][row.key] ?? "");
-    if (lost.length) return this.place(lost);
+    if (lost.length) {
+      return this.place(lost);
+    }
 
     const changed = WORD_GROUPS.filter((group) =>
       ROWS.some((row) => row.group === group && this.changed().has(rowKey(row))),
@@ -563,8 +585,11 @@ export default class AdminWordsPage implements OnInit {
       if (result.reason === "stale") {
         const names = [...new Set(result.changed.map((g) => WORD_HEADINGS[g as WordGroup]))];
         const where = names.length ? `Words in ${names.join(" and ")}` : "Words on this page";
-        if (await askStale(this.confirm, where)) await this.load();
-        else this.updatedAt = result.version ?? this.updatedAt;
+        if (await askStale(this.confirm, where)) {
+          await this.load();
+        } else {
+          this.updatedAt = result.version ?? this.updatedAt;
+        }
       } else if (result.reason === "invalid") {
         await this.place(result.issues);
       } else {
@@ -610,8 +635,12 @@ export default class AdminWordsPage implements OnInit {
     const hidden = issues
       .map((issue) => issue.path[1])
       .find((l): l is Locale => isLocale(l) && view !== "both" && l !== view);
-    if (hidden) this.view.set(this.wide() ? "both" : hidden);
-    if (this.gone) return;
+    if (hidden) {
+      this.view.set(this.wide() ? "both" : hidden);
+    }
+    if (this.gone) {
+      return;
+    }
     afterNextRender(() => focusFirstInvalid(this.host.nativeElement), { injector: this.injector });
   }
 
@@ -619,14 +648,18 @@ export default class AdminWordsPage implements OnInit {
   private async land(target: string): Promise<void> {
     const row = ROWS.find((r) => rowKey(r) === target);
     await this.go({ ...NO_FILTERS, row: null });
-    if (!row || this.gone) return;
+    if (!row || this.gone) {
+      return;
+    }
     afterNextRender(
       () => {
         // The column being translated, as a translation tool lands in the target.
         const locale = this.shownView() === "en" ? "en" : "de";
         const field = document.getElementById(`${row.group}-${row.key}-${locale}`);
         field?.focus();
-        if (field instanceof HTMLInputElement) field.select();
+        if (field instanceof HTMLInputElement) {
+          field.select();
+        }
       },
       { injector: this.injector },
     );

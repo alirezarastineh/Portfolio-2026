@@ -106,7 +106,9 @@ if (askConfig.unavailableReason) {
 
 // Nothing is uploading yet, so any `.part` file is left over from a crash.
 const partials = await cleanupPartialUploads();
-if (partials > 0) console.log(`[media] removed ${partials} partial upload(s)`);
+if (partials > 0) {
+  console.log(`[media] removed ${partials} partial upload(s)`);
+}
 
 if (process.env.NODE_ENV === "production" && !process.env.TOTP_ENC_KEY?.trim()) {
   console.warn("[auth] TOTP_ENC_KEY is not set — TOTP secrets are stored unencrypted");
@@ -128,11 +130,13 @@ const server = serve(
  * accepting connections, let in-flight requests (a publish, an upload) finish,
  * then close the pool so Postgres sees a clean disconnect rather than a reset.
  */
-const SHUTDOWN_TIMEOUT_MS = 8_000;
+const SHUTDOWN_TIMEOUT_MS = 8000;
 let shuttingDown = false;
 
 function shutdown(signal: string): void {
-  if (shuttingDown) return;
+  if (shuttingDown) {
+    return;
+  }
   shuttingDown = true;
   console.log(`[api] ${signal} received, draining`);
 
@@ -162,8 +166,9 @@ function shutdown(signal: string): void {
     void Promise.allSettled([database, flushSentry()])
       .then((results) => {
         for (const result of results) {
-          if (result.status === "rejected")
+          if (result.status === "rejected") {
             console.error("[api] shutdown step failed", result.reason);
+          }
         }
       })
       .finally(() => process.exit(error ? 1 : 0));

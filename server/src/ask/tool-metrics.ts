@@ -48,9 +48,15 @@ const RETURNING = new Set(["search_portfolio", "get_document", "get_resume"]);
 
 /** The documents a call returned (a search's hits, the fetched document, the CV). */
 function returned(tool: AnswerTrace["steps"][number]["tools"][number]): string[] {
-  if (tool.outcome !== "ok") return [];
-  if (tool.name === "search_portfolio") return tool.hits ?? [];
-  if (tool.name === "get_resume") return ["cv"];
+  if (tool.outcome !== "ok") {
+    return [];
+  }
+  if (tool.name === "search_portfolio") {
+    return tool.hits ?? [];
+  }
+  if (tool.name === "get_resume") {
+    return ["cv"];
+  }
   const id = tool.name === "get_document" ? requestedId(tool.input) : null;
   return id ? [id] : [];
 }
@@ -64,13 +70,15 @@ interface Tally {
 }
 
 export function measureTools(rows: readonly ToolMetricsRow[]): ToolMetrics {
-  const traced = rows.filter((row) => row.trace);
+  const traced = rows.filter(
+    (row): row is ToolMetricsRow & { trace: AnswerTrace } => row.trace !== null,
+  );
   const stats = new Map<string, Tally>();
   for (const row of traced) {
     // Whatever language the answer cited a document in, it is the document; a fetched id the
     // trace redacted (a long digit run) is matched back as Perception's fetch counts do.
     const wasCited = (id: string) => row.citedIds.some((cited) => namesDocument(id, cited));
-    for (const step of row.trace!.steps) {
+    for (const step of row.trace.steps) {
       for (const tool of step.tools) {
         const entry = stats.get(tool.name) ?? { calls: 0, outcomes: {}, returning: 0, cited: 0 };
         entry.calls++;
@@ -78,7 +86,9 @@ export function measureTools(rows: readonly ToolMetricsRow[]): ToolMetrics {
         const ids = returned(tool);
         if (ids.length) {
           entry.returning++;
-          if (ids.some(wasCited)) entry.cited++;
+          if (ids.some((id) => wasCited(id))) {
+            entry.cited++;
+          }
         }
         stats.set(tool.name, entry);
       }

@@ -32,9 +32,15 @@ export function wasForgotten(sessionHash: string, now = Date.now()): boolean {
 
 /** Held in memory only, a quarter of an hour: expired entries go first, then the oldest. */
 function remember(sessionHash: string, now: number): void {
-  for (const [hash, until] of forgotten) if (until <= now) forgotten.delete(hash);
+  for (const [hash, until] of forgotten) {
+    if (until <= now) {
+      forgotten.delete(hash);
+    }
+  }
   const oldest = forgotten.keys().next();
-  if (forgotten.size >= MAX_FORGOTTEN && !oldest.done) forgotten.delete(oldest.value);
+  if (forgotten.size >= MAX_FORGOTTEN && !oldest.done) {
+    forgotten.delete(oldest.value);
+  }
   forgotten.set(sessionHash, now + FORGOTTEN_MS);
 }
 
@@ -52,8 +58,12 @@ export async function forgetSessions(
   now = Date.now(),
 ): Promise<number> {
   const hashes = [...new Set(sessionHashes)];
-  if (!hashes.length) return 0;
-  for (const hash of hashes) remember(hash, now);
+  if (!hashes.length) {
+    return 0;
+  }
+  for (const hash of hashes) {
+    remember(hash, now);
+  }
   const sessions = sql.join(
     hashes.map((hash) => sql`${hash}`),
     sql`, `,

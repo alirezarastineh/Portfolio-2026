@@ -77,7 +77,9 @@ lessonsRouter.get("/", async (c) => {
     (typeof LESSON_STATUSES)[number],
     number
   >;
-  for (const row of counted) counts[row.status as keyof typeof counts] = row.n;
+  for (const row of counted) {
+    counts[row.status] = row.n;
+  }
   return c.json({ lessons: await withEffects(rows), counts });
 });
 
@@ -106,7 +108,9 @@ lessonsRouter.post("/", zValidator("json", createInput, invalid), async (c) => {
     return c.json({ error: "vague_statement" }, 400);
   }
   const cleaned = cleanScope(input.scope);
-  if (!cleaned.length) return c.json({ error: "empty_scope" }, 400);
+  if (!cleaned.length) {
+    return c.json({ error: "empty_scope" }, 400);
+  }
   const db = getDb();
 
   let source: LessonSource;
@@ -117,7 +121,9 @@ lessonsRouter.post("/", zValidator("json", createInput, invalid), async (c) => {
       .select({ id: aiJournal.id, status: aiJournal.status })
       .from(aiJournal)
       .where(inArray(aiJournal.id, ids));
-    if (entries.length < ids.length) return c.json({ error: "unknown_entry" }, 400);
+    if (entries.length < ids.length) {
+      return c.json({ error: "unknown_entry" }, 400);
+    }
     source = { source: "journal", entries };
     provenance = { journalIds: ids, topic: null };
   } else {
@@ -126,7 +132,9 @@ lessonsRouter.post("/", zValidator("json", createInput, invalid), async (c) => {
       .from(aiInsightSnapshots)
       .where(eq(aiInsightSnapshots.id, input.snapshotId));
     const topic = snapshot?.topics[input.topic];
-    if (!snapshot || !topic) return c.json({ error: "unknown_topic" }, 400);
+    if (!snapshot || !topic) {
+      return c.json({ error: "unknown_topic" }, 400);
+    }
     source = { source: "insight", topic };
     // The topic's name and counts, not its example questions (visitor text, pruned with the run).
     provenance = {
@@ -140,13 +148,15 @@ lessonsRouter.post("/", zValidator("json", createInput, invalid), async (c) => {
     };
   }
   const problem = corroborationProblem(source);
-  if (problem) return c.json({ error: "not_corroborated", detail: { reason: problem } }, 400);
+  if (problem) {
+    return c.json({ error: "not_corroborated", detail: { reason: problem } }, 400);
+  }
 
   const [row] = await db
     .insert(aiLessons)
     .values({ statement: input.statement, scope: cleaned, source: input.source, ...provenance })
     .returning();
-  const [view] = await withEffects([row!]);
+  const [view] = await withEffects([row]);
   return c.json({ lesson: view }, 201);
 });
 
@@ -211,7 +221,9 @@ lessonsRouter.patch("/:id", idParam, zValidator("json", patchInput, invalid), as
     return c.json({ error: "vague_statement" }, 400);
   }
   const cleaned = input.scope === undefined ? undefined : cleanScope(input.scope);
-  if (cleaned !== undefined && !cleaned.length) return c.json({ error: "empty_scope" }, 400);
+  if (cleaned !== undefined && !cleaned.length) {
+    return c.json({ error: "empty_scope" }, 400);
+  }
 
   const outcome = await getDb().transaction(async (tx) => {
     const [row] = await tx
@@ -219,10 +231,16 @@ lessonsRouter.patch("/:id", idParam, zValidator("json", patchInput, invalid), as
       .from(aiLessons)
       .where(eq(aiLessons.id, c.req.valid("param").id))
       .for("update");
-    if (!row) return "not_found" as const;
+    if (!row) {
+      return "not_found" as const;
+    }
     const retired = row.status === "retired";
-    if ((input.apply || input.retire) && retired) return "bad_transition" as const;
-    if (input.reopen && !retired) return "bad_transition" as const;
+    if ((input.apply || input.retire) && retired) {
+      return "bad_transition" as const;
+    }
+    if (input.reopen && !retired) {
+      return "bad_transition" as const;
+    }
     const now = new Date();
     const [updated] = await tx
       .update(aiLessons)
@@ -234,10 +252,14 @@ lessonsRouter.patch("/:id", idParam, zValidator("json", patchInput, invalid), as
       })
       .where(eq(aiLessons.id, row.id))
       .returning();
-    return updated!;
+    return updated;
   });
-  if (outcome === "not_found") return c.json({ error: "not_found" }, 404);
-  if (outcome === "bad_transition") return c.json({ error: "bad_transition" }, 409);
+  if (outcome === "not_found") {
+    return c.json({ error: "not_found" }, 404);
+  }
+  if (outcome === "bad_transition") {
+    return c.json({ error: "bad_transition" }, 409);
+  }
   const [view] = await withEffects([outcome]);
   return c.json({ lesson: view });
 });
@@ -248,6 +270,8 @@ lessonsRouter.delete("/:id", idParam, async (c) => {
     .delete(aiLessons)
     .where(eq(aiLessons.id, c.req.valid("param").id))
     .returning({ id: aiLessons.id });
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
   return c.json({ ok: true });
 });

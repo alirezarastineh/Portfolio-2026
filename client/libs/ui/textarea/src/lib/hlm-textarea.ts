@@ -6,7 +6,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 // As hlmInput: the edge at 3:1, 16px text on touch; it grows with its text.
 export const textareaVariants = cva(
-  "border-input-line placeholder:text-faint-foreground flex [field-sizing:content] min-h-16 w-full rounded-lg border bg-card px-2 py-2 text-sm pointer-coarse:text-base transition-[color,border-color] disabled:cursor-not-allowed disabled:opacity-50",
+  "border-input-line placeholder:text-faint-foreground flex field-sizing-content min-h-16 w-full rounded-lg border bg-card p-2 text-sm pointer-coarse:text-base transition-[color,border-color] disabled:cursor-not-allowed disabled:opacity-50",
   {
     variants: {
       error: {

@@ -23,9 +23,9 @@ const IP = "203.0.113.7";
 
 /** Any model asked would be counted, and refused: the endpoint must never ask one. */
 let modelAsked = 0;
-const refuse = async (): Promise<never> => {
+const refuse = (): Promise<never> => {
   modelAsked++;
-  throw new Error("the MCP endpoint must not ask a model");
+  return Promise.reject(new Error("the MCP endpoint must not ask a model"));
 };
 const forbidden = new MockLanguageModelV4({
   modelId: "forbidden",
@@ -35,7 +35,7 @@ const forbidden = new MockLanguageModelV4({
 const DEPS: AskDeps = {
   config: () => fixtureConfig(),
   chain: () => [mockEntry("gemini-3.5-flash-lite", forbidden)],
-  corpus: async (config) => ({ ...fixtureAskCorpus(config), siteUrl: SITE }),
+  corpus: (config) => Promise.resolve({ ...fixtureAskCorpus(config), siteUrl: SITE }),
 };
 const app = createApp({ ask: DEPS });
 
@@ -43,7 +43,7 @@ beforeEach(async () => {
   await resetDb();
   modelAsked = 0;
   // Counts another test left in memory.
-  await flushMcpUsage(async () => {});
+  await flushMcpUsage(() => Promise.resolve());
 });
 
 afterEach(() => {
@@ -52,12 +52,51 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-type Body = {
+interface McpError {
+  code: number;
+  message: string;
+  data?: unknown;
+}
+
+interface DiscoverResult {
+  resultType?: string;
+  supportedVersions?: string[];
+  capabilities?: { tools: { listChanged: boolean } };
+  ttlMs?: number;
+  cacheScope?: string;
+  _meta?: Record<string, unknown>;
+  instructions?: string;
+  protocolVersion?: string;
+  serverInfo?: { name: string; version: string };
+}
+
+interface ToolsListResult {
+  resultType?: string;
+  tools: {
+    name: string;
+    inputSchema: Record<string, unknown>;
+    annotations: Record<string, unknown>;
+  }[];
+}
+
+interface ToolCallResult<T = Record<string, unknown>> {
+  resultType?: string;
+  isError?: boolean;
+  content: { type: string; text: string }[];
+  structuredContent: T;
+}
+
+interface Body<T = Record<string, unknown>> {
   id?: number;
-  result?: Record<string, unknown> & { [key: string]: never };
-  error?: { code: number; message: string; data?: unknown };
-};
-const read = async (res: Response) => (await res.json()) as Body;
+  result?: T;
+  error?: McpError;
+}
+
+const read = async <T = Record<string, unknown>>(res: Response): Promise<Body<T>> =>
+  (await res.json()) as Body<T>;
+
+const counted = (rows: { name: string; count: number }[]) =>
+  rows.map((r) => [r.name, r.count]).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
 
 async function post(body: unknown, headers: Record<string, string> = {}): Promise<Response> {
   return app.request("/v1/mcp", {
@@ -89,7 +128,9 @@ function modern(
     "mcp-protocol-version": "2026-07-28",
     "mcp-method": method,
   };
-  if (method === "tools/call") mirrored["mcp-name"] = String(params["name"]);
+  if (method === "tools/call") {
+    mirrored["mcp-name"] = String(params["name"]);
+  }
   return post(
     { jsonrpc: "2.0", id: ++ids, method, params: { ...params, _meta: META } },
     { ...mirrored, ...headers },
@@ -104,10 +145,15 @@ function legacy(method: string, params: Record<string, unknown> = {}, version?: 
   );
 }
 
-/* The results are checked by shape below; this reads them loosely. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Loose = any;
-const result = async (res: Promise<Response>): Promise<Loose> => (await read(await res)).result;
+/* The results are checked by shape below. */
+const result = async <T = Record<string, unknown>>(resPromise: Promise<Response>): Promise<T> => {
+  const res = await resPromise;
+  const body = await read<T>(res);
+  if (body.result === undefined) {
+    throw new Error("Expected MCP result in response body");
+  }
+  return body.result;
+};
 
 describe("the read-only MCP endpoint (plan phase 32)", () => {
   it("serves a 2026-07-28 client: discovery, the tool list, and each tool (the done-when)", async () => {
@@ -115,7 +161,8 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
     expect(discovered.status).toBe(200);
     expect(discovered.headers.get("content-type")).toContain("application/json");
     expect(discovered.headers.get("cache-control")).toBe("no-store");
-    const discover = (await read(discovered)).result as Loose;
+    const discoverBody = await read<DiscoverResult>(discovered);
+    const discover = discoverBody.result;
     expect(discover).toMatchObject({
       resultType: "complete",
       supportedVersions: ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"],
@@ -129,15 +176,15 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
         },
       },
     });
-    expect(discover.instructions).toMatch(
+    expect(discover?.instructions).toMatch(
       /^Read-only access to Alireza Rastineh's published portfolio/,
     );
     // Visitor plan V21: where an exception sits, and what a fact is true as of.
-    expect(discover.instructions).toContain("Read a document's related ids");
-    expect(discover.instructions).toContain("the day it last changed (updated)");
+    expect(discover?.instructions).toContain("Read a document's related ids");
+    expect(discover?.instructions).toContain("the day it last changed (updated)");
 
-    const listed = await result(modern("tools/list"));
-    expect(listed.tools.map((t: { name: string }) => t.name)).toEqual([
+    const listed = await result<ToolsListResult>(modern("tools/list"));
+    expect(listed.tools.map((t) => t.name)).toEqual([
       "search_portfolio",
       "get_document",
       "list_projects",
@@ -153,9 +200,12 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
       });
     }
 
-    const call = (name: string, args: Record<string, unknown>) =>
-      result(modern("tools/call", { name, arguments: args }));
-    const search = await call("search_portfolio", { query: "pgvector" });
+    const call = <T = Record<string, unknown>>(name: string, args: Record<string, unknown>) =>
+      result<ToolCallResult<T>>(modern("tools/call", { name, arguments: args }));
+    const search = await call<{ results: { id: string; url: string; updated?: string }[] }>(
+      "search_portfolio",
+      { query: "pgvector" },
+    );
     expect(search.resultType).toBe("complete");
     expect(search.structuredContent.results).toContainEqual(
       expect.objectContaining({ id: "project:atlas@en", url: `${SITE}/en/work/atlas` }),
@@ -163,7 +213,14 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
     // The same JSON as text, for a client that reads only text.
     expect(JSON.parse(search.content[0].text)).toEqual(search.structuredContent);
 
-    const doc = await call("get_document", { id: "project:atlas" });
+    const doc = await call<{
+      id: string;
+      title: string;
+      url: string;
+      locale: string;
+      related: string[];
+      text: string;
+    }>("get_document", { id: "project:atlas" });
     expect(doc.structuredContent).toMatchObject({
       id: "project:atlas@en",
       title: "Atlas",
@@ -173,24 +230,26 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
     });
     expect(doc.structuredContent.text).toContain("pgvector");
     // The day each document last changed, where the corpus dates it (visitor plan V21).
-    const card = await call("get_document", { id: "system-card@en" });
+    const card = await call<{ updated: string }>("get_document", { id: "system-card@en" });
     expect(card.structuredContent.updated).toBe(SYSTEM_CARD_UPDATED);
-    const faq = await call("search_portfolio", { query: "notice period" });
+    const faq = await call<{ results: unknown[] }>("search_portfolio", { query: "notice period" });
     expect(faq.structuredContent.results).toContainEqual(
       expect.objectContaining({ id: "faq:a1c2e3f4@en", updated: "2026-09-01" }),
     );
 
-    const projects = await call("list_projects", { text: "rag" });
-    expect(projects.structuredContent.projects.map((p: { slug: string }) => p.slug)).toEqual([
-      "atlas",
-    ]);
+    const projects = await call<{ projects: { slug: string; url: string }[] }>("list_projects", {
+      text: "rag",
+    });
+    expect(projects.structuredContent.projects.map((p) => p.slug)).toEqual(["atlas"]);
     expect(projects.structuredContent.projects[0].url).toBe(`${SITE}/en/work/atlas`);
-    const german = await call("list_projects", { locale: "de" });
-    expect(
-      german.structuredContent.projects.map((p: { descriptor: string }) => p.descriptor),
-    ).toEqual(["Support-Assistent mit RAG"]);
+    const german = await call<{ projects: { descriptor: string }[] }>("list_projects", {
+      locale: "de",
+    });
+    expect(german.structuredContent.projects.map((p) => p.descriptor)).toEqual([
+      "Support-Assistent mit RAG",
+    ]);
 
-    const cv = await call("get_resume", {});
+    const cv = await call<{ available: boolean; id: string; download: string }>("get_resume", {});
     expect(cv.structuredContent).toMatchObject({
       available: true,
       id: "cv@en",
@@ -209,14 +268,15 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
     expect(opened.status).toBe(200);
     // No session: none minted.
     expect(opened.headers.get("mcp-session-id")).toBeNull();
-    const handshake = (await read(opened)).result as Loose;
+    const handshakeBody = await read<DiscoverResult>(opened);
+    const handshake = handshakeBody.result;
     expect(handshake).toMatchObject({
       protocolVersion: "2025-06-18",
       capabilities: { tools: { listChanged: false } },
       serverInfo: { name: "alirezarastineh-portfolio", version: "1.0.0" },
     });
-    expect(handshake.instructions).toContain("search_portfolio");
-    expect(handshake.resultType).toBeUndefined();
+    expect(handshake?.instructions).toContain("search_portfolio");
+    expect(handshake?.resultType).toBeUndefined();
 
     const initialized = await post(
       { jsonrpc: "2.0", method: "notifications/initialized" },
@@ -225,26 +285,25 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
     expect(initialized.status).toBe(202);
     expect(await initialized.text()).toBe("");
 
-    const listed = await result(legacy("tools/list", {}, "2025-06-18"));
-    expect(listed.tools.map((t: { name: string }) => t.name)).toEqual([...MCP_TOOL_NAMES]);
+    const listed = await result<ToolsListResult>(legacy("tools/list", {}, "2025-06-18"));
+    expect(listed.tools.map((t) => t.name)).toEqual([...MCP_TOOL_NAMES]);
     expect(listed.resultType).toBeUndefined();
-    const call = (name: string, args: Record<string, unknown>) =>
-      result(legacy("tools/call", { name, arguments: args }, "2025-06-18"));
-    const found = await call("search_portfolio", { query: "Borealis" });
+    const call = <T = Record<string, unknown>>(name: string, args: Record<string, unknown>) =>
+      result<ToolCallResult<T>>(legacy("tools/call", { name, arguments: args }, "2025-06-18"));
+    const found = await call<{ results: unknown[] }>("search_portfolio", { query: "Borealis" });
     expect(found.structuredContent.results).toContainEqual(
       expect.objectContaining({ id: "project:borealis@en", url: `${SITE}/en/work/borealis` }),
     );
-    const called = await call("get_document", { id: "profile@en" });
+    const called = await call<{ id: string; title: string }>("get_document", { id: "profile@en" });
     expect(called.structuredContent).toMatchObject({ id: "profile@en", title: "Alireza Rastineh" });
     expect(called.isError).toBeUndefined();
     expect(called.resultType).toBeUndefined();
-    const projects = await call("list_projects", {});
-    expect(projects.structuredContent.projects.map((p: { slug: string }) => p.slug)).toEqual([
-      "atlas",
-      "borealis",
-    ]);
+    const projects = await call<{ projects: { slug: string }[] }>("list_projects", {});
+    expect(projects.structuredContent.projects.map((p) => p.slug)).toEqual(["atlas", "borealis"]);
     // No German CV in the fixture: the English one.
-    const cv = await call("get_resume", { locale: "de" });
+    const cv = await call<{ available: boolean; id: string; download: string }>("get_resume", {
+      locale: "de",
+    });
     expect(cv.structuredContent).toMatchObject({
       available: true,
       id: "cv@en",
@@ -254,7 +313,7 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
     // A 2025-03-26 client sends no version header; a handshake asking for an older version
     // gets the newest one spoken here.
     expect(await result(legacy("ping"))).toEqual({});
-    const older = await result(
+    const older = await result<DiscoverResult>(
       legacy("initialize", { protocolVersion: "2024-11-05", capabilities: {} }),
     );
     expect(older.protocolVersion).toBe("2025-11-25");
@@ -267,14 +326,17 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
       expect(answer.status, `${status} ${code}`).toBe(status);
       const body = await read(answer);
       expect(body.error?.code, `${status} ${code}`).toBe(code);
-      return body.error!;
+      if (!body.error) {
+        throw new Error(`Expected error for ${status} ${code}`);
+      }
+      return body.error;
     };
     // The 2026-07-28 rules: headers mirror the body, the version is spoken, capabilities given.
-    await refused(modern("tools/list", {}, { "mcp-method": "ping" }), 400, -32020);
+    await refused(modern("tools/list", {}, { "mcp-method": "ping" }), 400, -32_020);
     await refused(
       modern("tools/call", { name: "get_document" }, { "mcp-name": "get_resume" }),
       400,
-      -32020,
+      -32_020,
     );
     const unsupported = await refused(
       post(
@@ -289,7 +351,7 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
         { "mcp-protocol-version": "1900-01-01", "mcp-method": "tools/list" },
       ),
       400,
-      -32022,
+      -32_022,
     );
     expect(unsupported.data).toEqual({
       supported: ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"],
@@ -306,46 +368,52 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
         { "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/list" },
       ),
       400,
-      -32602,
+      -32_602,
     );
 
     // An unknown method: 404 for a modern client, 200 for one of the handshake revisions.
-    await refused(modern("resources/list"), 404, -32601);
-    await refused(legacy("resources/list", {}, "2025-11-25"), 200, -32601);
+    await refused(modern("resources/list"), 404, -32_601);
+    await refused(legacy("resources/list", {}, "2025-11-25"), 200, -32_601);
     // An unknown tool is a protocol error; arguments that do not fit, a tool error to correct.
     const unknown = await refused(
       modern("tools/call", { name: "delete_everything", arguments: {} }),
       200,
-      -32602,
+      -32_602,
     );
     expect(unknown.message).toBe("Unknown tool: delete_everything");
-    const invalid = await result(modern("tools/call", { name: "search_portfolio", arguments: {} }));
+    const invalid = await result<ToolCallResult>(
+      modern("tools/call", { name: "search_portfolio", arguments: {} }),
+    );
     expect(invalid.isError).toBe(true);
     expect(invalid.content[0].text).toMatch(/^Invalid arguments for search_portfolio: query/);
-    const missing = await result(
+    const missing = await result<ToolCallResult>(
       modern("tools/call", { name: "get_document", arguments: { id: "project:nowhere" } }),
     );
     expect(missing).toMatchObject({ isError: true });
     expect(missing.content[0].text).toMatch(/^No document has the id "project:nowhere"/);
 
     // The transport: POST only, one message, JSON, from no browser but the site's own.
-    for (const method of ["GET", "DELETE"]) {
-      const res = await app.request("/v1/mcp", { method });
-      expect(res.status, method).toBe(405);
-      expect(res.headers.get("allow")).toBe("POST");
-      // The Origin rule holds for every method.
-      const elsewhere = await app.request("/v1/mcp", {
-        method,
-        headers: { origin: "https://evil.example" },
-      });
-      expect(elsewhere.status, method).toBe(403);
-    }
-    await refused(post([{ jsonrpc: "2.0", id: 1, method: "ping" }]), 400, -32600);
-    await refused(post("{not json"), 400, -32700);
-    await refused(post({ jsonrpc: "2.0", id: 3, result: {} }), 400, -32600);
-    expect((await modern("tools/list", {}, { origin: "https://evil.example" })).status).toBe(403);
+    await Promise.all(
+      ["GET", "DELETE"].map(async (method) => {
+        const res = await app.request("/v1/mcp", { method });
+        expect(res.status, method).toBe(405);
+        expect(res.headers.get("allow")).toBe("POST");
+        // The Origin rule holds for every method.
+        const elsewhere = await app.request("/v1/mcp", {
+          method,
+          headers: { origin: "https://evil.example" },
+        });
+        expect(elsewhere.status, method).toBe(403);
+      }),
+    );
+    await refused(post([{ jsonrpc: "2.0", id: 1, method: "ping" }]), 400, -32_600);
+    await refused(post("{not json"), 400, -32_700);
+    await refused(post({ jsonrpc: "2.0", id: 3, result: {} }), 400, -32_600);
+    const evilPost = await modern("tools/list", {}, { origin: "https://evil.example" });
+    expect(evilPost.status).toBe(403);
     // The site's own origin (the public CORS list) may.
-    expect((await modern("tools/list", {}, { origin: ADMIN_ORIGIN })).status).toBe(200);
+    const allowedPost = await modern("tools/list", {}, { origin: ADMIN_ORIGIN });
+    expect(allowedPost.status).toBe(200);
     const huge = await post({
       jsonrpc: "2.0",
       id: 4,
@@ -364,12 +432,12 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
     const limited = await modern("tools/list");
     expect(limited.status).toBe(429);
     expect(Number(limited.headers.get("retry-after"))).toBeGreaterThan(0);
-    expect((await read(limited)).error).toMatchObject({ code: -31429 });
+    const limitedBody = await read(limited);
+    expect(limitedBody.error).toMatchObject({ code: -31_429 });
 
     // Another address is served; the visitors' own buckets stay untouched.
-    expect((await modern("tools/list", {}, { "x-forwarded-for": "198.51.100.9" })).status).toBe(
-      200,
-    );
+    const otherIp = await modern("tools/list", {}, { "x-forwarded-for": "198.51.100.9" });
+    expect(otherIp.status).toBe(200);
     expect(
       await getDb().select().from(aiRateEvents).where(like(aiRateEvents.bucket, "ip:%")),
     ).toEqual([]);
@@ -377,10 +445,14 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
 
   it("puts every POST in the IP's bucket, read or not, and holds the day's limit too", async () => {
     const bucket = `mcp:${hashWithSalt("ip", IP)}`;
-    const inBucket = async () =>
-      (await getDb().select().from(aiRateEvents).where(eq(aiRateEvents.bucket, bucket))).length;
-    expect((await modern("tools/list")).status).toBe(200);
-    expect((await post("{not json")).status).toBe(400);
+    const inBucket = async () => {
+      const rows = await getDb().select().from(aiRateEvents).where(eq(aiRateEvents.bucket, bucket));
+      return rows.length;
+    };
+    const okRes = await modern("tools/list");
+    expect(okRes.status).toBe(200);
+    const badRes = await post("{not json");
+    expect(badRes.status).toBe(400);
     expect(await inBucket()).toBe(2);
 
     // A day's worth, none of it in the last hour: the hour's limit is not reached, the day's is.
@@ -413,22 +485,25 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
       ["list_projects", {}],
       ["get_resume", {}],
     ];
-    for (const [name, args] of calls) {
-      const called = await modern("tools/call", { name, arguments: args });
-      expect(called.status, name).toBe(200);
-      expect((await read(called)).result?.isError, name).toBeUndefined();
-    }
+    await calls.reduce<Promise<void>>(
+      (prev, [name, args]) =>
+        prev.then(async () => {
+          const called = await modern("tools/call", { name, arguments: args });
+          expect(called.status, name).toBe(200);
+          const calledBody = await read<{ isError?: boolean }>(called);
+          expect(calledBody.result?.isError, name).toBeUndefined();
+        }),
+      Promise.resolve(),
+    );
     expect(embedder).toBe(0);
     expect(modelAsked).toBe(0);
   });
 
   it("answers a failure inside with -32603 and the request's id, and logs it", async () => {
-    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
     setAskDeps({
       ...DEPS,
-      corpus: async () => {
-        throw new Error("the database is down");
-      },
+      corpus: () => Promise.reject(new Error("the database is down")),
     });
     const failed = await post(
       {
@@ -446,28 +521,26 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
     expect(failed.status).toBe(500);
     expect(await read(failed)).toMatchObject({
       id: 77,
-      error: { code: -32603, message: "Internal error: try again later" },
+      error: { code: -32_603, message: "Internal error: try again later" },
     });
     expect(logged).toHaveBeenCalledWith("[mcp] a request failed", expect.any(Error));
   });
 
   it("writes only its rate events and usage counts", async () => {
-    const tables = (
-      await getDb().execute<{ name: string }>(
-        sql`select table_name as name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE' order by 1`,
-      )
-    ).rows.map((r) => r.name);
-    const counts = async () => {
-      const all: Record<string, number> = {};
-      for (const table of tables) {
-        const [row] = (
-          await getDb().execute<{ n: number }>(
+    const tableResult = await getDb().execute<{ name: string }>(
+      sql`select table_name as name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE' order by 1`,
+    );
+    const tables = tableResult.rows.map((r) => r.name);
+    const counts = async (): Promise<Record<string, number>> => {
+      const entries = await Promise.all(
+        tables.map(async (table) => {
+          const res = await getDb().execute<{ n: number }>(
             sql`select count(*)::int as n from ${sql.identifier(table)}`,
-          )
-        ).rows;
-        all[table] = row!.n;
-      }
-      return all;
+          );
+          return [table, res.rows[0].n] as const;
+        }),
+      );
+      return Object.fromEntries(entries);
     };
     const before = await counts();
 
@@ -475,12 +548,16 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
     await legacy("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
     await post({ jsonrpc: "2.0", method: "notifications/initialized" });
     await modern("tools/list");
-    for (const name of MCP_TOOL_NAMES) {
-      await modern("tools/call", {
-        name,
-        arguments: name === "search_portfolio" ? { query: "Atlas" } : {},
-      });
-    }
+    await MCP_TOOL_NAMES.reduce<Promise<void>>(
+      (prev, name) =>
+        prev.then(async () => {
+          await modern("tools/call", {
+            name,
+            arguments: name === "search_portfolio" ? { query: "Atlas" } : {},
+          });
+        }),
+      Promise.resolve(),
+    );
     await modern("tools/call", { name: "get_document", arguments: { id: "profile" } });
     await modern("no/such-method");
     await modern("tools/list", {}, { origin: "https://evil.example" });
@@ -500,8 +577,6 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
     await modern("no/such-method");
     await modern("tools/list", {}, { origin: "https://evil.example" });
     await post({ jsonrpc: "2.0", method: "notifications/initialized" });
-    const counted = (rows: { name: string; count: number }[]) =>
-      rows.map((r) => [r.name, r.count]).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
     const expected = [
       ["notification", 1],
       ["refused:origin", 1],
@@ -523,7 +598,8 @@ describe("the read-only MCP endpoint (plan phase 32)", () => {
     await createAdmin();
     const admin = new TestClient(app);
     await admin.login();
-    const usage = (await (await admin.get("/admin/assistant/usage")).json()) as {
+    const usageRes = await admin.get("/admin/assistant/usage");
+    const usage = (await usageRes.json()) as {
       mcp: { day: string; name: string; count: number }[];
     };
     expect(counted(usage.mcp)).toEqual([

@@ -24,7 +24,9 @@ const AHEAD = "0px 0px 600px 0px";
  * block's own code loads then too. Call it from the page's constructor.
  */
 export function injectReadNext(page: () => ReadNextPage | null): void {
-  if (!isPlatformBrowser(inject(PLATFORM_ID))) return;
+  if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+    return;
+  }
   const launcher = inject(AskLauncherService);
   const router = inject(Router);
   const lang = inject(LanguageService);
@@ -37,16 +39,22 @@ export function injectReadNext(page: () => ReadNextPage | null): void {
   afterEveryRender(() => {
     const now = page();
     const key = now ? `${now.id}|${lang.lang()}` : null;
-    if (key === current) return;
+    if (key === current) {
+      return;
+    }
     current = key;
     observer?.disconnect();
     observer = null;
-    if (!now) return;
+    if (!now) {
+      return;
+    }
     now.article.querySelector(":scope > .read-next")?.remove();
     const end = now.article.querySelector(":scope > footer") ?? now.article;
     observer = new IntersectionObserver(
       (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return;
+        if (!entries.some((entry) => entry.isIntersecting)) {
+          return;
+        }
         observer?.disconnect();
         observer = null;
         void import("./read-next-block").then(({ showReadNext }) =>

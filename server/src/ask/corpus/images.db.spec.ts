@@ -33,7 +33,7 @@ beforeEach(async () => {
   resetAskCorpusMemo();
   invalidateAssistantCache();
   invalidateImageDescriptions();
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => undefined);
   await seed();
   await createAdmin();
   admin = new TestClient(app);
@@ -44,65 +44,67 @@ beforeEach(async () => {
 async function publishedDiagram(): Promise<{ id: string; file: string; slug: string }> {
   const data = new FormData();
   data.set("file", new File([new Uint8Array(PNG)], "pipeline.png", { type: "image/png" }));
-  const upload = (await (await admin.post("/admin/media", data)).json()) as {
+  const uploadRes = await admin.post("/admin/media", data);
+  const upload = (await uploadRes.json()) as {
     media: { id: string; filename: string };
   };
   const { id, filename: file } = upload.media;
-  expect((await admin.patch(`/admin/media/${id}`, { altEn: "Pipeline diagram" })).status).toBe(200);
+  const altRes = await admin.patch(`/admin/media/${id}`, { altEn: "Pipeline diagram" });
+  expect(altRes.status).toBe(200);
   const [first] = await getDb().select().from(projects).orderBy(projects.position).limit(1);
-  await getDb().update(projects).set({ coverId: id }).where(eq(projects.id, first!.id));
+  await getDb().update(projects).set({ coverId: id }).where(eq(projects.id, first.id));
   await getDb()
     .update(projectTranslations)
     .set({
       body: `<p>How it fits together:</p><p><img src="/media/${file}" alt="The pipeline"></p>`,
     })
     .where(
-      sql`${projectTranslations.projectId} = ${first!.id} and ${projectTranslations.locale} = 'en'`,
+      sql`${projectTranslations.projectId} = ${first.id} and ${projectTranslations.locale} = 'en'`,
     );
   await publishAll();
   resetCorpusMemo();
-  return { id, file, slug: first!.slug };
+  return { id, file, slug: first.slug };
 }
 
 describe("pictures in the corpus (plan phase 17)", () => {
   it("stand as markers where they appear, cover first, with the files they show", async () => {
     const { file, slug } = await publishedDiagram();
     const corpus = await getCorpus();
-    const en = corpus.documents.find((d) => d.id === `project:${slug}@en`)!;
-    expect(en.text).toContain("Cover: [image: Pipeline diagram]");
-    expect(en.text).toContain("How it fits together:\n[image: The pipeline]");
-    expect(en.images).toEqual([
+    const en = corpus.documents.find((d) => d.id === `project:${slug}@en`);
+    expect(en?.text).toContain("Cover: [image: Pipeline diagram]");
+    expect(en?.text).toContain("How it fits together:\n[image: The pipeline]");
+    expect(en?.images).toEqual([
       { file, alt: "Pipeline diagram" },
       { file, alt: "The pipeline" },
     ]);
     // The German page shows the same cover; its alt falls back to the English one.
-    const de = corpus.documents.find((d) => d.id === `project:${slug}@de`)!;
-    expect(de.images).toEqual([{ file, alt: "Pipeline diagram" }]);
+    const de = corpus.documents.find((d) => d.id === `project:${slug}@de`);
+    expect(de?.images).toEqual([{ file, alt: "Pipeline diagram" }]);
   });
 
   it("carry the admin's description after each marker, live on save, and in the corpus key", async () => {
     const { id, file, slug } = await publishedDiagram();
     const before = await getAskCorpus();
-    expect(before.byId.get(`project:${slug}@en`)!.text).not.toContain("[image description:");
+    expect(before.byId.get(`project:${slug}@en`)?.text).not.toContain("[image description:");
 
     const description = "Scanned PDFs → OCR → an LLM fills a JSON schema → review queue (Retool)";
-    expect((await admin.patch(`/admin/media/${id}`, { descriptionEn: description })).status).toBe(
-      200,
-    );
-    const listed = (await (await admin.get("/admin/media")).json()) as {
+    const patchRes = await admin.patch(`/admin/media/${id}`, { descriptionEn: description });
+    expect(patchRes.status).toBe(200);
+    const listRes = await admin.get("/admin/media");
+    const listed = (await listRes.json()) as {
       media: { id: string; descriptionEn: string | null }[];
     };
     expect(listed.media.find((m) => m.id === id)?.descriptionEn).toBe(description);
 
     const after = await getAskCorpus();
     expect(after.key).not.toBe(before.key);
-    const en = after.byId.get(`project:${slug}@en`)!.text;
+    const en = after.byId.get(`project:${slug}@en`)?.text;
     expect(en).toContain(
       `Cover: [image: Pipeline diagram]\n[image description: Scanned PDFs → OCR → an LLM fills a JSON schema → review queue (Retool)]`,
     );
     expect(en).toContain(`[image: The pipeline]\n[image description: ${description}]`);
     // No German description yet: the German page reads the English one.
-    expect(after.byId.get(`project:${slug}@de`)!.text).toContain(
+    expect(after.byId.get(`project:${slug}@de`)?.text).toContain(
       `[image description: ${description}]`,
     );
     // The search finds it, and so does the core.
@@ -110,19 +112,23 @@ describe("pictures in the corpus (plan phase 17)", () => {
     expect(after.core.en).toContain("Retool");
     expect(file).toMatch(/\.png$/);
 
-    expect((await admin.patch(`/admin/media/${id}`, { descriptionEn: "  " })).status).toBe(200);
-    expect((await getAskCorpus()).key).toBe(before.key);
+    const clearRes = await admin.patch(`/admin/media/${id}`, { descriptionEn: "  " });
+    expect(clearRes.status).toBe(200);
+    const afterClear = await getAskCorpus();
+    expect(afterClear.key).toBe(before.key);
   });
 
   it("change no key for a picture no published page shows", async () => {
     const before = await getAskCorpus();
     const data = new FormData();
     data.set("file", new File([new Uint8Array(PNG)], "unused.png", { type: "image/png" }));
-    const { media } = (await (await admin.post("/admin/media", data)).json()) as {
+    const uploadRes = await admin.post("/admin/media", data);
+    const { media } = (await uploadRes.json()) as {
       media: { id: string };
     };
     await admin.patch(`/admin/media/${media.id}`, { descriptionEn: "An unused diagram" });
-    expect((await getAskCorpus()).key).toBe(before.key);
+    const afterUnused = await getAskCorpus();
+    expect(afterUnused.key).toBe(before.key);
   });
 
   it("are stored in two nullable columns (migration 0018), so an older API's writes still work", async () => {
@@ -138,7 +144,8 @@ describe("pictures in the corpus (plan phase 17)", () => {
     const { id } = await publishedDiagram();
     await admin.patch(`/admin/media/${id}`, { descriptionDe: "Ein Diagramm" });
     await admin.patch(`/admin/media/${id}`, { altDe: "Diagramm" });
-    const listed = (await (await admin.get("/admin/media")).json()) as {
+    const listRes = await admin.get("/admin/media");
+    const listed = (await listRes.json()) as {
       media: { id: string; descriptionDe: string | null; altDe: string | null }[];
     };
     expect(listed.media.find((m) => m.id === id)).toMatchObject({
@@ -149,7 +156,7 @@ describe("pictures in the corpus (plan phase 17)", () => {
 
   it("refuses a description over 2,000 characters", async () => {
     const { id } = await publishedDiagram();
-    const res = await admin.patch(`/admin/media/${id}`, { descriptionEn: "x".repeat(2_001) });
+    const res = await admin.patch(`/admin/media/${id}`, { descriptionEn: "x".repeat(2001) });
     expect(res.status).toBe(400);
   });
 });

@@ -340,7 +340,14 @@ interface ModelTotal {
             </p>
           }
           <div>
-            <button hlmBtn variant="outline" size="sm" [disabled]="counting()" (click)="count()">
+            <button
+              hlmBtn
+              type="button"
+              variant="outline"
+              size="sm"
+              [disabled]="counting()"
+              (click)="count()"
+            >
               Count with Gemini
             </button>
           </div>
@@ -506,24 +513,28 @@ export class AssistantOverviewComponent implements OnInit {
   /** "Answering", "Resting", "Off": the state in words. */
   protected readonly stateLabel = computed(() => {
     const state = this.health()?.state.state;
-    if (state === "ok") return "Answering";
+    if (state === "ok") {
+      return "Answering";
+    }
     return state === "resting" ? "Resting" : "Off";
   });
 
   protected readonly spentShare = computed(() => {
     const state = this.health()?.state;
-    if (!state || state.state === "off" || !state.budgetUsd) return 0;
+    if (!state || state.state === "off" || !state.budgetUsd) {
+      return 0;
+    }
     return Math.min(100, (state.spentUsd / state.budgetUsd) * 100);
   });
 
   /** Asks the page to open the Trust tab. */
-  readonly toTrust = output<void>();
+  readonly toTrust = output();
 
   /** An alert or a demotion waiting for a person, in a sentence. */
   protected readonly trustLine = computed(() => trustAlert(this.health()?.trust));
 
   /** Asks the page to open the Insights tab. */
-  readonly toInsights = output<void>();
+  readonly toInsights = output();
 
   protected readonly noticeText = noticeLine;
 
@@ -604,8 +615,12 @@ export class AssistantOverviewComponent implements OnInit {
       this.api.assistantUsage(30),
     ]);
     this.loadError.set(health.ok ? null : health.error);
-    if (health.ok) this.health.set(health.data);
-    if (usage.ok) this.usage.set(usage.data);
+    if (health.ok) {
+      this.health.set(health.data);
+    }
+    if (usage.ok) {
+      this.usage.set(usage.data);
+    }
   }
 
   /** The nightly check's insights, seen: the notice goes. */

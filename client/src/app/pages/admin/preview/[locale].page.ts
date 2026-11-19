@@ -43,8 +43,12 @@ const ASK_ENTRIES =
 
 /** A request's URL string, whether passed as a string, `URL`, or `Request`. */
 function requestUrl(input: RequestInfo | URL): string {
-  if (typeof input === "string") return input;
-  if (input instanceof URL) return input.href;
+  if (typeof input === "string") {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.href;
+  }
   return input.url;
 }
 
@@ -128,7 +132,7 @@ class DraftShell {}
           Draft preview, {{ name(state.locale()) }}
         </span>
         <a
-          class="inline-flex min-h-8 touch-manipulation items-center rounded px-2 underline-offset-4 hover:underline"
+          class="inline-flex min-h-8 touch-manipulation items-center rounded-sm px-2 underline-offset-4 hover:underline"
           [href]="switchHref()"
           [attr.hreflang]="other()"
           (click)="switchLocale($event)"
@@ -136,13 +140,13 @@ class DraftShell {}
         >
         <button
           type="button"
-          class="inline-flex min-h-8 cursor-pointer touch-manipulation items-center rounded px-2 underline-offset-4 hover:underline"
+          class="inline-flex min-h-8 cursor-pointer touch-manipulation items-center rounded-sm px-2 underline-offset-4 hover:underline"
           (click)="refresh()"
         >
           Refresh
         </button>
         <a
-          class="inline-flex min-h-8 touch-manipulation items-center rounded px-2 underline-offset-4 hover:underline"
+          class="inline-flex min-h-8 touch-manipulation items-center rounded-sm px-2 underline-offset-4 hover:underline"
           routerLink="/admin/preview"
           >Close</a
         >
@@ -156,7 +160,7 @@ class DraftShell {}
 export default class AdminPreviewFrame {
   protected readonly state = inject(PreviewState);
   private readonly router = inject(Router);
-  private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected readonly issues = computed(() =>
     this.state.issues().map((issue) => ({ ...issue, link: editorLinkFor(issue) })),
@@ -197,9 +201,9 @@ export default class AdminPreviewFrame {
     });
     // No request leaves for the assistant from this tab, whatever a page asks (read next's map, a
     // question): refused in the browser, never sent.
-    const fetchFirst = isPlatformBrowser(inject(PLATFORM_ID)) ? window.fetch : undefined;
+    const fetchFirst = isPlatformBrowser(inject(PLATFORM_ID)) ? globalThis.fetch : undefined;
     if (fetchFirst) {
-      window.fetch = (input, init) =>
+      globalThis.fetch = (input, init) =>
         toAssistant(input)
           ? Promise.reject(new TypeError("The assistant answers only on the live site."))
           : fetchFirst(input, init);
@@ -208,7 +212,9 @@ export default class AdminPreviewFrame {
       root.removeEventListener("click", click, { capture: true });
       root.removeEventListener("submit", submit, { capture: true });
       entries?.disconnect();
-      if (fetchFirst) window.fetch = fetchFirst;
+      if (fetchFirst) {
+        globalThis.fetch = fetchFirst;
+      }
     });
   }
 
@@ -217,7 +223,9 @@ export default class AdminPreviewFrame {
   }
 
   protected switchLocale(event: MouseEvent): void {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) {
+      return;
+    }
     event.preventDefault();
     void this.router.navigateByUrl(this.switchHref());
   }
@@ -228,13 +236,21 @@ export default class AdminPreviewFrame {
   }
 
   private onClick(event: MouseEvent): void {
-    if (event.defaultPrevented || event.button !== 0) return;
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (event.defaultPrevented || event.button !== 0) {
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
     const anchor = (event.target as Element | null)?.closest?.("a[href]");
-    if (!(anchor instanceof HTMLAnchorElement)) return;
+    if (!(anchor instanceof HTMLAnchorElement)) {
+      return;
+    }
 
     const target = previewTarget(new URL(anchor.href), location.origin);
-    if (!target) return;
+    if (!target) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     if ("navigate" in target) {

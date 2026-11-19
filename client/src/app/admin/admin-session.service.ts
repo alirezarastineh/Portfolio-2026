@@ -28,9 +28,15 @@ export class AdminSessionService {
    */
   async ensure(force = false): Promise<boolean> {
     // The session cookie lives on the API origin, which SSR cannot read.
-    if (!this.isBrowser) return false;
-    if (this._checked() && !force) return this.isAuthenticated();
-    if (this.inFlight && !force) return this.inFlight;
+    if (!this.isBrowser) {
+      return false;
+    }
+    if (this._checked() && !force) {
+      return this.isAuthenticated();
+    }
+    if (this.inFlight && !force) {
+      return this.inFlight;
+    }
 
     this.inFlight = this.refresh();
     try {
@@ -75,8 +81,11 @@ export class AdminSessionService {
    * typed in it stay too; with nobody signed in there is nothing to keep.
    */
   lose(): void {
-    if (this.isAuthenticated()) this._lost.set(true);
-    else this.clear();
+    if (this.isAuthenticated()) {
+      this._lost.set(true);
+    } else {
+      this.clear();
+    }
   }
 
   /** The sign-in over the page went through. */

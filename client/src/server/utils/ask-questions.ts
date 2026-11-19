@@ -3,7 +3,7 @@ import { z } from "zod";
 import { apiBase } from "./content-upstream";
 
 const TTL_MS = 60_000;
-const UPSTREAM_TIMEOUT_MS = 2_000;
+const UPSTREAM_TIMEOUT_MS = 2000;
 
 const configSchema = z.object({
   state: z.string(),
@@ -27,9 +27,13 @@ export function resetAskQuestions(): void {
  * built-in three show.
  */
 export async function getAskQuestions(): Promise<AskQuestions> {
-  if (cached && Date.now() - cached.fetchedAt < TTL_MS) return cached.questions;
+  if (cached && Date.now() - cached.fetchedAt < TTL_MS) {
+    return cached.questions;
+  }
   const base = apiBase();
-  if (!base) return {};
+  if (!base) {
+    return {};
+  }
   try {
     const response = await fetch(`${base}/v1/ask/config`, {
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),

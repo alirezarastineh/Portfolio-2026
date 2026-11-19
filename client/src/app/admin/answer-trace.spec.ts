@@ -21,8 +21,8 @@ import type { AnswersRow, TraceStep } from "./assistant-types";
 const step: TraceStep = {
   model: "gemini-3.5-flash-lite",
   answerOnly: false,
-  ttftMs: 1_234,
-  tokens: { input: 12_000, cached: 9_000, output: 80, thoughts: 0 },
+  ttftMs: 1234,
+  tokens: { input: 12_000, cached: 9000, output: 80, thoughts: 0 },
   finishReason: "tool-calls",
   passedOver: [],
   tools: [],
@@ -80,8 +80,8 @@ describe("answer traces", () => {
 describe("assistant signals", () => {
   it("flags days when the primary model's cache hits fall under 50 %", () => {
     const rows = [
-      day({ day: "2026-09-29", primaryInput: 10_000, primaryCached: 8_000 }),
-      day({ day: "2026-09-30", primaryInput: 10_000, primaryCached: 1_000 }),
+      day({ day: "2026-09-29", primaryInput: 10_000, primaryCached: 8000 }),
+      day({ day: "2026-09-30", primaryInput: 10_000, primaryCached: 1000 }),
       day({ day: "2026-09-28", primaryInput: 0 }),
     ];
     expect(cacheDays(rows)).toEqual([
@@ -133,14 +133,14 @@ describe("assistant signals", () => {
           answers: 4,
           up: 1,
           flagged: 1,
-          primaryInput: 1_000,
+          primaryInput: 1000,
           primaryCached: 900,
         }),
         day({
           day: "2026-09-30",
           answers: 2,
           withDropped: 1,
-          primaryInput: 1_000,
+          primaryInput: 1000,
           primaryCached: 100,
         }),
       ],

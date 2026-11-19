@@ -33,8 +33,8 @@ describe("secret box", () => {
     useKey();
     const sealed = seal(SECRET);
     const [prefix, iv, ciphertext, tag] = sealed.split(":");
-    const flipped = Buffer.from(ciphertext!, "base64url");
-    flipped[0]! ^= 0xff;
+    const flipped = Buffer.from(ciphertext, "base64url");
+    flipped[0] ^= 0xff;
     expect(() => unseal([prefix, iv, flipped.toString("base64url"), tag].join(":"))).toThrow();
   });
 
@@ -45,7 +45,7 @@ describe("secret box", () => {
   it("rejects a truncated authentication tag", () => {
     useKey();
     const [prefix, iv, ciphertext, tag] = seal(SECRET).split(":");
-    const short = Buffer.from(tag!, "base64url").subarray(0, 4).toString("base64url");
+    const short = Buffer.from(tag, "base64url").subarray(0, 4).toString("base64url");
     expect(() => unseal([prefix, iv, ciphertext, short].join(":"))).toThrow();
   });
 

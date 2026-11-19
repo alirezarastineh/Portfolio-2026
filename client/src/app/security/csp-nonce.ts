@@ -43,10 +43,14 @@ export const KNOWN_INLINE_SCRIPT_IDS = [
  * bless any script that ever slipped into the rendered markup.
  */
 export function stampKnownScripts(doc: Document, nonce: string | null): void {
-  if (!nonce) return;
+  if (!nonce) {
+    return;
+  }
   for (const id of KNOWN_INLINE_SCRIPT_IDS) {
     const script = doc.getElementById(id);
-    if (script?.tagName.toLowerCase() === "script") script.setAttribute("nonce", nonce);
+    if (script?.tagName.toLowerCase() === "script") {
+      script.setAttribute("nonce", nonce);
+    }
   }
 }
 

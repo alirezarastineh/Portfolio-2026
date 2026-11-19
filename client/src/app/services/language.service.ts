@@ -99,7 +99,9 @@ export class LanguageService {
    * language. The URL, not this cookie, decides what a page renders.
    */
   remember(locale: Locale): void {
-    if (!this.isBrowser) return;
+    if (!this.isBrowser) {
+      return;
+    }
     try {
       document.cookie = localeCookie(locale);
     } catch {

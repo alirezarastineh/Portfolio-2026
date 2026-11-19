@@ -33,6 +33,14 @@ const NARRATIVE = `
 second()</code></pre>
   </div></app-prose-body>`;
 
+function query<T extends Element = Element>(root: ParentNode, selector: string): T {
+  const found = root.querySelector<T>(selector);
+  if (!found) {
+    throw new Error(`Missing element: ${selector}`);
+  }
+  return found;
+}
+
 function narrative(): HTMLElement {
   const root = document.createElement("div");
   root.className = "case-flow";
@@ -56,7 +64,7 @@ describe("decorateSections (visitor plan V9)", () => {
     expect(buttons.every((b) => b.textContent === "" && b.getAttribute("type") === "button")).toBe(
       true,
     );
-    const gate = root.querySelector("#the-gate")!;
+    const gate = query(root, "#the-gate");
     expect(gate.textContent).toBe("The gate");
     expect(gate.getAttribute("aria-label")).toBe("The gate");
     expect(gate.classList.contains("reader-asks")).toBe(true);
@@ -67,14 +75,18 @@ describe("decorateSections (visitor plan V9)", () => {
   it("follows the heading's text and the language when they change in place", () => {
     const root = narrative();
     decorateSections(root, EN);
-    root.querySelector("#problem")!.firstChild!.textContent = "Das Problem";
+    const problemText = query(root, "#problem").firstChild;
+    if (!problemText) {
+      throw new Error("Missing #problem text node");
+    }
+    problemText.textContent = "Das Problem";
     decorateSections(root, READER_ASK_COPY.de);
-    const heading = root.querySelector("#problem")!;
+    const heading = query(root, "#problem");
     expect(heading.getAttribute("aria-label")).toBe("Das Problem");
-    expect(heading.querySelector("button")!.getAttribute("aria-label")).toBe(
+    expect(query(heading, "button").getAttribute("aria-label")).toBe(
       "Zu diesem Abschnitt fragen: Das Problem",
     );
-    expect(heading.querySelector("button")!.getAttribute("data-label")).toBe("Fragen");
+    expect(query(heading, "button").getAttribute("data-label")).toBe("Fragen");
     expect(heading.querySelectorAll("button")).toHaveLength(1);
   });
 });
@@ -107,22 +119,22 @@ describe("the questions the buttons ask", () => {
     frameCodeBlocks(root, "Copy");
     decorateCode(root, EN);
 
-    const section = root.querySelector("#the-gate button.reader-ask")!;
+    const section = query<HTMLButtonElement>(root, "#the-gate button.reader-ask");
     expect(buttonQuestion(section, root, EN)).toEqual({
       question: "Explain this section",
       source: "section",
       about: { focus: { kind: "section", id: "the-gate" }, label: "The gate" },
     });
     const code = root.querySelectorAll("button.code-explain");
-    expect(buttonQuestion(code[0]!, root, EN)).toEqual({
+    expect(buttonQuestion(code[0], root, EN)).toEqual({
       question: "Explain this code",
       source: "code",
       about: { focus: { kind: "code", index: 0 }, label: "if (a) fail();" },
     });
     // Its first line with words names it.
-    expect(buttonQuestion(code[1]!, root, EN)?.about.label).toBe("second()");
+    expect(buttonQuestion(code[1], root, EN)?.about.label).toBe("second()");
     // Anything else, or a button outside the narrative, asks nothing.
-    expect(buttonQuestion(root.querySelector("p")!, root, EN)).toBeNull();
+    expect(buttonQuestion(query(root, "p"), root, EN)).toBeNull();
     expect(buttonQuestion(section, document.createElement("div"), EN)).toBeNull();
   });
 
@@ -155,18 +167,23 @@ describe("selectedText", () => {
     const select = (node: Node) => {
       const range = document.createRange();
       range.selectNodeContents(node);
-      const selection = document.getSelection()!;
+      const selection = document.getSelection();
+      if (!selection) {
+        throw new Error("Missing document selection");
+      }
       selection.removeAllRanges();
       selection.addRange(range);
       return selection;
     };
 
-    expect(selectedText(select(root.querySelector("section p")!), root)).toBe(
-      "Agents searched wikis.",
-    );
+    expect(selectedText(select(query(root, "section p")), root)).toBe("Agents searched wikis.");
     expect(selectedText(select(outside), root)).toBeNull();
-    document.getSelection()!.removeAllRanges();
-    expect(selectedText(document.getSelection(), root)).toBeNull();
+    const currentSelection = document.getSelection();
+    if (!currentSelection) {
+      throw new Error("Missing document selection");
+    }
+    currentSelection.removeAllRanges();
+    expect(selectedText(currentSelection, root)).toBeNull();
     const long = document.createElement("p");
     long.textContent = `${"word ".repeat(200)}\n\nend`;
     root.append(long);
@@ -225,7 +242,7 @@ describe("injectReaderAsk", () => {
       "#problem button.reader-ask",
     );
     expect(button).not.toBeNull();
-    button!.click();
+    button?.click();
     expect(ask).toHaveBeenCalledWith("Explain this section", "section", {
       focus: { kind: "section", id: "problem" },
       label: "Problem",

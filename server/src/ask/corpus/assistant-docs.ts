@@ -27,7 +27,7 @@ export function defaultSystemCard(locale: Locale, config: AskConfig): string {
   const fallbacks = [
     ...(config.gemini.fallbackModel ? [config.gemini.fallbackModel] : []),
     ...config.openrouter.models,
-  ].map(shortName);
+  ].map((model) => shortName(model));
   const fallbackList = fallbacks.length ? ` (${fallbacks.join(", ")})` : "";
 
   // Plan phase 33: what Parts C–G added, and the visitor plan's V22: what holds whatever the
@@ -83,7 +83,9 @@ export function assistantDocuments(
   for (const locale of LOCALES) {
     for (const entry of faq) {
       const t = entry.translations[locale];
-      if (!t) continue;
+      if (!t) {
+        continue;
+      }
       documents.push({
         id: faqDocId(entry.id, locale),
         kind: "faq",

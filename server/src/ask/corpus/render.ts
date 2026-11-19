@@ -24,9 +24,9 @@ export type CoreLayout = "locale" | "both";
 
 /** Characters kept in the prefix per kind; the rest is one `get_document` away. */
 export const CORE_LIMIT: Partial<Record<CorpusKind, number>> = {
-  project: 2_400,
-  post: 1_500,
-  cv: 2_500,
+  project: 2400,
+  post: 1500,
+  cv: 2500,
 };
 /** A promoted document is held whole, up to what `get_document` returns. */
 export const PROMOTED_CHARS = 12_000;
@@ -76,8 +76,11 @@ export function applyTiers(
   return documents.map((d) => {
     const marked: CorpusDocument = { ...d };
     delete marked.tier;
-    if (promoted.has(d.id)) marked.tier = "promoted";
-    else if (demoted.has(d.id)) marked.tier = "demoted";
+    if (promoted.has(d.id)) {
+      marked.tier = "promoted";
+    } else if (demoted.has(d.id)) {
+      marked.tier = "demoted";
+    }
     return marked;
   });
 }
@@ -94,15 +97,21 @@ export function baseId(id: string): string {
 function header(d: CorpusDocument, layout: CoreLayout = "locale"): string {
   const lines = ["---", `id: ${d.id}`, `title: ${d.title}`, `url: ${d.url}`];
   if (layout === "locale") {
-    if (d.updated) lines.push(`updated: ${d.updated}`);
-    if (d.related?.length) lines.push(`related: ${d.related.join(", ")}`);
+    if (d.updated) {
+      lines.push(`updated: ${d.updated}`);
+    }
+    if (d.related?.length) {
+      lines.push(`related: ${d.related.join(", ")}`);
+    }
   }
   return [...lines, "---"].join("\n");
 }
 
 /** `text` up to where a limit cuts it: the last line break past half the limit, else the limit. */
 function cutAt(text: string, limit: number | undefined): string {
-  if (!limit || text.length <= limit) return text;
+  if (!limit || text.length <= limit) {
+    return text;
+  }
   const cut = text.lastIndexOf("\n", limit);
   return text.slice(0, cut > limit / 2 ? cut : limit);
 }
@@ -117,10 +126,16 @@ function clip(text: string, limit: number | undefined, id: string): string {
  * promoted, half when demoted. Part C's layout knew no tiers.
  */
 export function coreLimit(d: CorpusDocument, layout: CoreLayout = "locale"): number | undefined {
-  if (layout === "both") return CORE_LIMIT[d.kind];
-  if (d.tier === "promoted") return PROMOTED_CHARS;
+  if (layout === "both") {
+    return CORE_LIMIT[d.kind];
+  }
+  if (d.tier === "promoted") {
+    return PROMOTED_CHARS;
+  }
   const limit = CORE_LIMIT[d.kind];
-  if (limit && d.tier === "demoted") return Math.floor(limit / 2);
+  if (limit && d.tier === "demoted") {
+    return Math.floor(limit / 2);
+  }
   return limit;
 }
 
@@ -139,11 +154,15 @@ export function heldText(d: CorpusDocument, layout: CoreLayout = "locale"): stri
 export function facts(text: string): Set<string> {
   const found = new Set<string>();
   const joined = text.replaceAll(/(\d)[.,\u2019\u00a0\u202f'](?=\d)/g, "$1");
-  for (const match of joined.matchAll(/\d+/g)) found.add(match[0]);
+  for (const match of joined.matchAll(/\d+/g)) {
+    found.add(match[0]);
+  }
   for (const word of text.toLowerCase().split(/\s+/)) {
     const link = word.search(/https?:\/\//);
     const token = trimPunctuation(link >= 0 ? word.slice(link) : word.replace(/^[(<[{"']+/, ""));
-    if (link >= 0 || EMAIL.test(token)) found.add(token);
+    if (link >= 0 || EMAIL.test(token)) {
+      found.add(token);
+    }
   }
   return found;
 }
@@ -153,15 +172,23 @@ const TRAILING = new Set([".", ",", ";", ":", "!", "?", ")", "]", "}", ">", '"',
 
 function trimPunctuation(word: string): string {
   let end = word.length;
-  while (end > 0 && TRAILING.has(word[end - 1]!)) end--;
+  while (end > 0 && TRAILING.has(word[end - 1])) {
+    end--;
+  }
   return word.slice(0, end);
 }
 
 /** `version` does not say all `other` says: much shorter, or missing one of its facts. */
 export function incompleteTranslation(version: CorpusDocument, other: CorpusDocument): boolean {
-  if (version.text.length < COMPLETE_SHARE * other.text.length) return true;
+  if (version.text.length < COMPLETE_SHARE * other.text.length) {
+    return true;
+  }
   const kept = facts(version.text);
-  for (const fact of facts(other.text)) if (!kept.has(fact)) return true;
+  for (const fact of facts(other.text)) {
+    if (!kept.has(fact)) {
+      return true;
+    }
+  }
   return false;
 }
 
@@ -178,14 +205,20 @@ export function coreView(
   reading: Locale,
   layout: CoreLayout = "locale",
 ): CoreView {
-  if (layout === "both") return { resident: [...documents], handles: [] };
+  if (layout === "both") {
+    return { resident: [...documents], handles: [] };
+  }
 
   const first = new Map<string, number>();
   const inReading = new Map<string, CorpusDocument>();
   documents.forEach((d, i) => {
     const base = baseId(d.id);
-    if (!first.has(base)) first.set(base, i);
-    if (d.locale === reading) inReading.set(base, d);
+    if (!first.has(base)) {
+      first.set(base, i);
+    }
+    if (d.locale === reading) {
+      inReading.set(base, d);
+    }
   });
 
   const resident: CorpusDocument[] = [];
@@ -203,7 +236,7 @@ export function coreView(
   resident.sort(
     (a, b) =>
       rank(a) - rank(b) ||
-      first.get(baseId(a.id))! - first.get(baseId(b.id))! ||
+      (first.get(baseId(a.id)) ?? 0) - (first.get(baseId(b.id)) ?? 0) ||
       Number(a.locale !== reading) - Number(b.locale !== reading),
   );
   return { resident, handles };
@@ -236,9 +269,9 @@ export function renderCore(
   const { resident, handles } = coreView(documents, reading, layout);
   const render = (d: CorpusDocument) => `${header(d)}\n${clip(d.text, coreLimit(d), d.id)}`;
   return [
-    ...resident.filter((d) => rank(d) < HANDLES_RANK).map(render),
+    ...resident.filter((d) => rank(d) < HANDLES_RANK).map((d) => render(d)),
     ...(handles.length ? [handleBlock(handles, reading)] : []),
-    ...resident.filter((d) => rank(d) > HANDLES_RANK).map(render),
+    ...resident.filter((d) => rank(d) > HANDLES_RANK).map((d) => render(d)),
   ].join("\n\n");
 }
 
@@ -254,7 +287,9 @@ export function renderCompact(
     const body =
       d.text.length > COMPACT_DOC_CHARS ? `${d.text.slice(0, COMPACT_DOC_CHARS)}…` : d.text;
     const part = `[${d.id}] ${d.title} (${d.url})\n${body}`;
-    if (total + part.length > COMPACT_TOTAL_CHARS) break;
+    if (total + part.length > COMPACT_TOTAL_CHARS) {
+      break;
+    }
     parts.push(part);
     total += part.length;
   }

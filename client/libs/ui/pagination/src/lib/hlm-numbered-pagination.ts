@@ -45,8 +45,15 @@ import { HlmPaginationPrevious } from "./hlm-pagination-previous";
       <nav hlmPagination>
         <ul hlmPaginationContent>
           @if (showEdges() && !_isFirstPageActive()) {
-            <li hlmPaginationItem (click)="goToPrevious()">
-              <hlm-pagination-previous />
+            <li hlmPaginationItem>
+              <hlm-pagination-previous
+                tabindex="0"
+                role="button"
+                [attr.aria-label]="'Go to previous page'"
+                (click)="goToPrevious()"
+                (keydown.enter)="goToPrevious()"
+                (keydown.space)="$event.preventDefault(); goToPrevious()"
+              />
             </li>
           }
 
@@ -55,20 +62,28 @@ import { HlmPaginationPrevious } from "./hlm-pagination-previous";
               @if (page === "...") {
                 <hlm-pagination-ellipsis />
               } @else {
-                <a
+                <button
+                  type="button"
                   hlmPaginationLink
                   [isActive]="currentPage() === page"
                   (click)="currentPage.set(page)"
                 >
                   {{ page }}
-                </a>
+                </button>
               }
             </li>
           }
 
           @if (showEdges() && !_isLastPageActive()) {
-            <li hlmPaginationItem (click)="goToNext()">
-              <hlm-pagination-next />
+            <li hlmPaginationItem>
+              <hlm-pagination-next
+                tabindex="0"
+                role="button"
+                [attr.aria-label]="'Go to next page'"
+                (click)="goToNext()"
+                (keydown.enter)="goToNext()"
+                (keydown.space)="$event.preventDefault(); goToNext()"
+              />
             </li>
           }
         </ul>

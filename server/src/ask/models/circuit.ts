@@ -43,8 +43,12 @@ function get(model: string): Breaker {
 /** Whether a request may go to this model now; claims the probe when half-open. */
 export function tryAcquire(model: string, now = Date.now()): boolean {
   const breaker = get(model);
-  if (breaker.openUntil === 0) return true;
-  if (now < breaker.openUntil || breaker.probing) return false;
+  if (breaker.openUntil === 0) {
+    return true;
+  }
+  if (now < breaker.openUntil || breaker.probing) {
+    return false;
+  }
   breaker.probing = true;
   return true;
 }
@@ -57,7 +61,9 @@ export function recordSuccess(model: string, ttftMs: number | null, now = Date.n
   breaker.lastSuccessAt = now;
   if (ttftMs !== null) {
     breaker.ttft.push(ttftMs);
-    if (breaker.ttft.length > TTFT_SAMPLES) breaker.ttft.shift();
+    if (breaker.ttft.length > TTFT_SAMPLES) {
+      breaker.ttft.shift();
+    }
   }
 }
 
@@ -100,16 +106,20 @@ export interface BreakerSnapshot {
 }
 
 function median(values: number[]): number | null {
-  if (!values.length) return null;
+  if (!values.length) {
+    return null;
+  }
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor((sorted.length - 1) / 2)]!;
+  return sorted[Math.floor((sorted.length - 1) / 2)];
 }
 
 export function breakerSnapshot(models: string[], now = Date.now()): BreakerSnapshot[] {
   return models.map((model) => {
     const b = get(model);
     let state: BreakerState = "closed";
-    if (b.openUntil !== 0) state = now < b.openUntil ? "open" : "half-open";
+    if (b.openUntil !== 0) {
+      state = now < b.openUntil ? "open" : "half-open";
+    }
     const iso = (t: number | null) => (t === null ? null : new Date(t).toISOString());
     return {
       model,

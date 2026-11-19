@@ -24,7 +24,9 @@ export function loadEncoder(): Promise<void> {
 }
 
 export function countTokens(text: string): number {
-  if (!text) return 0;
+  if (!text) {
+    return 0;
+  }
   if (encoder) {
     try {
       return encoder.encode(text).length;

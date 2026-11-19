@@ -18,12 +18,20 @@ export type PreviewTarget =
  * leave the preview for the live site.
  */
 export function previewTarget(url: URL, origin: string): PreviewTarget {
-  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-  if (url.origin !== origin) return { newTab: url.href };
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return null;
+  }
+  if (url.origin !== origin) {
+    return { newTab: url.href };
+  }
 
   const path = url.pathname;
-  if (path === PREVIEW_PREFIX || path.startsWith(`${PREVIEW_PREFIX}/`)) return null;
-  if (path.startsWith("/admin")) return null;
+  if (path === PREVIEW_PREFIX || path.startsWith(`${PREVIEW_PREFIX}/`)) {
+    return null;
+  }
+  if (path.startsWith("/admin")) {
+    return null;
+  }
   // Files and feeds are served by the server, not the router.
   if (/\.[a-z0-9]+$/i.test(path) || path.startsWith("/media/") || path.startsWith("/api/")) {
     return { newTab: url.href };
@@ -32,7 +40,9 @@ export function previewTarget(url: URL, origin: string): PreviewTarget {
   if (/^\/[a-z]{2}\/match\/?$/.test(path) && localeOfPath(path)) {
     return { hold: "The match page only runs on the live site." };
   }
-  if (localeOfPath(path)) return { navigate: `${PREVIEW_PREFIX}${path}${url.search}${url.hash}` };
+  if (localeOfPath(path)) {
+    return { navigate: `${PREVIEW_PREFIX}${path}${url.search}${url.hash}` };
+  }
   return { newTab: url.href };
 }
 

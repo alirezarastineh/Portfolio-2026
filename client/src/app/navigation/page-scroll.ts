@@ -38,7 +38,9 @@ const READER_INPUT = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
  */
 export function providePageScroll(): EnvironmentProviders {
   return provideAppInitializer(() => {
-    if (!isPlatformBrowser(inject(PLATFORM_ID))) return;
+    if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+      return;
+    }
 
     const router = inject(Router);
     const scroller = inject(ViewportScroller);
@@ -62,7 +64,9 @@ export function providePageScroll(): EnvironmentProviders {
       lastPage = page;
       cancelSettle?.();
 
-      if (fromHistory) return;
+      if (fromHistory) {
+        return;
+      }
 
       if (fragment && (firstLoad || changedPage)) {
         // Onto a section of a page that is only now rendering — and whose
@@ -75,7 +79,9 @@ export function providePageScroll(): EnvironmentProviders {
         return;
       }
 
-      if (changedPage) scroller.scrollToPosition([0, 0], JUMP);
+      if (changedPage) {
+        scroller.scrollToPosition([0, 0], JUMP);
+      }
     });
   });
 }
@@ -87,7 +93,9 @@ export function providePageScroll(): EnvironmentProviders {
  */
 export function settleOnAnchor(doc: Document, scroller: ViewportScroller, id: string): () => void {
   const view = doc.defaultView;
-  if (!view) return () => undefined;
+  if (!view) {
+    return () => undefined;
+  }
 
   const started = performance.now();
   let lastTop: number | null = null;
@@ -96,18 +104,25 @@ export function settleOnAnchor(doc: Document, scroller: ViewportScroller, id: st
 
   const stop = () => {
     view.cancelAnimationFrame(frame);
-    for (const type of READER_INPUT) view.removeEventListener(type, stop, true);
+    for (const type of READER_INPUT) {
+      view.removeEventListener(type, stop, true);
+    }
   };
-  for (const type of READER_INPUT)
+  for (const type of READER_INPUT) {
     view.addEventListener(type, stop, { capture: true, passive: true });
+  }
 
   const tick = () => {
-    if (performance.now() - started > SETTLE.maxMs) return stop();
+    if (performance.now() - started > SETTLE.maxMs) {
+      return stop();
+    }
     const target = doc.getElementById(id);
     if (target) {
       const top = target.getBoundingClientRect().top + view.scrollY;
       if (top === lastTop) {
-        if (++stable >= SETTLE.stableFrames) return stop();
+        if (++stable >= SETTLE.stableFrames) {
+          return stop();
+        }
       } else {
         scroller.scrollToAnchor(id, JUMP);
         lastTop = top;

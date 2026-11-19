@@ -25,7 +25,7 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "a date as YYYY-MM-DD");
 const optionalUrl = z.string().max(500).default("");
 
 /** Rich text as the editor writes it; sanitized by the server after parsing. */
-const richInput = z.string().max(20000);
+const richInput = z.string().max(20_000);
 const richLongInput = z.string().max(200_000);
 
 /** Wraps a per-locale payload so every write carries both languages. */
@@ -34,7 +34,9 @@ export function perLocale<T extends z.ZodType>(schema: T) {
 }
 
 function isTimeZone(value: string): boolean {
-  if (value === "") return true;
+  if (value === "") {
+    return true;
+  }
   try {
     new Intl.DateTimeFormat("en", { timeZone: value });
     return true;

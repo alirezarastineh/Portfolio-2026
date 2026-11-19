@@ -64,8 +64,12 @@ export interface TriggerVerdict {
   lastFailed: number;
 }
 
-const rate = (side: { answers: number; failed: number }) =>
-  side.answers ? side.failed / side.answers : 0;
+const side = (xs: readonly boolean[]) => ({
+  answers: xs.length,
+  failed: xs.filter(Boolean).length,
+});
+
+const rate = (s: { answers: number; failed: number }) => (s.answers ? s.failed / s.answers : 0);
 
 /**
  * The adaptive trigger, over whether each answer kept failed (newest first)
@@ -73,10 +77,6 @@ const rate = (side: { answers: number; failed: number }) =>
  */
 export function triggerVerdict(failures: readonly boolean[], newSince: number): TriggerVerdict {
   const r = TRIGGER_RULES;
-  const side = (xs: readonly boolean[]) => ({
-    answers: xs.length,
-    failed: xs.filter(Boolean).length,
-  });
   const recent = side(failures.slice(0, r.window));
   const previous = side(failures.slice(r.window, 2 * r.window));
   const lastFailed = side(failures.slice(0, r.recent)).failed;
@@ -90,7 +90,9 @@ export function triggerVerdict(failures: readonly boolean[], newSince: number): 
   if (newSince < r.minNew) {
     return no(`${newSince} new answers since the last insights; ${r.minNew} needed`);
   }
-  if (rate(recent) <= r.ratio * rate(previous)) return no(`failures did not rise: ${numbers}`);
+  if (rate(recent) <= r.ratio * rate(previous)) {
+    return no(`failures did not rise: ${numbers}`);
+  }
   if (lastFailed < r.minFailures) {
     return no(`${lastFailed} failed among the last ${r.recent}; ${r.minFailures} needed`);
   }
@@ -102,16 +104,22 @@ export function cleanScope(words: readonly string[]): string[] {
   const scope: string[] = [];
   for (const raw of words) {
     const word = raw.trim().toLowerCase();
-    if (!/^[\p{L}\p{N}]{3,40}$/u.test(word) || scope.includes(word)) continue;
+    if (!/^[\p{L}\p{N}]{3,40}$/u.test(word) || scope.includes(word)) {
+      continue;
+    }
     scope.push(word);
-    if (scope.length === LESSON_RULES.maxScope) break;
+    if (scope.length === LESSON_RULES.maxScope) {
+      break;
+    }
   }
   return scope;
 }
 
 /** Whether a question is one the lesson is about: a content word of the same stem as its scope. */
 export function inScope(question: string, scope: readonly string[]): boolean {
-  if (!scope.length) return false;
+  if (!scope.length) {
+    return false;
+  }
   return contentWords(question).some((word) => scope.some((s) => sameWord(word, s)));
 }
 
@@ -163,12 +171,20 @@ export function lessonEffect(
   const after = noRates();
   for (const row of rows) {
     const t = row.createdAt.getTime();
-    if (t < from || (t >= applied && t < since) || !inScope(row.question, scope)) continue;
+    if (t < from || (t >= applied && t < since) || !inScope(row.question, scope)) {
+      continue;
+    }
     const rates = t >= applied ? after : before;
     rates.answers++;
-    if (row.unknown) rates.unknown++;
-    if (row.feedback === -1) rates.down++;
-    if (failed(row, again)) rates.failed++;
+    if (row.unknown) {
+      rates.unknown++;
+    }
+    if (row.feedback === -1) {
+      rates.down++;
+    }
+    if (failed(row, again)) {
+      rates.failed++;
+    }
   }
   const successes = after.answers - after.failed;
   return {
@@ -211,7 +227,9 @@ export function corroborationProblem(input: LessonSource): string | null {
       : `a lesson needs ${LESSON_RULES.minEntries} accepted or fixed journal entries; ${decided.length} given`;
   }
   const { topic } = input;
-  if (!topic.unanswered) return "the topic is not one the assistant could not answer";
+  if (!topic.unanswered) {
+    return "the topic is not one the assistant could not answer";
+  }
   return topic.questions >= LESSON_RULES.minTopicQuestions
     ? null
     : `the topic has ${topic.questions} questions; ${LESSON_RULES.minTopicQuestions} needed`;

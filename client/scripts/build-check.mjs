@@ -24,7 +24,9 @@ const warnings = [];
 
 function check(raw, isWarning) {
   const line = stripVTControlCharacters(raw).trim();
-  if (line && isWarning(line)) warnings.push(line);
+  if (line && isWarning(line)) {
+    warnings.push(line);
+  }
 }
 
 /** Passes one child stream through to `sink` and keeps the lines `isWarning` picks. */
@@ -35,7 +37,9 @@ function watch(stream, sink, isWarning) {
     sink.write(chunk);
     const lines = (rest + chunk).split(/\r?\n/);
     rest = lines.pop() ?? "";
-    for (const line of lines) check(line, isWarning);
+    for (const line of lines) {
+      check(line, isWarning);
+    }
   });
   stream.on("end", () => check(rest, isWarning));
 }
@@ -46,8 +50,14 @@ const child = spawn(process.execPath, [vite, "build", ...process.argv.slice(2)],
 watch(child.stdout, process.stdout, (line) => !sizeRow.test(line) && warningLine.test(line));
 watch(child.stderr, process.stderr, () => true);
 
-const code = await new Promise((resolve) => child.on("close", (status) => resolve(status ?? 1)));
-if (code !== 0) process.exit(code);
+const code = await new Promise((resolve) => {
+  child.on("close", (status) => {
+    resolve(typeof status === "number" ? status : 1);
+  });
+});
+if (code !== 0) {
+  process.exit(code);
+}
 
 const problems = [];
 if (warnings.length > 0) {

@@ -18,7 +18,7 @@ import { getCorpus, getDraftCorpus, resetCorpusMemo } from "./build.js";
 beforeEach(async () => {
   await resetDb();
   resetCorpusMemo();
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => undefined);
   await seed();
 });
 
@@ -31,19 +31,19 @@ describe("document dates (plan phase 19)", () => {
     await db
       .update(projects)
       .set({ updatedAt: at("2026-03-01") })
-      .where(eq(projects.id, first!.id));
+      .where(eq(projects.id, first.id));
     // The English body changed later than the card; the German one earlier.
     await db
       .update(projectTranslations)
       .set({ updatedAt: at("2026-04-01") })
       .where(
-        sql`${projectTranslations.projectId} = ${first!.id} and ${projectTranslations.locale} = 'en'`,
+        sql`${projectTranslations.projectId} = ${first.id} and ${projectTranslations.locale} = 'en'`,
       );
     await db
       .update(projectTranslations)
       .set({ updatedAt: at("2026-02-01") })
       .where(
-        sql`${projectTranslations.projectId} = ${first!.id} and ${projectTranslations.locale} = 'de'`,
+        sql`${projectTranslations.projectId} = ${first.id} and ${projectTranslations.locale} = 'de'`,
       );
     const [post] = await db
       .insert(posts)
@@ -55,7 +55,7 @@ describe("document dates (plan phase 19)", () => {
       })
       .returning({ id: posts.id });
     await db.insert(postTranslations).values({
-      postId: post!.id,
+      postId: post.id,
       locale: "en",
       title: "Dated",
       excerpt: "A post with a date.",
@@ -70,8 +70,8 @@ describe("document dates (plan phase 19)", () => {
     const corpus = await getCorpus();
     const updated = (id: string) => corpus.documents.find((d) => d.id === id)?.updated;
 
-    expect(updated(`project:${first!.slug}@en`)).toBe("2026-04-01");
-    expect(updated(`project:${first!.slug}@de`)).toBe("2026-03-01");
+    expect(updated(`project:${first.slug}@en`)).toBe("2026-04-01");
+    expect(updated(`project:${first.slug}@de`)).toBe("2026-03-01");
     expect(updated("post:dated@en")).toBe("2026-05-02");
     expect(updated("profile@en")).toBe("2026-06-07");
     expect(updated("skills@de")).toBe("2026-06-07");
@@ -79,7 +79,7 @@ describe("document dates (plan phase 19)", () => {
     // The drafts: projects keep their own dates; what only a publish dates has none.
     const draft = await getDraftCorpus();
     const drafted = (id: string) => draft.documents.find((d) => d.id === id);
-    expect(drafted(`project:${first!.slug}@en`)?.updated).toBe("2026-04-01");
+    expect(drafted(`project:${first.slug}@en`)?.updated).toBe("2026-04-01");
     expect(drafted("profile@en")).toBeDefined();
     expect(drafted("profile@en")?.updated).toBeUndefined();
   });

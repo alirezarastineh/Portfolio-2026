@@ -19,13 +19,36 @@ import {
   withoutDemoted,
 } from "./trust.js";
 
+const byCodePoint = (a: string, b: string): number => {
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+};
+
+const DOLLAR = "$";
+
+const downgradeRun = (rows: number, downgraded: number) => ({ rows, downgraded });
+
+const registryEntry = (action: string) => TRUST_REGISTRY.find((e) => e.action === action);
+
+const scoreList = (n: number, score: number) => Array.from({ length: n }, () => score);
+
+const deepAnswers = (failed: number, aborted = 0) => [
+  ...Array.from({ length: failed }, () => "error:timeout"),
+  ...Array.from({ length: aborted }, () => "aborted"),
+  ...Array.from({ length: TRUST_RULES.deepWindow - failed }, () => "stop"),
+];
+
+const schemaImportFrom = (path: string, names: string) => `import { ${names} } from "${path}";\n`;
+
 describe("the trust registry (plan phase 14)", () => {
   it("gives every tool the agent gets a level, and every action one entry", () => {
     const actions = TRUST_REGISTRY.map((e) => e.action);
     expect(new Set(actions).size).toBe(actions.length);
     // The tools the agent is actually given, not only the list kept by hand.
     const given = Object.keys(buildTools(fixtureCorpus(), "en"));
-    expect([...given].sort()).toEqual([...TOOL_NAMES].sort());
+    expect([...given].sort(byCodePoint)).toEqual([...TOOL_NAMES].sort(byCodePoint));
     for (const tool of given) {
       expect(TRUST_REGISTRY.find((e) => e.action === tool)?.actor, tool).toBe("assistant");
     }
@@ -42,19 +65,23 @@ describe("the trust registry (plan phase 14)", () => {
   });
 
   it("demotes match past a fifth of its rows downgraded over 20 runs that wrote rows (visitor plan V20)", () => {
-    const run = (rows: number, downgraded: number) => ({ rows, downgraded });
-    expect(downgradeVerdict("feature:match", Array(19).fill(run(5, 0)))).toMatchObject({
+    expect(
+      downgradeVerdict(
+        "feature:match",
+        Array.from({ length: 19 }, () => downgradeRun(5, 0)),
+      ),
+    ).toMatchObject({
       verdict: "too-little",
       n: 19,
     });
     // A stopped run (no rows) is no evidence.
-    const atCeiling = [...Array(20).fill(run(5, 1)), run(0, 0)];
+    const atCeiling = [...Array.from({ length: 20 }, () => downgradeRun(5, 1)), downgradeRun(0, 0)];
     expect(downgradeVerdict("feature:match", atCeiling)).toMatchObject({
       verdict: "keep",
       value: 0.2,
       n: 20,
     });
-    const over = [run(5, 2), ...Array(19).fill(run(5, 1))];
+    const over = [downgradeRun(5, 2), ...Array.from({ length: 19 }, () => downgradeRun(5, 1))];
     expect(downgradeVerdict("feature:match", over)).toMatchObject({
       verdict: "demote",
       value: 0.21,
@@ -166,16 +193,19 @@ describe("the trust registry (plan phase 14)", () => {
   });
 
   it("lets the learning check run insights and retire a lesson, and only the admin propose one (plan phase 25)", () => {
-    const entry = (action: string) => TRUST_REGISTRY.find((e) => e.action === action);
-    expect(entry("insights.auto")).toMatchObject({ actor: "system", level: "L2", built: true });
-    expect(entry("insights.auto")?.enforcement).toMatch(/autoInsights/);
-    expect(entry("lesson.retire")).toMatchObject({
+    expect(registryEntry("insights.auto")).toMatchObject({
+      actor: "system",
+      level: "L2",
+      built: true,
+    });
+    expect(registryEntry("insights.auto")?.enforcement).toMatch(/autoInsights/);
+    expect(registryEntry("lesson.retire")).toMatchObject({
       actor: "system",
       level: "L2",
       reversible: true,
       built: true,
     });
-    expect(entry("lesson.propose")).toMatchObject({
+    expect(registryEntry("lesson.propose")).toMatchObject({
       actor: "admin",
       level: "L0",
       approver: "admin",
@@ -192,7 +222,7 @@ describe("the nightly schedule", () => {
 
   it("checks at 03:00 UTC and every 24 hours after, not while the deploy has the assistant off", async () => {
     vi.useFakeTimers();
-    const check = vi.fn(async () => null);
+    const check = vi.fn(() => Promise.resolve(null));
     let config = fixtureConfig();
     startTrustMonitor({ now: new Date("2026-10-01T02:00:00Z"), check, config: () => config });
     await vi.advanceTimersByTimeAsync(59 * 60_000);
@@ -210,9 +240,7 @@ describe("the nightly schedule", () => {
   it("logs a failed check and tries again the next night", async () => {
     vi.useFakeTimers();
     const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const check = vi.fn(async () => {
-      throw new Error("the database is down");
-    });
+    const check = vi.fn(() => Promise.reject(new Error("the database is down")));
     startTrustMonitor({
       now: new Date("2026-10-01T02:59:00Z"),
       check,
@@ -227,33 +255,28 @@ describe("the nightly schedule", () => {
 });
 
 describe("the demotion rules", () => {
-  const scores = (n: number, score: number) => Array.from({ length: n }, () => score);
-
   it("demotes a model below the faithfulness floor, given enough judged answers", () => {
     const m = modelSubject("gemini-x");
-    expect(faithfulnessVerdict(m, scores(TRUST_RULES.judgedMinimum - 1, 0)).verdict).toBe(
+    expect(faithfulnessVerdict(m, scoreList(TRUST_RULES.judgedMinimum - 1, 0)).verdict).toBe(
       "too-little",
     );
-    expect(faithfulnessVerdict(m, scores(TRUST_RULES.judgedMinimum, 0.79)).verdict).toBe("demote");
-    expect(faithfulnessVerdict(m, scores(TRUST_RULES.judgedMinimum, 0.8)).verdict).toBe("keep");
+    expect(faithfulnessVerdict(m, scoreList(TRUST_RULES.judgedMinimum, 0.79)).verdict).toBe(
+      "demote",
+    );
+    expect(faithfulnessVerdict(m, scoreList(TRUST_RULES.judgedMinimum, 0.8)).verdict).toBe("keep");
     // Only the latest 50 count: older, poorer answers do not.
-    const recentGood = [...scores(TRUST_RULES.judgedWindow, 0.9), ...scores(50, 0)];
+    const recentGood = [...scoreList(TRUST_RULES.judgedWindow, 0.9), ...scoreList(50, 0)];
     expect(faithfulnessVerdict(m, recentGood)).toMatchObject({ verdict: "keep", n: 50 });
   });
 
   it("demotes the deep route above the failure ceiling, leaving aborted answers out", () => {
-    const answers = (failed: number, aborted = 0) => [
-      ...Array.from({ length: failed }, () => "error:timeout"),
-      ...Array.from({ length: aborted }, () => "aborted"),
-      ...Array.from({ length: TRUST_RULES.deepWindow - failed }, () => "stop"),
-    ];
-    expect(errorRateVerdict("route:deep", answers(6)).verdict).toBe("keep");
-    expect(errorRateVerdict("route:deep", answers(7))).toMatchObject({
+    expect(errorRateVerdict("route:deep", deepAnswers(6)).verdict).toBe("keep");
+    expect(errorRateVerdict("route:deep", deepAnswers(7))).toMatchObject({
       verdict: "demote",
       n: 30,
     });
-    expect(errorRateVerdict("route:deep", answers(7, 5)).verdict).toBe("demote");
-    expect(errorRateVerdict("route:deep", answers(7).slice(1)).verdict).toBe("too-little");
+    expect(errorRateVerdict("route:deep", deepAnswers(7, 5)).verdict).toBe("demote");
+    expect(errorRateVerdict("route:deep", deepAnswers(7).slice(1)).verdict).toBe("too-little");
   });
 
   it("checks nightly at 03:00 UTC", () => {
@@ -288,8 +311,8 @@ const PUBLISH = "content/publish.ts";
 
 // An import's clause never crosses a `;`, so an `export type X = …;` before an
 // import cannot swallow it.
-const IMPORT = /^\s*(?:import|export)\s+(type\s+)?([^;]*?)\s*from\s*["']([^"']+)["']/gm;
-const SIDE_EFFECT = /^\s*import\s+["']([^"']+)["']/gm;
+const IMPORT_START = /^[ \t]*(import|export)\b/gm;
+const SIDE_EFFECT = /^[ \t]*import\s+["']([^"']+)["']/gm;
 const DYNAMIC = /\bimport\s*\(\s*[`"']([^`"'$]+)[`"']\s*\)/g;
 /** A dynamic import of a computed path, or a CommonJS require: neither can be followed. */
 const UNFOLLOWABLE = /\bimport\s*\(\s*(?![`"'][^`"'$]*[`"']\s*\))|require\s*\(/i;
@@ -298,6 +321,48 @@ const UNFOLLOWABLE = /\bimport\s*\(\s*(?![`"'][^`"'$]*[`"']\s*\))|require\s*\(/i
  * could write the table it came from. A computed key is beyond a static scan.
  */
 const COLUMN_TABLE = /\.\s*table\b|\[\s*[`"']table[`"']\s*\]|\{[^{}]*\btable\b[^{}]*\}\s*[=):]/;
+
+interface ParsedFromClause {
+  kind: "import" | "export";
+  typeOnly: boolean;
+  clause: string;
+  spec: string;
+  start: number;
+  end: number;
+}
+
+function scanFromClauses(text: string): ParsedFromClause[] {
+  const results: ParsedFromClause[] = [];
+  for (const startMatch of text.matchAll(IMPORT_START)) {
+    const start = startMatch.index;
+    const kind = startMatch[1] as "import" | "export";
+    const afterKeyword = start + startMatch[0].length;
+    const semi = text.indexOf(";", afterKeyword);
+    const segment = text.slice(afterKeyword, semi === -1 ? text.length : semi);
+    const fromMatch = /(?:[\s}*])from\s*["']([^"']+)["']/.exec(segment);
+    if (!fromMatch) {
+      continue;
+    }
+    const rawClause = segment.slice(0, fromMatch.index + 1).trim();
+    const typeOnly = /^type(?:\s|$)/.test(rawClause);
+    const clause = typeOnly ? rawClause.slice(4).trim() : rawClause;
+    const end = afterKeyword + fromMatch.index + fromMatch[0].length + (semi === -1 ? 0 : 1);
+    results.push({ kind, typeOnly, clause, spec: fromMatch[1], start, end });
+  }
+  return results;
+}
+
+function parseAliasedImport(specifier: string): { name: string; binding: string } {
+  const cleaned = specifier.trim().replace(/^type\s+/, "");
+  const match = /^(\S+)\s+as\s+(\S+)$/.exec(cleaned);
+  return match ? { name: match[1], binding: match[2] } : { name: cleaned, binding: cleaned };
+}
+
+function namedBindingsOf(clause: string): string {
+  const open = clause.indexOf("{");
+  const close = clause.lastIndexOf("}");
+  return open !== -1 && close > open ? clause.slice(open + 1, close) : "";
+}
 /** What publishing writes: written anywhere else, it would publish around the publish module. */
 const PUBLICATION_TABLES = [
   "contentPointers",
@@ -344,7 +409,7 @@ function schemaWrite(text: string): RegExpExecArray | null {
  * Nor may a column lead back to its table, anywhere (`COLUMN_TABLE`).
  */
 function notARead(text: string): RegExpExecArray | null {
-  const clauses = [...text.matchAll(/^\s*import\s*\{[^}]*\}\s*from\s*["'][^"']+["']/gm)];
+  const clauses = [...text.matchAll(/^[ \t]*import\s*\{[^}]*\}\s*from\s*["'][^"']+["']/gm)];
   for (const m of text.matchAll(NAMES_A_TABLE)) {
     const end = m.index + m[0].length;
     const after = text.slice(end, end + 40);
@@ -354,7 +419,9 @@ function notARead(text: string): RegExpExecArray | null {
       !/^\s+as\b/.test(after);
     const column = /^\s*\.\s*[\w$]+(?![\w$])(?!\s*[.[(])/.test(after);
     const readFrom = /\.(?:from|innerJoin|leftJoin|rightJoin|fullJoin)\(\s*$/.test(before);
-    if (!imported && !column && !readFrom) return m;
+    if (!imported && !column && !readFrom) {
+      return m;
+    }
   }
   return null;
 }
@@ -373,24 +440,72 @@ function importsOf(file: string, text: string, root: string): Import[] {
     return relative(root, path).replaceAll("\\", "/");
   };
   const found: Import[] = [];
-  for (const [, typeOnly, clause, spec] of text.matchAll(IMPORT)) {
-    if (typeOnly || !spec!.startsWith(".")) continue;
-    const named = /^\{([\s\S]*)\}$/.exec(clause!.trim());
-    const names = named
-      ? named[1]!
+  for (const { typeOnly, clause, spec } of scanFromClauses(text)) {
+    if (typeOnly || !spec.startsWith(".")) {
+      continue;
+    }
+    const trimmed = clause.trim();
+    const isNamed = trimmed.startsWith("{") && trimmed.endsWith("}");
+    const names = isNamed
+      ? trimmed
+          .slice(1, -1)
           .split(",")
           .map((n) => n.trim())
           .filter((n) => n && !n.startsWith("type "))
-          .map((n) => n.split(/\s+as\s+/)[0]!.trim())
+          .map((n) => parseAliasedImport(n).name)
       : ["*"];
-    found.push({ from: file, to: resolveSpec(spec!), names });
+    found.push({ from: file, to: resolveSpec(spec), names });
   }
   for (const pattern of [SIDE_EFFECT, DYNAMIC]) {
     for (const [, spec] of text.matchAll(pattern)) {
-      if (spec!.startsWith(".")) found.push({ from: file, to: resolveSpec(spec!), names: ["*"] });
+      if (spec.startsWith(".")) {
+        found.push({ from: file, to: resolveSpec(spec), names: ["*"] });
+      }
     }
   }
   return found;
+}
+
+function publicationTableWrite(file: string, text: string): RegExpExecArray | null {
+  if (file === SCHEMA) {
+    return schemaWrite(text);
+  }
+  if (PUBLICATION_READERS.has(file)) {
+    return notARead(text);
+  }
+  return firstMention(text);
+}
+
+function inspectPublishModule(
+  file: string,
+  text: string,
+  root: string,
+): { offending: Import[]; next: string[] } {
+  const offending: Import[] = [];
+  if (file !== PUBLISH) {
+    const write = publicationTableWrite(file, text);
+    if (write) {
+      offending.push({ from: file, to: "(publication tables)", names: [write[1]] });
+    }
+    if (COLUMN_TABLE.test(text)) {
+      offending.push({ from: file, to: "(a column's table)", names: ["table"] });
+    }
+  }
+  if (UNFOLLOWABLE.test(text)) {
+    offending.push({ from: file, to: "(computed import)", names: ["*"] });
+  }
+  const next: string[] = [];
+  for (const imp of importsOf(file, text, root)) {
+    if (imp.to === PUBLISH && imp.names.some((n) => !READ_ONLY_PUBLISH.has(n))) {
+      offending.push(imp);
+    }
+    // The publish route lives there: no agent module may mount or call one.
+    if (imp.to.startsWith("routes/")) {
+      offending.push(imp);
+    }
+    next.push(imp.to);
+  }
+  return { offending, next };
 }
 
 /**
@@ -410,36 +525,20 @@ function publishReach(
   const queue = [...entries];
   const offending: Import[] = [];
   while (queue.length) {
-    const file = queue.pop()!;
-    if (seen.has(file)) continue;
+    const file = queue.pop();
+    if (!file || seen.has(file)) {
+      continue;
+    }
     seen.add(file);
     const text = read(file);
-    if (text === null) continue;
+    if (text === null) {
+      continue;
+    }
     // The publish module writes the tables itself, behind the exports checked
     // below. Elsewhere only the schema and the one reader may name them at all.
-    if (file !== PUBLISH) {
-      const write =
-        file === SCHEMA
-          ? schemaWrite(text)
-          : PUBLICATION_READERS.has(file)
-            ? notARead(text)
-            : firstMention(text);
-      if (write) offending.push({ from: file, to: "(publication tables)", names: [write[1]!] });
-      if (COLUMN_TABLE.test(text)) {
-        offending.push({ from: file, to: "(a column's table)", names: ["table"] });
-      }
-    }
-    if (UNFOLLOWABLE.test(text)) {
-      offending.push({ from: file, to: "(computed import)", names: ["*"] });
-    }
-    for (const imp of importsOf(file, text, root)) {
-      if (imp.to === PUBLISH && imp.names.some((n) => !READ_ONLY_PUBLISH.has(n))) {
-        offending.push(imp);
-      }
-      // The publish route lives there: no agent module may mount or call one.
-      if (imp.to.startsWith("routes/")) offending.push(imp);
-      queue.push(imp.to);
-    }
+    const inspected = inspectPublishModule(file, text, root);
+    offending.push(...inspected.offending);
+    queue.push(...inspected.next);
   }
   return offending;
 }
@@ -447,7 +546,9 @@ function publishReach(
 function sources(dir: string): string[] {
   return readdirSync(join(SRC, dir)).flatMap((name) => {
     const path = `${dir}/${name}`;
-    if (statSync(join(SRC, path)).isDirectory()) return sources(path);
+    if (statSync(join(SRC, path)).isDirectory()) {
+      return sources(path);
+    }
     return name.endsWith(".ts") && !name.includes(".spec.") ? [path] : [];
   });
 }
@@ -457,10 +558,11 @@ const readSource = (file: string) =>
 
 const described = (found: Import[]) =>
   found
-    .map(
-      (i) => `${i.from}: ${i.to === PUBLISH ? i.names.join(",") : `${i.to} ${i.names.join(",")}`}`,
-    )
-    .sort();
+    .map((i) => {
+      const target = i.to === PUBLISH ? i.names.join(",") : `${i.to} ${i.names.join(",")}`;
+      return `${i.from}: ${target}`;
+    })
+    .sort(byCodePoint);
 
 /** The editors' content tables: the drafts and the live FAQ, which the content agent must never write. */
 const CONTENT_TABLES = [
@@ -492,7 +594,7 @@ interface Forbidden {
 }
 
 function forbidding(tables: readonly string[]): Forbidden {
-  const names = tables.map((t) => t.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`));
+  const names = tables.map((t) => t.replaceAll(/[A-Z]/g, (c) => `_${c.toLowerCase()}`));
   return {
     tables,
     sqlWrite: new RegExp(
@@ -518,8 +620,62 @@ const MCP_READS = forbidding([
   "aiFaqProposals",
   "aiProposals",
 ]);
-/** An import from the schema: its clause, and where it comes from. */
-const SCHEMA_IMPORT = /^\s*import\s+(type\s+)?([\s\S]*?)\s+from\s+["']([^"']+)["'];?/gm;
+interface BlankState {
+  mode: "code" | "line" | "block" | "quoted";
+  quote: string;
+  out: string;
+  index: number;
+}
+
+function stepCodeState(state: BlankState, text: string, strings: boolean): void {
+  const c = text[state.index];
+  const next = text[state.index + 1];
+  if (c === "/" && next === "/") {
+    state.mode = "line";
+    state.out += " ";
+  } else if (c === "/" && next === "*") {
+    state.mode = "block";
+    state.out += " ";
+  } else if (c === "'" || c === '"') {
+    state.mode = "quoted";
+    state.quote = c;
+    state.out += strings ? " " : c;
+  } else {
+    state.out += c;
+  }
+}
+
+function stepLineState(state: BlankState, text: string): void {
+  const c = text[state.index];
+  if (c === "\n") {
+    state.mode = "code";
+  }
+  state.out += c === "\n" ? c : " ";
+}
+
+function stepBlockState(state: BlankState, text: string): void {
+  const c = text[state.index];
+  if (c === "*" && text[state.index + 1] === "/") {
+    state.mode = "code";
+    state.index++;
+    state.out += "  ";
+    return;
+  }
+  state.out += c === "\n" ? c : " ";
+}
+
+function stepQuotedState(state: BlankState, text: string, strings: boolean): void {
+  const c = text[state.index];
+  if (c === "\\") {
+    state.out += strings ? "  " : c + (text[state.index + 1] ?? "");
+    state.index++;
+    return;
+  }
+  if (c === state.quote) {
+    state.mode = "code";
+  }
+  state.out += strings && c !== "\n" ? " " : c;
+}
 
 /**
  * A module's text with its comments blanked out, and with `strings` its quoted
@@ -527,40 +683,56 @@ const SCHEMA_IMPORT = /^\s*import\s+(type\s+)?([\s\S]*?)\s+from\s+["']([^"']+)["
  * character keeps its place, so a match's index is the same in the source.
  */
 function blanked(text: string, strings: boolean): string {
-  let out = "";
-  let state: "code" | "line" | "block" | "quoted" = "code";
-  let quote = "";
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]!;
-    const next = text[i + 1];
-    if (state === "code") {
-      if (c === "/" && next === "/") state = "line";
-      else if (c === "/" && next === "*") state = "block";
-      else if (c === "'" || c === '"') {
-        state = "quoted";
-        quote = c;
-        out += strings ? " " : c;
-        continue;
-      }
-      out += state === "code" ? c : " ";
-    } else if (state === "line") {
-      if (c === "\n") state = "code";
-      out += c === "\n" ? c : " ";
-    } else if (state === "block") {
-      if (c === "*" && next === "/") {
-        state = "code";
-        i++;
-        out += "  ";
-      } else out += c === "\n" ? c : " ";
-    } else if (c === "\\") {
-      out += strings ? "  " : c + (next ?? "");
-      i++;
+  const state: BlankState = { mode: "code", quote: "", out: "", index: 0 };
+  while (state.index < text.length) {
+    if (state.mode === "code") {
+      stepCodeState(state, text, strings);
+    } else if (state.mode === "line") {
+      stepLineState(state, text);
+    } else if (state.mode === "block") {
+      stepBlockState(state, text);
     } else {
-      if (c === quote) state = "code";
-      out += strings && c !== "\n" ? " " : c;
+      stepQuotedState(state, text, strings);
+    }
+    state.index++;
+  }
+  return state.out;
+}
+
+function schemaReferencePatterns(
+  prose: string,
+  forbidden: Forbidden,
+): { names: string[]; imports: ParsedFromClause[] } {
+  const imports = scanFromClauses(prose).filter((m) => m.kind === "import");
+  const bindings = new Set<string>();
+  const namespaces: string[] = [];
+  for (const m of imports) {
+    if (m.typeOnly || !/(^|\/)db\/schema(\.js)?$/.test(m.spec)) {
+      continue;
+    }
+    const clause = m.clause.trim();
+    const ns = /^\*\s+as\s+(\w+)$/.exec(clause);
+    if (ns) {
+      namespaces.push(ns[1]);
+    }
+    for (const part of namedBindingsOf(clause).split(",")) {
+      const { name, binding } = parseAliasedImport(part);
+      if (name && forbidden.tables.includes(name)) {
+        bindings.add(binding);
+      }
     }
   }
-  return out;
+  return {
+    imports,
+    names: [
+      ...bindings,
+      ...namespaces.flatMap((ns) => [
+        ...forbidden.tables.map((t) => String.raw`${ns}\s*\.\s*${t}`),
+        // A namespace used bare could hand any table on.
+        String.raw`${ns}(?!\s*\.)`,
+      ]),
+    ],
+  };
 }
 
 /**
@@ -573,42 +745,27 @@ function blanked(text: string, strings: boolean): string {
  */
 function contentWriteIn(text: string, forbidden: Forbidden = CONTENT): string | null {
   const prose = blanked(text, false);
-  if (UNFOLLOWABLE.test(prose)) return "an import that cannot be followed";
-  if (forbidden.sqlWrite.test(prose)) return "SQL that writes a content table";
-  if (forbidden.identifier.test(prose)) return "a content table named for SQL";
-
-  const imports = [...prose.matchAll(SCHEMA_IMPORT)];
-  const bindings = new Set<string>();
-  const namespaces: string[] = [];
-  for (const m of imports) {
-    if (m[1] || !/(^|\/)db\/schema(\.js)?$/.test(m[3]!)) continue;
-    const clause = m[2]!.trim();
-    const ns = /^\*\s+as\s+(\w+)$/.exec(clause);
-    if (ns) namespaces.push(ns[1]!);
-    const named = /\{([\s\S]*)\}/.exec(clause)?.[1] ?? "";
-    for (const part of named.split(",")) {
-      const [name, alias] = part
-        .trim()
-        .replace(/^type\s+/, "")
-        .split(/\s+as\s+/)
-        .map((s) => s.trim());
-      if (name && forbidden.tables.includes(name)) bindings.add(alias ?? name);
-    }
+  if (UNFOLLOWABLE.test(prose)) {
+    return "an import that cannot be followed";
   }
-  const names = [
-    ...bindings,
-    ...namespaces.flatMap((ns) => [
-      ...forbidden.tables.map((t) => String.raw`${ns}\s*\.\s*${t}`),
-      // A namespace used bare could hand any table on.
-      String.raw`${ns}(?!\s*\.)`,
-    ]),
-  ];
-  if (!names.length) return null;
+  if (forbidden.sqlWrite.test(prose)) {
+    return "SQL that writes a content table";
+  }
+  if (forbidden.identifier.test(prose)) {
+    return "a content table named for SQL";
+  }
+
+  const { names, imports } = schemaReferencePatterns(prose, forbidden);
+  if (!names.length) {
+    return null;
+  }
   const code = blanked(text, true);
-  const inImport = (at: number) => imports.some((m) => at >= m.index && at < m.index + m[0].length);
+  const inImport = (at: number) => imports.some((m) => at >= m.start && at < m.end);
   const mention = new RegExp(String.raw`(?<![\w$.])(?:${names.join("|")})(?![\w$])`, "g");
   for (const m of code.matchAll(mention)) {
-    if (inImport(m.index)) continue;
+    if (inImport(m.index)) {
+      continue;
+    }
     const end = m.index + m[0].length;
     const after = code.slice(end, end + 40);
     const before = code.slice(Math.max(0, m.index - 40), m.index);
@@ -619,7 +776,7 @@ function contentWriteIn(text: string, forbidden: Forbidden = CONTENT): string | 
       code.slice(Math.max(0, m.index - 200), m.index),
     );
     if (!column && !readFrom && !selected) {
-      return `${m[0].replace(/\s+/g, "")} used for more than a read`;
+      return `${m[0].replaceAll(/\s+/g, "")} used for more than a read`;
     }
   }
   return null;
@@ -639,18 +796,26 @@ function contentWrites(
   const queue = [entry];
   const writers: string[] = [];
   while (queue.length) {
-    const file = queue.pop()!;
-    if (seen.has(file)) continue;
+    const file = queue.pop();
+    if (!file || seen.has(file)) {
+      continue;
+    }
     seen.add(file);
     const text = read(file);
     // The publish module is fenced by the publish proof: an agent module may load only its
     // read-only exports (`READ_ONLY_PUBLISH`), so its own writes are out of the agent's reach.
-    if (text === null || file === PUBLISH) continue;
+    if (text === null || file === PUBLISH) {
+      continue;
+    }
     const how = file === "db/schema.ts" ? null : contentWriteIn(text, forbidden);
-    if (how) writers.push(`${file}: ${how}`);
-    for (const imp of importsOf(file, text, root)) queue.push(imp.to);
+    if (how) {
+      writers.push(`${file}: ${how}`);
+    }
+    for (const imp of importsOf(file, text, root)) {
+      queue.push(imp.to);
+    }
   }
-  return writers.sort();
+  return writers.sort(byCodePoint);
 }
 
 describe("the content agent proposes, and never writes the content (plan phase 29)", () => {
@@ -659,7 +824,6 @@ describe("the content agent proposes, and never writes the content (plan phase 2
   });
 
   it("would catch a write however it is spelled, and wherever it is imported from", () => {
-    const schema = (names: string) => `import { ${names} } from "../db/schema.js";\n`;
     const planted: Record<string, string> = {
       "ask/agent/content-work.ts": [
         "plain",
@@ -677,19 +841,19 @@ describe("the content agent proposes, and never writes the content (plan phase 2
       ]
         .map((name) => `import "../${name}.js";`)
         .join("\n"),
-      "ask/plain.ts": `${schema("projectTranslations")}db.update(projectTranslations).set({});`,
-      "ask/alias.ts": `${schema("projectTranslations as pt")}db.update(pt).set({});`,
+      "ask/plain.ts": `${schemaImportFrom("../db/schema.js", "projectTranslations")}db.update(projectTranslations).set({});`,
+      "ask/alias.ts": `${schemaImportFrom("../db/schema.js", "projectTranslations as pt")}db.update(pt).set({});`,
       "ask/namespace.ts": `import * as s from "../db/schema.js";\ndb.insert(s.aiFaq).values({});`,
       "ask/bare.ts": `import * as s from "../db/schema.js";\nconst { contentDocuments: docs } = s;`,
-      "ask/helper.ts": `${schema("mediaAssets")}write(tx, mediaAssets);`,
-      "ask/variable.ts": `${schema("postTranslations")}const table = postTranslations;`,
+      "ask/helper.ts": `${schemaImportFrom("../db/schema.js", "mediaAssets")}write(tx, mediaAssets);`,
+      "ask/variable.ts": `${schemaImportFrom("../db/schema.js", "postTranslations")}const table = postTranslations;`,
       "ask/sql.ts": 'db.execute(sql`update "public"."project_translations" set hook = \'\'`);',
-      "ask/identifier.ts": 'db.execute(sql`delete from ${sql.identifier("content_documents")}`);',
+      "ask/identifier.ts": `db.execute(sql\`delete from ${DOLLAR}{sql.identifier("content_documents")}\`);`,
       "ask/truncate.ts": "db.execute(sql`truncate table skill_translations`);",
       "ask/merge.ts": "db.execute(sql`merge into ai_faq using x on true`);",
-      "ask/computed.ts": "const m = await import(`../${name}.js`);",
+      "ask/computed.ts": `const m = await import(\`../${DOLLAR}{name}.js\`);`,
       // Reads only: from, joins, columns; and a table named in a comment or a label.
-      "ask/reader.ts": `${schema("projects, projectTranslations")}// we update projects elsewhere\nconst label = "the projects";\ndb.select({ id: projects.id }).from(projects).innerJoin(projectTranslations, eq(projectTranslations.projectId, projects.id));`,
+      "ask/reader.ts": `${schemaImportFrom("../db/schema.js", "projects, projectTranslations")}// we update projects elsewhere\nconst label = "the projects";\ndb.select({ id: projects.id }).from(projects).innerJoin(projectTranslations, eq(projectTranslations.projectId, projects.id));`,
     };
     expect(contentWrites("ask/agent/content-work.ts", (f) => planted[f] ?? null, SRC)).toEqual([
       "ask/alias.ts: pt used for more than a read",
@@ -710,7 +874,9 @@ describe("the content agent proposes, and never writes the content (plan phase 2
 /** Every module of the API, specs aside. */
 const allSources = () =>
   readdirSync(SRC).flatMap((name) => {
-    if (statSync(join(SRC, name)).isDirectory()) return sources(name);
+    if (statSync(join(SRC, name)).isDirectory()) {
+      return sources(name);
+    }
     return name.endsWith(".ts") && !name.includes(".spec.") ? [name] : [];
   });
 
@@ -722,7 +888,7 @@ function importersOf(
 ): string[] {
   return files
     .filter((file) => importsOf(file, read(file) ?? "", SRC).some((i) => i.to === target))
-    .sort();
+    .sort(byCodePoint);
 }
 
 describe("the content agent's apply runs only on the admin's decision (plan phase 30)", () => {
@@ -758,18 +924,17 @@ describe("the FAQ pipeline proposes; only the admin's accept writes the FAQ (pla
   });
 
   it("would catch the chain writing a lesson or the journal, however it is spelled", () => {
-    const schema = (names: string) => `import { ${names} } from "../../db/schema.js";\n`;
     const planted: Record<string, string> = {
       "ask/agent/faq-chain.ts": [
-        `${schema("aiJournal, aiFaqProposals")}`,
+        schemaImportFrom("../../db/schema.js", "aiJournal, aiFaqProposals"),
         // Reads and its own table: fine.
         "db.select({ id: aiJournal.id }).from(aiJournal);",
         "db.insert(aiFaqProposals).values({});",
         'import "./lesson.js";',
         'import "./journal.js";',
       ].join("\n"),
-      "ask/agent/lesson.ts": `${schema("aiLessons")}db.update(aiLessons).set({});`,
-      "ask/agent/journal.ts": "db.execute(sql`update ai_journal set fix_ref = ${id}`);",
+      "ask/agent/lesson.ts": `${schemaImportFrom("../../db/schema.js", "aiLessons")}db.update(aiLessons).set({});`,
+      "ask/agent/journal.ts": `db.execute(sql\`update ai_journal set fix_ref = ${DOLLAR}{id}\`);`,
     };
     expect(
       contentWrites("ask/agent/faq-chain.ts", (f) => planted[f] ?? null, SRC, FAQ_CHAIN),
@@ -835,7 +1000,7 @@ describe("agents outside read over MCP, and write only their counts (plan phase 
       .flatMap((file) => importsOf(file, readSource(file) ?? "", SRC))
       .filter((i) => i.to === "ask/deps.ts")
       .flatMap((i) => i.names);
-    expect([...new Set(fromDeps)].sort()).toEqual(["askConfig", "askCorpus"]);
+    expect([...new Set(fromDeps)].sort(byCodePoint)).toEqual(["askConfig", "askCorpus"]);
   });
 
   it("would see a module that talks to a model, its own or one it imports directly", () => {
@@ -848,16 +1013,16 @@ describe("agents outside read over MCP, and write only their counts (plan phase 
       "ask/mcp/protocol.ts": 'import type { UIMessage } from "ai";',
     };
     expect(
-      providerTalkers(["ask/mcp/route.ts", "ask/mcp/tools.ts", "ask/mcp/protocol.ts"], (f) =>
-        planted[f] === undefined ? null : planted[f],
+      providerTalkers(
+        ["ask/mcp/route.ts", "ask/mcp/tools.ts", "ask/mcp/protocol.ts"],
+        (f) => planted[f] ?? null,
       ),
     ).toEqual(["ask/embeddings.ts", "ask/mcp/tools.ts"]);
   });
 });
 
 /** A value import from the AI SDK or a provider: a module that can call a model itself. */
-const PROVIDER =
-  /^\s*import\s+(?!type\b)[^;]*?\sfrom\s+["'](?:ai|@ai-sdk\/[\w-]+|@openrouter\/[\w-]+)["']/m;
+const PROVIDER_SPECIFIER = /^(?:ai|@ai-sdk\/[\w-]+|@openrouter\/[\w-]+)$/;
 
 /** Among `files` and the modules they load directly, those that talk to a model provider. */
 function providerTalkers(
@@ -866,8 +1031,12 @@ function providerTalkers(
 ): string[] {
   const loaded = files.flatMap((file) => importsOf(file, read(file) ?? "", SRC).map((i) => i.to));
   return [...new Set([...files, ...loaded])]
-    .filter((file) => PROVIDER.test(blanked(read(file) ?? "", false)))
-    .sort();
+    .filter((file) =>
+      scanFromClauses(blanked(read(file) ?? "", false)).some(
+        (imp) => imp.kind === "import" && !imp.typeOnly && PROVIDER_SPECIFIER.test(imp.spec),
+      ),
+    )
+    .sort(byCodePoint);
 }
 
 describe("no writes from a laptop on the tunnel", () => {
@@ -907,7 +1076,7 @@ describe("publish stays out of every agent's reach", () => {
       // A template literal is followed too; a computed path or a require cannot be.
       "ask/tick.ts": "const m = await import(`../lib/tick.js`);",
       "lib/tick.ts": 'export { publishAll } from "../content/publish.js";',
-      "ask/computed.ts": "const m = await import(`../content/${name}.js`);",
+      "ask/computed.ts": `const m = await import(\`../content/${DOLLAR}{name}.js\`);`,
       "ask/required.ts": 'const m = createRequire(import.meta.url)("../content/publish.js");',
       // Space or a line break before the bracket is still a dynamic import.
       "ask/spaced.ts": 'const { publishAll } = await import ("../content/publish.js");',
@@ -920,8 +1089,8 @@ describe("publish stays out of every agent's reach", () => {
       // Writing the publication tables, however spelled: outside the schema and
       // the one reader, merely naming one is caught.
       "ask/writer.ts": "await db.insert(contentPointers).values(row);",
-      "ask/raw.ts": "await db.execute(sql`update content_pointers set version_id = ${id}`);",
-      "ask/template.ts": "await db.execute(sql`update ${contentVersions} set label = ${label}`);",
+      "ask/raw.ts": `await db.execute(sql\`update content_pointers set version_id = ${DOLLAR}{id}\`);`,
+      "ask/template.ts": `await db.execute(sql\`update ${DOLLAR}{contentVersions} set label = ${DOLLAR}{label}\`);`,
       "ask/namespace.ts": "await db.insert(schema.contentPublications).values(row);",
       "ask/alias.ts":
         'import { versionMediaRefs as refs } from "../db/schema.js";\nawait db.delete(refs);',
@@ -931,8 +1100,7 @@ describe("publish stays out of every agent's reach", () => {
       "ask/destructure.ts":
         "const { contentPointers: cp } = schema;\nawait db.update(cp).set(row);",
       "ask/merge.ts": "await db.execute(sql`MERGE INTO content_pointers USING incoming ON true`);",
-      "ask/identifier.ts":
-        'await db.execute(sql`update ${sql.identifier("content_pointers")} set version_id = ${id}`);',
+      "ask/identifier.ts": `await db.execute(sql\`update ${DOLLAR}{sql.identifier("content_pointers")} set version_id = ${DOLLAR}{id}\`);`,
       // The read-only exports are fine.
       "ask/fine.ts": 'import { buildAll, type PublishResult } from "../content/publish.js";',
     };
@@ -987,7 +1155,7 @@ describe("publish stays out of every agent's reach", () => {
       "const { table } = contentPointers.locale;\nawait db.update(table).set(row);",
       'import { contentPointers as cp } from "../../db/schema.js";\nawait db.update(cp).set(row);',
       "await db.execute(sql`MERGE INTO content_pointers USING incoming ON true`);",
-      'await db.execute(sql`truncate ${sql.identifier("content_versions")}`);',
+      `await db.execute(sql\`truncate ${DOLLAR}{sql.identifier("content_versions")}\`);`,
     ]) {
       expect(flagged(`${reads}\n${write}`), write).toBe(true);
     }

@@ -37,7 +37,9 @@ export function toolOutcomeLabel(outcome: ToolOutcome): string {
 
 /** A refusal or a failure is bad; finding nothing, or being cut off, is worth a look. */
 export function toolTone(outcome: ToolOutcome): Tone {
-  if (outcome === "ok") return "ok";
+  if (outcome === "ok") {
+    return "ok";
+  }
   return outcome === "not_allowed" || outcome === "error" ? "bad" : "warn";
 }
 
@@ -48,8 +50,12 @@ function percent(part: number, whole: number): string {
 /** Who answered the step, how fast, what it read and wrote, how it ended. */
 export function stepLine(step: TraceStep): string {
   const parts = [step.model ?? "no model could answer"];
-  if (step.answerOnly) parts.push("answer-only");
-  if (step.ttftMs !== null) parts.push(`${count.format(step.ttftMs)} ms to first token`);
+  if (step.answerOnly) {
+    parts.push("answer-only");
+  }
+  if (step.ttftMs !== null) {
+    parts.push(`${count.format(step.ttftMs)} ms to first token`);
+  }
   if (step.tokens) {
     const { input, cached, output } = step.tokens;
     parts.push(
@@ -57,13 +63,17 @@ export function stepLine(step: TraceStep): string {
       `${count.format(output)} out`,
     );
   }
-  if (step.finishReason) parts.push(step.finishReason);
+  if (step.finishReason) {
+    parts.push(step.finishReason);
+  }
   return parts.join(" · ");
 }
 
 /** The models a step passed over before one answered, or null when none were. */
 export function passedOverLine(step: TraceStep): string | null {
-  if (!step.passedOver.length) return null;
+  if (!step.passedOver.length) {
+    return null;
+  }
   return step.passedOver.map((p) => `${p.model} ${p.outcome} (${p.ms} ms)`).join(" → ");
 }
 
@@ -113,7 +123,9 @@ const NOT_REFUSED = new Set(["forgotten"]);
 export function refusalsByDay(rows: readonly GuardEventRow[]): RefusalDay[] {
   const days = new Map<string, GuardEventRow[]>();
   for (const row of rows) {
-    if (!NOT_REFUSED.has(row.kind)) days.set(row.day, [...(days.get(row.day) ?? []), row]);
+    if (!NOT_REFUSED.has(row.kind)) {
+      days.set(row.day, [...(days.get(row.day) ?? []), row]);
+    }
   }
   return [...days]
     .map(([day, kinds]) => ({
@@ -131,7 +143,9 @@ export function refusalsByDay(rows: readonly GuardEventRow[]): RefusalDay[] {
 export function refusalTotals(rows: readonly GuardEventRow[]): { kind: string; count: number }[] {
   const totals = new Map<string, number>();
   for (const row of rows) {
-    if (!NOT_REFUSED.has(row.kind)) totals.set(row.kind, (totals.get(row.kind) ?? 0) + row.count);
+    if (!NOT_REFUSED.has(row.kind)) {
+      totals.set(row.kind, (totals.get(row.kind) ?? 0) + row.count);
+    }
   }
   return [...totals]
     .map(([kind, n]) => ({ kind, count: n }))
@@ -144,8 +158,8 @@ export function droppedRate(rows: readonly AnswersRow[]): {
   withDropped: number;
   rate: number;
 } {
-  const { answers, count, rate } = shareOf(rows, "withDropped");
-  return { answers, withDropped: count, rate };
+  const { answers, count: withDropped, rate } = shareOf(rows, "withDropped");
+  return { answers, withDropped, rate };
 }
 
 /** The share of the period's answers a count covers (older API rows count as zero). */
@@ -154,12 +168,12 @@ export function shareOf(
   field: "withDropped" | "flagged",
 ): { answers: number; count: number; rate: number } {
   let answers = 0;
-  let count = 0;
+  let total = 0;
   for (const row of rows) {
     answers += row.answers;
-    count += row[field] ?? 0;
+    total += row[field] ?? 0;
   }
-  return { answers, count, rate: answers ? count / answers : 0 };
+  return { answers, count: total, rate: answers ? total / answers : 0 };
 }
 
 const CHECK_LABELS: Record<string, string> = {
@@ -189,12 +203,16 @@ const DOWN_REASONS: Record<string, string> = {
 /** A review queue reason in words: a check's flag, the judge's verdict, or people's signals as they are. */
 export function reasonLabel(reason: string): string {
   // The nightly judge found it unfaithful (plan phase 26).
-  if (reason === "judge:unfaithful") return "judged unfaithful";
+  if (reason === "judge:unfaithful") {
+    return "judged unfaithful";
+  }
   // The visitor's own signals (visitor plan V2): a thumbs-down's reason, a stop mid-answer.
   if (reason.startsWith("thumbs down:")) {
     return DOWN_REASONS[reason.slice("thumbs down:".length)] ?? "thumbs down";
   }
-  if (reason === "stopped") return "stopped mid-answer";
+  if (reason === "stopped") {
+    return "stopped mid-answer";
+  }
   return reason.startsWith("check:") ? checkLabel(reason.slice("check:".length)) : reason;
 }
 
@@ -266,6 +284,8 @@ export function dayRows(
   for (const r of refusalsByDay(usage.guardEvents ?? [])) {
     Object.assign(row(r.day), { refused: r.total, refusedKinds: r.kinds });
   }
-  for (const m of usage.models) row(m.day).usd += m.usd;
+  for (const m of usage.models) {
+    row(m.day).usd += m.usd;
+  }
   return [...byDay.values()].sort((a, b) => b.day.localeCompare(a.day));
 }

@@ -13,8 +13,9 @@ const PAGES = [
 
 test.describe("content security policy", () => {
   test("pages get an enforced policy with a fresh nonce per request", async ({ request }) => {
-    const first = (await request.get("/en")).headers()["content-security-policy"];
-    const second = (await request.get("/en")).headers()["content-security-policy"];
+    const [firstRes, secondRes] = await Promise.all([request.get("/en"), request.get("/en")]);
+    const first = firstRes.headers()["content-security-policy"];
+    const second = secondRes.headers()["content-security-policy"];
 
     expect(first).toContain("frame-ancestors 'none'");
     const scriptSrc = first?.split("; ").find((directive) => directive.startsWith("script-src "));
@@ -31,12 +32,20 @@ test.describe("content security policy", () => {
 
     // Analog's event-dispatch contract and Angular's replay call, at least.
     expect(scripts.length).toBeGreaterThanOrEqual(2);
-    for (const script of scripts) expect(script.nonce, script.attrs).toBe(nonce);
+    for (const script of scripts) {
+      expect(script.nonce, script.attrs).toBe(nonce);
+    }
   });
 
   test("files and the BFF carry no page policy", async ({ request }) => {
-    for (const path of ["/robots.txt", "/sitemap.xml", "/en/rss.xml", "/api/v1/content/en"]) {
-      expect((await request.get(path)).headers()["content-security-policy"], path).toBeUndefined();
+    const responses = await Promise.all(
+      ["/robots.txt", "/sitemap.xml", "/en/rss.xml", "/api/v1/content/en"].map(async (path) => ({
+        path,
+        res: await request.get(path),
+      })),
+    );
+    for (const { path, res } of responses) {
+      expect(res.headers()["content-security-policy"], path).toBeUndefined();
     }
   });
 

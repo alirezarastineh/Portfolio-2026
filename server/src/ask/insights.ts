@@ -108,28 +108,32 @@ export async function runInsights(
   reason = "",
 ): Promise<InsightRun> {
   const rows = await insightQuestions();
-  if (!rows.length) return { ok: true, snapshot: null };
+  if (!rows.length) {
+    return { ok: true, snapshot: null };
+  }
 
   // Each question fenced like the visitor's own turn (plan phase 15): it is data to group.
   const list = rows
     .map(
       (r) =>
-        `- ${wrapVisitor(r.question.replace(/\s+/g, " ").slice(0, 300), r.locale)}${r.unknown || r.down ? " [not answered]" : ""}`,
+        `- ${wrapVisitor(r.question.replaceAll(/\s+/g, " ").slice(0, 300), r.locale)}${r.unknown || r.down ? " [not answered]" : ""}`,
     )
     .join("\n");
   const result = await oneShot(config, trigger === "auto" ? "autoInsight" : "insight", (model) =>
     generateText({
       model,
       maxRetries: 0,
-      maxOutputTokens: 2_000,
+      maxOutputTokens: 2000,
       output: Output.object({ schema: insightSchema }),
       instructions: `You group questions that visitors asked a portfolio's AI assistant into topics, so its owner sees what recruiters and engineers want to know and what the assistant could not answer. Questions marked [not answered] got no useful answer. Write in English. Use only the questions given. ${INSIGHT_FENCE}`,
       prompt: `Questions (newest first):\n${list}`,
     }).then((r) => r.output),
   );
-  if (!result.ok) return result;
+  if (!result.ok) {
+    return result;
+  }
 
-  const newest = rows[0]!.id;
+  const newest = rows[0].id;
   const [snapshot] = await getDb()
     .insert(aiInsightSnapshots)
     .values({
@@ -145,8 +149,10 @@ export async function runInsights(
     })
     .returning();
   // The admin has seen today's topics: an automatic run before this one has no notice left.
-  if (trigger === "admin") await markSeen(snapshot!.id);
-  return { ok: true, snapshot: snapshot! };
+  if (trigger === "admin") {
+    await markSeen(snapshot.id);
+  }
+  return { ok: true, snapshot };
 }
 
 /**
@@ -159,7 +165,9 @@ export async function markSeen(id: string): Promise<boolean> {
     .select({ id: aiInsightSnapshots.id })
     .from(aiInsightSnapshots)
     .where(eq(aiInsightSnapshots.id, id));
-  if (!found) return false;
+  if (!found) {
+    return false;
+  }
   await db
     .update(aiInsightSnapshots)
     .set({ seenAt: new Date() })
@@ -200,7 +208,9 @@ export async function insightsNotice(): Promise<{
   unanswered: number;
 } | null> {
   const row = await unseenAutoSnapshot();
-  if (!row) return null;
+  if (!row) {
+    return null;
+  }
   const unanswered = row.topics.filter((t) => t.unanswered).length;
   return { id: row.id, at: row.createdAt, reason: row.reason, unanswered };
 }

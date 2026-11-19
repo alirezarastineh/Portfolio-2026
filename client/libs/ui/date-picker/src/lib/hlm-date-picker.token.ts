@@ -25,7 +25,7 @@ export interface HlmDatePickerConfig<T> {
 
 function getDefaultConfig<T>(): HlmDatePickerConfig<T> {
   return {
-    formatDate: (date) => (date instanceof Date ? date.toDateString() : `${date}`),
+    formatDate: (date) => (date instanceof Date ? date.toDateString() : String(date)),
     transformDate: (date) => date,
     autoCloseOnSelect: false,
   };

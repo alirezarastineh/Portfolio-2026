@@ -21,7 +21,9 @@ export function cardLayouts(projects: readonly { featured: boolean }[]): CardLay
       run++;
       continue;
     }
-    if (run % 2 === 1) layouts[i - 1] = "wide";
+    if (run % 2 === 1) {
+      layouts[i - 1] = "wide";
+    }
     run = 0;
   }
   return layouts;

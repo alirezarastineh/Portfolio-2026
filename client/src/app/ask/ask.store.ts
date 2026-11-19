@@ -1,5 +1,5 @@
 import { DOCUMENT } from "@angular/common";
-import { computed, effect, inject, untracked } from "@angular/core";
+import { computed, effect, inject, Injectable, untracked } from "@angular/core";
 import { Router } from "@angular/router";
 import { Chat } from "@ai-sdk/angular";
 import {
@@ -188,7 +188,9 @@ interface Stored {
 function readStored(): Stored | null {
   try {
     const raw = sessionStorage.getItem(ASK_STORAGE_KEY);
-    if (!raw) return null;
+    if (!raw) {
+      return null;
+    }
     const stored = JSON.parse(raw) as Stored;
     return typeof stored.sessionId === "string" && Array.isArray(stored.entries) ? stored : null;
   } catch {
@@ -202,7 +204,7 @@ function forStorage(messages: AskMessage[]): AskMessage[] {
     ...m,
     parts: m.parts.map((p) =>
       isToolUIPart(p) && p.type !== "tool-navigate" && "output" in p
-        ? ({ ...p, output: undefined } as typeof p)
+        ? { ...p, output: undefined }
         : p,
     ),
   }));
@@ -214,7 +216,9 @@ interface ErrorResponseBody {
 }
 
 function parseResponseBody(responseBody?: string): ErrorResponseBody {
-  if (!responseBody) return {};
+  if (!responseBody) {
+    return {};
+  }
   try {
     return JSON.parse(responseBody) as ErrorResponseBody;
   } catch {
@@ -252,7 +256,9 @@ function failureFrom(error: Error): { failure: Failure; retryAfter?: number } {
   if (error.message === "unavailable" || error.message === "timeout" || error.message === "error") {
     return { failure: error.message };
   }
-  if (error instanceof TypeError || !navigator.onLine) return { failure: "offline" };
+  if (error instanceof TypeError || !navigator.onLine) {
+    return { failure: "offline" };
+  }
   return { failure: "error" };
 }
 
@@ -271,7 +277,9 @@ async function readyToAsk(
   locale: Locale,
   host: HTMLElement | undefined,
 ): Promise<boolean> {
-  if (!TURNSTILE_SITE_KEY || next.verified) return true;
+  if (!TURNSTILE_SITE_KEY || next.verified) {
+    return true;
+  }
   try {
     next.turnstileToken = await turnstileToken(locale, host);
     return true;
@@ -289,8 +297,8 @@ function settleCheck(next: TurnstileState, entries: readonly Entry[], entryId: s
   next.turnstileToken = "";
 }
 
-export const AskStore = signalStore(
-  { providedIn: "root" },
+@Injectable({ providedIn: "root" })
+export class AskStore extends signalStore(
   withState<AskState>(() => {
     const stored = readStored();
     return {
@@ -377,10 +385,14 @@ export const AskStore = signalStore(
     });
 
     function handleToolPart(part: AskMessage["parts"][number]): void {
-      if (!isToolUIPart(part) || part.state !== "output-available") return;
+      if (!isToolUIPart(part) || part.state !== "output-available") {
+        return;
+      }
       if (part.type === "tool-navigate") {
         const output = part.output as { ok?: boolean; to?: string } | undefined;
-        if (output?.ok && output.to) void store._router.navigateByUrl(output.to);
+        if (output?.ok && output.to) {
+          void store._router.navigateByUrl(output.to);
+        }
       }
     }
 
@@ -406,7 +418,9 @@ export const AskStore = signalStore(
       }),
       onError: (error) => {
         const entryId = store._next.entryId;
-        if (!entryId) return;
+        if (!entryId) {
+          return;
+        }
         const { failure, retryAfter } = failureFrom(error);
         // The visitor sees one line; the console keeps what actually failed
         // (a dropped connection and a bug both read as "offline" otherwise).
@@ -439,7 +453,9 @@ export const AskStore = signalStore(
         }
         if (failure === "resting" || failure === "off") {
           const remote = store.remote();
-          if (remote) patchState(store, { remote: { ...remote, state: failure } });
+          if (remote) {
+            patchState(store, { remote: { ...remote, state: failure } });
+          }
         }
         patchState(store, {
           announcement: plainText(messageFor(failure, retryAfter)),
@@ -454,13 +470,19 @@ export const AskStore = signalStore(
         // The step a match is on (visitor plan V20): shown under the entry, never announced.
         if (part.type === "data-match-progress") {
           const step = matchStep(part.data);
-          if (step && entryId) patchState(store, { matchStep: { entryId, step } });
+          if (step && entryId) {
+            patchState(store, { matchStep: { entryId, step } });
+          }
           return;
         }
         const status = part.type === "data-status" ? (part.data as Partial<FailoverStatus>) : null;
-        if (status?.code !== "failover" || !entryId) return;
+        if (status?.code !== "failover" || !entryId) {
+          return;
+        }
         const { position, of } = status;
-        if (typeof position !== "number" || typeof of !== "number") return;
+        if (typeof position !== "number" || typeof of !== "number") {
+          return;
+        }
         const first = store.failover()?.entryId !== entryId;
         patchState(store, {
           failover: { entryId, position, of },
@@ -473,7 +495,9 @@ export const AskStore = signalStore(
         patchState(store, { failover: null, matchStep: null });
         persist();
         reportFinish(message, isAbort);
-        if (isAbort || isError || message.role !== "assistant") return;
+        if (isAbort || isError || message.role !== "assistant") {
+          return;
+        }
         track("ask_answer");
         const text = message.parts
           .filter((p) => p.type === "text")
@@ -486,7 +510,9 @@ export const AskStore = signalStore(
         }
         // The offer comes after the words (visitor plan V6): the model's, or the server's own.
         const summary = handoffSummary(message);
-        if (summary) patchState(store, { handoff: { summary, messageId: message.id } });
+        if (summary) {
+          patchState(store, { handoff: { summary, messageId: message.id } });
+        }
         // A tour: its checked stops, or the short tour where none matched (visitor plan V16).
         const data = tourData(message);
         if (data) {
@@ -519,7 +545,9 @@ export const AskStore = signalStore(
     function reportFinish(message: AskMessage, stopped: boolean): void {
       const entryId = store._next.entryId;
       const timing = entryId ? store._timings.get(entryId) : undefined;
-      if (message.role !== "assistant" || !entryId || !timing) return;
+      if (message.role !== "assistant" || !entryId || !timing) {
+        return;
+      }
       const { shownAt, totals } = finishedTotals({
         ...timing,
         now: performance.now(),
@@ -534,11 +562,11 @@ export const AskStore = signalStore(
       }));
     }
 
-    function messageFor(failure: Failure, retryAfter?: number): string {
+    function messageFor(failure: Failure, retryAfter = 60): string {
       const copy = ASK_COPY[locale()];
       switch (failure) {
         case "rateLimited":
-          return fmt(copy.errors.rateLimited, { s: retryAfter ?? 60 });
+          return fmt(copy.errors.rateLimited, { s: retryAfter });
         case "tooLong":
           return fmt(copy.errors.tooLong, { n: store.maxChars() });
         case "resting":
@@ -628,7 +656,9 @@ export const AskStore = signalStore(
         ]);
         return;
       }
-      if (deep && store.remote()?.deep === false) deep = false;
+      if (deep && store.remote()?.deep === false) {
+        deep = false;
+      }
 
       const entryId = newId();
       const userId = newId();
@@ -869,15 +899,23 @@ export const AskStore = signalStore(
       const copy = store.copy().tour;
       const words = arg.trim();
       const lower = words.toLowerCase();
-      if (!words) return startShortTour(input);
-      if (lower === "stop") return endTour(input);
-      if (lower === "more like this") return replanTour(input);
+      if (!words) {
+        return startShortTour(input);
+      }
+      if (lower === "stop") {
+        return endTour(input);
+      }
+      if (lower === "more like this") {
+        return replanTour(input);
+      }
       if (words.length > TOUR_INTEREST_CHARS) {
         return show(input, [
           { text: fmt(copy.tooLong, { n: TOUR_INTEREST_CHARS }), tone: "error" },
         ]);
       }
-      if (!store.available()) return startShortTour(input, copy.resting);
+      if (!store.available()) {
+        return startShortTour(input, copy.resting);
+      }
       return ask(input, input, false, undefined, { interest: words });
     }
 
@@ -887,7 +925,9 @@ export const AskStore = signalStore(
      */
     function handleMatch(input: string, arg: string): void {
       const copy = store.copy().match;
-      if (store.remote()?.match !== true) return show(input, [{ text: copy.off, tone: "dim" }]);
+      if (store.remote()?.match !== true) {
+        return show(input, [{ text: copy.off, tone: "dim" }]);
+      }
       if (!isMatchKind(arg)) {
         return show(input, [
           { text: copy.usage, tone: "dim" },
@@ -911,7 +951,9 @@ export const AskStore = signalStore(
      */
     async function sendMatch(kind: MatchKind, brief: string, source: MatchSource): Promise<void> {
       const text = brief.trim();
-      if (!text || text.length > MATCH_BRIEF_CHARS) return;
+      if (!text || text.length > MATCH_BRIEF_CHARS) {
+        return;
+      }
       const input = `match ${kind}`;
       track("match_send", { kind, source });
       const sending = ask(input, input, false, undefined, undefined, { kind, brief: text });
@@ -924,15 +966,24 @@ export const AskStore = signalStore(
     function replanTour(input: string): Promise<void> | void {
       const copy = store.copy().tour;
       const tour = store.tour();
-      if (!tour) return show(input, [{ text: copy.none, tone: "dim" }]);
-      if (tour.replanned) return show(input, [{ text: copy.replanned, tone: "dim" }]);
+      if (!tour) {
+        return show(input, [{ text: copy.none, tone: "dim" }]);
+      }
+      if (tour.replanned) {
+        return show(input, [{ text: copy.replanned, tone: "dim" }]);
+      }
       const stop = tour.stops[Math.max(0, tour.at)];
-      if (!stop || !replannable(stop)) return show(input, [{ text: copy.notHere, tone: "dim" }]);
+      if (!stop || !replannable(stop)) {
+        return show(input, [{ text: copy.notHere, tone: "dim" }]);
+      }
       if (!store.available()) {
         return show(input, [{ text: store._lang.t().ask.offline, tone: "dim" }]);
       }
       return ask(input, input, false, undefined, {
-        interest: (tour.interest || stop.title).slice(0, TOUR_INTEREST_CHARS),
+        interest: (tour.interest?.length ? tour.interest : stop.title).slice(
+          0,
+          TOUR_INTEREST_CHARS,
+        ),
         from: stop.id,
         ...(tour.messageId && tour.sig
           ? {
@@ -978,7 +1029,7 @@ export const AskStore = signalStore(
         show(input, [{ text: copy.first, tone: "dim" }]);
         return;
       }
-      const stop = tour.stops[at]!;
+      const stop = tour.stops[at];
       const target = stopTarget(content(), locale(), stop.url);
       if (!target) {
         show(input, [{ text: copy.gone, tone: "error" }]);
@@ -1165,12 +1216,16 @@ export const AskStore = signalStore(
       async submit(raw: string, about?: AskAbout): Promise<void> {
         const input = raw.trim();
         const parsed = parseInput(input);
-        if (parsed.kind === "empty") return;
+        if (parsed.kind === "empty") {
+          return;
+        }
         if (store.history().at(-1) !== input) {
           patchState(store, { history: [...store.history(), input].slice(-MAX_HISTORY) });
         }
         // Anything typed instead of a brief puts the paste box away (visitor plan V20).
-        if (store.match()) patchState(store, { match: null });
+        if (store.match()) {
+          patchState(store, { match: null });
+        }
 
         // A pending hand-off, forget (visitor plan V14) or what's new (V15) takes y/n first.
         if (store.forgetPending() && /^(y|yes|j|ja|n|no|nein)$/i.test(input)) {
@@ -1214,14 +1269,18 @@ export const AskStore = signalStore(
 
       /** The paste box put away, nothing sent. */
       cancelMatch(): void {
-        if (!store.match()) return;
+        if (!store.match()) {
+          return;
+        }
         patchState(store, { match: null, announcement: store.copy().match.cancelled });
       },
 
       /** Asks the failed question again. */
       async retry(entryId: string): Promise<void> {
         const entry = store.entries().find((e) => e.id === entryId);
-        if (entry?.kind !== "ask") return;
+        if (entry?.kind !== "ask") {
+          return;
+        }
         store._updateEntry(entryId, {
           failure: undefined,
           retryAfter: undefined,
@@ -1289,8 +1348,12 @@ export const AskStore = signalStore(
 
       /** A follow-up clicked, a citation followed or the answer copied (visitor plan V2). */
       note(messageId: string, count: Exclude<SignalCount, "retries">): void {
-        if (count === "followups") track("ask_followup");
-        if (count === "copies") track("ask_copy");
+        if (count === "followups") {
+          track("ask_followup");
+        }
+        if (count === "copies") {
+          track("ask_copy");
+        }
         store._signals.report(store.sessionId(), messageId, (totals) => bump(totals, count));
       },
 
@@ -1302,7 +1365,9 @@ export const AskStore = signalStore(
        * either, and keeps the session, so the visitor can try again.
        */
       async answerForget(yes: boolean): Promise<void> {
-        if (!store.forgetPending()) return;
+        if (!store.forgetPending()) {
+          return;
+        }
         const copy = store.copy();
         patchState(store, { forgetPending: false });
         if (!yes) {
@@ -1339,7 +1404,9 @@ export const AskStore = signalStore(
        * anything: today's date, in this browser.
        */
       answerNews(yes: boolean): void {
-        if (!store.newsPending()) return;
+        if (!store.newsPending()) {
+          return;
+        }
         const copy = store.copy();
         patchState(store, { newsPending: false });
         if (!yes) {
@@ -1363,7 +1430,9 @@ export const AskStore = signalStore(
         }
         const l = locale();
         const pages = await fetchMap(l);
-        if (locale() !== l) return;
+        if (locale() !== l) {
+          return;
+        }
         patchState(store, {
           news: pages ? { since, count: updatesSince(pages, since).length } : null,
         });
@@ -1371,7 +1440,9 @@ export const AskStore = signalStore(
 
       answerHandoff(yes: boolean): void {
         const pending = store.handoff();
-        if (!pending) return;
+        if (!pending) {
+          return;
+        }
         const copy = store.copy();
         patchState(store, { handoff: null });
         if (!yes) {
@@ -1380,21 +1451,21 @@ export const AskStore = signalStore(
         }
         track("ask_handoff");
         // The answer the offer came with: the conversation the form may attach.
-        const ask = pending.messageId
+        const askRef = pending.messageId
           ? { sessionId: store.sessionId(), messageId: pending.messageId }
           : null;
-        if (ask) {
+        if (askRef) {
           // Counted as confirmed (the hand-off funnel); best effort, retried
           // while the answer is still being logged.
           void confirmHandoff(() =>
             fetch(`${apiBaseUrl()}/v1/ask/handoff`, {
               method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify(ask),
+              body: JSON.stringify(askRef),
             }),
           );
         }
-        store._contact.prefill.set({ text: pending.summary, ask });
+        store._contact.prefill.set({ text: pending.summary, ask: askRef });
         show(copy.handoff.yes, [{ text: copy.handoff.done, tone: "accent" }]);
         this.toContact();
       },
@@ -1405,7 +1476,9 @@ export const AskStore = signalStore(
        */
       handOff(message: AskMessage): void {
         const summary = handoffSummary(message);
-        if (!summary) return;
+        if (!summary) {
+          return;
+        }
         patchState(store, { handoff: { summary, messageId: message.id } });
         this.answerHandoff(true);
       },
@@ -1458,10 +1531,14 @@ export const AskStore = signalStore(
       // The answer's first visible word (visitor plan V2): the moment the question being answered
       // gets text, as the browser shows it.
       effect(() => {
-        if (store.chat.status !== "streaming") return;
+        if (store.chat.status !== "streaming") {
+          return;
+        }
         const entry = store.entries().find((e) => e.id === store._next.entryId);
         const timing = entry ? store._timings.get(entry.id) : undefined;
-        if (entry?.kind !== "ask" || !timing || timing.shownAt !== undefined) return;
+        if (entry?.kind !== "ask" || !timing || timing.shownAt !== undefined) {
+          return;
+        }
         if (hasWords(answersByQuestion(store.chat.messages).get(entry.userId))) {
           timing.shownAt = performance.now();
         }
@@ -1472,6 +1549,4 @@ export const AskStore = signalStore(
       store._doc.defaultView?.addEventListener("pagehide", flush);
     },
   }),
-);
-
-export type AskStore = InstanceType<typeof AskStore>;
+) {}

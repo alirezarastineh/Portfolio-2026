@@ -48,7 +48,7 @@ const app = createApp({
     config: () => config,
     chain: (_config, role) =>
       role === "insight" ? [mockEntry("gemini-3.5-flash-lite", insight.model)] : [],
-    corpus: async (c) => fixtureCorpus(c),
+    corpus: (c) => Promise.resolve(fixtureCorpus(c)),
     evalPacing: null,
   },
 });
@@ -132,14 +132,52 @@ async function journalEntries(statuses: string[]): Promise<string[]> {
 const STATEMENT =
   "When visitors ask about streaming and the portfolio does not say, answer it once in the FAQ.";
 
+const daysAgoSql = (days: number) => sql`now() - make_interval(days => ${days})`;
+const hoursAgoSql = (hours: number) => sql`now() - make_interval(hours => ${hours})`;
+
+async function createLesson(journalIds: string[]): Promise<{ id: string; status: string }> {
+  const res = await admin.post("/admin/assistant/lessons", {
+    source: "journal",
+    statement: STATEMENT,
+    scope: ["Kafka", "streaming"],
+    journalIds,
+  });
+  expect(res.status).toBe(201);
+  const body = (await res.json()) as { lesson: { id: string; status: string } };
+  return body.lesson;
+}
+
+async function applyLesson(id: string, daysAgo: number): Promise<void> {
+  const res = await admin.patch(`/admin/assistant/lessons/${id}`, {
+    apply: { as: "faq", ref: "faq:kafka" },
+  });
+  expect(res.status).toBe(200);
+  await getDb()
+    .update(aiLessons)
+    .set({ appliedAt: sql`now() - make_interval(days => ${daysAgo})` })
+    .where(eq(aiLessons.id, id));
+}
+
+const patchLesson = (target: string, body: Record<string, unknown>) =>
+  admin.patch(`/admin/assistant/lessons/${target}`, body);
+
+/** Until another session waits on a lock: the request has reached the row the test holds. */
+const waitingOnLock = () =>
+  eventually(async () => {
+    const { rows } = await getDb().execute<{ n: number }>(
+      sql`select count(*)::int as n from pg_locks where not granted`,
+    );
+    return rows[0].n > 0 ? true : undefined;
+  });
+
 describe("the tables (migration 0021)", () => {
   it("keeps insights runs and lessons, with their checks", async () => {
-    const columns = async (table: string) =>
-      (
-        await getDb().execute<{ column_name: string }>(
-          sql`select column_name from information_schema.columns where table_name = ${table} order by column_name`,
-        )
-      ).rows.map((r) => r.column_name);
+    const columns = async (table: string) => {
+      const { rows } = await getDb().execute<{ column_name: string }>(
+        sql`select column_name from information_schema.columns where table_name = ${table} order by column_name`,
+      );
+      return rows.map((r) => r.column_name);
+    };
     expect(await columns("ai_insight_snapshots")).toEqual([
       "analysed",
       "created_at",
@@ -193,7 +231,7 @@ describe("the adaptive trigger", () => {
     const snapshots = await getDb().select().from(aiInsightSnapshots);
     expect(snapshots).toHaveLength(1);
     expect(snapshots[0]).toMatchObject({ trigger: "auto", analysed: 60, seenAt: null });
-    expect(snapshots[0]!.reason).toMatch(/^failures rose: the last 30: 9 failed/);
+    expect(snapshots[0].reason).toMatch(/^failures rose: the last 30: 9 failed/);
     const spent = await getDb().select().from(aiUsageFeatures);
     expect(new Set(spent.map((r) => r.feature))).toEqual(new Set(["autoInsights"]));
 
@@ -204,13 +242,15 @@ describe("the adaptive trigger", () => {
     expect(await getDb().select().from(aiInsightSnapshots)).toHaveLength(1);
     expect(insight.calls).toHaveLength(1);
 
-    const health = (await (await admin.get("/admin/assistant/health")).json()) as {
+    const healthRes = await admin.get("/admin/assistant/health");
+    const health = (await healthRes.json()) as {
       learning: { notice: { id: string; unanswered: number } | null };
     };
-    expect(health.learning.notice).toMatchObject({ id: snapshots[0]!.id, unanswered: 1 });
-    const seen = await admin.post(`/admin/assistant/insights/${snapshots[0]!.id}/seen`, {});
+    expect(health.learning.notice).toMatchObject({ id: snapshots[0].id, unanswered: 1 });
+    const seen = await admin.post(`/admin/assistant/insights/${snapshots[0].id}/seen`, {});
     expect(seen.status).toBe(200);
-    const after = (await (await admin.get("/admin/assistant/health")).json()) as {
+    const afterRes = await admin.get("/admin/assistant/health");
+    const after = (await afterRes.json()) as {
       learning: { notice: unknown };
     };
     expect(after.learning.notice).toBeNull();
@@ -228,9 +268,10 @@ describe("the adaptive trigger", () => {
     expect(insight.calls).toHaveLength(0);
     const [row] = await getDb().select().from(aiAudit).where(eq(aiAudit.action, "learning.check"));
     expect(row).toMatchObject({ decision: "denied" });
-    expect(row!.reason).toMatch(/insights did not run: automatic insights are switched off/);
+    expect(row.reason).toMatch(/insights did not run: automatic insights are switched off/);
     // The Insights tab shows it.
-    const view = (await (await admin.get("/admin/assistant/insights")).json()) as {
+    const viewRes = await admin.get("/admin/assistant/insights");
+    const view = (await viewRes.json()) as {
       snapshot: unknown;
       trigger: { decision: string; reason: string };
     };
@@ -257,8 +298,10 @@ describe("insights, kept", () => {
       analysed: 1,
       topics: [{ title: "Kafka and streaming" }],
       // The run its topics come from: what a lesson made from one names.
-      snapshot: { id: expect.any(String), trigger: "admin" },
+      snapshot: { trigger: "admin" },
     });
+    expect(typeof ran.snapshot.id).toBe("string");
+    expect(ran.snapshot.id.length).toBeGreaterThan(0);
     const cached = await admin.post("/admin/assistant/insights");
     expect(await cached.json()).toMatchObject({
       cached: true,
@@ -270,7 +313,8 @@ describe("insights, kept", () => {
     expect(refreshed.status).toBe(200);
     expect(insight.calls).toHaveLength(2);
 
-    const view = (await (await admin.get("/admin/assistant/insights")).json()) as {
+    const viewRes = await admin.get("/admin/assistant/insights");
+    const view = (await viewRes.json()) as {
       snapshot: { trigger: string; seenAt: string | null; topics: unknown[] };
     };
     expect(view.snapshot).toMatchObject({ trigger: "admin" });
@@ -281,12 +325,11 @@ describe("insights, kept", () => {
   });
 
   it("goes 59 days after it ran, so no question it quotes outlives the answers' 90 days", async () => {
-    const at = (days: number) => sql`now() - make_interval(days => ${days})`;
     await getDb()
       .insert(aiInsightSnapshots)
       .values([
-        { trigger: "admin", analysed: 1, topics: [], createdAt: at(60) },
-        { trigger: "auto", analysed: 1, topics: [], createdAt: at(58) },
+        { trigger: "admin", analysed: 1, topics: [], createdAt: daysAgoSql(60) },
+        { trigger: "auto", analysed: 1, topics: [], createdAt: daysAgoSql(58) },
         { trigger: "admin", analysed: 1, topics: [] },
       ]);
     await pruneInsightSnapshots();
@@ -294,28 +337,28 @@ describe("insights, kept", () => {
   });
 
   it("clears the notice of every run before the one seen, and the admin's own run clears them too", async () => {
-    const hoursAgo = (hours: number) => sql`now() - make_interval(hours => ${hours})`;
     const runs = await getDb()
       .insert(aiInsightSnapshots)
       .values([
-        { trigger: "auto", analysed: 9, topics: [], reason: "older", createdAt: hoursAgo(48) },
-        { trigger: "auto", analysed: 9, topics: [], reason: "newer", createdAt: hoursAgo(24) },
+        { trigger: "auto", analysed: 9, topics: [], reason: "older", createdAt: hoursAgoSql(48) },
+        { trigger: "auto", analysed: 9, topics: [], reason: "newer", createdAt: hoursAgoSql(24) },
       ])
       .returning({ id: aiInsightSnapshots.id });
-    const notice = async () =>
-      (
-        (await (await admin.get("/admin/assistant/health")).json()) as {
-          learning: { notice: { id: string } | null };
-        }
-      ).learning.notice;
-    expect(await notice()).toMatchObject({ id: runs[1]!.id });
-    expect((await admin.post(`/admin/assistant/insights/${runs[1]!.id}/seen`, {})).status).toBe(
-      200,
-    );
+    const notice = async () => {
+      const res = await admin.get("/admin/assistant/health");
+      const body = (await res.json()) as {
+        learning: { notice: { id: string } | null };
+      };
+      return body.learning.notice;
+    };
+    expect(await notice()).toMatchObject({ id: runs[1].id });
+    const seenRes = await admin.post(`/admin/assistant/insights/${runs[1].id}/seen`, {});
+    expect(seenRes.status).toBe(200);
     // The older one does not come back.
     expect(await notice()).toBeNull();
     const missing = "00000000-0000-4000-8000-000000000000";
-    expect((await admin.post(`/admin/assistant/insights/${missing}/seen`, {})).status).toBe(404);
+    const missingRes = await admin.post(`/admin/assistant/insights/${missing}/seen`, {});
+    expect(missingRes.status).toBe(404);
 
     // A new automatic run, then the admin runs insights: nothing is left to notice.
     await getDb()
@@ -325,38 +368,17 @@ describe("insights, kept", () => {
         analysed: 9,
         topics: [],
         reason: "latest",
-        createdAt: hoursAgo(12),
+        createdAt: hoursAgoSql(12),
       });
     expect(await notice()).not.toBeNull();
     await seed([{ minutesAgo: 1, failed: true }]);
-    expect((await admin.post("/admin/assistant/insights?refresh=1")).status).toBe(200);
+    const refreshRes = await admin.post("/admin/assistant/insights?refresh=1");
+    expect(refreshRes.status).toBe(200);
     expect(await notice()).toBeNull();
   });
 });
 
 describe("lessons", () => {
-  async function lesson(journalIds: string[]): Promise<{ id: string; status: string }> {
-    const res = await admin.post("/admin/assistant/lessons", {
-      source: "journal",
-      statement: STATEMENT,
-      scope: ["Kafka", "streaming"],
-      journalIds,
-    });
-    expect(res.status).toBe(201);
-    return ((await res.json()) as { lesson: { id: string; status: string } }).lesson;
-  }
-
-  async function applied(id: string, daysAgo: number): Promise<void> {
-    const res = await admin.patch(`/admin/assistant/lessons/${id}`, {
-      apply: { as: "faq", ref: "faq:kafka" },
-    });
-    expect(res.status).toBe(200);
-    await getDb()
-      .update(aiLessons)
-      .set({ appliedAt: sql`now() - make_interval(days => ${daysAgo})` })
-      .where(eq(aiLessons.id, id));
-  }
-
   interface LessonView {
     id: string;
     status: string;
@@ -373,16 +395,20 @@ describe("lessons", () => {
     } | null;
   }
 
-  const listed = async () =>
-    (await (await admin.get("/admin/assistant/lessons")).json()) as {
+  const listed = async () => {
+    const res = await admin.get("/admin/assistant/lessons");
+    return (await res.json()) as {
       lessons: LessonView[];
       counts: Record<string, number>;
     };
+  };
 
   it("tracks a fixed topic's answers before and since the fix (the done-when)", async () => {
-    const { id, status } = await lesson(await journalEntries(["accepted", "fixed", "accepted"]));
+    const { id, status } = await createLesson(
+      await journalEntries(["accepted", "fixed", "accepted"]),
+    );
     expect(status).toBe("proposed");
-    await applied(id, 1);
+    await applyLesson(id, 1);
     const day = 24 * 60;
     await seed([
       // Before: the topic asked three times, never answered.
@@ -420,8 +446,8 @@ describe("lessons", () => {
   });
 
   it("retires a lesson that fails after five applications, and the admin can reopen it", async () => {
-    const { id } = await lesson(await journalEntries(["accepted", "accepted", "accepted"]));
-    await applied(id, 1);
+    const { id } = await createLesson(await journalEntries(["accepted", "accepted", "accepted"]));
+    await applyLesson(id, 1);
     await seed([
       ...[60, 120].map((minutesAgo) => ({ minutesAgo })),
       ...[180, 240, 300].map((minutesAgo) => ({ minutesAgo, failed: true })),
@@ -429,7 +455,8 @@ describe("lessons", () => {
 
     const check = await runLearningCheck(config);
     expect(check?.lessons).toEqual({ measured: 1, retired: [id] });
-    const retired = (await listed()).lessons[0]!;
+    const listAfter = await listed();
+    const retired = listAfter.lessons[0];
     expect(retired).toMatchObject({
       status: "retired",
       decidedBy: "system",
@@ -452,35 +479,34 @@ describe("lessons", () => {
       retiredReason: null,
       decidedBy: null,
     });
-    expect((await admin.patch(`/admin/assistant/lessons/${id}`, { reopen: true })).status).toBe(
-      409,
-    );
+    const reopenAgain = await admin.patch(`/admin/assistant/lessons/${id}`, { reopen: true });
+    expect(reopenAgain.status).toBe(409);
 
     // Reopened, it is measured again from now: the answers that retired it do not, the next night.
     const next = await runLearningCheck(config);
     expect(next?.lessons).toEqual({ measured: 1, retired: [] });
-    expect((await listed()).lessons[0]).toMatchObject({
+    const listReopened = await listed();
+    expect(listReopened.lessons[0]).toMatchObject({
       status: "active",
       effect: { applications: 0, value: null },
     });
   });
 
   it("takes the admin's own retirement, reopening and edits, and refuses vague words", async () => {
-    const { id } = await lesson(await journalEntries(["accepted", "fixed", "accepted"]));
-    const patch = (target: string, body: Record<string, unknown>) =>
-      admin.patch(`/admin/assistant/lessons/${target}`, body);
+    const { id } = await createLesson(await journalEntries(["accepted", "fixed", "accepted"]));
     const refused = async (body: Record<string, unknown>, error: string, status = 400) => {
-      const res = await patch(id, body);
+      const res = await patchLesson(id, body);
       expect(res.status).toBe(status);
       expect(((await res.json()) as { error: string }).error).toBe(error);
     };
     await refused({ statement: "Be careful." }, "vague_statement");
     await refused({ scope: ["ab", "!!"] }, "empty_scope");
-    expect((await patch("00000000-0000-4000-8000-000000000000", { retire: true })).status).toBe(
-      404,
-    );
+    const missingPatch = await patchLesson("00000000-0000-4000-8000-000000000000", {
+      retire: true,
+    });
+    expect(missingPatch.status).toBe(404);
 
-    const retired = await patch(id, { retire: true });
+    const retired = await patchLesson(id, { retire: true });
     expect(((await retired.json()) as { lesson: LessonView }).lesson).toMatchObject({
       status: "retired",
       decidedBy: "admin",
@@ -488,13 +514,13 @@ describe("lessons", () => {
     });
     await refused({ retire: true }, "bad_transition", 409);
     // Never applied: reopened, it is proposed again.
-    const reopened = await patch(id, { reopen: true });
+    const reopened = await patchLesson(id, { reopen: true });
     expect(((await reopened.json()) as { lesson: LessonView }).lesson).toMatchObject({
       status: "proposed",
       decidedBy: null,
       retiredReason: null,
     });
-    const edited = await patch(id, {
+    const edited = await patchLesson(id, {
       statement: `${STATEMENT} Say where.`,
       scope: ["Kafka", "events"],
     });
@@ -504,18 +530,9 @@ describe("lessons", () => {
     });
   });
 
-  /** Until another session waits on a lock: the request has reached the row the test holds. */
-  const waitingOnLock = () =>
-    eventually(async () => {
-      const { rows } = await getDb().execute<{ n: number }>(
-        sql`select count(*)::int as n from pg_locks where not granted`,
-      );
-      return rows[0]!.n > 0 ? true : undefined;
-    });
-
   it("decides on the lesson as it stands once the nightly check lets go of it", async () => {
-    const { id } = await lesson(await journalEntries(["accepted", "fixed", "accepted"]));
-    await applied(id, 1);
+    const { id } = await createLesson(await journalEntries(["accepted", "fixed", "accepted"]));
+    await applyLesson(id, 1);
     // The nightly check holds the row, and retires the lesson; the admin applies it meanwhile.
     const check = await getPool().connect();
     try {
@@ -531,7 +548,8 @@ describe("lessons", () => {
       );
       await check.query("COMMIT");
       // The apply reads the retirement: refused, never written over it.
-      expect((await apply).status).toBe(409);
+      const applyRes = await apply;
+      expect(applyRes.status).toBe(409);
     } finally {
       check.release();
     }
@@ -540,8 +558,8 @@ describe("lessons", () => {
   });
 
   it("measures a lesson as it stands once the admin's edit lets go of it", async () => {
-    const { id } = await lesson(await journalEntries(["accepted", "fixed", "accepted"]));
-    await applied(id, 1);
+    const { id } = await createLesson(await journalEntries(["accepted", "fixed", "accepted"]));
+    await applyLesson(id, 1);
     // Five answers since the fix, three of them failing: enough to retire it…
     await seed([
       ...[60, 120].map((minutesAgo) => ({ minutesAgo })),
@@ -559,7 +577,8 @@ describe("lessons", () => {
         [id],
       );
       await edit.query("COMMIT");
-      expect((await check)?.lessons).toEqual({ measured: 1, retired: [] });
+      const checkResult = await check;
+      expect(checkResult?.lessons).toEqual({ measured: 1, retired: [] });
     } finally {
       edit.release();
     }
@@ -626,31 +645,36 @@ describe("lessons", () => {
       })
       .returning({ id: aiInsightSnapshots.id });
     const fromTopic = { source: "insight", statement: STATEMENT, scope: ["kafka"] };
-    await refused({ ...fromTopic, snapshotId: snapshot!.id, topic: 1 }, "not_corroborated");
-    await refused({ ...fromTopic, snapshotId: snapshot!.id, topic: 2 }, "not_corroborated");
-    await refused({ ...fromTopic, snapshotId: snapshot!.id, topic: 7 }, "unknown_topic");
-    const made = await post({ ...fromTopic, snapshotId: snapshot!.id, topic: 0 });
+    await refused({ ...fromTopic, snapshotId: snapshot.id, topic: 1 }, "not_corroborated");
+    await refused({ ...fromTopic, snapshotId: snapshot.id, topic: 2 }, "not_corroborated");
+    await refused({ ...fromTopic, snapshotId: snapshot.id, topic: 7 }, "unknown_topic");
+    const made = await post({ ...fromTopic, snapshotId: snapshot.id, topic: 0 });
     expect(made.status).toBe(201);
     const { lesson: kept } = (await made.json()) as { lesson: LessonView };
     // The topic's name and counts, never its example questions.
     expect(kept.topic).toEqual({
-      snapshotId: snapshot!.id,
+      snapshotId: snapshot.id,
       title: "Kafka",
       questions: 6,
       unanswered: true,
     });
 
-    expect(
-      (await admin.patch(`/admin/assistant/lessons/${kept.id}`, { retire: true, reopen: true }))
-        .status,
-    ).toBe(400);
-    expect((await admin.delete(`/admin/assistant/lessons/${kept.id}`)).status).toBe(200);
-    expect((await admin.delete(`/admin/assistant/lessons/${kept.id}`)).status).toBe(404);
+    const badPatch = await admin.patch(`/admin/assistant/lessons/${kept.id}`, {
+      retire: true,
+      reopen: true,
+    });
+    expect(badPatch.status).toBe(400);
+    const delOk = await admin.delete(`/admin/assistant/lessons/${kept.id}`);
+    expect(delOk.status).toBe(200);
+    const delMissing = await admin.delete(`/admin/assistant/lessons/${kept.id}`);
+    expect(delMissing.status).toBe(404);
   });
 
   it("is the admin's alone", async () => {
     const stranger = new TestClient(app, "198.51.100.7");
-    expect((await stranger.get("/admin/assistant/lessons")).status).toBe(401);
-    expect((await stranger.get("/admin/assistant/insights")).status).toBe(401);
+    const getLessons = await stranger.get("/admin/assistant/lessons");
+    expect(getLessons.status).toBe(401);
+    const getInsights = await stranger.get("/admin/assistant/insights");
+    expect(getInsights.status).toBe(401);
   });
 });

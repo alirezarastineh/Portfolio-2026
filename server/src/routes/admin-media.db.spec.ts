@@ -59,8 +59,30 @@ async function upload(
   return { status: res.status, body: (await res.json()) as MediaResponse };
 }
 
+function compareStrings(a: string, b: string): number {
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+}
+
 function onDisk(filename: string): boolean {
-  return existsSync(join(process.env.MEDIA_ROOT!, filename));
+  const root = process.env.MEDIA_ROOT;
+  if (!root) {
+    throw new Error("MEDIA_ROOT must be set in test environment");
+  }
+  return existsSync(join(root, filename));
+}
+
+/** Puts the asset on the first project in the draft. */
+async function useOnFirstProject(media: MediaResponse["media"]): Promise<string> {
+  const [first] = await getDb().select().from(projects).orderBy(projects.position).limit(1);
+  await getDb().update(projects).set({ coverId: media.id }).where(eq(projects.id, first.id));
+  return first.id;
+}
+
+async function removeFromProject(projectId: string): Promise<void> {
+  await getDb().update(projects).set({ coverId: null }).where(eq(projects.id, projectId));
 }
 
 describe("media upload", () => {
@@ -108,19 +130,27 @@ describe("media upload", () => {
     expect(body.media.blurDataUri).toMatch(/^data:image\/webp;base64,/);
 
     // 480 and 768 are below 1000; each in both formats.
-    const widths = body.media.variants.map((v) => `${v.format}:${v.width}`).sort();
+    const widths = body.media.variants.map((v) => `${v.format}:${v.width}`).sort(compareStrings);
     expect(widths).toEqual(["avif:480", "avif:768", "webp:480", "webp:768"]);
 
-    const avif = body.media.variants.find((v) => v.format === "avif" && v.width === 768)!;
+    const avif = body.media.variants.find((v) => v.format === "avif" && v.width === 768);
+    if (!avif) {
+      throw new Error("expected avif 768 variant");
+    }
     const served = await app.request(avif.path);
     expect(served.status).toBe(200);
     expect(served.headers.get("content-type")).toBe("image/avif");
     expect(served.headers.get("cache-control")).toContain("immutable");
-    expect((await sharp(Buffer.from(await served.arrayBuffer())).metadata()).width).toBe(768);
+    const servedMeta = await sharp(Buffer.from(await served.arrayBuffer())).metadata();
+    expect(servedMeta.width).toBe(768);
 
     // A revalidation with the same ETag is answered without the body.
+    const etag = served.headers.get("etag");
+    if (!etag) {
+      throw new Error("expected ETag header");
+    }
     const again = await app.request(avif.path, {
-      headers: { "if-none-match": served.headers.get("etag")! },
+      headers: { "if-none-match": etag },
     });
     expect(again.status).toBe(304);
   });
@@ -146,18 +176,22 @@ describe("media upload", () => {
   });
 
   it("names a CV after its owner and language, whatever it was uploaded as", async () => {
-    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
     await seed();
     await getDb().update(siteProfile).set({ name: "Jürgen Müller" });
     const { body } = await upload(PDF, "final_v3 (1).pdf", "application/pdf");
-    const disposition = async () =>
-      (await app.request(`/media/${body.media.filename}`)).headers.get("content-disposition");
+    const disposition = async () => {
+      const res = await app.request(`/media/${body.media.filename}`);
+      return res.headers.get("content-disposition");
+    };
 
-    expect((await client.put("/admin/resumes/de", { mediaId: body.media.id })).status).toBe(200);
+    const putDe = await client.put("/admin/resumes/de", { mediaId: body.media.id });
+    expect(putDe.status).toBe(200);
     expect(await disposition()).toBe('inline; filename="Jurgen-Muller-CV-de.pdf"');
 
     // One file as the CV for both languages carries no language.
-    expect((await client.put("/admin/resumes/en", { mediaId: body.media.id })).status).toBe(200);
+    const putEn = await client.put("/admin/resumes/en", { mediaId: body.media.id });
+    expect(putEn.status).toBe(200);
     expect(await disposition()).toBe('inline; filename="Jurgen-Muller-CV.pdf"');
   });
 
@@ -181,29 +215,32 @@ describe("media reconcile", () => {
       .png()
       .toBuffer();
     const { body } = await upload(photo);
-    const ours = [
+    const ours = new Set([
       body.media.filename,
       ...body.media.variants.map((v) => v.path.replace("/media/", "")),
-    ];
+    ]);
 
     // The media root is shared by the whole file, so earlier tests' files are
     // (correctly) orphans here; only this upload's files are checked.
-    const report = (await (await client.get("/admin/media-reconcile")).json()) as {
+    const reconcileRes = await client.get("/admin/media-reconcile");
+    const report = (await reconcileRes.json()) as {
       missingFiles: string[];
       orphanFiles: string[];
       totalAssets: number;
     };
     expect(report.missingFiles).toEqual([]);
     expect(report.totalAssets).toBe(1);
-    expect(report.orphanFiles.filter((name) => ours.includes(name))).toEqual([]);
+    expect(report.orphanFiles.filter((name) => ours.has(name))).toEqual([]);
   });
 });
 
 describe("media delete", () => {
   it("deletes an unused image and stops serving it", async () => {
     const { body } = await upload();
-    expect((await client.delete(`/admin/media/${body.media.id}`)).status).toBe(200);
-    expect((await app.request(`/media/${body.media.filename}`)).status).toBe(404);
+    const del = await client.delete(`/admin/media/${body.media.id}`);
+    expect(del.status).toBe(200);
+    const after = await app.request(`/media/${body.media.filename}`);
+    expect(after.status).toBe(404);
   });
 
   it("removes the variant files along with the original", async () => {
@@ -215,11 +252,12 @@ describe("media delete", () => {
     const { body } = await upload(photo);
     const variantFiles = body.media.variants.map((v) => v.path.replace("/media/", ""));
     expect(variantFiles.length).toBeGreaterThan(0);
-    expect(variantFiles.every(onDisk)).toBe(true);
+    expect(variantFiles.every((file) => onDisk(file))).toBe(true);
 
-    expect((await client.delete(`/admin/media/${body.media.id}`)).status).toBe(200);
+    const del = await client.delete(`/admin/media/${body.media.id}`);
+    expect(del.status).toBe(200);
     expect(onDisk(body.media.filename)).toBe(false);
-    expect(variantFiles.some(onDisk)).toBe(false);
+    expect(variantFiles.some((file) => onDisk(file))).toBe(false);
     expect(await getDb().select().from(mediaVariants)).toEqual([]);
   });
 
@@ -230,20 +268,9 @@ describe("media delete", () => {
 
   describe("with published content", () => {
     beforeEach(async () => {
-      vi.spyOn(console, "log").mockImplementation(() => {});
+      vi.spyOn(console, "log").mockImplementation(() => undefined);
       await seed();
     });
-
-    /** Puts the asset on the first project in the draft. */
-    async function useOnFirstProject(media: MediaResponse["media"]): Promise<string> {
-      const [first] = await getDb().select().from(projects).orderBy(projects.position).limit(1);
-      await getDb().update(projects).set({ coverId: media.id }).where(eq(projects.id, first!.id));
-      return first!.id;
-    }
-
-    async function removeFromProject(projectId: string): Promise<void> {
-      await getDb().update(projects).set({ coverId: null }).where(eq(projects.id, projectId));
-    }
 
     it("refuses to delete an image the draft still uses", async () => {
       const { body } = await upload();

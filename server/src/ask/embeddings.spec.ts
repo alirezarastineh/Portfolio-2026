@@ -33,7 +33,11 @@ const CONCEPTS: [RegExp, number][] = [
 
 function vectorOf(text: string): number[] {
   const v = [0, 0, 0, 0.05];
-  for (const [pattern, dim] of CONCEPTS) if (pattern.test(text)) v[dim] = 1;
+  for (const [pattern, dim] of CONCEPTS) {
+    if (pattern.test(text)) {
+      v[dim] = 1;
+    }
+  }
   return v;
 }
 
@@ -42,18 +46,20 @@ function embeddingModel(options: { fail?: boolean; delayMs?: number } = {}) {
     modelId: "gemini-embedding-2",
     maxEmbeddingsPerCall: 100,
     doEmbed: async ({ values, abortSignal }) => {
-      if (options.fail) throw new Error("embedding service down");
+      if (options.fail) {
+        throw new Error("embedding service down");
+      }
       if (options.delayMs) {
         await new Promise((resolve, reject) => {
           const timer = setTimeout(resolve, options.delayMs);
           abortSignal?.addEventListener("abort", () => {
             clearTimeout(timer);
-            reject(abortSignal.reason);
+            reject(abortSignal.reason instanceof Error ? abortSignal.reason : new Error("Aborted"));
           });
         });
       }
       return {
-        embeddings: values.map(vectorOf),
+        embeddings: values.map((v) => vectorOf(v)),
         usage: { tokens: values.join(" ").split(/\s+/).length },
         warnings: [],
       };
@@ -83,27 +89,31 @@ let corpus: AskCorpus;
 let recorded: ModelCall[][];
 let model: MockEmbeddingModelV4;
 
-async function ready(over: { fail?: boolean; delayMs?: number; available?: boolean } = {}) {
-  const use = (m: MockEmbeddingModelV4, available: boolean) =>
-    setEmbeddingDeps({
-      model: () => m,
-      available: async () => available,
-      record: async (calls) => {
-        recorded.push(calls);
-      },
-    });
-  // The chunks' vectors, from a model that never fails, as a backfill would have stored them.
-  use(embeddingModel(), true);
-  await embedInMemory(corpus, config);
-  model = embeddingModel(over);
-  use(model, over.available ?? true);
+const DEFAULT_SPEND: SearchSpend = { record: true };
+
+function useEmbeddingModel(m: MockEmbeddingModelV4, available: boolean) {
+  setEmbeddingDeps({
+    model: () => m,
+    available: () => Promise.resolve(available),
+    record: (calls) => {
+      recorded.push(calls);
+      return Promise.resolve();
+    },
+  });
 }
 
-const search = (
-  query: string,
-  reading: "en" | "de" = "en",
-  spend: SearchSpend = { record: true },
-) => hybridSearch(corpus, query, { config, reading, spend });
+async function ready(over: { fail?: boolean; delayMs?: number; available?: boolean } = {}) {
+  // The chunks' vectors, from a model that never fails, as a backfill would have stored them.
+  useEmbeddingModel(embeddingModel(), true);
+  await embedInMemory(corpus, config);
+  model = embeddingModel(over);
+  useEmbeddingModel(model, over.available ?? true);
+}
+
+const search = (query: string, reading: "en" | "de" = "en", spend: SearchSpend = DEFAULT_SPEND) =>
+  hybridSearch(corpus, query, { config, reading, spend });
+
+const bm25 = (query: string) => corpus.search.search(query, { locale: "en" });
 
 beforeEach(() => {
   resetEmbeddings();
@@ -161,9 +171,12 @@ describe("hybrid search", () => {
 
   it("keeps what BM25 finds near the top, and prefers the reading language on a tie", async () => {
     await ready();
-    expect((await search("retrieval")).hits[0]?.id).toBe("project:atlas@en");
-    expect((await search("TypeScript", "de")).hits[0]?.id).toBe("skills@de");
-    expect((await search("TypeScript", "en")).hits[0]?.id).toBe("skills@en");
+    const retrieval = await search("retrieval");
+    expect(retrieval.hits[0]?.id).toBe("project:atlas@en");
+    const deSkills = await search("TypeScript", "de");
+    expect(deSkills.hits[0]?.id).toBe("skills@de");
+    const enSkills = await search("TypeScript", "en");
+    expect(enSkills.hits[0]?.id).toBe("skills@en");
   });
 
   it("embeds a question once however it is typed, and records its tokens as the embeddings feature", async () => {
@@ -174,8 +187,8 @@ describe("hybrid search", () => {
     await search("  llm   OPS ", "en", { record: true, calls: answer });
     expect(model.doEmbedCalls).toHaveLength(1);
     expect(recorded).toHaveLength(1);
-    expect(recorded[0]![0]).toMatchObject({ model: "gemini-embedding-2" });
-    expect(recorded[0]![0]!.usage?.inputTokens.total).toBeGreaterThan(0);
+    expect(recorded[0][0]).toMatchObject({ model: "gemini-embedding-2" });
+    expect(recorded[0][0].usage?.inputTokens.total).toBeGreaterThan(0);
     // The answer keeps the same spend for its own cost; a cached query costs nothing.
     expect(answer).toEqual(recorded[0]);
 
@@ -193,31 +206,35 @@ describe("hybrid search", () => {
     const silent = new MockEmbeddingModelV4({
       modelId: "gemini-embedding-2",
       maxEmbeddingsPerCall: 100,
-      doEmbed: async ({ values }) => ({ embeddings: values.map(vectorOf), warnings: [] }),
+      doEmbed: ({ values }) =>
+        Promise.resolve({ embeddings: values.map((v) => vectorOf(v)), warnings: [] }),
     });
-    setEmbeddingDeps({ model: () => silent, available: async () => true });
+    setEmbeddingDeps({ model: () => silent, available: () => Promise.resolve(true) });
     const embedded = await embedInMemory(corpus, config);
-    expect(embedded.calls[0]!.usage?.inputTokens.total).toBeGreaterThan(0);
+    expect(embedded.calls[0].usage?.inputTokens.total).toBeGreaterThan(0);
     recorded = [];
     setEmbeddingDeps({
       model: () => silent,
-      available: async () => true,
-      record: async (calls) => {
+      available: () => Promise.resolve(true),
+      record: (calls) => {
         recorded.push(calls);
+        return Promise.resolve();
       },
     });
     const result = await search("LLM ops");
     expect(result.semantic).toBe(true);
-    const tokens = recorded[0]![0]!.usage!.inputTokens.total!;
-    expect(Number.isFinite(tokens) && tokens > 0).toBe(true);
+    const tokens = recorded[0][0].usage?.inputTokens.total;
+    expect(typeof tokens === "number" && Number.isFinite(tokens) && tokens > 0).toBe(true);
     expect(embeddingTokens(Number.NaN, ["LLM ops"])).toBeGreaterThan(0);
     expect(embeddingTokens(7, ["anything"])).toBe(7);
   });
 
   it("searches by words alone, without embedding the query, while a passage lacks its vector", async () => {
     // Nothing embedded yet: the backfill has not run.
-    setEmbeddingDeps({ model: () => (model = embeddingModel()), available: async () => true });
-    const bm25 = (query: string) => corpus.search.search(query, { locale: "en" });
+    setEmbeddingDeps({
+      model: () => (model = embeddingModel()),
+      available: () => Promise.resolve(true),
+    });
     expect(await search("retrieval")).toEqual({ hits: bm25("retrieval"), semantic: false });
     expect(model.doEmbedCalls).toHaveLength(0);
 
@@ -239,10 +256,10 @@ describe("hybrid search", () => {
   });
 
   it("embeds an eval's corpus in memory only where the fence allows, and hands back the spend", async () => {
-    setEmbeddingDeps({ model: () => embeddingModel(), available: async () => false });
+    setEmbeddingDeps({ model: () => embeddingModel(), available: () => Promise.resolve(false) });
     expect(await embedInMemory(corpus, config)).toEqual({ passages: 0, calls: [] });
 
-    setEmbeddingDeps({ model: () => embeddingModel(), available: async () => true });
+    setEmbeddingDeps({ model: () => embeddingModel(), available: () => Promise.resolve(true) });
     const embedded = await embedInMemory(corpus, config);
     // The two skills documents are one text: embedded once.
     expect(embedded.passages).toBe(DOCUMENTS.length - 1);
@@ -254,13 +271,11 @@ describe("hybrid search", () => {
   });
 
   it("falls back to BM25 alone when off, failing, slow or fenced", async () => {
-    const bm25 = (query: string) => corpus.search.search(query, { locale: "en" });
-
     await ready({ fail: true });
     expect(await search("retrieval")).toEqual({ hits: bm25("retrieval"), semantic: false });
 
     resetEmbeddings();
-    await ready({ delayMs: 1_000 });
+    await ready({ delayMs: 1000 });
     expect(await search("retrieval")).toEqual({ hits: bm25("retrieval"), semantic: false });
 
     resetEmbeddings();

@@ -6,7 +6,9 @@ const LOCALES: readonly Locale[] = ["en", "de"];
 
 /** `YYYY-MM-DD` from any date string, or null — never "today", which would be a lie. */
 export function isoDay(value: string | null | undefined): string | null {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
 }
@@ -45,14 +47,18 @@ export function sitemapPages(byLocale: SitemapInput): SitemapPage[] {
       mark(pages, `/legal/${legal.doc}`, locale, legal.updatedAt);
     }
     for (const project of content.projects ?? []) {
-      if (project.hasCaseStudy) mark(pages, `/work/${project.slug}`, locale, project.updatedAt);
+      if (project.hasCaseStudy) {
+        mark(pages, `/work/${project.slug}`, locale, project.updatedAt);
+      }
     }
     const posts = content.posts ?? [];
     if (posts.length > 0) {
       const dates = posts.map((p) => p.updatedAt).sort((a, b) => a.localeCompare(b));
       mark(pages, "/writing", locale, dates.at(-1) ?? null);
     }
-    for (const post of posts) mark(pages, `/writing/${post.slug}`, locale, post.updatedAt);
+    for (const post of posts) {
+      mark(pages, `/writing/${post.slug}`, locale, post.updatedAt);
+    }
   }
   return [...pages.values()];
 }

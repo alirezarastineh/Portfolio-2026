@@ -41,6 +41,7 @@ import { HlmInputGroupImports } from "@spartan-ng/helm/input-group";
         <hlm-input-group-addon align="inline-end">
           <button
             *brnAutocompleteClear
+            type="button"
             hlmInputGroupButton
             data-slot="autocomplete-clear"
             [disabled]="autocompleteInput.disabled()"

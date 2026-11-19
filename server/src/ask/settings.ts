@@ -86,7 +86,9 @@ export function invalidateAssistantCache(): void {
 function capsFrom(stored: Partial<Record<string, unknown>>): Record<FencedFeature, number | null> {
   return Object.fromEntries(
     FENCED_FEATURES.map((f) => {
-      if (!Object.hasOwn(stored, f)) return [f, CAP_DEFAULTS[f] ?? null];
+      if (!Object.hasOwn(stored, f)) {
+        return [f, CAP_DEFAULTS[f] ?? null];
+      }
       const cap = stored[f];
       return [f, typeof cap === "number" && cap > 0 ? cap : null];
     }),
@@ -103,16 +105,18 @@ function switchesFrom(stored: Partial<Record<string, unknown>>): Record<Switched
   ) as Record<SwitchedFeature, boolean>;
 }
 
+function tierIds(value: unknown, max: number): string[] {
+  return [...new Set(Array.isArray(value) ? value.filter((v) => typeof v === "string") : [])].slice(
+    0,
+    max,
+  );
+}
+
 /** The stored tiers: ids, each once, within the caps; a document in both lists is neither. */
 export function tiersFrom(stored: unknown): CorpusTiers {
   const record = (stored && typeof stored === "object" ? stored : {}) as Record<string, unknown>;
-  const ids = (value: unknown, max: number) =>
-    [...new Set(Array.isArray(value) ? value.filter((v) => typeof v === "string") : [])].slice(
-      0,
-      max,
-    );
-  const promoted = ids(record["promoted"], MAX_PROMOTED);
-  const demoted = ids(record["demoted"], MAX_DEMOTED);
+  const promoted = tierIds(record["promoted"], MAX_PROMOTED);
+  const demoted = tierIds(record["demoted"], MAX_DEMOTED);
   return {
     promoted: promoted.filter((id) => !demoted.includes(id)),
     demoted: demoted.filter((id) => !promoted.includes(id)),
@@ -126,7 +130,9 @@ function perLocale<T>(value: unknown, fallback: T): Record<Locale, T> {
 
 export async function readAiSettings(db: DbExecutor = getDb()): Promise<AiSettings> {
   const [row] = await db.select().from(aiSettings).where(eq(aiSettings.id, 1)).limit(1);
-  if (!row) return DEFAULT_SETTINGS;
+  if (!row) {
+    return DEFAULT_SETTINGS;
+  }
   return {
     enabled: row.enabled,
     dailyBudgetUsd: row.dailyBudgetUsd,
@@ -179,7 +185,9 @@ export function assistantState(
     );
     cache = { at: now, value };
     value.catch(() => {
-      if (cache?.value === value) cache = undefined;
+      if (cache?.value === value) {
+        cache = undefined;
+      }
     });
   }
   return cache.value;

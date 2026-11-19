@@ -51,7 +51,7 @@ import { AdminPageHeaderComponent } from "../../admin/components/page-header.com
 import { canResume, isActive } from "../../admin/eval-runs";
 
 /** How often the page reads a running run again. */
-const POLL_MS = 3_000;
+const POLL_MS = 3000;
 
 /** Refusals that leave the proposal as it was on the server: no need to read the list again. */
 const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
@@ -488,7 +488,9 @@ export default class AdminAgentPage implements OnInit {
       this.api.listRuns(),
       this.api.proposals(filterStatuses(this.filter())),
     ]);
-    if (this.destroyed || mine !== this.latest) return;
+    if (this.destroyed || mine !== this.latest) {
+      return;
+    }
     if (runs.ok) {
       this.runs.set(runs.data.runs);
       this.runsError.set(null);
@@ -511,13 +513,15 @@ export default class AdminAgentPage implements OnInit {
   /** While a content run is going, read the runs and the proposals again soon. */
   private poll(): void {
     this.stopPolling();
-    if (!this.destroyed && this.contentRuns().some(isActive)) {
+    if (!this.destroyed && this.contentRuns().some((run) => isActive(run))) {
       this.timer = setTimeout(() => void this.load(), POLL_MS);
     }
   }
 
   private stopPolling(): void {
-    if (this.timer !== null) clearTimeout(this.timer);
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+    }
     this.timer = null;
   }
 
@@ -526,7 +530,9 @@ export default class AdminAgentPage implements OnInit {
   }
 
   protected async start(): Promise<void> {
-    if (!this.canStart()) return;
+    if (!this.canStart()) {
+      return;
+    }
     this.starting.set(true);
     const result = await this.api.startContentRun({
       goals: CONTENT_GOALS.filter((goal) => this.chosen()[goal]),
@@ -565,8 +571,12 @@ export default class AdminAgentPage implements OnInit {
     refused: string,
   ): Promise<void> {
     const result = await call();
-    if (!result.ok) toast.error(refused, { description: runWords(result.error) });
-    if (this.destroyed) return;
+    if (!result.ok) {
+      toast.error(refused, { description: runWords(result.error) });
+    }
+    if (this.destroyed) {
+      return;
+    }
     this.said.set(result.ok ? done : `${refused}: ${runWords(result.error)}`);
     await this.load();
     this.focusLater("agent-runs-title");
@@ -577,7 +587,7 @@ export default class AdminAgentPage implements OnInit {
     const goals = ((run.params["goals"] as ContentGoal[] | undefined) ?? [])
       .map((goal) => GOAL_NAMES[goal] ?? goal)
       .join(", ");
-    return `${run.status[0]!.toUpperCase()}${run.status.slice(1)} · ${goals} · ${when}`;
+    return `${run.status[0].toUpperCase()}${run.status.slice(1)} · ${goals} · ${when}`;
   }
 
   protected summaryOf(run: RunRow): string | null {
@@ -587,13 +597,15 @@ export default class AdminAgentPage implements OnInit {
 
   protected cost(usd: number): string {
     // A run costs cents: four places under a dollar.
-    return "$" + usd.toFixed(usd < 1 ? 4 : 2);
+    return `$${usd.toFixed(usd < 1 ? 4 : 2)}`;
   }
 
   /** Another filter: the server lists its proposals (the newest 200 of them). */
   protected onFilter(value: unknown): void {
     const filter = PROPOSAL_FILTERS.find((f) => f.id === value)?.id;
-    if (!filter || filter === this.filter()) return;
+    if (!filter || filter === this.filter()) {
+      return;
+    }
     this.filter.set(filter);
     void this.load();
   }
@@ -601,8 +613,11 @@ export default class AdminAgentPage implements OnInit {
   protected select(id: string, on: boolean): void {
     this.selected.update((selected) => {
       const next = new Set(selected);
-      if (on) next.add(id);
-      else next.delete(id);
+      if (on) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
       return next;
     });
   }
@@ -645,16 +660,22 @@ export default class AdminAgentPage implements OnInit {
         result.error === "invalid_input" ? textWords(result.issues) : agentWords(result.error);
       toast.error("Not done", { description: words });
       // Left meanwhile: the decision stands on the server; nothing here to update or focus.
-      if (this.destroyed) return;
+      if (this.destroyed) {
+        return;
+      }
       this.said.set(`${p.label}: ${words}`);
       // It moved on the server (stale, decided in another tab, gone) or the request failed:
       // read the list again. A text refused for its field changed nothing.
-      if (!UNCHANGED_BY.has(result.error)) await this.load();
+      if (!UNCHANGED_BY.has(result.error)) {
+        await this.load();
+      }
       this.focusAfter(p.id);
       return;
     }
     // Left meanwhile: the decision stands on the server; nothing here to update or focus.
-    if (this.destroyed) return;
+    if (this.destroyed) {
+      return;
+    }
     this.replace([result.data.proposal]);
     this.editing.set(null);
     this.said.set(`${done}: ${p.label}.`);
@@ -663,12 +684,18 @@ export default class AdminAgentPage implements OnInit {
 
   protected async decideSelected(action: "apply" | "reject"): Promise<void> {
     const ids = this.selectedOpen().map((p) => p.id);
-    if (!ids.length) return;
+    if (!ids.length) {
+      return;
+    }
     this.busy.set("batch");
     const result = await this.api.decideProposals(ids, action);
     this.busy.set(null);
-    if (!result.ok) toast.error("Not done", { description: agentWords(result.error) });
-    if (this.destroyed) return;
+    if (!result.ok) {
+      toast.error("Not done", { description: agentWords(result.error) });
+    }
+    if (this.destroyed) {
+      return;
+    }
     if (!result.ok) {
       this.said.set(`Not done: ${agentWords(result.error)}`);
       // Some may have been decided before it failed: the server's list says which. The
@@ -684,10 +711,12 @@ export default class AdminAgentPage implements OnInit {
     const verb = action === "apply" ? "Applied" : "Rejected";
     this.said.set(
       failed.length
-        ? `${verb} ${decided.length}; ${failed.length} not: ${agentWords(failed[0]!.error)}`
+        ? `${verb} ${decided.length}; ${failed.length} not: ${agentWords(failed[0].error)}`
         : `${verb} ${decided.length}.`,
     );
-    if (failed.length) await this.load();
+    if (failed.length) {
+      await this.load();
+    }
     this.focusLater("agent-proposals-title");
   }
 
@@ -699,7 +728,9 @@ export default class AdminAgentPage implements OnInit {
   /** A decided proposal's buttons go: its heading takes focus, or the list's when it left the filter. */
   private focusAfter(id: string): void {
     // A destroyed page's injector takes no render hook (NG0911).
-    if (this.destroyed) return;
+    if (this.destroyed) {
+      return;
+    }
     afterNextRender(
       () => {
         const heading = document.getElementById(`proposal-${id}`);
@@ -710,7 +741,9 @@ export default class AdminAgentPage implements OnInit {
   }
 
   private focusLater(id: string): void {
-    if (this.destroyed) return;
+    if (this.destroyed) {
+      return;
+    }
     afterNextRender(() => document.getElementById(id)?.focus(), { injector: this.injector });
   }
 }

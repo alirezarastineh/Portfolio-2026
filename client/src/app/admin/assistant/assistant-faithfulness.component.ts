@@ -20,6 +20,8 @@ import {
 } from "../faithfulness";
 import { WINDOWS } from "../perception";
 
+const byModel = (key: string): string => key;
+
 /**
  * Overview → Faithfulness (plan phase 26): what the judge found on visitors'
  * answers, per model and per route, over a window. The nightly judge's random
@@ -118,8 +120,9 @@ export class AssistantFaithfulnessComponent implements OnInit {
   /** Two tables: by model, by route. */
   protected readonly tables = computed(() => {
     const v = this.view();
-    if (!v) return [];
-    const byModel = (key: string) => key;
+    if (!v) {
+      return [];
+    }
     return [
       { caption: "Judged faithfulness by model", head: "Model", rows: v.byModel, label: byModel },
       {
@@ -151,7 +154,9 @@ export class AssistantFaithfulnessComponent implements OnInit {
   private async load(): Promise<void> {
     const mine = ++this.loading;
     const result = await this.api.assistantFaithfulness(this.days());
-    if (mine !== this.loading) return;
+    if (mine !== this.loading) {
+      return;
+    }
     if (result.ok) {
       this.view.set(result.data);
       this.failed.set(false);

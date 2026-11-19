@@ -94,11 +94,15 @@ function revision(
     settings.corpusTiers,
   ];
   // Only when there are any, so a corpus without descriptions keeps its key.
-  const described = shownDescriptions(base, descriptions);
-  if (described.length) parts.push(described);
+  const shown = shownDescriptions(base, descriptions);
+  if (shown.length) {
+    parts.push(shown);
+  }
   // The related links (plan phase 19): a change to the rules that pick them is a new corpus.
   const links = documents.flatMap((d) => (d.related ? [[d.id, d.related]] : []));
-  if (links.length) parts.push(links);
+  if (links.length) {
+    parts.push(links);
+  }
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 12);
 }
 
@@ -119,11 +123,15 @@ function described(
   for (const image of images) {
     const marker = imageMarker(image.alt);
     const at = out.indexOf(marker, from);
-    if (at < 0) continue;
+    if (at < 0) {
+      continue;
+    }
     from = at + marker.length;
     const own = descriptions.get(image.file);
     const description = (own?.[locale] ?? own?.[other])?.replaceAll("[", "(").replaceAll("]", ")");
-    if (!description) continue;
+    if (!description) {
+      continue;
+    }
     const added = `\n[image description: ${description}]`;
     out = `${out.slice(0, from)}${added}${out.slice(from)}`;
     from += added.length;
@@ -137,17 +145,25 @@ function described(
  * (visitor plan V9).
  */
 export function describeImages(d: CorpusDocument, descriptions: ImageDescriptions): CorpusDocument {
-  if (!descriptions.size) return d;
+  if (!descriptions.size) {
+    return d;
+  }
   const text = d.images?.length ? described(d.text, d.images, d.locale, descriptions) : d.text;
   let sectionsChanged = false;
   const sections = d.sections?.map((s) => {
-    if (!s.images?.length) return s;
+    if (!s.images?.length) {
+      return s;
+    }
     const sectionText = described(s.text, s.images, d.locale, descriptions);
-    if (sectionText === s.text) return s;
+    if (sectionText === s.text) {
+      return s;
+    }
     sectionsChanged = true;
     return { ...s, text: sectionText };
   });
-  if (text === d.text && !sectionsChanged) return d;
+  if (text === d.text && !sectionsChanged) {
+    return d;
+  }
   return { ...d, text, ...(sectionsChanged ? { sections } : {}) };
 }
 
@@ -185,7 +201,9 @@ export function assembleCorpus(
  * single core: `--compare-core`). Its key says so, so no memo mixes the two.
  */
 export function withLayout(corpus: AskCorpus, layout: CoreLayout): AskCorpus {
-  if (layout === corpus.layout) return corpus;
+  if (layout === corpus.layout) {
+    return corpus;
+  }
   let laid = layouts.get(corpus);
   if (!laid) {
     laid = { ...corpus, key: `${corpus.key}|${layout}`, ...renderCorpus(corpus.documents, layout) };
@@ -230,9 +248,11 @@ export function resolveDocument(
   raw: string,
   locale: Locale,
 ): CorpusDocument | undefined {
-  const id = raw.trim().replace(/^\[\^?|\]$/g, "");
+  const id = raw.trim().replaceAll(/^\[\^?|\]$/g, "");
   const direct = corpus.byId.get(id);
-  if (direct) return direct;
+  if (direct) {
+    return direct;
+  }
   const base = id.replace(/@(en|de)$/, "");
   return (
     corpus.byId.get(`${base}@${locale}`) ??

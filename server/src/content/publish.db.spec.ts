@@ -22,9 +22,36 @@ import type { AppContent } from "./schema.js";
 
 const app = createApp();
 
+function requireDefined<T>(value: T | null | undefined, label = "value"): T {
+  if (value === null || value === undefined) {
+    throw new Error(`Expected ${label} to be defined`);
+  }
+  return value;
+}
+
+function byCodePoint(a: string, b: string): number {
+  if (a < b) {
+    return -1;
+  }
+  if (a > b) {
+    return 1;
+  }
+  return 0;
+}
+
+async function runStatements(statements: readonly string[], index = 0): Promise<void> {
+  if (index >= statements.length) {
+    return;
+  }
+  await getDb().execute(sql.raw(statements[index]));
+  await runStatements(statements, index + 1);
+}
+
 beforeEach(async () => {
   await resetDb();
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {
+    /* silenced in tests */
+  });
   await seed(); // drafts + a first publication of both locales
 });
 
@@ -39,16 +66,16 @@ async function renameFirstProject(name: string, locale: "en" | "de" = "en"): Pro
     .update(projectTranslations)
     .set({ name })
     .where(
-      sql`${projectTranslations.projectId} = ${first!.id} and ${projectTranslations.locale} = ${locale}`,
+      sql`${projectTranslations.projectId} = ${first.id} and ${projectTranslations.locale} = ${locale}`,
     );
-  return first!.id;
+  return first.id;
 }
 
 async function publicationCount(): Promise<number> {
   const [row] = await getDb()
     .select({ n: sql<number>`count(*)::int` })
     .from(contentPublications);
-  return row!.n;
+  return row.n;
 }
 
 describe("publishAll", () => {
@@ -57,11 +84,12 @@ describe("publishAll", () => {
     const outcome = await publishAll({ label: "rename" });
 
     expect(outcome.unchanged).toBe(false);
+    const publicationId = requireDefined(outcome.publicationId, "publicationId");
     const versions = await getDb()
       .select({ locale: contentVersions.locale })
       .from(contentVersions)
-      .where(eq(contentVersions.publicationId, outcome.publicationId!));
-    expect(versions.map((v) => v.locale).sort()).toEqual(["de", "en"]);
+      .where(eq(contentVersions.publicationId, publicationId));
+    expect(versions.map((v) => v.locale).sort((a, b) => byCodePoint(a, b))).toEqual(["de", "en"]);
   });
 
   it("writes nothing when the draft already matches what is live", async () => {
@@ -81,7 +109,7 @@ describe("publishAll", () => {
     const [a, b] = await Promise.all([publishAll({ label: "a" }), publishAll({ label: "b" })]);
 
     // Exactly one wrote; the other saw the result and had nothing left to do.
-    expect([a.unchanged, b.unchanged].sort()).toEqual([false, true]);
+    expect([a.unchanged, b.unchanged].sort((x, y) => Number(x) - Number(y))).toEqual([false, true]);
     expect(await publicationCount()).toBe(before + 1);
 
     const pointers = await getDb().select().from(contentPointers);
@@ -110,7 +138,7 @@ describe("publishAll", () => {
       })
       .returning({ id: mediaAssets.id });
     const [first] = await getDb().select().from(projects).orderBy(projects.position).limit(1);
-    await getDb().update(projects).set({ coverId: asset!.id }).where(eq(projects.id, first!.id));
+    await getDb().update(projects).set({ coverId: asset.id }).where(eq(projects.id, first.id));
 
     const outcome = await publishAll();
     const refs = await getDb().select().from(versionMediaRefs);
@@ -127,24 +155,29 @@ describe("rollbackToPublication", () => {
       .select({ id: contentPublications.id })
       .from(contentPublications)
       .limit(1);
-    const originalEn = (await liveContent("en")).projects[0]!.name;
-    const originalDe = (await liveContent("de")).projects[0]!.name;
+    const enBefore = await liveContent("en");
+    const originalEn = enBefore.projects[0].name;
+    const deBefore = await liveContent("de");
+    const originalDe = deBefore.projects[0].name;
 
     await renameFirstProject("Regrettable EN", "en");
     await renameFirstProject("Regrettable DE", "de");
     await publishAll();
-    expect((await liveContent("de")).projects[0]!.name).toBe("Regrettable DE");
+    const deChanged = await liveContent("de");
+    expect(deChanged.projects[0].name).toBe("Regrettable DE");
 
-    const outcome = await rollbackToPublication(original!.id);
-    expect(outcome.restoredFrom).toBe(original!.id);
-    expect((await liveContent("en")).projects[0]!.name).toBe(originalEn);
-    expect((await liveContent("de")).projects[0]!.name).toBe(originalDe);
+    const outcome = await rollbackToPublication(original.id);
+    expect(outcome.restoredFrom).toBe(original.id);
+    const enRestored = await liveContent("en");
+    expect(enRestored.projects[0].name).toBe(originalEn);
+    const deRestored = await liveContent("de");
+    expect(deRestored.projects[0].name).toBe(originalDe);
 
     const [written] = await getDb()
       .select()
       .from(contentPublications)
       .where(eq(contentPublications.id, outcome.publicationId));
-    expect(written).toMatchObject({ kind: "rollback", restoredFrom: original!.id });
+    expect(written).toMatchObject({ kind: "rollback", restoredFrom: original.id });
   });
 
   it("answers not_found for an unknown publication", async () => {
@@ -163,10 +196,10 @@ describe("rollbackToPublication", () => {
         locale: "en",
         payload: { version: 1, nonsense: true },
         checksum: "x",
-        publicationId: pub!.id,
+        publicationId: pub.id,
       });
 
-    const error = await rollbackToPublication(pub!.id).catch((e: unknown) => e);
+    const error = await rollbackToPublication(pub.id).catch((error_: unknown) => error_);
     expect(error).toBeInstanceOf(PublicationError);
     expect(error).toMatchObject({ status: 422, code: "invalid_payload" });
   });
@@ -183,14 +216,15 @@ describe("rollbackToPublication", () => {
       })
       .returning({ id: mediaAssets.id });
     const [first] = await getDb().select().from(projects).orderBy(projects.position).limit(1);
-    await getDb().update(projects).set({ coverId: asset!.id }).where(eq(projects.id, first!.id));
+    await getDb().update(projects).set({ coverId: asset.id }).where(eq(projects.id, first.id));
     const withImage = await publishAll();
 
-    await getDb().update(projects).set({ coverId: null }).where(eq(projects.id, first!.id));
+    await getDb().update(projects).set({ coverId: null }).where(eq(projects.id, first.id));
     await publishAll();
-    await getDb().delete(mediaAssets).where(eq(mediaAssets.id, asset!.id));
+    await getDb().delete(mediaAssets).where(eq(mediaAssets.id, asset.id));
 
-    await expect(rollbackToPublication(withImage.publicationId!)).rejects.toMatchObject({
+    const withImageId = requireDefined(withImage.publicationId, "publicationId");
+    await expect(rollbackToPublication(withImageId)).rejects.toMatchObject({
       status: 409,
       code: "media_missing",
     });
@@ -203,7 +237,8 @@ describe("restoreDraftFromPublication", () => {
       .select({ id: contentPublications.id })
       .from(contentPublications)
       .limit(1);
-    const originalName = (await liveContent("en")).projects[0]!.name;
+    const enBefore = await liveContent("en");
+    const originalName = enBefore.projects[0].name;
 
     await renameFirstProject("Edited since");
     const [added] = await getDb()
@@ -214,7 +249,7 @@ describe("restoreDraftFromPublication", () => {
       .insert(projectTranslations)
       .values(
         (["en", "de"] as const).map((locale) => ({
-          projectId: added!.id,
+          projectId: added.id,
           locale,
           name: "Added later",
           descriptor: "",
@@ -226,7 +261,7 @@ describe("restoreDraftFromPublication", () => {
       );
     await publishAll();
 
-    await restoreDraftFromPublication(original!.id);
+    await restoreDraftFromPublication(original.id);
 
     // The draft is back; the live site is untouched until the next publish.
     const [firstTranslation] = await getDb()
@@ -235,7 +270,8 @@ describe("restoreDraftFromPublication", () => {
       .innerJoin(projects, eq(projects.id, projectTranslations.projectId))
       .where(sql`${projectTranslations.locale} = 'en' and ${projects.position} = 0`);
     expect(firstTranslation?.name).toBe(originalName);
-    expect((await liveContent("en")).projects[0]!.name).toBe("Edited since");
+    const liveEn = await liveContent("en");
+    expect(liveEn.projects[0].name).toBe("Edited since");
 
     // Added since → hidden, not deleted.
     const [kept] = await getDb().select().from(projects).where(eq(projects.slug, "added-later"));
@@ -243,7 +279,8 @@ describe("restoreDraftFromPublication", () => {
 
     // And publishing it now reproduces the original exactly.
     const republished = await publishAll();
-    expect((await liveContent("en")).projects[0]!.name).toBe(originalName);
+    const republishedEn = await liveContent("en");
+    expect(republishedEn.projects[0].name).toBe(originalName);
     expect(republished.unchanged).toBe(false);
   });
 
@@ -259,9 +296,9 @@ describe("restoreDraftFromPublication", () => {
       .limit(1);
     await getDb()
       .insert(contentVersions)
-      .values({ locale: "en", payload: enVersion!.payload, checksum: "x", publicationId: pub!.id });
+      .values({ locale: "en", payload: enVersion.payload, checksum: "x", publicationId: pub.id });
 
-    await expect(restoreDraftFromPublication(pub!.id)).rejects.toMatchObject({
+    await expect(restoreDraftFromPublication(pub.id)).rejects.toMatchObject({
       status: 422,
       code: "incomplete_publication",
     });
@@ -274,7 +311,8 @@ describe("admin routes", () => {
     const client = new TestClient(app);
     await client.login();
 
-    const originalDe = (await liveContent("de")).projects[0]!.name;
+    const deBefore = await liveContent("de");
+    const originalDe = deBefore.projects[0].name;
     const [original] = await getDb()
       .select({ id: contentPublications.id })
       .from(contentPublications)
@@ -283,10 +321,11 @@ describe("admin routes", () => {
     await renameFirstProject("Changed DE", "de");
     await client.post("/admin/publish", {});
 
-    const res = await client.post(`/admin/publications/${original!.id}/rollback`, {});
+    const res = await client.post(`/admin/publications/${original.id}/rollback`, {});
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ ok: true, restoredFrom: original!.id });
-    expect((await liveContent("de")).projects[0]!.name).toBe(originalDe);
+    expect(await res.json()).toMatchObject({ ok: true, restoredFrom: original.id });
+    const deAfter = await liveContent("de");
+    expect(deAfter.projects[0].name).toBe(originalDe);
   });
 
   it("lists publications with their locales and which one is live", async () => {
@@ -299,7 +338,9 @@ describe("admin routes", () => {
       publications: { live: boolean; versions: { locale: string }[] }[];
     };
     expect(body.publications[0]).toMatchObject({ live: true });
-    expect(body.publications[0]!.versions.map((v) => v.locale).sort()).toEqual(["de", "en"]);
+    expect(
+      body.publications[0].versions.map((v) => v.locale).sort((a, b) => byCodePoint(a, b)),
+    ).toEqual(["de", "en"]);
   });
 
   it("reports an unchanged publish instead of writing a duplicate", async () => {
@@ -325,27 +366,22 @@ function migrationStatements(file: string): string[] {
  * sees the detour.
  */
 async function withPre0009Schema(fn: () => Promise<void>): Promise<void> {
-  const db = getDb();
-  for (const statement of [
+  await runStatements([
     `ALTER TABLE "projects" ADD COLUMN "image_id" uuid`,
     `ALTER TABLE "projects" ADD COLUMN "image_path" text`,
     `ALTER TABLE "projects" ADD CONSTRAINT "projects_image_id_media_assets_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."media_assets"("id") ON DELETE set null`,
     `CREATE INDEX "projects_image_idx" ON "projects" USING btree ("image_id")`,
     `ALTER TABLE "content_versions" ALTER COLUMN "publication_id" DROP NOT NULL`,
-  ]) {
-    await db.execute(sql.raw(statement));
-  }
+  ]);
   try {
     await fn();
   } finally {
     await resetDb();
-    for (const statement of [
+    await runStatements([
       `ALTER TABLE "projects" DROP COLUMN IF EXISTS "image_id"`,
       `ALTER TABLE "projects" DROP COLUMN IF EXISTS "image_path"`,
       `ALTER TABLE "content_versions" ALTER COLUMN "publication_id" SET NOT NULL`,
-    ]) {
-      await db.execute(sql.raw(statement));
-    }
+    ]);
   }
 }
 
@@ -388,7 +424,7 @@ describe("0003_backfill_publications", () => {
         { locale: "en", payload: {}, checksum: "e", label: "rollback to #1", createdAt: t3 },
       ]);
 
-      for (const statement of backfill) await getDb().execute(sql.raw(statement));
+      await runStatements(backfill);
 
       const pubs = await getDb()
         .select()
@@ -396,7 +432,7 @@ describe("0003_backfill_publications", () => {
         .orderBy(contentPublications.createdAt);
       expect(pubs.map((p) => p.kind)).toEqual(["publish", "publish", "rollback"]);
       const versions = await getDb().select().from(contentVersions);
-      expect(versions.every((v) => v.publicationId !== null)).toBe(true);
+      expect(versions.every((v) => Number.isInteger(v.publicationId))).toBe(true);
       expect(
         new Set(
           versions
@@ -407,10 +443,10 @@ describe("0003_backfill_publications", () => {
 
       const refs = await getDb().select().from(versionMediaRefs);
       expect(refs).toHaveLength(2);
-      expect(refs.every((r) => r.assetId === asset!.id)).toBe(true);
+      expect(refs.every((r) => r.assetId === asset.id)).toBe(true);
 
       // Idempotent: a second run changes nothing.
-      for (const statement of backfill) await getDb().execute(sql.raw(statement));
+      await runStatements(backfill);
       expect(await publicationCount()).toBe(3);
     });
   });
@@ -436,27 +472,27 @@ describe("0009_contract_cleanup", () => {
         .returning({ id: mediaAssets.id, filename: mediaAssets.filename });
       await getDb().execute(sql`
         insert into ${projects} (slug, position, image_id, image_path) values
-          ('by-id', 0, ${byId!.id}, null),
-          ('by-path', 1, null, ${`/media/${byPath!.filename}`}),
+          ('by-id', 0, ${byId.id}, null),
+          ('by-path', 1, null, ${`/media/${byPath.filename}`}),
           ('placeholder', 2, null, '/projects/placeholder.svg')`);
       // A version that never got a publication (a restored old dump).
       await insertLegacyVersions([{ locale: "en", payload: {}, checksum: "x" }]);
 
-      for (const statement of cleanup) await getDb().execute(sql.raw(statement));
+      await runStatements(cleanup);
 
       const covers = await getDb()
         .select({ slug: projects.slug, coverId: projects.coverId })
         .from(projects)
         .orderBy(projects.position);
       expect(covers).toEqual([
-        { slug: "by-id", coverId: byId!.id },
-        { slug: "by-path", coverId: byPath!.id },
+        { slug: "by-id", coverId: byId.id },
+        { slug: "by-path", coverId: byPath.id },
         { slug: "placeholder", coverId: null },
       ]);
 
       const [version] = await getDb().select().from(contentVersions);
       const [publication] = await getDb().select().from(contentPublications);
-      expect(version!.publicationId).toBe(publication!.id);
+      expect(version.publicationId).toBe(publication.id);
 
       const { rows } = await getDb().execute<{ column_name: string; is_nullable: string }>(sql`
         select column_name, is_nullable from information_schema.columns
@@ -480,8 +516,12 @@ describe("a case study's reader aids (plan 3, W8)", () => {
     const client = new TestClient(app);
     await client.login();
     const [first] = await getDb().select().from(projects).orderBy(projects.position).limit(1);
-    const path = `/admin/projects/${first!.id}`;
-    const load = async () => ((await (await client.get(path)).json()) as { project: Row }).project;
+    const path = `/admin/projects/${first.id}`;
+    const load = async () => {
+      const res = await client.get(path);
+      const data = (await res.json()) as { project: Row };
+      return data.project;
+    };
     const before = await load();
     // Both languages get a case study; only English gets aids.
     const save = (en: Record<string, unknown>) =>
@@ -495,11 +535,10 @@ describe("a case study's reader aids (plan 3, W8)", () => {
     return { before, load, save };
   }
 
-  const served = async (locale: "en" | "de", slug: string) =>
-    (await (await app.request(`/v2/content/${locale}/projects/${slug}`)).json()) as Record<
-      string,
-      unknown
-    >;
+  const served = async (locale: "en" | "de", slug: string) => {
+    const res = await app.request(`/v2/content/${locale}/projects/${slug}`);
+    return (await res.json()) as Record<string, unknown>;
+  };
 
   it("keep through a save, the editor's load, a publish and a restore; empty ones stay off the page", async () => {
     const { before, load, save } = await editor();
@@ -510,8 +549,10 @@ describe("a case study's reader aids (plan 3, W8)", () => {
       glossary: [],
     });
 
-    expect((await save(aids)).status).toBe(200);
-    expect((await load()).translations.en).toMatchObject(aids);
+    const saveAidsRes = await save(aids);
+    expect(saveAidsRes.status).toBe(200);
+    const loadedAids = await load();
+    expect(loadedAids.translations.en).toMatchObject(aids);
 
     const { publicationId } = await publishAll();
     expect(await served("en", before.slug)).toMatchObject({
@@ -520,40 +561,53 @@ describe("a case study's reader aids (plan 3, W8)", () => {
     });
     // The German case study has none: the doc is shaped as it was before the aids.
     const de = await served("de", before.slug);
-    expect(de).toMatchObject({ kind: "project", body: expect.stringContaining("Ein langer Text") });
+    expect(de).toMatchObject({
+      kind: "project",
+      body: expect.stringContaining("Ein langer Text") as unknown,
+    });
     expect(de).not.toHaveProperty("summaries");
     expect(de).not.toHaveProperty("glossary");
 
     // One level only: the other is left out.
-    expect((await save({ ...aids, summaryExpert: "" })).status).toBe(200);
+    const savePlainRes = await save({ ...aids, summaryExpert: "" });
+    expect(savePlainRes.status).toBe(200);
     await publishAll();
-    expect((await served("en", before.slug))["summaries"]).toEqual({ plain: aids.summaryPlain });
+    const enPlain = await served("en", before.slug);
+    expect(enPlain["summaries"]).toEqual({ plain: aids.summaryPlain });
 
     // Emptied in the draft, then brought back from the first publication.
-    expect((await save({ summaryPlain: "", summaryExpert: "", glossary: [] })).status).toBe(200);
-    await restoreDraftFromPublication(publicationId!);
-    expect((await load()).translations.en).toMatchObject(aids);
+    const clearRes = await save({ summaryPlain: "", summaryExpert: "", glossary: [] });
+    expect(clearRes.status).toBe(200);
+    await restoreDraftFromPublication(requireDefined(publicationId, "publicationId"));
+    const restored = await load();
+    expect(restored.translations.en).toMatchObject(aids);
   });
 
   it("are bounded where the admin's input arrives", async () => {
     const { save } = await editor();
     const definition = "A general definition.";
-    for (const [field, value] of [
+    const invalidCases = [
       ["glossary", Array.from({ length: 9 }, (_, i) => ({ term: `term ${i}`, definition }))],
       ["glossary", [{ term: "pgvector", definition: "" }]],
       ["glossary", [{ term: "x".repeat(81), definition }]],
       ["summaryPlain", "x".repeat(1001)],
       ["summaryExpert", "x".repeat(1001)],
-    ] as const) {
+    ] as const;
+    async function checkInvalid(index = 0): Promise<void> {
+      if (index >= invalidCases.length) {
+        return;
+      }
+      const [field, value] = invalidCases[index];
       const res = await save({ [field]: value });
       expect(res.status, field).toBe(400);
       const { issues } = (await res.json()) as { issues: { path: (string | number)[] }[] };
-      expect(issues[0]!.path.slice(0, 3)).toEqual(["translations", "en", field]);
+      expect(issues[0].path.slice(0, 3)).toEqual(["translations", "en", field]);
+      await checkInvalid(index + 1);
     }
+    await checkInvalid();
     // Eight terms, and summaries at the limit, pass; the text is trimmed.
     const eight = Array.from({ length: 8 }, (_, i) => ({ term: `term ${i}`, definition }));
-    expect((await save({ glossary: eight, summaryPlain: ` ${"x".repeat(1000)} ` })).status).toBe(
-      200,
-    );
+    const validRes = await save({ glossary: eight, summaryPlain: ` ${"x".repeat(1000)} ` });
+    expect(validRes.status).toBe(200);
   });
 });

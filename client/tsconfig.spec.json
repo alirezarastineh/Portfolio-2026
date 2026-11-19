@@ -11,6 +11,7 @@
   "files": ["src/test-setup.ts"],
   "include": [
     "src/**/*.ts",
+    "src/server/routes/.well-known/*.ts",
     "src/**/*.d.ts",
     "src/**/*.json",
     "libs/**/*.ts",

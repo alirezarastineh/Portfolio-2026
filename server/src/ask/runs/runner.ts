@@ -74,7 +74,9 @@ export function runInFlight(id: string): boolean {
 
 /** The old route's side: false while it runs already or a run is being started. */
 export function claimRequestEval(): boolean {
-  if (requestEval || starting) return false;
+  if (requestEval || starting) {
+    return false;
+  }
   requestEval = true;
   return true;
 }
@@ -88,7 +90,9 @@ export function releaseRequestEval(): void {
  * or not at all ("busy") while the old route or another start holds the slot.
  */
 export async function whileStarting<T>(start: () => Promise<T>): Promise<T | "busy"> {
-  if (requestEval || starting) return "busy";
+  if (requestEval || starting) {
+    return "busy";
+  }
   starting = true;
   try {
     return await start();
@@ -125,8 +129,12 @@ async function execute(run: RunRow, controller: AbortController): Promise<Ending
   let broken = false;
   try {
     locked = await tryLock(client, kind);
-    if (!locked) return { status: "failed", error: "another worker holds this kind's lock" };
-    if (!work) return { status: "failed", error: `no work registered for ${kind}` };
+    if (!locked) {
+      return { status: "failed", error: "another worker holds this kind's lock" };
+    }
+    if (!work) {
+      return { status: "failed", error: `no work registered for ${kind}` };
+    }
     console.log(`[runs] ${kind} run ${run.id} started`);
     const outcome = await work({
       run,
@@ -136,7 +144,8 @@ async function execute(run: RunRow, controller: AbortController): Promise<Ending
       finishItem: (key, result) => finishItem(run.id, key, result),
     });
     if (controller.signal.aborted) {
-      const shutdown = String(controller.signal.reason?.message ?? "") === "shutdown";
+      const reason: unknown = controller.signal.reason;
+      const shutdown = reason instanceof Error && reason.message === "shutdown";
       return { status: shutdown ? "interrupted" : "cancelled", summary: outcome.summary };
     }
     return outcome.status === "done"
@@ -183,15 +192,21 @@ export async function startRun(
   keys: string[],
 ): Promise<RunRow | null> {
   const run = await createRun(kind, params, keys);
-  if (run) launch(run);
+  if (run) {
+    launch(run);
+  }
   return run;
 }
 
 /** Continues an interrupted, failed or cancelled run from where it stopped. */
 export async function resumeRun(id: string): Promise<RunRow | null> {
-  if (inFlight.has(id)) return null;
+  if (inFlight.has(id)) {
+    return null;
+  }
   const run = await reopenRun(id);
-  if (run) launch(run);
+  if (run) {
+    launch(run);
+  }
   return run;
 }
 
@@ -210,7 +225,9 @@ export async function cancelRun(id: string, status: RunRow["status"]): Promise<b
 }
 
 async function recoverRun(run: RunRow): Promise<boolean> {
-  if (inFlight.has(run.id)) return false;
+  if (inFlight.has(run.id)) {
+    return false;
+  }
   const client = await getPool().connect();
   let broken = false;
   try {
@@ -240,11 +257,15 @@ export async function recoverRuns(): Promise<number> {
   const runs = await activeRuns();
   const results = await Promise.all(runs.map((run) => recoverRun(run)));
   const recovered = results.filter(Boolean).length;
-  if (recovered) console.log(`[runs] ${recovered} interrupted run(s) can be resumed`);
+  if (recovered) {
+    console.log(`[runs] ${recovered} interrupted run(s) can be resumed`);
+  }
   return recovered;
 }
 
 /** On shutdown: stop every run here; each ends as interrupted, resumable after the restart. */
 export function abortAllRuns(): void {
-  for (const controller of inFlight.values()) controller.abort(new Error("shutdown"));
+  for (const controller of inFlight.values()) {
+    controller.abort(new Error("shutdown"));
+  }
 }

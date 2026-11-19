@@ -42,7 +42,9 @@ function localStorageOrNull(): Storage | null {
 function read(storage: Pick<Storage, "getItem"> | null): Kept | null {
   try {
     const raw = storage?.getItem(NEWS_STORAGE_KEY);
-    if (!raw) return null;
+    if (!raw) {
+      return null;
+    }
     const kept = JSON.parse(raw) as Partial<Kept> | null;
     const { since, last } = kept ?? {};
     return typeof since === "string" &&
@@ -74,8 +76,12 @@ export function visitNews(
   storage: Pick<Storage, "getItem" | "setItem"> | null = localStorageOrNull(),
 ): string | null {
   const kept = read(storage);
-  if (!kept) return null;
-  if (kept.last >= day) return kept.since;
+  if (!kept) {
+    return null;
+  }
+  if (kept.last >= day) {
+    return kept.since;
+  }
   write(storage, { since: kept.last, last: day });
   return kept.last;
 }
@@ -124,8 +130,12 @@ const LISTED = 10;
 const SUMMARIZED = 5;
 
 function newsPageKind(page: MapPage): "post" | "case-study" | "project" {
-  if (page.kind === "post") return "post";
-  if (page.url.includes("/work/")) return "case-study";
+  if (page.kind === "post") {
+    return "post";
+  }
+  if (page.url.includes("/work/")) {
+    return "case-study";
+  }
   return "project";
 }
 
@@ -149,7 +159,7 @@ export function newsLines(
   return [
     { text: newsCount(updates.length, since, locale), tone: "accent" },
     ...updates.slice(0, LISTED).map((p) => ({
-      label: newsDay(p.updated!, locale),
+      ...(p.updated ? { label: newsDay(p.updated, locale) } : {}),
       text: `${p.title} · ${copy.news.kinds[newsPageKind(p)]}`,
       href: p.url,
       internal: true,

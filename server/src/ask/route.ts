@@ -158,7 +158,9 @@ export function streamsInFlight(): number {
 
 /** On shutdown: end every stream now (the visitor sees an interrupted answer and `retry`). */
 export function abortAllAsks(reason = "shutdown"): void {
-  for (const controller of inFlight) controller.abort(new Error(reason));
+  for (const controller of inFlight) {
+    controller.abort(new Error(reason));
+  }
 }
 
 async function readJson(c: Context): Promise<unknown> {
@@ -174,10 +176,16 @@ async function checkTurnstile(
   token: string | undefined,
   ip: string,
 ): Promise<boolean> {
-  if (!turnstileEnabled()) return true;
+  if (!turnstileEnabled()) {
+    return true;
+  }
   const session = hashWithSalt("session", sessionId);
-  if (verifiedSessions.has(session)) return true;
-  if (!(await verifyTurnstile(token, ip))) return false;
+  if (verifiedSessions.has(session)) {
+    return true;
+  }
+  if (!(await verifyTurnstile(token, ip))) {
+    return false;
+  }
   verifiedSessions.add(session);
   return true;
 }
@@ -217,8 +225,11 @@ async function spendState(
     const error = feature === "match" ? refusal(state) : `assistant_${state.state}`;
     return { ok: false, event: state.state, error };
   }
-  if (feature === "match" && (await demotedSubjects()).has(MATCH_SUBJECT)) {
-    return { ok: false, event: "off", error: "feature_off" };
+  if (feature === "match") {
+    const demoted = await demotedSubjects();
+    if (demoted.has(MATCH_SUBJECT)) {
+      return { ok: false, event: "off", error: "feature_off" };
+    }
   }
   return { ok: true, deepAllowed: state.deepAllowed };
 }
@@ -315,20 +326,26 @@ async function admitAsk(c: Context): Promise<AdmitResult> {
  * when its stop is not a page of the tour's language, or its plan is not one
  * this server signed for the session, or was replanned already.
  */
+type ReplanCheck = { ok: true; replan: { from: string; seen: string[] } | null } | { ok: false };
+
 function replanOf(
   tour: TourRequestBody,
   sessionId: string,
   corpus: AskCorpus,
   reading: Locale,
-): { from: string; seen: string[] } | null | "invalid" {
-  if (tour.from === undefined && tour.plan === undefined) return null;
+): ReplanCheck {
+  if (tour.from === undefined && tour.plan === undefined) {
+    return { ok: true, replan: null };
+  }
   const pages = mapOf(corpus, reading).map.pages;
-  if (!tour.from || !pages.some((page) => page.id === tour.from)) return "invalid";
+  if (!tour.from || !pages.some((page) => page.id === tour.from)) {
+    return { ok: false };
+  }
   const plan = tour.plan;
   if (plan && (plan.replanned || !verifyTour(sessionId, plan.messageId, plan, plan.sig))) {
-    return "invalid";
+    return { ok: false };
   }
-  return { from: tour.from, seen: plan?.stops ?? [] };
+  return { ok: true, replan: { from: tour.from, seen: plan?.stops ?? [] } };
 }
 
 /**
@@ -365,15 +382,21 @@ function plannerStream(
 async function tourResponse(c: Context, ask: AdmittedAsk): Promise<Response> {
   const { body, history, config, ipHash, sessionHash, release } = ask;
   try {
-    const interest = cleanVisitorText(body.tour!.interest);
+    const tour = body.tour;
+    if (!tour) {
+      release();
+      countGuardEvent("invalid_input");
+      return c.json({ error: "invalid_input" }, 400);
+    }
+    const interest = cleanVisitorText(tour.interest);
     const corpus = await askCorpus(config);
     const replan = replanOf(
-      body.tour!,
+      tour,
       body.sessionId,
       corpus,
       readingLocale(body.locale, history.language),
     );
-    if (!interest || replan === "invalid") {
+    if (!interest || !replan.ok) {
       release();
       countGuardEvent("invalid_input");
       return c.json({ error: "invalid_input" }, 400);
@@ -394,7 +417,7 @@ async function tourResponse(c: Context, ask: AdmittedAsk): Promise<Response> {
           config,
           chain: withoutDemoted(askChain(config, "lite"), demoted),
           abortSignal,
-          ...(replan ? { replan } : {}),
+          ...(replan.replan ? { replan: replan.replan } : {}),
           droppedAnswers: history.droppedAnswers,
           onClose,
         }).stream,
@@ -413,7 +436,13 @@ async function tourResponse(c: Context, ask: AdmittedAsk): Promise<Response> {
 async function matchResponse(c: Context, ask: AdmittedAsk): Promise<Response> {
   const { body, history, config, deepAllowed, ipHash, sessionHash, release } = ask;
   try {
-    const brief = cleanVisitorText(body.match!.brief);
+    const match = body.match;
+    if (!match) {
+      release();
+      countGuardEvent("invalid_input");
+      return c.json({ error: "invalid_input" }, 400);
+    }
+    const brief = cleanVisitorText(match.brief);
     if (!brief) {
       release();
       countGuardEvent("invalid_input");
@@ -428,7 +457,7 @@ async function matchResponse(c: Context, ask: AdmittedAsk): Promise<Response> {
       release,
       (abortSignal, onClose) =>
         streamMatch({
-          kind: body.match!.kind,
+          kind: match.kind,
           brief,
           locale: body.locale,
           language: detectLanguage(brief) ?? readingLocale(body.locale, history.language),
@@ -464,11 +493,17 @@ export function createAskRouter(): Hono {
     }),
     async (c) => {
       const admitted = await admitAsk(c);
-      if (!admitted.ok) return admitted.response;
+      if (!admitted.ok) {
+        return admitted.response;
+      }
       // A guided tour (visitor plan V16): admitted as a question is, planned instead of answered.
-      if (admitted.ask.body.mode === "tour") return tourResponse(c, admitted.ask);
+      if (admitted.ask.body.mode === "tour") {
+        return tourResponse(c, admitted.ask);
+      }
       // A matched brief (visitor plan V19): on its own feature, its own rate.
-      if (admitted.ask.body.mode === "match") return matchResponse(c, admitted.ask);
+      if (admitted.ask.body.mode === "match") {
+        return matchResponse(c, admitted.ask);
+      }
       const { body, history, config, deepAllowed, ipHash, sessionHash, release } = admitted.ask;
 
       const controller = new AbortController();
@@ -554,6 +589,7 @@ export function createAskRouter(): Hono {
     const state = await availability(config, settings, "terminal");
     const demoted = await demotedSubjects();
     c.header("Cache-Control", "no-store");
+    const matchAvailability = await availability(config, settings, "match");
     return c.json({
       state: state.state,
       deep: state.state === "ok" && state.deepAllowed && !demoted.has(DEEP_ROUTE),
@@ -564,16 +600,16 @@ export function createAskRouter(): Hono {
       scorecard: settings.publicScorecard,
       // Whether `match` is offered (visitor plan V19): its switch, its cap, the budget, and
       // not demoted by the trust check (V20).
-      match:
-        !demoted.has(MATCH_SUBJECT) &&
-        (await availability(config, settings, "match")).state === "ok",
+      match: !demoted.has(MATCH_SUBJECT) && matchAvailability.state === "ok",
     });
   });
 
   // Public, and working with the assistant off: aggregates only, no model call, cached.
   router.get("/scorecard", async (c) => {
     const { settings } = await assistantState();
-    if (!settings.publicScorecard) return c.json({ error: "not_published" }, 404);
+    if (!settings.publicScorecard) {
+      return c.json({ error: "not_published" }, 404);
+    }
     const ipHash = hashWithSalt("ip", clientIp(c));
     const rate = await checkScorecardRate(ipHash);
     if (!rate.ok) {
@@ -588,7 +624,9 @@ export function createAskRouter(): Hono {
   // Public, and working with the assistant off: the corpus's pages and links, no model call.
   router.get("/map", async (c) => {
     const parsed = mapQuery.safeParse({ locale: c.req.query("locale") });
-    if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
+    if (!parsed.success) {
+      return c.json({ error: "invalid_input" }, 400);
+    }
     const ipHash = hashWithSalt("ip", clientIp(c));
     const rate = await checkMapRate(ipHash);
     if (!rate.ok) {
@@ -600,13 +638,17 @@ export function createAskRouter(): Hono {
     // A publish changes the corpus's key, and so the validator: a revalidation is cheap.
     c.header("ETag", etag);
     c.header("Cache-Control", "public, max-age=300");
-    if (etagMatches(c.req.header("if-none-match"), etag)) return c.body(null, 304);
+    if (etagMatches(c.req.header("if-none-match"), etag)) {
+      return c.body(null, 304);
+    }
     return c.json(map);
   });
 
   router.post("/feedback", async (c) => {
     const parsed = feedbackBody.safeParse(await readJson(c));
-    if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
+    if (!parsed.success) {
+      return c.json({ error: "invalid_input" }, 400);
+    }
     const { sessionId, messageId, value } = parsed.data;
     // A reason belongs to a -1 only: a +1 clears the one a -1 had.
     const reason = value === -1 ? (parsed.data.reason ?? null) : null;
@@ -622,7 +664,9 @@ export function createAskRouter(): Hono {
         ),
       )
       .limit(1);
-    if (!message) return c.json({ error: "not_found" }, 404);
+    if (!message) {
+      return c.json({ error: "not_found" }, 404);
+    }
 
     await getDb()
       .insert(aiFeedback)
@@ -636,10 +680,14 @@ export function createAskRouter(): Hono {
 
   router.post("/signal", async (c) => {
     const parsed = signalBody.safeParse(await readJson(c));
-    if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
+    if (!parsed.success) {
+      return c.json({ error: "invalid_input" }, 400);
+    }
     const { sessionId, messageId, signals } = parsed.data;
     const sessionHash = hashWithSalt("session", sessionId);
-    if (!signalLimiter.take(sessionHash)) return c.json({ error: "rate_limited" }, 429);
+    if (!signalLimiter.take(sessionHash)) {
+      return c.json({ error: "rate_limited" }, 429);
+    }
 
     // Only the session that got the answer. The browser sends totals, set over what is there,
     // so a batch sent twice (a retry, the page's last word) cannot count twice.
@@ -651,13 +699,17 @@ export function createAskRouter(): Hono {
       .where(and(eq(aiMessages.id, messageId), eq(aiMessages.sessionHash, sessionHash)))
       .returning({ id: aiMessages.id });
     // The answer is logged once its stream ends: the browser tries again a moment later.
-    if (!row) return c.json({ error: "not_found" }, 404);
+    if (!row) {
+      return c.json({ error: "not_found" }, 404);
+    }
     return c.json({ ok: true });
   });
 
   router.post("/handoff", async (c) => {
     const parsed = handoffBody.safeParse(await readJson(c));
-    if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
+    if (!parsed.success) {
+      return c.json({ error: "invalid_input" }, 400);
+    }
     const { sessionId, messageId } = parsed.data;
 
     // Only the session that got the offer may confirm it, only on an answer
@@ -674,13 +726,17 @@ export function createAskRouter(): Hono {
         ),
       )
       .returning({ id: aiMessages.id });
-    if (!confirmed) return c.json({ error: "not_found" }, 404);
+    if (!confirmed) {
+      return c.json({ error: "not_found" }, 404);
+    }
     return c.json({ ok: true });
   });
 
   router.post("/inspect", async (c) => {
     const parsed = inspectBody.safeParse(await readJson(c));
-    if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
+    if (!parsed.success) {
+      return c.json({ error: "invalid_input" }, 400);
+    }
     const { sessionId, messageId } = parsed.data;
 
     // Only the session that got the answer, only a visitor's: the projection is the visitor's view.
@@ -709,14 +765,18 @@ export function createAskRouter(): Hono {
       .limit(1);
     c.header("Cache-Control", "no-store");
     // The answer is logged once its stream ends: the browser tries again a moment later.
-    if (!row) return c.json({ error: "not_found" }, 404);
+    if (!row) {
+      return c.json({ error: "not_found" }, 404);
+    }
     return c.json(inspectView(row));
   });
 
   // The visitor's own call, after their yes in the terminal: that session's answers only.
   router.post("/forget", async (c) => {
     const parsed = forgetBody.safeParse(await readJson(c));
-    if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
+    if (!parsed.success) {
+      return c.json({ error: "invalid_input" }, 400);
+    }
     const ipHash = hashWithSalt("ip", clientIp(c));
     const rate = await checkForgetRate(ipHash);
     if (!rate.ok) {
@@ -729,7 +789,9 @@ export function createAskRouter(): Hono {
       [sessionId, ...earlier].map((id) => hashWithSalt("session", id)),
     );
     // Counted as an aggregate, as refusals are: how often visitors use it, never whose.
-    if (deleted) countGuardEvent("forgotten");
+    if (deleted) {
+      countGuardEvent("forgotten");
+    }
     return c.json({ ok: true, deleted });
   });
 
@@ -738,9 +800,15 @@ export function createAskRouter(): Hono {
     let tick = 0;
     const stream = new ReadableStream<Uint8Array>({
       async pull(controller) {
-        if (tick > 0) await new Promise((resolve) => setTimeout(resolve, 400));
+        if (tick > 0) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 400);
+          });
+        }
         controller.enqueue(encoder.encode(`data: tick ${++tick}\n\n`));
-        if (tick >= 3) controller.close();
+        if (tick >= 3) {
+          controller.close();
+        }
       },
     });
     return new Response(stream, {

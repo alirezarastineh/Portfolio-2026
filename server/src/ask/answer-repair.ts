@@ -42,22 +42,27 @@ export function mergeInOrder(
       new ReadableStream<UIMessageChunk>(
         {
           async pull(controller) {
-            try {
-              for (;;) {
-                const { done, value } = await reader.read();
-                if (done) {
-                  controller.close();
-                  settle("done");
-                  return;
-                }
-                if (keep(value)) {
-                  controller.enqueue(value);
-                  return;
-                }
+            async function readNext(): Promise<void> {
+              const { done, value } = await reader.read();
+              if (done) {
+                controller.close();
+                settle("done");
+                return;
               }
+              if (keep(value)) {
+                controller.enqueue(value);
+                return;
+              }
+              return readNext();
+            }
+            try {
+              await readNext();
             } catch (error) {
-              if (options.onFailure === "end") controller.close();
-              else controller.error(error);
+              if (options.onFailure === "end") {
+                controller.close();
+              } else {
+                controller.error(error);
+              }
               settle("failed");
             }
           },
@@ -119,7 +124,9 @@ export function repairMessages(
 ): ModelMessage[] {
   const turn = { type: "text" as const, text: repairTurn(lookups) };
   const last = messages.at(-1);
-  if (last?.role !== "user") return [...messages, { role: "user", content: [turn] }];
+  if (last?.role !== "user") {
+    return [...messages, { role: "user", content: [turn] }];
+  }
   const content =
     typeof last.content === "string"
       ? [{ type: "text" as const, text: last.content }]

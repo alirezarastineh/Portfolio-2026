@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@angular/core";
-import { FormBuilder, ReactiveFormsModule, Validators } from "@angular/forms";
+import { FormBuilder, ReactiveFormsModule, Validators, type ValidatorFn } from "@angular/forms";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmAlert, HlmAlertDescription, HlmAlertTitle } from "@spartan-ng/helm/alert";
 import { HlmBadge } from "@spartan-ng/helm/badge";
@@ -21,6 +21,8 @@ import {
   LoadErrorComponent,
 } from "../../admin/components/load-state.component";
 import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
+
+const required: ValidatorFn = (control) => Validators.required(control);
 
 @Component({
   selector: "app-admin-account",
@@ -85,7 +87,7 @@ import { AdminPageHeaderComponent } from "../../admin/components/page-header.com
               <img
                 [src]="qr()"
                 alt="Authenticator QR code"
-                class="h-44 w-44 rounded-lg bg-white p-2"
+                class="size-44 rounded-lg bg-white p-2"
               />
               <p class="m-0 break-all font-data text-xs text-muted-foreground">
                 {{ otpauthUri() }}
@@ -177,12 +179,15 @@ import { AdminPageHeaderComponent } from "../../admin/components/page-header.com
                   </p>
                 </div>
                 @if (!row.current) {
-                  <button hlmBtn variant="outline" size="sm" (click)="revoke(row)">Revoke</button>
+                  <button hlmBtn type="button" variant="outline" size="sm" (click)="revoke(row)">
+                    Revoke
+                  </button>
                 }
               </div>
             }
             <button
               hlmBtn
+              type="button"
               variant="ghost"
               size="sm"
               class="self-start"
@@ -210,14 +215,14 @@ export default class AdminAccountPage implements OnInit {
   protected readonly sessionsError = signal<string | null>(null);
 
   protected readonly setupForm = this.fb.nonNullable.group({
-    password: ["", Validators.required],
+    password: ["", required],
   });
   protected readonly confirmForm = this.fb.nonNullable.group({
-    code: ["", [Validators.required, Validators.minLength(6)]],
+    code: ["", [required, Validators.minLength(6)]],
   });
   protected readonly passwordForm = this.fb.nonNullable.group({
-    currentPassword: ["", Validators.required],
-    newPassword: ["", [Validators.required, Validators.minLength(12)]],
+    currentPassword: ["", required],
+    newPassword: ["", [required, Validators.minLength(12)]],
   });
 
   ngOnInit(): void {
@@ -237,11 +242,15 @@ export default class AdminAccountPage implements OnInit {
     const result = await this.api.sessions();
     this.loadingSessions.set(false);
     this.sessionsError.set(result.ok ? null : result.error);
-    if (result.ok) this.sessions.set(result.data.sessions);
+    if (result.ok) {
+      this.sessions.set(result.data.sessions);
+    }
   }
 
   protected async startTotp(): Promise<void> {
-    if (this.setupForm.invalid || this.busy()) return;
+    if (this.setupForm.invalid || this.busy()) {
+      return;
+    }
     this.busy.set(true);
 
     const result = await this.api.totpSetup(this.setupForm.getRawValue().password);
@@ -260,7 +269,9 @@ export default class AdminAccountPage implements OnInit {
   }
 
   protected async confirmTotp(): Promise<void> {
-    if (this.confirmForm.invalid || this.busy()) return;
+    if (this.confirmForm.invalid || this.busy()) {
+      return;
+    }
     this.busy.set(true);
 
     const result = await this.api.totpConfirm(this.confirmForm.getRawValue().code.trim());
@@ -279,7 +290,9 @@ export default class AdminAccountPage implements OnInit {
   }
 
   protected async changePassword(): Promise<void> {
-    if (this.passwordForm.invalid || this.busy()) return;
+    if (this.passwordForm.invalid || this.busy()) {
+      return;
+    }
     this.busy.set(true);
 
     const { currentPassword, newPassword } = this.passwordForm.getRawValue();

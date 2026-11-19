@@ -36,7 +36,9 @@ export function mcpSummary(rows: readonly McpUsageRow[]): McpSummary {
       continue;
     }
     // A notification is acknowledged, not served.
-    if (row.name === "notification") continue;
+    if (row.name === "notification") {
+      continue;
+    }
     calls += row.count;
     if (row.name.startsWith("tools/call:")) {
       const tool = row.name.slice("tools/call:".length);

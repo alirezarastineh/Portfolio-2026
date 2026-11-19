@@ -16,7 +16,9 @@ const MIGRATION_LOCK_ID = 8_741_203;
 const PROD_TUNNEL_PORT = "55433";
 
 export function targetsProdTunnel(url: string | undefined): boolean {
-  if (!url) return false;
+  if (!url) {
+    return false;
+  }
   try {
     const { hostname, port } = new URL(url);
     return port === PROD_TUNNEL_PORT && (hostname === "127.0.0.1" || hostname === "localhost");
@@ -51,7 +53,9 @@ export async function runMigrations(): Promise<boolean> {
     return false;
   }
 
-  const migrationUrl = process.env.MIGRATION_DATABASE_URL?.trim() || undefined;
+  const rawMigrationUrl = process.env.MIGRATION_DATABASE_URL?.trim();
+  const migrationUrl =
+    rawMigrationUrl === undefined || rawMigrationUrl === "" ? undefined : rawMigrationUrl;
 
   // `pnpm dev` migrates at boot, so a laptop pointed at the tunnel would ship
   // unreleased migrations to production. Applying them there stays possible,

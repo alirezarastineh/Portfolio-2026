@@ -24,7 +24,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** Each model that judged the rows, with how many, most first. */
 function judgedBy(rows: readonly { judge: string }[]): { model: string; judged: number }[] {
   const counts = new Map<string, number>();
-  for (const row of rows) counts.set(row.judge, (counts.get(row.judge) ?? 0) + 1);
+  for (const row of rows) {
+    counts.set(row.judge, (counts.get(row.judge) ?? 0) + 1);
+  }
   return [...counts]
     .map(([model, judged]) => ({ model, judged }))
     .sort((a, b) => b.judged - a.judged || a.model.localeCompare(b.model));

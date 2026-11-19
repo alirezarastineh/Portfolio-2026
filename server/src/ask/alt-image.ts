@@ -36,8 +36,12 @@ export async function altImage(mediaId: string): Promise<AltImage> {
     .from(mediaAssets)
     .where(eq(mediaAssets.id, mediaId))
     .limit(1);
-  if (!asset) return { ok: false, error: "not_found" };
-  if (asset.kind !== "image") return { ok: false, error: "not_an_image" };
+  if (!asset) {
+    return { ok: false, error: "not_found" };
+  }
+  if (asset.kind !== "image") {
+    return { ok: false, error: "not_an_image" };
+  }
 
   const webp = await db
     .select({ filename: mediaVariants.filename, width: mediaVariants.width })
@@ -48,12 +52,15 @@ export async function altImage(mediaId: string): Promise<AltImage> {
   const variant = webp.findLast((v) => v.width <= PREFERRED_WIDTH) ?? webp[0];
 
   let pick: { filename: string; mediaType: string } | null = null;
-  if (variant) pick = { filename: variant.filename, mediaType: "image/webp" };
-  else if (SENDABLE.has(asset.mime) && asset.byteSize <= MAX_ORIGINAL_BYTES) {
+  if (variant) {
+    pick = { filename: variant.filename, mediaType: "image/webp" };
+  } else if (SENDABLE.has(asset.mime) && asset.byteSize <= MAX_ORIGINAL_BYTES) {
     pick = { filename: asset.filename, mediaType: asset.mime };
   }
   const path = pick ? resolveMediaPath(pick.filename) : null;
-  if (!pick || !path) return { ok: false, error: "unreadable" };
+  if (!pick || !path) {
+    return { ok: false, error: "unreadable" };
+  }
   try {
     return {
       ok: true,

@@ -99,19 +99,19 @@ describe("the skills' table", () => {
     );
     expect(table.map((s) => s.id)).toEqual(["seo", "alt"]);
     const [seo, alt] = table;
-    expect(seo!.versions.map((v) => [v.version, v.current, v.uses])).toEqual([
+    expect(seo.versions.map((v) => [v.version, v.current, v.uses])).toEqual([
       ["v3", true, 0],
       ["v2", false, 5],
       ["v1", false, 1],
     ]);
-    expect(seo!.versions[0]).toMatchObject({ first: null, last: null, keepRate: null });
-    expect(seo!.versions[1]).toMatchObject({ keepRate: 1, editRate: 0.2, medianEdit: 2 });
+    expect(seo.versions[0]).toMatchObject({ first: null, last: null, keepRate: null });
+    expect(seo.versions[1]).toMatchObject({ keepRate: 1, editRate: 0.2, medianEdit: 2 });
     // Another skill's versions stay with it.
-    expect(alt!.versions.map((v) => v.version)).toEqual(["a1", "a0"]);
+    expect(alt.versions.map((v) => v.version)).toEqual(["a1", "a0"]);
     expect(seo).toMatchObject({ description: "seo does a thing", template: "Write it." });
-    expect(Object.keys(seo!.versions[1]!)).not.toContain("skill");
-    expect(Object.keys(seo!.versions[1]!)).not.toContain("source");
-    expect(seo!.agent).toEqual([]);
+    expect(Object.keys(seo.versions[1])).not.toContain("skill");
+    expect(Object.keys(seo.versions[1])).not.toContain("source");
+    expect(seo.agent).toEqual([]);
   });
 
   it("counts the agents' drafts apart, the current version first (plan phases 29–31)", () => {
@@ -126,11 +126,11 @@ describe("the skills' table", () => {
     );
     const [seo] = table;
     // The copilot's rows hold the copilot's drafts only.
-    expect(seo!.versions.map((v) => [v.version, v.uses])).toEqual([
+    expect(seo.versions.map((v) => [v.version, v.uses])).toEqual([
       ["v3", 0],
       ["v2", 4],
     ]);
-    expect(seo!.agent.map((v) => [v.version, v.current, v.uses, v.keepRate])).toEqual([
+    expect(seo.agent.map((v) => [v.version, v.current, v.uses, v.keepRate])).toEqual([
       ["v3", true, 4, 1],
       ["v2", false, 1, 1],
       ["v1", false, 2, 0],

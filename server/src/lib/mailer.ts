@@ -38,7 +38,7 @@ export async function sendContactEmail(payload: ContactPayload): Promise<SendRes
       replyTo: payload.email,
       // Line breaks in a header field could start a new one; the name is the
       // only visitor-supplied text that lands in a header.
-      subject: `New contact from ${payload.name.replace(/[\r\n]+/g, " ").slice(0, 120)}`,
+      subject: `New contact from ${payload.name.replaceAll(/[\r\n]+/g, " ").slice(0, 120)}`,
       text: [
         `Name:    ${payload.name}`,
         `Email:   ${payload.email}`,
@@ -51,8 +51,8 @@ export async function sendContactEmail(payload: ContactPayload): Promise<SendRes
       return { ok: false, error: error.message ?? "send_failed" };
     }
     return { ok: true };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "send_failed";
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "send_failed";
     return { ok: false, error: msg };
   }
 }

@@ -39,13 +39,13 @@ class StubApi {
   updates: { id: string; input: SkillInput }[] = [];
   updateResponses = new Map<string, ApiResult<{ ok: true }>>();
 
-  async listSkills(): Promise<ApiResult<{ skills: SkillRow[] }>> {
-    return { ok: true, data: { skills: structuredClone(this.rows) } };
+  listSkills(): Promise<ApiResult<{ skills: SkillRow[] }>> {
+    return Promise.resolve({ ok: true, data: { skills: structuredClone(this.rows) } });
   }
 
-  async updateSkill(id: string, input: SkillInput): Promise<ApiResult<{ ok: true }>> {
+  updateSkill(id: string, input: SkillInput): Promise<ApiResult<{ ok: true }>> {
     this.updates.push({ id, input });
-    return this.updateResponses.get(id) ?? { ok: true, data: { ok: true } };
+    return Promise.resolve(this.updateResponses.get(id) ?? { ok: true, data: { ok: true } });
   }
 }
 
@@ -53,9 +53,9 @@ class StubConfirm {
   answer = true;
   calls = 0;
 
-  async ask(): Promise<boolean> {
+  ask(): Promise<boolean> {
     this.calls += 1;
-    return this.answer;
+    return Promise.resolve(this.answer);
   }
 }
 
@@ -84,8 +84,23 @@ async function setup(rows: SkillRow[]) {
   return { fixture, page: fixture.componentInstance, api, confirm, marks };
 }
 
+function editText(
+  page: AdminSkillsPage,
+  id: string,
+  key: "title" | "narrative",
+  locale: "en" | "de",
+  value: string,
+): void {
+  const control = page["control"](id, key, locale);
+  control.setValue(value);
+  control.markAsDirty();
+}
+
 describe("AdminSkillsPage.save", () => {
-  const originalScrollIntoView = Element.prototype.scrollIntoView;
+  const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+    Element.prototype,
+    "scrollIntoView",
+  );
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -93,20 +108,12 @@ describe("AdminSkillsPage.save", () => {
   });
 
   afterEach(() => {
-    Element.prototype.scrollIntoView = originalScrollIntoView;
+    if (originalScrollIntoView) {
+      Object.defineProperty(Element.prototype, "scrollIntoView", originalScrollIntoView);
+    } else {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    }
   });
-
-  function editText(
-    page: AdminSkillsPage,
-    id: string,
-    key: "title" | "narrative",
-    locale: "en" | "de",
-    value: string,
-  ): void {
-    const control = page["control"](id, key, locale);
-    control.setValue(value);
-    control.markAsDirty();
-  }
 
   it("saves changed groups, marks their controls pristine, and records draft timestamps", async () => {
     const { page, api } = await setup([skillRow("backend", "Backend"), skillRow("ops", "Ops")]);
@@ -144,7 +151,9 @@ describe("AdminSkillsPage.save", () => {
     await page["save"]();
     fixture.detectChanges();
     await fixture.whenStable();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
 
     expect(page["changedIds"]()).toEqual(["ops"]);
     expect(page["control"]("backend", "title", "en").dirty).toBe(false);

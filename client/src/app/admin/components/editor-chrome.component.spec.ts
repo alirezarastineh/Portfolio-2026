@@ -120,7 +120,7 @@ describe("SaveBarComponent", () => {
   it("saves, then opens the draft page, on Save & preview", () => {
     const { host, fixture } = setup();
     const opened = { opener: {} as unknown };
-    const open = vi.spyOn(window, "open").mockReturnValue(opened as Window);
+    const open = vi.spyOn(globalThis, "open").mockReturnValue(opened as Window);
     const button = () =>
       [...(fixture.nativeElement as HTMLElement).querySelectorAll("button")].find((b) =>
         b.textContent?.includes("Save & preview"),
@@ -130,7 +130,11 @@ describe("SaveBarComponent", () => {
     host.previewHref.set("/admin/preview/en#about");
     host.dirty.set(true);
     fixture.detectChanges();
-    button()!.click();
+    const previewButton = button();
+    if (!previewButton) {
+      throw new Error("Expected Save & preview button");
+    }
+    previewButton.click();
     expect(host.saves).toBe(1);
     expect(open).not.toHaveBeenCalled();
 
@@ -157,13 +161,16 @@ describe("SaveBarComponent", () => {
 
   it("does not open the preview when the save leaves problems", () => {
     const { host, fixture } = setup();
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const open = vi.spyOn(globalThis, "open").mockReturnValue(null);
     host.previewHref.set("/admin/preview/en");
     host.dirty.set(true);
     fixture.detectChanges();
     const button = [...(fixture.nativeElement as HTMLElement).querySelectorAll("button")].find(
       (b) => b.textContent?.includes("Save & preview"),
-    )!;
+    );
+    if (!button) {
+      throw new Error("Expected Save & preview button");
+    }
     button.click();
     host.saving.set(true);
     fixture.detectChanges();

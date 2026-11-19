@@ -29,7 +29,9 @@ function block(theme: Theme): string {
 /** A token as the copies write it. */
 function token(theme: Theme, name: string): string {
   const match = new RegExp(String.raw`--${name}:\s*(#[0-9a-f]{6});`).exec(block(theme));
-  if (!match?.[1]) throw new Error(`no colour for --${name} in the ${theme} theme`);
+  if (!match?.[1]) {
+    throw new Error(`no colour for --${name} in the ${theme} theme`);
+  }
   return match[1];
 }
 

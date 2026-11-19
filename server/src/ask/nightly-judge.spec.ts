@@ -30,10 +30,9 @@ describe("the night's picks", () => {
     expect(sampleCount(10)).toBe(3);
     expect(sampleCount(100)).toBe(5);
     expect(sampleCount(1000)).toBe(50);
-    expect(pickNightly("2026-10-06", candidates(2))).toEqual([
-      { id: expect.any(String), pick: "sample" },
-      { id: expect.any(String), pick: "sample" },
-    ]);
+    const two = pickNightly("2026-10-06", candidates(2));
+    expect(two.map((p) => p.pick)).toEqual(["sample", "sample"]);
+    expect(new Set(two.map((p) => p.id))).toEqual(new Set(["m_night0000", "m_night0001"]));
   });
 
   it("adds every flagged answer the sample did not draw, the sample first, at most 40", () => {
@@ -42,8 +41,8 @@ describe("the night's picks", () => {
     const sampled = picks.filter((p) => p.pick === "sample");
     expect(sampled).toHaveLength(5);
     // Ten flagged answers: those the sample drew stay "sample", the rest follow it.
-    const flagged = day.filter((c) => c.flagged).map((c) => c.id);
-    const drawnFlagged = sampled.filter((p) => flagged.includes(p.id)).length;
+    const flagged = new Set(day.filter((c) => c.flagged).map((c) => c.id));
+    const drawnFlagged = sampled.filter((p) => flagged.has(p.id)).length;
     expect(picks.filter((p) => p.pick === "flagged")).toHaveLength(10 - drawnFlagged);
     expect(picks.findIndex((p) => p.pick === "flagged")).toBe(5);
     expect(new Set(picks.map((p) => p.id)).size).toBe(picks.length);
@@ -95,7 +94,7 @@ describe("the nightly schedule", () => {
       "2026-10-08T02:30:00.000Z",
     );
     vi.useFakeTimers();
-    const start = vi.fn(async () => ({ refused: "feature_off" }));
+    const start = vi.fn(() => Promise.resolve({ refused: "feature_off" }));
     let config = fixtureConfig();
     startNightlyJudge({ now: new Date("2026-10-07T02:00:00Z"), start, config: () => config });
     await vi.advanceTimersByTimeAsync(29 * 60_000);
@@ -113,9 +112,7 @@ describe("the nightly schedule", () => {
   it("logs a failed start and tries again the next night", async () => {
     vi.useFakeTimers();
     const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const start = vi.fn(async () => {
-      throw new Error("the database is down");
-    });
+    const start = vi.fn(() => Promise.reject(new Error("the database is down")));
     startNightlyJudge({
       now: new Date("2026-10-07T02:29:00Z"),
       start,

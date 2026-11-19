@@ -77,6 +77,35 @@ const docs: CorpusDocument[] = [
   },
 ];
 const byId = new Map(docs.map((d) => [d.id, d]));
+const stopStream = () => undefined;
+
+const HISTORY_SESSION = "session-0123456789abcdef";
+const HISTORY_BASE = {
+  sessionId: HISTORY_SESSION,
+  locale: "en" as const,
+  historyTurns: 8,
+  maxInputTokens: 10_000,
+  maxChars: 600,
+};
+
+function askHistory(historyTurns: number, ...texts: string[]) {
+  return buildHistory({
+    ...HISTORY_BASE,
+    historyTurns,
+    messages: texts.map((text, i) => ({
+      id: `u${i}`,
+      role: "user",
+      parts: [{ type: "text", text }],
+    })),
+  });
+}
+
+const chainIds = (config: AskConfig, role: Parameters<typeof buildChain>[1]) =>
+  buildChain(config, role).map((e) => e.id);
+
+const thinkingLevel = (entry: ModelEntry | undefined) =>
+  (entry?.providerOptions?.["google"] as { thinkingConfig?: { thinkingLevel?: string } })
+    ?.thinkingConfig?.thinkingLevel;
 
 async function throughCitations(deltas: string[], locale: "en" | "de" = "en") {
   const cited = new Set<string>();
@@ -87,13 +116,15 @@ async function throughCitations(deltas: string[], locale: "en" | "de" = "en") {
   ];
   const input = new ReadableStream<TextStreamPart<ToolSet>>({
     start(c) {
-      for (const p of parts) c.enqueue(p);
+      for (const p of parts) {
+        c.enqueue(p);
+      }
       c.close();
     },
   });
   const out = await drain(
     input.pipeThrough(
-      citationTransform({ corpus: { byId }, locale, cited })({ tools: {}, stopStream: () => {} }),
+      citationTransform({ corpus: { byId }, locale, cited })({ tools: {}, stopStream }),
     ),
   );
   const text = out.map((p) => (p.type === "text-delta" ? p.text : "")).join("");
@@ -114,8 +145,12 @@ describe("citations", () => {
   });
 
   it("announces each source with its document's kind and, where it has one, its date (visitor plan V12)", async () => {
+    const atlas = byId.get("project:atlas@en");
+    if (!atlas) {
+      throw new Error("Expected project:atlas@en");
+    }
     const dated = new Map(byId);
-    dated.set("project:atlas@en", { ...byId.get("project:atlas@en")!, updated: "2026-09-12" });
+    dated.set("project:atlas@en", { ...atlas, updated: "2026-09-12" });
     const input = new ReadableStream<TextStreamPart<ToolSet>>({
       start(c) {
         c.enqueue({ type: "text-start", id: "t" });
@@ -132,7 +167,7 @@ describe("citations", () => {
       input.pipeThrough(
         citationTransform({ corpus: { byId: dated }, locale: "en", cited: new Set() })({
           tools: {},
-          stopStream: () => {},
+          stopStream,
         }),
       ),
     );
@@ -212,10 +247,10 @@ describe("citations", () => {
         .pipeThrough(
           citationTransform({ corpus: { byId }, locale: "en", cited: new Set() })({
             tools: {},
-            stopStream: () => {},
+            stopStream,
           }),
         )
-        .pipeThrough(recorderTransform(record)({ tools: {}, stopStream: () => {} })),
+        .pipeThrough(recorderTransform(record)({ tools: {}, stopStream })),
     );
     // Empty parts are dropped, the same rule the browser's copy is checked with.
     expect(answerText(record)).toBe("One\n\nTwo");
@@ -248,11 +283,13 @@ describe("citations", () => {
     ] as unknown as TextStreamPart<ToolSet>[];
     const input = new ReadableStream<TextStreamPart<ToolSet>>({
       start(c) {
-        for (const p of parts) c.enqueue(p);
+        for (const p of parts) {
+          c.enqueue(p);
+        }
         c.close();
       },
     });
-    await drain(input.pipeThrough(recorderTransform(record)({ tools: {}, stopStream: () => {} })));
+    await drain(input.pipeThrough(recorderTransform(record)({ tools: {}, stopStream })));
 
     expect(record.steps).toEqual([
       {
@@ -344,14 +381,8 @@ describe("tool outcomes", () => {
 });
 
 describe("history", () => {
-  const session = "session-0123456789abcdef";
-  const base = {
-    sessionId: session,
-    locale: "en" as const,
-    historyTurns: 8,
-    maxInputTokens: 10_000,
-    maxChars: 600,
-  };
+  const session = HISTORY_SESSION;
+  const base = HISTORY_BASE;
 
   it("replays a signed answer and drops an edited or unsigned one", async () => {
     const good = {
@@ -381,7 +412,9 @@ describe("history", () => {
       ],
     });
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.droppedAnswers).toBe(2);
     expect(result.messages).toEqual([
       { role: "user", content: wrapVisitor("What is Atlas?", "en") },
@@ -440,18 +473,9 @@ describe("history", () => {
   });
 
   it("names what the window dropped before the oldest turn still shown (plan phase 22)", async () => {
-    const ask = (...texts: string[]) =>
-      buildHistory({
-        ...base,
-        historyTurns: 2,
-        messages: texts.map((text, i) => ({
-          id: `u${i}`,
-          role: "user",
-          parts: [{ type: "text", text }],
-        })),
-      });
     // Six earlier questions, four of them shown: the first two go.
-    const trimmed = await ask(
+    const trimmed = await askHistory(
+      2,
       "What did Atlas achieve?",
       "Is Atlas still live?",
       "Is he available?",
@@ -461,14 +485,14 @@ describe("history", () => {
       "Where is he based?",
     );
     expect(trimmed.ok && trimmed.window).toEqual({ dropped: 2 });
-    const first = trimmed.ok ? (trimmed.messages[0]!.content as string) : "";
+    const first = trimmed.ok ? (trimmed.messages[0].content as string) : "";
     expect(first).toBe(
       '[Not shown: 2 earlier questions in this conversation, about Atlas, achieve, still.]\n<visitor locale="en">Is he available?</visitor>',
     );
     // Nothing dropped, nothing said.
-    const short = await ask("Is he available?", "Where is he based?");
+    const short = await askHistory(2, "Is he available?", "Where is he based?");
     expect(short.ok && short.window).toEqual({ dropped: 0 });
-    expect(short.ok && (short.messages[0]!.content as string)).toMatch(/^<visitor/);
+    expect(short.ok && (short.messages[0].content as string)).toMatch(/^<visitor/);
   });
 
   it("keeps only the last turns", async () => {
@@ -482,19 +506,16 @@ describe("history", () => {
   });
 
   it("finds the visitor's language, whatever the page's", async () => {
-    const ask = (...texts: string[]) =>
-      buildHistory({
-        ...base,
-        messages: texts.map((text, i) => ({
-          id: `u${i}`,
-          role: "user",
-          parts: [{ type: "text", text }],
-        })),
-      });
-    expect(await ask("was macht er?")).toMatchObject({ ok: true, language: "de" });
-    expect(await ask("Wo lebt er?", "Borealis?")).toMatchObject({ ok: true, language: "de" });
-    expect(await ask("Wo lebt er?", "What is Atlas?")).toMatchObject({ ok: true, language: "en" });
-    expect(await ask("Borealis?")).toMatchObject({ ok: true, language: null });
+    expect(await askHistory(8, "was macht er?")).toMatchObject({ ok: true, language: "de" });
+    expect(await askHistory(8, "Wo lebt er?", "Borealis?")).toMatchObject({
+      ok: true,
+      language: "de",
+    });
+    expect(await askHistory(8, "Wo lebt er?", "What is Atlas?")).toMatchObject({
+      ok: true,
+      language: "en",
+    });
+    expect(await askHistory(8, "Borealis?")).toMatchObject({ ok: true, language: null });
   });
 });
 
@@ -576,7 +597,7 @@ describe("redact", () => {
   });
 
   it("handles non-matching email-like strings in linear time without backtracking", () => {
-    const evilString = "user@" + "a.".repeat(50) + "123";
+    const evilString = `user@${"a.".repeat(50)}123`;
     const start = performance.now();
     expect(redact(evilString)).toBe(evilString);
     expect(performance.now() - start).toBeLessThan(50);
@@ -625,11 +646,11 @@ describe("corpus", () => {
   });
 
   it("renders the same bytes for the same documents, cutting long ones", () => {
-    const long: CorpusDocument = { ...docs[1]!, text: "line\n".repeat(1_000) };
-    const core = renderCore([docs[0]!, long], "en");
-    expect(core).toBe(renderCore([docs[0]!, long], "en"));
+    const long: CorpusDocument = { ...docs[1], text: "line\n".repeat(1000) };
+    const core = renderCore([docs[0], long], "en");
+    expect(core).toBe(renderCore([docs[0], long], "en"));
     expect(core).toContain('[… continues: get_document("project:atlas@en")]');
-    expect(renderCompact(docs, "en").length).toBeLessThan(2_000);
+    expect(renderCompact(docs, "en").length).toBeLessThan(2000);
   });
 
   it("search prefers the page language and falls back to the other", () => {
@@ -722,7 +743,7 @@ describe("prices", () => {
     const embedded = { input: 1_000_000, cached: 0, output: 0, thoughts: 0 };
     expect(costUsd("gemini-embedding-2", embedded, new Date("2026-10-05"))).toBeCloseTo(0.2);
     // Not the unknown-model fallback, which would charge it as the dearest chat model.
-    expect(priceOf("gemini-embedding-2", new Date("2026-10-05")).input).toBe(0.2);
+    expect(priceOf("gemini-embedding-2", new Date("2026-10-05")).input).toBeCloseTo(0.2);
   });
 
   it("prices every Gemini model the chains name, so none counts at the dearest price", () => {
@@ -741,18 +762,20 @@ describe("prices", () => {
 
 describe("the judge chain", () => {
   it("is the deep model unless SERVER_AI_JUDGE_MODELS names the judges, in its order", () => {
-    const ids = (config: AskConfig) => buildChain(config, "judge").map((e) => e.id);
-    expect(ids(fixtureConfig())).toEqual(["gemini-3.7-flash"]);
+    expect(chainIds(fixtureConfig(), "judge")).toEqual(["gemini-3.7-flash"]);
     const base = fixtureConfig();
     const withOpenRouter = { ...base, openrouter: { ...base.openrouter, apiKey: "test-key" } };
     // Another family first, whatever order the providers answer visitors in.
     expect(
-      ids({ ...withOpenRouter, judgeModels: ["vendor/judge:free", "gemini-3.5-flash-lite"] }),
+      chainIds(
+        { ...withOpenRouter, judgeModels: ["vendor/judge:free", "gemini-3.5-flash-lite"] },
+        "judge",
+      ),
     ).toEqual(["vendor/judge:free", "gemini-3.5-flash-lite"]);
     // A judge whose provider has no key is left out.
-    expect(ids({ ...base, judgeModels: ["vendor/judge:free", "gemini-3.5-flash-lite"] })).toEqual([
-      "gemini-3.5-flash-lite",
-    ]);
+    expect(
+      chainIds({ ...base, judgeModels: ["vendor/judge:free", "gemini-3.5-flash-lite"] }, "judge"),
+    ).toEqual(["gemini-3.5-flash-lite"]);
   });
 });
 
@@ -769,8 +792,6 @@ describe("the free-tier guard (visitor plan V1, D16)", () => {
     judgeModels: ["vendor/judge", "gemini-3.5-flash-lite"],
     copilotModel: "vendor/copilot",
   };
-  const ids = (config: AskConfig, role: Parameters<typeof buildChain>[1]) =>
-    buildChain(config, role).map((e) => e.id);
 
   it("tells a model that bills from one that does not", () => {
     expect(isFreeModel("vendor/open:free")).toBe(true);
@@ -782,11 +803,11 @@ describe("the free-tier guard (visitor plan V1, D16)", () => {
   it("leaves every model that bills out of every chain, a pairwise side too", () => {
     expect(billing.freeOnly).toBe(true);
     for (const role of ["lite", "deep", "insight", "copilot", "judge"] as const) {
-      expect(ids(billing, role).filter((id) => !isFreeModel(id))).toEqual([]);
+      expect(chainIds(billing, role).filter((id) => !isFreeModel(id))).toEqual([]);
     }
-    expect(ids(billing, "lite")).toContain("vendor/open:free");
-    expect(ids(billing, "insight")).toContain("vendor/open:free");
-    expect(ids(billing, "judge")).toEqual(["gemini-3.5-flash-lite"]);
+    expect(chainIds(billing, "lite")).toContain("vendor/open:free");
+    expect(chainIds(billing, "insight")).toContain("vendor/open:free");
+    expect(chainIds(billing, "judge")).toEqual(["gemini-3.5-flash-lite"]);
     expect(variantChain(billing, "vendor/paid")).toBeNull();
     expect(excludedModels(billing)).toEqual([
       "vendor/paid",
@@ -798,9 +819,9 @@ describe("the free-tier guard (visitor plan V1, D16)", () => {
 
   it("keeps them when it is switched off, and says so at boot", () => {
     const off = { ...billing, freeOnly: false };
-    expect(ids(off, "lite")).toContain("vendor/paid");
-    expect(ids(off, "judge")).toEqual(["vendor/judge", "gemini-3.5-flash-lite"]);
-    expect(ids(off, "copilot")).toContain("vendor/copilot");
+    expect(chainIds(off, "lite")).toContain("vendor/paid");
+    expect(chainIds(off, "judge")).toEqual(["vendor/judge", "gemini-3.5-flash-lite"]);
+    expect(chainIds(off, "copilot")).toContain("vendor/copilot");
     expect(excludedModels(off)).toEqual([]);
     expect(freeTierLine(off)).toEqual({
       warn: true,
@@ -819,7 +840,7 @@ describe("the free-tier guard (visitor plan V1, D16)", () => {
     const clean = freeTierLine(base);
     expect(clean.warn).toBe(false);
     expect(clean.text).toBe(
-      `[ask] free tier only: ${[...new Set([...ids(base, "lite"), ...ids(base, "deep"), ...ids(base, "insight"), ...ids(base, "copilot"), ...ids(base, "judge")])].join(", ")}`,
+      `[ask] free tier only: ${[...new Set([...chainIds(base, "lite"), ...chainIds(base, "deep"), ...chainIds(base, "insight"), ...chainIds(base, "copilot"), ...chainIds(base, "judge")])].join(", ")}`,
     );
   });
 
@@ -843,13 +864,22 @@ describe("the boot check", () => {
 
   it("asks about the search's embedding model only when search by meaning is on", async () => {
     const asked: string[] = [];
-    const fetchSpy = (async (input: string | URL | Request) => {
-      const url = String(input);
+    const fetchSpy = ((input: string | URL | Request) => {
+      let url: string;
+      if (typeof input === "string") {
+        url = input;
+      } else if (input instanceof URL) {
+        url = input.href;
+      } else {
+        url = input.url;
+      }
       asked.push(decodeURIComponent(url.slice(url.lastIndexOf("/") + 1)));
       // The embedding model is gone: search by meaning stays off, words alone remain.
-      return url.endsWith("gemini-embedding-2")
-        ? new Response("{}", { status: 404 })
-        : new Response(JSON.stringify({ inputTokenLimit: 500_000 }), { status: 200 });
+      return Promise.resolve(
+        url.endsWith("gemini-embedding-2")
+          ? new Response("{}", { status: 404 })
+          : new Response(JSON.stringify({ inputTokenLimit: 500_000 }), { status: 200 }),
+      );
     }) as typeof fetch;
 
     const off = fixtureConfig();
@@ -869,27 +899,25 @@ describe("the boot check", () => {
 });
 
 describe("the lookup tier", () => {
-  const thinking = (entry: ModelEntry | undefined) =>
-    (entry?.providerOptions?.["google"] as { thinkingConfig?: { thinkingLevel?: string } })
-      ?.thinkingConfig?.thinkingLevel;
-
   it("lets the first model think minimally and leaves the rest as configured", () => {
     const config = fixtureConfig();
     const lite = buildChain(config, "lite");
     const lookup = withMinimalThinking(lite, config.gemini.model);
     expect(lookup.map((e) => e.id)).toEqual(lite.map((e) => e.id));
-    expect(thinking(lite[0])).toBe("low");
-    expect(thinking(lookup[0])).toBe("minimal");
+    expect(thinkingLevel(lite[0])).toBe("low");
+    expect(thinkingLevel(lookup[0])).toBe("minimal");
     expect(lookup.slice(1)).toEqual(lite.slice(1));
     // The safety settings ride along; the chain it came from is untouched.
-    expect(lookup[0]!.providerOptions!["google"]).toMatchObject({
-      safetySettings: (lite[0]!.providerOptions!["google"] as { safetySettings: unknown })
-        .safetySettings,
+    const liteGoogle = lite[0].providerOptions?.["google"] as
+      { safetySettings: unknown } | undefined;
+    expect(liteGoogle?.safetySettings).toBeDefined();
+    expect(lookup[0].providerOptions?.["google"]).toMatchObject({
+      safetySettings: liteGoogle?.safetySettings,
     });
   });
 
   it("leaves a model without a thinking setting alone", () => {
-    const mock = { ...buildChain(fixtureConfig(), "lite")[0]!, providerOptions: undefined };
+    const mock = { ...buildChain(fixtureConfig(), "lite")[0], providerOptions: undefined };
     expect(withMinimalThinking([mock], mock.id)).toEqual([mock]);
     expect(withMinimalThinking([], mock.id)).toEqual([]);
   });
@@ -899,9 +927,9 @@ describe("the lookup tier", () => {
     // thinking, which it answers with a 400 (the visitor plan's V1, 2026-10-21).
     const config = fixtureConfig();
     const deep = buildChain(config, "deep");
-    expect(deep[0]!.id).toBe("gemini-3.7-flash");
+    expect(deep[0].id).toBe("gemini-3.7-flash");
     expect(withMinimalThinking(deep, config.gemini.model)).toEqual(deep);
-    expect(thinking(withMinimalThinking(deep, config.gemini.model)[0])).toBe("medium");
+    expect(thinkingLevel(withMinimalThinking(deep, config.gemini.model)[0])).toBe("medium");
   });
 });
 

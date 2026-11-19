@@ -90,16 +90,18 @@ const positive = z.string().trim().transform(Number).pipe(z.number().positive())
 const nonNegativeInt = z.string().trim().transform(Number).pipe(z.int().nonnegative());
 const positiveInt = z.string().trim().transform(Number).pipe(z.int().positive());
 
-const list = (raw: string | undefined): string[] =>
-  (raw ?? "")
+const list = (raw = ""): string[] =>
+  raw
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
 
-function firstKey(...names: string[]): string | null {
+function firstEnv(...names: string[]): string | null {
   for (const name of names) {
     const value = process.env[name]?.trim();
-    if (value) return value;
+    if (value) {
+      return value;
+    }
   }
   return null;
 }
@@ -107,9 +109,13 @@ function firstKey(...names: string[]): string | null {
 /** `schema.parse` of an env value, or `fallback` when it is unset or empty. */
 function read<T>(name: string, schema: z.ZodType<T>, fallback: T, errors: string[]): T {
   const raw = process.env[name];
-  if (raw === undefined || raw.trim() === "") return fallback;
+  if (raw === undefined || raw.trim() === "") {
+    return fallback;
+  }
   const parsed = schema.safeParse(raw);
-  if (parsed.success) return parsed.data;
+  if (parsed.success) {
+    return parsed.data;
+  }
   errors.push(`${name}: ${parsed.error.issues[0]?.message ?? "invalid"}`);
   return fallback;
 }
@@ -135,12 +141,12 @@ export function parseAskConfig(): AskConfig {
     (p): p is ProviderName => p === "gemini" || p === "openrouter",
   );
 
-  const geminiKey = firstKey(
+  const geminiKey = firstEnv(
     "SERVER_GEMINI_API_KEY",
     "GOOGLE_GENERATIVE_AI_API_KEY",
     "GEMINI_API_KEY",
   );
-  const openrouterKey = firstKey("SERVER_OPENROUTER_API_KEY", "OPENROUTER_API_KEY");
+  const openrouterKey = firstEnv("SERVER_OPENROUTER_API_KEY", "OPENROUTER_API_KEY");
   const openrouterModels = [
     ...list(process.env.SERVER_AI_MODEL),
     ...list(process.env.SERVER_AI_FALLBACK_MODELS),
@@ -152,16 +158,16 @@ export function parseAskConfig(): AskConfig {
     providerPriority: priority.length ? [...new Set(priority)] : ["gemini", "openrouter"],
     gemini: {
       apiKey: geminiKey,
-      model: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite",
-      deepModel: process.env.GEMINI_DEEP_MODEL?.trim() || null,
-      fallbackModel: process.env.GEMINI_FALLBACK_MODEL?.trim() || null,
+      model: firstEnv("GEMINI_MODEL") ?? "gemini-3.5-flash-lite",
+      deepModel: firstEnv("GEMINI_DEEP_MODEL"),
+      fallbackModel: firstEnv("GEMINI_FALLBACK_MODEL"),
     },
     openrouter: {
       apiKey: openrouterKey,
-      baseURL: process.env.SERVER_OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1",
+      baseURL: firstEnv("SERVER_OPENROUTER_BASE_URL") ?? "https://openrouter.ai/api/v1",
       models: [...new Set(openrouterModels)],
-      refererUrl: process.env.SERVER_AI_REFERER_URL?.trim() || "",
-      appTitle: process.env.SERVER_AI_APP_TITLE?.trim() || "",
+      refererUrl: firstEnv("SERVER_AI_REFERER_URL") ?? "",
+      appTitle: firstEnv("SERVER_AI_APP_TITLE") ?? "",
       dataCollection: read(
         "SERVER_AI_OPENROUTER_DATA_COLLECTION",
         z.enum(["allow", "deny"]),
@@ -170,15 +176,13 @@ export function parseAskConfig(): AskConfig {
       ),
     },
     copilotModel:
-      process.env.SERVER_AI_COPILOT_MODEL?.trim() ||
-      process.env.GEMINI_DEEP_MODEL?.trim() ||
-      process.env.GEMINI_MODEL?.trim() ||
+      firstEnv("SERVER_AI_COPILOT_MODEL", "GEMINI_DEEP_MODEL", "GEMINI_MODEL") ??
       "gemini-3.5-flash-lite",
     copilotHistoryTurns: read("SERVER_AI_COPILOT_HISTORY_TURNS", positiveInt, 8, errors),
     insightFallbackModels: list(process.env.SERVER_AI_INSIGHT_FALLBACK_MODELS),
     embeddings: {
       enabled: read("SERVER_AI_EMBEDDINGS", flag, false, errors),
-      model: process.env.GEMINI_EMBEDDING_MODEL?.trim() || "gemini-embedding-2",
+      model: firstEnv("GEMINI_EMBEDDING_MODEL") ?? "gemini-embedding-2",
       dims: 768,
       queryTimeoutMs: read("SERVER_AI_EMBEDDING_TIMEOUT_MS", positiveInt, 400, errors),
     },

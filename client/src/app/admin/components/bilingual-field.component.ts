@@ -76,6 +76,7 @@ import { FieldPairComponent } from "./field-pair.component";
             @if (view() !== "en") {
               <button
                 hlmDropdownMenuItem
+                type="button"
                 class="text-left"
                 [disabled]="!textEn().trim()"
                 (triggered)="copyToGerman()"
@@ -87,6 +88,7 @@ import { FieldPairComponent } from "./field-pair.component";
               @if (view() !== "en") {
                 <button
                   hlmDropdownMenuItem
+                  type="button"
                   class="text-left"
                   [disabled]="!!aiBusy() || !textEn().trim()"
                   (triggered)="aiTranslate('en')"
@@ -98,6 +100,7 @@ import { FieldPairComponent } from "./field-pair.component";
               @if (view() !== "de") {
                 <button
                   hlmDropdownMenuItem
+                  type="button"
                   class="text-left"
                   [disabled]="!!aiBusy() || !textDe().trim()"
                   (triggered)="aiTranslate('de')"
@@ -108,6 +111,7 @@ import { FieldPairComponent } from "./field-pair.component";
               }
               <button
                 hlmDropdownMenuItem
+                type="button"
                 class="text-left"
                 [disabled]="!!aiBusy()"
                 (triggered)="aiTighten()"
@@ -118,6 +122,7 @@ import { FieldPairComponent } from "./field-pair.component";
             <hlm-dropdown-menu-separator />
             <button
               hlmDropdownMenuItem
+              type="button"
               class="text-left"
               [disabled]="!lastUndo()"
               (triggered)="undo()"

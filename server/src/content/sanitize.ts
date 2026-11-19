@@ -75,9 +75,12 @@ export function sanitizeRichText(value: string): string {
 /** Wraps legacy plain text in a paragraph, escaping anything HTML-ish first. */
 export function plainTextToRichText(value: string): string {
   const trimmed = value.trim();
-  if (!trimmed) return "";
-  if (/^\s*<(p|ul|ol|h2|h3|h4|blockquote|pre)[\s>]/i.test(trimmed))
+  if (!trimmed) {
+    return "";
+  }
+  if (/^\s*<(p|ul|ol|h2|h3|h4|blockquote|pre)[\s>]/i.test(trimmed)) {
     return sanitizeRichText(trimmed);
+  }
 
   return trimmed
     .split(/\n{2,}/)
@@ -104,7 +107,7 @@ export function htmlToText(value: string, options: { images?: boolean } = {}): s
   // decoding of the whole text restores it exactly. A picture is a block of
   // its own: its marker ends the line.
   const marked = options.images
-    ? value.replace(
+    ? value.replaceAll(
         /<img\b[^<>]*>/gi,
         (img) =>
           `${escapeHtml(imageMarker(decodeEntities(/\salt="([^"]*)"/i.exec(img)?.[1] ?? "")))}\n`,
@@ -112,18 +115,18 @@ export function htmlToText(value: string, options: { images?: boolean } = {}): s
     : value;
   return decodeEntities(
     marked
-      .replace(/<(?:br|\/(?:p|li|h[2-4]|pre|blockquote))\b[^<>]*>/gi, "\n")
-      .replace(/<[^<>]*>/g, ""),
+      .replaceAll(/<(?:br|\/(?:p|li|h[2-4]|pre|blockquote))\b[^<>]*>/gi, "\n")
+      .replaceAll(/<[^<>]*>/g, ""),
   )
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
+    .replaceAll(/[ \t]+/g, " ")
+    .replaceAll(/\n{3,}/g, "\n\n")
     .trim();
 }
 
 /** How a picture stands in a text: `[image: its alt]`, or `[image]` without one. */
 export function imageMarker(alt: string): string {
   // Brackets in the alt would end the marker early.
-  const clean = alt.replace(/\s+/g, " ").trim().replaceAll("[", "(").replaceAll("]", ")");
+  const clean = alt.replaceAll(/\s+/g, " ").trim().replaceAll("[", "(").replaceAll("]", ")");
   return clean ? `[image: ${clean}]` : "[image]";
 }
 
@@ -132,7 +135,9 @@ export function mediaImages(html: string): { file: string; alt: string }[] {
   const found: { file: string; alt: string }[] = [];
   for (const [img] of html.matchAll(/<img\b[^<>]*>/gi)) {
     const file = /\ssrc="\/media\/([^"/?#]+)"/i.exec(img)?.[1];
-    if (!file) continue;
+    if (!file) {
+      continue;
+    }
     found.push({ file, alt: decodeEntities(/\salt="([^"]*)"/i.exec(img)?.[1] ?? "").trim() });
   }
   return found;
@@ -140,20 +145,32 @@ export function mediaImages(html: string): { file: string; alt: string }[] {
 
 /** The entities sanitize-html and Tiptap write. */
 export function decodeEntities(value: string): string {
-  return value.replace(
+  return value.replaceAll(
     /&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi,
     (entity, code: string) => {
       const lower = code.toLowerCase();
-      if (lower === "amp") return "&";
-      if (lower === "lt") return "<";
-      if (lower === "gt") return ">";
-      if (lower === "quot") return '"';
-      if (lower === "apos") return "'";
-      if (lower === "nbsp") return " ";
+      if (lower === "amp") {
+        return "&";
+      }
+      if (lower === "lt") {
+        return "<";
+      }
+      if (lower === "gt") {
+        return ">";
+      }
+      if (lower === "quot") {
+        return '"';
+      }
+      if (lower === "apos") {
+        return "'";
+      }
+      if (lower === "nbsp") {
+        return " ";
+      }
       const point = lower.startsWith("#x")
         ? Number.parseInt(lower.slice(2), 16)
         : Number.parseInt(lower.slice(1), 10);
-      return Number.isFinite(point) && point > 0 && point <= 0x10ffff
+      return Number.isFinite(point) && point > 0 && point <= 0x10_ff_ff
         ? String.fromCodePoint(point)
         : entity;
     },

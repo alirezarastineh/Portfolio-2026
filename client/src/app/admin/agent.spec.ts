@@ -88,7 +88,10 @@ describe("the Agent page's helpers (plan phase 30)", () => {
     expect(isContentRun({ kind: "eval", params: {} })).toBe(false);
     const summary = runSummary({ summary: { proposed: 3, needsYou: 1, stale: 2 } as never });
     expect(summary).toEqual({ proposed: 3, needsYou: 1, stale: 2 });
-    expect(summaryLine(summary!)).toBe("3 proposed, 1 need you, 2 stale");
+    if (!summary) {
+      throw new Error("expected summary");
+    }
+    expect(summaryLine(summary)).toBe("3 proposed, 1 need you, 2 stale");
     expect(runSummary({ summary: null })).toBeNull();
   });
 

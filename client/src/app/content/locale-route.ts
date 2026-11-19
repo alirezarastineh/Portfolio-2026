@@ -33,12 +33,16 @@ export function guardLocaleRoute(fileRoutes: Route[]): void {
   // the home page's chunk (hero, projects, GSAP: ~155 KB) only to find it does
   // not match. Matching it on `/de` alone keeps that code on the home page.
   const load = route.loadChildren as (() => Promise<Routes>) | undefined;
-  if (!load) throw new Error("[routing] the :locale route is not lazy — has Analog changed?");
+  if (!load) {
+    throw new Error("[routing] the :locale route is not lazy — has Analog changed?");
+  }
   route.loadChildren = async () => {
     const loaded = await load();
     for (const layout of loaded) {
       const home = layout.children?.find((child) => child.path === "" && child.loadChildren);
-      if (home) home.pathMatch = "full";
+      if (home) {
+        home.pathMatch = "full";
+      }
     }
     return loaded;
   };
@@ -57,7 +61,9 @@ export const localeContentResolver: ResolveFn<AppContent> = async (route) => {
   const store = inject(ContentStore);
   const language = inject(LanguageService);
 
-  if (!isLocale(locale)) throw new Error(`unsupported locale "${locale}"`);
+  if (!isLocale(locale)) {
+    throw new Error(`unsupported locale "${locale}"`);
+  }
 
   const content = await store.ensure(locale);
   language.activate(locale);

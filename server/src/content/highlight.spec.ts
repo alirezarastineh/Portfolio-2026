@@ -5,9 +5,21 @@ import { codeStylesheet, highlightCode } from "./highlight.js";
 /** Each class the stylesheet maps, with the token it gets. */
 async function roles(): Promise<Map<string, string>> {
   const map = new Map<string, string>();
-  const rules = (await codeStylesheet()).matchAll(/([^{}]+)\{\s*color: var\((--[a-z0-9-]+)\);/g);
-  for (const [, selectors, token] of rules) {
-    for (const [cls] of selectors!.matchAll(/sh[dl]-[0-9a-f]+/g)) map.set(cls, token!);
+  const css = await codeStylesheet();
+  for (const block of css.split("}")) {
+    const brace = block.indexOf("{");
+    if (brace === -1) {
+      continue;
+    }
+    const selectors = block.slice(0, brace);
+    const body = block.slice(brace + 1);
+    const tokenMatch = /color:\s*var\((--[a-z0-9-]+)\)/.exec(body);
+    if (!tokenMatch) {
+      continue;
+    }
+    for (const [cls] of selectors.matchAll(/sh[dl]-[0-9a-f]+/g)) {
+      map.set(cls, tokenMatch[1]);
+    }
   }
   return map;
 }
@@ -39,13 +51,15 @@ describe("codeStylesheet", () => {
       ["yaml", "a: 1\nb: [x, 'y']  # c"],
       ["markdown", "# h\n\n- a *b* `c`\n\n> q"],
     ];
-    for (const [lang, code] of samples) {
-      const html = await highlightCode(code, lang);
+    const results = await Promise.all(
+      samples.map(async ([lang, code]) => ({ lang, html: await highlightCode(code, lang) })),
+    );
+    for (const { lang, html } of results) {
       const pairs = [...html.matchAll(/class="(shd-[0-9a-f]+) (shl-[0-9a-f]+)/g)];
       expect(pairs.length, lang).toBeGreaterThan(0);
       for (const [, dark, light] of pairs) {
-        expect(map.get(dark!), `${lang}: ${dark}`).toBeDefined();
-        expect(map.get(light!), `${lang}: ${dark} ${light}`).toBe(map.get(dark!));
+        expect(map.get(dark), `${lang}: ${dark}`).toBeDefined();
+        expect(map.get(light), `${lang}: ${dark} ${light}`).toBe(map.get(dark));
       }
     }
   });

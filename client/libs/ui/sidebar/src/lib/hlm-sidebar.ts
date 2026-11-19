@@ -40,7 +40,7 @@ import { injectHlmSidebarConfig } from "./hlm-sidebar.token";
           [style.--sidebar-width]="sidebarWidthMobile()"
         >
           <h2 hlmSheetTitle class="sr-only">Navigation</h2>
-          <div class="flex h-full w-full flex-col">
+          <div class="flex size-full flex-col">
             <ng-container *ngTemplateOutlet="contentContainer" />
           </div>
         </hlm-sheet-content>
@@ -52,7 +52,7 @@ import { injectHlmSidebarConfig } from "./hlm-sidebar.token";
         <div
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
-          class="bg-background group-data-[variant=floating]:border-sidebar-border flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow"
+          class="bg-background group-data-[variant=floating]:border-sidebar-border flex size-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow-sm"
         >
           <ng-container *ngTemplateOutlet="contentContainer" />
         </div>
@@ -75,8 +75,8 @@ export class HlmSidebar {
       "group-data-[collapsible=offcanvas]:w-0",
       "group-data-[side=right]:rotate-180",
       this.variant() === "floating" || this.variant() === "inset"
-        ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
-        : "group-data-[collapsible=icon]:w-[var(--sidebar-width-icon)]",
+        ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]"
+        : "group-data-[collapsible=icon]:w-(--sidebar-width-icon)",
     ),
   );
 
@@ -85,11 +85,11 @@ export class HlmSidebar {
     hlm(
       "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) border-border pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] transition-[left,right,width] duration-200 ease-linear motion-reduce:transition-none md:flex",
       this.side() === "left"
-        ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
-        : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
+        ? "left-0 group-data-[collapsible=offcanvas]:-left-(--sidebar-width)"
+        : "right-0 group-data-[collapsible=offcanvas]:-right-(--sidebar-width)",
       this.variant() === "floating" || this.variant() === "inset"
-        ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
-        : "group-data-[collapsible=icon]:w-[var(--sidebar-width-icon)] group-data-[side=left]:border-r group-data-[side=right]:border-l",
+        ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
+        : "group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l",
       this.sidebarContainerClass(),
     ),
   );

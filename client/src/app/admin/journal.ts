@@ -213,7 +213,9 @@ export const hypothesisName = (id: HypothesisId): string =>
 
 /** "2 for, 0 against · 1.00", or "untested": a count, not a probability. */
 export function ratioLine(h: Pick<Hypothesis, "supporting" | "contradicting" | "ratio">): string {
-  if (!h.supporting && !h.contradicting) return "untested";
+  if (!h.supporting && !h.contradicting) {
+    return "untested";
+  }
   return `${h.supporting} for, ${h.contradicting} against · ${h.ratio.toFixed(2)}`;
 }
 
@@ -245,8 +247,12 @@ export function locatedLine(located: Located): string {
 
 function replayOutcome(r: ReplayOutcome): string {
   const citing = r.cited.length ? `, citing ${r.cited.join(", ")}` : "";
-  if (r.answered) return `answered${citing || ", citing nothing"}`;
-  if (r.unknown) return `said it isn't there${citing}`;
+  if (r.answered) {
+    return `answered${citing || ", citing nothing"}`;
+  }
+  if (r.unknown) {
+    return `said it isn't there${citing}`;
+  }
   return `failed (${r.finishReason})`;
 }
 
@@ -280,8 +286,12 @@ export function decisionProblem(
   status: JournalStatus,
   fields: Pick<JournalEntry, "rootCause" | "heuristic" | "fixType" | "fixRef" | "caseId">,
 ): string | null {
-  if (status !== "accepted" && status !== "fixed") return null;
-  if (!fields.rootCause.trim()) return "Write the root cause first.";
+  if (status !== "accepted" && status !== "fixed") {
+    return null;
+  }
+  if (!fields.rootCause.trim()) {
+    return "Write the root cause first.";
+  }
   if (words(fields.heuristic) < HEURISTIC_MIN_WORDS) {
     return `The heuristic needs at least ${HEURISTIC_MIN_WORDS} words: when it applies, and why.`;
   }
@@ -325,7 +335,9 @@ export function stoppedReplays(runs: readonly RunRow[]): Record<string, RunRow> 
   const newest = new Map<string, RunRow>();
   for (const run of runs) {
     const entry = run.kind === "agent" ? run.params["entry"] : undefined;
-    if (typeof entry === "string" && !newest.has(entry)) newest.set(entry, run);
+    if (typeof entry === "string" && !newest.has(entry)) {
+      newest.set(entry, run);
+    }
   }
   return Object.fromEntries([...newest].filter(([, run]) => RESUMABLE.has(run.status)));
 }

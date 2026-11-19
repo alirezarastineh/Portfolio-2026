@@ -40,7 +40,9 @@ export function sha256(buffer: Buffer): Buffer {
  */
 async function writeAtomically(buffer: Buffer, filename: string): Promise<void> {
   const target = resolveMediaPath(filename);
-  if (!target) throw new Error("refusing to write outside the media root");
+  if (!target) {
+    throw new Error("refusing to write outside the media root");
+  }
 
   await ensureMediaDirs();
   const temp = join(mediaRoot(), "tmp", `${randomUUID()}.part`);
@@ -65,17 +67,15 @@ export async function writeMediaFile(buffer: Buffer, filename: string): Promise<
  */
 export async function cleanupPartialUploads(): Promise<number> {
   const tmp = join(mediaRoot(), "tmp");
-  let removed = 0;
   try {
-    for (const entry of await readdir(tmp)) {
-      if (!entry.endsWith(".part")) continue;
-      await rm(join(tmp, entry), { force: true });
-      removed++;
-    }
+    const entries = await readdir(tmp);
+    const partials = entries.filter((entry) => entry.endsWith(".part"));
+    await Promise.all(partials.map((entry) => rm(join(tmp, entry), { force: true })));
+    return partials.length;
   } catch {
     // No tmp directory yet: nothing to clean.
+    return 0;
   }
-  return removed;
 }
 
 /**
@@ -89,7 +89,9 @@ export async function restoreMedia(buffer: Buffer, filename: string): Promise<vo
 
 export async function deleteMedia(filename: string): Promise<void> {
   const path = resolveMediaPath(filename);
-  if (!path) return;
+  if (!path) {
+    return;
+  }
   await rm(path, { force: true });
 }
 
@@ -100,10 +102,13 @@ export function openMedia(filename: string): NodeJS.ReadableStream | null {
 
 export async function mediaExists(filename: string): Promise<boolean> {
   const path = resolveMediaPath(filename);
-  if (!path) return false;
+  if (!path) {
+    return false;
+  }
 
   try {
-    return (await stat(path)).isFile();
+    const info = await stat(path);
+    return info.isFile();
   } catch {
     return false;
   }

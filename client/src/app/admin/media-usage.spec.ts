@@ -26,6 +26,17 @@ function asset(change: Partial<MediaAsset> = {}): MediaAsset {
   };
 }
 
+const cover = (alt: string) => ({
+  projects: [{ slug: "atlas", cover: { src: "/media/a.png", alt } }],
+});
+
+/** The live site in both languages, a project's cover the file, with the alt text published. */
+const marks = (en: string, de: string): DraftMarks => ({
+  paths: { en: [], de: [] },
+  live: { en: cover(en), de: cover(de) } as never,
+  asked: 0,
+});
+
 describe("usagePlace", () => {
   it("names each place the API reports, with the editor that changes it", () => {
     expect(usagePlace("project:atlas (gallery)")).toEqual({
@@ -73,13 +84,6 @@ describe("usageState and deleteBlocker", () => {
 });
 
 describe("altInDraft", () => {
-  /** The live site in both languages, a project's cover the file, with the alt text published. */
-  const marks = (en: string, de: string): DraftMarks => {
-    const cover = (alt: string) => ({
-      projects: [{ slug: "atlas", cover: { src: "/media/a.png", alt } }],
-    });
-    return { paths: { en: [], de: [] }, live: { en: cover(en), de: cover(de) } as never, asked: 0 };
-  };
   const shown = { usage: { draft: ["project:atlas"], live: true, recent: true } };
 
   it("is in the draft when the live picture carries other words than the saved ones", () => {

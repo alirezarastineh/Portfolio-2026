@@ -16,6 +16,9 @@ const PLAIN_DE =
 const EXPERT_DE =
   "Atlas kombiniert hybride Retrieval-Verfahren aus BM25-Volltextsuche und pgvector-Vektorsuche mit anschließendem Reranking, verankert die Generierung durch verpflichtende Quellenangaben und sichert jede Prompt- und Modelländerung über eine Evaluationssuite mit 300 realen Supportanfragen ab, wodurch die Eskalationen um 38 % zurückgingen.";
 
+const sentence = (long: number, short: number) =>
+  `${[...new Array<string>(long).fill("assistant"), ...new Array<string>(short).fill("it")].join(" ")}.`;
+
 describe("readability", () => {
   it("counts sentences, words and long words, a colon ending a sentence as LIX has it", () => {
     expect(readability("He builds AI systems: retrieval, evaluation. Fast!")).toEqual({
@@ -49,8 +52,6 @@ describe("readability", () => {
   });
 
   it("leaves English room for the portfolio's names: 36 % long words passes, 40 % fails (V22)", () => {
-    const sentence = (long: number, short: number) =>
-      `${[...Array<string>(long).fill("assistant"), ...Array<string>(short).fill("it")].join(" ")}.`;
     // 9 of 25 words long, as Parts F and G's plain answers about Atlas read; then 10 of 25.
     expect(notPlain(`${sentence(5, 7)} ${sentence(4, 9)}`, "en")).toEqual([]);
     expect(notPlain(`${sentence(5, 7)} ${sentence(5, 8)}`, "en")).toEqual([

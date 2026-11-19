@@ -10,7 +10,9 @@ import { uiSchema } from "./schema.js";
 
 beforeEach(async () => {
   await resetDb();
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {
+    /* silenced in tests */
+  });
 });
 
 async function uiDocument(locale: "en" | "de") {
@@ -18,7 +20,7 @@ async function uiDocument(locale: "en" | "de") {
     .select({ data: contentDocuments.data, updatedAt: contentDocuments.updatedAt })
     .from(contentDocuments)
     .where(and(eq(contentDocuments.section, "ui"), eq(contentDocuments.locale, locale)));
-  return row!;
+  return row;
 }
 
 describe("backfillContentV2", () => {
@@ -60,6 +62,6 @@ describe("backfillContentV2", () => {
       .select({ data: contentDocuments.data })
       .from(contentDocuments)
       .where(and(eq(contentDocuments.section, "imprint"), eq(contentDocuments.locale, "de")));
-    expect(imprint!.data).toEqual({ title: "Impressum", body: "<p>Mein Text</p>" });
+    expect(imprint.data).toEqual({ title: "Impressum", body: "<p>Mein Text</p>" });
   });
 });

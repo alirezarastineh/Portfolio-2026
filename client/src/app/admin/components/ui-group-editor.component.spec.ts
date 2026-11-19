@@ -8,10 +8,12 @@ const FIELDS: UiFieldDef[] = [{ key: "updated", label: "“Last updated” label
 
 function setup() {
   // An answer that arrives at once, as a quick server's can before the page's first check.
-  const loadGroup = vi.fn(async () => ({
-    value: { en: { updated: "Last updated" }, de: { updated: "Zuletzt aktualisiert" } },
-    updatedAt: "2026-10-21T10:00:00.000Z",
-  }));
+  const loadGroup = vi.fn(() =>
+    Promise.resolve({
+      value: { en: { updated: "Last updated" }, de: { updated: "Zuletzt aktualisiert" } },
+      updatedAt: "2026-10-21T10:00:00.000Z",
+    }),
+  );
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [{ provide: UiSectionService, useValue: { loadGroup } }],
@@ -21,11 +23,18 @@ function setup() {
   return { loadGroup, fixture: TestBed.createComponent(UiGroupEditorComponent) };
 }
 
-const settle = () => new Promise((resolve) => setTimeout(resolve));
+const settle = (): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve);
+  });
 
 /** The microtasks queued so far, and the ones they queue: all that runs before a first check. */
-async function microtasks(): Promise<void> {
-  for (let i = 0; i < 10; i++) await Promise.resolve();
+async function microtasks(turns = 10): Promise<void> {
+  if (turns <= 0) {
+    return;
+  }
+  await Promise.resolve();
+  await microtasks(turns - 1);
 }
 
 describe("UiGroupEditorComponent", () => {

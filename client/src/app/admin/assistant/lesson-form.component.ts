@@ -108,7 +108,7 @@ export class LessonFormComponent {
   /** Why the source cannot make a lesson yet (the entries chosen, say); null when it can. */
   readonly sourceProblem = input<string | null>(null);
   readonly made = output<Lesson>();
-  readonly cancelled = output<void>();
+  readonly cancelled = output();
 
   protected readonly statement = signal("");
   private scopeEdited = false;
@@ -138,7 +138,9 @@ export class LessonFormComponent {
   }
 
   protected async send(): Promise<void> {
-    if (this.problem() || this.sending()) return;
+    if (this.problem() || this.sending()) {
+      return;
+    }
     this.sending.set(true);
     const result = await this.api.createLesson({
       ...this.source(),

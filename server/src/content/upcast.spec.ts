@@ -51,7 +51,7 @@ function v1Payload(): v1.AppContent {
         links: { live: "", repo: "", caseStudy: "" },
       },
     ],
-    seo: v1Seo(seed.documents.seo["en"]!),
+    seo: v1Seo(seed.documents.seo["en"]),
   });
 }
 
@@ -60,7 +60,9 @@ describe("upcast", () => {
     const old = v1Payload();
     const result = upcast(old, "2026-01-01T00:00:00.000Z");
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
 
     const content = result.content satisfies AppContent;
     expect(result.from).toBe(1);
@@ -94,7 +96,9 @@ describe("upcast", () => {
     const published = { ...v2, seo: { ...v2.seo, themeColor: "#3b3b3d" } };
     const result = upcast(published, "x");
     expect(result).toMatchObject({ ok: true, from: 2 });
-    if (result.ok) expect(result.content.seo).toEqual(v2.seo);
+    if (result.ok) {
+      expect(result.content.seo).toEqual(v2.seo);
+    }
   });
 
   it("gives a v1 version the bundled legal pages as docs", async () => {
@@ -117,8 +121,8 @@ describe("fillMissing", () => {
 
   it("adds every v2 ui key to a v1 ui tree", () => {
     const ui = withUiDefaults(v1Payload().ui, "en") as Record<string, Record<string, string>>;
-    expect(ui["nav"]!["writing"]).toBe("Writing");
-    expect(ui["nav"]!["skills"]).toBe(v1Payload().ui.nav.skills);
+    expect(ui["nav"]["writing"]).toBe("Writing");
+    expect(ui["nav"]["skills"]).toBe(v1Payload().ui.nav.skills);
     expect(ui["ask"]).toEqual(UI_V2_ADDITIONS.en.ask);
   });
 

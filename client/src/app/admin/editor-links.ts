@@ -25,8 +25,8 @@ const LIST_PAGES: Record<string, { list: string; item: (slug: string) => string 
 
 /** `project:atlas` (a doc key) → the editor of that project. */
 const DOC_PAGES: Record<string, (slug: string) => string> = {
-  project: (slug) => LIST_PAGES["projects"]!.item(slug),
-  post: (slug) => LIST_PAGES["posts"]!.item(slug),
+  project: (slug) => LIST_PAGES["projects"].item(slug),
+  post: (slug) => LIST_PAGES["posts"].item(slug),
   legal: () => "/admin/legal",
 };
 
@@ -52,9 +52,15 @@ function docLink(key: string): string | null {
  */
 export function editorLinkFor(issue: Pick<ApiIssue, "path" | "label">): string | null {
   const [root, second] = issue.path;
-  if (typeof root !== "string") return null;
-  if (root === "ui") return UI_GROUP_PAGES[String(second)] ?? WORDS;
-  if (root === "docs") return docLink(String(second));
+  if (typeof root !== "string") {
+    return null;
+  }
+  if (root === "ui") {
+    return UI_GROUP_PAGES[String(second)] ?? WORDS;
+  }
+  if (root === "docs") {
+    return docLink(String(second));
+  }
 
   const pages = LIST_PAGES[root];
   if (pages) {
@@ -81,8 +87,12 @@ export function editorLinkForI18n(
     case "faq":
       return "/admin/assistant";
     case "section": {
-      if (item.id === "seo") return "/admin/seo";
-      if (item.id === "imprint" || item.id === "privacy") return "/admin/legal";
+      if (item.id === "seo") {
+        return "/admin/seo";
+      }
+      if (item.id === "imprint" || item.id === "privacy") {
+        return "/admin/legal";
+      }
       // `ui` fields are `group.key`: the first one's group decides the page.
       const field = [...(item.missingDe ?? []), ...(item.missingEn ?? [])][0];
       return UI_GROUP_PAGES[field?.split(".")[0] ?? ""] ?? WORDS;

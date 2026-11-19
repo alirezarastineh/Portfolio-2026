@@ -24,6 +24,9 @@ export const skillsRouter = new Hono();
 const invalid = (result: { success: boolean }, c: { json: (b: unknown, s: 400) => Response }) =>
   result.success ? undefined : c.json({ error: "invalid_input" }, 400);
 
+const needsReview = (failures: { message: string }[]) =>
+  failures.length ? { needsReview: failures.map((f) => f.message) } : {};
+
 skillsRouter.post("/copilot", zValidator("json", copilotInput, invalid), async (c) => {
   const input = c.req.valid("json");
   const config = askConfig();
@@ -34,13 +37,23 @@ skillsRouter.post("/copilot", zValidator("json", copilotInput, invalid), async (
     corpus: () => askCorpus(config),
     image: altImage,
   });
-  if (job instanceof SkillAnswer) return c.json(job.body, job.status);
+  if (job instanceof SkillAnswer) {
+    return c.json(job.body, job.status);
+  }
 
-  const result = await copilotSession(config, skill.accepts, (models) => runSkill(models, job));
-  if (!result.ok) return c.json({ error: result.error }, 503);
+  const result = await copilotSession(
+    config,
+    (entry) => skill.accepts(entry),
+    (models) => runSkill(models, job),
+  );
+  if (!result.ok) {
+    return c.json({ error: result.error }, 503);
+  }
   const { model, value: run } = result;
   // Every draft empty (a safety filter, say): nothing to put in a field, and nothing offered.
-  if (!run.text) return c.json({ error: "empty_draft" }, 502);
+  if (!run.text) {
+    return c.json({ error: "empty_draft" }, 502);
+  }
   const [top, ...others] = run.candidates;
 
   // The draft's record; an abstention is decided at once and has nothing to report.
@@ -62,8 +75,6 @@ skillsRouter.post("/copilot", zValidator("json", copilotInput, invalid), async (
       return null;
     },
   );
-  const needsReview = (failures: { message: string }[]) =>
-    failures.length ? { needsReview: failures.map((f) => f.message) } : {};
   return c.json({
     text: run.text,
     model: shortName(model),
@@ -71,11 +82,11 @@ skillsRouter.post("/copilot", zValidator("json", copilotInput, invalid), async (
     ...needsReview(run.failures),
     ...(others.length
       ? {
-          lead: top!.lead,
-          alternatives: others.map((c) => ({
-            text: c.text,
-            lead: c.lead,
-            ...needsReview(c.failures),
+          lead: top.lead,
+          alternatives: others.map((alt) => ({
+            text: alt.text,
+            lead: alt.lead,
+            ...needsReview(alt.failures),
           })),
         }
       : {}),

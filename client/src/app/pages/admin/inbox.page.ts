@@ -248,7 +248,7 @@ const LANGUAGES: Record<Locale, string> = {
 
                 <!-- Bound, not interpolated: the template's line breaks would show in pre-wrap. -->
                 <p
-                  class="m-0 max-w-prose whitespace-pre-wrap text-sm leading-relaxed wrap-break-word"
+                  class="m-0 max-w-prose whitespace-pre-wrap text-sm/relaxed wrap-break-word"
                   [attr.lang]="message.locale"
                   [textContent]="message.message"
                 ></p>
@@ -356,14 +356,18 @@ export default class AdminInboxPage implements OnInit {
   protected readonly fresh = computed(
     () => this.messages().filter((m) => m.status === "new").length,
   );
-  protected readonly empty = computed(() => FILTERS.find((f) => f.id === this.filter())!);
+  protected readonly empty = computed(
+    () => FILTERS.find((f) => f.id === this.filter()) ?? FILTERS[0],
+  );
 
   constructor() {
     // The address is the truth: the rail's Inbox, a link or Back can change it under the page.
     this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
       this.selectedId.set(params.get("m"));
       const filter = filterFrom(params.get("filter"));
-      if (filter === this.filter()) return;
+      if (filter === this.filter()) {
+        return;
+      }
       this.filter.set(filter);
       void this.load();
     });
@@ -375,7 +379,9 @@ export default class AdminInboxPage implements OnInit {
 
   protected onFilter(value: unknown): void {
     const filter = FILTERS.find((f) => f.id === value)?.id;
-    if (!filter) return;
+    if (!filter) {
+      return;
+    }
     this.filter.set(filter);
     this.selectedId.set(null);
     this.go({ filter: filter === "inbox" ? null : filter, m: null });
@@ -387,20 +393,28 @@ export default class AdminInboxPage implements OnInit {
     const filter = this.filter();
     const result = await this.api.listMessages(filter === "inbox" ? undefined : filter);
     // A later filter's answer wins over an earlier one arriving late.
-    if (filter !== this.filter()) return;
+    if (filter !== this.filter()) {
+      return;
+    }
     this.loading.set(false);
     this.loadError.set(result.ok ? null : result.error);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     // Spam has its own filter; the server's default leaves out only the archive.
     this.messages.set(result.data.messages.filter((m) => inFilter(filter, m.status)));
     const opened = this.selected();
-    if (opened?.status === "new") void this.markRead(opened);
+    if (opened?.status === "new") {
+      void this.markRead(opened);
+    }
   }
 
   /** Opens a message; a new one is marked read on the way. */
   protected open(message: MessageRow, focusReader = false): void {
     this.select(message.id);
-    if (message.status === "new") void this.markRead(message);
+    if (message.status === "new") {
+      void this.markRead(message);
+    }
     // Below lg the message replaces the list: its heading takes the focus.
     if (focusReader || !this.wide()) {
       setTimeout(() => this.find<HTMLElement>("#inbox-reader-title")?.focus());
@@ -430,7 +444,9 @@ export default class AdminInboxPage implements OnInit {
 
   /** J / K from the open message (or the first); E, U, R and # on it. */
   protected onKeydown(event: KeyboardEvent): void {
-    if (!isShortcutTarget(event)) return;
+    if (!isShortcutTarget(event)) {
+      return;
+    }
     const key = event.key.toLowerCase();
     if (key === "j" || key === "k") {
       event.preventDefault();
@@ -438,21 +454,27 @@ export default class AdminInboxPage implements OnInit {
       return;
     }
     const message = this.selected();
-    if (!message) return;
+    if (!message) {
+      return;
+    }
     if (key === "r") {
       event.preventDefault();
       this.find<HTMLAnchorElement>("#inbox-reply")?.click();
       return;
     }
     const status = statusForKey(key, message.status);
-    if (!status) return;
+    if (!status) {
+      return;
+    }
     event.preventDefault();
     void this.setStatus(message, status);
   }
 
   private step(by: 1 | -1): void {
     const next = stepFrom(this.messages(), this.selectedId(), by);
-    if (!next) return;
+    if (!next) {
+      return;
+    }
     this.open(next);
     if (this.wide()) {
       // The row keeps the focus, so the next J starts from where the eye is.
@@ -467,7 +489,9 @@ export default class AdminInboxPage implements OnInit {
   private async markRead(message: MessageRow): Promise<void> {
     this.patchStatus(message.id, "read");
     const result = await this.api.setMessageStatus(message.id, "read");
-    if (!result.ok) this.patchStatus(message.id, message.status);
+    if (!result.ok) {
+      this.patchStatus(message.id, message.status);
+    }
   }
 
   protected async setStatus(message: MessageRow, status: MessageStatus): Promise<void> {
@@ -516,7 +540,9 @@ export default class AdminInboxPage implements OnInit {
   /** ", in German, via the assistant": what the reader needs before answering. */
   protected sentIn(message: MessageRow): string {
     let language = "";
-    if (message.locale) language = LANGUAGES[message.locale] ?? ", in English";
+    if (message.locale) {
+      language = LANGUAGES[message.locale] ?? ", in English";
+    }
     const origin = message.origin === "ask" ? ", via the assistant" : "";
     return `${language}${origin}.`;
   }

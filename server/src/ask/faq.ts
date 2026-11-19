@@ -47,8 +47,8 @@ export async function insertFaq(tx: DbExecutor, input: FaqInput): Promise<string
     .returning({ id: aiFaq.id });
   const translations = LOCALES.flatMap((locale) => {
     const t = input.translations[locale];
-    return t ? [{ faqId: row!.id, locale, ...t }] : [];
+    return t ? [{ faqId: row.id, locale, ...t }] : [];
   });
   await tx.insert(aiFaqTranslations).values(translations);
-  return row!.id;
+  return row.id;
 }

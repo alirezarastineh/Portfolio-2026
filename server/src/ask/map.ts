@@ -92,7 +92,9 @@ export function mapEtag(corpusKey: string, locale: Locale): string {
 
 /** Whether an `If-None-Match` header names `etag` (it may list several, or `*`). */
 export function etagMatches(header: string | undefined, etag: string): boolean {
-  if (!header) return false;
+  if (!header) {
+    return false;
+  }
   return header.split(",").some((tag) => {
     const value = tag.trim();
     return value === "*" || value === etag;

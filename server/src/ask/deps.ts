@@ -47,7 +47,9 @@ export function askDraftCorpus(config: AskConfig): Promise<AskCorpus> {
 
 /** A pairwise side: a route's chain (`lite`, `deep`), or one model by id; null without its key. */
 export function askVariantChain(config: AskConfig, variant: string): ModelEntry[] | null {
-  if (variant === "lite" || variant === "deep") return askChain(config, variant);
+  if (variant === "lite" || variant === "deep") {
+    return askChain(config, variant);
+  }
   return (current.variantChain ?? variantChain)(config, variant);
 }
 

@@ -15,7 +15,9 @@ afterEach(() => {
 
 function captureLines() {
   const lines: Record<string, unknown>[] = [];
-  vi.spyOn(console, "log").mockImplementation((line: string) => lines.push(JSON.parse(line)));
+  vi.spyOn(console, "log").mockImplementation((line: string) => {
+    lines.push(JSON.parse(line) as Record<string, unknown>);
+  });
   return lines;
 }
 
@@ -31,7 +33,7 @@ describe("requestLog", () => {
       status: 200,
       level: "info",
     });
-    expect(typeof lines[0]!.ms).toBe("number");
+    expect(typeof lines[0].ms).toBe("number");
   });
 
   /** Tokens and search terms travel in query strings; they must not reach the log. */

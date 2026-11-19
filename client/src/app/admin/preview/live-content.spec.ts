@@ -110,7 +110,7 @@ describe("withIdentity", () => {
 });
 
 describe("withProject", () => {
-  const first = base.projects[0]!;
+  const first = base.projects[0];
   const row = {
     id: "p1",
     slug: "renamed",
@@ -176,44 +176,65 @@ describe("withProject", () => {
   });
 });
 
-describe("withExperiences", () => {
-  const entry = (id: string, title: string, isVisible = true): ExperienceInput & { id: string } =>
-    ({
-      id,
-      kind: "work",
-      orgName: `Org ${id}`,
-      orgUrl: "",
-      logoId: null,
-      location: "",
-      employmentType: "",
-      startDate: "2024-01-01",
-      endDate: null,
-      datePrecision: "month",
-      credentialId: "",
-      credentialUrl: "",
-      skills: [],
-      isVisible,
-      translations: {
-        en: { title, summary: "", highlights: ["Did it", " "] },
-        de: { title: `${title} DE`, summary: "", highlights: [] },
-      },
-    }) as ExperienceInput & { id: string };
+const experienceEntry = (
+  id: string,
+  title: string,
+  isVisible = true,
+): ExperienceInput & { id: string } => ({
+  id,
+  kind: "work",
+  orgName: `Org ${id}`,
+  orgUrl: "",
+  logoId: null,
+  location: "",
+  employmentType: "",
+  startDate: "2024-01-01",
+  endDate: null,
+  datePrecision: "month",
+  credentialId: "",
+  credentialUrl: "",
+  skills: [],
+  isVisible,
+  translations: {
+    en: { title, summary: "", highlights: ["Did it", " "] },
+    de: { title: `${title} DE`, summary: "", highlights: [] },
+  },
+});
 
+const skillCard = (id: string, isVisible: boolean) =>
+  ({
+    id,
+    icon: "cpu",
+    span: "sm",
+    items: ["TS", ""],
+    isVisible,
+    position: 0,
+    translations: {
+      en: { title: `${id} EN`, caption: "", narrative: "" },
+      de: { title: `${id} DE`, caption: "", narrative: "" },
+    },
+  }) as SkillRow;
+
+describe("withExperiences", () => {
   it("follows the list's order and visibility, with the open entry in its place", () => {
-    const rows = [entry("a", "First"), entry("b", "Hidden", false), entry("c", "Third")];
-    const open = { ...entry("c", "Third, edited"), id: "c" };
+    const rows = [
+      experienceEntry("a", "First"),
+      experienceEntry("b", "Hidden", false),
+      experienceEntry("c", "Third"),
+    ];
+    const open = { ...experienceEntry("c", "Third, edited"), id: "c" };
     const next = withExperiences(base, "en", rows, open, none);
     expect(next.experiences.map((e) => e.title)).toEqual(["First", "Third, edited"]);
     expect(next.experiences[0]?.highlights).toEqual(["Did it"]);
   });
 
   it("shows a new entry at the end, and a hidden one while it is open", () => {
-    const rows = [entry("a", "First"), entry("b", "Hidden", false)];
-    const created = { ...entry("x", "New role"), id: null };
+    const rows = [experienceEntry("a", "First"), experienceEntry("b", "Hidden", false)];
+    const created = { ...experienceEntry("x", "New role"), id: null };
     expect(withExperiences(base, "en", rows, created, none).experiences.at(-1)?.title).toBe(
       "New role",
     );
-    const hidden = { ...entry("b", "Hidden"), id: "b" };
+    const hidden = { ...experienceEntry("b", "Hidden"), id: "b" };
     expect(withExperiences(base, "de", rows, hidden, none).experiences.map((e) => e.title)).toEqual(
       ["First DE", "Hidden DE"],
     );
@@ -222,20 +243,11 @@ describe("withExperiences", () => {
 
 describe("withSkills", () => {
   it("lists the visible cards in the list's order, in the language shown", () => {
-    const card = (id: string, isVisible: boolean) =>
-      ({
-        id,
-        icon: "cpu",
-        span: "sm",
-        items: ["TS", ""],
-        isVisible,
-        position: 0,
-        translations: {
-          en: { title: `${id} EN`, caption: "", narrative: "" },
-          de: { title: `${id} DE`, caption: "", narrative: "" },
-        },
-      }) as SkillRow;
-    const next = withSkills(base, "de", [card("b", true), card("a", false), card("c", true)]);
+    const next = withSkills(base, "de", [
+      skillCard("b", true),
+      skillCard("a", false),
+      skillCard("c", true),
+    ]);
     expect(next.skills.map((s) => s.title)).toEqual(["b DE", "c DE"]);
     expect(next.skills[0]?.items).toEqual(["TS"]);
   });

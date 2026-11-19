@@ -22,10 +22,14 @@ export class DraftInvalidError extends Error {
 }
 
 function itemName(item: unknown): string | null {
-  if (!item || typeof item !== "object") return null;
+  if (!item || typeof item !== "object") {
+    return null;
+  }
   for (const field of ["slug", "id", "doc", "label"]) {
     const value = (item as Record<string, unknown>)[field];
-    if (typeof value === "string" && value) return value;
+    if (typeof value === "string" && value) {
+      return value;
+    }
   }
   return null;
 }
@@ -41,7 +45,7 @@ export function issueLabel(value: unknown, path: readonly (string | number)[]): 
   for (const segment of path) {
     if (typeof segment === "number") {
       const item = Array.isArray(node) ? (node[segment] as unknown) : undefined;
-      const name = itemName(item) ?? "#" + String(segment);
+      const name = itemName(item) ?? `#${String(segment)}`;
       label += `[${name}]`;
       node = item;
     } else {

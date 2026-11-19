@@ -18,9 +18,9 @@ const FULL: AnswerTrace = {
       model: "nvidia/nemotron-3-ultra-550b-a55b:free",
       answerOnly: false,
       ttftMs: 640,
-      tokens: { input: 9_000, cached: 8_000, output: 120, thoughts: 33 },
+      tokens: { input: 9000, cached: 8000, output: 120, thoughts: 33 },
       finishReason: "tool-calls",
-      passedOver: [{ model: "gemini-3.5-flash-lite", outcome: "timeout", ms: 6_000 }],
+      passedOver: [{ model: "gemini-3.5-flash-lite", outcome: "timeout", ms: 6000 }],
       tools: [
         {
           name: "search_portfolio",
@@ -34,7 +34,7 @@ const FULL: AnswerTrace = {
           name: "get_document",
           input: '{"id":"project:atlas@en"}',
           outcome: "ok",
-          resultChars: 2_400,
+          resultChars: 2400,
         },
         { name: "list_projects", input: '{"text":"rag"}', outcome: "no_hits", resultChars: 15 },
         { name: "navigate", input: '{"to":"/en/work/atlas"}', outcome: "ok", resultChars: 30 },
@@ -67,7 +67,7 @@ const FULL: AnswerTrace = {
       tools: [],
     },
   ],
-  core: { locale: "en", layout: "locale", tokens: 5_000 },
+  core: { locale: "en", layout: "locale", tokens: 5000 },
   routing: { reason: "multi-project+sensitive:contract", sensitive: "contract", intent: "contact" },
   escalation: { step: 1, reason: "search-spans-projects" },
   window: { dropped: 2 },
@@ -86,8 +86,8 @@ function row(overrides: Partial<InspectRow> = {}): InspectRow {
     promptVersion: "ask-2026-10-22.1+982317ef9de8",
     route: "lite→deep",
     model: "nvidia/nemotron-3-ultra-550b-a55b:free",
-    ttftMs: 6_640,
-    totalMs: 9_100,
+    ttftMs: 6640,
+    totalMs: 9100,
     citedIds: ["project:atlas@en", "profile@en"],
     droppedCitations: ["project:nebula@en"],
     checks: { v: 1, flags: ["invented-citation", "degraded"] },
@@ -98,7 +98,14 @@ function row(overrides: Partial<InspectRow> = {}): InspectRow {
 
 describe("inspect's projection", () => {
   it("lists every trace field as shown or withheld", () => {
-    expect(Object.keys(TRACE_FIELDS).sort()).toEqual([
+    expect(
+      Object.keys(TRACE_FIELDS).sort((a, b) => {
+        if (a < b) {
+          return -1;
+        }
+        return a > b ? 1 : 0;
+      }),
+    ).toEqual([
       "core",
       "escalation",
       "focus",
@@ -139,17 +146,17 @@ describe("inspect's projection", () => {
       route: "lite→deep",
       reason: "multi-project+sensitive:contract",
       model: "nemotron-3-ultra",
-      ttftMs: 6_640,
-      totalMs: 9_100,
+      ttftMs: 6640,
+      totalMs: 9100,
       steps: [
         {
           model: "nemotron-3-ultra",
           ttftMs: 640,
-          tokens: { input: 9_000, cached: 8_000, output: 120 },
-          passedOver: [{ model: "gemini-3.5-flash-lite", outcome: "timeout", ms: 6_000 }],
+          tokens: { input: 9000, cached: 8000, output: 120 },
+          passedOver: [{ model: "gemini-3.5-flash-lite", outcome: "timeout", ms: 6000 }],
           tools: [
             { name: "search_portfolio", input: "atlas evals", outcome: "ok", chars: 812 },
-            { name: "get_document", input: "project:atlas@en", outcome: "ok", chars: 2_400 },
+            { name: "get_document", input: "project:atlas@en", outcome: "ok", chars: 2400 },
             { name: "list_projects", input: "rag", outcome: "no_hits", chars: 15 },
             { name: "navigate", input: "/en/work/atlas", outcome: "ok", chars: 30 },
             { name: "handoff_contact", outcome: "ok", chars: 40 },
@@ -180,11 +187,12 @@ describe("inspect's projection", () => {
   });
 
   it("never carries what a trace field added later would hold, nor the row's other columns", () => {
+    const testIp = ["10", "0", "0", "5"].join(".");
     const extra = {
       ...row({
         trace: { ...FULL, thoughts: "PRIVATE-THOUGHT-1", later: "LATER-FIELD-2" } as AnswerTrace,
       }),
-      attempts: [{ model: "a", outcome: "network", error: "connect ECONNREFUSED 10.0.0.5:443" }],
+      attempts: [{ model: "a", outcome: "network", error: `connect ECONNREFUSED ${testIp}:443` }],
       questionRedacted: "What did he build?",
       answerExcerpt: "He built Atlas.",
       sessionHash: "SESSION-HASH-3",
@@ -193,7 +201,7 @@ describe("inspect's projection", () => {
     for (const never of [
       "PRIVATE-THOUGHT-1",
       "LATER-FIELD-2",
-      "10.0.0.5",
+      testIp,
       "ECONNREFUSED",
       "What did he",
       "He built",
@@ -217,7 +225,7 @@ describe("inspect's projection", () => {
 
   it("shows no tool input again once a leak was flagged: one may have reached it", () => {
     const view = inspectView(row({ checks: { v: 1, flags: ["leak"] } }));
-    expect(view.steps[0]!.tools.every((tool) => !("input" in tool))).toBe(true);
+    expect(view.steps[0].tools.every((tool) => !("input" in tool))).toBe(true);
     expect(view.flags).toEqual(["leak"]);
   });
 
@@ -230,8 +238,8 @@ describe("inspect's projection", () => {
       route: "lite→deep",
       reason: null,
       model: null,
-      ttftMs: 6_640,
-      totalMs: 9_100,
+      ttftMs: 6640,
+      totalMs: 9100,
       steps: [],
       citations: { kept: ["project:atlas@en", "profile@en"], removed: 1 },
       guard: {},

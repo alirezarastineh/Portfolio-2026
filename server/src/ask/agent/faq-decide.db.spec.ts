@@ -31,21 +31,22 @@ let config: AskConfig;
 /** The chain as a good model answers it (faq-chain.db.spec.ts covers the drafting itself). */
 const writer = new MockLanguageModelV4({
   modelId: "writer",
-  doGenerate: async (call) => {
+  doGenerate: (call) => {
     const sent = JSON.stringify(call.prompt);
-    const text = sent.includes("Write one question for the FAQ")
-      ? "Is he open to relocating?"
-      : sent.includes("Draft an answer in English")
-        ? "Yes, within the EU [^profile@en]."
-        : sent.includes("Is he open to relocating?")
-          ? "Ist er offen für einen Umzug?"
-          : "Ja, innerhalb der EU.";
-    return {
+    let text = "Ja, innerhalb der EU.";
+    if (sent.includes("Write one question for the FAQ")) {
+      text = "Is he open to relocating?";
+    } else if (sent.includes("Draft an answer in English")) {
+      text = "Yes, within the EU [^profile@en].";
+    } else if (sent.includes("Is he open to relocating?")) {
+      text = "Ist er offen für einen Umzug?";
+    }
+    return Promise.resolve({
       content: [{ type: "text", text }],
       finishReason: { unified: "stop", raw: "stop" },
       usage: usage(50, 10),
       warnings: [],
-    };
+    });
   },
 });
 
@@ -53,7 +54,7 @@ const app = createApp({
   ask: {
     config: () => config,
     chain: (_c, role) => (role === "copilot" ? [mockEntry("gemini-3.5-flash-lite", writer)] : []),
-    corpus: async (c) => fixtureCorpus(c),
+    corpus: (c) => Promise.resolve(fixtureCorpus(c)),
   },
 });
 
@@ -70,7 +71,7 @@ const TOPIC = {
 
 beforeEach(async () => {
   await resetDb();
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => undefined);
   invalidateAssistantCache();
   resetBreakers();
   config = fixtureConfig();
@@ -88,7 +89,7 @@ async function snapshot(topics: unknown[] = [TOPIC]): Promise<string> {
     .insert(aiInsightSnapshots)
     .values({ trigger: "admin", analysed: 30, topics: topics as never })
     .returning({ id: aiInsightSnapshots.id });
-  return row!.id;
+  return row.id;
 }
 
 /** Visitor answers about relocating, each this many minutes ago: "it isn't there" when failed. */
@@ -125,17 +126,18 @@ const DRAFTS = {
   answerDe: "Ja, innerhalb der EU.",
 };
 
+const recordDraftUse = (skill: "faq-question" | "faq-answer" | "translate", text: string) =>
+  recordUse({ skill, version: "v", model: "m", text, abstained: false, source: "agent" });
+
 /** A proposal as the chain leaves it, each draft with its skill use. */
 async function proposal(
   change: Partial<typeof aiFaqProposals.$inferInsert> = {},
 ): Promise<FaqProposal> {
-  const use = (skill: "faq-question" | "faq-answer" | "translate", text: string) =>
-    recordUse({ skill, version: "v", model: "m", text, abstained: false, source: "agent" });
   const uses = {
-    questionEn: await use("faq-question", DRAFTS.questionEn),
-    questionDe: await use("translate", DRAFTS.questionDe),
-    answerEn: await use("faq-answer", DRAFTS.answerEn),
-    answerDe: await use("translate", DRAFTS.answerDe),
+    questionEn: await recordDraftUse("faq-question", DRAFTS.questionEn),
+    questionDe: await recordDraftUse("translate", DRAFTS.questionDe),
+    answerEn: await recordDraftUse("faq-answer", DRAFTS.answerEn),
+    answerDe: await recordDraftUse("translate", DRAFTS.answerDe),
   };
   let source: Partial<typeof aiFaqProposals.$inferInsert> = {};
   if (change.source !== "journal") {
@@ -151,7 +153,7 @@ async function proposal(
     .insert(aiFaqProposals)
     .values({ source: "insight", ...source, ...DRAFTS, uses, status: "proposed", ...change })
     .returning();
-  return row!;
+  return row;
 }
 
 async function journalEntry(change: Partial<typeof aiJournal.$inferInsert> = {}) {
@@ -159,7 +161,7 @@ async function journalEntry(change: Partial<typeof aiJournal.$inferInsert> = {})
     .insert(aiJournal)
     .values({ messageIds: [], category: "unknown", diagnosis: {} as JournalDiagnosis, ...change })
     .returning();
-  return row!;
+  return row;
 }
 
 /** The text the admin accepts: the drafts as they are, unless changed. */
@@ -174,10 +176,37 @@ const finalText = (translations?: Record<string, unknown>) => ({
 const accept = (id: string, body: Record<string, unknown>) =>
   admin.post(`/admin/assistant/faq-proposals/${id}/accept`, body);
 const reject = (id: string) => admin.post(`/admin/assistant/faq-proposals/${id}/reject`, {});
-const row = async (id: string) =>
-  (await getDb().select().from(aiFaqProposals).where(eq(aiFaqProposals.id, id)))[0]!;
-const lessonRow = async (id: string) =>
-  (await getDb().select().from(aiLessons).where(eq(aiLessons.id, id)))[0]!;
+const row = async (id: string) => {
+  const rows = await getDb().select().from(aiFaqProposals).where(eq(aiFaqProposals.id, id));
+  return rows[0];
+};
+const lessonRow = async (id: string) => {
+  const rows = await getDb().select().from(aiLessons).where(eq(aiLessons.id, id));
+  return rows[0];
+};
+
+const rejectedFaqRows = (count: number, from: number) =>
+  Array.from({ length: count }, (_, i) => ({
+    source: "journal" as const,
+    status: "rejected" as const,
+    // Its number, to tell them apart; a second apart, so "newest" is plain.
+    questionEn: String(from + i),
+    createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, from + i)),
+  }));
+
+const listRejectedProposals = async () => {
+  const res = await admin.get("/admin/assistant/faq-proposals?status=rejected");
+  return (await res.json()) as Listed;
+};
+
+/** Until another session waits on a lock: the request has reached the row the test holds. */
+const waitingOnLock = () =>
+  eventually(async () => {
+    const { rows } = await getDb().execute<{ n: number }>(
+      sql`select count(*)::int as n from pg_locks where not granted`,
+    );
+    return rows[0].n > 0 ? true : undefined;
+  });
 
 const STATEMENT =
   "When visitors ask whether he would relocate, the FAQ entry answers it from the portfolio.";
@@ -225,9 +254,8 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
     });
     expect(drafted.status).toBe(201);
     const { proposal: p } = (await drafted.json()) as { proposal: FaqProposal };
-    const listed = (await (
-      await admin.get("/admin/assistant/faq-proposals?status=proposed,needs_you")
-    ).json()) as Listed;
+    const listedRes = await admin.get("/admin/assistant/faq-proposals?status=proposed,needs_you");
+    const listed = (await listedRes.json()) as Listed;
     expect(listed.proposals).toEqual([
       expect.objectContaining({ id: p.id, lessons: [], newLesson: null }),
     ]);
@@ -241,22 +269,27 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
       lesson: { statement: STATEMENT, scope: ["relocate", "relocation"] },
     });
     expect(res.status).toBe(200);
-    const { proposal, linked } = (await res.json()) as Accepted;
-    expect(proposal).toMatchObject({ status: "accepted", faqId: expect.any(String) });
-    expect(linked).toEqual({ journal: false, lesson: proposal.lessonId });
+    const { proposal: acceptedProposal, linked } = (await res.json()) as Accepted;
+    expect(acceptedProposal.status).toBe("accepted");
+    expect(acceptedProposal.faqId).toEqual(expect.any(String));
+    expect(linked).toEqual({ journal: false, lesson: acceptedProposal.lessonId });
 
     // Live: the assistant's FAQ has it, in both languages.
-    const faq = (await (await admin.get("/admin/assistant/faq")).json()) as {
+    const faqRes = await admin.get("/admin/assistant/faq");
+    const faq = (await faqRes.json()) as {
       faq: { id: string; translations: Record<string, { question: string; answer: string }> }[];
     };
-    expect(faq.faq).toEqual([
-      expect.objectContaining({
-        id: proposal.faqId,
-        translations: {
-          en: expect.objectContaining({ question: p.questionEn, answer: p.answerEn }),
-          de: expect.objectContaining({ question: p.questionDe, answer: p.answerDe }),
-        },
-      }),
+    expect(faq.faq).toHaveLength(1);
+    expect(faq.faq[0]).toMatchObject({
+      id: acceptedProposal.faqId,
+      translations: {
+        en: { question: p.questionEn, answer: p.answerEn },
+        de: { question: p.questionDe, answer: p.answerDe },
+      },
+    });
+    expect(Object.keys(faq.faq[0].translations).sort((a, b) => a.localeCompare(b))).toEqual([
+      "de",
+      "en",
     ]);
 
     // Provenance: the entry's source on the proposal, the entry on the lesson.
@@ -264,7 +297,7 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
       source: "insight",
       snapshotId,
       topic: { snapshotId, title: TOPIC.title, questions: 6, unanswered: true },
-      faqId: proposal.faqId,
+      faqId: acceptedProposal.faqId,
       // Decided, it keeps no text: the entry has the admin's words.
       questionEn: "",
       questionDe: "",
@@ -272,13 +305,17 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
       answerDe: "",
       notes: [],
     });
-    expect(await lessonRow(proposal.lessonId!)).toMatchObject({
+    expect(acceptedProposal.lessonId).toEqual(expect.any(String));
+    if (!acceptedProposal.lessonId) {
+      throw new Error("Expected lessonId");
+    }
+    expect(await lessonRow(acceptedProposal.lessonId)).toMatchObject({
       source: "insight",
       statement: STATEMENT,
       scope: ["relocate", "relocation"],
       topic: { snapshotId, title: TOPIC.title, questions: 6, unanswered: true },
       appliedAs: "faq",
-      appliedRef: proposal.faqId,
+      appliedRef: acceptedProposal.faqId,
       status: "active",
     });
     expect(await getDb().select().from(aiAudit).where(eq(aiAudit.action, "faq.accept"))).toEqual([
@@ -290,12 +327,14 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
       { minutesAgo: 0, failed: false, question: "Would he relocate for a role?" },
       { minutesAgo: 0, failed: true, question: "Can he relocate next month?" },
     ]);
-    const lessons = (await (await admin.get("/admin/assistant/lessons")).json()) as {
+    const lessonsRes = await admin.get("/admin/assistant/lessons");
+    const lessons = (await lessonsRes.json()) as {
       lessons: LessonView[];
     };
-    const measured = lessons.lessons.find((l) => l.id === proposal.lessonId)!;
-    expect(measured).toMatchObject({ appliedAs: "faq", appliedRef: proposal.faqId });
-    expect(measured.effect).toMatchObject({
+    const measured = lessons.lessons.find((l) => l.id === acceptedProposal.lessonId);
+    expect(measured).toBeDefined();
+    expect(measured).toMatchObject({ appliedAs: "faq", appliedRef: acceptedProposal.faqId });
+    expect(measured?.effect).toMatchObject({
       before: { answers: 2, unknown: 2 },
       after: { answers: 2, unknown: 1 },
       applications: 2,
@@ -314,7 +353,8 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
     const { lesson } = (await made.json()) as { lesson: { id: string } };
     // A later run's topic of the same name is the same topic.
     const p = await proposal({ snapshotId: await snapshot() });
-    const listed = (await (await admin.get("/admin/assistant/faq-proposals")).json()) as Listed;
+    const listedRes = await admin.get("/admin/assistant/faq-proposals");
+    const listed = (await listedRes.json()) as Listed;
     expect(listed.proposals[0]).toMatchObject({
       id: p.id,
       lessons: [{ id: lesson.id, statement: STATEMENT }],
@@ -332,9 +372,8 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
     });
     // Applied now: no longer offered.
     const again = await proposal({ snapshotId: await snapshot(), topicIndex: 0 });
-    const relisted = (await (
-      await admin.get("/admin/assistant/faq-proposals?status=proposed")
-    ).json()) as Listed;
+    const relistedRes = await admin.get("/admin/assistant/faq-proposals?status=proposed");
+    const relisted = (await relistedRes.json()) as Listed;
     expect(relisted.proposals.find((x) => x.id === again.id)?.lessons).toEqual([]);
   });
 
@@ -345,18 +384,21 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
     const second = await proposal({ source: "journal", journalId: elsewhere.id });
 
     // A journal lesson needs three entries: the list says so.
-    const listed = (await (await admin.get("/admin/assistant/faq-proposals")).json()) as Listed;
+    const listedRes = await admin.get("/admin/assistant/faq-proposals");
+    const listed = (await listedRes.json()) as Listed;
     expect(listed.proposals.find((x) => x.id === first.id)?.newLesson).toMatch(
       /a lesson from the journal needs 3 accepted or fixed entries/,
     );
 
-    const a = (await (await accept(first.id, finalText())).json()) as Accepted;
+    const aRes = await accept(first.id, finalText());
+    const a = (await aRes.json()) as Accepted;
     expect(a.linked).toEqual({ journal: true, lesson: null });
     const [entry] = await getDb().select().from(aiJournal).where(eq(aiJournal.id, open.id));
     // The fix is the entry; the status stays the admin's.
     expect(entry).toMatchObject({ fixType: "faq", fixRef: a.proposal.faqId, status: "proposed" });
 
-    const b = (await (await accept(second.id, finalText())).json()) as Accepted;
+    const bRes = await accept(second.id, finalText());
+    const b = (await bRes.json()) as Accepted;
     expect(b.linked).toEqual({ journal: false, lesson: null });
     const [kept] = await getDb().select().from(aiJournal).where(eq(aiJournal.id, elsewhere.id));
     expect(kept).toMatchObject({ fixType: "content", fixRef: null });
@@ -393,21 +435,26 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
     const [naming, notNaming, fromInsights] = lessons.map((l) => l.id);
 
     // Offered: the lesson naming the entry only.
-    const listed = (await (await admin.get("/admin/assistant/faq-proposals")).json()) as Listed;
+    const listedRes = await admin.get("/admin/assistant/faq-proposals");
+    const listed = (await listedRes.json()) as Listed;
     expect(listed.proposals.find((x) => x.id === p.id)?.lessons).toEqual([
       { id: naming, statement: STATEMENT },
     ]);
-    for (const id of [notNaming, fromInsights]) {
-      const res = await accept(p.id, { ...finalText(), lesson: { id } });
-      expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ error: "lesson_elsewhere" });
-    }
+    await [notNaming, fromInsights].reduce(
+      (acc, id) =>
+        acc.then(async () => {
+          const r = await accept(p.id, { ...finalText(), lesson: { id } });
+          expect(r.status).toBe(400);
+          expect(await r.json()).toEqual({ error: "lesson_elsewhere" });
+        }),
+      Promise.resolve(),
+    );
 
     const res = await accept(p.id, { ...finalText(), lesson: { id: naming } });
     expect(res.status).toBe(200);
     const accepted = (await res.json()) as Accepted;
     expect(accepted.linked).toEqual({ journal: true, lesson: naming });
-    expect(await lessonRow(naming!)).toMatchObject({
+    expect(await lessonRow(naming)).toMatchObject({
       appliedAs: "faq",
       appliedRef: accepted.proposal.faqId,
       status: "active",
@@ -525,15 +572,23 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
 
     // Nothing written: no entry, no lesson applied, the proposals still open.
     expect(await getDb().select().from(aiFaq)).toEqual([]);
-    expect((await row(p.id)).status).toBe("proposed");
-    expect((await lessonRow(rates!)).appliedAt).toBeNull();
+    const proposalRow = await row(p.id);
+    expect(proposalRow.status).toBe("proposed");
+    const rateLesson = await lessonRow(rates);
+    expect(rateLesson.appliedAt).toBeNull();
 
     // Decided once: neither accepted nor rejected again.
-    expect((await accept(p.id, finalText())).status).toBe(200);
-    for (const res of [await accept(p.id, finalText()), await reject(p.id)]) {
-      expect(res.status).toBe(409);
-      expect(await res.json()).toEqual({ error: "not_open" });
-    }
+    const acceptedOnce = await accept(p.id, finalText());
+    expect(acceptedOnce.status).toBe(200);
+    await [() => accept(p.id, finalText()), () => reject(p.id)].reduce(
+      (acc, send) =>
+        acc.then(async () => {
+          const res = await send();
+          expect(res.status).toBe(409);
+          expect(await res.json()).toEqual({ error: "not_open" });
+        }),
+      Promise.resolve(),
+    );
     expect(await getDb().select().from(aiFaq)).toHaveLength(1);
   });
 
@@ -541,7 +596,8 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
     const p = await proposal({ notes: ["Answer (DE): A second reading found: a typo."] });
     const res = await reject(p.id);
     expect(res.status).toBe(200);
-    expect(((await res.json()) as Accepted).proposal).toMatchObject({
+    const rejectedBody = (await res.json()) as Accepted;
+    expect(rejectedBody.proposal).toMatchObject({
       status: "rejected",
       questionEn: "",
       answerEn: "",
@@ -558,7 +614,8 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
     expect(await getDb().select().from(aiAudit).where(eq(aiAudit.action, "faq.reject"))).toEqual([
       expect.objectContaining({ target: p.id, decision: "allowed" }),
     ]);
-    expect((await reject("00000000-0000-4000-8000-000000000999")).status).toBe(404);
+    const missingReject = await reject("00000000-0000-4000-8000-000000000999");
+    expect(missingReject.status).toBe(404);
   });
 
   it("decides each draft by what the admin kept: as it was, edited, or left out", async () => {
@@ -568,8 +625,14 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
       finalText({ en: { question: DRAFTS.questionEn, answer: "Yes, within the European Union." } }),
     );
     expect(res.status).toBe(200);
-    const outcome = async (field: keyof typeof DRAFTS) =>
-      (await getDb().select().from(aiSkillUses).where(eq(aiSkillUses.id, p.uses[field]!)))[0]!;
+    const outcome = async (field: keyof typeof DRAFTS) => {
+      const useId = p.uses[field];
+      if (!useId) {
+        throw new Error(`Missing useId for ${field}`);
+      }
+      const rows = await getDb().select().from(aiSkillUses).where(eq(aiSkillUses.id, useId));
+      return rows[0];
+    };
     expect(await outcome("questionEn")).toMatchObject({ outcome: "kept", editDistance: 0 });
     expect(await outcome("answerEn")).toMatchObject({ outcome: "edited", editDistance: 3 });
     // German left out of the entry: its drafts were not kept.
@@ -581,58 +644,45 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
     const first = await proposal();
     const second = await proposal();
     await reject(first.id);
-    const ids = async (query: string) =>
-      (
-        (await (await admin.get(`/admin/assistant/faq-proposals${query}`)).json()) as Listed
-      ).proposals.map((p) => p.id);
+    const ids = async (query: string) => {
+      const res = await admin.get(`/admin/assistant/faq-proposals${query}`);
+      const body = (await res.json()) as Listed;
+      return body.proposals.map((p) => p.id);
+    };
     expect(await ids("")).toEqual([second.id, first.id]);
     expect(await ids("?status=rejected")).toEqual([first.id]);
     expect(await ids("?status=proposed,needs_you")).toEqual([second.id]);
     // A decided one offers no lesson.
-    const all = (await (await admin.get("/admin/assistant/faq-proposals")).json()) as Listed;
+    const allRes = await admin.get("/admin/assistant/faq-proposals");
+    const all = (await allRes.json()) as Listed;
     expect(all.proposals.find((p) => p.id === first.id)).toMatchObject({
       lessons: [],
       newLesson: null,
     });
     expect(all.limited).toBe(false);
-    for (const query of ["?status=bogus", "?status=", "?status=accepted,bogus"]) {
-      expect((await admin.get(`/admin/assistant/faq-proposals${query}`)).status).toBe(400);
-    }
+    await ["?status=bogus", "?status=", "?status=accepted,bogus"].reduce(
+      (acc, query) =>
+        acc.then(async () => {
+          const res = await admin.get(`/admin/assistant/faq-proposals${query}`);
+          expect(res.status).toBe(400);
+        }),
+      Promise.resolve(),
+    );
   });
 
   it("lists the newest 200, and says there are more only when there are", async () => {
-    const rows = (count: number, from: number) =>
-      Array.from({ length: count }, (_, i) => ({
-        source: "journal" as const,
-        status: "rejected" as const,
-        // Its number, to tell them apart; a second apart, so "newest" is plain.
-        questionEn: String(from + i),
-        createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, from + i)),
-      }));
-    const list = async () =>
-      (await (await admin.get("/admin/assistant/faq-proposals?status=rejected")).json()) as Listed;
-
-    await getDb().insert(aiFaqProposals).values(rows(200, 0));
-    const all = await list();
+    await getDb().insert(aiFaqProposals).values(rejectedFaqRows(200, 0));
+    const all = await listRejectedProposals();
     expect(all.proposals).toHaveLength(200);
     expect(all.limited).toBe(false);
 
-    await getDb().insert(aiFaqProposals).values(rows(1, 200));
-    const more = await list();
+    await getDb().insert(aiFaqProposals).values(rejectedFaqRows(1, 200));
+    const more = await listRejectedProposals();
     expect(more.proposals).toHaveLength(200);
     expect(more.limited).toBe(true);
-    expect(more.proposals[0]!.questionEn).toBe("200");
+    expect(more.proposals[0].questionEn).toBe("200");
     expect(more.proposals.map((p) => p.questionEn)).not.toContain("0");
   });
-
-  /** Until another session waits on a lock: the request has reached the row the test holds. */
-  const waitingOnLock = () =>
-    eventually(async () => {
-      const { rows } = await getDb().execute<{ n: number }>(
-        sql`select count(*)::int as n from pg_locks where not granted`,
-      );
-      return rows[0]!.n > 0 ? true : undefined;
-    });
 
   it("accepts a proposal once when two tabs accept it: the second reads the first's decision", async () => {
     const p = await proposal();
@@ -693,6 +743,7 @@ describe("deciding the FAQ proposals (plan phase 31)", () => {
       appliedAs: "content-task",
       appliedRef: "about-page",
     });
-    expect((await row(p.id)).status).toBe("proposed");
+    const finalRow = await row(p.id);
+    expect(finalRow.status).toBe("proposed");
   });
 });

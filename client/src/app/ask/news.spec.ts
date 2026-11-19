@@ -26,7 +26,9 @@ function storage(entries: Record<string, string> = {}) {
       writes.push(key);
       data.set(key, value);
     },
-    removeItem: (key: string) => void data.delete(key),
+    removeItem: (key: string) => {
+      data.delete(key);
+    },
   };
 }
 
@@ -96,12 +98,12 @@ describe("what's new in this browser (visitor plan V15)", () => {
   });
 });
 
-describe("what's new, in words", () => {
-  const fmtDay = (day: string, locale: string) =>
-    new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: "UTC" }).format(
-      new Date(`${day}T00:00:00Z`),
-    );
+const fmtDay = (day: string, locale: string) =>
+  new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: "UTC" }).format(
+    new Date(`${day}T00:00:00Z`),
+  );
 
+describe("what's new, in words", () => {
   it("counts the updates since a day, in either language", () => {
     expect(newsDay("2026-09-12", "en")).toBe(fmtDay("2026-09-12", "en"));
     expect(newsCount(3, "2026-09-12", "en")).toBe(`3 updates since ${fmtDay("2026-09-12", "en")}`);

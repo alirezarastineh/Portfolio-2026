@@ -70,7 +70,7 @@ describe("measureTools", () => {
     });
     expect(byName["get_resume"]).toMatchObject({ calls: 1, citedAfter: 1 });
     // A tool that returns no documents has no citation rate.
-    expect(byName["suggest_followups"]!.citedAfter).toBeNull();
+    expect(byName["suggest_followups"].citedAfter).toBeNull();
     expect(measureTools([])).toEqual({ answers: 0, tools: [] });
   });
 
@@ -80,7 +80,7 @@ describe("measureTools", () => {
     const input = redact(JSON.stringify({ id: `${faq}@en` }));
     expect(input).toContain("[number]");
     const fetched = (cited: string[]) =>
-      measureTools([answer([tool("get_document", "ok", { input })], cited)]).tools[0]!.citedAfter;
+      measureTools([answer([tool("get_document", "ok", { input })], cited)]).tools[0].citedAfter;
     expect(fetched([`${faq}@de`])).toBe(1);
     expect(fetched(["faq:c9d0e1f2-a1b2-4c3d-8e9f-other@en"])).toBe(0);
   });

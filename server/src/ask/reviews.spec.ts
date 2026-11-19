@@ -37,7 +37,7 @@ describe("the review queue", () => {
     expect(sampleSize(4)).toBe(4);
     expect(sampleSize(100)).toBe(10);
     expect(sampleSize(400)).toBe(20);
-    expect(sampleSize(5_000)).toBe(30);
+    expect(sampleSize(5000)).toBe(30);
   });
 
   it("is the same for the same week, flagged answers first and each answer once", () => {
@@ -67,14 +67,17 @@ describe("the review queue", () => {
     const stillSampled = new Set(buildQueue("2026-W40", later).map((e) => e.id));
     const dropped = early.find((c) => !stillSampled.has(c.id));
     expect(dropped).toBeDefined();
+    if (!dropped) {
+      throw new Error("expected a dropped item");
+    }
 
     const queue = buildQueue(
       "2026-W40",
-      later.map((c) => ({ ...c, reviewed: c.id === dropped!.id })),
+      later.map((c) => ({ ...c, reviewed: c.id === dropped.id })),
     );
     expect(queue.filter((e) => e.sampled)).toHaveLength(10);
-    expect(queue.find((e) => e.id === dropped!.id)).toEqual({
-      id: dropped!.id,
+    expect(queue.find((e) => e.id === dropped.id)).toEqual({
+      id: dropped.id,
       reasons: [],
       sampled: false,
     });

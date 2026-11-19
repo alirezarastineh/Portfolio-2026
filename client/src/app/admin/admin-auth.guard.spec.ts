@@ -16,9 +16,9 @@ class StubSession {
     return this.isLost;
   }
 
-  async ensure(): Promise<boolean> {
+  ensure(): Promise<boolean> {
     this.ensureCalls++;
-    return this.authenticated;
+    return Promise.resolve(this.authenticated);
   }
 }
 

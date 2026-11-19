@@ -4,7 +4,7 @@ import { answersByQuestion } from "./answers";
 import type { AskMessage } from "./ask-types";
 
 function message(id: string, role: AskMessage["role"], text: string): AskMessage {
-  return { id, role, parts: [{ type: "text", text }] } as AskMessage;
+  return { id, role, parts: [{ type: "text", text }] };
 }
 
 describe("answersByQuestion", () => {

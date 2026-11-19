@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { compileFunction } from "node:vm";
 import { describe, expect, it } from "vitest";
 
 import { ASK_LINK_CHARS, cleanLinkQuestion, shareLink, takeLinkQuestion } from "./ask-link";
@@ -41,14 +42,23 @@ describe("index.html's ask-link script", () => {
     resolve(dirname(fileURLToPath(import.meta.url)), "../../../index.html"),
     "utf8",
   );
-  const source = /<script id="ask-link">([\s\S]*?)<\/script>/.exec(html)![1]!;
+  const match = /<script id="ask-link">([\s\S]*?)<\/script>/.exec(html);
+  if (!match) {
+    throw new Error("Missing #ask-link script in index.html");
+  }
+  const source = match[1];
 
   /** Runs the script at parse time, as the browser would, against stand-ins. */
   function run(href: string) {
     const replaced: string[] = [];
     const win: Record<string, unknown> = {};
     const location = new URL(href);
-    new Function("window", "location", "history", source)(win, location, {
+    const runScript = compileFunction(source, ["window", "location", "history"]) as (
+      windowArg: unknown,
+      locationArg: unknown,
+      historyArg: unknown,
+    ) => void;
+    runScript(win, location, {
       state: null,
       replaceState: (_state: unknown, _title: string, url: string) => replaced.push(url),
     });

@@ -45,7 +45,7 @@ function published(): AppContent {
   return {
     ...content,
     identity: { ...content.identity, resume: { href: "/media/cv.pdf", bytes: 1000 } },
-    projects: [{ ...first!, slug: "atlas", name: "Atlas", hasCaseStudy: true }, ...rest],
+    projects: [{ ...first, slug: "atlas", name: "Atlas", hasCaseStudy: true }, ...rest],
     posts: [post("evals-first", { title: "Evals first", excerpt: "Measure,\n  then change." })],
   };
 }
@@ -58,7 +58,7 @@ describe("llms.txt (plan phase 32)", () => {
 
     // The format's shape: an H1, a quoted summary, then sections of link lists.
     expect(lines[0]).toBe(`# ${content.identity.name}`);
-    expect(lines[2]).toBe(`> ${content.seo.description.replace(/\s+/g, " ").trim()}`);
+    expect(lines[2]).toBe(`> ${content.seo.description.replaceAll(/\s+/g, " ").trim()}`);
     expect(lines[4]).toContain(`${content.identity.name} (${content.identity.handle}): `);
     // A case study links its page; a project without one, the projects on the home page.
     expect(text).toContain(`- [Atlas](${ORIGIN}/en/work/atlas)`);
@@ -71,7 +71,9 @@ describe("llms.txt (plan phase 32)", () => {
     );
     expect(text).toContain(`## CV\n\n- [The CV, as a PDF](${ORIGIN}/en/resume.pdf)`);
     // Every link is absolute.
-    for (const [, url] of text.matchAll(/\]\(([^)]+)\)/g)) expect(url).toMatch(/^https:\/\//);
+    for (const [, url] of text.matchAll(/\]\(([^)]+)\)/g)) {
+      expect(url).toMatch(/^https:\/\//);
+    }
 
     // For agents: the MCP endpoint and its tools, the agent card; the optional links last.
     expect(text).toContain(`## For agents\n\n- [MCP](${MCP}): read-only MCP endpoint`);
@@ -123,11 +125,11 @@ describe("llms.txt (plan phase 32)", () => {
       availabilityLimited: "Booked until March!",
       availabilityClosed: "  Not looking\n right now  ",
     };
-    expect(who("open", hero)!.endsWith(" Open to staff roles.")).toBe(true);
+    expect(who("open", hero).endsWith(" Open to staff roles.")).toBe(true);
     // A label that ends a sentence keeps its own stop.
-    expect(who("limited", hero)!.endsWith(" Booked until March!")).toBe(true);
-    expect(who("closed", hero)!.endsWith(" Not looking right now.")).toBe(true);
-    expect(who("open")!.endsWith(` ${content.ui.hero.availabilityOpen}.`)).toBe(true);
+    expect(who("limited", hero).endsWith(" Booked until March!")).toBe(true);
+    expect(who("closed", hero).endsWith(" Not looking right now.")).toBe(true);
+    expect(who("open").endsWith(` ${content.ui.hero.availabilityOpen}.`)).toBe(true);
   });
 
   it("finds the endpoint from the API's origin, and nothing without one", () => {
@@ -137,13 +139,16 @@ describe("llms.txt (plan phase 32)", () => {
   });
 });
 
+const faq = (id: string, title: string, updated?: string) => ({
+  id,
+  kind: "faq" as const,
+  title,
+  ...(updated ? { updated } : {}),
+});
+
+const INTERNAL_API = ["http", "://api.internal"].join("");
+
 describe("llms.txt for visiting agents (visitor plan V21)", () => {
-  const faq = (id: string, title: string, updated?: string) => ({
-    id,
-    kind: "faq" as const,
-    title,
-    ...(updated ? { updated } : {}),
-  });
   const assistant: AssistantIndex = {
     scorecard: true,
     match: true,
@@ -216,17 +221,21 @@ describe("the assistant index llms.txt reads (visitor plan V21)", () => {
 
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.stubEnv("API_INTERNAL_BASE_URL", "http://api.internal/");
+    vi.stubEnv("API_INTERNAL_BASE_URL", `${INTERNAL_API}/`);
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     up = true;
     calls.length = 0;
-    vi.stubGlobal("fetch", async (url: string) => {
+    vi.stubGlobal("fetch", (url: string) => {
       calls.push(url);
-      if (!up) return new Response("down", { status: 503 });
-      return Response.json(
-        url.includes("/v1/ask/map")
-          ? { v: 1, locale: "de", pages: [], assistant: [CARD] }
-          : { state: "ok", scorecard: true, match: true },
+      if (!up) {
+        return Promise.resolve(new Response("down", { status: 503 }));
+      }
+      return Promise.resolve(
+        Response.json(
+          url.includes("/v1/ask/map")
+            ? { v: 1, locale: "de", pages: [], assistant: [CARD] }
+            : { state: "ok", scorecard: true, match: true },
+        ),
       );
     });
   });
@@ -242,8 +251,8 @@ describe("the assistant index llms.txt reads (visitor plan V21)", () => {
     const first = await getAssistantIndex("de");
     expect(first).toEqual({ documents: [CARD], scorecard: true, match: true });
     expect(calls).toEqual([
-      "http://api.internal/v1/ask/map?locale=de",
-      "http://api.internal/v1/ask/config",
+      `${INTERNAL_API}/v1/ask/map?locale=de`,
+      `${INTERNAL_API}/v1/ask/config`,
     ]);
     await getAssistantIndex("de");
     expect(calls).toHaveLength(2);

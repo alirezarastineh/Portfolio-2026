@@ -35,9 +35,17 @@ const app = createApp({
     config: () => config,
     chain: (_c, role) =>
       role === "copilot" ? [mockEntry("gemini-3.5-flash-lite", writer.model)] : [],
-    corpus: async (c) => fixtureCorpus(c),
+    corpus: (c) => Promise.resolve(fixtureCorpus(c)),
   },
 });
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
 
 let admin: TestClient;
 
@@ -61,9 +69,13 @@ function writing(
     modelId: "writer",
     doGenerate: async (call) => {
       calls.push(call);
-      if (options.hold) await options.hold;
+      if (options.hold) {
+        await options.hold;
+      }
       const sent = JSON.stringify(call.prompt);
-      if (options.fails?.(sent)) throw apiError(503);
+      if (options.fails?.(sent)) {
+        throw apiError(503);
+      }
       const text = reply(sent);
       return {
         content: text ? [{ type: "text", text }] : [],
@@ -80,8 +92,12 @@ function writing(
 const chain =
   (answer = "Yes, within the EU [^profile@en].") =>
   (sent: string): string => {
-    if (sent.includes(STEP.question)) return "Is he open to relocating?";
-    if (sent.includes(STEP.answer)) return answer;
+    if (sent.includes(STEP.question)) {
+      return "Is he open to relocating?";
+    }
+    if (sent.includes(STEP.answer)) {
+      return answer;
+    }
     if (sent.includes(STEP.translate)) {
       return sent.includes("Is he open to relocating?")
         ? "Ist er offen für einen Umzug?"
@@ -98,9 +114,16 @@ const TOPIC = {
   unanswered: true,
 };
 
+const insightTopic = (snapshotId: string) => ({
+  snapshotId,
+  title: TOPIC.title,
+  questions: 6,
+  unanswered: true,
+});
+
 beforeEach(async () => {
   await resetDb();
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => undefined);
   invalidateAssistantCache();
   resetBreakers();
   config = fixtureConfig();
@@ -127,7 +150,7 @@ async function snapshot(topics: unknown[] = [TOPIC]): Promise<string> {
     .insert(aiInsightSnapshots)
     .values({ trigger: "admin", analysed: 30, topics: topics as never })
     .returning({ id: aiInsightSnapshots.id });
-  return row!.id;
+  return row.id;
 }
 
 /** A journal entry on a visitor's answer, the answer kept or (no question) pruned. */
@@ -160,7 +183,7 @@ async function journalEntry(
       diagnosis: {} as JournalDiagnosis,
     })
     .returning({ id: aiJournal.id });
-  return row!.id;
+  return row.id;
 }
 
 type Drafted = { proposal: FaqProposal; existing?: boolean };
@@ -213,13 +236,22 @@ describe("the FAQ pipeline drafts proposals (plan phase 31)", () => {
 
     // Each draft recorded as the agent's, waiting for the admin's decision; spent as `agent`.
     const uses = await getDb().select().from(aiSkillUses);
-    expect(uses.map((u) => [u.skill, u.source, u.outcome]).sort()).toEqual([
+    expect(
+      uses
+        .map((u) => [u.skill, u.source, u.outcome])
+        .sort(
+          (a, b) =>
+            String(a[0]).localeCompare(String(b[0])) ||
+            String(a[1]).localeCompare(String(b[1])) ||
+            String(a[2] ?? "").localeCompare(String(b[2] ?? "")),
+        ),
+    ).toEqual([
       ["faq-answer", "agent", null],
       ["faq-question", "agent", null],
       ["translate", "agent", null],
       ["translate", "agent", null],
     ]);
-    expect(Object.keys(proposal.uses).sort()).toEqual([
+    expect(Object.keys(proposal.uses).sort((a, b) => a.localeCompare(b))).toEqual([
       "answerDe",
       "answerEn",
       "questionDe",
@@ -284,46 +316,57 @@ describe("the FAQ pipeline drafts proposals (plan phase 31)", () => {
     await switchOn();
     const snapshotId = await snapshot();
     const missing = "00000000-0000-4000-8000-000000000999";
-    for (const [body, error] of [
-      [{ source: "insight", snapshotId, topic: 3 }, "unknown_topic"],
-      [{ source: "insight", snapshotId: missing, topic: 0 }, "unknown_topic"],
-      [{ source: "journal", entryId: missing }, "unknown_entry"],
-    ] as const) {
-      const res = await draft(body);
-      expect(res.status, error).toBe(404);
-      expect(await res.json()).toEqual({ error });
-    }
-    for (const body of [
+    await (
+      [
+        [{ source: "insight", snapshotId, topic: 3 }, "unknown_topic"],
+        [{ source: "insight", snapshotId: missing, topic: 0 }, "unknown_topic"],
+        [{ source: "journal", entryId: missing }, "unknown_entry"],
+      ] as const
+    ).reduce(
+      (acc, [body, error]) =>
+        acc.then(async () => {
+          const res = await draft(body);
+          expect(res.status, error).toBe(404);
+          expect(await res.json()).toEqual({ error });
+        }),
+      Promise.resolve(),
+    );
+    await [
       { source: "insight", snapshotId, topic: -1 },
       { source: "insight", snapshotId: "not-a-uuid", topic: 0 },
       { source: "journal" },
       { source: "insight", snapshotId, topic: 0, extra: true },
-    ]) {
-      expect((await draft(body)).status, JSON.stringify(body)).toBe(400);
-    }
+    ].reduce(
+      (acc, body) =>
+        acc.then(async () => {
+          const res = await draft(body);
+          expect(res.status, JSON.stringify(body)).toBe(400);
+        }),
+      Promise.resolve(),
+    );
     expect(writer.calls).toHaveLength(0);
   });
 
   it("returns a source's open proposal without a model call, and runs one chain for two clicks", async () => {
     await switchOn();
-    let open: () => void = () => {};
-    const hold = new Promise<void>((resolve) => (open = resolve));
+    const { promise: hold, resolve: open } = deferred();
     writer = writing(chain(), { hold });
     const snapshotId = await snapshot();
     const body = { source: "insight", snapshotId, topic: 0 };
     const first = draft(body);
-    await eventually(async () => (writer.calls.length === 1 ? true : undefined));
+    await eventually(() => Promise.resolve(writer.calls.length === 1 ? true : undefined));
     // The second click lands while the first chain waits on its model.
     const second = draft(body);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 100);
+    });
     open();
     const [a, b] = await Promise.all([first, second]);
-    const ids = [
-      ((await a.json()) as Drafted).proposal.id,
-      ((await b.json()) as Drafted).proposal.id,
-    ];
+    const aJson = (await a.json()) as Drafted;
+    const bJson = (await b.json()) as Drafted;
+    const ids = [aJson.proposal.id, bJson.proposal.id];
     expect(ids[0]).toBe(ids[1]);
-    expect([a.status, b.status].sort()).toEqual([200, 201]);
+    expect([a.status, b.status].sort((x, y) => x - y)).toEqual([200, 201]);
     expect(writer.calls).toHaveLength(4);
 
     const again = await draft(body);
@@ -343,7 +386,7 @@ describe("the FAQ pipeline drafts proposals (plan phase 31)", () => {
 
   it("keeps what was drafted when a later step's models fail, for the admin to finish", async () => {
     await switchOn();
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
     writer = writing(chain(), { fails: (sent) => sent.includes(STEP.answer) });
     const res = await draft({ source: "insight", snapshotId: await snapshot(), topic: 0 });
     expect(res.status).toBe(201);
@@ -357,7 +400,8 @@ describe("the FAQ pipeline drafts proposals (plan phase 31)", () => {
     });
     expect(proposal.notes).toEqual([expect.stringMatching(/^Answer \(EN\): not drafted/)]);
     // Spent all the same.
-    expect((await getDb().select().from(aiUsageFeatures))[0]).toMatchObject({ feature: "agent" });
+    const spentFeatures = await getDb().select().from(aiUsageFeatures);
+    expect(spentFeatures[0]).toMatchObject({ feature: "agent" });
 
     // No question, nothing to propose (another topic: this one has its open proposal now).
     resetBreakers();
@@ -439,12 +483,11 @@ describe("the FAQ pipeline drafts proposals (plan phase 31)", () => {
 
   it("offers the proposal another process stored meanwhile, and discards its own drafts", async () => {
     await switchOn();
-    let open: () => void = () => {};
-    const hold = new Promise<void>((resolve) => (open = resolve));
+    const { promise: hold, resolve: open } = deferred();
     writer = writing(chain(), { hold });
     const snapshotId = await snapshot();
     const drafting = draft({ source: "insight", snapshotId, topic: 0 });
-    await eventually(async () => (writer.calls.length === 1 ? true : undefined));
+    await eventually(() => Promise.resolve(writer.calls.length === 1 ? true : undefined));
     // Another API process (a deploy's overlap) stores the topic's proposal while this chain runs.
     const [theirs] = await getDb()
       .insert(aiFaqProposals)
@@ -460,7 +503,7 @@ describe("the FAQ pipeline drafts proposals (plan phase 31)", () => {
     open();
     const res = await drafting;
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ proposal: { id: theirs!.id }, existing: true });
+    expect(await res.json()).toMatchObject({ proposal: { id: theirs.id }, existing: true });
     // This chain's four drafts were never offered: discarded, none left waiting.
     const uses = await getDb().select().from(aiSkillUses);
     expect(uses.map((u) => u.outcome)).toEqual([
@@ -473,26 +516,26 @@ describe("the FAQ pipeline drafts proposals (plan phase 31)", () => {
   });
 
   it("prunes an open proposal with the visitor text it came from; a decided one stays", async () => {
-    const topic = (snapshotId: string) => ({
-      snapshotId,
-      title: TOPIC.title,
-      questions: 6,
-      unanswered: true,
-    });
-    const insert = async (values: Partial<typeof aiFaqProposals.$inferInsert>) =>
-      (
-        await getDb()
-          .insert(aiFaqProposals)
-          .values({
-            source: "journal",
-            questionEn: "Is he open to relocating?",
-            status: "proposed",
-            ...values,
-          })
-          .returning({ id: aiFaqProposals.id })
-      )[0]!.id;
+    const insert = async (values: Partial<typeof aiFaqProposals.$inferInsert>) => {
+      const [inserted] = await getDb()
+        .insert(aiFaqProposals)
+        .values({
+          source: "journal",
+          questionEn: "Is he open to relocating?",
+          status: "proposed",
+          ...values,
+        })
+        .returning({ id: aiFaqProposals.id });
+      return inserted.id;
+    };
     const fromRun = async (snapshotId: string, status: "proposed" | "accepted") =>
-      insert({ source: "insight", snapshotId, topicIndex: 0, topic: topic(snapshotId), status });
+      insert({
+        source: "insight",
+        snapshotId,
+        topicIndex: 0,
+        topic: insightTopic(snapshotId),
+        status,
+      });
 
     const kept = await snapshot();
     const pruned = await snapshot();
@@ -509,7 +552,7 @@ describe("the FAQ pipeline drafts proposals (plan phase 31)", () => {
       source: "insight",
       snapshotId: pruned,
       topicIndex: 0,
-      topic: topic(pruned),
+      topic: insightTopic(pruned),
       status: "proposed",
       uses: { questionEn: use },
     });
@@ -526,12 +569,20 @@ describe("the FAQ pipeline drafts proposals (plan phase 31)", () => {
       .where(eq(aiMessages.id, "m_old000000001"));
     const deleted = await journalEntry("Is he open to moving?", "m_deleted00001");
     const keptEntry = await insert({ journalId: recent, status: "proposed" });
-    for (const journalId of [gone, old, deleted]) await insert({ journalId, status: "needs_you" });
+    await [gone, old, deleted].reduce(
+      (acc, journalId) =>
+        acc.then(async () => {
+          await insert({ journalId, status: "needs_you" });
+        }),
+      Promise.resolve(),
+    );
     await getDb().delete(aiJournal).where(eq(aiJournal.id, deleted));
 
     expect(await pruneFaqProposals()).toBe(4);
     const left = await getDb().select({ id: aiFaqProposals.id }).from(aiFaqProposals);
-    expect(left.map((p) => p.id).sort()).toEqual([keptRun, decided, keptEntry].sort());
+    expect(left.map((p) => p.id).sort((a, b) => a.localeCompare(b))).toEqual(
+      [keptRun, decided, keptEntry].sort((a, b) => a.localeCompare(b)),
+    );
     expect(left.map((p) => p.id)).not.toContain(prunedRun);
     // Its draft was never decided by the admin: discarded, not left waiting.
     const [draftUse] = await getDb().select().from(aiSkillUses).where(eq(aiSkillUses.id, use));

@@ -122,7 +122,7 @@ const TABS: { id: Tab; label: string }[] = [
         <!-- One row that scrolls, with arrows where it overflows: eleven tabs wrapped onto two rows below md. -->
         <hlm-paginated-tabs-list tabListLabel="Assistant sections">
           @for (option of tabs; track option.id) {
-            <button [hlmTabsTrigger]="option.id">{{ option.label }}</button>
+            <button type="button" [hlmTabsTrigger]="option.id">{{ option.label }}</button>
           }
         </hlm-paginated-tabs-list>
 
@@ -225,13 +225,17 @@ export default class AdminAssistantPage implements OnInit {
     }
     void this.recovery.list().then((copies) => {
       const tab = copies.map((copy) => TAB_OF[copy.editor]).find(Boolean);
-      if (tab && this.tab() === "overview") void this.select(tab);
+      if (tab && this.tab() === "overview") {
+        void this.select(tab);
+      }
     });
   }
 
   protected async select(next: Tab): Promise<void> {
     const current = this.tab();
-    if (next === current) return;
+    if (next === current) {
+      return;
+    }
     this.strip.set(next);
     if (this.unsaved.hasAny()) {
       const leave = await this.confirm.ask({
@@ -248,7 +252,9 @@ export default class AdminAssistantPage implements OnInit {
       this.unsaved.clearAll();
     }
     // A drafted proposal takes focus once: coming back to the FAQ later, it does not.
-    if (next !== "faq") this.faqProposal.set(null);
+    if (next !== "faq") {
+      this.faqProposal.set(null);
+    }
     this.tab.set(next);
   }
 

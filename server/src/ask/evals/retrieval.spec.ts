@@ -29,15 +29,20 @@ function conceptModel() {
   return new MockEmbeddingModelV4({
     modelId: "gemini-embedding-2",
     maxEmbeddingsPerCall: 100,
-    doEmbed: async ({ values }) => ({
-      embeddings: values.map((text) => {
-        const v = [0.01, 0.01, 0.01];
-        for (const [pattern, dim] of concepts) if (pattern.test(text)) v[dim] = 1;
-        return v;
+    doEmbed: ({ values }) =>
+      Promise.resolve({
+        embeddings: values.map((text) => {
+          const v = [0.01, 0.01, 0.01];
+          for (const [pattern, dim] of concepts) {
+            if (pattern.test(text)) {
+              v[dim] = 1;
+            }
+          }
+          return v;
+        }),
+        usage: { tokens: values.length },
+        warnings: [],
       }),
-      usage: { tokens: values.length },
-      warnings: [],
-    }),
   });
 }
 
@@ -52,7 +57,9 @@ describe("the retrieval report", () => {
     const config = fixtureConfig();
     const results = await runRetrieval(fixtureAskCorpus(config), config);
     expect(results.map((r) => r.id)).toEqual(RETRIEVAL_CASES.map((c) => c.id));
-    for (const r of results) expect(r.semantic).toBe(false);
+    for (const r of results) {
+      expect(r.semantic).toBe(false);
+    }
     const byId = new Map(results.map((r) => [r.id, r]));
     expect(byId.get("synonym")).toMatchObject({ words: null, hybrid: null });
     expect(byId.get("de-question-en-post")).toMatchObject({ words: null, hybrid: null });
@@ -62,12 +69,14 @@ describe("the retrieval report", () => {
 
   it("ranks by words and meaning once the corpus is embedded, and keeps the queries' spend", async () => {
     const config = withEmbeddings(fixtureConfig());
-    setEmbeddingDeps({ model: conceptModel, available: async () => true });
+    setEmbeddingDeps({ model: conceptModel, available: () => Promise.resolve(true) });
     const corpus = fixtureAskCorpus(config);
     await embedInMemory(corpus, config);
     const spent: ModelCall[] = [];
     const results = await runRetrieval(corpus, config, spent);
-    for (const r of results) expect(r.semantic).toBe(true);
+    for (const r of results) {
+      expect(r.semantic).toBe(true);
+    }
     const byId = new Map(results.map((r) => [r.id, r]));
     expect(byId.get("synonym")?.hybrid).not.toBeNull();
     expect(byId.get("en-question-de-post")?.hybrid).not.toBeNull();

@@ -25,7 +25,10 @@ export class HlmDialogService {
   ) {
     const mergedOptions = {
       ...options,
-      backdropClass: cssClassesToArray(`${hlmDialogOverlayClass} ${options?.backdropClass ?? ""}`),
+      backdropClass: [
+        ...cssClassesToArray(hlmDialogOverlayClass),
+        ...cssClassesToArray(options?.backdropClass),
+      ],
       context: {
         ...(options?.context && typeof options.context === "object" ? options.context : {}),
         $component: component,

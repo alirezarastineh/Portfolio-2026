@@ -72,7 +72,9 @@ async function processNow(buffer: Buffer, sniffed: SniffedImage): Promise<Proces
   // The header alone, so the size check costs nothing.
   const header = await sharp(buffer).metadata();
   const pixels = (header.width ?? 0) * (header.height ?? 0);
-  if (pixels > MAX_INPUT_PIXELS) throw new ImageTooLargeError(pixels);
+  if (pixels > MAX_INPUT_PIXELS) {
+    throw new ImageTooLargeError(pixels);
+  }
 
   // `rotate()` with no angle applies the EXIF orientation, then output is
   // written without metadata (sharp's default), which is what strips EXIF.
@@ -80,19 +82,19 @@ async function processNow(buffer: Buffer, sniffed: SniffedImage): Promise<Proces
   const original = await reencode(upright.clone(), sniffed.ext).toBuffer();
   const { width, height } = await sharp(original).metadata();
 
-  const variants: ProcessedVariant[] = [];
-  for (const target of VARIANT_WIDTHS) {
-    if (!width || target >= width) continue;
-    for (const format of ["webp", "avif"] as const) {
-      const resized = sharp(original).resize({ width: target });
-      const encoded =
-        format === "webp"
-          ? resized.webp({ quality: 78 })
-          : resized.avif({ quality: 55, effort: 2 });
-      const { data, info } = await encoded.toBuffer({ resolveWithObject: true });
-      variants.push({ format, width: info.width, height: info.height, buffer: data });
-    }
-  }
+  const specs = width
+    ? VARIANT_WIDTHS.filter((target) => target < width).flatMap((target) =>
+        (["webp", "avif"] as const).map((format) => ({ target, format })),
+      )
+    : [];
+  const variants = await specs.reduce<Promise<ProcessedVariant[]>>(
+    (chain, { target, format }) =>
+      chain.then(async (acc) => {
+        acc.push(await encodeVariant(original, target, format));
+        return acc;
+      }),
+    Promise.resolve([]),
+  );
 
   const blur = await sharp(original).resize({ width: 16 }).blur().webp({ quality: 40 }).toBuffer();
 
@@ -103,6 +105,18 @@ async function processNow(buffer: Buffer, sniffed: SniffedImage): Promise<Proces
     blurDataUri: `data:image/webp;base64,${blur.toString("base64")}`,
     variants,
   };
+}
+
+async function encodeVariant(
+  original: Buffer,
+  target: number,
+  format: VariantFormat,
+): Promise<ProcessedVariant> {
+  const resized = sharp(original).resize({ width: target });
+  const encoded =
+    format === "webp" ? resized.webp({ quality: 78 }) : resized.avif({ quality: 55, effort: 2 });
+  const { data, info } = await encoded.toBuffer({ resolveWithObject: true });
+  return { format, width: info.width, height: info.height, buffer: data };
 }
 
 /** Same format as uploaded, high quality: this is the file the variants come from. */

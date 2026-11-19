@@ -58,7 +58,9 @@ export function ogCardFor(
 
   if (kind === "work") {
     const project = content.projects.find((p) => p.slug === slug && p.hasCaseStudy);
-    if (!project) return null;
+    if (!project) {
+      return null;
+    }
     return {
       ...base,
       eyebrow: project.descriptor || t.nav.work,
@@ -70,7 +72,9 @@ export function ogCardFor(
   }
 
   const post = content.posts.find((p) => p.slug === slug);
-  if (!post) return null;
+  if (!post) {
+    return null;
+  }
   return {
     ...base,
     eyebrow: t.nav.writing,
@@ -182,7 +186,9 @@ function promptLine(question: string): Node {
  * the case study's band shows them, or the post's date line.
  */
 function facts(card: OgCard): Node {
-  if (card.prompt) return promptLine(card.prompt);
+  if (card.prompt) {
+    return promptLine(card.prompt);
+  }
   if (card.metrics.length === 0) {
     return text(
       {
@@ -221,9 +227,15 @@ function facts(card: OgCard): Node {
  * past that, three lines and a one-line summary, so the card never overflows.
  */
 function titleStyle(title: string): { fontSize: number; lines: number; summaryLines: number } {
-  if (title.length <= 24) return { fontSize: 80, lines: 2, summaryLines: 2 };
-  if (title.length <= 56) return { fontSize: 68, lines: 2, summaryLines: 2 };
-  if (title.length <= 72) return { fontSize: 56, lines: 2, summaryLines: 2 };
+  if (title.length <= 24) {
+    return { fontSize: 80, lines: 2, summaryLines: 2 };
+  }
+  if (title.length <= 56) {
+    return { fontSize: 68, lines: 2, summaryLines: 2 };
+  }
+  if (title.length <= 72) {
+    return { fontSize: 56, lines: 2, summaryLines: 2 };
+  }
   return { fontSize: 56, lines: 3, summaryLines: 1 };
 }
 

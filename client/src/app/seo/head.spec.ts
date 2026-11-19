@@ -27,7 +27,7 @@ describe("applyHead", () => {
 
     const canonicals = document.head.querySelectorAll('link[rel="canonical"]');
     expect(canonicals).toHaveLength(1);
-    expect(canonicals[0]!.getAttribute("href")).toBe("https://site.test/de");
+    expect(canonicals[0].getAttribute("href")).toBe("https://site.test/de");
 
     const alternates = Array.from(document.head.querySelectorAll('link[rel="alternate"]')).map(
       (l) => `${l.getAttribute("hreflang")}=${l.getAttribute("href")}`,
@@ -39,7 +39,10 @@ describe("applyHead", () => {
     ]);
 
     const ld = document.head.querySelector('script[type="application/ld+json"]');
-    expect(JSON.parse(ld!.textContent!)).toEqual({ "@type": "Thing" });
+    if (!ld) {
+      throw new Error("Expected JSON-LD script");
+    }
+    expect(JSON.parse(ld.textContent ?? "")).toEqual({ "@type": "Thing" });
   });
 
   /** Client-side navigation must not accumulate tags from earlier pages. */
@@ -71,21 +74,36 @@ describe("structured data", () => {
     const graph = (homeJsonLd(content, "en", origin) as { "@graph": Record<string, unknown>[] })[
       "@graph"
     ];
-    const person = graph.find((node) => node["@type"] === "Person")!;
-    const page = graph.find((node) => node["@type"] === "ProfilePage")!;
+    const person = graph.find((node) => node["@type"] === "Person");
+    const page = graph.find((node) => node["@type"] === "ProfilePage");
+    if (!person || !page) {
+      throw new Error("Expected Person and ProfilePage nodes in JSON-LD graph");
+    }
 
     expect(page["url"]).toBe(pageUrl(origin, "en"));
     expect(page["mainEntity"]).toEqual({ "@id": person["@id"] });
     expect(person["name"]).toBe(content.identity.name);
-    for (const href of person["sameAs"] as string[]) expect(href).toMatch(/^https?:\/\//);
+    for (const href of person["sameAs"] as string[]) {
+      expect(href).toMatch(/^https?:\/\//);
+    }
   });
 });
+
+function metaTagKey(tag: ReturnType<typeof pageMeta>[number]): string {
+  if ("name" in tag && tag.name !== undefined) {
+    return tag.name;
+  }
+  if ("property" in tag && tag.property !== undefined) {
+    return tag.property;
+  }
+  return "";
+}
 
 describe("pageMeta", () => {
   /** Analog updates tags by name but never removes one, so every page must send all of them. */
   it("emits the same tag set for every page", () => {
     const keys = (tags: ReturnType<typeof pageMeta>) =>
-      tags.map((t) => ("name" in t ? t.name : "property" in t ? t.property : "")).sort();
+      tags.map((t) => metaTagKey(t)).sort((a, b) => a.localeCompare(b));
     const home = pageMeta(content, "en", {
       title: "a",
       description: "b",

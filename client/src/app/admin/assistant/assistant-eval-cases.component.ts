@@ -111,8 +111,11 @@ export class AssistantEvalCasesComponent implements OnInit {
 
   private async load(): Promise<void> {
     const result = await this.api.evalCases();
-    if (result.ok) this.rows.set(result.data.cases);
-    else toast.error("Could not load the eval cases", { description: result.error });
+    if (result.ok) {
+      this.rows.set(result.data.cases);
+    } else {
+      toast.error("Could not load the eval cases", { description: result.error });
+    }
   }
 
   protected async toggle(row: EvalCaseRow): Promise<void> {
@@ -134,7 +137,9 @@ export class AssistantEvalCasesComponent implements OnInit {
       confirmLabel: "Delete case",
       destructive: true,
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
     this.busy.set(true);
     const result = await this.api.deleteEvalCase(row.id);
     this.busy.set(false);

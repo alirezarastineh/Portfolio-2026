@@ -32,7 +32,9 @@ describe("newNonce", () => {
   it("is 128 random bits in base64, different every time", () => {
     const nonces = new Set(Array.from({ length: 50 }, newNonce));
     expect(nonces.size).toBe(50);
-    for (const nonce of nonces) expect(nonce).toMatch(/^[A-Za-z0-9+/]{22}==$/);
+    for (const nonce of nonces) {
+      expect(nonce).toMatch(/^[A-Za-z0-9+/]{22}==$/);
+    }
   });
 });
 

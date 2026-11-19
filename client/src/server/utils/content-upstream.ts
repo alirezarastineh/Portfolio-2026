@@ -36,7 +36,7 @@ interface Entry {
 const TTL_MS = 60_000;
 /** A doc that does not exist yet may be published any moment; ask again soon. */
 const MISSING_TTL_MS = 10_000;
-const UPSTREAM_TIMEOUT_MS = 2_000;
+const UPSTREAM_TIMEOUT_MS = 2000;
 const MAX_DOCS = 256;
 
 const FALLBACK: Record<Locale, unknown> = { en: fallbackEn, de: fallbackDe };
@@ -59,22 +59,29 @@ export function isLocale(value: unknown): value is Locale {
 
 /** Called after a publish, so the next request fetches instead of waiting out the TTL. */
 export function invalidate(locale?: Locale): void {
-  if (locale) fresh.delete(locale);
-  else fresh.clear();
+  if (locale) {
+    fresh.delete(locale);
+  } else {
+    fresh.clear();
+  }
   // Docs follow the core's version, so every one may have changed.
   freshDocs.clear();
 }
 
 export function apiBase(): string {
   let base = process.env["API_INTERNAL_BASE_URL"] ?? "";
-  while (base.endsWith("/")) base = base.slice(0, -1);
+  while (base.endsWith("/")) {
+    base = base.slice(0, -1);
+  }
   return base;
 }
 
 function bounded<K, V>(map: Map<K, V>, key: K, value: V): void {
   if (!map.has(key) && map.size >= MAX_DOCS) {
     const oldest = map.keys().next().value;
-    if (oldest !== undefined) map.delete(oldest);
+    if (oldest !== undefined) {
+      map.delete(oldest);
+    }
   }
   map.set(key, value);
 }
@@ -97,7 +104,9 @@ async function fetchUpstream(
   },
 ): Promise<Upstream> {
   const base = apiBase();
-  if (!base) return { kind: "failed" };
+  if (!base) {
+    return { kind: "failed" };
+  }
 
   try {
     const upstream = await fetch(`${base}${path}`, {
@@ -109,8 +118,12 @@ async function fetchUpstream(
       },
     });
 
-    if (upstream.status === 304 && known) return { kind: "unchanged" };
-    if (upstream.status === 404) return { kind: "missing" };
+    if (upstream.status === 304 && known) {
+      return { kind: "unchanged" };
+    }
+    if (upstream.status === 404) {
+      return { kind: "missing" };
+    }
     if (upstream.ok) {
       const parsed = validate(await upstream.json());
       if (parsed.success) {
@@ -139,18 +152,25 @@ async function fetchUpstream(
 
 export async function getContent(locale: Locale): Promise<ContentResult> {
   const cached = fresh.get(locale);
-  if (cached && Date.now() - cached.fetchedAt < TTL_MS) return { ...cached, source: "cache" };
+  if (cached && Date.now() - cached.fetchedAt < TTL_MS) {
+    return { ...cached, source: "cache" };
+  }
 
   const known = lastKnownGood.get(locale);
   const result = await fetchUpstream(`/v2/content/${locale}`, known, (p) =>
     appContentSchema.safeParse(p),
   );
 
-  if (result.kind === "unchanged" && known)
+  if (result.kind === "unchanged" && known) {
     return remember(locale, { ...known, fetchedAt: Date.now() });
-  if (result.kind === "ok") return remember(locale, result.entry);
+  }
+  if (result.kind === "ok") {
+    return remember(locale, result.entry);
+  }
 
-  if (known) return { ...known, source: "stale" };
+  if (known) {
+    return { ...known, source: "stale" };
+  }
   return { payload: FALLBACK[locale], etag: null, lastModified: null, source: "fallback" };
 }
 
@@ -186,15 +206,21 @@ export async function getDoc(locale: Locale, kind: DocKind, slug: string): Promi
     bounded(lastKnownGoodDocs, key, entry);
     return { ...entry, source: "api" };
   };
-  if (result.kind === "unchanged" && known) return keep({ ...known, fetchedAt: Date.now() });
-  if (result.kind === "ok") return keep(result.entry);
+  if (result.kind === "unchanged" && known) {
+    return keep({ ...known, fetchedAt: Date.now() });
+  }
+  if (result.kind === "ok") {
+    return keep(result.entry);
+  }
   if (result.kind === "missing") {
     const missing = { payload: null, etag: null, lastModified: null, fetchedAt: Date.now() };
     bounded(freshDocs, key, missing);
     return { ...missing, source: "api" };
   }
 
-  if (known) return { ...known, source: "stale" };
+  if (known) {
+    return { ...known, source: "stale" };
+  }
   const fallback = FALLBACK_DOCS[locale][docKey(kind, slug)] ?? null;
   return { payload: fallback, etag: null, lastModified: null, source: "fallback" };
 }
@@ -234,7 +260,9 @@ const assistantIndexes = new Map<Locale, { index: AssistantIndex; fetchedAt: num
 /** One language's assistant index; what was known before when the API cannot say, else none. */
 export async function getAssistantIndex(locale: Locale): Promise<AssistantIndex> {
   const cached = assistantIndexes.get(locale);
-  if (cached && Date.now() - cached.fetchedAt < ASSISTANT_TTL_MS) return cached.index;
+  if (cached && Date.now() - cached.fetchedAt < ASSISTANT_TTL_MS) {
+    return cached.index;
+  }
   const [map, config] = await Promise.all([
     fetchUpstream(`/v1/ask/map?locale=${locale}`, undefined, (p) =>
       assistantMapSchema.safeParse(p),
@@ -262,7 +290,9 @@ export function siteOriginOf(payload: unknown, fallback: string): string {
   } | null;
   for (const candidate of [content?.identity?.siteUrl, content?.seo?.canonical]) {
     try {
-      if (typeof candidate === "string" && candidate) return new URL(candidate).origin;
+      if (typeof candidate === "string" && candidate) {
+        return new URL(candidate).origin;
+      }
     } catch {
       // try the next one
     }

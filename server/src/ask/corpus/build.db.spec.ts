@@ -21,9 +21,15 @@ import { getAskCorpus, resetAskCorpusMemo } from "./index.js";
 beforeEach(async () => {
   await resetDb();
   resetCorpusMemo();
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => undefined);
   await seed();
 });
+
+const siteOf = async () => {
+  resetAskCorpusMemo();
+  const [built, assembled] = [await getCorpus(), await getAskCorpus(fixtureConfig())];
+  return [built.siteUrl, assembled.siteUrl];
+};
 
 describe("getCorpus", () => {
   it("is built from what is live, in both languages, in a fixed order", async () => {
@@ -50,19 +56,20 @@ describe("getCorpus", () => {
       .update(projectTranslations)
       .set({ body: "<p>The long story of the migration.</p>" })
       .where(
-        sql`${projectTranslations.projectId} = ${project!.id} and ${projectTranslations.locale} = 'en'`,
+        sql`${projectTranslations.projectId} = ${project.id} and ${projectTranslations.locale} = 'en'`,
       );
 
     // A draft edit changes nothing the assistant sees…
-    expect((await getCorpus()).text).toBe(first.text);
+    const draftCorpus = await getCorpus();
+    expect(draftCorpus.text).toBe(first.text);
 
     // …until it is published.
     await publishAll();
     const next = await getCorpus();
     expect(next.key).not.toBe(first.key);
     expect(next.text).toContain("The long story of the migration.");
-    const doc = next.documents.find((d) => d.id === `project:${project!.slug}@en`)!;
-    expect(doc.url).toBe(`/en/work/${project!.slug}`);
+    const doc = next.documents.find((d) => d.id === `project:${project.slug}@en`);
+    expect(doc?.url).toBe(`/en/work/${project.slug}`);
   });
 
   it("keeps a case study's sections and code blocks, under the ids its page gives them (visitor plan V9)", async () => {
@@ -80,11 +87,15 @@ describe("getCorpus", () => {
           "<pre><code>plain</code></pre>",
       })
       .where(
-        sql`${projectTranslations.projectId} = ${project!.id} and ${projectTranslations.locale} = 'en'`,
+        sql`${projectTranslations.projectId} = ${project.id} and ${projectTranslations.locale} = 'en'`,
       );
     await publishAll();
 
-    const doc = (await getCorpus()).documents.find((d) => d.id === `project:${project!.slug}@en`)!;
+    const builtCorpus = await getCorpus();
+    const doc = builtCorpus.documents.find((d) => d.id === `project:${project.slug}@en`);
+    if (!doc) {
+      throw new Error(`Missing project:${project.slug}@en`);
+    }
     // The fixed sections first, under the page's ids: the body's own "Problem" holds `problem`,
     // so the fixed one yields; then the body's headings, as the table of contents has them.
     expect(doc.sections?.map((s) => s.id)).toEqual([
@@ -117,7 +128,7 @@ describe("getCorpus", () => {
       .insert(experienceTranslations)
       .values(
         ["en", "de"].map((locale) => ({
-          experienceId: exp!.id,
+          experienceId: exp.id,
           locale: locale as "en" | "de",
           title: "Engineer",
           highlights: ["Built the thing"],
@@ -129,14 +140,14 @@ describe("getCorpus", () => {
       .returning({ id: posts.id });
     await getDb()
       .insert(postTranslations)
-      .values({ postId: draft!.id, locale: "en", title: "Unpublished thoughts" });
+      .values({ postId: draft.id, locale: "en", title: "Unpublished thoughts" });
     const [live] = await getDb()
       .insert(posts)
       .values({ slug: "public", status: "published", publishedAt: new Date(Date.now() - 1000) })
       .returning({ id: posts.id });
     await getDb()
       .insert(postTranslations)
-      .values({ postId: live!.id, locale: "en", title: "Public note", body: "<p>Hello</p>" });
+      .values({ postId: live.id, locale: "en", title: "Public note", body: "<p>Hello</p>" });
     await publishAll();
 
     const corpus = await getCorpus();
@@ -145,16 +156,12 @@ describe("getCorpus", () => {
     expect(corpus.text).not.toContain("Unpublished thoughts");
     expect(corpus.documents.find((d) => d.id === "post:public@en")?.url).toBe("/en/writing/public");
 
-    await getDb().update(posts).set({ status: "draft" }).where(eq(posts.id, live!.id));
-    expect((await getCorpus()).text).toContain("Public note"); // still live until the next publish
+    await getDb().update(posts).set({ status: "draft" }).where(eq(posts.id, live.id));
+    const stillLive = await getCorpus();
+    expect(stillLive.text).toContain("Public note"); // still live until the next publish
   });
 
   it("carries the published site's origin, which the assistant's corpus passes on (plan phase 32)", async () => {
-    const siteOf = async () => {
-      resetAskCorpusMemo();
-      const [built, assembled] = [await getCorpus(), await getAskCorpus(fixtureConfig())];
-      return [built.siteUrl, assembled.siteUrl];
-    };
     await getDb().update(siteProfile).set({ siteUrl: "https://example.test/en/about" });
     await publishAll();
     expect(await siteOf()).toEqual(["https://example.test", "https://example.test"]);

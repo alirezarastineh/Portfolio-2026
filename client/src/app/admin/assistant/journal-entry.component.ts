@@ -49,7 +49,7 @@ import {
 import { RecoveryService, type RecoveryHandle } from "../recovery.service";
 import { FreezeCaseComponent } from "./freeze-case.component";
 
-const POLL_MS = 2_000;
+const POLL_MS = 2000;
 
 /** The fields the admin edits, as the server last had them. */
 interface Fields {
@@ -411,7 +411,7 @@ export class JournalEntryComponent {
   readonly changed = output<JournalEntry>();
   readonly deleted = output<string>();
   /** A replay ended: the list reads the entry again. */
-  readonly replayed = output<void>();
+  readonly replayed = output();
   /** An FAQ proposal drafted from its question (plan phase 31): it waits in the FAQ tab. */
   readonly toFaqProposal = output<string>();
 
@@ -494,7 +494,9 @@ export class JournalEntryComponent {
       untracked(() => {
         const seen = this.seen;
         const follow = <K extends keyof Fields>(key: K, field: WritableSignal<Fields[K]>) => {
-          if (!seen || field() === seen[key]) field.set(server[key]);
+          if (!seen || field() === seen[key]) {
+            field.set(server[key]);
+          }
         };
         follow("rootCause", this.rootCause);
         follow("fixType", this.fixType);
@@ -579,7 +581,9 @@ export class JournalEntryComponent {
     expected: string | null = this.expected().trim() || null,
   ): Promise<void> {
     const message = this.entry().message;
-    if (!message) return;
+    if (!message) {
+      return;
+    }
     this.saving.set(true);
     const result = await this.api.diagnoseAnswer(message.id, expected);
     this.saving.set(false);
@@ -601,7 +605,9 @@ export class JournalEntryComponent {
         "Only the chains that did not answer are asked again, on today's corpus. It spends as Admin agents (Settings → Spending).",
       confirmLabel: "Resume",
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
     this.replaying.set(true);
     this.status.set("Answering the question again on the chains left…");
     const resumed = await this.api.resumeRun(runId);
@@ -640,7 +646,9 @@ export class JournalEntryComponent {
       confirmLabel: "Delete entry",
       destructive: true,
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
     const result = await this.api.deleteJournalEntry(this.entry().id);
     if (!result.ok) {
       toast.error("Could not delete the entry", { description: refusal(result.error) });
@@ -656,7 +664,9 @@ export class JournalEntryComponent {
    * in the FAQ tab. An entry with an open proposal gets that one back.
    */
   protected async draftProposal(): Promise<void> {
-    if (this.drafting()) return;
+    if (this.drafting()) {
+      return;
+    }
     this.drafting.set(true);
     this.status.set("Drafting an FAQ proposal: this takes up to a minute.");
     const result = await this.api.draftFaqProposal({
@@ -688,7 +698,9 @@ export class JournalEntryComponent {
         "It is answered again on today's corpus by the lite and the deep chain: two answers, about $0.002–0.005 at paid prices, nothing on the free tier. It spends as Admin agents (Settings → Spending).",
       confirmLabel: "Replay",
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
     this.replaying.set(true);
     this.status.set("Answering the question again on the lite and the deep chain…");
     const started = await this.api.startReplayRun(this.entry().id);
@@ -703,17 +715,28 @@ export class JournalEntryComponent {
 
   /** Until the replay run ends; then the entry is read again with its evidence. */
   private follow(id: string): void {
-    if (!this.isBrowser) return;
-    this.timer = setTimeout(async () => {
-      const result = await this.api.getRun(id);
-      if (result.ok && isActive(result.data.run)) return this.follow(id);
-      this.replaying.set(false);
-      const error = result.ok ? result.data.run.error : result.error;
-      if (error) toast.error("The replay stopped", { description: error });
-      this.status.set(
-        error ? `The replay stopped: ${error}` : "Replay finished: its evidence is in.",
-      );
-      this.replayed.emit();
+    if (!this.isBrowser) {
+      return;
+    }
+    this.timer = setTimeout(() => {
+      void this.pollReplay(id);
     }, POLL_MS);
+  }
+
+  private async pollReplay(id: string): Promise<void> {
+    const result = await this.api.getRun(id);
+    if (result.ok && isActive(result.data.run)) {
+      this.follow(id);
+      return;
+    }
+    this.replaying.set(false);
+    const error = result.ok ? result.data.run.error : result.error;
+    if (error) {
+      toast.error("The replay stopped", { description: error });
+    }
+    this.status.set(
+      error ? `The replay stopped: ${error}` : "Replay finished: its evidence is in.",
+    );
+    this.replayed.emit();
   }
 }

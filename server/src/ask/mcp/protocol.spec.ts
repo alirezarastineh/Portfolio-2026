@@ -180,11 +180,11 @@ describe("the MCP endpoint's protocol (plan phase 32)", () => {
     expect(failure(3, ERRORS.methodNotFound, "Method not found: x")).toEqual({
       jsonrpc: "2.0",
       id: 3,
-      error: { code: -32601, message: "Method not found: x" },
+      error: { code: -32_601, message: "Method not found: x" },
     });
     expect(failure(null, ERRORS.parse, "Parse error", { at: 1 })).toEqual({
       jsonrpc: "2.0",
-      error: { code: -32700, message: "Parse error", data: { at: 1 } },
+      error: { code: -32_700, message: "Parse error", data: { at: 1 } },
     });
   });
 });

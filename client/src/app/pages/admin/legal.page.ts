@@ -172,7 +172,7 @@ function docInDraft(marks: DraftMarks | null, id: LegalDoc, field: Field): boole
         <div hlmTabs class="gap-6" [tab]="active()" (tabActivated)="show($event)">
           <div hlmTabsList aria-label="Legal page">
             @for (doc of docList; track doc.id) {
-              <button [hlmTabsTrigger]="doc.id">
+              <button type="button" [hlmTabsTrigger]="doc.id">
                 {{ doc.label }}
                 @if (tabMark(doc.id); as change) {
                   <span
@@ -323,7 +323,9 @@ export default class AdminLegalPage implements OnInit {
     const marks = this.pulse?.marks() ?? null;
     const here = this.savedHere();
     const out: Record<string, TraceState> = {};
-    if (!docs || !base) return out;
+    if (!docs || !base) {
+      return out;
+    }
     for (const { id } of DOCS) {
       for (const field of FIELDS) {
         const unsaved = LOCALES.some((l) => docs[id][l][field] !== base[id][l][field]);
@@ -337,7 +339,9 @@ export default class AdminLegalPage implements OnInit {
 
   /** Fields saved to the draft and not live; null until the review or a save here says. */
   protected readonly notLive = computed(() => {
-    if (!this.pulse?.marks() && this.savedHere().size === 0) return null;
+    if (!this.pulse?.marks() && this.savedHere().size === 0) {
+      return null;
+    }
     return Object.values(this.trace()).filter((state) => state === "draft").length;
   });
 
@@ -351,7 +355,7 @@ export default class AdminLegalPage implements OnInit {
     return Object.fromEntries(
       DOCS.map(({ id }) => {
         const [en, de] = [at(id, "en"), at(id, "de")];
-        return [id, en !== undefined && de !== undefined ? { en, de } : null];
+        return [id, en === undefined || de === undefined ? null : { en, de }];
       }),
     ) as Record<LegalDoc, Record<Locale, string> | null>;
   });
@@ -372,7 +376,9 @@ export default class AdminLegalPage implements OnInit {
     for (const { id } of DOCS) {
       for (const locale of LOCALES) {
         this.titles[id][locale].valueChanges.subscribe((title) => {
-          if (title !== this.docs()?.[id][locale].title) this.patch(id, locale, { title });
+          if (title !== this.docs()?.[id][locale].title) {
+            this.patch(id, locale, { title });
+          }
         });
       }
     }
@@ -385,8 +391,10 @@ export default class AdminLegalPage implements OnInit {
         this.docs.set(docs);
         this.fill();
         // A copy typed on the other document opens its tab.
-        const other = DOCS.find(({ id }) => id !== this.active())!.id;
-        if (!this.edited(this.active()) && this.edited(other)) void this.show(other);
+        const other = DOCS.find(({ id }) => id !== this.active())?.id ?? DOCS[0].id;
+        if (!this.edited(this.active()) && this.edited(other)) {
+          void this.show(other);
+        }
       },
     });
   }
@@ -403,7 +411,9 @@ export default class AdminLegalPage implements OnInit {
 
   /** A tab puts its document in the address, replaced as the Inbox's filters are: Back leaves Legal. */
   protected show(id: string): Promise<boolean> {
-    if (id === this.active()) return Promise.resolve(true);
+    if (id === this.active()) {
+      return Promise.resolve(true);
+    }
     return this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { doc: id === "privacy" ? id : null },
@@ -474,7 +484,9 @@ export default class AdminLegalPage implements OnInit {
       for (const locale of LOCALES) {
         const text = docs?.[id][locale].title ?? "";
         // A reset drops the field's own drafts and its Undo: only where the text moved.
-        if (this.titles[id][locale].value !== text) this.titles[id][locale].reset(text);
+        if (this.titles[id][locale].value !== text) {
+          this.titles[id][locale].reset(text);
+        }
       }
     }
   }
@@ -483,7 +495,9 @@ export default class AdminLegalPage implements OnInit {
     this.docs.update((d) =>
       d ? { ...d, [id]: { ...d[id], [locale]: { ...d[id][locale], ...change } } } : d,
     );
-    for (const field of Object.keys(change)) this.issues.resolve(`${id}.${locale}.${field}`);
+    for (const field of Object.keys(change)) {
+      this.issues.resolve(`${id}.${locale}.${field}`);
+    }
   }
 
   protected discard(): void {
@@ -502,14 +516,25 @@ export default class AdminLegalPage implements OnInit {
   protected async save(): Promise<void> {
     const docs = this.docs();
     const pristine = this.pristine();
-    if (!docs || !pristine || this.saving()) return;
+    if (!docs || !pristine || this.saving()) {
+      return;
+    }
     this.saving.set(true);
     const before = this.trace();
-    for (const { id } of DOCS) {
-      if (JSON.stringify(docs[id]) === JSON.stringify(pristine[id])) continue;
-      const ok = await this.saveDoc(id, docs[id], before);
-      if (!ok || this.gone) break;
-    }
+    const changed = DOCS.filter(
+      ({ id }) => JSON.stringify(docs[id]) !== JSON.stringify(pristine[id]),
+    );
+    const saveSequentially = async (index: number): Promise<void> => {
+      const entry = changed[index];
+      if (!entry) {
+        return;
+      }
+      const ok = await this.saveDoc(entry.id, docs[entry.id], before);
+      if (ok && !this.gone) {
+        await saveSequentially(index + 1);
+      }
+    };
+    await saveSequentially(0);
     this.saving.set(false);
   }
 
@@ -526,31 +551,46 @@ export default class AdminLegalPage implements OnInit {
       this.savedHere.update((marks) => {
         const next = new Map(marks);
         for (const field of FIELDS) {
-          if (before[`${id}.${field}`] === "unsaved") next.set(`${id}.${field}`, at);
+          if (before[`${id}.${field}`] === "unsaved") {
+            next.set(`${id}.${field}`, at);
+          }
         }
         return next;
       });
       this.savedAt.set(at);
-      for (const locale of LOCALES) this.titles[id][locale].markAsPristine();
+      for (const locale of LOCALES) {
+        this.titles[id][locale].markAsPristine();
+      }
       return true;
     }
-    if (result.status === 409) await this.handleStale(id);
-    else if (result.issues?.length) this.refused(id, result.issues);
-    else toastNotSaved(result.error);
+    if (result.status === 409) {
+      await this.handleStale(id);
+    } else if (result.issues?.length) {
+      this.refused(id, result.issues);
+    } else {
+      toastNotSaved(result.error);
+    }
     return false;
   }
 
   /** Saved elsewhere: asked by the document's name. Reload replaces that one document; Keep moves on to it. */
   private async handleStale(id: LegalDoc): Promise<void> {
     const fresh = await this.api.getSection<LegalSectionInput>(id);
-    const reload = await askStale(this.confirm, DOCS.find((doc) => doc.id === id)!.name);
-    if (this.gone) return;
+    const label = DOCS.find((doc) => doc.id === id)?.name ?? id;
+    const reload = await askStale(this.confirm, label);
+    if (this.gone) {
+      return;
+    }
     if (!fresh.ok) {
-      if (reload) toastNotSaved(fresh.error, "Could not load the page");
+      if (reload) {
+        toastNotSaved(fresh.error, "Could not load the page");
+      }
       return;
     }
     this.tokens[id] = fresh.data.updatedAt;
-    if (!reload) return;
+    if (!reload) {
+      return;
+    }
     // Only this document: the other one's edits were never stale.
     const doc = docOf(fresh.data.data);
     this.docs.update((d) => (d ? { ...d, [id]: structuredClone(doc) } : d));
@@ -568,14 +608,20 @@ export default class AdminLegalPage implements OnInit {
     const other = issues
       .map((issue) => issue.path[0])
       .find((locale): locale is Locale => isLocale(locale) && shown !== "both" && locale !== shown);
-    if (other) this.view.set(this.wide() ? "both" : other);
+    if (other) {
+      this.view.set(this.wide() ? "both" : other);
+    }
     void this.show(id).then(() =>
       afterNextRender(
         () => {
-          if (this.gone) return;
+          if (this.gone) {
+            return;
+          }
           for (const locale of LOCALES) {
             const message = this.issues.get(`${id}.${locale}.title`);
-            if (message) this.titles[id][locale].setErrors({ server: message });
+            if (message) {
+              this.titles[id][locale].setErrors({ server: message });
+            }
           }
           focusFirstInvalid(this.host.nativeElement);
         },

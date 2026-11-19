@@ -92,14 +92,14 @@ const COPY: Record<
 const NO_ASSISTANT: AssistantIndex = { documents: [], scorecard: false, match: false };
 
 /** One line of prose, as a list item takes it. */
-const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
+const oneLine = (text: string) => text.replaceAll(/\s+/g, " ").trim();
 /** A label as a sentence: the hero's words end without a stop. */
 const sentence = (text: string) => {
   const line = oneLine(text);
   return !line || /[.!?…]$/.test(line) ? line : `${line}.`;
 };
 /** Text inside a link's brackets. */
-const linkText = (text: string) => oneLine(text).replace(/[[\]\\]/g, String.raw`\$&`);
+const linkText = (text: string) => oneLine(text).replaceAll(/[[\]\\]/g, String.raw`\$&`);
 
 type Project = AppContent["projects"][number];
 type Post = AppContent["posts"][number];
@@ -180,10 +180,16 @@ export function buildLlmsTxt(
   const api = mcpUrl ? new URL(mcpUrl).origin : null;
   lines.push(`## ${copy.agents}`, "");
   // The match page answers either way; it is listed only while match is offered (plan 3 W3).
-  if (assistant.match) lines.push(`- [${copy.match}](${base}/match): ${copy.matchLine}`);
-  if (mcpUrl) lines.push(`- [MCP](${mcpUrl}): ${copy.mcpLine}`);
+  if (assistant.match) {
+    lines.push(`- [${copy.match}](${base}/match): ${copy.matchLine}`);
+  }
+  if (mcpUrl) {
+    lines.push(`- [MCP](${mcpUrl}): ${copy.mcpLine}`);
+  }
   lines.push(`- [Agent card](${origin}/.well-known/agent-card.json): ${copy.cardLine}`);
-  if (api) lines.push(`- [Map](${api}/v1/ask/map?locale=${locale}): ${copy.mapLine}`);
+  if (api) {
+    lines.push(`- [Map](${api}/v1/ask/map?locale=${locale}): ${copy.mapLine}`);
+  }
   if (api && assistant.scorecard) {
     lines.push(`- [Scorecard](${api}/v1/ask/scorecard): ${copy.scorecardLine}`);
   }

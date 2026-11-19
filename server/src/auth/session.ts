@@ -69,7 +69,9 @@ export async function createSession(options: {
     })
     .returning({ id: adminSessions.id });
 
-  if (!row) throw new Error("failed to create session");
+  if (!row) {
+    throw new Error("failed to create session");
+  }
   return { token, csrfToken, sessionId: row.id };
 }
 
@@ -103,10 +105,18 @@ export async function resolveSession(token: string): Promise<ActiveSession | nul
     .where(eq(adminSessions.tokenHash, hashToken(token)))
     .limit(1);
 
-  if (!row) return null;
-  if (row.revokedAt) return null;
-  if (!row.isActive) return null;
-  if (row.idleExpiresAt <= now || row.absoluteExpiresAt <= now) return null;
+  if (!row) {
+    return null;
+  }
+  if (row.revokedAt) {
+    return null;
+  }
+  if (!row.isActive) {
+    return null;
+  }
+  if (row.idleExpiresAt <= now || row.absoluteExpiresAt <= now) {
+    return null;
+  }
 
   // A pending-TOTP session keeps its fixed 5-minute window. Sliding it by the
   // full idle TTL would let a half-authenticated session live for hours.
@@ -193,7 +203,9 @@ const PRUNE_INTERVAL_MS = 60 * 60 * 1000;
 let pruneTimer: NodeJS.Timeout | undefined;
 
 export function startSessionPruning(): void {
-  if (pruneTimer) return;
+  if (pruneTimer) {
+    return;
+  }
   pruneTimer = setInterval(() => {
     void pruneSessions().catch((error) => console.error("[auth] pruning sessions failed", error));
   }, PRUNE_INTERVAL_MS);

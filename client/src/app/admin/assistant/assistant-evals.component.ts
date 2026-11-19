@@ -37,7 +37,7 @@ const STATUS_LABELS: Record<RunRow["status"], string> = {
   interrupted: "interrupted by a restart",
 };
 
-const POLL_MS = 2_000;
+const POLL_MS = 2000;
 
 /**
  * The eval suite as a background run: ~40 questions against a frozen sample
@@ -55,13 +55,20 @@ const POLL_MS = 2_000;
   template: `
     <div class="flex flex-col gap-6">
       <div class="flex flex-wrap items-center gap-3">
-        <button hlmBtn size="sm" [disabled]="busy() || !!activeRun()" (click)="start()">
+        <button
+          hlmBtn
+          type="button"
+          size="sm"
+          [disabled]="busy() || !!activeRun()"
+          (click)="start()"
+        >
           Run the evals
         </button>
         @if (activeRun(); as running) {
           @if (running.kind === "eval") {
             <button
               hlmBtn
+              type="button"
               size="sm"
               variant="outline"
               [disabled]="busy()"
@@ -130,6 +137,7 @@ const POLL_MS = 2_000;
             <div>
               <button
                 hlmBtn
+                type="button"
                 size="sm"
                 variant="outline"
                 [disabled]="busy()"
@@ -296,10 +304,18 @@ const POLL_MS = 2_000;
                     </td>
                     <td class="p-2 text-right font-data">\${{ r.usd | number: "1.3-4" }}</td>
                     <td class="flex flex-wrap justify-end gap-2 p-2">
-                      <button hlmBtn size="sm" variant="ghost" (click)="open(r.id)">Open</button>
+                      <button hlmBtn type="button" size="sm" variant="ghost" (click)="open(r.id)">
+                        Open
+                      </button>
                       @if (view(); as v) {
                         @if (v.run.id !== r.id) {
-                          <button hlmBtn size="sm" variant="ghost" (click)="compare(r)">
+                          <button
+                            hlmBtn
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            (click)="compare(r)"
+                          >
                             Compare
                           </button>
                         }
@@ -343,7 +359,9 @@ export class AssistantEvalsComponent implements OnInit {
    */
   protected readonly activeRun = computed(() => {
     const v = this.view();
-    if (v && isActive(v.run)) return v.run;
+    if (v && isActive(v.run)) {
+      return v.run;
+    }
     return this.runs().find(isActive) ?? null;
   });
 
@@ -367,19 +385,25 @@ export class AssistantEvalsComponent implements OnInit {
   /** The history, and the eval run going on (or the latest) opened. */
   private async load(): Promise<void> {
     const [list, judge] = await Promise.all([this.api.listRuns(), this.api.judgeStatus()]);
-    if (judge.ok) this.judge.set(judge.data);
+    if (judge.ok) {
+      this.judge.set(judge.data);
+    }
     // With runs on screen, a toast; before, the history says so, with Try again.
     if (!list.ok) {
       if (this.runs().length) {
         toast.error("Could not load the eval runs", { description: list.error });
-      } else this.loadError.set(true);
+      } else {
+        this.loadError.set(true);
+      }
       return;
     }
     this.loadError.set(false);
     this.runs.set(list.data.runs);
     const evals = this.evalRuns();
     const first = evals.find(isActive) ?? evals[0];
-    if (first && !this.view()) await this.open(first.id);
+    if (first && !this.view()) {
+      await this.open(first.id);
+    }
   }
 
   protected reload(): void {
@@ -398,7 +422,9 @@ export class AssistantEvalsComponent implements OnInit {
       toast.error("Could not load the run", { description: result.error });
       return;
     }
-    if (this.view()?.run.id !== id) this.comparison.set(null);
+    if (this.view()?.run.id !== id) {
+      this.comparison.set(null);
+    }
     this.view.set(result.data);
     const run = result.data.run;
     this.runs.update((runs) => runs.map((r) => (r.id === run.id ? run : r)));
@@ -415,7 +441,9 @@ export class AssistantEvalsComponent implements OnInit {
         "About 40 questions go to the configured models, plus a judge for answerable cases. It runs in the background, paced for free-tier limits, and takes 10–15 minutes; its cost counts toward today's budget.",
       confirmLabel: "Run evals",
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
     this.busy.set(true);
     const result = await this.api.startEvalRun();
     this.busy.set(false);
@@ -432,7 +460,9 @@ export class AssistantEvalsComponent implements OnInit {
     this.busy.set(true);
     const result = await this.api.cancelRun(run.id);
     this.busy.set(false);
-    if (!result.ok) toast.error("Could not cancel the run", { description: result.error });
+    if (!result.ok) {
+      toast.error("Could not cancel the run", { description: result.error });
+    }
     await this.open(run.id);
   }
 
@@ -443,7 +473,9 @@ export class AssistantEvalsComponent implements OnInit {
       description: `The ${left} ${left === 1 ? "case" : "cases"} still to do go to the configured models, paced as before; their cost counts toward today's budget.`,
       confirmLabel: "Resume",
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
     this.busy.set(true);
     const result = await this.api.resumeRun(run.id);
     this.busy.set(false);
@@ -456,7 +488,9 @@ export class AssistantEvalsComponent implements OnInit {
 
   protected async compare(other: RunRow): Promise<void> {
     const base = this.view();
-    if (!base) return;
+    if (!base) {
+      return;
+    }
     const result = await this.api.getRun(other.id);
     if (!result.ok) {
       toast.error("Could not load that run", { description: result.error });
@@ -470,7 +504,9 @@ export class AssistantEvalsComponent implements OnInit {
 
   private async refreshList(): Promise<void> {
     const list = await this.api.listRuns();
-    if (list.ok) this.runs.set(list.data.runs);
+    if (list.ok) {
+      this.runs.set(list.data.runs);
+    }
   }
 
   protected statusLabel(run: RunRow): string {

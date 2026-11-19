@@ -29,6 +29,14 @@ class Host {
   retries = 0;
 }
 
+function query<T extends Element = HTMLElement>(parent: ParentNode, selector: string): T {
+  const el = parent.querySelector<T>(selector);
+  if (!el) {
+    throw new Error(`Expected element matching ${selector}`);
+  }
+  return el;
+}
+
 function render() {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
@@ -42,27 +50,27 @@ function render() {
 describe("load states", () => {
   it("says what failed and why, and asks again on Try again", () => {
     const { fixture, root } = render();
-    const page = root.querySelector("#page")!;
+    const page = query(root, "#page");
 
     expect(page.querySelector("[role=alert]")).not.toBeNull();
     expect(page.querySelector("h2")?.textContent).toBe("Could not load the posts");
     expect(page.textContent).toContain("http_502");
 
-    page.querySelector("button")!.click();
-    root.querySelector<HTMLButtonElement>("#tile button")!.click();
+    query<HTMLButtonElement>(page, "button").click();
+    query<HTMLButtonElement>(root, "#tile button").click();
     expect(fixture.componentInstance.retries).toBe(2);
   });
 
   it("fits a tile in one line, without a heading of its own", () => {
-    const tile = render().root.querySelector("#tile")!;
+    const tile = query(render().root, "#tile");
     expect(tile.querySelector("h2")).toBeNull();
     expect(tile.textContent).toContain("Could not load");
   });
 
   it("draws placeholders shaped like the rows that come, announcing only the label", () => {
     const { root } = render();
-    const fields = root.querySelector("#fields [role=status]")!;
-    const list = root.querySelector("#list [role=status]")!;
+    const fields = query(root, "#fields [role=status]");
+    const list = query(root, "#list [role=status]");
 
     expect(fields.querySelectorAll(":scope > [aria-hidden=true]")).toHaveLength(4);
     expect(list.querySelectorAll(":scope > [aria-hidden=true]")).toHaveLength(3);

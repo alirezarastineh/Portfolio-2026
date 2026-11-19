@@ -182,18 +182,26 @@ export function detectLanguage(text: string): Locale | null {
   let de = 0;
   let en = 0;
   for (const word of text.toLowerCase().match(/\p{L}+/gu) ?? []) {
-    if (GERMAN_WORDS.has(word) || /[äöüß]/.test(word)) de++;
-    if (ENGLISH_WORDS.has(word)) en++;
+    if (GERMAN_WORDS.has(word) || /[äöüß]/.test(word)) {
+      de++;
+    }
+    if (ENGLISH_WORDS.has(word)) {
+      en++;
+    }
   }
-  if (de === en) return null;
+  if (de === en) {
+    return null;
+  }
   return de > en ? "de" : "en";
 }
 
 /** Whether a sentence starts at `at`: nothing before it but spaces, a stop or an opening mark. */
 function startsSentence(text: string, at: number): boolean {
   let i = at - 1;
-  while (i >= 0 && /\s/.test(text[i]!)) i--;
-  return i < 0 || /[.!?:;„“"‚‘«»(–—•-]/.test(text[i]!);
+  while (i >= 0 && /\s/.test(text[i])) {
+    i--;
+  }
+  return i < 0 || /[.!?:;„“"‚‘«»(–—•-]/.test(text[i]);
 }
 
 /**
@@ -207,9 +215,15 @@ export function commonWords(text: string): Record<Locale, number> {
   const counts = { de: 0, en: 0 };
   for (const match of text.matchAll(/\p{L}+/gu)) {
     const word = match[0].toLowerCase();
-    if (word !== match[0] && !startsSentence(text, match.index)) continue;
-    if (GERMAN_WORDS.has(word)) counts.de++;
-    if (ENGLISH_WORDS.has(word)) counts.en++;
+    if (word !== match[0] && !startsSentence(text, match.index)) {
+      continue;
+    }
+    if (GERMAN_WORDS.has(word)) {
+      counts.de++;
+    }
+    if (ENGLISH_WORDS.has(word)) {
+      counts.en++;
+    }
   }
   return counts;
 }
@@ -221,8 +235,10 @@ export function commonWords(text: string): Record<Locale, number> {
  */
 export function visitorLanguage(texts: readonly string[]): Locale | null {
   for (let i = texts.length - 1; i >= 0; i--) {
-    const language = detectLanguage(texts[i]!);
-    if (language) return language;
+    const language = detectLanguage(texts[i]);
+    if (language) {
+      return language;
+    }
   }
   return null;
 }

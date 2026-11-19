@@ -46,8 +46,11 @@ export function countGuardEvent(kind: GuardEventKind, at = new Date()): void {
   const day = utcDay(at);
   const key = `${day}|${kind}`;
   const row = pending.get(key);
-  if (row) row.count++;
-  else pending.set(key, { day, kind, count: 1 });
+  if (row) {
+    row.count++;
+  } else {
+    pending.set(key, { day, kind, count: 1 });
+  }
 }
 
 async function upsert(rows: GuardEventRow[]): Promise<void> {
@@ -62,7 +65,9 @@ async function upsert(rows: GuardEventRow[]): Promise<void> {
 
 /** Writes what has gathered. Counts that fail to write are kept for the next flush. */
 export async function flushGuardEvents(write = upsert): Promise<void> {
-  if (!pending.size) return;
+  if (!pending.size) {
+    return;
+  }
   const rows = [...pending.values()];
   pending.clear();
   try {
@@ -85,7 +90,9 @@ export function pendingGuardEvents(): GuardEventRow[] {
 let timer: NodeJS.Timeout | undefined;
 
 export function startGuardEventFlush(intervalMs = 60_000): void {
-  if (timer) return;
+  if (timer) {
+    return;
+  }
   timer = setInterval(() => {
     void flushGuardEvents().catch((error: unknown) =>
       console.error("[ask] guard events not written", error),

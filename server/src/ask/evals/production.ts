@@ -55,7 +55,9 @@ export async function earlierQuestions(messageId: string): Promise<string[] | nu
     .select({ sessionHash: aiMessages.sessionHash })
     .from(aiMessages)
     .where(and(eq(aiMessages.id, messageId), VISITOR_ANSWER));
-  if (!message) return null;
+  if (!message) {
+    return null;
+  }
   // Compared in SQL: the row's own timestamp keeps microseconds a JS date would lose.
   const asked = db
     .select({ createdAt: aiMessages.createdAt })
@@ -91,14 +93,18 @@ export async function freezeCase(
     })
     .from(aiMessages)
     .where(and(eq(aiMessages.id, messageId), VISITOR_ANSWER));
-  if (!message) return { ok: false, error: "not_found" };
+  if (!message) {
+    return { ok: false, error: "not_found" };
+  }
   const [snapshot] = message.corpusKey
     ? await db
         .select({ key: aiCorpusSnapshots.key })
         .from(aiCorpusSnapshots)
         .where(eq(aiCorpusSnapshots.key, message.corpusKey))
     : [];
-  if (!snapshot) return { ok: false, error: "no_snapshot" };
+  if (!snapshot) {
+    return { ok: false, error: "no_snapshot" };
+  }
 
   const [row] = await db
     .insert(aiEvalCases)
@@ -118,7 +124,7 @@ export async function freezeCase(
       fromMessageId: messageId,
     })
     .returning({ id: aiEvalCases.id });
-  return { ok: true, id: row!.id };
+  return { ok: true, id: row.id };
 }
 
 export interface ProductionCase {
@@ -154,7 +160,9 @@ export async function productionCases(): Promise<ProductionCase[]> {
 
 /** The snapshots the cases need, as corpora. */
 export async function snapshotCorpora(keys: readonly string[]): Promise<Map<string, AskCorpus>> {
-  if (!keys.length) return new Map();
+  if (!keys.length) {
+    return new Map();
+  }
   const rows = await getDb()
     .select()
     .from(aiCorpusSnapshots)
@@ -178,18 +186,32 @@ export async function runProductionSuite(
   for (const { evalCase, snapshotKey } of cases) {
     bySnapshot.set(snapshotKey, [...(bySnapshot.get(snapshotKey) ?? []), evalCase]);
   }
+  const groups = [...bySnapshot.entries()];
   const results: CaseResult[] = [];
   let missing = 0;
-  for (const [key, group] of bySnapshot) {
+
+  async function runGroups(startIndex: number): Promise<void> {
+    let i = startIndex;
+    while (i < groups.length && !corpora.has(groups[i][0])) {
+      missing += groups[i][1].length;
+      i++;
+    }
+    if (i >= groups.length) {
+      return;
+    }
+    const [key, group] = groups[i];
     const corpus = corpora.get(key);
     if (!corpus) {
-      missing += group.length;
-      continue;
+      return;
     }
     const summary = await runEvals({ ...options, cases: group, corpus });
     results.push(...summary.results);
-    if (summary.incomplete) break;
+    if (!summary.incomplete) {
+      await runGroups(i + 1);
+    }
   }
+
+  await runGroups(0);
   return { planned: cases.length, results, missing };
 }
 
@@ -206,8 +228,12 @@ export function staleness(
   let changed = false;
   for (const id of cited) {
     const now = live.byId.get(id);
-    if (!now) return "gone";
-    if (now.text !== snapshot.byId.get(id)?.text) changed = true;
+    if (!now) {
+      return "gone";
+    }
+    if (now.text !== snapshot.byId.get(id)?.text) {
+      changed = true;
+    }
   }
   return changed ? "changed" : null;
 }

@@ -26,7 +26,10 @@ export class CommandPaletteService {
   }
 
   toggle(): void {
-    if (this._open()) this.hide();
-    else this.show(true);
+    if (this._open()) {
+      this.hide();
+    } else {
+      this.show(true);
+    }
   }
 }

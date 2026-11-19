@@ -39,7 +39,7 @@ export class HlmDropdownMenu {
 
     this.setSideWithDarkMagic();
     // this is a best effort, but does not seem to work currently
-    // TODO: figure out a way for us to know the host is about to be closed. might not be possible with CDK
+    // Pending CDK support: figure out a way for us to know the host is about to be closed. might not be possible with CDK
     this._host.closed.pipe(takeUntilDestroyed()).subscribe(() => this._state.set("closed"));
   }
 

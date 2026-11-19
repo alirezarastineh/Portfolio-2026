@@ -153,13 +153,14 @@ const FULL_DATE = new Intl.DateTimeFormat("en-GB", {
 
         <ng-template #rowMenu let-row>
           <hlm-dropdown-menu class="w-48">
-            <button hlmDropdownMenuItem [routerLink]="['/admin/writing', row.slug]">
+            <button hlmDropdownMenuItem type="button" [routerLink]="['/admin/writing', row.slug]">
               <ng-icon name="lucidePencil" size="14" aria-hidden="true" />
               <span>Edit</span>
             </button>
             <hlm-dropdown-menu-separator />
             <button
               hlmDropdownMenuItem
+              type="button"
               class="text-destructive focus:text-destructive"
               (triggered)="remove(row)"
             >
@@ -199,11 +200,18 @@ export default class AdminWritingPage implements OnInit {
     const result = await this.api.listPosts();
     this.loading.set(false);
     this.loadError.set(result.ok ? null : result.error);
-    if (result.ok) this.rows.set(result.data.posts);
+    if (result.ok) {
+      this.rows.set(result.data.posts);
+    }
   }
 
   protected title(row: PostListRow): string {
-    return row.translations.en?.title || row.translations.de?.title || row.slug;
+    const enTitle = row.translations.en?.title ?? "";
+    if (enTitle !== "") {
+      return enTitle;
+    }
+    const deTitle = row.translations.de?.title ?? "";
+    return deTitle === "" ? row.slug : deTitle;
   }
 
   /** The languages it exists in: "EN, DE", "EN" or "DE". */
@@ -216,7 +224,9 @@ export default class AdminWritingPage implements OnInit {
 
   /** As saved: a draft, scheduled for a date to come, or published. */
   protected status(row: PostListRow): string {
-    if (row.status === "draft") return "Draft";
+    if (row.status === "draft") {
+      return "Draft";
+    }
     const at = row.publishedAt ? Date.parse(row.publishedAt) : Number.NaN;
     return at > Date.now() ? `Scheduled for ${DAY_MONTH.format(at)}` : "Published";
   }
@@ -244,7 +254,9 @@ export default class AdminWritingPage implements OnInit {
       confirmLabel: "Delete post",
       destructive: true,
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
 
     const previous = this.rows();
     this.rows.update((list) => list.filter((r) => r.id !== row.id));

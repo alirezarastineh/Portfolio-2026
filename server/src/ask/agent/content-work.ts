@@ -57,10 +57,14 @@ export async function planContent(input: {
   maxItems?: number;
   maxUsd?: number;
 }): Promise<{ params: Record<string, unknown>; keys: string[] } | { error: string; status: 400 }> {
-  if (!askChain(askConfig(), "copilot").length) return { error: "no_chain", status: 400 };
+  if (!askChain(askConfig(), "copilot").length) {
+    return { error: "no_chain", status: 400 };
+  }
   const maxItems = input.maxItems ?? DEFAULT_ITEMS;
   const targets = await contentTargets(input.goals, maxItems);
-  if (!targets.length) return { error: "nothing_to_do", status: 400 };
+  if (!targets.length) {
+    return { error: "nothing_to_do", status: 400 };
+  }
   const params: ContentParams = {
     task: "content",
     goals: input.goals,
@@ -172,10 +176,10 @@ async function propose(
   ctx: ItemContext,
   key: string,
   target: Target,
-  draft: Drafted,
+  drafted: Drafted,
 ): Promise<void> {
-  const flags = draft.flags ?? [];
-  const status: ProposalStatus = draft.after && !flags.length ? "proposed" : "needs_you";
+  const flags = drafted.flags ?? [];
+  const status: ProposalStatus = drafted.after && !flags.length ? "proposed" : "needs_you";
   const id = await insertProposal({
     runId: ctx.work.run.id,
     goal: target.goal,
@@ -185,12 +189,12 @@ async function propose(
     locale: target.locale,
     label: target.label,
     before: target.current,
-    after: draft.after,
-    skill: draft.skill,
-    version: skillFor(draft.skill).version,
-    useId: draft.useId ?? null,
+    after: drafted.after,
+    skill: drafted.skill,
+    version: skillFor(drafted.skill).version,
+    useId: drafted.useId ?? null,
     flags,
-    notes: draft.notes ?? [],
+    notes: drafted.notes ?? [],
     status,
   });
   await ctx.paid.finish(key, "done", { proposal: id, status });
@@ -209,11 +213,13 @@ async function draft(
 ): Promise<Drafted | { down: number } | "aborted"> {
   const plan = draftPlan(target, ctx.glossary);
   const none = (note: string): Drafted => ({ skill: plan.skill, after: null, notes: [note] });
-  if (plan.missing) return none(plan.missing);
+  if (plan.missing) {
+    return none(plan.missing);
+  }
 
   const skill = skillFor(plan.skill);
   // The models first: no image is read for a request no model can take.
-  const session = skillModels(askConfig(), skill.accepts);
+  const session = skillModels(askConfig(), (entry) => skill.accepts(entry));
   if (!session.ok) {
     return none(
       session.error === "no_model_for_this"
@@ -222,13 +228,17 @@ async function draft(
     );
   }
   const job = await skill.request(plan.input, ctx.skills);
-  if (job instanceof SkillAnswer) return none(answerNote(job));
+  if (job instanceof SkillAnswer) {
+    return none(answerNote(job));
+  }
 
   let run: SkillRun;
   try {
     run = await runSkill({ ...session.models, signal: ctx.paid.signal }, job);
   } catch (error) {
-    if (ctx.paid.signal.aborted) return "aborted";
+    if (ctx.paid.signal.aborted) {
+      return "aborted";
+    }
     console.warn(
       `[agent] content run ${ctx.work.run.id}: ${key} not drafted`,
       (error as Error).message,
@@ -240,10 +250,13 @@ async function draft(
     ctx.calls.push(...session.calls());
   }
   // Cut off after the draft came back: not proposed, so a resume drafts it whole.
-  if (ctx.paid.signal.aborted) return "aborted";
+  if (ctx.paid.signal.aborted) {
+    return "aborted";
+  }
 
-  if (!run.text)
+  if (!run.text) {
     return none("Every draft came back empty (a safety filter, maybe): draft it in the editor.");
+  }
   const flags = run.failures.map((f) => f.gate);
   const useId = await recordUse({
     skill: skill.id,
@@ -278,7 +291,9 @@ async function draft(
 async function draftItem(ctx: ItemContext, key: string): Promise<"halt" | null> {
   const { work, paid } = ctx;
   await paid.start(key);
-  if (paid.signal.aborted) return null;
+  if (paid.signal.aborted) {
+    return null;
+  }
 
   const target = await readTarget(key, ctx.goals);
   const proposed = target ? await proposalFor(work.run.id, target) : null;
@@ -308,7 +323,8 @@ async function draftItem(ctx: ItemContext, key: string): Promise<"halt" | null> 
 async function summaryOf(
   runId: string,
 ): Promise<{ proposed: number; needsYou: number; stale: number }> {
-  const items = (await getRun(runId))?.items ?? [];
+  const run = await getRun(runId);
+  const items = run?.items ?? [];
   const results = items.flatMap((i) =>
     i.status === "done" && i.result
       ? [i.result as { stale?: boolean; status?: ProposalStatus }]
@@ -333,8 +349,10 @@ async function draftFrom(
   from: number,
   maxUsd: number,
 ): Promise<WorkOutcome | null> {
-  const key = keys[from];
-  if (key === undefined || ctx.paid.signal.aborted) return null;
+  const key = keys.at(from);
+  if (key === undefined || ctx.paid.signal.aborted) {
+    return null;
+  }
   const runId = ctx.work.run.id;
   // The run's own limit: what it has spent, and an item as dear as its dearest so far.
   const { spent, dearest } = await spendOf(runId);
@@ -366,11 +384,15 @@ export const contentWork: WorkFn = async (work): Promise<WorkOutcome> => {
   const maxUsd = params.maxUsd ?? DEFAULT_USD;
 
   const halted = await draftFrom(ctx, work.keys, 0, maxUsd);
-  if (halted) return halted;
+  if (halted) {
+    return halted;
+  }
 
   const summary = await summaryOf(work.run.id);
   const stopped = paid.stoppedBy();
-  if (stopped) return { status: "failed", error: stopped, summary };
+  if (stopped) {
+    return { status: "failed", error: stopped, summary };
+  }
   // Cancelled or interrupted: the runner records which; a resume drafts what is left.
   return { status: "done", summary };
 };

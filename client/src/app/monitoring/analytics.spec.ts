@@ -18,7 +18,7 @@ describe("injectUmami", () => {
     const scripts = document.head.querySelectorAll("script");
     expect(scripts).toHaveLength(1);
 
-    const script = scripts[0]!;
+    const script = scripts[0];
     expect(script.src).toBe(CONFIG.src);
     expect(script.defer).toBe(true);
     expect(script.getAttribute("data-website-id")).toBe(CONFIG.websiteId);

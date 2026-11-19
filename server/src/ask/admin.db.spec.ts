@@ -48,33 +48,53 @@ const app = createApp({
       const m = models[role] ?? models.lite;
       return m ? [mockEntry("gemini-3.5-flash-lite", m.model)] : [];
     },
-    corpus: async (c) => fixtureCorpus(c),
+    corpus: (c) => Promise.resolve(fixtureCorpus(c)),
     // The playground's draft: a project the published corpus does not have yet.
-    draftCorpus: async (c) =>
-      assembleCorpus(
-        {
-          ...FIXTURE_BASE,
-          key: "draft:x",
-          documents: [
-            ...FIXTURE_BASE.documents,
-            {
-              id: "project:nova@en",
-              kind: "project",
-              locale: "en",
-              title: "Nova",
-              url: "/en/work/nova",
-              text: "Nova — unpublished draft project",
-            },
-          ],
-        },
-        DEFAULT_SETTINGS,
-        [],
-        c,
+    draftCorpus: (c) =>
+      Promise.resolve(
+        assembleCorpus(
+          {
+            ...FIXTURE_BASE,
+            key: "draft:x",
+            documents: [
+              ...FIXTURE_BASE.documents,
+              {
+                id: "project:nova@en",
+                kind: "project",
+                locale: "en",
+                title: "Nova",
+                url: "/en/work/nova",
+                text: "Nova — unpublished draft project",
+              },
+            ],
+          },
+          DEFAULT_SETTINGS,
+          [],
+          c,
+        ),
       ),
   },
 });
 
 let admin: TestClient;
+
+async function conversationIds(filter: string): Promise<string[]> {
+  const res = await admin.get(`/admin/assistant/conversations?filter=${filter}`);
+  const body = (await res.json()) as {
+    messages: { id: string; feedback: number | null }[];
+  };
+  return body.messages.map((m) => m.id);
+}
+
+const featureSplit = (day: string, feature: string, model: string, usd: number) => ({
+  day,
+  feature,
+  model,
+  requests: 1,
+  usd,
+});
+
+const dayBefore = (days: number) => utcDay(new Date(Date.now() - days * 24 * 60 * 60 * 1000));
 
 beforeEach(async () => {
   await resetDb();
@@ -91,12 +111,15 @@ beforeEach(async () => {
 describe("admin assistant API", () => {
   it("is admin-only", async () => {
     const anonymous = new TestClient(app);
-    expect((await anonymous.get("/admin/assistant/settings")).status).toBe(401);
-    expect((await anonymous.post("/admin/assistant/playground", {})).status).toBe(401);
+    const settingsRes = await anonymous.get("/admin/assistant/settings");
+    expect(settingsRes.status).toBe(401);
+    const playgroundRes = await anonymous.post("/admin/assistant/playground", {});
+    expect(playgroundRes.status).toBe(401);
   });
 
   it("saves settings, which the public config then reflects", async () => {
-    const initial = (await (await admin.get("/admin/assistant/settings")).json()) as {
+    const initialRes = await admin.get("/admin/assistant/settings");
+    const initial = (await initialRes.json()) as {
       settings: { enabled: boolean };
       env: { keys: { gemini: boolean }; chains: { lite: { id: string }[] } };
     };
@@ -113,16 +136,15 @@ describe("admin assistant API", () => {
     });
     expect(res.status).toBe(200);
 
-    const publicConfig = (await (await app.request("/v1/ask/config")).json()) as Record<
-      string,
-      unknown
-    >;
+    const publicConfigRes = await app.request("/v1/ask/config");
+    const publicConfig = (await publicConfigRes.json()) as Record<string, unknown>;
     expect(publicConfig).toMatchObject({ deep: false, suggestions: { en: ["What is Atlas?"] } });
 
-    expect(
-      (await admin.put("/admin/assistant/settings", { enabled: true, dailyBudgetUsd: 5000 }))
-        .status,
-    ).toBe(400);
+    const invalidRes = await admin.put("/admin/assistant/settings", {
+      enabled: true,
+      dailyBudgetUsd: 5000,
+    });
+    expect(invalidRes.status).toBe(400);
   });
 
   it("manages FAQ entries and their order", async () => {
@@ -132,57 +154,55 @@ describe("admin assistant API", () => {
     });
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
-    const second = (await (
-      await admin.post("/admin/assistant/faq", {
-        isVisible: false,
-        translations: { de: { question: "Umzug?", answer: "Innerhalb der EU." } },
-      })
-    ).json()) as { id: string };
+    const secondRes = await admin.post("/admin/assistant/faq", {
+      isVisible: false,
+      translations: { de: { question: "Umzug?", answer: "Innerhalb der EU." } },
+    });
+    const second = (await secondRes.json()) as { id: string };
 
-    expect(
-      (
-        await admin.put(`/admin/assistant/faq/${id}`, {
-          isVisible: true,
-          translations: {
-            en: { question: "Notice period?", answer: "Four weeks." },
-            de: { question: "Frist?", answer: "Vier Wochen." },
-          },
-        })
-      ).status,
-    ).toBe(200);
-    expect((await admin.patch("/admin/assistant/faq-order", { ids: [second.id, id] })).status).toBe(
-      200,
-    );
+    const updated = await admin.put(`/admin/assistant/faq/${id}`, {
+      isVisible: true,
+      translations: {
+        en: { question: "Notice period?", answer: "Four weeks." },
+        de: { question: "Frist?", answer: "Vier Wochen." },
+      },
+    });
+    expect(updated.status).toBe(200);
+    const reordered = await admin.patch("/admin/assistant/faq-order", { ids: [second.id, id] });
+    expect(reordered.status).toBe(200);
 
-    const { faq } = (await (await admin.get("/admin/assistant/faq")).json()) as {
+    const faqRes = await admin.get("/admin/assistant/faq");
+    const { faq } = (await faqRes.json()) as {
       faq: { id: string; translations: Record<string, { answer: string }> }[];
     };
     expect(faq.map((f) => f.id)).toEqual([second.id, id]);
-    expect(faq[1]!.translations["de"]!.answer).toBe("Vier Wochen.");
+    expect(faq[1].translations["de"].answer).toBe("Vier Wochen.");
 
-    expect((await admin.delete(`/admin/assistant/faq/${id}`)).status).toBe(200);
-    expect((await admin.delete(`/admin/assistant/faq/${id}`)).status).toBe(404);
-    expect(
-      (await admin.post("/admin/assistant/faq", { isVisible: true, translations: {} })).status,
-    ).toBe(400);
+    const deleted = await admin.delete(`/admin/assistant/faq/${id}`);
+    expect(deleted.status).toBe(200);
+    const deletedAgain = await admin.delete(`/admin/assistant/faq/${id}`);
+    expect(deletedAgain.status).toBe(404);
+    const emptyFaq = await admin.post("/admin/assistant/faq", {
+      isVisible: true,
+      translations: {},
+    });
+    expect(emptyFaq.status).toBe(400);
   });
 
   it("dates a FAQ translation by its last change, not by a save or a reorder (plan phase 19)", async () => {
-    const created = (await (
-      await admin.post("/admin/assistant/faq", {
-        isVisible: true,
-        translations: {
-          en: { question: "Would he relocate?", answer: "Within the EU." },
-          de: { question: "Würde er umziehen?", answer: "Innerhalb der EU." },
-        },
-      })
-    ).json()) as { id: string };
-    const other = (await (
-      await admin.post("/admin/assistant/faq", {
-        isVisible: true,
-        translations: { en: { question: "Notice period?", answer: "One month." } },
-      })
-    ).json()) as { id: string };
+    const createdRes = await admin.post("/admin/assistant/faq", {
+      isVisible: true,
+      translations: {
+        en: { question: "Would he relocate?", answer: "Within the EU." },
+        de: { question: "Würde er umziehen?", answer: "Innerhalb der EU." },
+      },
+    });
+    const created = (await createdRes.json()) as { id: string };
+    const otherRes = await admin.post("/admin/assistant/faq", {
+      isVisible: true,
+      translations: { en: { question: "Notice period?", answer: "One month." } },
+    });
+    const other = (await otherRes.json()) as { id: string };
     // Written long ago, as far as the dates go.
     await getDb()
       .update(aiFaqTranslations)
@@ -208,11 +228,16 @@ describe("admin assistant API", () => {
 
     // A reorder touches no translation.
     await admin.patch("/admin/assistant/faq-order", { ids: [other.id, created.id] });
-    expect((await dates())["en"]).toBe("2026-01-01");
+    const afterReorder = await dates();
+    expect(afterReorder["en"]).toBe("2026-01-01");
 
     // The corpus says so in the header.
     invalidateAssistantCache();
-    const entry = (await readFaq()).find((f) => f.id === created.id)!;
+    const faqList = await readFaq();
+    const entry = faqList.find((f) => f.id === created.id);
+    if (!entry) {
+      throw new Error("Expected FAQ entry");
+    }
     expect(entry.translations.en?.updatedAt?.slice(0, 10)).toBe("2026-01-01");
     const docs = assistantDocuments(DEFAULT_SETTINGS, [entry], fixtureConfig());
     expect(docs.find((d) => d.id.endsWith("@en") && d.kind === "faq")?.updated).toBe("2026-01-01");
@@ -236,29 +261,32 @@ describe("admin assistant API", () => {
     const chunks = await readUiChunks(res);
     expect(uiText(chunks)).toBe("Nova is a draft [^project:nova@en].");
 
-    const row = await eventually(async () => (await getDb().select().from(aiMessages))[0]);
+    const row = await eventually(async () => {
+      const messages = await getDb().select().from(aiMessages);
+      return messages[0];
+    });
     expect(row.source).toBe("playground");
     // Its spend is the playground's, not the visitors'.
     const spent = await getDb().select().from(aiUsageFeatures);
     expect(spent.map((r) => r.feature)).toEqual(["playground"]);
 
-    const visitors = (await (await admin.get("/admin/assistant/conversations")).json()) as {
+    const visitorsRes = await admin.get("/admin/assistant/conversations");
+    const visitors = (await visitorsRes.json()) as {
       messages: unknown[];
     };
     expect(visitors.messages).toHaveLength(0);
-    const playground = (await (
-      await admin.get("/admin/assistant/conversations?source=playground")
-    ).json()) as {
+    const playgroundRes = await admin.get("/admin/assistant/conversations?source=playground");
+    const playground = (await playgroundRes.json()) as {
       messages: {
         question: string;
         corpusKey: string;
         trace: { steps: { model: string; tools: unknown[] }[] };
       }[];
     };
-    expect(playground.messages[0]!.question).toBe("What is Nova?");
+    expect(playground.messages[0].question).toBe("What is Nova?");
     // Its timeline: one step, answered by the lite model, against the draft corpus.
-    expect(playground.messages[0]!.corpusKey).toMatch(/^draft:x/);
-    expect(playground.messages[0]!.trace.steps).toEqual([
+    expect(playground.messages[0].corpusKey).toMatch(/^draft:x/);
+    expect(playground.messages[0].trace.steps).toEqual([
       expect.objectContaining({ model: "gemini-3.5-flash-lite", tools: [] }),
     ]);
     // Drafts are never snapshotted: only visitor answers keep their corpus.
@@ -282,7 +310,10 @@ describe("admin assistant API", () => {
     expect(uiText(await readUiChunks(res))).toBe(
       "Atlas ships; Nova is a draft [^project:nova@en].",
     );
-    const row = await eventually(async () => (await getDb().select().from(aiMessages))[0]);
+    const row = await eventually(async () => {
+      const messages = await getDb().select().from(aiMessages);
+      return messages[0];
+    });
     expect(row).toMatchObject({ source: "playground", route: "lite→deep" });
     expect(row.trace?.escalation).toEqual({ step: 2, reason: "projects-fetched" });
     expect(models.lite.calls).toHaveLength(2);
@@ -326,17 +357,11 @@ describe("admin assistant API", () => {
       ]);
     await getDb().insert(aiFeedback).values({ messageId: "m_c00000001", value: -1 });
 
-    const list = async (filter: string) =>
-      (
-        (await (await admin.get(`/admin/assistant/conversations?filter=${filter}`)).json()) as {
-          messages: { id: string; feedback: number | null }[];
-        }
-      ).messages.map((m) => m.id);
-    expect(await list("unknown")).toEqual(["m_a00000001"]);
-    expect(await list("down")).toEqual(["m_c00000001"]);
-    expect(await list("dropped")).toEqual(["m_d00000001"]);
-    expect(await list("flagged")).toEqual(["m_d00000001"]);
-    expect(await list("all")).toHaveLength(4);
+    expect(await conversationIds("unknown")).toEqual(["m_a00000001"]);
+    expect(await conversationIds("down")).toEqual(["m_c00000001"]);
+    expect(await conversationIds("dropped")).toEqual(["m_d00000001"]);
+    expect(await conversationIds("flagged")).toEqual(["m_d00000001"]);
+    expect(await conversationIds("all")).toHaveLength(4);
   });
 
   it("reports usage per day and model, and health", async () => {
@@ -349,24 +374,17 @@ describe("admin assistant API", () => {
       usd: 0.01,
     });
     // The split by feature: per day and feature over its models, inside the period only.
-    const dayBefore = (days: number) => utcDay(new Date(Date.now() - days * 24 * 60 * 60 * 1000));
-    const split = (day: string, feature: string, model: string, usd: number) => ({
-      day,
-      feature,
-      model,
-      requests: 1,
-      usd,
-    });
     await getDb()
       .insert(aiUsageFeatures)
       .values([
-        split(utcDay(), "eval", "gemini-3.5-flash-lite", 0.25),
-        split(utcDay(), "eval", "gemini-3.7-flash", 0.5),
-        split(utcDay(), "terminal", "gemini-3.5-flash-lite", 0.125),
-        split(dayBefore(1), "terminal", "gemini-3.5-flash-lite", 0.0625),
-        split(dayBefore(10), "copilot", "gemini-3.5-flash-lite", 1),
+        featureSplit(utcDay(), "eval", "gemini-3.5-flash-lite", 0.25),
+        featureSplit(utcDay(), "eval", "gemini-3.7-flash", 0.5),
+        featureSplit(utcDay(), "terminal", "gemini-3.5-flash-lite", 0.125),
+        featureSplit(dayBefore(1), "terminal", "gemini-3.5-flash-lite", 0.0625),
+        featureSplit(dayBefore(10), "copilot", "gemini-3.5-flash-lite", 1),
       ]);
-    const usage = (await (await admin.get("/admin/assistant/usage?days=7")).json()) as {
+    const usageRes = await admin.get("/admin/assistant/usage?days=7");
+    const usage = (await usageRes.json()) as {
       models: { model: string; cachedInputTokens: number }[];
       features: { day: string; feature: string; requests: number; usd: number }[];
     };
@@ -379,7 +397,8 @@ describe("admin assistant API", () => {
       { day: utcDay(), feature: "terminal", requests: 1, usd: 0.125 },
     ]);
 
-    const health = (await (await admin.get("/admin/assistant/health")).json()) as {
+    const healthRes = await admin.get("/admin/assistant/health");
+    const health = (await healthRes.json()) as {
       state: { state: string };
       models: { freeOnly: boolean; excluded: string[] };
       corpus: {
@@ -413,16 +432,21 @@ describe("admin assistant API", () => {
 
   it("asks Gemini to count each language's prefix, and fails only when neither count came", async () => {
     const counts = { en: 111 as number | null, de: 222 as number | null };
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
-      const text = (JSON.parse(String(init?.body)) as { contents: { parts: { text: string }[] }[] })
-        .contents[0]!.parts[0]!.text;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((_url, init) => {
+      if (typeof init?.body !== "string") {
+        throw new TypeError("Expected JSON string request body");
+      }
+      const text = (JSON.parse(init.body) as { contents: { parts: { text: string }[] }[] })
+        .contents[0].parts[0].text;
       // The German core opens with the German profile.
       const count = text.includes("# Portfolio documents\n\n---\nid: profile@de\n")
         ? counts.de
         : counts.en;
-      return count === null
-        ? new Response("{}", { status: 500 })
-        : Response.json({ totalTokens: count });
+      return Promise.resolve(
+        count === null
+          ? new Response("{}", { status: 500 })
+          : Response.json({ totalTokens: count }),
+      );
     });
     try {
       const corpus = fixtureCorpus(config);
@@ -448,7 +472,8 @@ describe("admin assistant API", () => {
       });
 
       counts.en = null;
-      expect((await admin.post("/admin/assistant/corpus/count", {})).status).toBe(502);
+      const noneReturned = await admin.post("/admin/assistant/corpus/count", {});
+      expect(noneReturned.status).toBe(502);
     } finally {
       fetchSpy.mockRestore();
     }
@@ -472,7 +497,7 @@ describe("admin assistant API", () => {
           ...base,
           id: "m_s00000001",
           model: "gemini-3.5-flash-lite",
-          tokens: { input: 1_000, cached: 200, output: 10, thoughts: 0 },
+          tokens: { input: 1000, cached: 200, output: 10, thoughts: 0 },
           droppedCitations: ["project:nebula@en"],
           checks: { v: 1, flags: ["invented-citation", "uncited"] },
         },
@@ -480,7 +505,7 @@ describe("admin assistant API", () => {
           ...base,
           id: "m_s00000002",
           model: "gemini-3.5-flash-lite",
-          tokens: { input: 3_000, cached: 600, output: 10, thoughts: 0 },
+          tokens: { input: 3000, cached: 600, output: 10, thoughts: 0 },
           checks: { v: 1, flags: ["uncited"] },
         },
         // A fallback's tokens are not the primary model's cache.
@@ -488,7 +513,7 @@ describe("admin assistant API", () => {
           ...base,
           id: "m_s00000003",
           model: "nvidia/nemotron-3-super-120b-a12b:free",
-          tokens: { input: 5_000, cached: 5_000, output: 10, thoughts: 0 },
+          tokens: { input: 5000, cached: 5000, output: 10, thoughts: 0 },
         },
       ]);
     await getDb()
@@ -498,7 +523,8 @@ describe("admin assistant API", () => {
         { day: utcDay(), kind: "honeypot", count: 1 },
       ]);
 
-    const usage = (await (await admin.get("/admin/assistant/usage?days=7")).json()) as {
+    const usageRes = await admin.get("/admin/assistant/usage?days=7");
+    const usage = (await usageRes.json()) as {
       primaryModel: string;
       answers: Record<string, unknown>[];
       guardEvents: { kind: string; count: number }[];
@@ -511,7 +537,7 @@ describe("admin assistant API", () => {
         answers: 3,
         withDropped: 1,
         flagged: 2,
-        primaryInput: 4_000,
+        primaryInput: 4000,
         primaryCached: 800,
       }),
     ]);
@@ -536,21 +562,20 @@ describe("admin assistant API", () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ text: "<p>Hallo <strong>Welt</strong></p>" });
-    expect(JSON.stringify(models.copilot.calls[0]!.prompt)).toContain("keep every tag");
+    expect(JSON.stringify(models.copilot.calls[0].prompt)).toContain("keep every tag");
 
     const [usage] = await getDb().select().from(aiUsage);
     expect(usage).toMatchObject({ requests: 1, inputTokens: 50 });
 
     // A draft over its limit is never cut (plan phase 28): it comes back whole, the limit named.
     models.copilot = generating(["A".repeat(400)]);
-    const seo = (await (
-      await admin.post("/admin/ai/copilot", {
-        task: "seo",
-        text: "Long case study",
-        locale: "en",
-        maxLength: 155,
-      })
-    ).json()) as { text: string; needsReview: string[] };
+    const seoRes = await admin.post("/admin/ai/copilot", {
+      task: "seo",
+      text: "Long case study",
+      locale: "en",
+      maxLength: 155,
+    });
+    const seo = (await seoRes.json()) as { text: string; needsReview: string[] };
     expect(seo.text).toBe("A".repeat(400));
     expect(seo.needsReview).toEqual(["245 characters over the limit of 155"]);
   });
@@ -563,7 +588,8 @@ describe("admin assistant API", () => {
     );
     const upload = new FormData();
     upload.set("file", new File([new Uint8Array(png)], "pipeline.png", { type: "image/png" }));
-    const { media } = (await (await admin.post("/admin/media", upload)).json()) as {
+    const mediaRes = await admin.post("/admin/media", upload);
+    const { media } = (await mediaRes.json()) as {
       media: { id: string };
     };
 
@@ -576,7 +602,7 @@ describe("admin assistant API", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ text: "Diagramm der Suchpipeline." });
 
-    const prompt = JSON.stringify(models.copilot.calls[0]!.prompt);
+    const prompt = JSON.stringify(models.copilot.calls[0].prompt);
     expect(prompt).toContain("German");
     expect(prompt).toContain('"mediaType":"image/png"');
     expect(prompt).toContain("pipeline.png");
@@ -597,7 +623,8 @@ describe("admin assistant API", () => {
     );
     const upload = new FormData();
     upload.set("file", new File([new Uint8Array(png)], "pipeline.png", { type: "image/png" }));
-    const { media } = (await (await admin.post("/admin/media", upload)).json()) as {
+    const mediaRes = await admin.post("/admin/media", upload);
+    const { media } = (await mediaRes.json()) as {
       media: { id: string };
     };
 
@@ -614,11 +641,12 @@ describe("admin assistant API", () => {
       text: "OCR → LLM: page text\nLLM → review queue: low-confidence fields",
     });
 
-    const prompt = JSON.stringify(models.copilot.calls[0]!.prompt);
+    const prompt = JSON.stringify(models.copilot.calls[0].prompt);
     expect(prompt).toContain('"mediaType":"image/png"');
     expect(prompt).toContain("A → B");
     // Nothing is stored until the admin saves it.
-    const listed = (await (await admin.get("/admin/media")).json()) as {
+    const listedRes = await admin.get("/admin/media");
+    const listed = (await listedRes.json()) as {
       media: { id: string; descriptionEn: string | null }[];
     };
     expect(listed.media.find((m) => m.id === media.id)?.descriptionEn).toBeNull();
@@ -662,7 +690,7 @@ describe("admin assistant API", () => {
       analysed: 1,
       topics: [{ title: "Notice period", unanswered: true }],
     });
-    const prompt = JSON.stringify(models.insight.calls[0]!.prompt);
+    const prompt = JSON.stringify(models.insight.calls[0].prompt);
     expect(prompt).toContain("[not answered]");
     // Each question fenced as the visitor's words, with the order not to follow them (phase 15).
     expect(prompt).toContain(
@@ -717,7 +745,7 @@ describe("admin assistant API", () => {
     models.insight = generating([JSON.stringify({ topics: [] })]);
     const res = await admin.post("/admin/assistant/insights");
     expect(((await res.json()) as { analysed: number }).analysed).toBe(1);
-    const prompt = JSON.stringify(models.insight.calls[0]!.prompt);
+    const prompt = JSON.stringify(models.insight.calls[0].prompt);
     expect(prompt).toContain(
       '<visitor locale=\\"en\\">Embedded C firmware</visitor> [not answered]',
     );

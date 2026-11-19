@@ -28,7 +28,9 @@ export function serializeJsonLd(data: object): string {
  */
 export function applyHead(document: Document, spec: HeadSpec): void {
   const head = document.head;
-  if (!head) return;
+  if (!head) {
+    return;
+  }
 
   // Also the static canonical `index.html` used to ship.
   for (const node of Array.from(head.querySelectorAll('[data-seo], link[rel="canonical"]'))) {

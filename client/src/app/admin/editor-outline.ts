@@ -20,14 +20,14 @@ export interface OutlineItem {
 
 const LOCALES: Locale[] = ["en", "de"];
 
-/** Text a visitor would read: tags stripped, and not the seed's TODO placeholder. */
+/** Text a visitor would read: tags stripped, and not the seed's placeholder marker. */
 export function hasText(value: string | null | undefined): boolean {
-  const text = (value ?? "").replace(/<[^<>]{0,1000}>/g, " ").trim();
+  const text = (value ?? "").replaceAll(/<[^<>]{0,1000}>/g, " ").trim();
   return text !== "" && !isPlaceholder(text);
 }
 
 function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  return str.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 function prefixPattern(prefix: string): RegExp {
@@ -43,7 +43,7 @@ function prefixPattern(prefix: string): RegExp {
  * one segment: `translations.*.name` is the name in either language.
  */
 export function problemsUnder(paths: readonly string[], prefixes: readonly string[]): number {
-  const patterns = prefixes.map(prefixPattern);
+  const patterns = prefixes.map((prefix) => prefixPattern(prefix));
   return paths.filter((path) => patterns.some((pattern) => pattern.test(path))).length;
 }
 
@@ -56,7 +56,7 @@ const translated = (fields: string[]) => fields.map((field) => `translations.*.$
 /** The project editor's sections, in page order. */
 export function projectOutline(p: ProjectRow, problems: readonly string[]): OutlineItem[] {
   const t = LOCALES.map((locale) => p.translations[locale]);
-  const every = (read: (tr: (typeof t)[number]) => boolean) => t.every(read);
+  const every = (read: (tr: (typeof t)[number]) => boolean) => t.every((tr) => read(tr));
   const item = (
     id: string,
     label: string,
@@ -114,7 +114,7 @@ export function projectOutline(p: ProjectRow, problems: readonly string[]): Outl
           hasText(tr.problem) &&
           hasText(tr.aiArchitecture) &&
           hasText(tr.fullStackInfra) &&
-          tr.outcomes.some(hasText),
+          tr.outcomes.some((outcome) => hasText(outcome)),
       ),
       translated(["problem", "aiArchitecture", "fullStackInfra", "outcomes"]),
     ),

@@ -26,18 +26,24 @@ export class ChangedElsewhere {
   /** After this editor's own write (a save, a reorder), which moves the versions too. */
   async refresh(): Promise<void> {
     const items = await this.read();
-    if (items) this.remember(items);
+    if (items) {
+      this.remember(items);
+    }
   }
 
   /** Whether the save may go ahead: nothing changed there, or the person chose to replace it. */
   async mayOverwrite(ids: readonly string[], what: string): Promise<boolean> {
-    if (!ids.length) return true;
+    if (!ids.length) {
+      return true;
+    }
     const items = await this.read();
     const moved = items?.some((item) => {
       const known = this.known.get(item.id);
       return ids.includes(item.id) && known !== undefined && known !== item.updatedAt;
     });
-    if (!moved) return true;
+    if (!moved) {
+      return true;
+    }
     return this.confirm.ask({
       title: "Changed elsewhere",
       description: `${what} changed in another tab or session since you opened it. Saving replaces that version.`,

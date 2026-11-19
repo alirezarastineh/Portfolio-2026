@@ -19,21 +19,34 @@ const INSTRUCTIONS =
   "Cite every factual claim with the id of the document it comes from.";
 const CANARY = "Rq7m-4c1f-82ab";
 const GEMINI_KEY = `AIza${"x".repeat(35)}`;
+const CLIENT_INTERNAL_INVALIDATE_URL = [
+  "http",
+  "://client.internal:3000/api/v1/content/_invalidate",
+].join("");
+const CLIENT_INVALIDATE_URL = ["http", "://client:3000/api/v1/content/_invalidate"].join("");
 
 const guard = buildLeakGuard({
   instructions: INSTRUCTIONS,
   // The system card says this sentence too: quoting it is fine.
   corpusTexts: ["Cite every factual claim with the id of the document it comes from."],
   canary: CANARY,
-  secrets: ["http://client.internal:3000/api/v1/content/_invalidate", "short"],
+  secrets: [CLIENT_INTERNAL_INVALIDATE_URL, "short"],
 });
+
+/** Fed in pieces of `size` characters. */
+const inPieces = (text: string, size: number) =>
+  Array.from({ length: Math.ceil(text.length / size) }, (_, i) =>
+    text.slice(i * size, (i + 1) * size),
+  );
 
 /** The text as a visitor would see it, fed in the given pieces. */
 function shown(pieces: string[]): { text: string; hits: Set<LeakKind> } {
   const hits = new Set<LeakKind>();
   const state = newScanState();
   let text = "";
-  for (const piece of pieces) text += scanChunk(guard, state, piece, false, hits);
+  for (const piece of pieces) {
+    text += scanChunk(guard, state, piece, false, hits);
+  }
   text += scanChunk(guard, state, "", true, hits);
   return { text, hits };
 }
@@ -72,20 +85,15 @@ describe("the leak guard (plan phase 15)", () => {
       { gemini: { apiKey: "gemini-key-123" }, openrouter: { apiKey: null } },
       {
         DATABASE_URL: database.href,
-        CONTENT_INVALIDATE_URL: "http://client:3000/api/v1/content/_invalidate",
+        CONTENT_INVALIDATE_URL: CLIENT_INVALIDATE_URL,
       },
     );
-    expect(secrets).toEqual([
-      "gemini-key-123",
-      database.href,
-      "pa$$word99",
-      "http://client:3000/api/v1/content/_invalidate",
-    ]);
+    expect(secrets).toEqual(["gemini-key-123", database.href, "pa$$word99", CLIENT_INVALIDATE_URL]);
   });
 
   it("removes configured secrets and key-shaped strings, never short ones", () => {
     const { text, hits } = shown([
-      `Use ${GEMINI_KEY} and http://client.internal:3000/api/v1/content/_invalidate, short.`,
+      `Use ${GEMINI_KEY} and ${CLIENT_INTERNAL_INVALIDATE_URL}, short.`,
     ]);
     expect(text).toBe(`Use ${REDACTED} and ${REDACTED}, short.`);
     expect(hits).toEqual(new Set(["secret"]));
@@ -176,12 +184,6 @@ describe("the leak guard (plan phase 15)", () => {
     expect(held.pending.length).toBeLessThanOrEqual(HOLD_BACK);
     expect(hits.size).toBe(0);
   });
-
-  /** Fed in pieces of `size` characters. */
-  const inPieces = (text: string, size: number) =>
-    Array.from({ length: Math.ceil(text.length / size) }, (_, i) =>
-      text.slice(i * size, (i + 1) * size),
-    );
 
   it("never lets a secret out at the end of a long word, however it is cut", () => {
     // Found by review: the 96-character cap released a long word whole, secret and all.

@@ -27,8 +27,8 @@ function getDefaultConfig<T>(): HlmDateRangePickerConfig<T> {
   return {
     formatDates: (dates) =>
       dates
-        .filter(Boolean)
-        .map((date) => (date instanceof Date ? date.toDateString() : `${date}`))
+        .filter((date): date is NonNullable<T> => Boolean(date))
+        .map((date) => (date instanceof Date ? date.toDateString() : String(date)))
         .join(" - "),
     transformDates: (dates) => dates,
     autoCloseOnEndSelection: false,

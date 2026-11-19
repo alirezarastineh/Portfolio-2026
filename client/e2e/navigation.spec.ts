@@ -1,11 +1,13 @@
-import { expect, interactive, type PageProblems, test } from "./fixtures";
+import { expect, interactive, type PageProblems, requireBox, test } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /** Counts full page loads, so a test can prove navigation stayed client-side. */
 function countDocumentLoads(page: Page): () => number {
   let loads = 0;
   page.on("request", (request) => {
-    if (request.resourceType() === "document") loads += 1;
+    if (request.resourceType() === "document") {
+      loads += 1;
+    }
   });
   return () => loads;
 }
@@ -44,7 +46,9 @@ test.describe("language switch", () => {
     await interactive(page);
     const loads = countDocumentLoads(page);
 
-    if (isMobile) await page.getByRole("button", { name: "Toggle navigation" }).click();
+    if (isMobile) {
+      await page.getByRole("button", { name: "Toggle navigation" }).click();
+    }
     await page.locator('header a[hreflang="de"]:visible').click();
 
     await expect(page).toHaveURL(/\/de\/legal\/privacy$/);
@@ -70,7 +74,9 @@ test.describe("language switch", () => {
     // The cookie is written by the click handler, so wait for hydration: a
     // click before it follows the plain link without remembering anything.
     await interactive(page);
-    if (isMobile) await page.getByRole("button", { name: "Toggle navigation" }).click();
+    if (isMobile) {
+      await page.getByRole("button", { name: "Toggle navigation" }).click();
+    }
     await page.locator('header a[hreflang="de"]:visible').click();
     await expect(page).toHaveURL(/\/de$/);
 
@@ -87,7 +93,9 @@ test.describe("site navigation", () => {
     await page.goto("/en/legal/imprint");
     await interactive(page);
 
-    if (isMobile) await page.getByRole("button", { name: "Toggle navigation" }).click();
+    if (isMobile) {
+      await page.getByRole("button", { name: "Toggle navigation" }).click();
+    }
     await page.locator("header nav a:visible", { hasText: "Work" }).click();
 
     await expect(page).toHaveURL(/\/en#projects$/);
@@ -135,7 +143,9 @@ test.describe("site navigation", () => {
 
   test("the mobile menu opens and closes", async ({ page, isMobile }) => {
     // The mobile navigation drawer and hamburger toggle are only rendered on mobile viewports.
-    if (!isMobile) return;
+    if (!isMobile) {
+      return;
+    }
     await page.goto("/en");
     const toggle = page.getByRole("button", { name: "Toggle navigation" });
 
@@ -180,7 +190,9 @@ test.describe("site navigation", () => {
   });
 
   test("the mobile menu's Ask or search hands over to the palette", async ({ page, isMobile }) => {
-    if (!isMobile) return;
+    if (!isMobile) {
+      return;
+    }
     await page.goto("/en/writing");
     await interactive(page);
     const toggle = page.getByRole("button", { name: "Toggle navigation" });
@@ -202,7 +214,9 @@ test.describe("site navigation", () => {
     page,
     isMobile,
   }) => {
-    if (!isMobile) return;
+    if (!isMobile) {
+      return;
+    }
     await page.goto("/en");
     await interactive(page);
     const toggle = page.getByRole("button", { name: "Toggle navigation" });
@@ -234,11 +248,15 @@ test.describe("site navigation", () => {
     page,
     isMobile,
   }) => {
-    if (!isMobile) return;
+    if (!isMobile) {
+      return;
+    }
     await page.goto("/en");
     await interactive(page);
-    for (const control of await page.locator(".site-header-row :is(a, button):visible").all()) {
-      expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const controls = await page.locator(".site-header-row :is(a, button):visible").all();
+    const boxes = await Promise.all(controls.map((control) => requireBox(control)));
+    for (const box of boxes) {
+      expect(box.height).toBeGreaterThanOrEqual(44);
     }
   });
 
@@ -246,7 +264,9 @@ test.describe("site navigation", () => {
     page,
     isMobile,
   }) => {
-    if (!isMobile) return;
+    if (!isMobile) {
+      return;
+    }
     await page.goto("/en/writing");
     await interactive(page);
     await page.getByRole("button", { name: "Toggle navigation" }).click();
@@ -264,7 +284,9 @@ test.describe("site navigation", () => {
   });
 
   test("the ask button steps aside while the menu is open", async ({ page, isMobile }) => {
-    if (!isMobile) return;
+    if (!isMobile) {
+      return;
+    }
     await page.goto("/en/work/project-one");
     await interactive(page);
     // A pill with its word on phones too; it sat on the menu's theme switch.
@@ -285,7 +307,9 @@ test.describe("site navigation", () => {
   });
 
   test("widening the window to the desktop layout closes the menu", async ({ page, isMobile }) => {
-    if (!isMobile) return;
+    if (!isMobile) {
+      return;
+    }
     await page.goto("/en");
     await interactive(page);
     await page.getByRole("button", { name: "Toggle navigation" }).click();

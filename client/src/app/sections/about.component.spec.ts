@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { signal, type Signal } from "@angular/core";
-import { TestBed } from "@angular/core/testing";
+import { type ComponentFixture, TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -28,6 +28,10 @@ class StubContentStore {
   }
 }
 
+function rootOf(fixture: ComponentFixture<AboutSectionComponent>): HTMLElement {
+  return fixture.nativeElement as HTMLElement;
+}
+
 describe("AboutSectionComponent", () => {
   beforeEach(() => {
     TestBed.resetTestingModule();
@@ -46,7 +50,7 @@ describe("AboutSectionComponent", () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const english = fixture.nativeElement.textContent as string;
+    const english = rootOf(fixture).textContent ?? "";
     expect(english).toContain("Building AI applications");
     expect(english).not.toContain("KI-Anwendungen");
 
@@ -54,7 +58,7 @@ describe("AboutSectionComponent", () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const german = fixture.nativeElement.textContent as string;
+    const german = rootOf(fixture).textContent ?? "";
     expect(german).toContain("KI-Anwendungen");
     expect(german).not.toContain("Building AI applications");
   });
@@ -66,17 +70,16 @@ describe("AboutSectionComponent", () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const heading = () => fixture.nativeElement.querySelector("h2") as HTMLElement;
-    expect(heading().textContent?.trim()).toBe("About");
-    expect(fixture.nativeElement.querySelector("section").getAttribute("aria-labelledby")).toBe(
-      heading().id,
-    );
+    const root = rootOf(fixture);
+    const heading = () => root.querySelector("h2");
+    expect(heading()?.textContent?.trim()).toBe("About");
+    expect(root.querySelector("section")?.getAttribute("aria-labelledby")).toBe(heading()?.id);
 
     language.activate("de");
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(heading().textContent?.trim()).toBe("Über mich");
+    expect(heading()?.textContent?.trim()).toBe("Über mich");
   });
 
   it("leaves out what the content lacks: without a photo, no frame and no initials", async () => {
@@ -84,7 +87,7 @@ describe("AboutSectionComponent", () => {
     const fixture = TestBed.createComponent(AboutSectionComponent);
     fixture.detectChanges();
     await fixture.whenStable();
-    const root: HTMLElement = fixture.nativeElement;
+    const root = rootOf(fixture);
 
     expect(root.querySelector("img")).toBeNull();
     expect(root.textContent).not.toContain("AR");
@@ -116,7 +119,10 @@ describe("AboutSectionComponent", () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const portrait = fixture.nativeElement.querySelector("img") as HTMLImageElement;
+    const portrait = rootOf(fixture).querySelector("img");
+    if (!portrait) {
+      throw new Error("Expected portrait img");
+    }
     expect(portrait.alt).toBe("Alireza Rastineh");
     expect(portrait.className).toContain("grayscale");
     expect(portrait.className).toContain("aspect-[4/5]");
@@ -127,7 +133,13 @@ describe("AboutSectionComponent", () => {
     const language = TestBed.inject(LanguageService);
     fixture.detectChanges();
     await fixture.whenStable();
-    const figure = () => fixture.nativeElement.querySelector("figure") as HTMLElement;
+    const figure = () => {
+      const el = rootOf(fixture).querySelector("figure");
+      if (!el) {
+        throw new Error("Expected figure element");
+      }
+      return el;
+    };
     const steps = () =>
       [...figure().querySelectorAll("li > span:first-child")].map((s) => s.textContent);
 
@@ -149,7 +161,7 @@ describe("AboutSectionComponent", () => {
     const fixture = TestBed.createComponent(AboutSectionComponent);
     fixture.detectChanges();
     await fixture.whenStable();
-    const root: HTMLElement = fixture.nativeElement;
+    const root = rootOf(fixture);
 
     expect(root.querySelector("#about > div > div > p")?.textContent).toContain(
       "Building AI applications in a Jupyter notebook is easy",

@@ -23,7 +23,7 @@ export interface BreadcrumbItem {
   template: `
     <nav [attr.aria-label]="label()">
       <ol
-        class="m-0 flex list-none flex-wrap items-center gap-x-2 gap-y-1 p-0 text-small [overflow-wrap:anywhere]"
+        class="m-0 flex list-none flex-wrap items-center gap-x-2 gap-y-1 p-0 text-small wrap-anywhere"
       >
         @for (item of items(); track $index; let last = $last) {
           <li class="flex items-center gap-2">

@@ -23,8 +23,11 @@ function loadApi(): Promise<TurnstileApi> {
     script.async = true;
     script.onload = () => {
       const loaded = (globalThis as { turnstile?: TurnstileApi }).turnstile;
-      if (loaded) resolve(loaded);
-      else reject(new Error("turnstile did not load"));
+      if (loaded) {
+        resolve(loaded);
+      } else {
+        reject(new Error("turnstile did not load"));
+      }
     };
     script.onerror = () => reject(new Error("turnstile did not load"));
     document.head.appendChild(script);
@@ -41,7 +44,9 @@ function loadApi(): Promise<TurnstileApi> {
  * shown in `host` (or a small panel at the bottom of the screen).
  */
 export async function turnstileToken(locale: string, host?: HTMLElement): Promise<string> {
-  if (!TURNSTILE_SITE_KEY) return "";
+  if (!TURNSTILE_SITE_KEY) {
+    return "";
+  }
   const turnstile = await loadApi();
 
   const box = document.createElement("div");
@@ -55,7 +60,9 @@ export async function turnstileToken(locale: string, host?: HTMLElement): Promis
   return new Promise<string>((resolve, reject) => {
     let id = "";
     const done = () => {
-      if (id) turnstile.remove(id);
+      if (id) {
+        turnstile.remove(id);
+      }
       box.remove();
       host?.removeAttribute("data-asking");
     };

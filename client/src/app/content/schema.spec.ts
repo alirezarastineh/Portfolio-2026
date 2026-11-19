@@ -33,7 +33,9 @@ describe("appContentSchema", () => {
         expect(result.error?.issues ?? [], key).toEqual([]);
       }
       const core = appContentSchema.parse(loadFallback(locale));
-      for (const legal of core.legal) expect(docs, legal.doc).toHaveProperty(`legal:${legal.doc}`);
+      for (const legal of core.legal) {
+        expect(docs, legal.doc).toHaveProperty(`legal:${legal.doc}`);
+      }
     });
   }
 

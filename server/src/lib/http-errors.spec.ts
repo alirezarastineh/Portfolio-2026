@@ -54,7 +54,7 @@ describe("onApiError", () => {
   });
 
   it("answers anything else with a JSON 500 and logs the detail", async () => {
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const res = await appThrowing(new Error("secret detail")).request("/boom");
     expect(res.status).toBe(500);
     const body = await res.text();

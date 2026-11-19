@@ -12,7 +12,7 @@ import {
   output,
   signal,
 } from "@angular/core";
-import { FormBuilder, ReactiveFormsModule, Validators } from "@angular/forms";
+import { FormBuilder, ReactiveFormsModule, type ValidatorFn, Validators } from "@angular/forms";
 import { BrnInputOtp, BrnInputOtpInput } from "@spartan-ng/brain/input-otp";
 import { HlmAlert, HlmAlertDescription } from "@spartan-ng/helm/alert";
 import { HlmButton } from "@spartan-ng/helm/button";
@@ -24,6 +24,9 @@ import { HlmSpinner } from "@spartan-ng/helm/spinner";
 import { AdminApiService, type AdminUser } from "../admin-api.service";
 
 export type SignInStep = "credentials" | "totp";
+
+const required: ValidatorFn = (control) => Validators.required(control);
+const emailValidator: ValidatorFn = (control) => Validators.email(control);
 
 const ERROR_COPY: Record<string, string> = {
   invalid_credentials: "Incorrect email or password.",
@@ -168,10 +171,10 @@ export class SignInFormComponent implements OnInit {
   readonly step = model<SignInStep>("credentials");
 
   /** The password was right, and a code is still wanted. */
-  readonly codeNeeded = output<void>();
+  readonly codeNeeded = output();
   readonly signedIn = output<AdminUser>();
   /** "Use a different account": back at the password step. */
-  readonly startedOver = output<void>();
+  readonly startedOver = output();
 
   /**
    * The TOTP step also accepts single-use recovery codes (`ABCDE-FGHJK`), which
@@ -185,12 +188,12 @@ export class SignInFormComponent implements OnInit {
   private gone = false;
 
   protected readonly credentials = this.fb.nonNullable.group({
-    email: ["", [Validators.required, Validators.email]],
-    password: ["", [Validators.required]],
+    email: ["", [required, emailValidator]],
+    password: ["", [required]],
   });
 
   protected readonly totp = this.fb.nonNullable.group({
-    code: ["", [Validators.required, Validators.minLength(6)]],
+    code: ["", [required, Validators.minLength(6)]],
   });
 
   constructor() {
@@ -198,7 +201,9 @@ export class SignInFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    if (this.email()) this.credentials.controls.email.setValue(this.email());
+    if (this.email()) {
+      this.credentials.controls.email.setValue(this.email());
+    }
   }
 
   protected showError(field: "email" | "password"): boolean {
@@ -208,7 +213,9 @@ export class SignInFormComponent implements OnInit {
 
   protected async submitCredentials(): Promise<void> {
     this.credentials.markAllAsTouched();
-    if (this.credentials.invalid || this.busy()) return;
+    if (this.credentials.invalid || this.busy()) {
+      return;
+    }
 
     this.busy.set(true);
     this.error.set("");
@@ -228,12 +235,16 @@ export class SignInFormComponent implements OnInit {
       return;
     }
 
-    if (result.data.user) this.signedIn.emit(result.data.user);
+    if (result.data.user) {
+      this.signedIn.emit(result.data.user);
+    }
   }
 
   protected async submitTotp(): Promise<void> {
     this.totp.markAllAsTouched();
-    if (this.totp.invalid || this.busy()) return;
+    if (this.totp.invalid || this.busy()) {
+      return;
+    }
 
     this.busy.set(true);
     this.error.set("");
@@ -268,7 +279,9 @@ export class SignInFormComponent implements OnInit {
     afterNextRender(
       {
         read: () => {
-          if (!this.gone) this.doc.getElementById(`${this.idPrefix()}email`)?.focus();
+          if (!this.gone) {
+            this.doc.getElementById(`${this.idPrefix()}email`)?.focus();
+          }
         },
       },
       { injector: this.injector },

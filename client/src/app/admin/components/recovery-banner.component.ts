@@ -55,7 +55,9 @@ export class RecoveryBannerComponent {
     const undos = this.recovery.back().map((one) => one.discard());
     this.recovery.back.set([]);
     toastDiscarded(() => {
-      for (const undo of undos) undo();
+      for (const undo of undos) {
+        undo();
+      }
     });
     this.focusTitle();
   }

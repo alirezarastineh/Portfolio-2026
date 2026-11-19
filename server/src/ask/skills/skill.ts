@@ -34,7 +34,7 @@ export const SKILL_IDS = [
 export type SkillId = (typeof SKILL_IDS)[number];
 
 /** How every skill calls its model: part of each version. */
-export const CALL = { maxRetries: 0, maxOutputTokens: 4_000, temperature: 0.2 } as const;
+export const CALL = { maxRetries: 0, maxOutputTokens: 4000, temperature: 0.2 } as const;
 
 export const LANGUAGE = { en: "English", de: "German" } as const;
 
@@ -164,7 +164,10 @@ const FINISH_PROBE = "  A draft [^atlas] , as written. ";
 export function skillVersion<I extends { task: SkillId }, P>(
   def: SkillDefinition<I, P>,
   call: Readonly<Record<keyof typeof CALL, number>> = CALL,
-  protocol: unknown = protocolFor({ explores: Boolean(def.explore), critic: Boolean(def.critic) }),
+  protocol: unknown = protocolFor({
+    explores: Boolean(def.explore),
+    critic: def.critic !== undefined,
+  }),
 ): string {
   const body = {
     id: def.id,
@@ -185,7 +188,6 @@ export function skillVersion<I extends { task: SkillId }, P>(
 }
 
 export function defineSkill<I extends { task: SkillId }, P = I>(def: SkillDefinition<I, P>): Skill {
-  const prepare = def.prepare ?? ((input: I) => input as unknown as P);
   return {
     id: def.id,
     description: def.description,
@@ -194,12 +196,15 @@ export function defineSkill<I extends { task: SkillId }, P = I>(def: SkillDefini
     version: skillVersion(def),
     gates: def.gates.map((gate) => gate.id),
     leads: def.explore?.leads.map((lead) => lead.id) ?? [],
-    critic: Boolean(def.critic),
+    critic: def.critic !== undefined,
     template: def.build(def.samples[0]).instructions,
     accepts: def.models === "vision" ? (entry) => entry.provider === "gemini" : () => true,
     async request(input, ctx) {
-      const prepared = await prepare(def.input.parse(input), ctx);
-      if (prepared instanceof SkillAnswer) return prepared;
+      const parsed = def.input.parse(input);
+      const prepared = def.prepare ? await def.prepare(parsed, ctx) : (parsed as unknown as P);
+      if (prepared instanceof SkillAnswer) {
+        return prepared;
+      }
       return {
         ...def.build(prepared),
         check: (text) =>

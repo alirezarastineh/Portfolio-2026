@@ -19,7 +19,6 @@ import { LanguageService } from "../services/language.service";
 import { answersByQuestion } from "./answers";
 import { AskLauncherService } from "./ask-launcher.service";
 import { AskStore } from "./ask.store";
-import type { AskMessage } from "./ask-types";
 import { handoffSummary } from "./handoff-offer";
 import { linkPolicyFor } from "./link-policy";
 import { markOf, matchData, stepLine, type MatchKind, type MatchMark } from "./match";
@@ -267,7 +266,9 @@ export class MatchPanelComponent {
   protected readonly step = computed(() => {
     const entry = this.entry();
     const answering = this.store.entries().findLast((e) => e.kind === "ask");
-    if (!entry || !this.busy() || answering?.id !== entry.id) return null;
+    if (!entry || !this.busy() || answering?.id !== entry.id) {
+      return null;
+    }
     const copy = this.store.copy().match;
     const progress = this.store.matchStep();
     return progress?.entryId === entry.id ? stepLine(progress.step, copy.steps) : copy.started;
@@ -287,7 +288,9 @@ export class MatchPanelComponent {
     const entry = this.entry();
     const message =
       entry?.kind === "ask" ? answersByQuestion(this.store.chat.messages).get(entry.userId) : null;
-    if (!message) return null;
+    if (!message) {
+      return null;
+    }
     const text = message.parts
       .filter((p) => p.type === "text")
       .map((p) => p.text)
@@ -295,7 +298,7 @@ export class MatchPanelComponent {
     const locale = this.lang.lang();
     const day = new Date(message.metadata?.createdAt ?? Date.now());
     return {
-      message: message as AskMessage,
+      message,
       data: matchData(message, this.linkPolicy()),
       // The counts and the summary, or a stopped match's line; what they cite, the table lists.
       lead: plainText(text.split("\n\n")[0] ?? ""),
@@ -315,15 +318,21 @@ export class MatchPanelComponent {
     let seen = this.store.announcement();
     effect(() => {
       const text = this.store.announcement();
-      if (text === seen) return;
+      if (text === seen) {
+        return;
+      }
       seen = text;
-      if (!untracked(this.launcher.sheetOpen)) this.said.set(text);
+      if (!untracked(this.launcher.sheetOpen)) {
+        this.said.set(text);
+      }
     });
   }
 
   /** One request at a time, as the terminal's prompt sends. */
   protected async send(brief: string): Promise<void> {
-    if (this.busy()) return;
+    if (this.busy()) {
+      return;
+    }
     this.refused.set(null);
     await this.store.sendMatch(this.kind(), brief, "page");
     const last = this.store.entries().at(-1);
@@ -335,7 +344,9 @@ export class MatchPanelComponent {
   /** The site's own pages through the router; a file (the CV) and a modified click as links do. */
   protected follow(event: MouseEvent, url: string): void {
     const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
-    if (modified || event.button !== 0 || url.startsWith("/media/")) return;
+    if (modified || event.button !== 0 || url.startsWith("/media/")) {
+      return;
+    }
     event.preventDefault();
     void this.router.navigateByUrl(url);
   }

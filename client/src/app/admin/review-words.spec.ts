@@ -80,7 +80,18 @@ const groups = wordChanges([{ ...side, rows }]);
 const said = (page: string) =>
   groups
     .find((group) => group.page === page)
-    ?.changes.map((c) => `${c.named ? c.what : `[${c.what}]`} ${c.kind}`);
+    ?.changes.map((c) => {
+      const label = c.named ? c.what : `[${c.what}]`;
+      return `${label} ${c.kind}`;
+    });
+const openOf = (path: string) => nameChange(path, side).open;
+const excerptAt = (path: string): string | null => {
+  const row = rows.find((entry) => entry.path === path);
+  if (!row) {
+    throw new Error(`Missing row ${path}`);
+  }
+  return excerptOf(row);
+};
 
 describe("the review in words", () => {
   it("groups every change by the page that edits it, in the rail's order, the unknown last", () => {
@@ -136,25 +147,24 @@ describe("the review in words", () => {
   });
 
   it("opens each where it is changed: Words' row, the entry, the document, the editor", () => {
-    const open = (path: string) => nameChange(path, side).open;
-    expect(open("ui.contact.submit")).toEqual({
+    expect(openOf("ui.contact.submit")).toEqual({
       path: "/admin/words",
       query: { row: "contact.submit" },
     });
-    expect(open("ui.about.bio")).toEqual({ path: "/admin/about" });
-    expect(open("projects[atlas].hook")).toEqual({ path: "/admin/projects/atlas" });
-    expect(open("projects[old]")).toEqual({ path: "/admin/projects" });
-    expect(open("projects (order)")).toEqual({ path: "/admin/projects" });
-    expect(open("projects[atlas].cover.alt")).toEqual({ path: "/admin/media" });
-    expect(open("experiences[e1].title")).toEqual({
+    expect(openOf("ui.about.bio")).toEqual({ path: "/admin/about" });
+    expect(openOf("projects[atlas].hook")).toEqual({ path: "/admin/projects/atlas" });
+    expect(openOf("projects[old]")).toEqual({ path: "/admin/projects" });
+    expect(openOf("projects (order)")).toEqual({ path: "/admin/projects" });
+    expect(openOf("projects[atlas].cover.alt")).toEqual({ path: "/admin/media" });
+    expect(openOf("experiences[e1].title")).toEqual({
       path: "/admin/experience",
       query: { edit: "e1" },
     });
-    expect(open("legal:privacy")).toEqual({ path: "/admin/legal", query: { doc: "privacy" } });
-    expect(open("legal:imprint")).toEqual({ path: "/admin/legal" });
-    expect(open("post:hello")).toEqual({ path: "/admin/writing/hello" });
-    expect(open("socials")).toEqual({ path: "/admin/hero" });
-    expect(open("extras.x")).toBeNull();
+    expect(openOf("legal:privacy")).toEqual({ path: "/admin/legal", query: { doc: "privacy" } });
+    expect(openOf("legal:imprint")).toEqual({ path: "/admin/legal" });
+    expect(openOf("post:hello")).toEqual({ path: "/admin/writing/hello" });
+    expect(openOf("socials")).toEqual({ path: "/admin/hero" });
+    expect(openOf("extras.x")).toBeNull();
   });
 
   it("keeps both languages of a field together, English first", () => {
@@ -162,29 +172,27 @@ describe("the review in words", () => {
     const both = wordChanges([
       { ...en, rows: changeRows(live, draft) },
       { ...side, rows: changeRows(live, draft) },
-    ]).find((group) => group.page === "About")!.changes;
-    expect(both.map((c) => `${c.what} ${c.locale}`)).toEqual(["Bio en", "Bio de"]);
+    ]).find((group) => group.page === "About")?.changes;
+    expect(both?.map((c) => `${c.what} ${c.locale}`)).toEqual(["Bio en", "Bio de"]);
   });
 });
 
 describe("the excerpt", () => {
-  const of = (path: string) => excerptOf(rows.find((row) => row.path === path)!);
-
   it("is the new text, plain: no tags, one space between words", () => {
-    expect(of("ui.about.bio")).toBe("Ich baue verlässliche Systeme.");
-    expect(of("ui.contact.submit")).toBe("Senden");
+    expect(excerptAt("ui.about.bio")).toBe("Ich baue verlässliche Systeme.");
+    expect(excerptAt("ui.contact.submit")).toBe("Senden");
   });
 
   it("is a page's body for a doc, a list's items, yes or no for a switch", () => {
-    expect(of("project:atlas")).toBe("Ziel Ein neuer Text.");
-    expect(of("projects[atlas].stack")).toBe("Go, Rust");
-    expect(of("projects[atlas].featured")).toBe("Yes");
+    expect(excerptAt("project:atlas")).toBe("Ziel Ein neuer Text.");
+    expect(excerptAt("projects[atlas].stack")).toBe("Go, Rust");
+    expect(excerptAt("projects[atlas].featured")).toBe("Yes");
   });
 
   it("is none for a picture, an order, a whole item or what was removed", () => {
-    expect(of("projects[atlas].cover")).toBeNull();
-    expect(of("projects (order)")).toBeNull();
-    expect(of("projects[nova]")).toBeNull();
-    expect(of("projects[old]")).toBeNull();
+    expect(excerptAt("projects[atlas].cover")).toBeNull();
+    expect(excerptAt("projects (order)")).toBeNull();
+    expect(excerptAt("projects[nova]")).toBeNull();
+    expect(excerptAt("projects[old]")).toBeNull();
   });
 });

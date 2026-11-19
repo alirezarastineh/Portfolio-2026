@@ -109,14 +109,17 @@ export class AdminPageHeaderComponent {
     // Stuck one pixel under the shell's top bar, the row is a pixel out of the area below
     // the bar: less than fully visible there is the signal. At rest, it is whole.
     afterNextRender(() => {
-      if (typeof IntersectionObserver === "undefined") return;
+      if (typeof IntersectionObserver === "undefined") {
+        return;
+      }
       // The bar is 3rem: in pixels at the reader's text size.
       const bar =
         3 * (Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16);
       const observer = new IntersectionObserver(
         ([entry]) => {
-          if (entry)
+          if (entry) {
             this.stuck.set(entry.intersectionRatio < 1 && entry.boundingClientRect.top < bar + 1);
+          }
         },
         { threshold: [1], rootMargin: `-${bar}px 0px 0px 0px` },
       );

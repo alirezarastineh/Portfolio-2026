@@ -101,10 +101,16 @@ function tokens(text: string): Token[] {
   for (const match of text.matchAll(/\S+/g)) {
     const raw = match[0];
     let lead = 0;
-    while (lead < raw.length && !WORDISH.test(raw[lead]!)) lead++;
+    while (lead < raw.length && !WORDISH.test(raw[lead])) {
+      lead++;
+    }
     let tail = raw.length;
-    while (tail > lead && !WORDISH.test(raw[tail - 1]!)) tail--;
-    if (tail === lead) continue;
+    while (tail > lead && !WORDISH.test(raw[tail - 1])) {
+      tail--;
+    }
+    if (tail === lead) {
+      continue;
+    }
     const start = match.index + lead;
     found.push({
       word: raw.slice(lead, tail).toLowerCase(),
@@ -143,17 +149,23 @@ export function buildLeakGuard(options: {
 }): LeakGuard {
   const exempt = new Set<string>();
   for (const text of [...options.corpusTexts, ...(options.quotable ?? [])]) {
-    for (const s of shinglesOf(text)) exempt.add(s);
+    for (const s of shinglesOf(text)) {
+      exempt.add(s);
+    }
   }
   const shingles = new Set([...shinglesOf(options.instructions)].filter((s) => !exempt.has(s)));
   const prefixes = new Set<string>();
   for (const shingle of shingles) {
     const parts = shingle.split(" ");
-    for (let n = 1; n < SHINGLE_WORDS; n++) prefixes.add(parts.slice(0, n).join(" "));
+    for (let n = 1; n < SHINGLE_WORDS; n++) {
+      prefixes.add(parts.slice(0, n).join(" "));
+    }
   }
   const literals: Literal[] = [{ text: options.canary, kind: "canary", anyCase: true }];
   for (const text of new Set(options.secrets)) {
-    if (text.length >= 8) literals.push({ text, kind: "secret", anyCase: false });
+    if (text.length >= 8) {
+      literals.push({ text, kind: "secret", anyCase: false });
+    }
   }
   literals.sort((a, b) => b.text.length - a.text.length);
   return { literals, shingles, prefixes };
@@ -170,11 +182,15 @@ export function deploySecrets(
   const secrets = [keys.gemini.apiKey, keys.openrouter.apiKey];
   for (const name of INTERNAL_URLS) {
     const url = env[name]?.trim();
-    if (!url) continue;
+    if (!url) {
+      continue;
+    }
     secrets.push(url);
     try {
       const { password } = new URL(url);
-      if (password) secrets.push(decodeURIComponent(password));
+      if (password) {
+        secrets.push(decodeURIComponent(password));
+      }
     } catch {
       // Not a URL: guarded as it is.
     }
@@ -217,7 +233,7 @@ interface Span {
 }
 
 function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  return text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 /**
@@ -251,10 +267,12 @@ function spansFromMarks(found: Token[], marked: boolean[], reported: boolean[]):
       continue;
     }
     let last = k;
-    while (last + 1 < found.length && marked[last + 1]) last++;
+    while (last + 1 < found.length && marked[last + 1]) {
+      last++;
+    }
     spans.push({
-      start: found[k]!.start,
-      end: found[last]!.end,
+      start: found[k].start,
+      end: found[last].end,
       kind: "instructions",
       echo: !reported.slice(k, last + 1).some(Boolean),
     });
@@ -276,14 +294,20 @@ function copiedSpans(
   const reported = Array.from({ length: found.length }, () => false);
   for (let j = 0; j < found.length; j++) {
     const end = history.length + j;
-    if (end + 1 < SHINGLE_WORDS) continue;
+    if (end + 1 < SHINGLE_WORDS) {
+      continue;
+    }
     const start = end + 1 - SHINGLE_WORDS;
     const run = all.slice(start, end + 1).join(" ");
-    if (!guard.shingles.has(run)) continue;
+    if (!guard.shingles.has(run)) {
+      continue;
+    }
     const own = !echo.shingles.has(run);
     for (let k = Math.max(0, start - history.length); k <= j; k++) {
       marked[k] = true;
-      if (own) reported[k] = true;
+      if (own) {
+        reported[k] = true;
+      }
     }
   }
   return spansFromMarks(found, marked, reported);
@@ -295,8 +319,11 @@ function merged(spans: Span[]): Span[] {
   const out: Span[] = [];
   for (const span of sorted) {
     const last = out.at(-1);
-    if (last && span.start <= last.end) last.end = Math.max(last.end, span.end);
-    else out.push({ ...span });
+    if (last && span.start <= last.end) {
+      last.end = Math.max(last.end, span.end);
+    } else {
+      out.push({ ...span });
+    }
   }
   return out;
 }
@@ -326,9 +353,13 @@ function exactTail(guard: LeakGuard, text: string): number {
   for (const key of KEYS) {
     from = Math.min(from, tailOf(text, key.prefix));
     const at = text.lastIndexOf(key.prefix);
-    if (at < 0) continue;
+    if (at < 0) {
+      continue;
+    }
     const body = text.slice(at + key.prefix.length);
-    if (body.length < key.length && key.body.test(body)) from = Math.min(from, at);
+    if (body.length < key.length && key.body.test(body)) {
+      from = Math.min(from, at);
+    }
   }
   return from;
 }
@@ -342,9 +373,11 @@ function copyTail(
 ): number {
   const all = [...history, ...complete.map((t) => t.word)];
   for (let s = Math.max(0, all.length - (SHINGLE_WORDS - 1)); s < all.length; s++) {
-    if (!guard.prefixes.has(all.slice(s).join(" "))) continue;
+    if (!guard.prefixes.has(all.slice(s).join(" "))) {
+      continue;
+    }
     const first = Math.max(0, s - history.length);
-    return first < complete.length ? complete[first]!.rawStart : end;
+    return first < complete.length ? complete[first].rawStart : end;
   }
   return end;
 }
@@ -362,12 +395,10 @@ function cutAt(
   spans: Span[],
   history: readonly string[],
 ): number {
-  const open = found.length > 0 && found.at(-1)!.rawEnd === raw.length;
-  const complete = open ? found.slice(0, -1) : found;
-  const soft = Math.min(
-    open ? found.at(-1)!.rawStart : raw.length,
-    copyTail(guard, complete, history, raw.length),
-  );
+  const last = found.at(-1);
+  const openStart = last?.rawEnd === raw.length ? last.rawStart : undefined;
+  const complete = openStart === undefined ? found : found.slice(0, -1);
+  const soft = Math.min(openStart ?? raw.length, copyTail(guard, complete, history, raw.length));
   let cut = Math.min(exactTail(guard, raw), Math.max(soft, raw.length - HOLD_BACK, 0));
   for (let moved = true; moved;) {
     moved = false;
@@ -409,11 +440,17 @@ export function scanChunk(
   const cut = final ? raw.length : cutAt(guard, raw, found, removals, state.history);
 
   // Counted once shown removed: a match still held back may yet come to nothing.
-  for (const span of spans) if (span.end <= cut && !span.echo) hits.add(span.kind);
+  for (const span of spans) {
+    if (span.end <= cut && !span.echo) {
+      hits.add(span.kind);
+    }
+  }
   let ready = "";
   let at = 0;
   for (const span of removals) {
-    if (span.end > cut) break;
+    if (span.end > cut) {
+      break;
+    }
     ready += raw.slice(at, span.start) + REDACTED;
     at = span.end;
   }
@@ -443,13 +480,17 @@ export function leakGuardTransform<TOOLS extends ToolSet>(
       transform(part, out) {
         if (part.type === "text-delta") {
           const ready = scanChunk(guard, state(part.id), part.text, false, hits, echo);
-          if (ready) out.enqueue({ ...part, text: ready });
+          if (ready) {
+            out.enqueue({ ...part, text: ready });
+          }
           return;
         }
         if (part.type === "text-end") {
           const rest = scanChunk(guard, state(part.id), "", true, hits, echo);
           states.delete(part.id);
-          if (rest) out.enqueue({ type: "text-delta", id: part.id, text: rest });
+          if (rest) {
+            out.enqueue({ type: "text-delta", id: part.id, text: rest });
+          }
         }
         out.enqueue(part);
       },

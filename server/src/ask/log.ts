@@ -19,7 +19,7 @@ import type { AnswerTrace } from "./trace.js";
  */
 
 const RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
-const EXCERPT_CHARS = 2_000;
+const EXCERPT_CHARS = 2000;
 
 const EMAIL = /[\p{L}\p{N}._%+-]{1,64}@(?:[\p{L}\p{N}-]{1,63}\.){1,8}\p{L}{2,24}/gu;
 /** IBAN-like: two letters, two digits, then 10-30 letters or digits (spaces allowed). */
@@ -32,13 +32,13 @@ const DATE_LIKE = /^(?:19|20)\d{2}(?:\s*[-/.]\s*\d{2,4}){1,2}$/;
 
 /** A run of digits worth hiding: seven or more of them, and not a date. */
 const isNumber = (match: string) =>
-  match.replace(/\D/g, "").length >= 7 && !DATE_LIKE.test(match.trim());
+  match.replaceAll(/\D/g, "").length >= 7 && !DATE_LIKE.test(match.trim());
 
 export function redact(text: string): string {
   return text
-    .replace(EMAIL, "[email]")
-    .replace(IBAN, "[number]")
-    .replace(DIGITS, (match) => (isNumber(match) ? "[number]" : match));
+    .replaceAll(EMAIL, "[email]")
+    .replaceAll(IBAN, "[number]")
+    .replaceAll(DIGITS, (match) => (isNumber(match) ? "[number]" : match));
 }
 
 /**
@@ -49,7 +49,7 @@ export function redact(text: string): string {
 export function personalPieces(text: string): string[] {
   return [
     ...[...text.matchAll(EMAIL), ...text.matchAll(IBAN)].map((match) => match[0]),
-    ...[...text.matchAll(DIGITS)].map((match) => match[0]).filter(isNumber),
+    ...[...text.matchAll(DIGITS)].map((match) => match[0]).filter((match) => isNumber(match)),
   ];
 }
 
@@ -154,7 +154,9 @@ export async function pruneAiMessages(now = Date.now()): Promise<void> {
 let pruneTimer: NodeJS.Timeout | undefined;
 
 export function startAskPruning(): void {
-  if (pruneTimer) return;
+  if (pruneTimer) {
+    return;
+  }
   pruneTimer = setInterval(
     () => {
       // Answers first: a snapshot is kept while an answer refers to it.

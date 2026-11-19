@@ -27,9 +27,34 @@ import type { AppContent, Doc } from "./schema.js";
 const app = createApp();
 let client: TestClient;
 
+function requireDefined<T>(value: T | null | undefined, label = "value"): T {
+  if (value === null || value === undefined) {
+    throw new Error(`Expected ${label} to be defined`);
+  }
+  return value;
+}
+
+function byCodePoint(a: string, b: string): number {
+  if (a < b) {
+    return -1;
+  }
+  if (a > b) {
+    return 1;
+  }
+  return 0;
+}
+
+function withoutTimes(value: unknown): unknown {
+  return JSON.parse(
+    JSON.stringify(value, (key, v: unknown) => (key === "updatedAt" ? undefined : v)),
+  ) as unknown;
+}
+
 beforeEach(async () => {
   await resetDb();
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {
+    /* silenced in tests */
+  });
   await seed();
   await createAdmin();
   client = new TestClient(app);
@@ -58,7 +83,7 @@ async function image(): Promise<{ id: string; filename: string }> {
     .insert(mediaVariants)
     .values(
       (["webp", "avif"] as const).map((format) => ({
-        assetId: row!.id,
+        assetId: row.id,
         format,
         width: 480,
         height: 240,
@@ -66,11 +91,12 @@ async function image(): Promise<{ id: string; filename: string }> {
         byteSize: 5,
       })),
     );
-  return { id: row!.id, filename };
+  return { id: row.id, filename };
 }
 
 async function live(locale: "en" | "de" = "en"): Promise<AppContent> {
-  return (await (await app.request(`/v2/content/${locale}`)).json()) as AppContent;
+  const res = await app.request(`/v2/content/${locale}`);
+  return (await res.json()) as AppContent;
 }
 
 async function doc(path: string): Promise<Response> {
@@ -79,7 +105,7 @@ async function doc(path: string): Promise<Response> {
 
 async function firstProjectId(): Promise<string> {
   const [first] = await getDb().select().from(projects).orderBy(projects.position).limit(1);
-  return first!.id;
+  return first.id;
 }
 
 async function setBody(body: string, locale: "en" | "de" = "en"): Promise<string> {
@@ -102,8 +128,8 @@ describe("publishing v2", () => {
     expect(outcome.unchanged).toBe(false);
 
     const core = await live();
-    const slug = core.projects[0]!.slug;
-    expect(core.projects[0]!.hasCaseStudy).toBe(true);
+    const slug = core.projects[0].slug;
+    expect(core.projects[0].hasCaseStudy).toBe(true);
     expect(JSON.stringify(core)).not.toContain("Why it mattered");
 
     const res = await doc(`en/projects/${slug}`);
@@ -115,15 +141,18 @@ describe("publishing v2", () => {
     expect(study.body).toMatch(/class="shd-[0-9a-f]+ shl-[0-9a-f]+"/);
     // Only English has a body, so only English has a page.
     expect(study.alternates).toEqual({ en: `/en/work/${slug}`, de: null });
-    expect((await doc(`de/projects/${slug}`)).status).toBe(404);
+    const deRes = await doc(`de/projects/${slug}`);
+    expect(deRes.status).toBe(404);
 
+    const enResult = requireDefined(
+      outcome.results.find((r) => r.locale === "en"),
+      "en publish result",
+    );
     const rows = await getDb()
       .select({ key: contentVersionDocs.key })
       .from(contentVersionDocs)
-      .where(
-        eq(contentVersionDocs.versionId, outcome.results.find((r) => r.locale === "en")!.versionId),
-      );
-    expect(rows.map((r) => r.key).sort()).toEqual([
+      .where(eq(contentVersionDocs.versionId, enResult.versionId));
+    expect(rows.map((r) => r.key).sort((a, b) => byCodePoint(a, b))).toEqual([
       "legal:imprint",
       "legal:privacy",
       `project:${slug}`,
@@ -134,8 +163,10 @@ describe("publishing v2", () => {
     await setBody("<p>v1</p>");
     await publishAll();
     await setBody("<p>v2</p>");
-    expect((await publishAll()).unchanged).toBe(false);
-    expect((await publishAll()).unchanged).toBe(true);
+    const republished = await publishAll();
+    expect(republished.unchanged).toBe(false);
+    const repeatPublish = await publishAll();
+    expect(repeatPublish.unchanged).toBe(true);
   });
 
   it("publishes covers, gallery and inline images as responsive images, and records them all", async () => {
@@ -144,47 +175,47 @@ describe("publishing v2", () => {
     const inline = await image();
     const id = await firstProjectId();
     await getDb().update(projects).set({ coverId: cover.id }).where(eq(projects.id, id));
+    const existingRes = await client.get(`/admin/projects/${id}`);
+    const { project: existing } = (await existingRes.json()) as {
+      project: Record<string, unknown>;
+    };
     await client.put(`/admin/projects/${id}`, {
-      ...(await (async () => {
-        const { project } = (await (await client.get(`/admin/projects/${id}`)).json()) as {
-          project: Record<string, unknown>;
-        };
-        return project;
-      })()),
+      ...existing,
       coverId: cover.id,
       gallery: [{ mediaId: shot.id, caption: { en: "Screen", de: "Bildschirm" } }],
     });
     await setBody(`<p>See:</p><img src="/media/${inline.filename}" alt="diagram" />`);
     const outcome = await publishAll();
 
-    const project = (await live()).projects[0]!;
+    const liveEn = await live();
+    const project = liveEn.projects[0];
     expect(project.cover).toMatchObject({
       src: `/media/${cover.filename}`,
       width: 2000,
       height: 1000,
       alt: "Alt text",
       sources: [
-        { type: "image/avif", srcset: expect.stringContaining("480w") },
-        { type: "image/webp", srcset: expect.stringContaining("480w") },
+        { type: "image/avif", srcset: expect.stringContaining("480w") as unknown },
+        { type: "image/webp", srcset: expect.stringContaining("480w") as unknown },
       ],
     });
 
-    const study = (await (await doc(`en/projects/${project.slug}`)).json()) as Extract<
-      Doc,
-      { kind: "project" }
-    >;
+    const studyRes = await doc(`en/projects/${project.slug}`);
+    const study = (await studyRes.json()) as Extract<Doc, { kind: "project" }>;
     expect(study.gallery[0]).toMatchObject({ src: `/media/${shot.filename}`, caption: "Screen" });
     expect(study.body).toContain('<picture><source type="image/avif"');
     expect(study.body).toContain(
       `<img src="/media/${inline.filename}" alt="diagram" width="2000" height="1000"`,
     );
 
+    const enResult = requireDefined(
+      outcome.results.find((r) => r.locale === "en"),
+      "en publish result",
+    );
     const refs = await getDb()
       .select({ assetId: versionMediaRefs.assetId })
       .from(versionMediaRefs)
-      .where(
-        eq(versionMediaRefs.versionId, outcome.results.find((r) => r.locale === "en")!.versionId),
-      );
+      .where(eq(versionMediaRefs.versionId, enResult.versionId));
     expect(new Set(refs.map((r) => r.assetId))).toEqual(new Set([cover.id, shot.id, inline.id]));
 
     // And the media library refuses to delete what the draft uses.
@@ -208,24 +239,30 @@ describe("publishing v2", () => {
         de: null,
       },
     });
-    const id = ((await res.json()) as { id: string }).id;
+    const createdPost = (await res.json()) as { id: string };
+    const id = createdPost.id;
     await publishAll();
-    expect((await live()).posts).toEqual([]);
+    const beforeDue = await live();
+    expect(beforeDue.posts).toEqual([]);
 
     await getDb()
       .update(posts)
       .set({ publishedAt: new Date(Date.now() - 1000) })
       .where(eq(posts.id, id));
     await publishAll();
-    const [post] = (await live()).posts;
+    const afterDue = await live();
+    const [post] = afterDue.posts;
     expect(post).toMatchObject({
       slug: "hello",
       readingMinutes: 2,
       alternates: { en: "/en/writing/hello", de: null },
     });
-    expect((await live("de")).posts).toEqual([]);
-    expect((await doc("en/posts/hello")).status).toBe(200);
-    expect((await doc("de/posts/hello")).status).toBe(404);
+    const liveDe = await live("de");
+    expect(liveDe.posts).toEqual([]);
+    const enPostRes = await doc("en/posts/hello");
+    expect(enPostRes.status).toBe(200);
+    const dePostRes = await doc("de/posts/hello");
+    expect(dePostRes.status).toBe(404);
   });
 });
 
@@ -273,16 +310,15 @@ describe("the admin flow end to end", () => {
       period: { start: "2022-01-01", end: null, precision: "month" },
       employmentType: "full-time",
     });
-    expect((await live("de")).experiences[0]!.title).toBe("Leitender Ingenieur");
+    const deContent = await live("de");
+    expect(deContent.experiences[0].title).toBe("Leitender Ingenieur");
     expect(en.posts[0]).toMatchObject({
       slug: "shipping-rag",
       alternates: { en: "/en/writing/shipping-rag", de: "/de/writing/shipping-rag" },
     });
 
-    const postDoc = (await (await doc("en/posts/shipping-rag")).json()) as Extract<
-      Doc,
-      { kind: "post" }
-    >;
+    const postDocRes = await doc("en/posts/shipping-rag");
+    const postDoc = (await postDocRes.json()) as Extract<Doc, { kind: "post" }>;
     expect(postDoc.toc).toEqual([{ id: "retrieval", text: "Retrieval", level: 2 }]);
   });
 });
@@ -302,12 +338,12 @@ describe("rollback and restore across versions", () => {
           locale: "en",
           payload: { ...pre, projects: pre.projects.map((p) => ({ ...p, name: "Old name" })) },
           checksum: "a",
-          publicationId: old!.id,
+          publicationId: old.id,
         },
-        { locale: "de", payload: preDe, checksum: "b", publicationId: old!.id },
+        { locale: "de", payload: preDe, checksum: "b", publicationId: old.id },
       ]);
 
-    const outcome = await rollbackToPublication(old!.id);
+    const outcome = await rollbackToPublication(old.id);
     const [written] = await getDb()
       .select()
       .from(contentPublications)
@@ -316,11 +352,12 @@ describe("rollback and restore across versions", () => {
 
     const core = await live();
     expect(core.version).toBe(2);
-    expect(core.projects[0]!.name).toBe("Old name");
+    expect(core.projects[0].name).toBe("Old name");
     // The payload carries its placeholder picture; no project column is needed.
-    expect(core.projects[0]!.cover).toMatchObject({ src: "/projects/project-one.svg" });
+    expect(core.projects[0].cover).toMatchObject({ src: "/projects/project-one.svg" });
     // v1 carried no legal pages; the rollback still has them.
-    expect((await doc("en/legal/privacy")).status).toBe(200);
+    const privacyRes = await doc("en/legal/privacy");
+    expect(privacyRes.status).toBe(200);
   });
 
   it("restores a publication made before v2 into the draft, minus its placeholder pictures", async () => {
@@ -336,12 +373,12 @@ describe("rollback and restore across versions", () => {
           locale: "en",
           payload: { ...en, projects: en.projects.map((p) => ({ ...p, name: `Old ${p.slug}` })) },
           checksum: "a",
-          publicationId: old!.id,
+          publicationId: old.id,
         },
-        { locale: "de", payload: v1Snapshot("de"), checksum: "b", publicationId: old!.id },
+        { locale: "de", payload: v1Snapshot("de"), checksum: "b", publicationId: old.id },
       ]);
 
-    await restoreDraftFromPublication(old!.id);
+    await restoreDraftFromPublication(old.id);
     const draft = await buildLocale(getDb(), "en");
     expect(draft.core.projects[0]).toMatchObject({ name: "Old project-one", cover: null });
   });
@@ -351,7 +388,8 @@ describe("rollback and restore across versions", () => {
     const id = await setBody(
       '<h2>Story</h2><pre><code class="language-ts">let x = 1;</code></pre>',
     );
-    const { project } = (await (await client.get(`/admin/projects/${id}`)).json()) as {
+    const projectRes = await client.get(`/admin/projects/${id}`);
+    const { project } = (await projectRes.json()) as {
       project: Record<string, unknown>;
     };
     await client.put(`/admin/projects/${id}`, {
@@ -375,13 +413,9 @@ describe("rollback and restore across versions", () => {
     await getDb().update(projects).set({ featured: false, tags: [] });
     await getDb().update(experiences).set({ isVisible: false });
 
-    await restoreDraftFromPublication(original.publicationId!);
+    await restoreDraftFromPublication(requireDefined(original.publicationId, "publicationId"));
     const restored = await buildLocale(getDb(), "en");
 
-    const withoutTimes = (value: unknown) =>
-      JSON.parse(
-        JSON.stringify(value, (key, v: unknown) => (key === "updatedAt" ? undefined : v)),
-      ) as unknown;
     expect(withoutTimes(restored.core)).toEqual(withoutTimes(publishedEn.core));
     expect(withoutTimes([...restored.docs])).toEqual(withoutTimes([...publishedEn.docs]));
     // The live site did not move.

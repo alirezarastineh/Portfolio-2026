@@ -149,7 +149,9 @@ function toolName(name: string): InspectTool["name"] {
 /** The tool's listed input from the stored (redacted, cut) JSON; nothing if it does not parse. */
 function toolInput(tool: TraceTool): string | undefined {
   const key = TOOL_INPUTS[toolName(tool.name) as ToolName];
-  if (!key) return undefined;
+  if (!key) {
+    return undefined;
+  }
   try {
     const value = (JSON.parse(tool.input) as Record<string, unknown> | null)?.[key];
     return typeof value === "string" && value ? value.slice(0, INPUT_CHARS) : undefined;

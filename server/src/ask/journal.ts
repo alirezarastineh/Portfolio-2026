@@ -304,9 +304,13 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 export function contentWords(question: string): string[] {
   const words: string[] = [];
   for (const word of tokens(question.replaceAll(/\[(?:email|number)\]/g, " "))) {
-    if (word.length < 3 || FUNCTION_WORDS.has(word) || words.includes(word)) continue;
+    if (word.length < 3 || FUNCTION_WORDS.has(word) || words.includes(word)) {
+      continue;
+    }
     words.push(word);
-    if (words.length === MAX_WORDS) break;
+    if (words.length === MAX_WORDS) {
+      break;
+    }
   }
   return words;
 }
@@ -346,7 +350,9 @@ export function stem(word: string): string {
       continue;
     }
     const ending = ENDINGS.find((e) => w.endsWith(e) && w.length - e.length >= 3);
-    if (!ending) break;
+    if (!ending) {
+      break;
+    }
     w = w.slice(0, -ending.length);
   }
   return w;
@@ -364,7 +370,9 @@ function vocabularyOf(text: string): Vocabulary {
   const words = new Map<string, string>();
   for (const token of tokens(text)) {
     const s = stem(token);
-    if (!words.has(s)) words.set(s, token);
+    if (!words.has(s)) {
+      words.set(s, token);
+    }
   }
   return words;
 }
@@ -430,7 +438,7 @@ function weightsOf(words: readonly string[], indexed: readonly Indexed[]): numbe
 function coverageOf(d: Indexed, words: readonly string[], weights: readonly number[]): Coverage {
   const matches = words.map((word) => matchIn(d.vocabulary, word));
   const total = weights.reduce((sum, w) => sum + w, 0);
-  const held = matches.reduce((sum, m, i) => (m === undefined ? sum : sum + weights[i]!), 0);
+  const held = matches.reduce((sum, m, i) => (m === undefined ? sum : sum + weights[i]), 0);
   return { share: total ? held / total : 0, matches };
 }
 
@@ -459,7 +467,9 @@ export function symptomsOf(answer: DiagnosisAnswer): Symptom[] {
 function observe(input: DiagnosisInput): Scene {
   const { answer } = input;
   const documents = input.snapshot ?? input.live;
-  if (!documents) throw new Error("diagnose: neither the answer's corpus nor today's");
+  if (!documents) {
+    throw new Error("diagnose: neither the answer's corpus nor today's");
+  }
   const reading = answer.trace?.core?.locale ?? answer.locale;
   // Answers from before per-language cores (no core in their trace) read one core with both.
   const layout = answer.trace?.core?.layout ?? "both";
@@ -494,20 +504,30 @@ function place(
   matches: readonly (string | undefined)[],
 ): Pick<Located, "position" | "pastCut" | "held" | "length"> {
   const length = doc.text.length;
-  if (scene.handles.has(doc.id)) return { position: "handle", pastCut: [], held: 0, length };
+  if (scene.handles.has(doc.id)) {
+    return { position: "handle", pastCut: [], held: 0, length };
+  }
   const held = heldText(doc, scene.layout);
-  if (held.length >= length) return { position: "whole", pastCut: [], held: length, length };
+  if (held.length >= length) {
+    return { position: "whole", pastCut: [], held: length, length };
+  }
   const before = vocabularyOf(`${doc.title}\n${held}`);
   const after = vocabularyOf(doc.text.slice(held.length));
   const pastCut: string[] = [];
   let matched = 0;
   scene.words.forEach((word, i) => {
-    if (matches[i] === undefined) return;
+    if (matches[i] === undefined) {
+      return;
+    }
     matched++;
     const later = matchIn(before, word) === undefined ? matchIn(after, word) : undefined;
-    if (later !== undefined && !pastCut.includes(later)) pastCut.push(later);
+    if (later !== undefined && !pastCut.includes(later)) {
+      pastCut.push(later);
+    }
   });
-  if (!matched) return { position: "clipped", pastCut: [], held: held.length, length };
+  if (!matched) {
+    return { position: "clipped", pastCut: [], held: held.length, length };
+  }
   return { position: pastCut.length ? "rest" : "held", pastCut, held: held.length, length };
 }
 
@@ -523,9 +543,13 @@ function findFact(scene: Scene, indexed: readonly Indexed[], search: CorpusSearc
   const candidates: Indexed[] = [];
   for (const chunk of search.rank(scene.words.join(" "), undefined, scene.reading)) {
     const d = byId.get(chunk.slice(0, chunk.lastIndexOf("#")));
-    if (!d || candidates.includes(d)) continue;
+    if (!d || candidates.includes(d)) {
+      continue;
+    }
     candidates.push(d);
-    if (candidates.length === CANDIDATES) break;
+    if (candidates.length === CANDIDATES) {
+      break;
+    }
   }
   const weights = weightsOf(scene.words, indexed);
   let closest: Search["closest"] = null;
@@ -553,8 +577,13 @@ function findFact(scene: Scene, indexed: readonly Indexed[], search: CorpusSearc
 
 function named(scene: Scene, id: string): Located | null {
   const doc = resolveRequested(scene.documents, id, scene.reading);
-  if (!doc) return null;
-  const d = scene.indexed.find((x) => x.doc.id === doc.id)!;
+  if (!doc) {
+    return null;
+  }
+  const d = scene.indexed.find((x) => x.doc.id === doc.id);
+  if (!d) {
+    return null;
+  }
   const coverage = coverageOf(d, scene.words, scene.weights);
   return {
     id: doc.id,
@@ -626,14 +655,18 @@ function liveFact(
   findings: Finding[],
   untested: string[],
 ): string | null {
-  if (scene.corpus === "live") return null;
+  if (scene.corpus === "live") {
+    return null;
+  }
   if (!input.live) {
     untested.push("Today's corpus could not be read: nothing was compared with it.");
     return null;
   }
   const indexed = index(input.live);
   const { located } = findFact(scene, indexed, new CorpusSearch([...input.live]));
-  if (!located) return null;
+  if (!located) {
+    return null;
+  }
   findings.push(
     finding(
       "content-missing",
@@ -760,7 +793,9 @@ function readFindings(located: Located, { read, refused }: Fetches): Finding[] {
       ),
     ];
   }
-  if (located.position === "whole" || located.position === "held") return [];
+  if (located.position === "whole" || located.position === "held") {
+    return [];
+  }
   return [finding("context-unused", "reads", true, `It never fetched ${located.id}`)];
 }
 
@@ -768,16 +803,18 @@ function readFindings(located: Located, { read, refused }: Fetches): Finding[] {
 function searchFindings(scene: Scene, located: Located, untested: string[]): Finding[] {
   const found: Finding[] = [];
   const searches = calls(scene, ["search_portfolio"]);
-  const withHits = searches.filter(({ tool }) => tool.hits);
+  const withHits = searches.flatMap(({ tool, step }) =>
+    tool.hits ? [{ hits: tool.hits, step }] : [],
+  );
   if (searches.length && !withHits.length) {
     untested.push("Its trace keeps no search hits (an answer from before plan phase 18).");
   }
   const hit = withHits
-    .map(({ tool, step }) => ({
+    .map(({ hits, step }) => ({
       step,
-      rank: tool.hits!.findIndex((id) => sameDocument(id, located.id)),
+      rank: hits.findIndex((id) => sameDocument(id, located.id)),
     }))
-    .find(({ rank }) => rank >= 0);
+    .find(({ rank: foundRank }) => foundRank >= 0);
   if (hit) {
     found.push(
       finding(
@@ -790,7 +827,7 @@ function searchFindings(scene: Scene, located: Located, untested: string[]): Fin
     return found;
   }
   if (withHits.length) {
-    const documents = new Set(withHits.flatMap(({ tool }) => tool.hits!)).size;
+    const documents = new Set(withHits.flatMap(({ hits }) => hits)).size;
     found.push(
       finding(
         "retrieval-miss",
@@ -800,12 +837,14 @@ function searchFindings(scene: Scene, located: Located, untested: string[]): Fin
       ),
     );
   }
-  if (!scene.words.length) return found;
+  if (!scene.words.length) {
+    return found;
+  }
 
   const hits = scene.search.search(scene.words.join(" "), { locale: scene.reading });
-  const rank = hits.findIndex((h) => sameDocument(h.id, located.id));
+  const docRank = hits.findIndex((h) => sameDocument(h.id, located.id));
   const doc = scene.documents.find((d) => d.id === located.id);
-  if (rank < 0) {
+  if (docRank < 0) {
     const other =
       doc && doc.locale !== scene.reading
         ? ` (the search prefers ${LANGUAGE[scene.reading]} documents)`
@@ -824,7 +863,7 @@ function searchFindings(scene: Scene, located: Located, untested: string[]): Fin
         "retrieval-miss",
         "question-search",
         false,
-        `A search for the question's words returns ${located.id} at rank ${rank + 1}: a search would have found it`,
+        `A search for the question's words returns ${located.id} at rank ${docRank + 1}: a search would have found it`,
       ),
     );
   } else if (withHits.length) {
@@ -833,7 +872,7 @@ function searchFindings(scene: Scene, located: Located, untested: string[]): Fin
         "retrieval-miss",
         "question-search",
         true,
-        `A search for the question's words returns ${located.id} at rank ${rank + 1}; its own queries did not`,
+        `A search for the question's words returns ${located.id} at rank ${docRank + 1}; its own queries did not`,
       ),
     );
   }
@@ -849,8 +888,12 @@ const FELL_SHORT: Partial<Record<Category, string>> = {
 
 /** "Almost working": the right document cited, the answer still wrong. */
 function citationFindings(scene: Scene, located: Located): Finding[] {
-  if (!CONTENT_SYMPTOMS.has(scene.category)) return [];
-  if (!scene.answer.citedIds.some((id) => sameDocument(id, located.id))) return [];
+  if (!CONTENT_SYMPTOMS.has(scene.category)) {
+    return [];
+  }
+  if (!scene.answer.citedIds.some((id) => sameDocument(id, located.id))) {
+    return [];
+  }
   const observation = `It cited ${located.id}, the document that holds the answer, and still ${FELL_SHORT[scene.category] ?? "fell short"}`;
   return [
     finding("content-missing", "citation", false, observation),
@@ -867,14 +910,22 @@ function citationFindings(scene: Scene, located: Located): Finding[] {
  * unproven. A document the core held whole proves nothing either way.
  */
 function partialReads(scene: Scene): { findings: Finding[]; partial: Located | null } {
-  if (!CONTENT_SYMPTOMS.has(scene.category)) return { findings: [], partial: null };
+  if (!CONTENT_SYMPTOMS.has(scene.category)) {
+    return { findings: [], partial: null };
+  }
   for (const cited of scene.answer.citedIds) {
     const doc = resolveRequested(scene.documents, cited, scene.reading);
-    if (!doc) continue;
+    if (!doc) {
+      continue;
+    }
     const placed = place(scene, doc, []);
-    if (placed.position === "whole") continue;
+    if (placed.position === "whole") {
+      continue;
+    }
     const partial: Located = { id: doc.id, named: false, coverage: 0, words: [], ...placed };
-    if (fetchesOf(scene, partial).read) continue;
+    if (fetchesOf(scene, partial).read) {
+      continue;
+    }
     const read =
       placed.position === "handle"
         ? "had only its one-line handle"
@@ -1042,7 +1093,9 @@ const SIGNAL_TEXT: Record<string, string> = {
 };
 
 function escalationObservation(escalation?: { step: number; reason: string }): string {
-  if (!escalation) return "It moved to the deep chain";
+  if (!escalation) {
+    return "It moved to the deep chain";
+  }
   return `It moved to the deep chain at step ${escalation.step + 1} (${escalation.reason})`;
 }
 
@@ -1050,11 +1103,15 @@ function falseSimpleSignals(answer: DiagnosisAnswer): string[] {
   const signals: string[] = [];
   for (const f of answer.flags) {
     if ((UNDER_SERVED as readonly string[]).includes(f)) {
-      signals.push(SIGNAL_TEXT[f]!);
+      signals.push(SIGNAL_TEXT[f]);
     }
   }
-  if (answer.feedback === -1) signals.push("a thumbs-down");
-  if (answer.rephrased) signals.push("asked again");
+  if (answer.feedback === -1) {
+    signals.push("a thumbs-down");
+  }
+  if (answer.rephrased) {
+    signals.push("asked again");
+  }
   return signals;
 }
 
@@ -1068,7 +1125,9 @@ function routingFindings(scene: Scene, projectNames: readonly string[]): Finding
   if (trace?.escalation || answer.route.includes("deep")) {
     return [finding("under-routed", "routing", false, escalationObservation(trace?.escalation))];
   }
-  if (answer.route !== "lite") return [];
+  if (answer.route !== "lite") {
+    return [];
+  }
 
   const found: Finding[] = [];
   const decision = routeQuestion(answer.question, {
@@ -1142,7 +1201,9 @@ function routingFindings(scene: Scene, projectNames: readonly string[]): Finding
  * prompt's matter, or the reader's level's (V10).
  */
 function visitorFindings(answer: DiagnosisAnswer): Finding[] {
-  if (answer.feedback !== -1) return [];
+  if (answer.feedback !== -1) {
+    return [];
+  }
   if (answer.downReason === "wrong") {
     const said = "The visitor marked it wrong or made up";
     return [
@@ -1161,11 +1222,12 @@ function visitorFindings(answer: DiagnosisAnswer): Finding[] {
   return [];
 }
 
+const infra = (outcome: string) => INFRA_OUTCOMES.has(outcome);
+
 /** H7: whether the answer failed in the providers or the plumbing rather than in itself. */
 function infrastructureFindings(scene: Scene): Finding[] {
   const { answer, steps } = scene;
   const found: Finding[] = [];
-  const infra = (outcome: string) => INFRA_OUTCOMES.has(outcome);
   if (answer.finishReason.startsWith("error")) {
     found.push(
       finding("infrastructure", "infrastructure", true, `It finished with ${answer.finishReason}`),
@@ -1271,8 +1333,9 @@ export function replayFindings(
 ): { findings: Finding[]; untested: string[] } {
   const untested: string[] = [];
   const results = replay.results.filter((r) => {
-    if (r.unavailable)
+    if (r.unavailable) {
       untested.push(`The replay on the ${r.chain} chain found no model answering.`);
+    }
     return !r.unavailable;
   });
   const ok = (r: ReplayResult | undefined) => !!r && succeeded(r, located);
@@ -1312,7 +1375,9 @@ function almostAnswered(
 ): Finding[] {
   const found: Finding[] = [];
   for (const r of results) {
-    if (!located || ok(r) || !r.cited.some((id) => sameDocument(id, located.id))) continue;
+    if (!located || ok(r) || !r.cited.some((id) => sameDocument(id, located.id))) {
+      continue;
+    }
     const observation = `Replayed on the ${r.chain} chain, ${r.model ?? "a model"} cited ${located.id} and still ${r.unknown ? "said it isn't there" : "fell short"}`;
     found.push(
       finding("context-unused", "replay", true, observation),
@@ -1493,7 +1558,9 @@ const HEURISTICS = {
 function failingModel(scene: Scene): string | null {
   for (const step of scene.steps) {
     const failed = step.passedOver.find((p) => INFRA_OUTCOMES.has(p.outcome));
-    if (failed) return failed.model;
+    if (failed) {
+      return failed.model;
+    }
   }
   return (
     scene.answer.attempts.find((a) => INFRA_OUTCOMES.has(a.outcome))?.model ?? scene.answer.model
@@ -1509,7 +1576,9 @@ function propose(
   /** A cited document read only in part, when the fact was not placed. */
   partial: Located | null,
 ): Proposal {
-  if (!leading) return { rootCause: "", fixType: null, fix: "", fixRef: null, heuristic: "" };
+  if (!leading) {
+    return { rootCause: "", fixType: null, fix: "", fixRef: null, heuristic: "" };
+  }
   const evidence = leading.evidence.filter((e) => e.supports).map((e) => e.observation);
   const cause = `${HYPOTHESIS_TITLES[leading.id]}: ${evidence.join("; ")}.`;
   const rootCause =
@@ -1673,16 +1742,22 @@ function useOfCorpus(
     return null;
   }
   if (!located) {
-    if (!scene.answer.trace) return null;
+    if (!scene.answer.trace) {
+      return null;
+    }
     const reads = partialReads(scene);
     findings.push(...reads.findings);
     return reads.partial;
   }
   findings.push(...positionFindings(scene, located));
-  if (scene.answer.trace) findings.push(...readFindings(located, fetches));
+  if (scene.answer.trace) {
+    findings.push(...readFindings(located, fetches));
+  }
   // Searching mattered only for a fact the core did not hold.
   const inContext = located.position === "whole" || located.position === "held";
-  if (scene.answer.trace && !inContext) findings.push(...searchFindings(scene, located, untested));
+  if (scene.answer.trace && !inContext) {
+    findings.push(...searchFindings(scene, located, untested));
+  }
   findings.push(...citationFindings(scene, located));
   return null;
 }
@@ -1720,7 +1795,7 @@ export function diagnose(input: DiagnosisInput): JournalDiagnosis {
   }
 
   const hypotheses = rank(findings);
-  const top = hypotheses[0]!;
+  const top = hypotheses[0];
   const leading = top.ratio > 0.5 && top.supporting > 0 ? top : null;
   const trace = input.answer.trace;
   return {
@@ -1788,8 +1863,12 @@ export function decisionProblem(
   status: JournalStatus,
   fields: DecidedFields,
 ): "missing_root_cause" | "vague_heuristic" | "missing_fix" | null {
-  if (status !== "accepted" && status !== "fixed") return null;
-  if (!fields.rootCause.trim()) return "missing_root_cause";
+  if (status !== "accepted" && status !== "fixed") {
+    return null;
+  }
+  if (!fields.rootCause.trim()) {
+    return "missing_root_cause";
+  }
   if (fields.heuristic.trim().split(/\s+/).filter(Boolean).length < HEURISTIC_MIN_WORDS) {
     return "vague_heuristic";
   }

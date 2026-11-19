@@ -33,15 +33,21 @@ export function isoWeek(at: Date): string {
 /** The week's first moment (Monday 00:00 UTC) and the next week's; null for a malformed week. */
 export function weekBounds(week: string): { start: Date; end: Date } | null {
   const match = /^(\d{4})-W(\d{2})$/.exec(week);
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
   const year = Number(match[1]);
   const number = Number(match[2]);
-  if (number < 1 || number > 53) return null;
+  if (number < 1 || number > 53) {
+    return null;
+  }
   const jan4 = new Date(Date.UTC(year, 0, 4));
   const firstMonday = jan4.getTime() - ((jan4.getUTCDay() || 7) - 1) * DAY_MS;
   const start = new Date(firstMonday + (number - 1) * 7 * DAY_MS);
   // Week 53 exists only in some years.
-  if (isoWeek(start) !== week) return null;
+  if (isoWeek(start) !== week) {
+    return null;
+  }
   return { start, end: new Date(start.getTime() + 7 * DAY_MS) };
 }
 
@@ -114,8 +120,11 @@ export function labelStats(
   for (const review of reviews) {
     for (const label of REVIEW_LABELS) {
       const value = review.labels[label];
-      if (value === true) stats[label].good++;
-      else if (value === false) stats[label].bad++;
+      if (value === true) {
+        stats[label].good++;
+      } else if (value === false) {
+        stats[label].bad++;
+      }
     }
   }
   return stats;

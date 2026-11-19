@@ -29,7 +29,7 @@ const { values } = parseArgs({ options: { port: { type: "string" } } });
 process.env.HOST ??= "127.0.0.1";
 const port = Number(values.port ?? process.env.PORT ?? "4173");
 // The app itself listens beside the compressing front, which takes `port`.
-const appPort = port + 10000;
+const appPort = port + 10_000;
 process.env.PORT = String(appPort);
 process.env.CSP_MODE ??= "enforce";
 // The API and analytics origins the build was made with, as compose passes
@@ -41,7 +41,9 @@ process.env.CSP_MODE ??= "enforce";
 // lighthouserc.cjs).
 const buildEnv = loadEnv("production", fileURLToPath(new URL("..", import.meta.url)), "VITE_");
 for (const key of ["VITE_API_BASE_URL", "VITE_UMAMI_SRC"]) {
-  if (buildEnv[key]) process.env[key] ??= buildEnv[key];
+  if (buildEnv[key]) {
+    process.env[key] ??= buildEnv[key];
+  }
 }
 // Never live content, whatever the shell has set: the fixture API, on loopback.
 process.env.API_INTERNAL_BASE_URL = await startFixtureApi();
@@ -78,7 +80,9 @@ createServer((req, res) => {
     },
   );
   upstream.on("error", () => {
-    if (!res.headersSent) res.writeHead(502);
+    if (!res.headersSent) {
+      res.writeHead(502);
+    }
     res.end();
   });
   req.pipe(upstream);

@@ -12,7 +12,7 @@ export interface Issue {
 }
 
 function sentence(text: string): string {
-  return text ? text[0]!.toUpperCase() + text.slice(1) : text;
+  return text ? text[0].toUpperCase() + text.slice(1) : text;
 }
 
 function plural(n: number, one: string, many: string): string {
@@ -38,7 +38,9 @@ export function issueMessage(issue: ZodIssue): string {
     }
     case "too_big": {
       const max = Number(issue.maximum);
-      if (issue.origin === "string") return `At most ${plural(max, "character", "characters")}`;
+      if (issue.origin === "string") {
+        return `At most ${plural(max, "character", "characters")}`;
+      }
       if (issue.origin === "array" || issue.origin === "set") {
         return `At most ${plural(max, "item", "items")}`;
       }

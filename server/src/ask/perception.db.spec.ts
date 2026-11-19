@@ -95,8 +95,8 @@ async function seed(): Promise<void> {
     v: 1,
     // Read in English: the German profile was a handle, the English one whole (a re-read).
     steps: [
-      step({ input: 1_000, cached: 0 }, ["profile@de"]),
-      step({ input: 1_200, cached: 600 }, ["profile@en"]),
+      step({ input: 1000, cached: 0 }, ["profile@de"]),
+      step({ input: 1200, cached: 600 }, ["profile@en"]),
     ],
     core: { locale: "en", layout: "locale", tokens: 500 },
     // Its history was trimmed: two earlier questions no longer shown (plan phase 22).
@@ -105,7 +105,7 @@ async function seed(): Promise<void> {
   const before: AnswerTrace = {
     v: 1,
     // Both languages in one core, as before: the rest of a long project.
-    steps: [step({ input: 2_000, cached: 0 }, ["project:long@en"])],
+    steps: [step({ input: 2000, cached: 0 }, ["project:long@en"])],
   };
   await getDb()
     .insert(aiMessages)
@@ -115,7 +115,7 @@ async function seed(): Promise<void> {
         id: "m_per_locale",
         sessionHash: "s1",
         usd: 0.003,
-        tokens: { input: 2_200, cached: 600, output: 20, thoughts: 0 },
+        tokens: { input: 2200, cached: 600, output: 20, thoughts: 0 },
         trace: perLocale,
         citedIds: ["profile@en"],
       },
@@ -124,7 +124,7 @@ async function seed(): Promise<void> {
         id: "m_before_cores",
         sessionHash: "s2",
         usd: 0.001,
-        tokens: { input: 2_000, cached: 0, output: 10, thoughts: 0 },
+        tokens: { input: 2000, cached: 0, output: 10, thoughts: 0 },
         trace: before,
         citedIds: ["project:long@en"],
       },
@@ -182,6 +182,12 @@ async function view(query = ""): Promise<PerceptionView> {
 const putTiers = (tiers: { promoted: string[]; demoted: string[] }) =>
   admin.put("/admin/assistant/perception/tiers", tiers);
 
+const healthKey = async () => {
+  const res = await admin.get("/admin/assistant/health");
+  const body = (await res.json()) as { corpus: { key: string } };
+  return body.corpus.key;
+};
+
 describe("perception (plan phase 16)", () => {
   it("adds ai_settings.corpus_tiers, empty by default, so an older API's insert still works", async () => {
     await getDb().execute(sql`insert into ai_settings (id) values (1)`);
@@ -201,11 +207,11 @@ describe("perception (plan phase 16)", () => {
     const p = await view();
     expect(p.days).toBe(30);
     expect(p.answers).toBe(2);
-    expect(p.cache.first).toEqual({ steps: 2, input: 3_000, cached: 0, hits: 0 });
-    expect(p.cache.later).toEqual({ steps: 1, input: 1_200, cached: 600, hits: 1 });
+    expect(p.cache.first).toEqual({ steps: 2, input: 3000, cached: 0, hits: 0 });
+    expect(p.cache.later).toEqual({ steps: 1, input: 1200, cached: 600, hits: 1 });
     expect(p.fetches).toEqual({ whole: 1, rest: 1, handle: 1, unknown: 0 });
     expect(p.rereadRatio).toBeCloseTo(1 / 3);
-    expect(p.tokens).toMatchObject({ helpful: 2, perHelpful: (4_200 + 30) / 2 });
+    expect(p.tokens).toMatchObject({ helpful: 2, perHelpful: (4200 + 30) / 2 });
     expect(p.usdPerAnswer).toBeCloseTo(0.002);
     // Before and after, apart: the answer without a core in its trace read both languages.
     expect(p.byLayout.locale).toMatchObject({
@@ -225,8 +231,8 @@ describe("perception (plan phase 16)", () => {
       { id: "project:long@en", fetched: 1, cited: 1 },
       { id: "profile@de", fetched: 1, cited: 0 },
     ]);
-    expect(p.coreTokens!.en).toBeGreaterThan(0);
-    expect(p.coreTokens!.de).toBeGreaterThan(0);
+    expect(p.coreTokens?.en).toBeGreaterThan(0);
+    expect(p.coreTokens?.de).toBeGreaterThan(0);
     expect(p.tiers).toEqual({ promoted: [], demoted: [] });
     // Two answers are far from the floors: everything is only considered.
     expect(p.suggestions.promote).toEqual([]);
@@ -262,33 +268,41 @@ describe("perception (plan phase 16)", () => {
 
     const shorter = await view("?days=1");
     expect(shorter.days).toBe(1);
-    expect((await admin.get("/admin/assistant/perception?days=91")).status).toBe(400);
+    const badDays = await admin.get("/admin/assistant/perception?days=91");
+    expect(badDays.status).toBe(400);
   });
 
   it("applies tiers the admin chose: stored, audited, and read by the next question's core", async () => {
-    const health = async () =>
-      ((await (await admin.get("/admin/assistant/health")).json()) as { corpus: { key: string } })
-        .corpus.key;
-    const keyBefore = await health();
-    expect(read!.core.en).toContain('[… continues: get_document("project:long@en")]');
+    const keyBefore = await healthKey();
+    const readBefore = read;
+    if (!readBefore) {
+      throw new Error("expected corpus to be read");
+    }
+    expect(readBefore.core.en).toContain('[… continues: get_document("project:long@en")]');
 
     const res = await putTiers({ promoted: ["project:long@en"], demoted: [] });
     expect(res.status).toBe(200);
     const [stored] = await getDb().select().from(aiSettings).where(eq(aiSettings.id, 1));
-    expect(stored!.corpusTiers).toEqual({ promoted: ["project:long@en"], demoted: [] });
+    expect(stored.corpusTiers).toEqual({ promoted: ["project:long@en"], demoted: [] });
 
-    const keyAfter = await health();
+    const keyAfter = await healthKey();
     expect(keyAfter).not.toBe(keyBefore);
+    const readAfter = read;
+    if (!readAfter) {
+      throw new Error("expected corpus to be read");
+    }
     // Whole, and right after the profile.
-    expect(read!.core.en).not.toContain("continues: get_document");
-    expect(read!.core.en.indexOf("id: project:long@en")).toBeLessThan(
-      read!.core.en.indexOf("id: project:atlas@en"),
+    expect(readAfter.core.en).not.toContain("continues: get_document");
+    expect(readAfter.core.en.indexOf("id: project:long@en")).toBeLessThan(
+      readAfter.core.en.indexOf("id: project:atlas@en"),
     );
-    expect(read!.documents.find((d) => d.id === "project:long@en")?.tier).toBe("promoted");
-    expect((await view()).tiers.promoted).toEqual(["project:long@en"]);
+    expect(readAfter.documents.find((d) => d.id === "project:long@en")?.tier).toBe("promoted");
+    const afterView = await view();
+    expect(afterView.tiers.promoted).toEqual(["project:long@en"]);
 
-    expect((await putTiers({ promoted: [], demoted: ["project:atlas@en"] })).status).toBe(200);
-    expect(await health()).not.toBe(keyAfter);
+    const demotedRes = await putTiers({ promoted: [], demoted: ["project:atlas@en"] });
+    expect(demotedRes.status).toBe(200);
+    expect(await healthKey()).not.toBe(keyAfter);
     const log = await getDb()
       .select({ actor: aiAudit.actor, action: aiAudit.action, reason: aiAudit.reason })
       .from(aiAudit)
@@ -302,12 +316,14 @@ describe("perception (plan phase 16)", () => {
       },
     ]);
 
-    expect((await putTiers({ promoted: [], demoted: [] })).status).toBe(200);
-    expect(await health()).toBe(keyBefore);
+    const clearedRes = await putTiers({ promoted: [], demoted: [] });
+    expect(clearedRes.status).toBe(200);
+    expect(await healthKey()).toBe(keyBefore);
   });
 
   it("drops a stored tier whose document is no longer published, and still refuses a new unknown one", async () => {
-    expect((await putTiers({ promoted: ["project:long@en"], demoted: [] })).status).toBe(200);
+    const promotedRes = await putTiers({ promoted: ["project:long@en"], demoted: [] });
+    expect(promotedRes.status).toBe(200);
     published = FIXTURE_BASE.documents;
     // The page still lists the old tier and sends it with the next change.
     const res = await putTiers({ promoted: ["project:long@en"], demoted: ["project:atlas@en"] });
@@ -321,7 +337,7 @@ describe("perception (plan phase 16)", () => {
       .from(aiAudit)
       .orderBy(asc(aiAudit.id))
       .offset(1);
-    expect(last!.reason).toBe(
+    expect(last.reason).toBe(
       "promoted −project:long@en; demoted +project:atlas@en; no longer published: project:long@en",
     );
     const refused = await putTiers({ promoted: ["project:gone@en"], demoted: [] });
@@ -332,7 +348,8 @@ describe("perception (plan phase 16)", () => {
     const refused = async (tiers: { promoted: string[]; demoted: string[] }, error: string) => {
       const res = await putTiers(tiers);
       expect(res.status).toBe(400);
-      expect(((await res.json()) as { error: string }).error).toBe(error);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe(error);
     };
     await refused({ promoted: ["project:nova@en"], demoted: [] }, "unknown_document");
     await refused({ promoted: ["project:long@en"], demoted: ["project:long@en"] }, "both_tiers");
@@ -344,10 +361,12 @@ describe("perception (plan phase 16)", () => {
     expect(await getDb().select().from(aiAudit)).toEqual([]);
 
     const visitor = new TestClient(app);
-    expect((await visitor.get("/admin/assistant/perception")).status).toBe(401);
-    expect(
-      (await visitor.put("/admin/assistant/perception/tiers", { promoted: [], demoted: [] }))
-        .status,
-    ).toBe(401);
+    const getRes = await visitor.get("/admin/assistant/perception");
+    expect(getRes.status).toBe(401);
+    const putRes = await visitor.put("/admin/assistant/perception/tiers", {
+      promoted: [],
+      demoted: [],
+    });
+    expect(putRes.status).toBe(401);
   });
 });

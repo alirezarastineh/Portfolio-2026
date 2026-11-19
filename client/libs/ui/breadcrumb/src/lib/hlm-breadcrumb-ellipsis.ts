@@ -29,7 +29,7 @@ export class HlmBreadcrumbEllipsis {
 
   protected readonly _computedClass = computed(() =>
     hlm(
-      "size-5 [&>ng-icon]:text-[calc(var(--spacing)*4)] flex items-center justify-center",
+      "size-5 [&>ng-icon]:text-[--spacing(4)] flex items-center justify-center",
       this.userClass(),
     ),
   );

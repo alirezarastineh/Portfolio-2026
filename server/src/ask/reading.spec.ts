@@ -105,14 +105,14 @@ describe("the reading language", () => {
     const outcome = await done;
 
     // The German core: the German documents whole, the English versions as handles.
-    const instructions = JSON.stringify(model.calls[0]!.prompt[0]);
+    const instructions = JSON.stringify(model.calls[0].prompt[0]);
     expect(instructions).toContain("id: project:atlas@de");
     expect(instructions).toContain("## Also in English");
     expect(instructions).toContain("- project:atlas@en: Atlas (/en/work/atlas)");
     expect(instructions).not.toContain("id: project:atlas@en");
 
     // The tools read German: list_projects returned the German project.
-    const toolMessage = JSON.stringify(model.calls[1]!.prompt.find((m) => m.role === "tool"));
+    const toolMessage = JSON.stringify(model.calls[1].prompt.find((m) => m.role === "tool"));
     expect(toolMessage).toContain("Support-Assistent");
     expect(toolMessage).not.toContain("support assistant");
 

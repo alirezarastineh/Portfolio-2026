@@ -211,7 +211,9 @@ function getResume(corpus: AskCorpus, args: unknown): ToolResult {
   const wanted: Locale = input.locale ?? "en";
   const doc =
     corpus.byId.get(`cv@${wanted}`) ?? corpus.byId.get(`cv@${wanted === "en" ? "de" : "en"}`);
-  if (!doc) return result({ available: false, note: "The portfolio publishes no CV." });
+  if (!doc) {
+    return result({ available: false, note: "The portfolio publishes no CV." });
+  }
   return result({
     available: true,
     id: doc.id,
@@ -243,7 +245,9 @@ const isToolName = (name: unknown): name is McpToolName =>
  * naming what to fix, so the calling model can correct them.
  */
 export function callTool(corpus: AskCorpus, name: unknown, args: unknown): ToolResult | null {
-  if (!isToolName(name)) return null;
+  if (!isToolName(name)) {
+    return null;
+  }
   const parsed = INPUTS[name].safeParse(args ?? {});
   if (!parsed.success) {
     const problems = parsed.error.issues

@@ -15,8 +15,8 @@ export const MATCH_KINDS = ["role", "project", "problem"] as const;
 export type MatchKind = (typeof MATCH_KINDS)[number];
 
 /** The most a brief may be, in characters, and the most of it the log keeps. */
-export const MATCH_BRIEF_CHARS = 4_000;
-export const MATCH_BRIEF_LOGGED = 2_000;
+export const MATCH_BRIEF_CHARS = 4000;
+export const MATCH_BRIEF_LOGGED = 2000;
 /** How many items a plan has, and the most characters an item may be. */
 export const MATCH_ITEMS = { min: 1, max: 8 } as const;
 export const MATCH_ITEM_CHARS = 160;
@@ -117,6 +117,8 @@ export interface SynthItem {
   passages: { id: string; title: string; snippet: string; related?: string[] }[];
 }
 
+const formatRelated = (ids?: string[]) => (ids?.length ? `(related: ${ids.join(", ")})` : "");
+
 /**
  * The synthesizer's request: the items (fenced by the caller, numbered as in
  * the plan), each item's passages, and the brief again (fenced), so nothing
@@ -129,12 +131,13 @@ export function synthPrompt(
   fencedBrief: string,
 ): string {
   const { item } = KIND[kind];
-  const related = (ids?: string[]) => (ids?.length ? `(related: ${ids.join(", ")})` : "");
-  const passages = items.map(({ n, passages }) =>
+  const passages = items.map(({ n, passages: itemPassages }) =>
     [
       `${item} ${n}:`,
-      ...passages.map((p) =>
-        [`- ${p.id} · ${p.title}: ${p.snippet}`, related(p.related)].filter(Boolean).join(" "),
+      ...itemPassages.map((p) =>
+        [`- ${p.id} · ${p.title}: ${p.snippet}`, formatRelated(p.related)]
+          .filter(Boolean)
+          .join(" "),
       ),
     ].join("\n"),
   );

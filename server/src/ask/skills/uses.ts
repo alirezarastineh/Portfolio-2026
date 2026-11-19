@@ -53,7 +53,7 @@ export async function recordUse(use: {
       ...(use.abstained ? { outcome: "abstained" as const, decidedAt: sql`now()` } : {}),
     })
     .returning({ id: aiSkillUses.id });
-  return row!.id;
+  return row.id;
 }
 
 /** The editor's verdicts; each draft is decided once, so a repeated or unknown id is skipped. */

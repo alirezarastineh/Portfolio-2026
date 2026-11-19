@@ -89,8 +89,8 @@ function safeDownloadName(originalName: string): string {
 function headerSafe(text: string): string {
   return text
     .normalize("NFKD")
-    .replace(/[^\w.\- ]+/g, "")
-    .replace(/\s+/g, "-")
+    .replaceAll(/[^\w.\- ]+/g, "")
+    .replaceAll(/\s+/g, "-")
     .replace(/^[.-]+/, "")
     .slice(0, 100);
 }
@@ -111,12 +111,14 @@ async function documentName(
     .from(profileResumes)
     .where(eq(profileResumes.mediaId, assetId))
     .orderBy(profileResumes.locale);
-  if (resumes.length === 0) return safeDownloadName(originalName);
+  if (resumes.length === 0) {
+    return safeDownloadName(originalName);
+  }
 
   const [profile] = await db.select({ name: siteProfile.name }).from(siteProfile).limit(1);
   const person = headerSafe(profile?.name ?? "");
   const prefix = person ? `${person}-` : "";
-  const locale = resumes.length === 1 ? `-${resumes[0]!.locale}` : "";
+  const locale = resumes.length === 1 ? `-${resumes[0].locale}` : "";
   return `${prefix}CV${locale}.pdf`;
 }
 
@@ -140,7 +142,9 @@ mediaRouter.get("/:name", async (c) => {
   }
 
   const stream = openMedia(name);
-  if (!stream) return c.json({ error: "not_found" }, 404);
+  if (!stream) {
+    return c.json({ error: "not_found" }, 404);
+  }
 
   c.header("Content-Type", served.mime);
   // Safe to cache forever: filenames are UUIDs and are never reused.
@@ -174,14 +178,18 @@ export async function findMediaUsage(
     .select({ slug: projects.slug })
     .from(projects)
     .where(eq(projects.coverId, id));
-  for (const row of projectRefs) usedBy.add(`project:${row.slug}`);
+  for (const row of projectRefs) {
+    usedBy.add(`project:${row.slug}`);
+  }
 
   const gallery = await db
     .select({ slug: projects.slug })
     .from(projectGallery)
     .innerJoin(projects, eq(projects.id, projectGallery.projectId))
     .where(eq(projectGallery.mediaId, id));
-  for (const row of gallery) usedBy.add(`project:${row.slug} (gallery)`);
+  for (const row of gallery) {
+    usedBy.add(`project:${row.slug} (gallery)`);
+  }
 
   // An image placed inside a body or a rich-text field.
   const inProjectText = await db
@@ -196,40 +204,53 @@ export async function findMediaUsage(
         sql`${projectTranslations.fullStackInfra} like ${like}`,
       ),
     );
-  for (const row of inProjectText) usedBy.add(`project:${row.slug}`);
+  for (const row of inProjectText) {
+    usedBy.add(`project:${row.slug}`);
+  }
 
   const [profile] = await db
     .select({ avatarId: siteProfile.avatarId })
     .from(siteProfile)
     .where(eq(siteProfile.avatarId, id))
     .limit(1);
-  if (profile) usedBy.add("profile:avatar");
+  if (profile) {
+    usedBy.add("profile:avatar");
+  }
 
   const resumes = await db
     .select({ locale: profileResumes.locale })
     .from(profileResumes)
     .where(eq(profileResumes.mediaId, id));
-  for (const row of resumes) usedBy.add(`resume:${row.locale}`);
+  for (const row of resumes) {
+    usedBy.add(`resume:${row.locale}`);
+  }
 
   const logos = await db
     .select({ orgName: experiences.orgName })
     .from(experiences)
     .where(eq(experiences.logoId, id));
-  for (const row of logos) usedBy.add(`experience:${row.orgName}`);
+  for (const row of logos) {
+    usedBy.add(`experience:${row.orgName}`);
+  }
 
   const postRefs = await db
     .selectDistinct({ slug: posts.slug })
     .from(posts)
     .leftJoin(postTranslations, eq(postTranslations.postId, posts.id))
     .where(or(eq(posts.coverId, id), sql`${postTranslations.body} like ${like}`));
-  for (const row of postRefs) usedBy.add(`post:${row.slug}`);
+  for (const row of postRefs) {
+    usedBy.add(`post:${row.slug}`);
+  }
 
   // Also catch a path pasted straight into a content document (and the legal pages).
+  const filenameLike = `%${filename}%`;
   const documents = await db
     .select({ section: contentDocuments.section, locale: contentDocuments.locale })
     .from(contentDocuments)
-    .where(sql`${contentDocuments.data}::text like ${"%" + filename + "%"}`);
-  for (const d of documents) usedBy.add(`${d.section}:${d.locale}`);
+    .where(sql`${contentDocuments.data}::text like ${filenameLike}`);
+  for (const d of documents) {
+    usedBy.add(`${d.section}:${d.locale}`);
+  }
 
   return [...usedBy];
 }
@@ -250,7 +271,9 @@ export async function mediaUsageAll(db: DbExecutor = getDb()): Promise<Map<strin
   const idByName = new Map(assets.map((a) => [a.filename.toLowerCase(), a.id]));
 
   const byId = (id: string | null, label: string) => {
-    if (id) usage.get(id)?.add(label);
+    if (id) {
+      usage.get(id)?.add(label);
+    }
   };
   const byText = (text: string | null, label: string) => {
     for (const match of (text ?? "").matchAll(ORIGINAL_NAME)) {

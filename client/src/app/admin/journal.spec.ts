@@ -23,6 +23,9 @@ const hypothesis = (over: Partial<Hypothesis>): Hypothesis => ({
   ...over,
 });
 
+const replayRun = (id: string, entry: string, status: string, kind = "agent") =>
+  ({ id, kind, status, params: { task: "replay", entry } }) as unknown as RunRow;
+
 describe("the failure journal in the admin (plan phase 24)", () => {
   it("says the evidence as a count, and the leading hypothesis in one line", () => {
     expect(ratioLine(hypothesis({}))).toBe("untested");
@@ -41,7 +44,7 @@ describe("the failure journal in the admin (plan phase 24)", () => {
 
   it("places the fact, with the cut where there is one", () => {
     const base = { id: "project:long@en", named: false, coverage: 1, words: [], pastCut: [] };
-    expect(locatedLine({ ...base, position: "rest", held: 2_394, length: 3_512 })).toBe(
+    expect(locatedLine({ ...base, position: "rest", held: 2394, length: 3512 })).toBe(
       "project:long@en: cut short in the core, a matching word only past the cut, at 2,394 of 3,512 characters",
     );
     expect(locatedLine({ ...base, named: true, position: "whole", held: 90, length: 90 })).toBe(
@@ -76,15 +79,13 @@ describe("the failure journal in the admin (plan phase 24)", () => {
   });
 
   it("offers to resume an entry's replay only when its newest one stopped short", () => {
-    const run = (id: string, entry: string, status: string, kind = "agent") =>
-      ({ id, kind, status, params: { task: "replay", entry } }) as unknown as RunRow;
     // Newest first, as the runs list comes.
     const runs = [
-      run("r4", "e1", "failed"),
-      run("r3", "e2", "done"),
-      run("r2", "e2", "failed"),
-      run("r1", "e3", "interrupted"),
-      run("r0", "e4", "failed", "eval"),
+      replayRun("r4", "e1", "failed"),
+      replayRun("r3", "e2", "done"),
+      replayRun("r2", "e2", "failed"),
+      replayRun("r1", "e3", "interrupted"),
+      replayRun("r0", "e4", "failed", "eval"),
     ];
     expect(
       Object.fromEntries(Object.entries(stoppedReplays(runs)).map(([k, v]) => [k, v.id])),

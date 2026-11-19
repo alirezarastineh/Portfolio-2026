@@ -61,12 +61,14 @@ const app = createApp({
   ask: {
     config: () => config,
     chain: (_config, role: ChainRole): ModelEntry[] => {
-      if (noChains) return [];
+      if (noChains) {
+        return [];
+      }
       return role === "deep"
         ? [mockEntry("gemini-3.7-flash", deep.model)]
         : [mockEntry("gemini-3.5-flash-lite", lite.model)];
     },
-    corpus: async () => corpus,
+    corpus: () => Promise.resolve(corpus),
     evalPacing: null,
   },
 });
@@ -78,7 +80,9 @@ function held(text: string): {
   open: () => void;
 } {
   let open!: () => void;
-  const opened = new Promise<void>((resolve) => (open = resolve));
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
   const calls: LanguageModelV4CallOptions[] = [];
   const model = new MockLanguageModelV4({
     modelId: "held",
@@ -104,7 +108,7 @@ beforeEach(async () => {
   resetRecordedSnapshots();
   resetBreakers();
   noChains = false;
-  config = fixtureConfig({ firstChunkTimeoutMs: 5_000, requestTimeoutMs: 10_000 });
+  config = fixtureConfig({ firstChunkTimeoutMs: 5000, requestTimeoutMs: 10_000 });
   corpus = assembleCorpus(BASE, DEFAULT_SETTINGS, [], config);
   lite = scripted([textTurn("That is not in the portfolio.")]);
   deep = scripted([textTurn("In 2023 he migrated the clusters to Kubernetes [^project:long@en].")]);
@@ -123,7 +127,7 @@ const trace = (extra: Partial<AnswerTrace> = {}): AnswerTrace => ({
       model: MODEL,
       answerOnly: false,
       ttftMs: 700,
-      tokens: { input: 1_000, cached: 0, output: 12, thoughts: 0 },
+      tokens: { input: 1000, cached: 0, output: 12, thoughts: 0 },
       finishReason: "stop",
       passedOver: [],
       tools: [],
@@ -163,8 +167,8 @@ async function seedAnswer(
       model: MODEL,
       attempts: [{ model: MODEL, outcome: "ok", ms: 700 }],
       ttftMs: 700,
-      totalMs: 1_500,
-      tokens: { input: 1_000, cached: 0, output: 12, thoughts: 0 },
+      totalMs: 1500,
+      tokens: { input: 1000, cached: 0, output: 12, thoughts: 0 },
       finishReason: "stop",
       promptVersion: "ask-test+abc",
       corpusKey: "snap#1",
@@ -204,9 +208,49 @@ async function patch(id: string, body: Record<string, unknown>) {
 }
 
 async function list(status?: string) {
-  const res = await admin.get(`/admin/assistant/journal${status ? `?status=${status}` : ""}`);
+  const query = status ? `?status=${status}` : "";
+  const res = await admin.get(`/admin/assistant/journal${query}`);
   expect(res.status).toBe(200);
   return (await res.json()) as { entries: EntryView[]; counts: Record<string, number> };
+}
+
+async function proposedEntry(): Promise<EntryView> {
+  await snapshot();
+  const diagnosed = await diagnoseAnswer({ messageId: await seedAnswer() });
+  return diagnosed.body.entry;
+}
+
+async function entryId(): Promise<string> {
+  await snapshot();
+  const diagnosed = await diagnoseAnswer({ messageId: await seedAnswer() });
+  return diagnosed.body.entry.id;
+}
+
+const startReplay = (entry: string) =>
+  admin.post("/admin/assistant/runs", { kind: "agent", entry });
+
+const runView = (id: string) =>
+  eventually(async () => {
+    const res = await admin.get(`/admin/assistant/runs/${id}`);
+    const view = (await res.json()) as {
+      run: { status: string; error: string | null };
+      items: { key: string; status: string; result: Record<string, unknown> | null }[];
+    };
+    return ["done", "failed", "cancelled"].includes(view.run.status) ? view : undefined;
+  }, 10_000);
+
+async function switchAgentOn(): Promise<void> {
+  await getDb()
+    .insert(aiSettings)
+    .values({ id: 1, featureSwitches: { agent: true } });
+  invalidateAssistantCache();
+}
+
+async function startedReplayId(entry: string): Promise<string> {
+  const res = await startReplay(entry);
+  expect(res.status).toBe(202);
+  const body = (await res.json()) as { id: string };
+  return body.id;
 }
 
 const ACCEPTABLE = {
@@ -272,7 +316,7 @@ describe("Diagnose", () => {
       position: "rest",
       pastCut: ["migrated", "clusters", "kubernetes"],
     });
-    const h3 = diagnosis.hypotheses[0]!;
+    const h3 = diagnosis.hypotheses[0];
     expect(h3).toMatchObject({ id: "context-unused", supporting: 2, contradicting: 0, ratio: 1 });
     expect(h3.evidence.map((e) => e.observation)).toEqual([
       expect.stringMatching(
@@ -297,9 +341,11 @@ describe("Diagnose", () => {
   it("analyses a proposed entry again rather than adding one, keeping what the admin wrote", async () => {
     await snapshot();
     const id = await seedAnswer();
-    const first = (await diagnoseAnswer({ messageId: id })).body.entry;
+    const firstRes = await diagnoseAnswer({ messageId: id });
+    const first = firstRes.body.entry;
     const heuristic = "Mine: when a case study runs long, its last lines must reach the core.";
-    expect((await patch(first.id, { heuristic })).status).toBe(200);
+    const patched = await patch(first.id, { heuristic });
+    expect(patched.status).toBe(200);
 
     // Named: the admin says where the answer is; the proposal follows, the edit stays.
     const again = await diagnoseAnswer({ messageId: id, expected: "project:atlas" });
@@ -321,21 +367,27 @@ describe("Diagnose", () => {
       id: "project:long@en",
       named: false,
     });
-    expect((await list()).entries).toHaveLength(1);
+    const allListed = await list();
+    expect(allListed.entries).toHaveLength(1);
   });
 
   it("refuses unknown answers, playground answers, unknown documents and decided entries", async () => {
     await snapshot();
     const id = await seedAnswer();
     await seedAnswer("m_playground01", { source: "playground" });
-    expect((await diagnoseAnswer({ messageId: "m_nothing0001" })).status).toBe(404);
-    expect((await diagnoseAnswer({ messageId: "m_playground01" })).status).toBe(404);
-    expect((await diagnoseAnswer({ messageId: "bad id" })).status).toBe(400);
+    const missing = await diagnoseAnswer({ messageId: "m_nothing0001" });
+    expect(missing.status).toBe(404);
+    const playground = await diagnoseAnswer({ messageId: "m_playground01" });
+    expect(playground.status).toBe(404);
+    const badId = await diagnoseAnswer({ messageId: "bad id" });
+    expect(badId.status).toBe(400);
     const unknown = await diagnoseAnswer({ messageId: id, expected: "project:nowhere" });
     expect(unknown).toMatchObject({ status: 400, body: { error: "unknown_document" } });
 
-    const { entry } = (await diagnoseAnswer({ messageId: id })).body;
-    expect((await patch(entry.id, { status: "accepted", ...ACCEPTABLE })).status).toBe(200);
+    const created = await diagnoseAnswer({ messageId: id });
+    const { entry } = created.body;
+    const accepted = await patch(entry.id, { status: "accepted", ...ACCEPTABLE });
+    expect(accepted.status).toBe(200);
     const decided = await diagnoseAnswer({ messageId: id });
     expect(decided).toMatchObject({
       status: 409,
@@ -367,13 +419,8 @@ describe("Diagnose", () => {
 });
 
 describe("the admin's decisions", () => {
-  async function proposed(): Promise<EntryView> {
-    await snapshot();
-    return (await diagnoseAnswer({ messageId: await seedAnswer() })).body.entry;
-  }
-
   it("accepts with a root cause and a heuristic that says something, then fixes with a case", async () => {
-    const entry = await proposed();
+    const entry = await proposedEntry();
     expect(await patch(entry.id, { status: "fixed" })).toMatchObject({
       status: 409,
       body: { error: "bad_transition" },
@@ -401,17 +448,17 @@ describe("the admin's decisions", () => {
       .insert(aiEvalCases)
       .values({ question: "Did he migrate clusters?", locale: "en", snapshotKey: "snap#1" })
       .returning({ id: aiEvalCases.id });
-    const fixed = await patch(entry.id, { status: "fixed", fixRef: null, caseId: frozen!.id });
-    expect(fixed.body.entry).toMatchObject({ status: "fixed", caseId: frozen!.id, fixRef: null });
+    const fixed = await patch(entry.id, { status: "fixed", fixRef: null, caseId: frozen.id });
+    expect(fixed.body.entry).toMatchObject({ status: "fixed", caseId: frozen.id, fixRef: null });
 
     // The case deleted, the entry keeps its history without it.
-    await getDb().delete(aiEvalCases).where(eq(aiEvalCases.id, frozen!.id));
+    await getDb().delete(aiEvalCases).where(eq(aiEvalCases.id, frozen.id));
     const [row] = await getDb().select().from(aiJournal).where(eq(aiJournal.id, entry.id));
     expect(row).toMatchObject({ status: "fixed", caseId: null });
   });
 
   it("retires an entry, reopens it, and deletes it for good", async () => {
-    const entry = await proposed();
+    const entry = await proposedEntry();
     const retired = await patch(entry.id, { status: "retired" });
     expect(retired.body.entry).toMatchObject({ status: "retired", decidedBy: "admin" });
     const reopened = await patch(entry.id, { status: "proposed" });
@@ -420,22 +467,28 @@ describe("the admin's decisions", () => {
       decidedBy: null,
       decidedAt: null,
     });
-    expect((await list("retired")).entries).toHaveLength(0);
+    const retiredList = await list("retired");
+    expect(retiredList.entries).toHaveLength(0);
 
-    expect((await admin.delete(`/admin/assistant/journal/${entry.id}`)).status).toBe(200);
-    expect((await admin.delete(`/admin/assistant/journal/${entry.id}`)).status).toBe(404);
-    expect((await patch(entry.id, { status: "accepted" })).status).toBe(404);
+    const delOk = await admin.delete(`/admin/assistant/journal/${entry.id}`);
+    expect(delOk.status).toBe(200);
+    const delMissing = await admin.delete(`/admin/assistant/journal/${entry.id}`);
+    expect(delMissing.status).toBe(404);
+    const patchMissing = await patch(entry.id, { status: "accepted" });
+    expect(patchMissing.status).toBe(404);
   });
 
   it("keeps an entry once its answer is pruned, and keeps the journal for the admin only", async () => {
-    const entry = await proposed();
-    await getDb().delete(aiMessages).where(eq(aiMessages.id, entry.messageIds[0]!));
-    const [kept] = (await list()).entries;
+    const entry = await proposedEntry();
+    await getDb().delete(aiMessages).where(eq(aiMessages.id, entry.messageIds[0]));
+    const afterPrune = await list();
+    const [kept] = afterPrune.entries;
     expect(kept).toMatchObject({ id: entry.id, message: null });
-    expect(kept!.diagnosis.leading).toBe("context-unused");
+    expect(kept.diagnosis.leading).toBe("context-unused");
 
     const stranger = new TestClient(app, "198.51.100.9");
-    expect((await stranger.get("/admin/assistant/journal")).status).toBe(401);
+    const strangerList = await stranger.get("/admin/assistant/journal");
+    expect(strangerList.status).toBe(401);
     const post = await stranger.post("/admin/assistant/journal/diagnose", {
       messageId: "m_journal0001",
     });
@@ -444,24 +497,6 @@ describe("the admin's decisions", () => {
 });
 
 describe("the replay (paid, a background run)", () => {
-  async function entryId(): Promise<string> {
-    await snapshot();
-    return (await diagnoseAnswer({ messageId: await seedAnswer() })).body.entry.id;
-  }
-
-  const startReplay = (entry: string) =>
-    admin.post("/admin/assistant/runs", { kind: "agent", entry });
-
-  const runView = (id: string) =>
-    eventually(async () => {
-      const res = await admin.get(`/admin/assistant/runs/${id}`);
-      const view = (await res.json()) as {
-        run: { status: string; error: string | null };
-        items: { key: string; status: string; result: Record<string, unknown> | null }[];
-      };
-      return ["done", "failed", "cancelled"].includes(view.run.status) ? view : undefined;
-    }, 10_000);
-
   it("waits for the admin to switch admin agents on", async () => {
     const entry = await entryId();
     const refused = await startReplay(entry);
@@ -471,14 +506,11 @@ describe("the replay (paid, a background run)", () => {
 
   it("answers again on both chains, records the spend as agent, and merges the evidence", async () => {
     const entry = await entryId();
-    await getDb()
-      .insert(aiSettings)
-      .values({ id: 1, featureSwitches: { agent: true } });
-    invalidateAssistantCache();
+    await switchAgentOn();
 
-    const started = await startReplay(entry);
-    expect(started.status).toBe(202);
-    const { id } = (await started.json()) as { id: string };
+    const replayRes = await startReplay(entry);
+    expect(replayRes.status).toBe(202);
+    const { id } = (await replayRes.json()) as { id: string };
     const view = await runView(id);
     expect(view.run).toMatchObject({ status: "done", error: null });
     expect(view.items.map((i) => [i.key, i.status])).toEqual([
@@ -502,13 +534,17 @@ describe("the replay (paid, a background run)", () => {
     const spent = await getDb().select().from(aiUsageFeatures);
     expect(new Set(spent.map((r) => r.feature))).toEqual(new Set(["agent"]));
 
-    const [merged] = (await list()).entries;
-    expect(merged!.replay?.results.map((r) => [r.chain, r.answered])).toEqual([
+    const listedAfter = await list();
+    const [merged] = listedAfter.entries;
+    expect(merged.replay?.results.map((r) => [r.chain, r.answered])).toEqual([
       ["lite", false],
       ["deep", true],
     ]);
-    expect(merged!.diagnosis.replayed).toBe(true);
-    const routed = merged!.diagnosis.hypotheses.find((h) => h.id === "under-routed")!;
+    expect(merged.diagnosis.replayed).toBe(true);
+    const routed = merged.diagnosis.hypotheses.find((h) => h.id === "under-routed");
+    if (!routed) {
+      throw new Error("expected under-routed hypothesis");
+    }
     expect(routed.evidence.filter((e) => e.supports).map((e) => e.observation)).toEqual([
       `Replayed today, the deep chain answers it (gemini-3.7-flash); the lite chain does not (${MODEL})`,
     ]);
@@ -516,10 +552,7 @@ describe("the replay (paid, a background run)", () => {
 
   it("refuses an unknown entry, a retired one, and one whose answer is gone", async () => {
     const entry = await entryId();
-    await getDb()
-      .insert(aiSettings)
-      .values({ id: 1, featureSwitches: { agent: true } });
-    invalidateAssistantCache();
+    await switchAgentOn();
 
     const unknown = await startReplay("00000000-0000-4000-8000-000000000000");
     expect(unknown.status).toBe(400);
@@ -548,7 +581,7 @@ describe("the replay (paid, a background run)", () => {
 
   it("refuses a replay with no chain to answer on", async () => {
     const entry = await entryId();
-    await switchOn();
+    await switchAgentOn();
     noChains = true;
     const refused = await startReplay(entry);
     expect(refused.status).toBe(400);
@@ -557,10 +590,10 @@ describe("the replay (paid, a background run)", () => {
 
   it("writes nothing while a chain has no model answering, and a resume finishes it", async () => {
     const entry = await entryId();
-    await switchOn();
+    await switchAgentOn();
     deep = failing(apiError(500), "gemini-3.7-flash");
 
-    const first = await started(entry);
+    const first = await startedReplayId(entry);
     const down = await runView(first);
     expect(down.run).toMatchObject({ status: "failed", error: PROVIDER_DOWN });
     expect(down.items.map((i) => [i.key, i.status])).toEqual([
@@ -568,18 +601,21 @@ describe("the replay (paid, a background run)", () => {
       ["deep", "unavailable"],
     ]);
     // An outage is no evidence: the entry waits for every chain.
-    expect((await list()).entries[0]!.replay).toBeNull();
+    const listDuringOutage = await list();
+    expect(listDuringOutage.entries[0].replay).toBeNull();
 
     deep = scripted([
       textTurn("In 2023 he migrated the clusters to Kubernetes [^project:long@en]."),
     ]);
     resetBreakers();
-    expect((await admin.post(`/admin/assistant/runs/${first}/resume`, {})).status).toBe(202);
+    const resumed = await admin.post(`/admin/assistant/runs/${first}/resume`, {});
+    expect(resumed.status).toBe(202);
     const done = await runView(first);
     expect(done.run).toMatchObject({ status: "done", error: null });
     // The lite chain answered once: a resume asks only the chain left.
     expect(lite.calls).toHaveLength(1);
-    expect((await list()).entries[0]!.replay?.results.map((r) => [r.chain, r.answered])).toEqual([
+    const listAfterResume = await list();
+    expect(listAfterResume.entries[0].replay?.results.map((r) => [r.chain, r.answered])).toEqual([
       ["lite", false],
       ["deep", true],
     ]);
@@ -592,7 +628,7 @@ describe("the replay (paid, a background run)", () => {
       .values({ id: 1, featureSwitches: { agent: true }, featureCaps: { agent: 0.0000001 } });
     invalidateAssistantCache();
 
-    const view = await runView(await started(entry));
+    const view = await runView(await startedReplayId(entry));
     expect(view.run.status).toBe("failed");
     expect(view.run.error).toMatch(/its own daily cap/);
     expect(view.items.map((i) => [i.key, i.status])).toEqual([
@@ -600,19 +636,21 @@ describe("the replay (paid, a background run)", () => {
       ["deep", "pending"],
     ]);
     expect(deep.calls).toHaveLength(0);
-    expect((await list()).entries[0]!.replay).toBeNull();
+    const listAfterCap = await list();
+    expect(listAfterCap.entries[0].replay).toBeNull();
   });
 
   it("stops before the next chain once the entry is retired, and leaves it as decided", async () => {
     const entry = await entryId();
-    await switchOn();
+    await switchAgentOn();
     const gate = held("That is not in the portfolio.");
     lite = gate;
 
-    const id = await started(entry);
+    const id = await startedReplayId(entry);
     // The lite chain is answering when the admin retires the entry.
-    await eventually(async () => (gate.calls.length === 1 ? true : undefined));
-    expect((await patch(entry, { status: "retired" })).status).toBe(200);
+    await eventually(() => Promise.resolve(gate.calls.length === 1 ? true : undefined));
+    const retiredRes = await patch(entry, { status: "retired" });
+    expect(retiredRes.status).toBe(200);
     gate.open();
     const view = await runView(id);
     expect(view.run).toMatchObject({ status: "failed", error: ENTRY_DECIDED });
@@ -625,19 +663,6 @@ describe("the replay (paid, a background run)", () => {
     const [row] = await getDb().select().from(aiJournal).where(eq(aiJournal.id, entry));
     expect(row).toMatchObject({ status: "retired", replay: null });
   });
-
-  async function switchOn(): Promise<void> {
-    await getDb()
-      .insert(aiSettings)
-      .values({ id: 1, featureSwitches: { agent: true } });
-    invalidateAssistantCache();
-  }
-
-  async function started(entry: string): Promise<string> {
-    const res = await startReplay(entry);
-    expect(res.status).toBe(202);
-    return ((await res.json()) as { id: string }).id;
-  }
 });
 
 describe("a new analysis joining its entry", () => {
@@ -650,7 +675,8 @@ describe("a new analysis joining its entry", () => {
 
   it("says why a replay could not join: the entry decided, its answer pruned, the entry gone", async () => {
     await snapshot();
-    const { entry } = (await diagnoseAnswer({ messageId: await seedAnswer() })).body;
+    const diagnosed = await diagnoseAnswer({ messageId: await seedAnswer() });
+    const { entry } = diagnosed.body;
     await patch(entry.id, { status: "retired" });
     expect(await applyReplay(entry.id, record)).toBe("entry_decided");
     await patch(entry.id, { status: "proposed" });
@@ -662,11 +688,14 @@ describe("a new analysis joining its entry", () => {
 
   it("reads the entry again when its status moved while the replay was being analysed", async () => {
     await snapshot();
-    const { entry } = (await diagnoseAnswer({ messageId: await seedAnswer() })).body;
+    const diagnosed = await diagnoseAnswer({ messageId: await seedAnswer() });
+    const { entry } = diagnosed.body;
     let writes = 0;
     // The admin accepts the entry between the first read and the first write.
     const write: typeof reanalysed = async (row, diagnosis, replay) => {
-      if (writes++ === 0) await patch(entry.id, { status: "accepted", ...ACCEPTABLE });
+      if (writes++ === 0) {
+        await patch(entry.id, { status: "accepted", ...ACCEPTABLE });
+      }
       return reanalysed(row, diagnosis, replay);
     };
     const applied = await applyReplay(entry.id, record, write);
@@ -678,14 +707,22 @@ describe("a new analysis joining its entry", () => {
   it("keeps an edit the admin saved while the entry was being analysed", async () => {
     await snapshot();
     const id = await seedAnswer();
-    const first = (await diagnoseAnswer({ messageId: id })).body.entry;
+    const diagnosed = await diagnoseAnswer({ messageId: id });
+    const first = diagnosed.body.entry;
     // Read before the admin saves, as an analysis or a replay's end reads it.
-    const stale = (await getEntry(first.id))!;
+    const stale = await getEntry(first.id);
+    if (!stale) {
+      throw new Error("expected entry");
+    }
     const heuristic =
       "Mine, saved meanwhile: keep what visitors ask about early in a long case study.";
-    expect((await patch(first.id, { heuristic })).status).toBe(200);
+    const patched = await patch(first.id, { heuristic });
+    expect(patched.status).toBe(200);
 
-    const answer = (await loadAnswer(id))!;
+    const answer = await loadAnswer(id);
+    if (!answer) {
+      throw new Error("expected answer");
+    }
     const fresh = diagnose({ answer, ...(await loadCorpora(answer)), expected: "project:atlas" });
     expect(fresh.proposal.rootCause).not.toBe(stale.rootCause);
     const updated = await reanalysed(stale, fresh);

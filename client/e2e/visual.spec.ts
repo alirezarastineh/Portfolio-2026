@@ -42,15 +42,25 @@ const TODAY = new Date("2026-09-25T09:00:00Z");
  * the first screen left unloaded.
  */
 async function scrollThrough(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
-    for (let y = 0; y < document.documentElement.scrollHeight; y += innerHeight / 2) {
-      scrollTo(0, y);
-      await frame();
-      await frame();
-    }
-    scrollTo(0, 0);
-  });
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        let y = 0;
+        const step = () => {
+          if (y >= document.documentElement.scrollHeight) {
+            scrollTo(0, 0);
+            resolve();
+            return;
+          }
+          scrollTo(0, y);
+          y += innerHeight / 2;
+          requestAnimationFrame(() => {
+            requestAnimationFrame(step);
+          });
+        };
+        step();
+      }),
+  );
   // Only images on show: a lazy one inside `display: none` (the writing
   // index's covers on phones) never loads, and never needs to.
   await page.waitForFunction(() =>

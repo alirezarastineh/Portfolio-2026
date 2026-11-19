@@ -31,7 +31,8 @@ export const evalWork: WorkFn = async (work) => {
   const paid = paidItems(work, calls);
   // Searched by meaning as visitors' answers are, when that is on (plan phase 18): the
   // fixture embedded in memory, its spend recorded with the first case.
-  calls.push(...(await embedInMemory(corpus, config)).calls);
+  const embedded = await embedInMemory(corpus, config);
+  calls.push(...embedded.calls);
 
   const partial = await runEvals({
     cases: work.keys.flatMap((key) => byId.get(key) ?? []),
@@ -50,7 +51,8 @@ export const evalWork: WorkFn = async (work) => {
       paid.finish(result.id, result.status === "unavailable" ? "unavailable" : "done", result),
   });
 
-  const items = (await getRun(work.run.id))?.items ?? [];
+  const run = await getRun(work.run.id);
+  const items = run?.items ?? [];
   const results = items.flatMap((i) =>
     i.status === "done" && i.result ? [i.result as CaseResult] : [],
   );
@@ -67,7 +69,11 @@ export const evalWork: WorkFn = async (work) => {
     results: undefined,
   };
   const stopped = paid.stoppedBy();
-  if (stopped) return { status: "failed", error: stopped, summary };
-  if (partial.unavailable) return { status: "failed", error: PROVIDER_DOWN, summary };
+  if (stopped) {
+    return { status: "failed", error: stopped, summary };
+  }
+  if (partial.unavailable) {
+    return { status: "failed", error: PROVIDER_DOWN, summary };
+  }
   return { status: "done", summary };
 };

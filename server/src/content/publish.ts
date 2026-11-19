@@ -20,20 +20,26 @@ import { DraftInvalidError, type DraftIssue } from "./draft-issues.js";
 import { CONTENT_SCHEMA_VERSION, LOCALES, type Locale } from "./schema.js";
 import { payloadVersion, upcast, upcastDocs } from "./upcast.js";
 
-export { CONTENT_SCHEMA_VERSION };
-
 /** Arbitrary but fixed; the migration lock uses 8_741_203. */
 const PUBLISH_LOCK_ID = 8_741_204;
 
 /** Key-sorted JSON, so an identical payload always yields an identical hash. */
 export function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  }
   const entries = Object.entries(value as Record<string, unknown>)
     .filter(([, v]) => v !== undefined)
     .sort(([a], [b]) => {
-      if (a < b) return -1;
-      if (a > b) return 1;
+      if (a < b) {
+        return -1;
+      }
+      if (a > b) {
+        return 1;
+      }
       return 0;
     });
   const fields = entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",");
@@ -58,7 +64,7 @@ export function builtChecksum(built: BuiltLocale): string {
 export function mediaFilenamesIn(value: unknown): string[] {
   const names = new Set<string>();
   for (const match of JSON.stringify(value).matchAll(/\/media\/([A-Za-z0-9][A-Za-z0-9._-]*)/g)) {
-    names.add(match[1]!);
+    names.add(match[1]);
   }
   return [...names];
 }
@@ -68,7 +74,9 @@ export async function assetIdsFor(
   db: DbExecutor,
   filenames: string[],
 ): Promise<{ ids: string[]; found: Set<string> }> {
-  if (filenames.length === 0) return { ids: [], found: new Set() };
+  if (filenames.length === 0) {
+    return { ids: [], found: new Set() };
+  }
   const originals = await db
     .select({ id: mediaAssets.id, filename: mediaAssets.filename })
     .from(mediaAssets)
@@ -119,14 +127,16 @@ export class PublicationError extends Error {
 export async function notifyClientCache(locale?: Locale): Promise<void> {
   const url = process.env.CONTENT_INVALIDATE_URL;
   const token = process.env.CONTENT_INVALIDATE_TOKEN;
-  if (!url || !token) return;
+  if (!url || !token) {
+    return;
+  }
 
   try {
     const response = await fetch(url, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify(locale ? { locale } : {}),
-      signal: AbortSignal.timeout(2_000),
+      signal: AbortSignal.timeout(2000),
     });
     if (!response.ok) {
       console.error(`[publish] client cache invalidation returned ${response.status}`);
@@ -157,15 +167,18 @@ async function withPublishLock<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
   try {
     await client.query("SELECT pg_advisory_lock($1)", [PUBLISH_LOCK_ID]);
     const db = drizzle(client, { schema });
-    for (let attempt = 1; ; attempt++) {
+    const runAttempt = async (attempt: number): Promise<T> => {
       try {
         return await db.transaction(fn, { isolationLevel: "repeatable read" });
       } catch (error) {
         // 40001 serialization_failure: a concurrent write touched what we read.
-        if (attempt < 2 && pgErrorCode(error) === "40001") continue;
+        if (attempt < 2 && pgErrorCode(error) === "40001") {
+          return runAttempt(attempt + 1);
+        }
         throw error;
       }
-    }
+    };
+    return await runAttempt(1);
   } finally {
     try {
       await client.query("SELECT pg_advisory_unlock($1)", [PUBLISH_LOCK_ID]);
@@ -182,7 +195,9 @@ async function recordMediaRefs(tx: Tx, versionId: number, built: BuiltLocale): P
     tx,
     mediaFilenamesIn({ core: built.core, docs: [...built.docs.values()] }),
   );
-  if (ids.length === 0) return;
+  if (ids.length === 0) {
+    return;
+  }
   await tx
     .insert(versionMediaRefs)
     .values(ids.map((assetId) => ({ versionId, assetId })))
@@ -211,7 +226,9 @@ async function writeVersion(
       createdBy: options.userId,
     })
     .returning({ id: contentVersions.id });
-  if (!version) throw new Error(`failed to insert content version for "${options.locale}"`);
+  if (!version) {
+    throw new Error(`failed to insert content version for "${options.locale}"`);
+  }
 
   if (options.built.docs.size > 0) {
     await tx.insert(contentVersionDocs).values(
@@ -245,18 +262,31 @@ export async function buildAll(
   db: DbExecutor,
   now: Date = new Date(),
 ): Promise<{ locale: Locale; built: BuiltLocale; checksum: string }[]> {
+  const attempts = await Promise.all(
+    LOCALES.map(async (locale) => {
+      try {
+        const built = await buildLocale(db, locale, now);
+        return { ok: true as const, locale, built, checksum: builtChecksum(built) };
+      } catch (error) {
+        if (!(error instanceof DraftInvalidError)) {
+          throw error;
+        }
+        return { ok: false as const, locale, issues: error.issues };
+      }
+    }),
+  );
   const out: { locale: Locale; built: BuiltLocale; checksum: string }[] = [];
   const invalid: { locale: Locale; issues: DraftIssue[] }[] = [];
-  for (const locale of LOCALES) {
-    try {
-      const built = await buildLocale(db, locale, now);
-      out.push({ locale, built, checksum: builtChecksum(built) });
-    } catch (error) {
-      if (!(error instanceof DraftInvalidError)) throw error;
-      invalid.push({ locale, issues: error.issues });
+  for (const item of attempts) {
+    if (item.ok) {
+      out.push({ locale: item.locale, built: item.built, checksum: item.checksum });
+    } else {
+      invalid.push({ locale: item.locale, issues: item.issues });
     }
   }
-  if (invalid.length > 0) throw new PublicationError(422, "invalid_draft", { locales: invalid });
+  if (invalid.length > 0) {
+    throw new PublicationError(422, "invalid_draft", { locales: invalid });
+  }
   return out;
 }
 
@@ -274,7 +304,8 @@ export async function buildAll(
 export async function publishAll(
   options: { label?: string; userId?: string } = {},
 ): Promise<PublishOutcome> {
-  const label = options.label?.trim() || null;
+  const trimmedLabel = options.label?.trim();
+  const label = trimmedLabel === undefined || trimmedLabel === "" ? null : trimmedLabel;
   const userId = options.userId ?? null;
 
   const outcome = await withPublishLock(async (tx) => {
@@ -289,16 +320,18 @@ export async function publishAll(
       .from(contentPointers)
       .innerJoin(contentVersions, eq(contentVersions.id, contentPointers.versionId));
 
-    const liveFor = (locale: Locale) => live.find((row) => row.locale === locale);
-    if (built.every((b) => liveFor(b.locale)?.checksum === b.checksum)) {
+    const liveByLocale = new Map(live.map((row) => [row.locale, row]));
+    const unchangedResults = built.flatMap((b) => {
+      const current = liveByLocale.get(b.locale);
+      return current?.checksum === b.checksum
+        ? [{ locale: b.locale, versionId: current.versionId, checksum: b.checksum }]
+        : [];
+    });
+    if (unchangedResults.length === built.length) {
       return {
         publicationId: null,
         unchanged: true,
-        results: built.map((b) => ({
-          locale: b.locale,
-          versionId: liveFor(b.locale)!.versionId,
-          checksum: b.checksum,
-        })),
+        results: unchangedResults,
       } satisfies PublishOutcome;
     }
 
@@ -306,10 +339,12 @@ export async function publishAll(
       .insert(contentPublications)
       .values({ kind: "publish", label, schemaVersion: CONTENT_SCHEMA_VERSION, createdBy: userId })
       .returning({ id: contentPublications.id });
-    if (!publication) throw new Error("failed to insert publication");
+    if (!publication) {
+      throw new Error("failed to insert publication");
+    }
 
-    const results: PublishResult[] = [];
-    for (const b of built) {
+    const results = await built.reduce<Promise<PublishResult[]>>(async (prev, b) => {
+      const acc = await prev;
       const versionId = await writeVersion(tx, {
         publicationId: publication.id,
         locale: b.locale,
@@ -318,8 +353,9 @@ export async function publishAll(
         label,
         userId,
       });
-      results.push({ locale: b.locale, versionId, checksum: b.checksum });
-    }
+      acc.push({ locale: b.locale, versionId, checksum: b.checksum });
+      return acc;
+    }, Promise.resolve([]));
     return { publicationId: publication.id, unchanged: false, results } satisfies PublishOutcome;
   });
 
@@ -357,7 +393,9 @@ export async function loadPublication(
     })
     .from(contentVersions)
     .where(eq(contentVersions.publicationId, publicationId));
-  if (versions.length === 0) throw new PublicationError(404, "not_found");
+  if (versions.length === 0) {
+    throw new PublicationError(404, "not_found");
+  }
 
   const docRows = await db
     .select({
@@ -373,36 +411,36 @@ export async function loadPublication(
       ),
     );
 
-  const loaded: LoadedVersion[] = [];
-  for (const version of versions) {
-    const result = upcast(version.payload, version.createdAt.toISOString());
-    if (!result.ok) {
-      throw new PublicationError(422, "invalid_payload", {
+  return Promise.all(
+    versions.map(async (version) => {
+      const result = upcast(version.payload, version.createdAt.toISOString());
+      if (!result.ok) {
+        throw new PublicationError(422, "invalid_payload", {
+          locale: version.locale,
+          issues: result.issues,
+        });
+      }
+      let docs;
+      try {
+        docs = await upcastDocs(
+          payloadVersion(version.payload) ?? CONTENT_SCHEMA_VERSION,
+          version.locale,
+          docRows.filter((d) => d.versionId === version.id),
+        );
+      } catch (error) {
+        throw new PublicationError(422, "invalid_payload", {
+          locale: version.locale,
+          issues: String(error),
+        });
+      }
+      return {
+        versionId: version.id,
         locale: version.locale,
-        issues: result.issues,
-      });
-    }
-    let docs;
-    try {
-      docs = await upcastDocs(
-        payloadVersion(version.payload) ?? CONTENT_SCHEMA_VERSION,
-        version.locale,
-        docRows.filter((d) => d.versionId === version.id),
-      );
-    } catch (error) {
-      throw new PublicationError(422, "invalid_payload", {
-        locale: version.locale,
-        issues: String(error),
-      });
-    }
-    loaded.push({
-      versionId: version.id,
-      locale: version.locale,
-      from: result.from,
-      built: { core: result.content, docs },
-    });
-  }
-  return loaded;
+        from: result.from,
+        built: { core: result.content, docs },
+      };
+    }),
+  );
 }
 
 export interface RollbackOutcome {
@@ -436,7 +474,9 @@ export async function rollbackToPublication(
     ];
     const { found } = await assetIdsFor(tx, wanted);
     const missing = wanted.filter((name) => !found.has(name));
-    if (missing.length > 0) throw new PublicationError(409, "media_missing", { missing });
+    if (missing.length > 0) {
+      throw new PublicationError(409, "media_missing", { missing });
+    }
 
     const label = `rollback to publication #${sourceId}`;
     const [publication] = await tx
@@ -449,10 +489,12 @@ export async function rollbackToPublication(
         createdBy: userId ?? null,
       })
       .returning({ id: contentPublications.id });
-    if (!publication) throw new Error("failed to insert publication");
+    if (!publication) {
+      throw new Error("failed to insert publication");
+    }
 
-    const results: PublishResult[] = [];
-    for (const source of sources) {
+    const results = await sources.reduce<Promise<PublishResult[]>>(async (prev, source) => {
+      const acc = await prev;
       const checksum = builtChecksum(source.built);
       const versionId = await writeVersion(tx, {
         publicationId: publication.id,
@@ -462,8 +504,9 @@ export async function rollbackToPublication(
         label,
         userId: userId ?? null,
       });
-      results.push({ locale: source.locale, versionId, checksum });
-    }
+      acc.push({ locale: source.locale, versionId, checksum });
+      return acc;
+    }, Promise.resolve([]));
     return { publicationId: publication.id, restoredFrom: sourceId, results };
   });
 
@@ -472,3 +515,5 @@ export async function rollbackToPublication(
   await notifyClientCache();
   return outcome;
 }
+
+export { CONTENT_SCHEMA_VERSION } from "./schema.js";

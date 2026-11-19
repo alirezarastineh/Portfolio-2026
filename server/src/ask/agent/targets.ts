@@ -79,10 +79,18 @@ export const targetKey = (ref: TargetRef): string =>
 /** A run item's key back as its target, or null when it is not one. */
 export function parseKey(key: string): TargetRef | null {
   const [goal, kind, entityId, field, locale, ...rest] = key.split("|");
-  if (rest.length || !entityId || !field) return null;
-  if (!CONTENT_GOALS.includes(goal as ContentGoal)) return null;
-  if (!TARGET_KINDS.includes(kind as TargetKind)) return null;
-  if (locale !== "en" && locale !== "de") return null;
+  if (rest.length || !entityId || !field) {
+    return null;
+  }
+  if (!CONTENT_GOALS.includes(goal as ContentGoal)) {
+    return null;
+  }
+  if (!TARGET_KINDS.includes(kind as TargetKind)) {
+    return null;
+  }
+  if (locale !== "en" && locale !== "de") {
+    return null;
+  }
   return { goal: goal as ContentGoal, kind: kind as TargetKind, entityId, field, locale };
 }
 
@@ -200,6 +208,15 @@ interface Content {
   media: { id: string; name: string; alt: Record<Locale, string> }[];
 }
 
+const textsOf = <R extends { locale: Locale }>(rows: R[]): Texts =>
+  Object.fromEntries(rows.map((row) => [row.locale, row as Record<string, unknown>]));
+
+const titleOf = (texts: Texts, key: string, fallback: string) => {
+  const en = texts.en?.[key];
+  const de = texts.de?.[key];
+  return (typeof en === "string" && en.trim()) || (typeof de === "string" && de.trim()) || fallback;
+};
+
 async function loadContent(): Promise<Content> {
   const db = getDb();
   const [
@@ -243,16 +260,6 @@ async function loadContent(): Promise<Content> {
       .from(mediaAssets)
       .orderBy(asc(mediaAssets.createdAt)),
   ]);
-
-  const textsOf = <R extends { locale: Locale }>(rows: R[]): Texts =>
-    Object.fromEntries(rows.map((row) => [row.locale, row as Record<string, unknown>]));
-  const titleOf = (texts: Texts, key: string, fallback: string) => {
-    const en = texts.en?.[key];
-    const de = texts.de?.[key];
-    return (
-      (typeof en === "string" && en.trim()) || (typeof de === "string" && de.trim()) || fallback
-    );
-  };
 
   const entities: Content["entities"] = [
     ...projectRows.map((p) => {
@@ -307,7 +314,9 @@ type TargetBase = Omit<Target, "source" | "gap">;
 /** An image's alt text. */
 function describeAlt(ref: TargetRef, content: Content, key: string): Target | null {
   const asset = content.media.find((m) => m.id === ref.entityId);
-  if (ref.kind !== "media" || ref.field !== "alt" || !asset) return null;
+  if (ref.kind !== "media" || ref.field !== "alt" || !asset) {
+    return null;
+  }
   const current = asset.alt[ref.locale];
   return {
     ...ref,
@@ -329,8 +338,9 @@ function describeSection(ref: TargetRef, content: Content, key: string): Target 
     !section ||
     !texts ||
     NOT_TEXT.has(`${section.section}:${ref.field}`)
-  )
+  ) {
     return null;
+  }
   const source = section.texts[otherOf(ref.locale)]?.[ref.field] ?? "";
   const current = texts[ref.field] ?? "";
   return {
@@ -348,7 +358,9 @@ function describeSection(ref: TargetRef, content: Content, key: string): Target 
 function translationTarget(base: TargetBase, theirs: Texts[Locale]): Target {
   const source = theirs ? textOf(theirs, base.field) : "";
   const gap = !!theirs && isEmpty(base.current) && !isEmpty(source);
-  if (base.field !== "seoDescription") return { ...base, source, gap };
+  if (base.field !== "seoDescription") {
+    return { ...base, source, gap };
+  }
   // A search description is translated within what search results show; an over-long
   // one is the seo goal's to draft again, from the page, not to carry into a language.
   return {
@@ -368,7 +380,9 @@ function seoTarget(
   goals: readonly ContentGoal[],
 ): Target | null {
   const pageFields = PAGE_FIELDS[entity.kind];
-  if (base.field !== "seoDescription" || !pageFields) return null;
+  if (base.field !== "seoDescription" || !pageFields) {
+    return null;
+  }
   const page = pageFields
     .map((f) => textOf(mine, f))
     .filter((t) => !isEmpty(t))
@@ -392,7 +406,9 @@ function describeEntity(
   const entity = content.entities.find((e) => e.kind === ref.kind && e.id === ref.entityId);
   const mine = entity?.texts[ref.locale];
   // An entity gone, or with no text in this language at all (a post in one language only).
-  if (!entity || !mine || !TEXT_FIELDS[entity.kind].fields.includes(ref.field)) return null;
+  if (!entity || !mine || !TEXT_FIELDS[entity.kind].fields.includes(ref.field)) {
+    return null;
+  }
   const theirs = entity.texts[otherOf(ref.locale)];
   const base: TargetBase = {
     ...ref,
@@ -409,8 +425,12 @@ function describeEntity(
 /** A target as `content` has it, or null when its entity, language or field is gone. */
 function describe(ref: TargetRef, content: Content, goals: readonly ContentGoal[]): Target | null {
   const key = targetKey(ref);
-  if (ref.goal === "alt") return describeAlt(ref, content, key);
-  if (ref.kind === "section") return describeSection(ref, content, key);
+  if (ref.goal === "alt") {
+    return describeAlt(ref, content, key);
+  }
+  if (ref.kind === "section") {
+    return describeSection(ref, content, key);
+  }
   return describeEntity(ref, content, goals, key);
 }
 
@@ -456,10 +476,14 @@ export async function contentTargets(
   for (const goal of goals) {
     for (const ref of candidates(goal, content)) {
       const target = describe(ref, content, goals);
-      if (!target?.gap || seen.has(target.key)) continue;
+      if (!target?.gap || seen.has(target.key)) {
+        continue;
+      }
       seen.add(target.key);
       targets.push(target);
-      if (targets.length === maxItems) return targets;
+      if (targets.length === maxItems) {
+        return targets;
+      }
     }
   }
   return targets;
@@ -480,12 +504,16 @@ export async function readTargets(
   goals: readonly ContentGoal[],
 ): Promise<Map<string, Target>> {
   const found = new Map<string, Target>();
-  if (!keys.length) return found;
+  if (!keys.length) {
+    return found;
+  }
   const content = await loadContent();
   for (const key of keys) {
     const ref = parseKey(key);
     const target = ref ? describe(ref, content, goals) : null;
-    if (target) found.set(key, target);
+    if (target) {
+      found.set(key, target);
+    }
   }
   return found;
 }

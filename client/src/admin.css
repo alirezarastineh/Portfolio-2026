@@ -301,7 +301,12 @@
       #000 calc(100% - var(--sidebar-fade-bottom)),
       transparent
     );
-    animation: sidebar-fade linear both;
-    animation-timeline: scroll(self);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="sidebar-content"] {
+      animation: sidebar-fade linear both;
+      animation-timeline: scroll(self);
+    }
   }
 }

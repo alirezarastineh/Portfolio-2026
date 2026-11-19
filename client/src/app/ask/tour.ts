@@ -106,6 +106,8 @@ export function defaultTour(content: AppContent, locale: Locale): TourStop[] {
   ];
 }
 
+const str = (value: unknown): string => (typeof value === "string" ? value : "");
+
 /** The server's tour, from its answer's `data-tour` part; null when it has none, or a malformed one. */
 export function tourData(message: AskMessage | undefined): {
   kind: "plan" | "default";
@@ -117,10 +119,13 @@ export function tourData(message: AskMessage | undefined): {
   const part = message?.parts.find((p) => p.type === "data-tour") as
     { data?: Record<string, unknown> } | undefined;
   const data = part?.data;
-  if (data?.["v"] !== 1) return null;
+  if (data?.["v"] !== 1) {
+    return null;
+  }
   const kind = data["kind"];
-  if (kind !== "plan" && kind !== "default") return null;
-  const str = (value: unknown) => (typeof value === "string" ? value : "");
+  if (kind !== "plan" && kind !== "default") {
+    return null;
+  }
   const stops = Array.isArray(data["stops"])
     ? (data["stops"] as unknown[]).flatMap((raw): TourStop[] => {
         const s = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -136,7 +141,9 @@ export function tourData(message: AskMessage | undefined): {
           : [];
       })
     : [];
-  if (kind === "plan" && !stops.length) return null;
+  if (kind === "plan" && !stops.length) {
+    return null;
+  }
   return {
     kind,
     interest: str(data["interest"]),
@@ -156,8 +163,12 @@ const STOP_PATH = /^\/(en|de)(?:\/(?:work|writing)\/([a-z0-9-]+)|#([a-z]+))?$/;
  */
 export function stopTarget(content: AppContent, locale: Locale, url: string): string | null {
   const match = STOP_PATH.exec(url);
-  if (!match) return null;
-  if (match[1] !== locale) return url;
+  if (!match) {
+    return null;
+  }
+  if (match[1] !== locale) {
+    return url;
+  }
   return openTarget(content, locale, match[2] ?? match[3] ?? "home") === url ? url : null;
 }
 
@@ -181,7 +192,7 @@ export function tourLines(state: TourState, copy: AskCopy["tour"]): OutLine[] {
 
 /** A stop reached: its line, a question about it, and, at the last, that it was the last. */
 export function stopLines(state: TourState, copy: AskCopy["tour"]): OutLine[] {
-  const stop = state.stops[state.at]!;
+  const stop = state.stops[state.at];
   const last = state.at === state.stops.length - 1;
   return [
     {

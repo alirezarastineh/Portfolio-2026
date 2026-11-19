@@ -25,6 +25,8 @@ beforeEach(async () => {
 
 const trace = (extra: Partial<AnswerTrace>): AnswerTrace => ({ v: 1, steps: [], ...extra });
 
+const day = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
+
 async function seed(): Promise<void> {
   const base = {
     locale: "en" as const,
@@ -34,9 +36,8 @@ async function seed(): Promise<void> {
     sessionHash: "s",
     source: "terminal",
     usd: 0.001,
-    tokens: { input: 1_000, cached: 0, output: 50, thoughts: 0 },
+    tokens: { input: 1000, cached: 0, output: 50, thoughts: 0 },
   };
-  const day = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
   await getDb()
     .insert(aiMessages)
     .values([
@@ -53,7 +54,7 @@ async function seed(): Promise<void> {
         ...base,
         id: "m_lite00001",
         route: "lite",
-        ttftMs: 1_500,
+        ttftMs: 1500,
         questionRedacted: "Which of his projects scaled the furthest?",
         trace: trace({ routing: { reason: "default" } }),
         createdAt: day(1),
@@ -62,7 +63,7 @@ async function seed(): Promise<void> {
         ...base,
         id: "m_moved0001",
         route: "lite→deep",
-        ttftMs: 2_500,
+        ttftMs: 2500,
         questionRedacted: "Tell me about his projects",
         trace: trace({
           routing: { reason: "default" },
@@ -74,7 +75,7 @@ async function seed(): Promise<void> {
         ...base,
         id: "m_careful01",
         route: "lite",
-        ttftMs: 1_200,
+        ttftMs: 1200,
         questionRedacted: "What salary does he expect?",
         trace: trace({
           routing: { reason: "default+sensitive:compensation", sensitive: "compensation" },
@@ -86,7 +87,7 @@ async function seed(): Promise<void> {
         ...base,
         id: "m_before001",
         route: "lite",
-        ttftMs: 1_800,
+        ttftMs: 1800,
         questionRedacted: "Hi",
         createdAt: day(4),
       },
@@ -95,7 +96,7 @@ async function seed(): Promise<void> {
         ...base,
         id: "m_old000001",
         route: "lite",
-        ttftMs: 1_000,
+        ttftMs: 1000,
         questionRedacted: "Old",
         createdAt: day(20),
       },
@@ -104,7 +105,7 @@ async function seed(): Promise<void> {
         id: "m_eval00001",
         source: "eval",
         route: "deep",
-        ttftMs: 3_000,
+        ttftMs: 3000,
         questionRedacted: "Eval",
         createdAt: day(1),
       },
@@ -142,17 +143,20 @@ describe("GET /admin/assistant/router", () => {
     const tiers = Object.fromEntries(report.tiers.map((t) => [t.tier, t]));
     expect(tiers["lookup"]).toMatchObject({ answers: 1, p50TtftMs: 500 });
     expect(tiers["lite"]).toMatchObject({ answers: 3 });
-    expect(tiers["escalated"]).toMatchObject({ answers: 1, p50TtftMs: 2_500 });
+    expect(tiers["escalated"]).toMatchObject({ answers: 1, p50TtftMs: 2500 });
     expect(tiers["deep"]).toMatchObject({ answers: 0 });
 
-    const month = (await (await admin.get("/admin/assistant/router?days=30")).json()) as {
+    const monthRes = await admin.get("/admin/assistant/router?days=30");
+    const month = (await monthRes.json()) as {
       answers: number;
     };
     expect(month.answers).toBe(6);
-    expect((await admin.get("/admin/assistant/router?days=0")).status).toBe(400);
+    const badDaysRes = await admin.get("/admin/assistant/router?days=0");
+    expect(badDaysRes.status).toBe(400);
   });
 
   it("is the admin's alone", async () => {
-    expect((await app.request("/admin/assistant/router")).status).toBe(401);
+    const res = await app.request("/admin/assistant/router");
+    expect(res.status).toBe(401);
   });
 });

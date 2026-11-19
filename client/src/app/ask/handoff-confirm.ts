@@ -10,18 +10,30 @@ export async function confirmHandoff(
 ): Promise<boolean> {
   const maxAttempts = options.attempts ?? 4;
   const delayMs = options.delayMs ?? 2000;
-  const sleep = options.sleep ?? ((ms) => new Promise<void>((done) => setTimeout(done, ms)));
+  const sleep =
+    options.sleep ??
+    ((ms) =>
+      new Promise<void>((done) => {
+        setTimeout(done, ms);
+      }));
 
   async function step(attempt: number): Promise<boolean> {
-    if (attempt > maxAttempts) return false;
+    if (attempt > maxAttempts) {
+      return false;
+    }
     let status: number;
     try {
-      status = (await post()).status;
+      const response = await post();
+      status = response.status;
     } catch {
       return false;
     }
-    if (status !== 404) return status >= 200 && status < 300;
-    if (attempt === maxAttempts) return false;
+    if (status !== 404) {
+      return status >= 200 && status < 300;
+    }
+    if (attempt === maxAttempts) {
+      return false;
+    }
     await sleep(delayMs);
     return step(attempt + 1);
   }

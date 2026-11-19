@@ -55,12 +55,17 @@ function setup(
     navigate,
     pages: () => Promise.resolve(PAGES),
   });
-  const run = (name: string, args: Record<string, unknown> = {}) =>
-    tools
-      .find((t) => t.name === name)!
-      .execute(args, { signal: new AbortController().signal }) as Promise<string>;
+  const run = (name: string, args: Record<string, unknown> = {}) => {
+    const tool = tools.find((t) => t.name === name);
+    if (!tool) {
+      throw new Error(`Missing tool: ${name}`);
+    }
+    return tool.execute(args, { signal: new AbortController().signal }) as Promise<string>;
+  };
   return { store, chat, navigate, tools, run };
 }
+
+const toolNames = (remote: RemoteConfig | null) => setup(remote).tools.map((t) => t.name);
 
 afterEach(() => {
   delete (globalThis as { umami?: unknown }).umami;
@@ -68,11 +73,18 @@ afterEach(() => {
 
 describe("agentTools (plan 3 W6)", () => {
   it("declares the spending tools only while their feature is on", () => {
-    const names = (remote: RemoteConfig | null) => setup(remote).tools.map((t) => t.name);
-    expect(names(ON)).toEqual(["list_pages", "open_page", "ask_portfolio", "match_brief"]);
-    expect(names({ ...ON, match: false })).toEqual(["list_pages", "open_page", "ask_portfolio"]);
-    expect(names({ ...ON, state: "resting" })).toEqual(["list_pages", "open_page", "match_brief"]);
-    expect(names(null)).toEqual(["list_pages", "open_page"]);
+    expect(toolNames(ON)).toEqual(["list_pages", "open_page", "ask_portfolio", "match_brief"]);
+    expect(toolNames({ ...ON, match: false })).toEqual([
+      "list_pages",
+      "open_page",
+      "ask_portfolio",
+    ]);
+    expect(toolNames({ ...ON, state: "resting" })).toEqual([
+      "list_pages",
+      "open_page",
+      "match_brief",
+    ]);
+    expect(toolNames(null)).toEqual(["list_pages", "open_page"]);
     for (const tool of setup().tools) {
       expect(tool.name.length, tool.name).toBeLessThanOrEqual(30);
       expect(tool.description.length, tool.name).toBeLessThanOrEqual(500);
@@ -86,8 +98,10 @@ describe("agentTools (plan 3 W6)", () => {
     expect(await run("list_pages")).toBe(
       "/en/work/atlas · project · Atlas\n/en#about · profile · About",
     );
-    for (const path of ["/en/work/other", "https://evil.example/", "/\\evil.example", 7]) {
-      expect(await run("open_page", { path })).toContain("Not one of the site's pages");
+    const badPaths = ["/en/work/other", "https://evil.example/", "/\\evil.example", 7];
+    const badResults = await Promise.all(badPaths.map((path) => run("open_page", { path })));
+    for (const result of badResults) {
+      expect(result).toContain("Not one of the site's pages");
     }
     expect(navigate).not.toHaveBeenCalled();
     expect(await run("open_page", { path: "/en/work/atlas" })).toBe(
@@ -114,7 +128,7 @@ describe("agentTools (plan 3 W6)", () => {
     expect(await run("ask_portfolio", { question: "x".repeat(601) })).toBe(
       "Too long: at most 600 characters.",
     );
-    expect(await run("match_brief", { kind: "role", brief: "x".repeat(4_001) })).toContain(
+    expect(await run("match_brief", { kind: "role", brief: "x".repeat(4001) })).toContain(
       "1 to 4000",
     );
     expect(await run("match_brief", { kind: "job", brief: "A role." })).toContain(
@@ -132,9 +146,9 @@ describe("agentTools (plan 3 W6)", () => {
 
   it("keeps every output within 1,500 characters, the answer's sources whole", async () => {
     const source = { type: "source-url", sourceId: "p1", url: "/en/work/atlas", title: "Atlas" };
-    const { run } = setup(ON, [{ type: "text", text: "word ".repeat(1_000) }, source]);
+    const { run } = setup(ON, [{ type: "text", text: "word ".repeat(1000) }, source]);
     const out = await run("ask_portfolio", { question: "Tell me everything." });
-    expect(out.length).toBeLessThanOrEqual(1_500);
+    expect(out.length).toBeLessThanOrEqual(1500);
     expect(out).toContain("(cut: the site shows it whole)\nSources:\n- Atlas: /en/work/atlas");
   });
 

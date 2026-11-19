@@ -14,7 +14,9 @@ export interface SniffedImage {
  * ever genuinely needed it belongs on a separate cookie-less host.
  */
 export function sniffImage(buffer: Buffer): SniffedImage | null {
-  if (buffer.length < 16) return null;
+  if (buffer.length < 16) {
+    return null;
+  }
 
   if (isPng(buffer)) {
     return { mime: "image/png", ext: "png", ...pngSize(buffer) };
@@ -54,7 +56,9 @@ function isWebp(b: Buffer): boolean {
 }
 
 function isAvif(b: Buffer): boolean {
-  if (b.toString("ascii", 4, 8) !== "ftyp") return false;
+  if (b.toString("ascii", 4, 8) !== "ftyp") {
+    return false;
+  }
   const brand = b.toString("ascii", 8, 12);
   return brand === "avif" || brand === "avis";
 }
@@ -62,7 +66,9 @@ function isAvif(b: Buffer): boolean {
 function pngSize(b: Buffer): { width: number | null; height: number | null } {
   // IHDR is always the first chunk: width/height are big-endian at 16 and 20.
   // A truncated file shorter than that used to throw RangeError → a 500.
-  if (b.length < 24) return { width: null, height: null };
+  if (b.length < 24) {
+    return { width: null, height: null };
+  }
   return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
 }
 
@@ -76,11 +82,11 @@ function webpSize(b: Buffer): { width: number | null; height: number | null } {
   try {
     if (format === "VP8 ") {
       // Lossy: 14-bit dimensions after the 3-byte start code.
-      return { width: b.readUInt16LE(26) & 0x3fff, height: b.readUInt16LE(28) & 0x3fff };
+      return { width: b.readUInt16LE(26) & 0x3f_ff, height: b.readUInt16LE(28) & 0x3f_ff };
     }
     if (format === "VP8L") {
       const bits = b.readUInt32LE(21);
-      return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+      return { width: (bits & 0x3f_ff) + 1, height: ((bits >> 14) & 0x3f_ff) + 1 };
     }
     if (format === "VP8X") {
       // 24-bit little-endian, stored minus one.
@@ -121,7 +127,9 @@ function jpegSize(b: Buffer): { width: number | null; height: number | null } {
     }
 
     const length = b.readUInt16BE(offset + 2);
-    if (length < 2) break;
+    if (length < 2) {
+      break;
+    }
     offset += 2 + length;
   }
 
@@ -138,7 +146,9 @@ export interface SniffedDocument {
  * served as a download-or-view document, never parsed or rendered here.
  */
 export function sniffDocument(buffer: Buffer): SniffedDocument | null {
-  if (buffer.length < 8) return null;
+  if (buffer.length < 8) {
+    return null;
+  }
   return buffer.toString("ascii", 0, 5) === "%PDF-"
     ? { mime: "application/pdf", ext: "pdf" }
     : null;

@@ -5,7 +5,7 @@ import { contentDocuments } from "../db/schema.js";
 import type { DbExecutor } from "./build.js";
 import { LEGAL_DEFAULTS } from "./legal-defaults.js";
 import { canonicalJson } from "./publish.js";
-import { LOCALES, legalDocSchema } from "./schema.js";
+import { LOCALES, legalDocSchema, type Locale } from "./schema.js";
 import { withUiDefaults } from "./ui-defaults.js";
 
 export interface BackfillReport {
@@ -13,6 +13,41 @@ export interface BackfillReport {
   ui: number;
   /** Legal documents created from the bundled draft. */
   legal: number;
+}
+
+async function backfillLocale(db: DbExecutor, locale: Locale): Promise<BackfillReport> {
+  const isUi = and(eq(contentDocuments.section, "ui"), eq(contentDocuments.locale, locale));
+  const [ui] = await db
+    .select({ data: contentDocuments.data })
+    .from(contentDocuments)
+    .where(isUi)
+    .limit(1);
+  if (!ui) {
+    return { ui: 0, legal: 0 };
+  }
+
+  let uiUpdated = 0;
+  const filled = withUiDefaults(ui.data, locale);
+  if (canonicalJson(filled) !== canonicalJson(ui.data)) {
+    // updated_at stays: this is not an edit, and it is the editors' token
+    // for detecting a save made elsewhere.
+    await db.update(contentDocuments).set({ data: filled }).where(isUi);
+    uiUpdated = 1;
+  }
+
+  const inserted = await db
+    .insert(contentDocuments)
+    .values(
+      legalDocSchema.options.map((doc) => ({
+        section: doc,
+        locale,
+        data: LEGAL_DEFAULTS[locale][doc],
+      })),
+    )
+    .onConflictDoNothing()
+    .returning({ section: contentDocuments.section });
+
+  return { ui: uiUpdated, legal: inserted.length };
 }
 
 /**
@@ -26,34 +61,9 @@ export interface BackfillReport {
  * Nothing is touched before the seed has created the `ui` documents.
  */
 export async function backfillContentV2(db: DbExecutor = getDb()): Promise<BackfillReport> {
-  const report: BackfillReport = { ui: 0, legal: 0 };
-
-  for (const locale of LOCALES) {
-    const isUi = and(eq(contentDocuments.section, "ui"), eq(contentDocuments.locale, locale));
-    const [ui] = await db
-      .select({ data: contentDocuments.data })
-      .from(contentDocuments)
-      .where(isUi)
-      .limit(1);
-    if (!ui) continue;
-
-    const filled = withUiDefaults(ui.data, locale);
-    if (canonicalJson(filled) !== canonicalJson(ui.data)) {
-      // updated_at stays: this is not an edit, and it is the editors' token
-      // for detecting a save made elsewhere.
-      await db.update(contentDocuments).set({ data: filled }).where(isUi);
-      report.ui++;
-    }
-
-    for (const doc of legalDocSchema.options) {
-      const inserted = await db
-        .insert(contentDocuments)
-        .values({ section: doc, locale, data: LEGAL_DEFAULTS[locale][doc] })
-        .onConflictDoNothing()
-        .returning({ section: contentDocuments.section });
-      report.legal += inserted.length;
-    }
-  }
-
-  return report;
+  const results = await Promise.all(LOCALES.map((locale) => backfillLocale(db, locale)));
+  return results.reduce(
+    (report, item) => ({ ui: report.ui + item.ui, legal: report.legal + item.legal }),
+    { ui: 0, legal: 0 },
+  );
 }

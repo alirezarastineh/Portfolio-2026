@@ -10,7 +10,14 @@ import { describe, expect, it } from "vitest";
  */
 const here = dirname(fileURLToPath(import.meta.url));
 const css = readFileSync(resolve(here, "./components.css"), "utf8");
-const shared = [...new Set([...css.matchAll(/^\s*\.([a-z][a-z-]*)/gm)].map((match) => match[1]))];
+const shared = [
+  ...new Set(
+    css
+      .split("\n")
+      .map((line) => /^\.([a-z][a-z-]*)/.exec(line.trimStart())?.[1])
+      .filter((name): name is string => Boolean(name)),
+  ),
+];
 
 describe("the shared pieces", () => {
   it("are found in the stylesheet", () => {

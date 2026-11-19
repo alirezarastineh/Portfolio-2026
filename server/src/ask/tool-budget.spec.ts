@@ -36,7 +36,7 @@ describe("an answer's tool budget", () => {
     expect(budget.take("post:a@en", 30_000)).toBe(FETCH_CLIP);
     expect(budget.take("post:b@en", 30_000)).toBe(FETCH_CLIP);
     // 36,000 read: the fourth is cut to what is left of the 40,000.
-    expect(budget.take("post:c@en", 30_000)).toBe(4_000);
+    expect(budget.take("post:c@en", 30_000)).toBe(4000);
     expect(budget.spent()).toEqual({ calls: DOCUMENT_CALLS, chars: DOCUMENT_CHARS });
     // A fifth, however short, is past the envelope.
     expect(budget.take("profile@en", 10)).toBeNull();
@@ -55,7 +55,7 @@ const document = (id: string, kind: CorpusKind, text: string): CorpusDocument =>
   text,
 });
 
-const LONG = "Long case study. ".repeat(1_000);
+const LONG = "Long case study. ".repeat(1000);
 
 const EXTRA: CorpusDocument[] = [
   document("cv@en", "cv", "Curriculum vitae: Alireza Rastineh, Berlin."),
@@ -92,7 +92,11 @@ async function answerWith(turns: LanguageModelV4StreamPart[][], pageId?: string)
   const model = scripted(turns);
   const question = "Tell me everything about his work";
   // The page asked on (visitor plan V8), held cut short, so promoted.
-  const page = pageId ? { document: corpus.byId.get(pageId)!, held: "clipped" as const } : null;
+  const pageDoc = pageId ? corpus.byId.get(pageId) : undefined;
+  if (pageId && !pageDoc) {
+    throw new Error(`Missing fixture doc: ${pageId}`);
+  }
+  const page = pageDoc ? { document: pageDoc, held: "clipped" as const } : null;
   const run = streamAnswer({
     page,
     messages: [{ role: "user", content: wrapVisitor(question, "en") }],
@@ -111,7 +115,10 @@ async function answerWith(turns: LanguageModelV4StreamPart[][], pageId?: string)
   });
   await drain(run.stream);
   const outcome = await run.done;
-  const outcomes = outcome.steps!.steps.map((step) => step.tools.map((tool) => tool.outcome));
+  if (!outcome.steps) {
+    throw new Error("expected steps");
+  }
+  const outcomes = outcome.steps.steps.map((step) => step.tools.map((tool) => tool.outcome));
   return { model, outcome, outcomes };
 }
 
@@ -119,7 +126,9 @@ async function answerWith(turns: LanguageModelV4StreamPart[][], pageId?: string)
 function resultsSeen(call: LanguageModelV4CallOptions): Map<string, Record<string, unknown>> {
   const seen = new Map<string, Record<string, unknown>>();
   for (const message of call.prompt) {
-    if (message.role !== "tool") continue;
+    if (message.role !== "tool") {
+      continue;
+    }
     for (const part of message.content) {
       if (part.type === "tool-result" && part.output.type === "json") {
         seen.set(part.toolCallId, part.output.value as Record<string, unknown>);
@@ -158,7 +167,7 @@ describe("the tools in an answer (scripted model)", () => {
       ["duplicate", "ok"],
       [],
     ]);
-    const seen = resultsSeen(model.calls[3]!);
+    const seen = resultsSeen(model.calls[3]);
     expect(seen.get("s2")).toEqual({ duplicate: true, note: NOTES.alreadyProvided });
     expect(seen.get("d2")).toEqual({
       id: "project:atlas@en",
@@ -188,20 +197,25 @@ describe("the tools in an answer (scripted model)", () => {
     );
 
     expect(outcomes).toEqual([["duplicate", "ok", "ok", "ok", "budget_exhausted"], []]);
-    const seen = resultsSeen(model.calls[1]!);
+    const seen = resultsSeen(model.calls[1]);
     expect(seen.get("p1")).toEqual({
       id: "project:long-a@en",
       duplicate: true,
       note: NOTES.onPage,
     });
-    expect(seen.get("l4")!["text"] as string).toHaveLength(4_000 + "…".length);
+    const l4 = seen.get("l4");
+    if (!l4) {
+      throw new Error("expected l4 tool result");
+    }
+    expect(l4["text"] as string).toHaveLength(4000 + "…".length);
     expect(seen.get("l5")).toEqual({ error: "budget_exhausted", note: NOTES.budgetSpent });
     // Its text is in the page block, framed as a document and cut where a fetch cuts it.
-    const system = model.calls[0]!.prompt[0]!;
+    const system = model.calls[0].prompt[0];
     const instructions = system.role === "system" ? system.content : "";
     const header = "---\nid: project:long-a@en\ntitle: project:long-a@en\nurl: /en\n---";
+    const preview = `A ${LONG}`.slice(0, FETCH_CLIP);
     expect(instructions).toContain(
-      `\nIts text, as get_document returns it:\n${header}\n${`A ${LONG}`.slice(0, FETCH_CLIP)}…\n\n# Required response language`,
+      `\nIts text, as get_document returns it:\n${header}\n${preview}…\n\n# Required response language`,
     );
     expect(outcome.steps?.page).toEqual({ id: "project:long-a@en", promoted: true });
   });
@@ -220,7 +234,7 @@ describe("the tools in an answer (scripted model)", () => {
     ]);
 
     expect(outcomes).toEqual([["ok", "ok", "ok", "ok", "budget_exhausted"], ["duplicate"], []]);
-    const seen = resultsSeen(model.calls[2]!);
+    const seen = resultsSeen(model.calls[2]);
     expect(seen.get("d5")).toEqual({ error: "budget_exhausted", note: NOTES.budgetSpent });
     expect(seen.get("d6")).toMatchObject({ duplicate: true });
   });
@@ -239,8 +253,14 @@ describe("the tools in an answer (scripted model)", () => {
     ]);
 
     expect(outcomes).toEqual([["ok", "ok", "ok", "ok", "budget_exhausted"], []]);
-    const seen = resultsSeen(model.calls[1]!);
-    const text = (id: string) => seen.get(id)!["text"] as string;
+    const seen = resultsSeen(model.calls[1]);
+    const text = (id: string) => {
+      const result = seen.get(id);
+      if (!result) {
+        throw new Error(`expected ${id} tool result`);
+      }
+      return result["text"] as string;
+    };
     expect(text("l1")).toHaveLength(FETCH_CLIP + 1);
     expect(text("l1").endsWith("…")).toBe(true);
     expect(text("l4")).toHaveLength(DOCUMENT_CHARS - 3 * FETCH_CLIP + 1);
@@ -265,7 +285,7 @@ describe("the tools in an answer (scripted model)", () => {
 
     expect(first.outcomes).toEqual([["ok"], []]);
     expect(second.outcomes).toEqual([["ok", "ok", "duplicate"], []]);
-    expect(resultsSeen(second.model.calls[1]!).get("d3")).toEqual({
+    expect(resultsSeen(second.model.calls[1]).get("d3")).toEqual({
       id: "cv@en",
       duplicate: true,
       note: NOTES.alreadyProvided,

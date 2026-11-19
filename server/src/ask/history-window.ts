@@ -59,24 +59,27 @@ export function measureWindow(
   rephrased: ReadonlySet<string>,
 ): WindowMetrics {
   const known = rows.filter((row) => row.trace?.window !== undefined);
-  const trimmed = (row: WindowRow) => row.trace!.window!.dropped > 0;
+  const trimmed = (row: WindowRow) => (row.trace?.window?.dropped ?? 0) > 0;
   const tally = (list: readonly WindowRow[]) => ({
     answers: list.length,
     rephrased: list.filter((row) => rephrased.has(row.id)).length,
   });
   return {
     sessions: new Set(known.map((row) => row.sessionHash)).size,
-    sessionsTrimmed: new Set(known.filter(trimmed).map((row) => row.sessionHash)).size,
-    afterTrim: tally(known.filter(trimmed)),
+    sessionsTrimmed: new Set(known.filter((row) => trimmed(row)).map((row) => row.sessionHash))
+      .size,
+    afterTrim: tally(known.filter((row) => trimmed(row))),
     otherwise: tally(known.filter((row) => !trimmed(row))),
   };
 }
 
 /** The visitor's text of a turn as `wrapVisitor` fenced it, unescaped. */
 export function visitorText(message: ModelMessage): string | null {
-  if (message.role !== "user" || typeof message.content !== "string") return null;
+  if (message.role !== "user" || typeof message.content !== "string") {
+    return null;
+  }
   const match = /^<visitor locale="(?:en|de)">([\s\S]*)<\/visitor>$/.exec(message.content);
-  return match ? match[1]!.replaceAll("&lt;", "<").replaceAll("&gt;", ">") : null;
+  return match ? match[1].replaceAll("&lt;", "<").replaceAll("&gt;", ">") : null;
 }
 
 /** The visitor questions the window dropped: those of `turns` before what was kept. */
@@ -98,12 +101,19 @@ export function windowTopics(questions: readonly string[], limit = NOTE_TOPICS):
   let seen = 0;
   for (const question of questions) {
     for (const raw of question.split(/[^\p{L}\p{N}]+/u)) {
-      if (!TOPIC_WORD.test(raw)) continue;
+      if (!TOPIC_WORD.test(raw)) {
+        continue;
+      }
       const word = raw.toLowerCase();
-      if (FUNCTION_WORDS.has(word)) continue;
+      if (FUNCTION_WORDS.has(word)) {
+        continue;
+      }
       const entry = counts.get(word);
-      if (entry) entry.count++;
-      else counts.set(word, { count: 1, first: seen++, spelling: raw });
+      if (entry) {
+        entry.count++;
+      } else {
+        counts.set(word, { count: 1, first: seen++, spelling: raw });
+      }
     }
   }
   return [...counts.values()]

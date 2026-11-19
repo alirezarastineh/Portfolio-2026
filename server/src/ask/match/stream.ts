@@ -61,12 +61,19 @@ function rowLine(row: MatchRow, item: MatchItem, kind: MatchKind, language: Loca
 /** The answer's text: the counts and the model's summary, then a row per item; a stop's line alone. */
 export function matchText(outcome: MatchOutcome): string {
   const { kind, language } = outcome;
-  if (outcome.stop) return stopLine(outcome.stop, kind, language);
+  if (outcome.stop) {
+    return stopLine(outcome.stop, kind, language);
+  }
   const counts: Record<MatchStatus, number> = { evidence: 0, partial: 0, "not-published": 0 };
-  for (const row of outcome.rows) counts[row.status]++;
+  for (const row of outcome.rows) {
+    counts[row.status]++;
+  }
   const head = [countsLine(kind, counts, language), outcome.summary].filter(Boolean).join(" ");
   const items = new Map(outcome.items.map((item) => [item.n, item]));
-  const rows = outcome.rows.map((row) => rowLine(row, items.get(row.n)!, kind, language));
+  const rows = outcome.rows.flatMap((row) => {
+    const item = items.get(row.n);
+    return item ? [rowLine(row, item, kind, language)] : [];
+  });
   return [head, "", ...rows].join("\n");
 }
 
@@ -97,27 +104,34 @@ export interface MatchData {
  * lines did theirs.
  */
 export function matchData(outcome: MatchOutcome, corpus: AskCorpus): MatchData | null {
-  if (outcome.stop || !outcome.rows.length) return null;
+  if (outcome.stop || !outcome.rows.length) {
+    return null;
+  }
   const { kind, language } = outcome;
   const items = new Map(outcome.items.map((item) => [item.n, item]));
   return {
     v: 1,
     kind,
-    items: outcome.rows.map((row) => {
-      const item = items.get(row.n)!;
-      return {
-        n: row.n,
-        text: shownItem(item.text),
-        priorityLabel: kind === "role" ? priorityLabel(item.priority, language) : "",
-        status: row.status,
-        statusLabel: statusLabel(kind, row.status, language),
-        summary:
-          row.status === "not-published" ? notPublishedLine(item.careful, language) : row.summary,
-        cites: row.cites.flatMap((id) => {
-          const doc = resolveDocument(corpus, id, language);
-          return doc ? [{ id: doc.id, title: doc.title, url: doc.url }] : [];
-        }),
-      };
+    items: outcome.rows.flatMap((row) => {
+      const item = items.get(row.n);
+      if (!item) {
+        return [];
+      }
+      return [
+        {
+          n: row.n,
+          text: shownItem(item.text),
+          priorityLabel: kind === "role" ? priorityLabel(item.priority, language) : "",
+          status: row.status,
+          statusLabel: statusLabel(kind, row.status, language),
+          summary:
+            row.status === "not-published" ? notPublishedLine(item.careful, language) : row.summary,
+          cites: row.cites.flatMap((id) => {
+            const doc = resolveDocument(corpus, id, language);
+            return doc ? [{ id: doc.id, title: doc.title, url: doc.url }] : [];
+          }),
+        },
+      ];
     }),
   };
 }
@@ -212,11 +226,15 @@ export function streamMatch(request: MatchStreamRequest): {
       const data = matchData(outcome, corpus);
       writer.write({ type: "start", messageId, messageMetadata: { createdAt: Date.now() } });
       writer.write({ type: "start-step" });
-      for (const source of sources) writer.write(source);
+      for (const source of sources) {
+        writer.write(source);
+      }
       writer.write({ type: "text-start", id: "match" });
       writer.write({ type: "text-delta", id: "match", delta: shown });
       writer.write({ type: "text-end", id: "match" });
-      if (data) writer.write({ type: "data-match", data });
+      if (data) {
+        writer.write({ type: "data-match", data });
+      }
       writer.write({ type: "finish-step" });
       writer.write({
         type: "finish",
@@ -238,12 +256,16 @@ export function streamMatch(request: MatchStreamRequest): {
   });
 
   let resolveDone!: (outcome: MatchOutcome | null) => void;
-  const done = new Promise<MatchOutcome | null>((resolve) => (resolveDone = resolve));
+  const done = new Promise<MatchOutcome | null>((resolve) => {
+    resolveDone = resolve;
+  });
 
   const stream = closingStream(ui, async (ending, error) => {
-    if (error !== undefined) failure ??= error;
+    if (error !== undefined) {
+      failure ??= error;
+    }
     request.onClose?.();
-    const result = outcome as MatchOutcome | null;
+    const result = outcome;
     if (request.persist !== false) {
       await persistMatch(request, {
         messageId,
@@ -263,7 +285,9 @@ export function streamMatch(request: MatchStreamRequest): {
 
 /** The row's route reason: the kind, and how the match ended. */
 export function matchRouteReason(kind: MatchKind, result: MatchOutcome | null): string {
-  if (!result) return `${kind}:none`;
+  if (!result) {
+    return `${kind}:none`;
+  }
   const end = result.stop ? `stop:${result.stop}` : "rows";
   const repaired = result.repaired.plan || result.repaired.rows ? "+repair" : "";
   return `${kind}:${end}${repaired}`;

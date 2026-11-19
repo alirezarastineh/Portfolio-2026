@@ -46,7 +46,9 @@ function replaced(n: number | null): string {
   if (n === null) {
     return "The draft's changes could not be counted: any that are not live yet are replaced.";
   }
-  if (n === 0) return "The draft matches what is live, so nothing waiting is replaced.";
+  if (n === 0) {
+    return "The draft matches what is live, so nothing waiting is replaced.";
+  }
   return `It replaces the draft's ${changesLabel(n)} that ${n === 1 ? "is" : "are"} not live yet.`;
 }
 
@@ -149,12 +151,16 @@ function replaced(n: number | null): string {
           <hlm-dropdown-menu class="w-56">
             <!-- The live one has nothing to compare with and nothing to roll back to. -->
             @if (!row.live) {
-              <button hlmDropdownMenuItem (triggered)="view(row)">View changes</button>
-              <button hlmDropdownMenuItem (triggered)="rollback(row)">
+              <button hlmDropdownMenuItem type="button" (triggered)="view(row)">
+                View changes
+              </button>
+              <button hlmDropdownMenuItem type="button" (triggered)="rollback(row)">
                 Roll back to #{{ row.id }}
               </button>
             }
-            <button hlmDropdownMenuItem (triggered)="restoreDraft(row)">Restore into draft</button>
+            <button hlmDropdownMenuItem type="button" (triggered)="restoreDraft(row)">
+              Restore into draft
+            </button>
           </hlm-dropdown-menu>
         </ng-template>
       }
@@ -187,7 +193,7 @@ function replaced(n: number | null): string {
               @for (side of d.data; track side.locale) {
                 <p class="m-0 mt-3 text-sm font-medium" [textContent]="side.language"></p>
                 <pre
-                  class="m-0 mt-1 rounded-lg border border-border bg-card/40 p-3 font-data text-xs leading-relaxed whitespace-pre-wrap wrap-anywhere"
+                  class="m-0 mt-1 rounded-lg border border-border bg-card/40 p-3 font-data text-xs/relaxed whitespace-pre-wrap wrap-anywhere"
                   translate="no"
                   [textContent]="side.json"
                 ></pre>
@@ -222,7 +228,9 @@ export default class AdminPublicationsPage implements OnInit {
     // A publish or a roll back from the top bar's review puts a new one on top: read the list again.
     const seen = this.pulse.publishes();
     effect(() => {
-      if (this.pulse.publishes() !== seen) untracked(() => void this.load());
+      if (this.pulse.publishes() !== seen) {
+        untracked(() => void this.load());
+      }
     });
   }
 
@@ -239,7 +247,9 @@ export default class AdminPublicationsPage implements OnInit {
     const result = await this.api.publications();
     this.loading.set(false);
     this.loadError.set(result.ok ? null : result.error);
-    if (result.ok) this.rows.set(result.data.publications);
+    if (result.ok) {
+      this.rows.set(result.data.publications);
+    }
   }
 
   /** What the list knows without the revisions: published, or rolled back to which one. */
@@ -252,18 +262,24 @@ export default class AdminPublicationsPage implements OnInit {
   }
 
   protected liveWords(row: PublicationRow): string {
-    if (row.live) return "Live";
+    if (row.live) {
+      return "Live";
+    }
     const live = row.versions.find((version) => version.live);
     return live ? `${LANGUAGE[live.locale]} live` : "";
   }
 
   protected onDetailState(state: string): void {
-    if (state === "closed") this.detail.set(null);
+    if (state === "closed") {
+      this.detail.set(null);
+    }
   }
 
   /** Both languages' revisions, on demand, against what is live: what a roll back would change. */
   protected async view(row: PublicationRow): Promise<void> {
-    if (this.busy() !== null) return;
+    if (this.busy() !== null) {
+      return;
+    }
     this.busy.set(row.id);
     const englishFirst = [...row.versions].sort(
       (a, b) => Number(a.locale !== "en") - Number(b.locale !== "en"),
@@ -279,14 +295,18 @@ export default class AdminPublicationsPage implements OnInit {
     this.detail.set({
       id: row.id,
       groups: wordChanges(
-        details
-          .filter((d) => d.live)
-          .map((d) => ({
-            locale: d.revision.locale,
-            before: d.live!.payload,
-            after: d.revision.payload,
-            rows: changeRows(d.live!.payload, d.revision.payload),
-          })),
+        details.flatMap((d) =>
+          d.live
+            ? [
+                {
+                  locale: d.revision.locale,
+                  before: d.live.payload,
+                  after: d.revision.payload,
+                  rows: changeRows(d.live.payload, d.revision.payload),
+                },
+              ]
+            : [],
+        ),
       ),
       data: details.map((d) => ({
         locale: d.revision.locale,
@@ -297,13 +317,17 @@ export default class AdminPublicationsPage implements OnInit {
   }
 
   protected async rollback(row: PublicationRow): Promise<void> {
-    if (this.busy() !== null) return;
+    if (this.busy() !== null) {
+      return;
+    }
     const confirmed = await this.confirm.ask({
       title: `Roll back to #${row.id}?`,
       description: `Both languages go back to #${row.id}'s content, live at once, as a new publication. Nothing is deleted.`,
       confirmLabel: "Roll back",
     });
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
     this.busy.set(row.id);
     const result = await this.api.rollbackPublication(row.id);
@@ -318,7 +342,9 @@ export default class AdminPublicationsPage implements OnInit {
   }
 
   protected async restoreDraft(row: PublicationRow): Promise<void> {
-    if (this.busy() !== null) return;
+    if (this.busy() !== null) {
+      return;
+    }
     // No editor is open here: what Restore replaces is the draft's changes not yet live, counted
     // now, from a review of its own (the pulse may still be reading an older one).
     const review = await this.api.publishReview();
@@ -329,7 +355,9 @@ export default class AdminPublicationsPage implements OnInit {
       confirmLabel: "Restore into draft",
       destructive: counted !== 0,
     });
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
     this.busy.set(row.id);
     const result = await this.api.restoreDraft(row.id);

@@ -49,7 +49,12 @@ import { listVariants } from "./hlm-tabs-list";
       <ng-icon hlm size="base" name="lucideChevronLeft" />
     </button>
 
-    <div #tabListContainer class="z-1 flex grow overflow-hidden" (keydown)="_handleKeydown($event)">
+    <div
+      #tabListContainer
+      tabindex="-1"
+      class="z-1 flex grow overflow-hidden"
+      (keydown)="_handleKeydown($event)"
+    >
       <div
         class="relative grow transition-transform"
         #tabList
@@ -89,7 +94,7 @@ export class HlmTabsPaginatedList extends BrnTabsPaginatedList {
 
   public readonly items = contentChildren(BrnTabsTrigger, { descendants: false });
   /** Explicitly annotating type to avoid non-portable inferred type */
-  public readonly itemsChanges: Observable<ReadonlyArray<BrnPaginatedTabHeaderItem>> = toObservable(
+  public readonly itemsChanges: Observable<readonly BrnPaginatedTabHeaderItem[]> = toObservable(
     this.items,
   );
 
@@ -110,7 +115,7 @@ export class HlmTabsPaginatedList extends BrnTabsPaginatedList {
   public readonly paginationButtonClass = input<ClassValue>("", { alias: "paginationButtonClass" }); // NOSONAR - alias required: 'paginationButtonClass' is a more descriptive name for users of the component, while 'paginationButtonClass' is a valid
   protected readonly _paginationButtonClass = computed(() =>
     hlm(
-      "relative z-[2] select-none disabled:cursor-default",
+      "relative z-2 select-none disabled:cursor-default",
       buttonVariants({ variant: "ghost", size: "icon" }),
       this.paginationButtonClass(),
     ),

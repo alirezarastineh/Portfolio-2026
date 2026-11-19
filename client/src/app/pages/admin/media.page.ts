@@ -316,7 +316,7 @@ function textsOf(asset: MediaAsset): { id: string; updatedAt: string } {
               </button>
               @if (isUnused(asset)) {
                 <label
-                  class="absolute left-1.5 top-1.5 flex size-7 cursor-pointer items-center justify-center rounded-md bg-card/90 backdrop-blur"
+                  class="absolute left-1.5 top-1.5 flex size-7 cursor-pointer items-center justify-center rounded-md bg-card/90 backdrop-blur-sm"
                 >
                   <input
                     type="checkbox"
@@ -609,7 +609,7 @@ export default class AdminMediaPage implements OnInit {
   /** Before a save: the file's texts read again, against what the panel opened with. */
   private readonly elsewhere = new ChangedElsewhere(this.confirm, async () => {
     const result = await this.api.listMedia();
-    return result.ok ? result.data.media.map(textsOf) : null;
+    return result.ok ? result.data.media.map((asset) => textsOf(asset)) : null;
   });
 
   protected readonly filters = FILTERS;
@@ -658,10 +658,12 @@ export default class AdminMediaPage implements OnInit {
   protected readonly counts = computed(() => {
     const assets = this.library.assets();
     return Object.fromEntries(
-      FILTERS.map((f) => [f.id, assets.filter(MATCHES[f.id]).length]),
+      FILTERS.map((f) => [f.id, assets.filter((asset) => MATCHES[f.id](asset)).length]),
     ) as Record<Filter, number>;
   });
-  protected readonly visible = computed(() => this.library.assets().filter(MATCHES[this.filter()]));
+  protected readonly visible = computed(() =>
+    this.library.assets().filter((asset) => MATCHES[this.filter()](asset)),
+  );
   protected readonly unused = computed(() => this.library.assets().filter(isUnused));
   protected readonly selectedBytes = computed(() =>
     this.library
@@ -690,7 +692,7 @@ export default class AdminMediaPage implements OnInit {
 
   protected readonly places = computed(() =>
     (this.active()?.usage?.draft ?? [])
-      .map(usagePlace)
+      .map((place) => usagePlace(place))
       .concat(this.active()?.usage?.live ? [{ label: "The live site", link: null }] : []),
   );
   protected readonly blocker = computed(() => {
@@ -702,7 +704,9 @@ export default class AdminMediaPage implements OnInit {
     const asset = this.active();
     const alt = this.alt();
     const description = this.description();
-    if (!asset) return [];
+    if (!asset) {
+      return [];
+    }
     const fields: [string, boolean][] = [
       ["alt.en", alt.en !== (asset.altEn ?? "")],
       ["alt.de", alt.de !== (asset.altDe ?? "")],
@@ -714,7 +718,9 @@ export default class AdminMediaPage implements OnInit {
   protected readonly altChanged = computed(() => this.changed().some((f) => f.startsWith("alt")));
   /** Saved and not on the site yet: grey, as every field in the draft (plan 5, U16). */
   protected readonly altTrace = computed<TraceState>(() => {
-    if (this.altChanged()) return "unsaved";
+    if (this.altChanged()) {
+      return "unsaved";
+    }
     const asset = this.active();
     return asset && altInDraft(asset, this.pulse.marks()) ? "draft" : "live";
   });
@@ -722,9 +728,13 @@ export default class AdminMediaPage implements OnInit {
     this.changed().some((f) => f.startsWith("description")),
   );
   protected readonly stateText = computed(() => {
-    if (this.saving()) return "Saving…";
+    if (this.saving()) {
+      return "Saving…";
+    }
     const n = this.changed().length;
-    if (n) return n === 1 ? "1 unsaved change" : `${n} unsaved changes`;
+    if (n) {
+      return n === 1 ? "1 unsaved change" : `${n} unsaved changes`;
+    }
     const at = this.savedAt();
     return at ? `Saved ${typedAt(at)}` : "";
   });
@@ -737,7 +747,9 @@ export default class AdminMediaPage implements OnInit {
   protected offerFor(kind: "alt" | "describe", id: string, locale: Locale): DraftOffer | null {
     const target = `media:${kind}:${id}:${locale}`;
     const offer = this.offers()[target];
-    if (!offer) return null;
+    if (!offer) {
+      return null;
+    }
     return !offer.tracked || this.ledger.waits(target) ? offer.value : null;
   }
 
@@ -745,8 +757,11 @@ export default class AdminMediaPage implements OnInit {
     const value = draftOffer(draft);
     this.offers.update((all) => {
       const next = { ...all };
-      if (value) next[target] = { value, tracked: Boolean(draft.suggestionId) };
-      else delete next[target];
+      if (value) {
+        next[target] = { value, tracked: Boolean(draft.suggestionId) };
+      } else {
+        delete next[target];
+      }
       return next;
     });
   }
@@ -767,7 +782,9 @@ export default class AdminMediaPage implements OnInit {
       item: this.activeId,
       saved: () => {
         const asset = this.active();
-        if (!asset) return null;
+        if (!asset) {
+          return null;
+        }
         return {
           alt: { en: asset.altEn ?? "", de: asset.altDe ?? "" },
           description: { en: asset.descriptionEn ?? "", de: asset.descriptionDe ?? "" },
@@ -787,7 +804,9 @@ export default class AdminMediaPage implements OnInit {
     });
     effect(() => {
       const wanted = this.wanted();
-      if (this.library.loaded()) untracked(() => this.follow(wanted));
+      if (this.library.loaded()) {
+        untracked(() => this.follow(wanted));
+      }
     });
     // Leaving the page: a draft not saved was not kept.
     inject(DestroyRef).onDestroy(() => {
@@ -827,12 +846,16 @@ export default class AdminMediaPage implements OnInit {
   private async reopen(): Promise<void> {
     const ids = await this.recovery.items("media");
     const asset = this.library.assets().find((a) => ids.includes(a.id));
-    if (asset && !this.activeId() && !this.wanted() && !this.gone) this.choose(asset);
+    if (asset && !this.activeId() && !this.wanted() && !this.gone) {
+      this.choose(asset);
+    }
   }
 
   /** The panel follows the address: opens the file it names, closes when it names none. */
   private follow(wanted: string | null): void {
-    if (wanted === this.activeId()) return;
+    if (wanted === this.activeId()) {
+      return;
+    }
     if (!wanted) {
       this.dropDetails();
       return;
@@ -866,7 +889,9 @@ export default class AdminMediaPage implements OnInit {
 
   protected onFilter(value: unknown): void {
     const filter = FILTERS.find((f) => f.id === value)?.id;
-    if (!filter) return;
+    if (!filter) {
+      return;
+    }
     this.filter.set(filter);
     this.go({ filter: filter === "all" ? null : filter });
   }
@@ -883,7 +908,9 @@ export default class AdminMediaPage implements OnInit {
 
   protected async loadReconcile(): Promise<void> {
     const result = await this.api.mediaReconcile();
-    if (result.ok) this.reconcile.set(result.data);
+    if (result.ok) {
+      this.reconcile.set(result.data);
+    }
   }
 
   /* ---- the panel ---- */
@@ -912,7 +939,9 @@ export default class AdminMediaPage implements OnInit {
     const id = this.activeId();
     // The sheet reports "closed" again once its state input follows: only the
     // first report, while a file is still open here, is a request to close.
-    if (state !== "closed" || !id || this.gone) return;
+    if (state !== "closed" || !id || this.gone) {
+      return;
+    }
     const unsaved = this.changed().length > 0;
     this.activeId.set(null);
     if (unsaved) {
@@ -934,7 +963,9 @@ export default class AdminMediaPage implements OnInit {
 
   /** A link out of the panel. With unsaved text the route's guard asks, and it stays open. */
   protected close(): void {
-    if (this.changed().length) return;
+    if (this.changed().length) {
+      return;
+    }
     // The link's own navigation leaves the page: a second one here, to the address, would cancel it.
     this.ledger.abandonPrefix("media:");
     this.activeId.set(null);
@@ -952,7 +983,9 @@ export default class AdminMediaPage implements OnInit {
   }
 
   protected onPanelKey(event: KeyboardEvent): void {
-    if (!isSaveShortcut(event)) return;
+    if (!isSaveShortcut(event)) {
+      return;
+    }
     // Never the browser's "Save page as…" in the panel.
     event.preventDefault();
     void this.save();
@@ -961,7 +994,9 @@ export default class AdminMediaPage implements OnInit {
   /** Alt text and description in one write, only the texts that changed; the panel stays. */
   protected async save(): Promise<void> {
     const asset = this.active();
-    if (!asset || this.saving() || !this.changed().length) return;
+    if (!asset || this.saving() || !this.changed().length) {
+      return;
+    }
     const id = asset.id;
     this.saving.set(true);
     const goOn = await this.elsewhere.mayOverwrite([id], "This file's alt text or description");
@@ -1003,8 +1038,12 @@ export default class AdminMediaPage implements OnInit {
     await this.library.load(true);
     this.saving.set(false);
     const now = this.library.assets().find((a) => a.id === id);
-    if (now) this.elsewhere.remember([textsOf(now)]);
-    if (this.activeId() !== id) return;
+    if (now) {
+      this.elsewhere.remember([textsOf(now)]);
+    }
+    if (this.activeId() !== id) {
+      return;
+    }
     this.alt.set(sent.alt);
     this.description.set(sent.description);
     this.fill();
@@ -1066,14 +1105,18 @@ export default class AdminMediaPage implements OnInit {
 
   protected async remove(asset: MediaAsset): Promise<void> {
     // In use: the button stays a stop with its reason, and does nothing.
-    if (this.blocker()) return;
+    if (this.blocker()) {
+      return;
+    }
     const go = await this.confirm.ask({
       title: `Delete ${asset.originalName}?`,
       description: "This removes the file and its resized copies from disk. It cannot be undone.",
       confirmLabel: "Delete",
       destructive: true,
     });
-    if (!go) return;
+    if (!go) {
+      return;
+    }
     let result = await this.api.deleteMedia(asset.id);
     // Only older publications use it: allowed, but a rollback to one would then be refused.
     if (!result.ok && result.error === "media_in_history") {
@@ -1084,7 +1127,9 @@ export default class AdminMediaPage implements OnInit {
         confirmLabel: "Delete anyway",
         destructive: true,
       });
-      if (!anyway) return;
+      if (!anyway) {
+        return;
+      }
       result = await this.api.deleteMedia(asset.id, true);
     }
     if (!result.ok) {
@@ -1101,7 +1146,9 @@ export default class AdminMediaPage implements OnInit {
 
   /** The file's tile, or the bulk Delete, went with what was deleted: the focus goes to the heading. */
   private focusHeading(): void {
-    if (!this.gone) this.host.nativeElement.querySelector<HTMLElement>("h1")?.focus();
+    if (!this.gone) {
+      this.host.nativeElement.querySelector<HTMLElement>("h1")?.focus();
+    }
   }
 
   /* ---- selection ---- */
@@ -1109,8 +1156,11 @@ export default class AdminMediaPage implements OnInit {
   protected toggle(asset: MediaAsset): void {
     this.selected.update((set) => {
       const next = new Set(set);
-      if (next.has(asset.id)) next.delete(asset.id);
-      else next.add(asset.id);
+      if (next.has(asset.id)) {
+        next.delete(asset.id);
+      } else {
+        next.add(asset.id);
+      }
       return next;
     });
   }
@@ -1142,7 +1192,9 @@ export default class AdminMediaPage implements OnInit {
         confirmLabel: "Delete",
         destructive: true,
       });
-      if (!go) return;
+      if (!go) {
+        return;
+      }
       ids.push(...safe.map((a) => a.id));
     }
     let includeHistory = false;
@@ -1155,9 +1207,13 @@ export default class AdminMediaPage implements OnInit {
         cancelLabel: "Keep them",
         destructive: true,
       });
-      if (includeHistory) ids.push(...inHistory.map((a) => a.id));
+      if (includeHistory) {
+        ids.push(...inHistory.map((a) => a.id));
+      }
     }
-    if (!ids.length) return;
+    if (!ids.length) {
+      return;
+    }
 
     this.deleting.set(true);
     const result = await this.api.cleanupMedia(ids, includeHistory);
@@ -1170,11 +1226,13 @@ export default class AdminMediaPage implements OnInit {
     await this.afterChange();
     this.focusHeading();
     const { deleted, skipped, freedBytes } = result.data;
-    for (const id of deleted) this.recovery.forget("media", id);
+    for (const id of deleted) {
+      this.recovery.forget("media", id);
+    }
     toast.success(`Deleted ${deleted.length} ${deleted.length === 1 ? "file" : "files"}`, {
-      description:
-        `${formatBytes(freedBytes)} freed.` +
-        (skipped.length ? ` ${skipped.length} became used meanwhile and were kept.` : ""),
+      description: `${formatBytes(freedBytes)} freed.${
+        skipped.length ? ` ${skipped.length} became used meanwhile and were kept.` : ""
+      }`,
     });
   }
 
@@ -1192,21 +1250,29 @@ export default class AdminMediaPage implements OnInit {
   }
 
   protected onDragEnter(event: DragEvent): void {
-    if (this.hasFiles(event) && !this.active()) this.dragging.set(true);
+    if (this.hasFiles(event) && !this.active()) {
+      this.dragging.set(true);
+    }
   }
 
   protected onDragOver(event: DragEvent): void {
     // Without this the browser opens a dropped file instead of handing it over.
-    if (this.hasFiles(event) && !this.active()) event.preventDefault();
+    if (this.hasFiles(event) && !this.active()) {
+      event.preventDefault();
+    }
   }
 
   protected onDragLeave(event: DragEvent): void {
     // Leaving the window, not moving from one element to the next.
-    if (!event.relatedTarget) this.dragging.set(false);
+    if (!event.relatedTarget) {
+      this.dragging.set(false);
+    }
   }
 
   protected onDrop(event: DragEvent): void {
-    if (!this.hasFiles(event) || this.active()) return;
+    if (!this.hasFiles(event) || this.active()) {
+      return;
+    }
     event.preventDefault();
     this.dragging.set(false);
     void this.uploadAll(Array.from(event.dataTransfer?.files ?? []));
@@ -1214,25 +1280,33 @@ export default class AdminMediaPage implements OnInit {
 
   /** One after the other, so the progress reads as one file's, and a failure names its file. */
   private async uploadAll(files: File[]): Promise<void> {
-    if (!files.length || this.uploading()) return;
+    if (!files.length || this.uploading()) {
+      return;
+    }
     this.uploadSaid.set(
-      files.length === 1 ? `Uploading ${files[0]!.name}…` : `Uploading ${files.length} files…`,
+      files.length === 1 ? `Uploading ${files[0].name}…` : `Uploading ${files.length} files…`,
     );
     const done = await this.uploadNext(files, 0, 0);
     this.uploading.set(null);
     this.uploadSaid.set("");
     await this.loadReconcile();
-    if (done) toast.success(done === 1 ? "Uploaded" : `Uploaded ${done} files`);
+    if (done) {
+      toast.success(done === 1 ? "Uploaded" : `Uploaded ${done} files`);
+    }
   }
 
   private async uploadNext(files: File[], index: number, done: number): Promise<number> {
     const file = files[index];
-    if (!file) return done;
+    if (!file) {
+      return done;
+    }
     this.uploading.set({ name: file.name, index: index + 1, total: files.length, percent: 0 });
     const result = await this.library.upload(file, (percent) =>
       this.uploading.update((u) => (u ? { ...u, percent } : u)),
     );
-    if (!result.ok) toast.error(`${file.name} was not uploaded`, { description: result.message });
+    if (!result.ok) {
+      toast.error(`${file.name} was not uploaded`, { description: result.message });
+    }
     return this.uploadNext(files, index + 1, done + (result.ok ? 1 : 0));
   }
 

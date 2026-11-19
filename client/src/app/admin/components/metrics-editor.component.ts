@@ -142,9 +142,13 @@ export class MetricsEditorComponent {
   protected update(locale: Locale, index: number, part: Part, text: string): void {
     this.list(locale).update((list) => {
       const next = [...list];
-      while (next.length <= index) next.push({ value: "", label: "" });
-      const metric: MetricInput = { ...next[index]!, [part]: text };
-      if (!metric.context) delete metric.context;
+      while (next.length <= index) {
+        next.push({ value: "", label: "" });
+      }
+      const metric: MetricInput = { ...next[index], [part]: text };
+      if (!metric.context) {
+        delete metric.context;
+      }
       next[index] = metric;
       return next;
     });

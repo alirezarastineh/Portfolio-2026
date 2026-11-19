@@ -7,6 +7,12 @@ import type { AssistantHealth } from "./assistant-types";
 import { AdminPulseService, assistantAlert } from "./pulse.service";
 
 const ok = <T>(data: T) => ({ ok: true as const, data });
+const byCodePoint = (a: string, b: string): number => {
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+};
 
 function message(id: string, status: MessageRow["status"]): MessageRow {
   return {
@@ -37,31 +43,35 @@ class StubApi {
   readonly writes = signal(0);
   readonly calls: string[] = [];
 
-  async status() {
+  status() {
     this.calls.push("status");
-    return ok({
-      user: { id: "u", email: "a@b.c", totpEnrolled: true },
-      pointers: [],
-      lastEdit: null,
-      lastPublish: null,
-      hasUnpublishedChanges: true,
-    });
+    return Promise.resolve(
+      ok({
+        user: { id: "u", email: "a@b.c", totpEnrolled: true },
+        pointers: [],
+        lastEdit: null,
+        lastPublish: null,
+        hasUnpublishedChanges: true,
+      }),
+    );
   }
-  async publishReview() {
+  publishReview() {
     this.calls.push("review");
-    return ok({ canPublish: true, locales: [] });
+    return Promise.resolve(ok({ canPublish: true, locales: [] }));
   }
-  async listMessages() {
+  listMessages() {
     this.calls.push("messages");
-    return ok({ messages: [message("1", "new"), message("2", "spam"), message("3", "read")] });
+    return Promise.resolve(
+      ok({ messages: [message("1", "new"), message("2", "spam"), message("3", "read")] }),
+    );
   }
-  async i18nStatus() {
+  i18nStatus() {
     this.calls.push("i18n");
-    return ok({ items: [] });
+    return Promise.resolve(ok({ items: [] }));
   }
-  async assistantHealth() {
+  assistantHealth() {
     this.calls.push("assistant");
-    return ok(health());
+    return Promise.resolve(ok(health()));
   }
 }
 
@@ -137,7 +147,13 @@ describe("AdminPulseService", () => {
     const { api, pulse } = setup();
     await pulse.refresh();
 
-    expect(api.calls.sort()).toEqual(["assistant", "i18n", "messages", "review", "status"]);
+    expect(api.calls.toSorted(byCodePoint)).toEqual([
+      "assistant",
+      "i18n",
+      "messages",
+      "review",
+      "status",
+    ]);
     expect(pulse.unpublished()).toBe(true);
     expect(pulse.messages()?.map((m) => m.id)).toEqual(["1", "3"]);
     expect(pulse.newMessages()).toBe(1);
@@ -159,7 +175,7 @@ describe("AdminPulseService", () => {
     expect(api.calls).toEqual([]);
 
     await vi.advanceTimersByTimeAsync(600);
-    expect(api.calls.sort()).toEqual(["i18n", "messages", "review", "status"]);
+    expect(api.calls.toSorted(byCodePoint)).toEqual(["i18n", "messages", "review", "status"]);
   });
 
   it("ignores writes before anyone is signed in", async () => {
@@ -167,7 +183,7 @@ describe("AdminPulseService", () => {
     const { api } = setup();
     api.writes.update((n) => n + 1);
     TestBed.tick();
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(1000);
     expect(api.calls).toEqual([]);
   });
 
@@ -175,7 +191,8 @@ describe("AdminPulseService", () => {
     const { api, pulse } = setup();
     await pulse.refresh(["i18n"]);
     const working = api.i18nStatus.bind(api);
-    api.i18nStatus = async () => ({ ok: false as const, error: "http_502", status: 502 }) as never;
+    api.i18nStatus = () =>
+      Promise.resolve({ ok: false as const, error: "http_502", status: 502 }) as never;
 
     await pulse.refresh(["i18n"]);
     expect(pulse.failed().has("i18n")).toBe(true);

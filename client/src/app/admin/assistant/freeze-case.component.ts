@@ -200,12 +200,16 @@ export class FreezeCaseComponent {
   /** What was asked before it: none when the API cannot say (an older API, a pruned answer). */
   private async loadEarlier(): Promise<void> {
     const id = this.message().id;
-    if (this.earlierOf === id) return;
+    if (this.earlierOf === id) {
+      return;
+    }
     this.earlierOf = id;
     this.loadingEarlier.set(true);
     const result = await this.api.earlierQuestions(id);
     // Another answer came meanwhile, and started over.
-    if (this.earlierOf !== id) return;
+    if (this.earlierOf !== id) {
+      return;
+    }
     this.earlier.set(result.ok ? result.data.questions : []);
     this.loadingEarlier.set(false);
   }

@@ -58,7 +58,9 @@ export function paidItems(
     async start(key: string): Promise<void> {
       dearest ??= await dearestItemUsd(work.run);
       const blocked = await spendBlocked(feature, options.projected ? dearest : 0);
-      if (!blocked) return work.startItem(key);
+      if (!blocked) {
+        return work.startItem(key);
+      }
       budget.abort(new Error(blocked));
       await audit({
         actor: "agent",
@@ -79,7 +81,9 @@ export function paidItems(
       }
       const usd = summarizeCalls(own).usd;
       dearest = Math.max(dearest ?? 0, usd);
-      if (signal.aborted) return work.finishItem(key, { status: "pending", usd });
+      if (signal.aborted) {
+        return work.finishItem(key, { status: "pending", usd });
+      }
       return work.finishItem(key, { status, result, usd });
     },
   };

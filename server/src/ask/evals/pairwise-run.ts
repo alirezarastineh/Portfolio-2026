@@ -1,7 +1,7 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
 
-import { newTrace } from "../models/fallback.js";
+import { newTrace, type ModelCall } from "../models/fallback.js";
 import type { ModelEntry } from "../models/registry.js";
 import { summarizeCalls } from "../usage.js";
 import type { EvalCase } from "./cases.js";
@@ -108,7 +108,9 @@ function side(answered: AnsweredCase): PairwiseSide {
 
 /** Who wins when an answer failed: the side that did not, or neither. */
 function forfeit(failedA: boolean, failedB: boolean): PairOutcome {
-  if (failedA && failedB) return "tie";
+  if (failedA && failedB) {
+    return "tie";
+  }
   return failedA ? "b" : "a";
 }
 
@@ -124,13 +126,15 @@ const SIDE_RETRIES = 3;
  * failover included.
  */
 function sideOptions(options: EvalOptions, variant: AnswerVariant): EvalOptions {
-  if (variant.chain.length !== 1) return options;
+  if (variant.chain.length !== 1) {
+    return options;
+  }
   const { config } = options;
   return {
     ...options,
     config: {
       ...config,
-      firstChunkTimeoutMs: Math.max(config.firstChunkTimeoutMs, config.requestTimeoutMs - 1_000),
+      firstChunkTimeoutMs: Math.max(config.firstChunkTimeoutMs, config.requestTimeoutMs - 1000),
       maxRetries: Math.max(config.maxRetries, SIDE_RETRIES),
     },
   };
@@ -140,8 +144,8 @@ async function pairCase(
   options: EvalOptions,
   input: PairwiseOptions,
   c: EvalCase,
+  calls: ModelCall[],
 ): Promise<PairwiseCaseResult> {
-  const calls = options.calls!;
   const from = calls.length;
   const acquire = createRetryAcquirer(options.rateLimitRetry);
   const a = await answerCase(sideOptions(options, input.a), c, acquire, input.a);
@@ -183,7 +187,9 @@ async function pairCase(
   const bFirst = aFirst.choice
     ? await judgePair(options, c, b.outcome.text, a.outcome.text, documents, acquire)
     : null;
-  if (!aFirst.choice || !bFirst?.choice) return unavailable(["judge unavailable"]);
+  if (!aFirst.choice || !bFirst?.choice) {
+    return unavailable(["judge unavailable"]);
+  }
   return {
     ...base,
     status: "judged",
@@ -195,27 +201,39 @@ async function pairCase(
 }
 
 export async function runPairwise(input: PairwiseOptions): Promise<PairwiseSummary> {
+  const calls = input.calls ?? [];
   const options: EvalOptions = {
     ...input,
     // A side answers with its own chain; the judge role gets the judge chain.
     chain: (role) => (role === "judge" ? input.judgeChain : input.a.chain),
-    calls: input.calls ?? [],
+    calls,
     beforeModelCall: input.pacing ? createModelCallGate(input.pacing) : undefined,
     onResult: undefined,
   };
   const results: PairwiseCaseResult[] = [];
   // Two answerers' answers: a tour is planned and a brief matched, not answered (V16, V20).
   const cases = input.cases.filter((c) => c.category !== "tour" && c.category !== "match");
-  for (const c of cases) {
-    if (input.abortSignal?.aborted) break;
+
+  async function runRemaining(index: number): Promise<void> {
+    if (index >= cases.length || input.abortSignal?.aborted) {
+      return;
+    }
+    const c = cases[index];
     await input.onStart?.(c);
     // Stopped between cases (a cancel, a spent budget): the rest stay undone.
-    if (input.abortSignal?.aborted) break;
-    const result = await pairCase(options, input, c);
+    if (input.abortSignal?.aborted) {
+      return;
+    }
+    const result = await pairCase(options, input, c, calls);
     results.push(result);
     await input.onResult?.(result);
-    if (result.status === "unavailable") break;
+    if (result.status === "unavailable") {
+      return;
+    }
+    await runRemaining(index + 1);
   }
+  await runRemaining(0);
+
   return summarizePairwise({
     a: input.a.label,
     b: input.b.label,

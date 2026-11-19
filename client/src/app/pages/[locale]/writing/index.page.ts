@@ -213,7 +213,9 @@ export default class WritingPageComponent {
   protected readonly tags = computed(() => {
     const counts = new Map<string, number>();
     for (const post of this.posts()) {
-      for (const t of post.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+      for (const t of post.tags) {
+        counts.set(t, (counts.get(t) ?? 0) + 1);
+      }
     }
     return [...counts.entries()]
       .sort(([a, x], [b, y]) => y - x || a.localeCompare(b))

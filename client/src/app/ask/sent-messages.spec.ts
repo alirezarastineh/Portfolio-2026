@@ -7,17 +7,17 @@ import { forRequest } from "./sent-messages";
 function conversation(n: number): AskMessage[] {
   return Array.from({ length: n }, (_, i) =>
     i % 2 === 0
-      ? ({
+      ? {
           id: `q${i}`,
           role: "user",
           parts: [{ type: "text", text: `question ${i}` }],
-        } as AskMessage)
-      : ({
+        }
+      : {
           id: `a${i}`,
           role: "assistant",
           parts: [{ type: "text", text: `answer ${i}` }],
           metadata: { sig: `sig-${i}` },
-        } as AskMessage),
+        },
   );
 }
 
@@ -47,8 +47,8 @@ describe("forRequest", () => {
         .map((m) => m.id),
     ]);
     // The answer that opens the last 16 follows the question it answers.
-    expect(sent[1]!.id).toBe("q2");
-    expect(sent[2]!.id).toBe("a3");
+    expect(sent[1].id).toBe("q2");
+    expect(sent[2].id).toBe("a3");
   });
 
   it("sends at most 12 earlier questions", () => {

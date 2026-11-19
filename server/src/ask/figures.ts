@@ -9,7 +9,7 @@ import { decodeEntities } from "../content/sanitize.js";
 /** A no-break space (U+00A0; U+202F is the narrow one): inside a number, never between two. */
 const NO_BREAK = String.fromCodePoint(0xa0);
 /** What may stand between a number's digits: `.`, `,`, `'`, `’` and the no-break spaces. */
-const SEPARATORS = `.,'${String.fromCodePoint(0x2019)}${NO_BREAK}${String.fromCodePoint(0x202f)}`;
+const SEPARATORS = `.,'${String.fromCodePoint(0x20_19)}${NO_BREAK}${String.fromCodePoint(0x20_2f)}`;
 /** A number, and the letters written straight after it (3rd, 800ms, 2GB). */
 const NUMBER = new RegExp(String.raw`(\d+(?:[${SEPARATORS}]\d+)*)(\p{L}*)`, "gu");
 /** An English ordinal's ending: such a number may be spelled out ("3rd-party" → "Drittanbieter"). */
@@ -42,7 +42,7 @@ export interface Figure {
 }
 
 /** A percent or currency sign after a number, a space allowed between (German writes "40 %"). */
-const SIGN_AFTER = new RegExp(`^[ ${NO_BREAK}${String.fromCodePoint(0x202f)}]?([%‰€$£])`, "u");
+const SIGN_AFTER = new RegExp(`^[ ${NO_BREAK}${String.fromCodePoint(0x20_2f)}]?([%‰€$£])`, "u");
 /** A currency sign before a number. */
 const SIGN_BEFORE = /[€$£] ?$/u;
 
@@ -54,13 +54,18 @@ const SIGN_BEFORE = /[€$£] ?$/u;
 function valueOf(number: string): string {
   const [first = "", ...runs] = number.split(/\D/);
   const value = runs.reduce((v, run) => v + (run.length === 3 ? run : `.${run}`), first);
-  const [whole, fraction, ...more] = value.split(".");
-  if (fraction === undefined || more.length) return value;
+  const parts = value.split(".");
+  if (parts.length !== 2) {
+    return value;
+  }
+  const [whole, fraction] = parts;
   // Not `/0+$/`: on a long run of zeros ending in another digit it retries from every zero.
   let end = fraction.length;
-  while (end > 0 && fraction[end - 1] === "0") end--;
+  while (end > 0 && fraction[end - 1] === "0") {
+    end--;
+  }
   const trimmed = fraction.slice(0, end);
-  return trimmed ? `${whole}.${trimmed}` : whole!;
+  return trimmed ? `${whole}.${trimmed}` : whole;
 }
 
 /**
@@ -73,19 +78,25 @@ function valueOf(number: string): string {
 export function numbersOf(text: string): Figure[] {
   // Not `visible()`: collapsing whitespace would turn a no-break space (whitespace to a
   // regular expression) into an ordinary one, and split a number written with one in two.
-  const plain = decodeEntities(text.replace(/&nbsp;/gi, NO_BREAK).replace(/<[^<>]{0,1000}>/g, " "));
+  const plain = decodeEntities(
+    text.replaceAll(/&nbsp;/gi, NO_BREAK).replaceAll(/<[^<>]{0,1000}>/g, " "),
+  );
   const times = [...plain.matchAll(TIME)].map((m) => [m.index, m.index + m[0].length] as const);
   let t = 0;
   return [...plain.matchAll(NUMBER)].map((m) => {
     // Both in text order: the times that end before this number are behind it.
-    while (t < times.length && times[t]![1] <= m.index) t++;
-    const inTime = t < times.length && times[t]![0] <= m.index;
+    while (t < times.length && times[t][1] <= m.index) {
+      t++;
+    }
+    const inTime = t < times.length && times[t][0] <= m.index;
     const after = SIGN_AFTER.exec(plain.slice(m.index + m[0].length, m.index + m[0].length + 2));
     const before = SIGN_BEFORE.exec(plain.slice(Math.max(0, m.index - 2), m.index));
+    const letters = m[2];
+    const sign = after?.[1] ?? before?.[0].trim() ?? "";
     return {
-      value: valueOf(m[1]!),
-      optional: inTime || ORDINAL.test(m[2]!),
-      unit: m[2] || after?.[1] || before?.[0].trim() || "",
+      value: valueOf(m[1]),
+      optional: inTime || ORDINAL.test(letters),
+      unit: letters === "" ? sign : letters,
     };
   });
 }

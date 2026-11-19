@@ -69,7 +69,9 @@ perceptionRouter.get(
         .select({ key: aiCorpusSnapshots.key, documents: aiCorpusSnapshots.documents })
         .from(aiCorpusSnapshots)
         .where(inArray(aiCorpusSnapshots.key, keys));
-      for (const s of stored) snapshots.set(s.key, s.documents);
+      for (const s of stored) {
+        snapshots.set(s.key, s.documents);
+      }
     }
 
     const again = rephrased(rows);
@@ -147,20 +149,27 @@ perceptionRouter.put(
     if (asked.promoted.some((id) => asked.demoted.includes(id))) {
       return c.json({ error: "both_tiers" }, 400);
     }
-    const before = (await readAiSettings()).corpusTiers;
+    const { corpusTiers: before } = await readAiSettings();
     const stored = new Set([...before.promoted, ...before.demoted]);
     const corpus = await askCorpus(askConfig());
     const known = (id: string) => corpus.byId.has(id);
     const all = [...asked.promoted, ...asked.demoted];
     const unknown = all.find((id) => !known(id) && !stored.has(id));
-    if (unknown) return c.json({ error: "unknown_document", id: unknown }, 400);
+    if (unknown) {
+      return c.json({ error: "unknown_document", id: unknown }, 400);
+    }
     const tiers: CorpusTiers = {
-      promoted: asked.promoted.filter(known),
-      demoted: asked.demoted.filter(known),
+      promoted: asked.promoted.filter((id) => known(id)),
+      demoted: asked.demoted.filter((id) => known(id)),
     };
     const dropped = all.filter((id) => !known(id));
-    const fixed = tiers.demoted.find((id) => !DEMOTABLE.has(corpus.byId.get(id)!.kind));
-    if (fixed) return c.json({ error: "not_demotable", id: fixed }, 400);
+    const fixed = tiers.demoted.find((id) => {
+      const doc = corpus.byId.get(id);
+      return !doc || !DEMOTABLE.has(doc.kind);
+    });
+    if (fixed) {
+      return c.json({ error: "not_demotable", id: fixed }, 400);
+    }
 
     const now = new Date();
     await getDb()

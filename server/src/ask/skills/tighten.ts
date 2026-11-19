@@ -5,9 +5,9 @@ import { defineSkill, LANGUAGE } from "./skill.js";
 
 export const tightenInput = z.object({
   task: z.literal("tighten"),
-  text: z.string().min(1).max(2_000),
+  text: z.string().min(1).max(2000),
   locale: z.enum(["en", "de"]),
-  maxLength: z.number().int().min(10).max(2_000).optional(),
+  maxLength: z.number().int().min(10).max(2000).optional(),
 });
 
 type TightenInput = z.infer<typeof tightenInput>;

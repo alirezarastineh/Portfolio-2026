@@ -32,7 +32,72 @@ function type(control: FormControl<string>, value: string): void {
 }
 
 const text = (fixture: ReturnType<typeof setup>["fixture"]): string =>
-  fixture.nativeElement.textContent ?? "";
+  (fixture.nativeElement as HTMLElement).textContent ?? "";
+
+const tick = (): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+
+const DEFAULT_DRAFT: CopilotDraft = { text: "Hallo Welt", model: "m", suggestionId: "s1" };
+
+/** A field pair in a section editor's form, its copilot answering as `copilot` does. */
+function mounted(copilot: (input?: unknown) => Promise<unknown>, german = "", maxLength = 0) {
+  TestBed.resetTestingModule();
+  const reported: DraftVerdict[][] = [];
+  TestBed.configureTestingModule({
+    providers: [
+      CopilotLedger,
+      {
+        provide: AdminApiService,
+        useValue: {
+          copilot,
+          reportDrafts: (outcomes: DraftVerdict[]) => {
+            reported.push(outcomes);
+            return Promise.resolve({ ok: true, data: { recorded: outcomes.length } });
+          },
+        },
+      },
+    ],
+  });
+  // As a section editor holds them: one form, saved and discarded whole.
+  const form = new FormGroup({
+    en: new FormControl("Hello world", { nonNullable: true }),
+    de: new FormControl(german, { nonNullable: true }),
+  });
+  const fixture = TestBed.createComponent(FieldPairComponent);
+  fixture.componentRef.setInput("id", "greeting");
+  fixture.componentRef.setInput("label", "Greeting");
+  fixture.componentRef.setInput("controlEn", form.controls.en);
+  fixture.componentRef.setInput("controlDe", form.controls.de);
+  fixture.componentRef.setInput("maxLength", maxLength);
+  fixture.detectChanges();
+  const button = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll("button")).find(
+    (b) =>
+      b.getAttribute("aria-label") === "Translate → DE: the English Greeting into German, with AI",
+  );
+  if (!button) {
+    throw new Error("Expected translate button");
+  }
+  return { fixture, form, reported, button };
+}
+
+async function translated(
+  draft: CopilotDraft = DEFAULT_DRAFT,
+  german = "",
+  /** German typed and not saved before the translation. */
+  typed?: string,
+) {
+  const mount = mounted(() => Promise.resolve({ ok: true, data: draft }), german);
+  if (typed !== undefined) {
+    type(mount.form.controls.de, typed);
+  }
+  mount.button.click();
+  await tick();
+  expect(mount.form.controls.de.value).toBe(draft.text);
+  expect(mount.form.controls.de.dirty).toBe(true);
+  return mount;
+}
 
 describe("FieldPairComponent", () => {
   let ctx: ReturnType<typeof setup>;
@@ -67,7 +132,7 @@ describe("FieldPairComponent", () => {
     ctx.fixture.detectChanges();
 
     const copy = Array.from(
-      ctx.fixture.nativeElement.querySelectorAll("button") as NodeListOf<HTMLButtonElement>,
+      (ctx.fixture.nativeElement as HTMLElement).querySelectorAll("button"),
     ).find((b) => b.textContent?.includes("EN → DE"));
     copy?.click();
     ctx.fixture.detectChanges();
@@ -89,13 +154,15 @@ describe("FieldPairComponent", () => {
     const { fixture } = setup(20);
     expect(text(fixture)).toContain("5 / 20");
 
-    const input = fixture.nativeElement.querySelector("#greeting-en") as HTMLInputElement;
-    expect(input.getAttribute("maxlength")).toBe("20");
+    const input = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+      "#greeting-en",
+    );
+    expect(input?.getAttribute("maxlength")).toBe("20");
   });
 
   /** Spartan's label owns `for`: a plain `[attr.for]` binding was overwritten, and nothing was named. */
   it("names each field by its label, and its language when both show", () => {
-    const root: HTMLElement = ctx.fixture.nativeElement;
+    const root = ctx.fixture.nativeElement as HTMLElement;
     const name = (id: string) =>
       (root.querySelector(`#${id}`)?.getAttribute("aria-labelledby") ?? "")
         .split(" ")
@@ -112,76 +179,23 @@ describe("FieldPairComponent", () => {
   });
 
   it("renders no counter or cap without maxLength", () => {
-    const input = ctx.fixture.nativeElement.querySelector("#greeting-en") as HTMLInputElement;
-    expect(input.getAttribute("maxlength")).toBeNull();
+    const input = (ctx.fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+      "#greeting-en",
+    );
+    expect(input?.getAttribute("maxlength")).toBeNull();
     expect(text(ctx.fixture)).not.toContain("/ ");
   });
 });
 
 /** The copilot's drafts in a field pair: judged when the editor saves or discards (plan phase 27). */
 describe("FieldPairComponent's drafts", () => {
-  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-  /** A field pair in a section editor's form, its copilot answering as `copilot` does. */
-  function mounted(copilot: (input?: unknown) => Promise<unknown>, german = "", maxLength = 0) {
-    TestBed.resetTestingModule();
-    const reported: DraftVerdict[][] = [];
-    TestBed.configureTestingModule({
-      providers: [
-        CopilotLedger,
-        {
-          provide: AdminApiService,
-          useValue: {
-            copilot,
-            reportDrafts: async (outcomes: DraftVerdict[]) => {
-              reported.push(outcomes);
-              return { ok: true, data: { recorded: outcomes.length } };
-            },
-          },
-        },
-      ],
-    });
-    // As a section editor holds them: one form, saved and discarded whole.
-    const form = new FormGroup({
-      en: new FormControl("Hello world", { nonNullable: true }),
-      de: new FormControl(german, { nonNullable: true }),
-    });
-    const fixture = TestBed.createComponent(FieldPairComponent);
-    fixture.componentRef.setInput("id", "greeting");
-    fixture.componentRef.setInput("label", "Greeting");
-    fixture.componentRef.setInput("controlEn", form.controls.en);
-    fixture.componentRef.setInput("controlDe", form.controls.de);
-    fixture.componentRef.setInput("maxLength", maxLength);
-    fixture.detectChanges();
-    const button = Array.from(
-      fixture.nativeElement.querySelectorAll("button") as NodeListOf<HTMLButtonElement>,
-    ).find(
-      (b) =>
-        b.getAttribute("aria-label") ===
-        "Translate → DE: the English Greeting into German, with AI",
-    )!;
-    return { fixture, form, reported, button };
-  }
-
-  async function translated(
-    draft: CopilotDraft = { text: "Hallo Welt", model: "m", suggestionId: "s1" },
-    german = "",
-    /** German typed and not saved before the translation. */
-    typed?: string,
-  ) {
-    const mount = mounted(async () => ({ ok: true, data: draft }), german);
-    if (typed !== undefined) type(mount.form.controls.de, typed);
-    mount.button.click();
-    await tick();
-    expect(mount.form.controls.de.value).toBe(draft.text);
-    expect(mount.form.controls.de.dirty).toBe(true);
-    return mount;
-  }
-
   it("drops a draft that comes back after the field pair closed, and leaves the field alone", async () => {
     let answer!: (result: unknown) => void;
     const { fixture, form, reported, button } = mounted(
-      () => new Promise((resolve) => (answer = resolve)),
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
     );
     button.click();
     fixture.destroy(); // the admin left before the model answered
@@ -268,14 +282,14 @@ describe("FieldPairComponent's drafts", () => {
     };
     const sent: unknown[] = [];
     const mount = mounted(
-      async (input?: unknown) => {
+      (input?: unknown) => {
         sent.push(input);
-        return { ok: true, data: draft };
+        return Promise.resolve({ ok: true, data: draft });
       },
       "",
       12,
     );
-    const root: HTMLElement = mount.fixture.nativeElement;
+    const root = mount.fixture.nativeElement as HTMLElement;
     // The notes' live region is there before any draft, so a draft's notes are read out.
     expect(root.querySelector("#greeting-de-draft")?.closest("[aria-live=polite]")).not.toBeNull();
     mount.button.click();
@@ -304,11 +318,14 @@ describe("FieldPairComponent's drafts", () => {
       alternatives: [{ text: "Zweiter Entwurf.", lead: "problem" }],
     });
     fixture.detectChanges();
-    const root: HTMLElement = fixture.nativeElement;
+    const root = fixture.nativeElement as HTMLElement;
     const use = Array.from(root.querySelectorAll("button")).find(
       (b) => b.getAttribute("aria-label") === "Use this draft (problem first) for Greeting DE",
     );
-    use!.click();
+    if (!use) {
+      throw new Error("Expected use draft button");
+    }
+    use.click();
     fixture.detectChanges();
     await fixture.whenStable();
     expect(form.controls.de.value).toBe("Zweiter Entwurf.");

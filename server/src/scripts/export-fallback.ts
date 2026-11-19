@@ -57,35 +57,40 @@ async function fromDatabase(): Promise<Map<Locale, { core: unknown; docs: Map<st
         )
     : [];
 
-  const out = new Map<Locale, { core: unknown; docs: Map<string, Doc> }>();
-  for (const row of rows) {
-    const result = upcast(row.payload, row.createdAt.toISOString());
-    if (!result.ok) throw new Error(`live ${row.locale} v${row.versionId} does not validate`);
-    const docs = await upcastDocs(
-      payloadVersion(row.payload) ?? result.from,
-      row.locale,
-      docRows.filter((d) => d.versionId === row.versionId),
-    );
-    out.set(row.locale, { core: result.content, docs });
-  }
-  return out;
+  const entries = await Promise.all(
+    rows.map(async (row) => {
+      const result = upcast(row.payload, row.createdAt.toISOString());
+      if (!result.ok) {
+        throw new Error(`live ${row.locale} v${row.versionId} does not validate`);
+      }
+      const docs = await upcastDocs(
+        payloadVersion(row.payload) ?? result.from,
+        row.locale,
+        docRows.filter((d) => d.versionId === row.versionId),
+      );
+      return [row.locale, { core: result.content, docs }] as const;
+    }),
+  );
+  return new Map(entries);
 }
 
 async function fromFiles(): Promise<Map<Locale, { core: unknown; docs: Map<string, Doc> }>> {
-  const out = new Map<Locale, { core: unknown; docs: Map<string, Doc> }>();
-  for (const locale of LOCALES) {
-    const payload = JSON.parse(
-      readFileSync(resolve(CONTENT_DIR, `fallback.${locale}.json`), "utf8"),
-    ) as unknown;
-    const result = upcast(payload, new Date("2026-09-22T00:00:00.000Z").toISOString());
-    if (!result.ok)
-      throw new Error(
-        `fallback.${locale}.json does not validate: ${JSON.stringify(result.issues)}`,
-      );
-    const docs = await upcastDocs(payloadVersion(payload) ?? result.from, locale, []);
-    out.set(locale, { core: result.content, docs });
-  }
-  return out;
+  const entries = await Promise.all(
+    LOCALES.map(async (locale) => {
+      const payload = JSON.parse(
+        readFileSync(resolve(CONTENT_DIR, `fallback.${locale}.json`), "utf8"),
+      ) as unknown;
+      const result = upcast(payload, new Date("2026-09-22T00:00:00.000Z").toISOString());
+      if (!result.ok) {
+        throw new Error(
+          `fallback.${locale}.json does not validate: ${JSON.stringify(result.issues)}`,
+        );
+      }
+      const docs = await upcastDocs(payloadVersion(payload) ?? result.from, locale, []);
+      return [locale, { core: result.content, docs }] as const;
+    }),
+  );
+  return new Map(entries);
 }
 
 loadEnvFiles();
@@ -93,7 +98,9 @@ try {
   const content = process.argv.includes("--from-files") ? await fromFiles() : await fromDatabase();
   for (const locale of LOCALES) {
     const entry = content.get(locale);
-    if (!entry) throw new Error(`nothing is published for "${locale}"`);
+    if (!entry) {
+      throw new Error(`nothing is published for "${locale}"`);
+    }
     write(`fallback.${locale}.json`, entry.core);
     write(
       `fallback-docs.${locale}.json`,

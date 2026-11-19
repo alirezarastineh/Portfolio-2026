@@ -34,7 +34,7 @@ const gemini = (id: string, model: ScriptedModel): ModelEntry => ({
 
 const includeThoughts = (model: ScriptedModel, call = 0) =>
   (
-    model.calls[call]!.providerOptions?.["google"] as
+    model.calls[call].providerOptions?.["google"] as
       { thinkingConfig?: { includeThoughts?: boolean } } | undefined
   )?.thinkingConfig?.includeThoughts;
 
@@ -109,22 +109,24 @@ describe("thoughts (the admin's answers only)", () => {
   });
 
   it("asks the deep chain an answer moves up to for them too, and only the admin's", async () => {
-    for (const source of ["eval", "terminal"] as const) {
-      const lite = scripted([
-        toolTurn("get_document", { id: "project:atlas@en" }, "c1"),
-        toolTurn("get_document", { id: "project:borealis@en" }, "c2"),
-      ]);
-      const deep = scripted([thinkingTurn("Compare the two.", "Both [^project:atlas@en].")]);
-      const { chunks, outcome } = await answer(source, [gemini("gemini-3.5-flash-lite", lite)], {
-        escalation: () => [gemini("gemini-3.7-flash", deep)],
-      });
+    await Promise.all(
+      (["eval", "terminal"] as const).map(async (source) => {
+        const lite = scripted([
+          toolTurn("get_document", { id: "project:atlas@en" }, "c1"),
+          toolTurn("get_document", { id: "project:borealis@en" }, "c2"),
+        ]);
+        const deep = scripted([thinkingTurn("Compare the two.", "Both [^project:atlas@en].")]);
+        const { chunks, outcome } = await answer(source, [gemini("gemini-3.5-flash-lite", lite)], {
+          escalation: () => [gemini("gemini-3.7-flash", deep)],
+        });
 
-      const admin = source === "eval";
-      expect(outcome.escalation).toBe("projects-fetched");
-      expect(includeThoughts(lite)).toBe(admin);
-      expect(includeThoughts(deep)).toBe(admin);
-      expect(outcome.reasoning).toBe(admin ? "Compare the two." : null);
-      expect(chunks.some((c) => c.type.startsWith("reasoning"))).toBe(admin);
-    }
+        const admin = source === "eval";
+        expect(outcome.escalation).toBe("projects-fetched");
+        expect(includeThoughts(lite)).toBe(admin);
+        expect(includeThoughts(deep)).toBe(admin);
+        expect(outcome.reasoning).toBe(admin ? "Compare the two." : null);
+        expect(chunks.some((c) => c.type.startsWith("reasoning"))).toBe(admin);
+      }),
+    );
   });
 });

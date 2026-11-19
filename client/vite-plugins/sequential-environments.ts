@@ -22,7 +22,9 @@ export function sequentialEnvironments(): Plugin {
       order: "post",
       handler(config) {
         const buildApp = config.builder?.buildApp;
-        if (!buildApp) return;
+        if (!buildApp) {
+          return;
+        }
         return { builder: { buildApp: (builder) => buildApp(inTurn(builder)) } };
       },
     },

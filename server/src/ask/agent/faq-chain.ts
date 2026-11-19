@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 
 import { getDb } from "../../db/client.js";
 import {
@@ -63,7 +63,7 @@ const SUMMARY_CHARS = 500;
 const FAQ_QUESTION_MAX = 300;
 const FAQ_ANSWER_MAX = 3000;
 
-const clean = (text: string, max: number) => text.replace(/\s+/g, " ").trim().slice(0, max);
+const clean = (text: string, max: number) => text.replaceAll(/\s+/g, " ").trim().slice(0, max);
 
 /** The source, read again; why not when it is gone. */
 export async function faqSource(
@@ -76,7 +76,9 @@ export async function faqSource(
       .from(aiInsightSnapshots)
       .where(eq(aiInsightSnapshots.id, input.snapshotId));
     const topic = snapshot?.topics[input.topic];
-    if (!snapshot || !topic) return { error: "unknown_topic" };
+    if (!snapshot || !topic) {
+      return { error: "unknown_topic" };
+    }
     const questions = topic.examples
       .map((q) => clean(q, QUESTION_CHARS))
       .filter(Boolean)
@@ -107,7 +109,9 @@ export async function faqSource(
     .select({ id: aiJournal.id, messageIds: aiJournal.messageIds })
     .from(aiJournal)
     .where(eq(aiJournal.id, input.entryId));
-  if (!entry) return { error: "unknown_entry" };
+  if (!entry) {
+    return { error: "unknown_entry" };
+  }
   const messageId = entry.messageIds[0];
   // The visitor's question, redacted, while the answer is kept (90 days).
   const [message] = messageId
@@ -117,7 +121,9 @@ export async function faqSource(
         .where(eq(aiMessages.id, messageId))
     : [];
   const question = message ? clean(message.question, QUESTION_CHARS) : "";
-  if (!question) return { error: "question_gone" };
+  if (!question) {
+    return { error: "question_gone" };
+  }
   return {
     key: `journal:${entry.id}`,
     kept: {
@@ -140,13 +146,21 @@ const OPEN: FaqProposalStatus[] = ["proposed", "needs_you"];
  */
 async function openProposal(source: FaqSource): Promise<FaqProposal | null> {
   const { kept } = source;
-  const where =
-    kept.source === "insight"
-      ? and(
-          eq(aiFaqProposals.source, "insight"),
-          sql`${aiFaqProposals.topic} ->> 'title' = ${kept.topic!.title}`,
-        )
-      : eq(aiFaqProposals.journalId, kept.journalId!);
+  let where: SQL | undefined;
+  if (kept.source === "insight") {
+    if (!kept.topic) {
+      return null;
+    }
+    where = and(
+      eq(aiFaqProposals.source, "insight"),
+      sql`${aiFaqProposals.topic} ->> 'title' = ${kept.topic.title}`,
+    );
+  } else {
+    if (!kept.journalId) {
+      return null;
+    }
+    where = eq(aiFaqProposals.journalId, kept.journalId);
+  }
   const [row] = await getDb()
     .select()
     .from(aiFaqProposals)
@@ -190,8 +204,9 @@ async function step(
 ): Promise<Drafted | "down"> {
   const skill = skillFor(input.task);
   const job = await skill.request(input, ctx);
-  if (job instanceof SkillAnswer)
-    throw new Error(`the ${input.task} step answered without a model`);
+  if (job instanceof SkillAnswer) {
+    throw new TypeError(`the ${input.task} step answered without a model`);
+  }
   let run: SkillRun;
   try {
     run = await runSkill(session.models, job);
@@ -247,20 +262,27 @@ class Gathered {
 
   keep(field: FaqDraftField, drafted: Drafted): void {
     this.texts[field] = drafted.text;
-    if (drafted.useId) this.uses[field] = drafted.useId;
+    if (drafted.useId) {
+      this.uses[field] = drafted.useId;
+    }
     for (const failure of drafted.failures) {
       this.flags.push(`${field}:${failure.gate}`);
       this.notes.push(`${FIELD_NAMES[field]}: ${failure.message}`);
     }
-    for (const note of criticNotes(drafted.critic))
+    for (const note of criticNotes(drafted.critic)) {
       this.notes.push(`${FIELD_NAMES[field]}: ${note}`);
+    }
   }
 
   /** Whether a step brought text; when not, a note says why (the admin writes the field). */
   drafted(field: FaqDraftField, drafted: Drafted | "down"): drafted is Drafted {
-    if (drafted === "down") this.notes.push(notDrafted(field));
-    else if (!drafted.text) this.notes.push(cameEmpty(field));
-    else return true;
+    if (drafted === "down") {
+      this.notes.push(notDrafted(field));
+    } else if (drafted.text) {
+      return true;
+    } else {
+      this.notes.push(cameEmpty(field));
+    }
     return false;
   }
 
@@ -281,7 +303,9 @@ async function draftTheRest(
   const translate = (text: string, maxLength: number) =>
     step(session, ctx, { task: "translate", text, from: "en", to: "de", maxLength, glossary });
   const questionDe = await translate(question, FAQ_QUESTION_MAX);
-  if (got.drafted("questionDe", questionDe)) got.keep("questionDe", questionDe);
+  if (got.drafted("questionDe", questionDe)) {
+    got.keep("questionDe", questionDe);
+  }
 
   // 2. The answer, grounded in the published portfolio, or a gap: never invented.
   // What `faq-answer` takes (its input's bounds): a draft outside them is the admin's to fix.
@@ -295,11 +319,15 @@ async function draftTheRest(
     got.notes.push(CONTENT_GAP);
     return;
   }
-  if (!got.drafted("answerEn", answer)) return;
+  if (!got.drafted("answerEn", answer)) {
+    return;
+  }
   got.keep("answerEn", answer);
   // 3. The answer in German.
   const answerDe = await translate(answer.text, FAQ_ANSWER_MAX);
-  if (got.drafted("answerDe", answerDe)) got.keep("answerDe", answerDe);
+  if (got.drafted("answerDe", answerDe)) {
+    got.keep("answerDe", answerDe);
+  }
 }
 
 /**
@@ -325,12 +353,16 @@ async function store(source: FaqSource, got: Gathered, usd: number): Promise<Dra
         })
         .onConflictDoNothing()
         .returning();
-  if (row) return { ok: true, proposal: row, existing: false };
+  if (row) {
+    return { ok: true, proposal: row, existing: false };
+  }
   await Promise.all(
     Object.values(got.uses).map((id) => decideUse(id, { outcome: "discarded", distance: null })),
   );
   const theirs = open ?? (await openProposal(source));
-  if (!theirs) throw new Error("the FAQ proposal was not stored");
+  if (!theirs) {
+    throw new Error("the FAQ proposal was not stored");
+  }
   return { ok: true, proposal: theirs, existing: true };
 }
 
@@ -338,9 +370,13 @@ async function store(source: FaqSource, got: Gathered, usd: number): Promise<Dra
 async function runChain(source: FaqSource): Promise<DraftOutcome> {
   const config = askConfig();
   const state = await availability(config, await readAiSettings(), "agent");
-  if (state.state !== "ok") return { ok: false, error: refusal(state), status: 503 };
+  if (state.state !== "ok") {
+    return { ok: false, error: refusal(state), status: 503 };
+  }
   const session = skillModels(config, () => true);
-  if (!session.ok) return { ok: false, error: session.error, status: 503 };
+  if (!session.ok) {
+    return { ok: false, error: session.error, status: 503 };
+  }
   const ctx: SkillContext = { config, corpus: () => askCorpus(config), image: altImage };
 
   try {
@@ -354,8 +390,12 @@ async function runChain(source: FaqSource): Promise<DraftOutcome> {
       ...(source.summary ? { summary: source.summary } : {}),
       questions: source.questions,
     });
-    if (question === "down") return { ok: false, error: "unavailable", status: 503 };
-    if (!question.text) return { ok: false, error: "empty_draft", status: 502 };
+    if (question === "down") {
+      return { ok: false, error: "unavailable", status: 503 };
+    }
+    if (!question.text) {
+      return { ok: false, error: "empty_draft", status: 502 };
+    }
     got.keep("questionEn", question);
     // A question still reading as an order to the assistant after its repairs goes no further:
     // the answer step takes the question as the admin's own words, unfenced.

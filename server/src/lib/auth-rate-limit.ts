@@ -96,7 +96,9 @@ export async function pruneAuthAttempts(): Promise<void> {
 let pruneTimer: NodeJS.Timeout | undefined;
 
 export function startAuthAttemptPruning(): void {
-  if (pruneTimer) return;
+  if (pruneTimer) {
+    return;
+  }
   pruneTimer = setInterval(() => {
     void pruneAuthAttempts().catch((error) =>
       console.error("[auth] pruning attempts failed", error),

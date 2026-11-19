@@ -49,7 +49,9 @@ export function usagePlace(raw: string): UsagePlace {
 
 /** The languages an image still has no alt text in (none for a PDF). */
 export function missingAlt(asset: MediaAsset): Locale[] {
-  if (asset.kind !== "image") return [];
+  if (asset.kind !== "image") {
+    return [];
+  }
   return (["en", "de"] as const).filter(
     (locale) => !(locale === "en" ? asset.altEn : asset.altDe)?.trim(),
   );
@@ -58,7 +60,9 @@ export function missingAlt(asset: MediaAsset): Locale[] {
 /** "no alt", "no alt DE": what the tile says about a missing description. */
 export function missingAltLabel(asset: MediaAsset): string | null {
   const missing = missingAlt(asset);
-  if (missing.length === 0) return null;
+  if (missing.length === 0) {
+    return null;
+  }
   return missing.length === 2 ? "no alt" : `no alt ${missing[0]?.toUpperCase()}`;
 }
 
@@ -66,21 +70,37 @@ export function missingAltLabel(asset: MediaAsset): string | null {
 export type UsageState = "live" | "draft" | "unused" | "unknown";
 
 export function usageState(asset: MediaAsset): UsageState {
-  if (!asset.usage) return "unknown";
-  if (asset.usage.live) return "live";
+  if (!asset.usage) {
+    return "unknown";
+  }
+  if (asset.usage.live) {
+    return "live";
+  }
   return asset.usage.draft.length ? "draft" : "unused";
 }
 
 /** Every alt text the content gives a picture of this file (`src` is the file's address). */
 function altsOf(node: unknown, src: string, out: string[] = []): string[] {
   if (Array.isArray(node)) {
-    for (const child of node) altsOf(child, src, out);
+    for (const child of node) {
+      altsOf(child, src, out);
+    }
   } else if (node !== null && typeof node === "object") {
     const image = node as Record<string, unknown>;
-    if (image["src"] === src && typeof image["alt"] === "string") out.push(image["alt"]);
-    else for (const child of Object.values(image)) altsOf(child, src, out);
+    if (image["src"] === src && typeof image["alt"] === "string") {
+      out.push(image["alt"]);
+    } else {
+      for (const child of Object.values(image)) {
+        altsOf(child, src, out);
+      }
+    }
   }
   return out;
+}
+
+function nonEmpty(text: string | null | undefined): string | null {
+  const trimmed = text?.trim() ?? "";
+  return trimmed === "" ? null : trimmed;
 }
 
 /**
@@ -90,14 +110,20 @@ function altsOf(node: unknown, src: string, out: string[] = []): string[] {
  * the case studies' pages, which the review does not hold: those are not compared.
  */
 export function altInDraft(asset: MediaAsset, marks: DraftMarks | null): boolean {
-  if (asset.kind !== "image") return false;
+  if (asset.kind !== "image") {
+    return false;
+  }
   const state = usageState(asset);
-  if (state === "draft") return true;
-  if (state !== "live" || !marks) return false;
+  if (state === "draft") {
+    return true;
+  }
+  if (state !== "live" || !marks) {
+    return false;
+  }
   const src = `/media/${asset.filename}`;
   return (["en", "de"] as const).some((locale) => {
     const [own, other] = locale === "en" ? [asset.altEn, asset.altDe] : [asset.altDe, asset.altEn];
-    const words = own?.trim() || other?.trim();
+    const words = nonEmpty(own) ?? nonEmpty(other);
     return !!words && altsOf(marks.live[locale], src).some((alt) => alt !== words);
   });
 }
@@ -105,7 +131,11 @@ export function altInDraft(asset: MediaAsset, marks: DraftMarks | null): boolean
 /** Why a file cannot be deleted right now, or null when it can. */
 export function deleteBlocker(asset: MediaAsset): string | null {
   const state = usageState(asset);
-  if (state === "live") return "The live site shows it. Publish without it first.";
-  if (state === "draft") return "The draft uses it: change those places first.";
+  if (state === "live") {
+    return "The live site shows it. Publish without it first.";
+  }
+  if (state === "draft") {
+    return "The draft uses it: change those places first.";
+  }
   return null;
 }

@@ -38,7 +38,9 @@ function originOf(url: string): string {
 
 /** A v1 image string (relative, legacy SVG, or an absolute `https://api…/media/x`). */
 function imageFromV1(image: string, alt: string): Image | null {
-  if (!image) return null;
+  if (!image) {
+    return null;
+  }
   const media = /\/media\/([^/?#]+)$/.exec(image);
   return {
     src: media ? `/media/${media[1]}` : image,
@@ -104,7 +106,9 @@ export function upcast(payload: unknown, publishedAt: string): UpcastResult {
   const version = payloadVersion(payload);
   if (version === 1) {
     const parsed = v1.appContentSchema.safeParse(payload);
-    if (!parsed.success) return { ok: false, issues: parsed.error.issues };
+    if (!parsed.success) {
+      return { ok: false, issues: parsed.error.issues };
+    }
     try {
       return { ok: true, content: upcastV1(parsed.data, publishedAt), from: 1 };
     } catch (error) {
@@ -128,18 +132,23 @@ export async function upcastDocs(
 ): Promise<Map<string, Doc>> {
   const docs = new Map<string, Doc>();
   if (version === 1) {
-    for (const doc of legalDocSchema.options) {
-      const draft = LEGAL_DEFAULTS[locale][doc];
-      const rendered = await renderBody(draft.body);
-      docs.set(docKey("legal", doc), {
-        kind: "legal",
-        doc,
-        title: draft.title,
-        body: rendered.html,
-        updatedAt: LEGAL_DEFAULTS_UPDATED_AT,
-      });
-    }
-    return docs;
+    const entries = await Promise.all(
+      legalDocSchema.options.map(async (doc): Promise<[string, Doc]> => {
+        const draft = LEGAL_DEFAULTS[locale][doc];
+        const rendered = await renderBody(draft.body);
+        return [
+          docKey("legal", doc),
+          {
+            kind: "legal",
+            doc,
+            title: draft.title,
+            body: rendered.html,
+            updatedAt: LEGAL_DEFAULTS_UPDATED_AT,
+          },
+        ];
+      }),
+    );
+    return new Map(entries);
   }
   for (const row of stored) {
     docs.set(row.key, docSchema.parse(row.payload));

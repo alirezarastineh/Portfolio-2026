@@ -161,11 +161,16 @@ export class ReadinessCardComponent implements OnInit {
     const skipped: Locale[] = [];
     let unreachable = false;
     results.forEach((result, i) => {
-      const locale = LOCALES[i]!;
-      if (result.ok) drafts[locale] = result.data;
+      const locale = LOCALES[i];
+      if (result.ok) {
+        drafts[locale] = result.data;
+      }
       // 422 is a draft that does not build; anything else, no usable answer.
-      else if (result.status === 422) skipped.push(locale);
-      else unreachable = true;
+      else if (result.status === 422) {
+        skipped.push(locale);
+      } else {
+        unreachable = true;
+      }
     });
 
     const checkable = Object.keys(drafts).length > 0 && !unreachable;
@@ -194,9 +199,11 @@ export class ReadinessCardComponent implements OnInit {
   private onlyIn(check: ReadinessCheck): string {
     const checked = this.report()?.locales ?? [];
     const failing = new Set(check.hits.flatMap((hit) => hit.locales));
-    if (checked.length < 2 || failing.size !== 1) return "";
+    if (checked.length < 2 || failing.size !== 1) {
+      return "";
+    }
     const [locale] = failing;
-    return `, ${LANGUAGE[locale!]} only`;
+    return `, ${LANGUAGE[locale]} only`;
   }
 
   protected kindLabel(item: I18nItem): string {
@@ -210,11 +217,19 @@ export class ReadinessCardComponent implements OnInit {
 
   /** "German empty: hook", "English changed after the German was last edited". */
   protected problemText(item: I18nItem): string {
-    if (item.absent) return item.absent === "de" ? "English only" : "German only";
+    if (item.absent) {
+      return item.absent === "de" ? "English only" : "German only";
+    }
     const parts: string[] = [];
-    if (item.missingDe.length) parts.push(`German empty: ${item.missingDe.join(", ")}`);
-    if (item.missingEn.length) parts.push(`English empty: ${item.missingEn.join(", ")}`);
-    if (item.stale) parts.push("English changed after the German was last edited");
+    if (item.missingDe.length) {
+      parts.push(`German empty: ${item.missingDe.join(", ")}`);
+    }
+    if (item.missingEn.length) {
+      parts.push(`English empty: ${item.missingEn.join(", ")}`);
+    }
+    if (item.stale) {
+      parts.push("English changed after the German was last edited");
+    }
     return parts.join("; ");
   }
 }

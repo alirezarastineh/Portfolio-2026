@@ -39,7 +39,9 @@ const IMAGE_PART = /\.(?:src|srcset|sources|width|height|blur)$/;
 
 /** The field a path belongs to: an image's parts are the image, an item of a list without ids the list. */
 export function fieldOf(path: string): string {
-  if (path.startsWith("ui.")) return path;
+  if (path.startsWith("ui.")) {
+    return path;
+  }
   const item = ITEM.exec(path)?.[0] ?? "";
   return (
     item +
@@ -72,7 +74,9 @@ export function changeRows(
     const order = KEYED.test(entry.path) ? `${entry.path} (order)` : null;
     const path = whole ?? order ?? fieldOf(entry.path);
     const row = rows.get(path) ?? { path, kind: entry.kind, entries: [] };
-    if (row.kind !== entry.kind) row.kind = "changed";
+    if (row.kind !== entry.kind) {
+      row.kind = "changed";
+    }
     row.entries.push(entry);
     rows.set(path, row);
   }
@@ -109,7 +113,7 @@ export function summarizeLocale(review: LocaleReview): LocaleSummary {
 }
 
 export function summarizeReview(review: PublishReview): PublishSummary {
-  const locales = review.locales.map(summarizeLocale);
+  const locales = review.locales.map((locale) => summarizeLocale(locale));
   return {
     locales,
     total: locales.reduce((sum, l) => sum + l.changes, 0),

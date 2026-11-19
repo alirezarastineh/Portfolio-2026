@@ -36,7 +36,7 @@ async function render(previews: Record<Locale, Preview>, i18n: I18nItem[] = []) 
       provideRouter([]),
       {
         provide: AdminApiService,
-        useValue: { preview: async (locale: Locale) => previews[locale] },
+        useValue: { preview: (locale: Locale) => Promise.resolve(previews[locale]) },
       },
       // The rail's list of translations to check: Before launch counts the same one.
       { provide: AdminPulseService, useValue: { i18n: signal(i18n) } },
@@ -45,7 +45,9 @@ async function render(previews: Record<Locale, Preview>, i18n: I18nItem[] = []) 
   const fixture = TestBed.createComponent(ReadinessCardComponent);
   fixture.detectChanges();
   // Its own load (not a pending task): let the stubbed answers arrive.
-  await new Promise((resolve) => setTimeout(resolve));
+  await new Promise<void>((done) => {
+    setTimeout(done);
+  });
   fixture.detectChanges();
   return fixture;
 }
@@ -63,21 +65,21 @@ const rows = (root: HTMLElement) => [...root.querySelectorAll(":scope ul > li > 
 describe("ReadinessCardComponent (Today's Before launch)", () => {
   it("lists every failing rule as a row, worst first, whose Fix opens the first place's editor", async () => {
     const fixture = await render(both());
-    const root: HTMLElement = fixture.nativeElement;
+    const root = fixture.nativeElement as HTMLElement;
 
     expect(text(root.querySelector("h2"))).toBe("Before launch");
-    expect([...root.querySelectorAll("p")].map(text)).toContainEqual(
+    expect([...root.querySelectorAll("p")].map((el) => text(el))).toContainEqual(
       expect.stringMatching(/^\d+ of 11 ready$/),
     );
-    const first = rows(root)[0]!;
+    const first = rows(root)[0];
     expect(text(first)).toMatch(/^Placeholder text \(\d+\) fix before sharing Fix$/);
     expect(first.getAttribute("href")).toBe("/admin/projects/project-one");
-    expect(rows(root).map(text)).toContain("No experience worth fixing Fix");
+    expect(rows(root).map((el) => text(el))).toContain("No experience worth fixing Fix");
   });
 
   it("keeps the nice-to-haves as rows, after the urgent ones", async () => {
     const fixture = await render(both());
-    const words = rows(fixture.nativeElement).map(text);
+    const words = rows(fixture.nativeElement as HTMLElement).map((el) => text(el));
     const tip = words.findIndex((w) => w.includes("nice to have"));
     expect(tip).toBeGreaterThan(words.findIndex((w) => w.includes("worth fixing")));
     expect(words).toContain("No posts nice to have Fix");
@@ -89,10 +91,13 @@ describe("ReadinessCardComponent (Today's Before launch)", () => {
       item("p2", "Release gate", ["hook", "role"]),
       { ...item("e1", "Staff engineer · Acme", ["summary"]), kind: "experience" },
     ]);
-    const root: HTMLElement = fixture.nativeElement;
+    const root = fixture.nativeElement as HTMLElement;
     const show = [...root.querySelectorAll("button")].find((b) =>
       text(b).startsWith("3 translations to check"),
-    )!;
+    );
+    if (!show) {
+      throw new Error("Expected toggle button for translations to check");
+    }
     expect(show.getAttribute("aria-expanded")).toBe("false");
     expect(root.querySelector('a[href="/admin/projects/p2"]')).toBeNull();
 
@@ -108,15 +113,16 @@ describe("ReadinessCardComponent (Today's Before launch)", () => {
 
   it("checks the language that builds, and says which one it could not", async () => {
     const fixture = await render({ en: { ok: true, data: load("en") }, de: doesNotBuild });
-    expect(text(fixture.nativeElement)).toContain(
-      "The German draft does not build, so it was not checked.",
-    );
-    expect(text(fixture.nativeElement)).toContain("Placeholder text");
+    const root = fixture.nativeElement as HTMLElement;
+    expect(text(root)).toContain("The German draft does not build, so it was not checked.");
+    expect(text(root)).toContain("Placeholder text");
   });
 
   it("offers to try again when the API does not answer", async () => {
     const down: Preview = { ok: false, error: "http_500", status: 500 };
     const fixture = await render({ en: down, de: down });
-    expect(rows(fixture.nativeElement).map(text)).toEqual(["Could not check the draft. Try again"]);
+    expect(rows(fixture.nativeElement as HTMLElement).map((el) => text(el))).toEqual([
+      "Could not check the draft. Try again",
+    ]);
   });
 });

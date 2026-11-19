@@ -388,10 +388,6 @@
     border-color var(--dur-2);
 }
 
-.toc-link[aria-current] {
-  color: var(--color-foreground);
-}
-
 @media (hover: hover) {
   .toc-link:hover {
     color: var(--color-foreground);
@@ -399,6 +395,7 @@
 }
 
 .toc-link[aria-current] {
+  color: var(--color-foreground);
   border-color: var(--signal);
 }
 
@@ -467,9 +464,15 @@
 .prose-body a,
 .prose-compact a {
   text-decoration-thickness: 1px;
-  transition:
-    text-decoration-color var(--dur-2),
-    text-decoration-thickness var(--dur-2);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .prose-body a,
+  .prose-compact a {
+    transition:
+      text-decoration-color var(--dur-2),
+      text-decoration-thickness var(--dur-2);
+  }
 }
 
 @media (hover: hover) {

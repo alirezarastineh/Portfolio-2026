@@ -92,15 +92,20 @@ describe("AskLauncherService", () => {
   });
 
   describe("the panel's width (plan 4 U8)", () => {
-    let onChange: (event: { matches: boolean }) => void = () => undefined;
+    const onChange: { current: ((event: { matches: boolean }) => void) | null } = {
+      current: null,
+    };
     beforeEach(() => {
+      onChange.current = null;
       // jsdom has no matchMedia: below 1024px, until the window turns.
-      window.matchMedia = ((query: string) => ({
+      globalThis.matchMedia = ((query: string) => ({
         matches: query === "(width < 64rem)",
-        addEventListener: (_: string, listener: typeof onChange) => (onChange = listener),
+        addEventListener: (_: string, listener: (event: { matches: boolean }) => void) => {
+          onChange.current = listener;
+        },
       })) as unknown as typeof window.matchMedia;
     });
-    afterEach(() => Reflect.deleteProperty(window, "matchMedia"));
+    afterEach(() => Reflect.deleteProperty(globalThis, "matchMedia"));
 
     it("steps aside for the page only where it covers the page, below 1024px", () => {
       const launcher = TestBed.inject(AskLauncherService);
@@ -110,7 +115,10 @@ describe("AskLauncherService", () => {
       expect(launcher.sheetOpen()).toBe(false);
 
       // Turned to 1024px or wider: beside the page, it stays.
-      onChange({ matches: false });
+      if (!onChange.current) {
+        throw new Error("matchMedia listener was not registered");
+      }
+      onChange.current({ matches: false });
       launcher.openSheet("button");
       launcher.closeIfSheet();
       expect(launcher.sheetOpen()).toBe(true);

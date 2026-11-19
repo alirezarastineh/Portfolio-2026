@@ -13,7 +13,7 @@ const ARGON2ID = 2 as Algorithm;
  */
 const OPTIONS = {
   algorithm: ARGON2ID,
-  memoryCost: 19456,
+  memoryCost: 19_456,
   timeCost: 2,
   parallelism: 1,
   outputLen: 32,

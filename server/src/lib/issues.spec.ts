@@ -4,10 +4,12 @@ import { z } from "zod";
 import { issueLabel } from "../content/draft-issues.js";
 import { toIssues } from "./issues.js";
 
-function issuesOf(schema: z.ZodType, value: unknown) {
+function issuesOf(schema: z.ZodType, value: unknown, prefix: (string | number)[] = []) {
   const parsed = schema.safeParse(value);
-  if (parsed.success) throw new Error("expected a failure");
-  return toIssues(parsed.error.issues);
+  if (parsed.success) {
+    throw new Error("expected a failure");
+  }
+  return toIssues(parsed.error.issues, prefix);
 }
 
 describe("toIssues", () => {
@@ -46,11 +48,7 @@ describe("toIssues", () => {
   });
 
   it("prefixes paths", () => {
-    const [issue] = toIssues(z.object({ a: z.string() }).safeParse({ a: 1 }).error!.issues, [
-      "ui",
-      "hero",
-      "en",
-    ]);
+    const [issue] = issuesOf(z.object({ a: z.string() }), { a: 1 }, ["ui", "hero", "en"]);
     expect(issue?.path).toEqual(["ui", "hero", "en", "a"]);
   });
 });

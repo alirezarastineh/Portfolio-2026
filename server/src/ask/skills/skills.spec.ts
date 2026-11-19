@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { z } from "zod";
 
 import { fixtureConfig, fixtureCorpus } from "../../test/ask-fixtures.js";
 import { generating, mockEntry } from "../../test/ask-models.js";
@@ -22,27 +23,49 @@ import { translateSkill } from "./translate.js";
 
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const MEDIA = "00000000-0000-4000-8000-000000000001";
+const DEFAULT_IMAGE: AltImage = {
+  ok: true,
+  image: Buffer.from(PNG),
+  mediaType: "image/png",
+  name: "flow.png",
+};
 
 function context(
-  image: AltImage = { ok: true, image: Buffer.from(PNG), mediaType: "image/png", name: "flow.png" },
+  image: AltImage = DEFAULT_IMAGE,
   corpus: AskCorpus = fixtureCorpus(),
 ): SkillContext {
-  return { config: fixtureConfig(), corpus: async () => corpus, image: async () => image };
+  return {
+    config: fixtureConfig(),
+    corpus: () => Promise.resolve(corpus),
+    image: () => Promise.resolve(image),
+  };
 }
 
 /** Every string the model was sent, joined: the instructions, the prompt, a file's media type. */
 function sentText(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (value instanceof Uint8Array) return "";
-  if (Array.isArray(value)) return value.map(sentText).join("\n");
-  if (value && typeof value === "object") return Object.values(value).map(sentText).join("\n");
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value instanceof Uint8Array) {
+    return "";
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sentText(item)).join("\n");
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value)
+      .map((item) => sentText(item))
+      .join("\n");
+  }
   return "";
 }
 
 async function jobFor(input: unknown, ctx = context()): Promise<SkillJob> {
   const parsed = copilotInput.parse(input);
   const job = await skillFor(parsed.task).request(parsed, ctx);
-  if (job instanceof SkillAnswer) throw new Error(`answered without a model: ${parsed.task}`);
+  if (job instanceof SkillAnswer) {
+    throw new TypeError(`answered without a model: ${parsed.task}`);
+  }
   return job;
 }
 
@@ -285,9 +308,11 @@ describe("the skills registry (plan phase 27)", () => {
         temperature: CALL.temperature,
         maxOutputTokens: CALL.maxOutputTokens,
       });
-      const sent = sentText(call!.prompt);
-      for (const phrase of fixture.told) expect(sent, phrase).toContain(phrase);
-      const parts: { type: string }[] = call!.prompt.flatMap((m) =>
+      const sent = sentText(call.prompt);
+      for (const phrase of fixture.told) {
+        expect(sent, phrase).toContain(phrase);
+      }
+      const parts: { type: string }[] = call.prompt.flatMap((m) =>
         Array.isArray(m.content) ? (m.content as { type: string }[]) : [],
       );
       expect(parts.some((part) => part.type === "file")).toBe(fixture.file ?? false);
@@ -318,15 +343,18 @@ describe("the skills registry (plan phase 27)", () => {
       [{ ok: false, error: "not_an_image" }, 400],
       [{ ok: false, error: "unreadable" }, 400],
     ] as const;
-    for (const skill of ["alt", "describe"] as const) {
-      for (const [image, status] of refusals) {
+    const checks = (["alt", "describe"] as const).flatMap((skill) =>
+      refusals.map(([image, status]) => ({ skill, image, status })),
+    );
+    await Promise.all(
+      checks.map(async ({ skill, image, status }) => {
         const answer = await skillFor(skill).request(
           copilotInput.parse({ task: skill, mediaId: MEDIA, locale: "en" }),
           context(image),
         );
         expect(answer).toEqual(new SkillAnswer({ error: image.error }, status));
-      }
-    }
+      }),
+    );
   });
 
   it("tells a translation the portfolio's names and terms to keep, when it is given them (plan phase 29)", async () => {
@@ -362,9 +390,9 @@ describe("the skills registry (plan phase 27)", () => {
     expect(skillVersion(translateSkill)).toBe(translate.version);
     // At most 80 terms, each at most 60 characters.
     const input = { task: "translate", text: "x", from: "de", to: "en" };
-    expect(copilotInput.safeParse({ ...input, glossary: Array(81).fill("Atlas") }).success).toBe(
-      false,
-    );
+    expect(
+      copilotInput.safeParse({ ...input, glossary: new Array(81).fill("Atlas") }).success,
+    ).toBe(false);
     expect(copilotInput.safeParse({ ...input, glossary: ["x".repeat(61)] }).success).toBe(false);
   });
 
@@ -378,7 +406,7 @@ describe("the skills registry (plan phase 27)", () => {
 });
 
 describe("a skill's version", () => {
-  type Tighten = (typeof tightenInput)["_output"];
+  type Tighten = z.output<typeof tightenInput>;
   const base: SkillDefinition<Tighten, Tighten> = {
     id: "tighten",
     description: "Shortens a text.",
@@ -396,7 +424,7 @@ describe("a skill's version", () => {
     const protocol = protocolFor({ explores: false, critic: false }) as Record<string, unknown>;
     expect(skillVersion(base, CALL, protocol)).toBe(version);
     const moved = [
-      skillVersion({ ...base, finish: (text) => text.replace(/\s*\[\^[^\]]*\]/g, "") }),
+      skillVersion({ ...base, finish: (text) => text.replaceAll(/\[(?:\^)[^\]\n]*\]/g, "") }),
       skillVersion(base, CALL, { ...protocol, repair: "Try again." }),
       // The same leads, the judge reading less of the source.
       skillVersion({

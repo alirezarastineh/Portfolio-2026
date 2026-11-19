@@ -53,7 +53,9 @@ export async function forgetConversation(
   if (res.status === 429) {
     return { ok: false, retryAfter: typeof body.retryAfter === "number" ? body.retryAfter : 60 };
   }
-  if (!res.ok || typeof body.deleted !== "number") return { ok: false, retryAfter: null };
+  if (!res.ok || typeof body.deleted !== "number") {
+    return { ok: false, retryAfter: null };
+  }
   return { ok: true, deleted: body.deleted };
 }
 

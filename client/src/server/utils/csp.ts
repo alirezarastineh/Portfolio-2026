@@ -57,7 +57,9 @@ export function isPagePath(path: string): boolean {
 }
 
 export function originOf(url: string | undefined): string | null {
-  if (!url) return null;
+  if (!url) {
+    return null;
+  }
   try {
     const { origin, protocol } = new URL(url);
     return protocol === "https:" || protocol === "http:" ? origin : null;
@@ -71,12 +73,16 @@ export function originOf(url: string | undefined): string | null {
  * (`https://<key>@<host>/<project>` → `https://<host>/api/<project>/security/?sentry_key=<key>`).
  */
 export function sentryCspEndpoint(dsn: string | undefined): SentryCspEndpoint | null {
-  if (!dsn) return null;
+  if (!dsn) {
+    return null;
+  }
   try {
     const url = new URL(dsn);
     const segments = url.pathname.split("/").filter(Boolean);
     const project = segments.pop();
-    if (!url.username || !project || !/^\d+$/.test(project)) return null;
+    if (!url.username || !project || !/^\d+$/.test(project)) {
+      return null;
+    }
     const prefix = segments.map((segment) => `/${segment}`).join("");
     return {
       origin: url.origin,
@@ -89,8 +95,12 @@ export function sentryCspEndpoint(dsn: string | undefined): SentryCspEndpoint | 
 
 export function parseMode(value: string | undefined): CspMode {
   const mode = value?.trim().toLowerCase();
-  if (!mode) return "enforce";
-  if ((MODES as readonly string[]).includes(mode)) return mode as CspMode;
+  if (!mode) {
+    return "enforce";
+  }
+  if ((MODES as readonly string[]).includes(mode)) {
+    return mode as CspMode;
+  }
   console.warn(`[csp] unknown CSP_MODE "${value}", enforcing`);
   return "enforce";
 }
@@ -109,10 +119,11 @@ export function cspHeaderName(mode: Exclude<CspMode, "off">): string {
   return mode === "enforce" ? "Content-Security-Policy" : "Content-Security-Policy-Report-Only";
 }
 
-export function buildCsp(nonce: string, config: CspConfig): string {
-  const sources = (...values: (string | null)[]) =>
-    [...new Set(values.filter((value): value is string => Boolean(value)))].join(" ");
+function sources(...values: (string | null)[]): string {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))].join(" ");
+}
 
+export function buildCsp(nonce: string, config: CspConfig): string {
   const nonceSource = `'nonce-${nonce}'`;
   const turnstile = config.turnstile ? TURNSTILE_ORIGIN : null;
   // Umami Cloud serves the script and collects events on different origins.
@@ -132,7 +143,9 @@ export function buildCsp(nonce: string, config: CspConfig): string {
     "form-action 'self'",
     "frame-ancestors 'none'",
   ];
-  if (turnstile) directives.push(`frame-src ${turnstile}`);
+  if (turnstile) {
+    directives.push(`frame-src ${turnstile}`);
+  }
   if (config.sentry) {
     // report-uri for browsers without the Reporting API (Firefox, Safari).
     directives.push(`report-uri ${config.sentry.reportUri}`, `report-to ${REPORT_GROUP}`);

@@ -61,7 +61,9 @@ export function freezeRequest(
   },
 ): { ok: true; body: FreezeBody } | { ok: false; error: string } {
   const question = form.question.trim();
-  if (question.length < 3) return { ok: false, error: "The question needs at least 3 characters" };
+  if (question.length < 3) {
+    return { ok: false, error: "The question needs at least 3 characters" };
+  }
   const turns = form.turns.map((turn) => turn.trim()).filter(Boolean);
   if (turns.some((turn) => turn.length < 3)) {
     return {
@@ -76,7 +78,7 @@ export function freezeRequest(
   return {
     ok: true,
     body: {
-      ...(question !== original.trim() ? { question } : {}),
+      ...(question === original.trim() ? {} : { question }),
       ...(turns.length ? { turns } : {}),
       mustCite: listInput(form.mustCite),
       mustInclude: listInput(form.mustInclude),

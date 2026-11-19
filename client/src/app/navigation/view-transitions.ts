@@ -47,10 +47,14 @@ export function studyDirection(
 ): StudyDirection | null {
   const a = studySlug(from);
   const b = studySlug(to);
-  if (!a || !b) return null;
+  if (!a || !b) {
+    return null;
+  }
   const i = order.indexOf(a);
   const j = order.indexOf(b);
-  if (i === -1 || j === -1 || i === j) return null;
+  if (i === -1 || j === -1 || i === j) {
+    return null;
+  }
   return j > i ? "forward" : "back";
 }
 
@@ -70,16 +74,22 @@ export function animatePageChangesOnly({ transition, from, to }: ViewTransitionI
     transition.skipTransition();
     return;
   }
-  if (!("types" in transition)) return;
+  if (!("types" in transition)) {
+    return;
+  }
   // Only a move between two case studies has a direction, and only then is
   // the site's content sure to be loaded: the admin has none (reading it
   // there throws, which broke the move from the admin's login to its dashboard).
-  if (!studySlug(fromPath) || !studySlug(toPath)) return;
+  if (!studySlug(fromPath) || !studySlug(toPath)) {
+    return;
+  }
 
   const order = inject(LanguageService)
     .content()
     .projects.filter((p) => p.hasCaseStudy)
     .map((p) => p.slug);
   const direction = studyDirection(fromPath, toPath, order);
-  if (direction) transition.types.add(direction);
+  if (direction) {
+    transition.types.add(direction);
+  }
 }

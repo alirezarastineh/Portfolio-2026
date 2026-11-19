@@ -24,10 +24,14 @@ export const MAX_WORD_PAIRS = 4_000_000;
 
 /** How many words two texts share in order: their longest common subsequence. */
 export function sharedWords(a: readonly string[], b: readonly string[]): number {
-  if (!a.length || !b.length) return 0;
+  if (!a.length || !b.length) {
+    return 0;
+  }
   if (a.length * b.length > MAX_WORD_PAIRS) {
     const left = new Map<string, number>();
-    for (const word of a) left.set(word, (left.get(word) ?? 0) + 1);
+    for (const word of a) {
+      left.set(word, (left.get(word) ?? 0) + 1);
+    }
     let shared = 0;
     for (const word of b) {
       const n = left.get(word) ?? 0;
@@ -42,11 +46,11 @@ export function sharedWords(a: readonly string[], b: readonly string[]): number 
   let row = new Uint32Array(b.length + 1);
   for (let i = 1; i <= a.length; i++) {
     for (let j = 1; j <= b.length; j++) {
-      row[j] = a[i - 1] === b[j - 1] ? previous[j - 1]! + 1 : Math.max(previous[j]!, row[j - 1]!);
+      row[j] = a[i - 1] === b[j - 1] ? previous[j - 1] + 1 : Math.max(previous[j], row[j - 1]);
     }
     [previous, row] = [row, previous];
   }
-  return previous[b.length]!;
+  return previous[b.length];
 }
 
 const sameWords = (a: readonly string[], b: readonly string[]) =>
@@ -67,7 +71,9 @@ export function classify(
 ): { outcome: "kept" | "edited" | "discarded"; distance: number } {
   const a = wordsOf(draft);
   const b = wordsOf(saved);
-  if (sameWords(a, b)) return { outcome: "kept", distance: 0 };
+  if (sameWords(a, b)) {
+    return { outcome: "kept", distance: 0 };
+  }
   const shared = sharedWords(a, b);
   // At least 1: the multiset bound can match a reordered text word for word.
   const distance = Math.max(1, a.length + b.length - 2 * shared);
@@ -141,7 +147,9 @@ export class CopilotLedger {
   use(target: string, pick: number): void {
     const draft = this.waiting.get(target);
     const text = draft?.offered?.[pick];
-    if (!draft || text === undefined) return;
+    if (!draft || text === undefined) {
+      return;
+    }
     this.waiting.set(target, { ...draft, text, pick });
     this.revision.update((n) => n + 1);
   }
@@ -155,7 +163,9 @@ export class CopilotLedger {
   /** Judges the field's draft by what the field holds now (a field pair's save). */
   settle(target: string): void {
     const draft = this.take(target);
-    if (draft) this.judge(draft, draft.read());
+    if (draft) {
+      this.judge(draft, draft.read());
+    }
   }
 
   /**
@@ -170,15 +180,23 @@ export class CopilotLedger {
     const sending = new Map<string, Waiting & { sent: string }>();
     for (const [target, value] of Object.entries(sent)) {
       const draft = this.take(target);
-      if (draft) sending.set(target, { ...draft, sent: value });
+      if (draft) {
+        sending.set(target, { ...draft, sent: value });
+      }
     }
     return (saved) => {
       for (const [target, draft] of sending) {
-        if (saved) this.judge(draft, draft.sent);
-        else if (this.waiting.has(target)) this.discard(draft);
-        else this.waiting.set(target, draft);
+        if (saved) {
+          this.judge(draft, draft.sent);
+        } else if (this.waiting.has(target)) {
+          this.discard(draft);
+        } else {
+          this.waiting.set(target, draft);
+        }
       }
-      if (sending.size) this.revision.update((n) => n + 1);
+      if (sending.size) {
+        this.revision.update((n) => n + 1);
+      }
       sending.clear();
     };
   }
@@ -188,18 +206,23 @@ export class CopilotLedger {
    * file, another entry): it never lands, and was not kept.
    */
   drop(draft: { suggestionId?: string }): void {
-    if (draft.suggestionId)
+    if (draft.suggestionId) {
       this.report({ id: draft.suggestionId, outcome: "discarded", distance: null });
+    }
   }
 
   /** The field's draft was never saved: the editor closed, or the form it sat in went. */
   abandon(target: string): void {
     const draft = this.take(target);
-    if (draft) this.discard(draft);
+    if (draft) {
+      this.discard(draft);
+    }
   }
 
   abandonPrefix(prefix: string): void {
-    for (const target of this.targets(prefix)) this.abandon(target);
+    for (const target of this.targets(prefix)) {
+      this.abandon(target);
+    }
   }
 
   /** Whether a field holds a draft still waiting for its verdict. */
@@ -209,7 +232,9 @@ export class CopilotLedger {
 
   private take(target: string): Waiting | undefined {
     const draft = this.waiting.get(target);
-    if (this.waiting.delete(target)) this.revision.update((n) => n + 1);
+    if (this.waiting.delete(target)) {
+      this.revision.update((n) => n + 1);
+    }
     return draft;
   }
 
@@ -239,7 +264,9 @@ export class CopilotLedger {
   /** One request for every verdict of the same tick (a save settles each field at once). */
   private report(verdict: DraftVerdict): void {
     this.queue.push(verdict);
-    if (this.scheduled) return;
+    if (this.scheduled) {
+      return;
+    }
     this.scheduled = true;
     queueMicrotask(() => void this.flush());
   }
@@ -254,7 +281,9 @@ export class CopilotLedger {
     const results = await Promise.all(batches.map((batch) => this.api.reportDrafts(batch)));
     for (const result of results) {
       // Never in the admin's way: an older API (404) or the network loses a verdict, no more.
-      if (!result.ok) console.warn("[copilot] verdicts not recorded", result.error);
+      if (!result.ok) {
+        console.warn("[copilot] verdicts not recorded", result.error);
+      }
     }
   }
 }

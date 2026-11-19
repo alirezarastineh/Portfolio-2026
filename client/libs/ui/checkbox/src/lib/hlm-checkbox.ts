@@ -71,7 +71,7 @@ export class HlmCheckbox implements ControlValueAccessor {
 
   protected readonly _computedClass = computed(() =>
     hlm(
-      "border-input dark:bg-input/30 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground dark:data-[state=checked]:bg-primary data-[state=checked]:border-primary focus-visible:border-ring focus-visible:ring-ring/50 peer size-4 shrink-0 cursor-default rounded-[4px] border shadow-xs transition-shadow outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
+      "border-input dark:bg-input/30 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground dark:data-[state=checked]:bg-primary data-[state=checked]:border-primary focus-visible:border-ring focus-visible:ring-ring/50 peer size-4 shrink-0 cursor-default rounded-lg border shadow-xs transition-shadow outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
       this.userClass(),
       this._disabled() ? "cursor-not-allowed opacity-50" : "",
       this._errorStateClass(),
@@ -133,7 +133,9 @@ export class HlmCheckbox implements ControlValueAccessor {
   protected _onTouched?: TouchFn;
 
   protected _handleChange(value: boolean): void {
-    if (this._disabled()) return;
+    if (this._disabled()) {
+      return;
+    }
     this.checked.set(value);
     this.checkedChange.emit(value);
     this._onChange?.(value);

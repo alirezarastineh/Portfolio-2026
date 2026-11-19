@@ -189,7 +189,9 @@ export function spendInput(
     featureCaps[feature] = cap;
   }
   const featureSwitches: Partial<Record<SwitchedFeature, boolean>> = {};
-  for (const { feature } of SWITCHES) featureSwitches[feature] = draft.switches[feature] ?? true;
+  for (const { feature } of SWITCHES) {
+    featureSwitches[feature] = draft.switches[feature] ?? true;
+  }
   return {
     ok: true,
     value: { publicReserve: reserve / 100, featureCaps, featureSwitches },

@@ -67,7 +67,7 @@ describe("outcomes in the admin", () => {
     const view: BrowserView = {
       reported: 3,
       shownP50Ms: 900,
-      shownP95Ms: 4_050,
+      shownP95Ms: 4050,
       serverP50Ms: 700,
       serverP95Ms: null,
       stopRate: 1 / 3,
@@ -77,7 +77,7 @@ describe("outcomes in the admin", () => {
       retried: 1,
       downReasons: { wrong: 2, unanswered: 0, length: 1, none: 1 },
     };
-    expect(seconds(4_050)).toBe("4.0 s");
+    expect(seconds(4050)).toBe("4.0 s");
     expect(seconds(null)).toBe("–");
     expect(browserTiles(view)).toEqual([
       {

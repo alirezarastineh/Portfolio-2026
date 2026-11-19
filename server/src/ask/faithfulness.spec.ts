@@ -41,7 +41,7 @@ describe("faithfulness per model and route", () => {
     );
     expect(byRoute.map((r) => r.key)).toEqual(["lite", "deep", "lite→deep"]);
     // No sampled answer on a route: nothing to average.
-    expect(byRoute[2]!.sampled).toEqual({
+    expect(byRoute[2].sampled).toEqual({
       judged: 0,
       faithfulness: null,
       helpfulness: null,

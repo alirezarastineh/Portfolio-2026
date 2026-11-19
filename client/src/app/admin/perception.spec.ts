@@ -21,40 +21,40 @@ const view = (over: Partial<PerceptionView> = {}): PerceptionView => ({
   answers: 40,
   cache: {
     first: { steps: 30, input: 30_000, cached: 0, hits: 0 },
-    later: { steps: 10, input: 12_000, cached: 9_000, hits: 8 },
+    later: { steps: 10, input: 12_000, cached: 9000, hits: 8 },
   },
   fetches: { whole: 1, rest: 6, handle: 2, unknown: 0 },
   rereadRatio: 1 / 9,
   healthyReread: 0.05,
-  tokens: { input: 40_000, output: 4_000, inputPerAnswer: 1_000, helpful: 30, perHelpful: 1_467 },
+  tokens: { input: 40_000, output: 4000, inputPerAnswer: 1000, helpful: 30, perHelpful: 1467 },
   usdPerAnswer: 0.0021,
   byLayout: {
     both: {
       answers: 25,
       cache: {
         first: { steps: 20, input: 24_000, cached: 0, hits: 0 },
-        later: { steps: 5, input: 6_000, cached: 0, hits: 0 },
+        later: { steps: 5, input: 6000, cached: 0, hits: 0 },
       },
       fetches: { whole: 1, rest: 4, handle: 0, unknown: 0 },
       rereadRatio: 0.2,
       tokens: {
         input: 30_000,
-        output: 2_500,
-        inputPerAnswer: 1_200,
+        output: 2500,
+        inputPerAnswer: 1200,
         helpful: 18,
-        perHelpful: 1_806,
+        perHelpful: 1806,
       },
       usdPerAnswer: 0.0025,
     },
     locale: {
       answers: 15,
       cache: {
-        first: { steps: 10, input: 6_000, cached: 0, hits: 0 },
-        later: { steps: 5, input: 12_000, cached: 9_000, hits: 5 },
+        first: { steps: 10, input: 6000, cached: 0, hits: 0 },
+        later: { steps: 5, input: 12_000, cached: 9000, hits: 5 },
       },
       fetches: { whole: 0, rest: 2, handle: 2, unknown: 0 },
       rereadRatio: 0,
-      tokens: { input: 10_000, output: 1_500, inputPerAnswer: 667, helpful: 12, perHelpful: 958 },
+      tokens: { input: 10_000, output: 1500, inputPerAnswer: 667, helpful: 12, perHelpful: 958 },
       usdPerAnswer: null,
     },
   },
@@ -67,7 +67,7 @@ const view = (over: Partial<PerceptionView> = {}): PerceptionView => ({
     { id: "project:atlas@en", fetched: 12, cited: 20 },
     { id: "profile@en", fetched: 1, cited: 25 },
   ],
-  coreTokens: { en: 1_341, de: 1_557 },
+  coreTokens: { en: 1341, de: 1557 },
   rules: { promoteShare: 0.2, promoteMinAnswers: 20, demoteMinAnswers: 200 },
   limits: { promoted: 6, demoted: 30 },
   tiers: { promoted: ["project:atlas@en"], demoted: [] },
@@ -242,7 +242,7 @@ describe("perception in the admin", () => {
 
   it("sets the answers asked on a case study or a post against the rest (visitor plan V8)", () => {
     const pages = {
-      pageAware: { answers: 3, rounds: 1.4, ttftP50Ms: 1_050, helpful: 2 / 3, promoted: 1 },
+      pageAware: { answers: 3, rounds: 1.4, ttftP50Ms: 1050, helpful: 2 / 3, promoted: 1 },
       rest: { answers: 1, rounds: null, ttftP50Ms: null, helpful: 0 },
     };
     expect(pagesLine(view({ pages }))).toBe(

@@ -49,7 +49,9 @@ proposalsRouter.get(
     );
     return c.json({
       proposals: proposals.map((p) => {
-        if (p.status !== "proposed" && p.status !== "needs_you") return { ...p, changed: false };
+        if (p.status !== "proposed" && p.status !== "needs_you") {
+          return { ...p, changed: false };
+        }
         const target = now.get(targetKey(p));
         return { ...p, changed: target?.current !== p.before };
       }),
@@ -60,8 +62,12 @@ proposalsRouter.get(
 );
 
 function answer(c: Context, result: Decided): Response {
-  if (result.ok) return c.json({ proposal: result.proposal });
-  if (result.error === "not_found") return c.json({ error: "not_found" }, 404);
+  if (result.ok) {
+    return c.json({ proposal: result.proposal });
+  }
+  if (result.error === "not_found") {
+    return c.json({ error: "not_found" }, 404);
+  }
   if (result.error === "invalid_input") {
     return c.json({ error: "invalid_input", issues: result.issues }, 400);
   }

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { actionLabel, levelLabel, rulesLine, subjectLabel, trustAlert } from "./trust";
 
+const demotion = (subject: string) => ({ subject, at: "2026-10-01T03:00:00.000Z", reason: "" });
+
 describe("trust in the admin", () => {
   it("names what was demoted, and each level", () => {
     expect(subjectLabel("model:gemini-3.7-flash")).toBe("the model gemini-3.7-flash");
@@ -12,7 +14,6 @@ describe("trust in the admin", () => {
   });
 
   it("says what waits for a person, or nothing", () => {
-    const demotion = (subject: string) => ({ subject, at: "2026-10-01T03:00:00.000Z", reason: "" });
     expect(trustAlert(undefined)).toBeNull();
     expect(trustAlert({ alerts: 0, demoted: [] })).toBeNull();
     expect(trustAlert({ alerts: 2, demoted: [] })).toBe("2 alerts: see the Trust tab");

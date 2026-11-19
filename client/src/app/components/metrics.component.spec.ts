@@ -12,7 +12,10 @@ describe("MetricsComponent", () => {
     ]);
     fixture.detectChanges();
 
-    const row = (fixture.nativeElement as HTMLElement).querySelector("dl")!;
+    const row = (fixture.nativeElement as HTMLElement).querySelector("dl");
+    if (!row) {
+      throw new Error("Expected dl element");
+    }
     expect(row.style.getPropertyValue("--metric-chars")).toBe("9");
     expect(row.querySelectorAll(".metric-context")).toHaveLength(1);
   });

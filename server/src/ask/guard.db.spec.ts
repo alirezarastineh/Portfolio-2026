@@ -40,8 +40,8 @@ const app = createApp({
         ? mockEntry("gemini-3.5-flash-lite", copilot.model)
         : mockEntry("gemini-3.5-flash-lite", lite.model),
     ],
-    corpus: async (c) => fixtureCorpus(c),
-    draftCorpus: async (c) => fixtureCorpus(c),
+    corpus: (c) => Promise.resolve(fixtureCorpus(c)),
+    draftCorpus: (c) => Promise.resolve(fixtureCorpus(c)),
     evalPacing: null,
   },
 });
@@ -92,6 +92,8 @@ function ask(text: string) {
 // One draft, one call: a translation explores no leads (tighten drafts three since plan phase 28).
 const copilotRequest = () =>
   admin.post("/admin/ai/copilot", { task: "translate", text: "Short.", from: "en", to: "de" });
+
+const sumUsd = (rows: { usd: number }[]) => rows.reduce((s, r) => s + r.usd, 0);
 
 describe("migration 0015: usage per feature and the fence settings", () => {
   it("adds ai_usage_features and the settings' reserve, caps and switches", async () => {
@@ -152,7 +154,7 @@ describe("migration 0015: usage per feature and the fence settings", () => {
       };
     };
     expect(settings.dailyBudgetUsd).toBe(4);
-    expect(settings.publicReserve).toBe(0.7);
+    expect(settings.publicReserve).toBeCloseTo(0.7);
     expect(settings.featureCaps).toMatchObject({ eval: 0.5, copilot: 0.1, pairwise: null });
     expect(settings.featureSwitches).toMatchObject({ copilot: false, judge: true, agent: false });
     // Match (visitor plan V19): off, with its default cap, until the admin sets either.
@@ -169,7 +171,7 @@ describe("migration 0015: usage per feature and the fence settings", () => {
       featureCaps: { copilot: null },
     });
     const [merged] = await getDb().select().from(aiSettings);
-    expect(merged!.featureCaps).toEqual({ eval: 0.5, copilot: null });
+    expect(merged.featureCaps).toEqual({ eval: 0.5, copilot: null });
 
     // A stored null clears a default cap too: match then stops only at the whole budget.
     const cleared = await admin.put("/admin/assistant/settings", {
@@ -215,9 +217,8 @@ describe("usage per feature", () => {
       ["eval", "gemini-3.7-flash", 1],
       ["terminal", "gemini-3.5-flash-lite", 1],
     ]);
-    const sum = (rows: { usd: number }[]) => rows.reduce((s, r) => s + r.usd, 0);
-    expect(sum(split)).toBeCloseTo(sum(total), 12);
-    expect(sum(total)).toBeGreaterThan(0);
+    expect(sumUsd(split)).toBeCloseTo(sumUsd(total), 12);
+    expect(sumUsd(total)).toBeGreaterThan(0);
   });
 
   it("keeps the day's total when the split by feature cannot be written", async () => {
@@ -239,7 +240,7 @@ describe("usage per feature", () => {
       Array.from({ length: 12 }, (_, i) => {
         const order = i % 2 ? models : [...models].reverse();
         return recordUsage(
-          order.map((m) => call(m, 1_000)),
+          order.map((m) => call(m, 1000)),
           i % 3 ? "terminal" : "copilot",
         );
       }),
@@ -269,7 +270,8 @@ describe("the fences", () => {
     expect(await oneRequest.json()).toEqual({ error: "reserve_reached" });
 
     // Every other admin tool stops at the same line.
-    expect(await (await copilotRequest()).json()).toEqual({ error: "reserve_reached" });
+    const copilotRes = await copilotRequest();
+    expect(await copilotRes.json()).toEqual({ error: "reserve_reached" });
     await getDb()
       .insert(aiMessages)
       .values({
@@ -306,7 +308,8 @@ describe("the fences", () => {
     });
     expect(terminal).toHaveLength(1);
 
-    const health = (await (await admin.get("/admin/assistant/health")).json()) as {
+    const healthRes = await admin.get("/admin/assistant/health");
+    const health = (await healthRes.json()) as {
       state: { state: string };
       spend: {
         totalUsd: number;
@@ -323,7 +326,7 @@ describe("the fences", () => {
       copilot: "reserve",
       agent: "off",
     });
-    expect(health.spend.features.find((f) => f.feature === "eval")!.spentUsd).toBe(1);
+    expect(health.spend.features.find((f) => f.feature === "eval")?.spentUsd).toBe(1);
   });
 
   it("stops a feature at its cap and at its switch, and leaves the others alone", async () => {

@@ -188,13 +188,15 @@ function pictures() {
   const images: CorpusImage[] = [];
   return {
     images,
-    rich(html: string): string {
+    rich: (html: string): string => {
       images.push(...mediaImages(html));
       return htmlToText(html, { images: true });
     },
-    picture(label: string, image: { src: string; alt: string }, caption = ""): string {
+    picture: (label: string, image: { src: string; alt: string }, caption = ""): string => {
       const file = mediaFile(image.src);
-      if (file) images.push({ file, alt: image.alt });
+      if (file) {
+        images.push({ file, alt: image.alt });
+      }
       // The marker ends the line: a description follows it on the next.
       const lead = caption.trim() ? `${caption.trim()} ` : "";
       return `${label}: ${lead}${imageMarker(image.alt)}`;
@@ -208,7 +210,9 @@ function pictures() {
  */
 function headingLabel(label: string, locale: Locale): string {
   const word = label.trim();
-  if (!/^\p{Lu}{4,}$/u.test(word)) return label;
+  if (!/^\p{Lu}{4,}$/u.test(word)) {
+    return label;
+  }
   const lower = word.toLocaleLowerCase(locale);
   return lower.charAt(0).toLocaleUpperCase(locale) + lower.slice(1);
 }
@@ -235,8 +239,8 @@ export function bodySections(html: string): CorpusSection[] {
   const heads = [...html.matchAll(BODY_H2)];
   return heads.map((head, i) =>
     sectionOf(
-      head[1]!,
-      htmlToText(head[2]!).replace(/\s+/g, " ").trim(),
+      head[1],
+      htmlToText(head[2]).replaceAll(/\s+/g, " ").trim(),
       html.slice(head.index + head[0].length, heads[i + 1]?.index ?? html.length),
     ),
   );
@@ -246,7 +250,9 @@ const CODE_BLOCK = /<pre class="code-block[^"<>]*"><code>([\s\S]*?)<\/code><\/pr
 
 /** A rendered body's code blocks in page order, as their source: the highlighting's markup out. */
 export function codeBlocks(html: string): string[] {
-  return [...html.matchAll(CODE_BLOCK)].map((m) => decodeEntities(m[1]!.replace(/<[^<>]*>/g, "")));
+  return [...html.matchAll(CODE_BLOCK)].map((m) =>
+    decodeEntities(m[1].replaceAll(/<[^<>]*>/g, "")),
+  );
 }
 
 /**
@@ -339,6 +345,7 @@ function projectDocument(
   ]
     .filter(Boolean)
     .join("\n");
+  const updated = day(project.updatedAt, body?.updatedAt);
   return {
     id: `project:${project.slug}@${locale}`,
     kind: "project",
@@ -347,7 +354,7 @@ function projectDocument(
     url: project.hasCaseStudy ? `/${locale}/work/${project.slug}` : `/${locale}#projects`,
     text,
     ...(images.length ? { images } : {}),
-    updated: day(project.updatedAt, body?.updatedAt)!,
+    ...(updated ? { updated } : {}),
     ...(body && project.hasCaseStudy ? caseStudyParts(project, body, locale, ui) : {}),
   };
 }
@@ -367,6 +374,7 @@ function postDocument(
   ]
     .filter(Boolean)
     .join("\n");
+  const updated = day(post.updatedAt, doc?.kind === "post" ? doc.updatedAt : undefined);
   return {
     id: `post:${post.slug}@${locale}`,
     kind: "post",
@@ -375,7 +383,7 @@ function postDocument(
     url: `/${locale}/writing/${post.slug}`,
     text,
     ...(images.length ? { images } : {}),
-    updated: day(post.updatedAt, doc?.kind === "post" ? doc.updatedAt : undefined)!,
+    ...(updated ? { updated } : {}),
     ...(doc?.kind === "post" ? postParts(doc.body) : {}),
   };
 }
@@ -442,12 +450,15 @@ function documentsFor(
 async function cvText(href: string): Promise<string> {
   const filename = /^\/media\/([^/?#]+)$/.exec(href)?.[1];
   const path = filename ? resolveMediaPath(filename) : null;
-  if (!path) return "";
+  if (!path) {
+    return "";
+  }
   try {
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: await readFile(path) });
     try {
-      const rawText = (await parser.getText()).text;
+      const parsed = await parser.getText();
+      const rawText = parsed.text;
       return rawText
         .split("\n")
         .map((line) => line.trimEnd())
@@ -505,29 +516,31 @@ async function loadLive(db: DbExecutor): Promise<LiveLocale[]> {
         )
     : [];
 
-  const live = (
-    await Promise.all(
-      LOCALES.map(async (locale): Promise<LiveLocale | null> => {
-        const row = rows.find((r) => r.locale === locale);
-        if (!row) return null;
-        const result = upcast(row.payload, row.createdAt.toISOString());
-        if (!result.ok) return null;
-        const docs = await upcastDocs(
-          payloadVersion(row.payload) ?? result.from,
-          locale,
-          docRows.filter((d) => d.versionId === row.versionId),
-        );
-        return {
-          locale,
-          versionId: row.versionId,
-          core: result.content,
-          docs,
-          publishedAt: row.createdAt.toISOString(),
-        };
-      }),
-    )
-  ).filter((entry): entry is LiveLocale => entry !== null);
-  return live;
+  const loaded = await Promise.all(
+    LOCALES.map(async (locale): Promise<LiveLocale | null> => {
+      const row = rows.find((r) => r.locale === locale);
+      if (!row) {
+        return null;
+      }
+      const result = upcast(row.payload, row.createdAt.toISOString());
+      if (!result.ok) {
+        return null;
+      }
+      const docs = await upcastDocs(
+        payloadVersion(row.payload) ?? result.from,
+        locale,
+        docRows.filter((d) => d.versionId === row.versionId),
+      );
+      return {
+        locale,
+        versionId: row.versionId,
+        core: result.content,
+        docs,
+        publishedAt: row.createdAt.toISOString(),
+      };
+    }),
+  );
+  return loaded.filter((entry): entry is LiveLocale => entry !== null);
 }
 
 function projectFacts(live: Pick<LiveLocale, "locale" | "core">): ProjectFacts[] {
@@ -553,25 +566,28 @@ async function buildCorpus(
   key: string,
   live: Pick<LiveLocale, "locale" | "core" | "docs" | "publishedAt">[],
 ): Promise<Corpus> {
-  const documents = live.flatMap(documentsFor);
-  const cvs = (
-    await Promise.all(
-      live.map(async ({ locale, core }): Promise<CorpusDocument | null> => {
-        const resume = core.identity.resume;
-        if (!resume) return null;
-        const text = await cvText(resume.href);
-        if (!text) return null;
-        return {
-          id: `cv@${locale}`,
-          kind: "cv",
-          locale,
-          title: `CV (${locale})`,
-          url: resume.href,
-          text,
-        };
-      }),
-    )
-  ).filter((cv): cv is CorpusDocument => cv !== null);
+  const documents = live.flatMap((entry) => documentsFor(entry));
+  const cvResults = await Promise.all(
+    live.map(async ({ locale, core }): Promise<CorpusDocument | null> => {
+      const resume = core.identity.resume;
+      if (!resume) {
+        return null;
+      }
+      const text = await cvText(resume.href);
+      if (!text) {
+        return null;
+      }
+      return {
+        id: `cv@${locale}`,
+        kind: "cv",
+        locale,
+        title: `CV (${locale})`,
+        url: resume.href,
+        text,
+      };
+    }),
+  );
+  const cvs = cvResults.filter((cv): cv is CorpusDocument => cv !== null);
   documents.push(...cvs);
   // The assistant's FAQ and system card are added by `ask/corpus/index.ts`:
   // they are live on save, not published.
@@ -579,7 +595,7 @@ async function buildCorpus(
     key,
     documents,
     text: toMarkdown(documents),
-    projects: live.flatMap(projectFacts),
+    projects: live.flatMap((entry) => projectFacts(entry)),
     posts: live.flatMap(({ locale, core }) =>
       core.posts.map((p) => ({
         slug: p.slug,
@@ -597,7 +613,9 @@ function siteUrlOf(live: Pick<LiveLocale, "core">[]): Pick<Corpus, "siteUrl"> {
   for (const { core } of live) {
     try {
       const origin = new URL(core.identity.siteUrl).origin;
-      if (origin !== "null") return { siteUrl: origin };
+      if (origin !== "null") {
+        return { siteUrl: origin };
+      }
     } catch {
       // Not a URL: try the next language.
     }
@@ -632,7 +650,9 @@ export async function getCorpus(db: DbExecutor = getDb()): Promise<Corpus> {
     memo = { key, corpus };
     // A failed build must not stay memoised.
     corpus.catch(() => {
-      if (memo?.corpus === corpus) memo = undefined;
+      if (memo?.corpus === corpus) {
+        memo = undefined;
+      }
     });
   }
   return memo.corpus;

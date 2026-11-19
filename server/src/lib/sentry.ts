@@ -2,6 +2,10 @@ type SentrySdk = typeof import("@sentry/node");
 
 let sdk: SentrySdk | undefined;
 
+function nonEmpty(value: string | undefined): string | undefined {
+  return value === undefined || value === "" ? undefined : value;
+}
+
 /**
  * Error reporting to Sentry, off unless SENTRY_DSN is set. The SDK is only
  * imported then, so an unconfigured deploy pays nothing for it.
@@ -12,13 +16,15 @@ let sdk: SentrySdk | undefined;
  */
 export async function initSentry(): Promise<void> {
   const dsn = process.env.SENTRY_DSN?.trim();
-  if (!dsn || sdk) return;
+  if (!dsn || sdk) {
+    return;
+  }
 
   const Sentry = await import("@sentry/node");
   Sentry.init({
     dsn,
-    environment: process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV,
-    release: process.env.SENTRY_RELEASE || undefined,
+    environment: nonEmpty(process.env.SENTRY_ENVIRONMENT) ?? process.env.NODE_ENV,
+    release: nonEmpty(process.env.SENTRY_RELEASE),
     // No IPs, cookies, headers, bodies or local variables leave the server —
     // and no assistant questions or answers. SDK 11 collects all of these by
     // default (it replaced `sendDefaultPii`), so each is switched off here.

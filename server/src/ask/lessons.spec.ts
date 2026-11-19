@@ -228,8 +228,8 @@ describe("the nightly learning check", () => {
       "2026-10-08T03:30:00.000Z",
     );
     vi.useFakeTimers();
-    const check = vi.fn(async () => null);
-    const prune = vi.fn(async () => undefined);
+    const check = vi.fn(() => Promise.resolve(null));
+    const prune = vi.fn(() => Promise.resolve(undefined));
     let config = fixtureConfig();
     startLearningMonitor({
       now: new Date("2026-10-07T03:00:00Z"),
@@ -254,13 +254,11 @@ describe("the nightly learning check", () => {
   it("logs a failed check and tries again the next night", async () => {
     vi.useFakeTimers();
     const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const check = vi.fn(async () => {
-      throw new Error("the database is down");
-    });
+    const check = vi.fn(() => Promise.reject(new Error("the database is down")));
     startLearningMonitor({
       now: new Date("2026-10-07T03:29:00Z"),
       check,
-      prune: async () => undefined,
+      prune: () => Promise.resolve(undefined),
       config: () => fixtureConfig(),
     });
     await vi.advanceTimersByTimeAsync(60_000);

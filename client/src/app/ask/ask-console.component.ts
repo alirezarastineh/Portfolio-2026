@@ -597,7 +597,9 @@ export class AskConsoleComponent {
   /** About this page on a case study or a post; else three of the admin's, or the built-in three. */
   protected readonly suggestions = computed(() => {
     const page = pageQuestions(this.lang.page(), this.lang.content(), this.copy().pageQuestions);
-    if (page) return page;
+    if (page) {
+      return page;
+    }
     const own = this.store.remote()?.suggestions[this.lang.lang()];
     return own?.length ? own.slice(0, 3) : this.starters().starters;
   });
@@ -606,7 +608,9 @@ export class AskConsoleComponent {
   /** Where the tour is (visitor plan V16): "tour · stop 2 of 5 · Atlas", or its stops before the first. */
   protected readonly tourLabel = computed(() => {
     const tour = this.store.tour();
-    if (!tour) return "";
+    if (!tour) {
+      return "";
+    }
     const copy = this.copy().tour;
     const stop = tour.stops[tour.at];
     return stop
@@ -629,7 +633,9 @@ export class AskConsoleComponent {
   protected readonly latestAskId = computed(() => {
     const entries: Entry[] = this.store.entries();
     for (let i = entries.length - 1; i >= 0; i--) {
-      if (entries[i]!.kind === "ask") return entries[i]!.id;
+      if (entries[i].kind === "ask") {
+        return entries[i].id;
+      }
     }
     return null;
   });
@@ -640,14 +646,20 @@ export class AskConsoleComponent {
     // (a failed answer can put the assistant to rest mid-conversation).
     effect(() => {
       const remote = this.store.remote();
-      if (!remote) return;
+      if (!remote) {
+        return;
+      }
       this.launcher.assistant.set(remote.state === "ok" ? "online" : "resting");
-      if (remote.scorecard !== undefined) this.launcher.scorecard.set(remote.scorecard);
+      if (remote.scorecard !== undefined) {
+        this.launcher.scorecard.set(remote.scorecard);
+      }
     });
 
     effect((onCleanup) => {
       const left = (this.store.limitedUntil() ?? 0) - Date.now();
-      if (left <= 0) return;
+      if (left <= 0) {
+        return;
+      }
       this.limited.set(true);
       const timer = setTimeout(() => this.limited.set(false), left);
       onCleanup(() => {
@@ -664,21 +676,27 @@ export class AskConsoleComponent {
 
     // On the stage nobody hands it a request: the panel does that for its console.
     afterRenderEffect(() => {
-      if (this.stage() && this.launcher.takeFocus()) this.claim();
+      if (this.stage() && this.launcher.takeFocus()) {
+        this.claim();
+      }
     });
 
     afterNextRender(() => (this.launcher.turnstileHost = this.check().nativeElement));
     inject(DestroyRef).onDestroy(() => {
       this.launcher.turnstileHost = null;
       // Leaving home mid-answer or mid-tour, the panel carries on (plan 4 U11b).
-      if (this.stage() && (this.busy() || this.store.tour())) this.launcher.openPanel();
+      if (this.stage() && (this.busy() || this.store.tour())) {
+        this.launcher.openPanel();
+      }
     });
 
     // A new exchange goes to the top, once; what it writes grows beneath it (NN/g: no autoscroll).
     let newest: string | undefined;
     afterRenderEffect(() => {
       const id = this.store.entries().at(-1)?.id;
-      if (id === newest) return;
+      if (id === newest) {
+        return;
+      }
       newest = id;
       this.toNewest();
     });
@@ -688,7 +706,9 @@ export class AskConsoleComponent {
   private toNewest(): void {
     const log = this.logRef().nativeElement;
     const latest = log.querySelector<HTMLElement>(".latest");
-    if (latest) log.scrollTop = latest.offsetTop;
+    if (latest) {
+      log.scrollTop = latest.offsetTop;
+    }
   }
 
   focusInput(): void {
@@ -709,11 +729,17 @@ export class AskConsoleComponent {
     this.toNewest();
     // A shared link's question (visitor plan V17): in the prompt, for the visitor to send or not.
     const draft = this.launcher.takeDraft();
-    if (draft) this.setValue(draft);
+    if (draft) {
+      this.setValue(draft);
+    }
     const question = this.launcher.takeQuestion();
     const about = this.launcher.takeAbout();
-    if (question) this.send(question, about ?? undefined);
-    if (!this.onPhone() || TYPING.has(source)) this.focusInput();
+    if (question) {
+      this.send(question, about ?? undefined);
+    }
+    if (!this.onPhone() || TYPING.has(source)) {
+      this.focusInput();
+    }
   }
 
   /** Where the panel is a sheet, and a focused prompt an on-screen keyboard over what was asked for. */
@@ -723,13 +749,18 @@ export class AskConsoleComponent {
 
   /** After a button: back to the prompt, or on a phone to the log, keeping the keyboard down. */
   protected refocus(): void {
-    if (this.onPhone()) this.logRef().nativeElement.focus({ preventScroll: true });
-    else this.focusInput();
+    if (this.onPhone()) {
+      this.logRef().nativeElement.focus({ preventScroll: true });
+    } else {
+      this.focusInput();
+    }
   }
 
   /** `ask_open`, once per page load, with where the visitor came from. */
   protected reportOpen(source: AskSource): void {
-    if (this.launcher.opened) return;
+    if (this.launcher.opened) {
+      return;
+    }
     this.launcher.opened = true;
     track("ask_open", { source });
   }
@@ -738,10 +769,14 @@ export class AskConsoleComponent {
   protected submit(): void {
     const el = this.inputRef().nativeElement;
     const text = el.value;
-    if (!text.trim()) return;
+    if (!text.trim()) {
+      return;
+    }
     if (parseInput(text).kind === "ask") {
       // One answer at a time; shell commands still run meanwhile. The words stay in the prompt.
-      if (this.busy() || this.limited()) return;
+      if (this.busy() || this.limited()) {
+        return;
+      }
       if (this.tooLong()) {
         this.store.announce(this.tooLongText());
         return;
@@ -760,14 +795,19 @@ export class AskConsoleComponent {
    */
   send(text: string, about?: AskAbout): void {
     const question = parseInput(text).kind === "ask";
-    if (question && (this.busy() || text.length > this.store.maxChars())) this.setValue(text);
-    else void this.store.submit(text, about);
+    if (question && (this.busy() || text.length > this.store.maxChars())) {
+      this.setValue(text);
+    } else {
+      void this.store.submit(text, about);
+    }
     this.refocus();
   }
 
   /** The composer's button, which otherwise submits the form. */
   protected stopIfBusy(): void {
-    if (this.busy()) this.store.stop();
+    if (this.busy()) {
+      this.store.stop();
+    }
   }
 
   /** A command that needs a word of the visitor's: in the prompt, to finish. */
@@ -821,7 +861,9 @@ export class AskConsoleComponent {
   }
 
   private handleTabKey(event: KeyboardEvent, el: HTMLTextAreaElement): boolean {
-    if (event.key !== "Tab" || event.shiftKey || !el.value) return false;
+    if (event.key !== "Tab" || event.shiftKey || !el.value) {
+      return false;
+    }
     const completed = complete(el.value, this.lang.content());
     if (completed) {
       event.preventDefault();
@@ -845,7 +887,9 @@ export class AskConsoleComponent {
   }
 
   protected onKey(event: KeyboardEvent): void {
-    if (event.isComposing) return;
+    if (event.isComposing) {
+      return;
+    }
     const el = this.inputRef().nativeElement;
 
     if (event.key === "Enter" && !event.shiftKey) {
@@ -853,7 +897,9 @@ export class AskConsoleComponent {
       this.submit();
       return;
     }
-    if (this.handleArrowKey(event, el) || this.handleTabKey(event, el)) return;
+    if (this.handleArrowKey(event, el) || this.handleTabKey(event, el)) {
+      return;
+    }
     this.handleShortcutKey(event, el);
   }
 
@@ -865,14 +911,20 @@ export class AskConsoleComponent {
   /** ↑ older, ↓ newer; true when it moved. */
   private recall(direction: -1 | 1): boolean {
     const history = this.store.history();
-    if (!history.length) return false;
+    if (!history.length) {
+      return false;
+    }
     if (this.historyIndex === null) {
-      if (direction === 1) return false;
+      if (direction === 1) {
+        return false;
+      }
       this.draft = this.inputRef().nativeElement.value;
       this.historyIndex = history.length - 1;
     } else {
       const next = this.historyIndex + direction;
-      if (next < 0) return true;
+      if (next < 0) {
+        return true;
+      }
       if (next >= history.length) {
         this.historyIndex = null;
         this.setValue(this.draft);
@@ -880,7 +932,7 @@ export class AskConsoleComponent {
       }
       this.historyIndex = next;
     }
-    this.setValue(history[this.historyIndex]!, false);
+    this.setValue(history[this.historyIndex], false);
     return true;
   }
 
@@ -888,7 +940,9 @@ export class AskConsoleComponent {
     const el = this.inputRef().nativeElement;
     el.value = text;
     el.setSelectionRange(text.length, text.length);
-    if (resetHistory) this.historyIndex = null;
+    if (resetHistory) {
+      this.historyIndex = null;
+    }
     this.grow();
   }
 

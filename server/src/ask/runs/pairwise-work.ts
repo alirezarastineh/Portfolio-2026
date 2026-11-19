@@ -28,8 +28,12 @@ export const pairwiseWork: WorkFn = async (work) => {
   const params = work.run.params as unknown as PairwiseParams;
   const a = askVariantChain(config, params.a);
   const b = askVariantChain(config, params.b);
-  if (!a?.length) return { status: "failed", error: `No model for "${params.a}".` };
-  if (!b?.length) return { status: "failed", error: `No model for "${params.b}".` };
+  if (!a?.length) {
+    return { status: "failed", error: `No model for "${params.a}".` };
+  }
+  if (!b?.length) {
+    return { status: "failed", error: `No model for "${params.b}".` };
+  }
   const judgeChain = askChain(config, "judge");
   const byId = new Map(EVAL_CASES.map((c) => [c.id, c]));
   const calls: ModelCall[] = [];
@@ -37,7 +41,8 @@ export const pairwiseWork: WorkFn = async (work) => {
   const corpus = fixtureAskCorpus(config);
   // Searched by meaning as visitors' answers are, when that is on (plan phase 18): the
   // fixture embedded in memory, its spend recorded with the first case.
-  calls.push(...(await embedInMemory(corpus, config)).calls);
+  const embedded = await embedInMemory(corpus, config);
+  calls.push(...embedded.calls);
 
   await runPairwise({
     cases: work.keys.flatMap((key) => byId.get(key) ?? []),
@@ -56,7 +61,8 @@ export const pairwiseWork: WorkFn = async (work) => {
       paid.finish(result.id, result.status === "judged" ? "done" : "unavailable", result),
   });
 
-  const items = (await getRun(work.run.id))?.items ?? [];
+  const run = await getRun(work.run.id);
+  const items = run?.items ?? [];
   const summary = summarizePairwise({
     a: params.a,
     b: params.b,
@@ -67,7 +73,9 @@ export const pairwiseWork: WorkFn = async (work) => {
     ),
   });
   const stopped = paid.stoppedBy();
-  if (stopped) return { status: "failed", error: stopped, summary };
+  if (stopped) {
+    return { status: "failed", error: stopped, summary };
+  }
   if (items.some((i) => i.status === "unavailable")) {
     return { status: "failed", error: PROVIDER_DOWN, summary };
   }

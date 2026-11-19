@@ -39,14 +39,26 @@ export type ToolOutcome =
  * carries a `tool-error` for it instead.
  */
 export function toolOutcome(output: unknown): ToolOutcome {
-  if (!output || typeof output !== "object") return "ok";
+  if (!output || typeof output !== "object") {
+    return "ok";
+  }
   const result = output as Record<string, unknown>;
-  if (result["duplicate"] === true) return "duplicate";
-  if (result["error"] === "budget_exhausted") return "budget_exhausted";
-  if (result["error"] === "not_found" || result["available"] === false) return "not_found";
-  if (result["error"] === "not_allowed") return "not_allowed";
-  if (typeof result["error"] === "string") return "error";
-  const list = [result["results"], result["projects"]].find(Array.isArray);
+  if (result["duplicate"] === true) {
+    return "duplicate";
+  }
+  if (result["error"] === "budget_exhausted") {
+    return "budget_exhausted";
+  }
+  if (result["error"] === "not_found" || result["available"] === false) {
+    return "not_found";
+  }
+  if (result["error"] === "not_allowed") {
+    return "not_allowed";
+  }
+  if (typeof result["error"] === "string") {
+    return "error";
+  }
+  const list = [result["results"], result["projects"]].find((value) => Array.isArray(value));
   return list?.length === 0 ? "no_hits" : "ok";
 }
 
@@ -56,15 +68,11 @@ function distance(a: string, b: string): number {
   for (let i = 1; i <= a.length; i++) {
     const next = [i];
     for (let j = 1; j <= b.length; j++) {
-      next[j] = Math.min(
-        row[j]! + 1,
-        next[j - 1]! + 1,
-        row[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
+      next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
     }
     row = next;
   }
-  return row[b.length]!;
+  return row[b.length];
 }
 
 /**
@@ -75,18 +83,26 @@ function distance(a: string, b: string): number {
  * tool. Anything less certain fails as before.
  */
 export function repairToolName(name: string, known: readonly string[]): string | null {
-  if (known.includes(name)) return name;
+  if (known.includes(name)) {
+    return name;
+  }
   const containing = known.filter((k) => name.includes(k));
-  if (containing.length === 1) return containing[0]!;
+  if (containing.length === 1) {
+    return containing[0];
+  }
   const near = known.filter((k) => distance(name, k) <= 2);
-  return near.length === 1 ? near[0]! : null;
+  return near.length === 1 ? near[0] : null;
 }
 
 /** What a search returned, for the trace (plan phase 18): its documents, and whether by meaning too. */
 export function searchResult(output: unknown): { hits: string[]; semantic: boolean } | null {
-  if (!output || typeof output !== "object") return null;
+  if (!output || typeof output !== "object") {
+    return null;
+  }
   const result = output as { results?: unknown; semantic?: unknown };
-  if (!Array.isArray(result.results)) return null;
+  if (!Array.isArray(result.results)) {
+    return null;
+  }
   const hits = result.results
     .map((r) => (r && typeof r === "object" ? (r as { id?: unknown }).id : undefined))
     .filter((id): id is string => typeof id === "string")
@@ -103,18 +119,28 @@ export function allowedPath(
 ): string | null {
   const path = raw.trim();
   const match = /^\/(en|de)(\/[a-z0-9/_-]*)?(#[a-z-]+)?$/i.exec(path);
-  if (!match) return null;
-  const locale = match[1]!.toLowerCase() as Locale;
+  if (!match) {
+    return null;
+  }
+  const locale = match[1].toLowerCase() as Locale;
   const rest = (match[2] ?? "").replace(/\/$/, "");
   const fragment = match[3]?.slice(1);
 
   if (!rest) {
-    if (!fragment) return `/${locale}`;
+    if (!fragment) {
+      return `/${locale}`;
+    }
     return (SECTIONS as readonly string[]).includes(fragment) ? `/${locale}#${fragment}` : null;
   }
-  if (fragment) return null;
-  if (rest === "/writing") return `/${locale}/writing`;
-  if (rest === "/legal/imprint" || rest === "/legal/privacy") return `/${locale}${rest}`;
+  if (fragment) {
+    return null;
+  }
+  if (rest === "/writing") {
+    return `/${locale}/writing`;
+  }
+  if (rest === "/legal/imprint" || rest === "/legal/privacy") {
+    return `/${locale}${rest}`;
+  }
 
   const work = /^\/work\/([a-z0-9-]+)$/.exec(rest);
   if (work) {
@@ -157,13 +183,21 @@ export function buildTools(
   page?: { id: string; length: number },
 ) {
   const budget = new ToolBudget();
-  if (page) budget.take(page.id, page.length);
+  if (page) {
+    budget.take(page.id, page.length);
+  }
   /** A document's text through the envelope: read once, cut where the budget says. */
   const readOnce = (id: string, text: string) => {
-    if (id === page?.id) return { id, duplicate: true as const, note: NOTES.onPage };
-    if (budget.hasRead(id)) return { id, duplicate: true as const, note: NOTES.alreadyProvided };
+    if (id === page?.id) {
+      return { id, duplicate: true as const, note: NOTES.onPage };
+    }
+    if (budget.hasRead(id)) {
+      return { id, duplicate: true as const, note: NOTES.alreadyProvided };
+    }
     const chars = budget.take(id, text.length);
-    if (chars === null) return { error: "budget_exhausted" as const, note: NOTES.budgetSpent };
+    if (chars === null) {
+      return { error: "budget_exhausted" as const, note: NOTES.budgetSpent };
+    }
     return { text: fetchedText(text, chars) };
   };
 
@@ -186,7 +220,9 @@ export function buildTools(
               hits: corpus.search.search(query, { locale, ...(kinds ? { kinds } : {}) }),
               semantic: false,
             };
-        if (!hits.length) return { results: [], note: NOTES.noHits };
+        if (!hits.length) {
+          return { results: [], note: NOTES.noHits };
+        }
         // `semantic` only when the embeddings took part: BM25's result reads as before.
         return semantic ? { results: hits, semantic } : { results: hits };
       },
@@ -196,7 +232,9 @@ export function buildTools(
       ...TOOL_DEFS.get_document,
       execute: ({ id }) => {
         const doc = resolveDocument(corpus, id, locale);
-        if (!doc) return { error: "not_found" as const, note: NOTES.notFound };
+        if (!doc) {
+          return { error: "not_found" as const, note: NOTES.notFound };
+        }
         const read = readOnce(doc.id, doc.text);
         return "text" in read
           ? { id: doc.id, title: doc.title, url: doc.url, text: read.text }
@@ -228,10 +266,14 @@ export function buildTools(
         const wanted = input.locale ?? locale;
         const doc =
           corpus.byId.get(`cv@${wanted}`) ?? corpus.byId.get(`cv@${wanted === "en" ? "de" : "en"}`);
-        if (!doc) return { available: false as const, note: NOTES.noCv };
+        if (!doc) {
+          return { available: false as const, note: NOTES.noCv };
+        }
         // The CV is a document: `get_document("cv@en")` after it is a repeat, and the reverse.
         const read = readOnce(doc.id, doc.text);
-        if (!("text" in read)) return read;
+        if (!("text" in read)) {
+          return read;
+        }
         const download = `/${doc.locale}/resume.pdf`;
         return { available: true as const, id: doc.id, download, text: read.text };
       },

@@ -33,7 +33,8 @@ export function hasStoredConversation(): boolean {
 type Loose = Record<string, unknown> | undefined;
 const loose = (value: unknown): Loose =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
-const list = (value: unknown): Loose[] => (Array.isArray(value) ? value.map(loose) : []);
+const list = (value: unknown): Loose[] =>
+  Array.isArray(value) ? value.map((item) => loose(item)) : [];
 
 /**
  * Matched work marked on the site (plan 3 W4), from the tab's stored
@@ -49,16 +50,24 @@ export function matchMarks(stored: unknown): Map<string, number> {
       .flatMap((message) => list(message?.["parts"]))
       .findLast((part) => part?.["type"] === "data-match")?.["data"],
   );
-  if (data?.["v"] !== 1) return marks;
+  if (data?.["v"] !== 1) {
+    return marks;
+  }
   for (const row of list(data["items"])) {
-    if (row?.["status"] !== "evidence") continue;
+    if (row?.["status"] !== "evidence") {
+      continue;
+    }
     const pages = new Set(
       list(row["cites"]).map((cite) => {
         const id = cite?.["id"];
         return typeof id === "string" ? id.split("@")[0] : "";
       }),
     );
-    for (const page of pages) if (page) marks.set(page, (marks.get(page) ?? 0) + 1);
+    for (const page of pages) {
+      if (page) {
+        marks.set(page, (marks.get(page) ?? 0) + 1);
+      }
+    }
   }
   return marks;
 }
@@ -73,7 +82,9 @@ export class MatchMarks {
 
   constructor() {
     // Empty on the server and until hydration, so the server's HTML and hydration carry no mark.
-    if (!isPlatformBrowser(inject(PLATFORM_ID))) return;
+    if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+      return;
+    }
     afterNextRender(() => {
       try {
         this.read(JSON.parse(sessionStorage.getItem(ASK_STORAGE_KEY) ?? "null"));

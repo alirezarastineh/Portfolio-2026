@@ -179,10 +179,14 @@ const PREVIEW = { unpublishedPosts: true };
 
 adminRouter.get("/content/preview/:locale", async (c) => {
   const parsed = localeSchema.safeParse(c.req.param("locale"));
-  if (!parsed.success) return c.json({ error: "unsupported_locale" }, 400);
+  if (!parsed.success) {
+    return c.json({ error: "unsupported_locale" }, 400);
+  }
 
   const preview = await buildPreview(parsed.data);
-  if (!preview.ok) return c.json(preview.body, 422);
+  if (!preview.ok) {
+    return c.json(preview.body, 422);
+  }
   c.header("Cache-Control", "no-store");
   return c.json(preview.built.core);
 });
@@ -190,13 +194,21 @@ adminRouter.get("/content/preview/:locale", async (c) => {
 adminRouter.get("/content/preview/:locale/:kind/:slug", async (c) => {
   const locale = localeSchema.safeParse(c.req.param("locale"));
   const kind = c.req.param("kind");
-  if (!locale.success) return c.json({ error: "unsupported_locale" }, 400);
-  if (!isDocKind(kind)) return c.json({ error: "unknown_kind" }, 404);
+  if (!locale.success) {
+    return c.json({ error: "unsupported_locale" }, 400);
+  }
+  if (!isDocKind(kind)) {
+    return c.json({ error: "unknown_kind" }, 404);
+  }
 
   const preview = await buildPreview(locale.data);
-  if (!preview.ok) return c.json(preview.body, 422);
+  if (!preview.ok) {
+    return c.json(preview.body, 422);
+  }
   const doc = preview.built.docs.get(docKey(kind, c.req.param("slug")));
-  if (!doc) return c.json({ error: "not_found" }, 404);
+  if (!doc) {
+    return c.json({ error: "not_found" }, 404);
+  }
   c.header("Cache-Control", "no-store");
   return c.json(doc);
 });
@@ -218,8 +230,10 @@ adminRouter.post("/publish", async (c) => {
   let label: string | undefined;
 
   try {
-    const body = (await c.req.json()) as { label?: unknown };
-    if (typeof body?.label === "string") label = body.label.slice(0, 200);
+    const body = await c.req.json<{ label?: unknown }>();
+    if (typeof body?.label === "string") {
+      label = body.label.slice(0, 200);
+    }
   } catch {
     // An empty body is fine; the label is optional.
   }
@@ -264,7 +278,9 @@ function isSection(value: string): value is SectionName {
 
 adminRouter.get("/sections/:section", async (c) => {
   const section = c.req.param("section");
-  if (!isSection(section)) return c.json({ error: "unknown_section" }, 404);
+  if (!isSection(section)) {
+    return c.json({ error: "unknown_section" }, 404);
+  }
 
   const rows = await getDb()
     .select({
@@ -287,11 +303,13 @@ adminRouter.get("/sections/:section", async (c) => {
 
 adminRouter.put("/sections/:section", async (c) => {
   const section = c.req.param("section");
-  if (!isSection(section)) return c.json({ error: "unknown_section" }, 404);
+  if (!isSection(section)) {
+    return c.json({ error: "unknown_section" }, 404);
+  }
 
   let body: { data?: unknown; updatedAt?: unknown };
   try {
-    body = (await c.req.json()) as typeof body;
+    body = await c.req.json<typeof body>();
   } catch {
     return c.json({ error: "invalid_input" }, 400);
   }
@@ -315,7 +333,9 @@ adminRouter.put("/sections/:section", async (c) => {
       c.get("session").userId,
     ),
   );
-  if (!saved.ok) return c.json({ error: "stale", current: saved.current }, 409);
+  if (!saved.ok) {
+    return c.json({ error: "stale", current: saved.current }, 409);
+  }
   return c.json({ ok: true, updatedAt: saved.updatedAt });
 });
 
@@ -327,20 +347,31 @@ adminRouter.put("/sections/:section", async (c) => {
 adminRouter.patch("/sections/ui", async (c) => {
   let body: { groups?: unknown; updatedAt?: unknown };
   try {
-    body = (await c.req.json()) as typeof body;
+    body = await c.req.json<typeof body>();
   } catch {
     return c.json({ error: "invalid_input" }, 400);
   }
 
   const parsed = parseUiGroups(body.groups, ["groups"]);
-  if (!parsed.ok) return c.json({ error: "invalid_input", issues: parsed.issues }, 400);
+  if (!parsed.ok) {
+    return c.json({ error: "invalid_input", issues: parsed.issues }, 400);
+  }
 
   const saved = await getDb().transaction((tx) =>
     saveUiGroups(tx, parsed.groups, expectedToken(body.updatedAt), c.get("session").userId),
   );
-  if (!saved.ok) return c.json({ error: "stale", current: saved.current }, 409);
+  if (!saved.ok) {
+    return c.json({ error: "stale", current: saved.current }, 409);
+  }
   return c.json({ ok: true, updatedAt: saved.updatedAt });
 });
+
+// Both sides as v2, so a diff against a pre-v2 revision shows content
+// changes rather than the format change.
+function asV2(payload: unknown, at: Date): unknown {
+  const result = upcast(payload, at.toISOString());
+  return result.ok ? result.content : payload;
+}
 
 /**
  * One version of a publication, in full, plus whatever is live for the same
@@ -349,7 +380,9 @@ adminRouter.patch("/sections/ui", async (c) => {
  */
 adminRouter.get("/revisions/:id", async (c) => {
   const id = parseVersionId(c.req.param("id"));
-  if (id === null) return c.json({ error: "invalid_id" }, 400);
+  if (id === null) {
+    return c.json({ error: "invalid_id" }, 400);
+  }
 
   const db = getDb();
   const [revision] = await db
@@ -366,7 +399,9 @@ adminRouter.get("/revisions/:id", async (c) => {
     .where(eq(contentVersions.id, id))
     .limit(1);
 
-  if (!revision) return c.json({ error: "not_found" }, 404);
+  if (!revision) {
+    return c.json({ error: "not_found" }, 404);
+  }
 
   const [live] = await db
     .select({
@@ -378,13 +413,6 @@ adminRouter.get("/revisions/:id", async (c) => {
     .innerJoin(contentVersions, eq(contentVersions.id, contentPointers.versionId))
     .where(eq(contentPointers.locale, revision.locale))
     .limit(1);
-
-  // Both sides as v2, so a diff against a pre-v2 revision shows content
-  // changes rather than the format change.
-  const asV2 = (payload: unknown, at: Date) => {
-    const result = upcast(payload, at.toISOString());
-    return result.ok ? result.content : payload;
-  };
 
   return c.json({
     revision: {
@@ -437,7 +465,9 @@ adminRouter.get("/publications", async (c) => {
 
 adminRouter.post("/publications/:id/rollback", async (c) => {
   const id = parseVersionId(c.req.param("id"));
-  if (id === null) return c.json({ error: "invalid_id" }, 400);
+  if (id === null) {
+    return c.json({ error: "invalid_id" }, 400);
+  }
 
   try {
     const outcome = await rollbackToPublication(id, c.get("session").userId);
@@ -453,7 +483,9 @@ adminRouter.post("/publications/:id/rollback", async (c) => {
 /** Makes the draft match a publication again; nothing goes live until the next publish. */
 adminRouter.post("/publications/:id/restore-draft", async (c) => {
   const id = parseVersionId(c.req.param("id"));
-  if (id === null) return c.json({ error: "invalid_id" }, 400);
+  if (id === null) {
+    return c.json({ error: "invalid_id" }, 400);
+  }
 
   try {
     const outcome = await restoreDraftFromPublication(id, c.get("session").userId);

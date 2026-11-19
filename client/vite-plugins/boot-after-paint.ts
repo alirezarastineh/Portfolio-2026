@@ -29,16 +29,20 @@ export function bootAfterPaint(): Plugin {
       order: "post",
       handler(html) {
         const entry = /<script type="module" crossorigin src="([^"]+)"><\/script>\s*/.exec(html);
-        if (!entry) return html;
+        if (!entry) {
+          return html;
+        }
         const preloads = [
           ...html.matchAll(/<link rel="modulepreload" crossorigin href="([^"]+)">\s*/g),
         ];
 
         let out = html.replace(entry[0], "");
-        for (const preload of preloads) out = out.replace(preload[0], "");
+        for (const preload of preloads) {
+          out = out.replace(preload[0], "");
+        }
         const loader = loaderSource(
-          entry[1]!,
-          preloads.map((p) => p[1]!),
+          entry[1],
+          preloads.map((p) => p[1]),
         );
         return out.replace(
           "</head>",

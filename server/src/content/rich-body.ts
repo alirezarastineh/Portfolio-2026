@@ -38,10 +38,10 @@ export function readingMinutes(html: string): number {
 export function slugify(text: string): string {
   const slug = text
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replaceAll(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replaceAll("ß", "ss")
-    .replace(/[^a-z0-9]+/g, "-")
+    .replaceAll(/[^a-z0-9]+/g, "-")
     .replace(/^-/, "")
     .slice(0, 60)
     .replace(/-$/, "");
@@ -50,9 +50,11 @@ export function slugify(text: string): string {
 
 function addHeadingIds(html: string, toc: TocEntry[]): string {
   const used = new Map<string, number>();
-  return html.replace(/<h([23])>([\s\S]*?)<\/h\1>/g, (whole, level: string, inner: string) => {
-    const text = htmlToText(inner).replace(/\s+/g, " ").trim();
-    if (!text) return whole;
+  return html.replaceAll(/<h([23])>([\s\S]*?)<\/h\1>/g, (whole, level: string, inner: string) => {
+    const text = htmlToText(inner).replaceAll(/\s+/g, " ").trim();
+    if (!text) {
+      return whole;
+    }
     const base = slugify(text);
     const seen = used.get(base) ?? 0;
     used.set(base, seen + 1);
@@ -64,16 +66,22 @@ function addHeadingIds(html: string, toc: TocEntry[]): string {
 
 async function highlightBlocks(html: string): Promise<string> {
   const pattern = /<pre><code(?: class="language-([a-z0-9+#-]+)")?>([\s\S]*?)<\/code><\/pre>/g;
+  const matches = [...html.matchAll(pattern)];
+  if (matches.length === 0) {
+    return html;
+  }
+  const highlighted = await Promise.all(
+    matches.map(([, lang = null, code = ""]) => highlightCode(decodeEntities(code), lang)),
+  );
   const parts: string[] = [];
   let last = 0;
-  for (const match of html.matchAll(pattern)) {
-    const [whole, lang = null, code = ""] = match;
+  for (const [index, match] of matches.entries()) {
+    const [whole, lang = null] = match;
     parts.push(html.slice(last, match.index));
-    const highlighted = await highlightCode(decodeEntities(code), lang);
     // The language survives as a class, so a restore into the draft can undo
     // the highlighting without losing it (restore.ts, `unrenderBody`).
     const label = lang ? ` code-lang-${lang}` : "";
-    parts.push(`<pre class="code-block${label}"><code>${highlighted}</code></pre>`);
+    parts.push(`<pre class="code-block${label}"><code>${highlighted[index]}</code></pre>`);
     last = match.index + whole.length;
   }
   parts.push(html.slice(last));
@@ -92,11 +100,13 @@ function srcset(media: BodyMedia, format: string): string {
 const BODY_SIZES = "(min-width: 800px) 720px, 100vw";
 
 function enrichImages(html: string, media: ReadonlyMap<string, BodyMedia>): string {
-  return html.replace(
+  return html.replaceAll(
     /<img src="\/media\/([^"<>]+)"([^<>]*)>/g,
     (whole, filename: string, rest: string) => {
       const info = media.get(filename);
-      if (!info) return whole;
+      if (!info) {
+        return whole;
+      }
 
       const alt = /\salt="([^"]*)"/.exec(rest)?.[1] ?? "";
       const title = /\stitle="([^"]*)"/.exec(rest)?.[1];
@@ -107,7 +117,9 @@ function enrichImages(html: string, media: ReadonlyMap<string, BodyMedia>): stri
       const webp = srcset(info, "webp");
       const sizesAttr = webp ? ` sizes="${BODY_SIZES}"` : "";
       const img = `<img src="/media/${filename}" alt="${alt}"${titleAttr}${sizeAttr}${sizesAttr} />`;
-      if (!avif && !webp) return img;
+      if (!avif && !webp) {
+        return img;
+      }
 
       const sources = [
         avif
@@ -126,7 +138,9 @@ export async function renderBody(
   html: string,
   media: ReadonlyMap<string, BodyMedia> = new Map(),
 ): Promise<RenderedBody> {
-  if (!html) return { html: "", toc: [] };
+  if (!html) {
+    return { html: "", toc: [] };
+  }
   const toc: TocEntry[] = [];
   // Headings before highlighting: code is escaped by then, so a literal
   // "<h2>" inside a code block can never be mistaken for a heading.
@@ -138,5 +152,5 @@ export async function renderBody(
 
 /** `/media/<file>` names a body shows, for looking up their variants. */
 export function bodyMediaFilenames(html: string): string[] {
-  return [...new Set([...html.matchAll(/<img src="\/media\/([^"]+)"/g)].map((m) => m[1]!))];
+  return [...new Set([...html.matchAll(/<img src="\/media\/([^"]+)"/g)].map((m) => m[1]))];
 }

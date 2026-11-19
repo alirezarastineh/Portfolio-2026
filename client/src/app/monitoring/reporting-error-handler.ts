@@ -16,10 +16,11 @@ export const SENTRY_DSN = new InjectionToken<string | undefined>("SENTRY_DSN", {
 let sdk: Promise<BrowserSdk> | undefined;
 
 function loadSdk(dsn: string): Promise<BrowserSdk> {
+  const sha = import.meta.env.VITE_GIT_SHA ?? "";
   sdk ??= import("@sentry/browser").then((Sentry) => {
     Sentry.init({
       dsn,
-      release: import.meta.env.VITE_GIT_SHA || undefined,
+      release: sha === "" ? undefined : sha,
       environment: import.meta.env.MODE,
       // Nothing personal leaves the browser: SDK 11 collects user info,
       // cookies, headers, query strings and bodies unless told not to (it
@@ -64,11 +65,13 @@ export class ReportingErrorHandler implements ErrorHandler {
     console.error(error);
 
     const dsn = this.dsn;
-    if (!this.isBrowser || !dsn) return;
+    if (!this.isBrowser || !dsn) {
+      return;
+    }
 
     void loadSdk(dsn)
       .then((Sentry) => Sentry.captureException(error))
       // Reporting must never become a second error of its own.
-      .catch(() => {});
+      .catch(() => undefined);
   }
 }

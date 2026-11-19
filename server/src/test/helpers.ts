@@ -29,7 +29,7 @@ export async function createAdmin(email = ADMIN_EMAIL, password = ADMIN_PASSWORD
     .insert(adminUsers)
     .values({ email, passwordHash: await hashPassword(password) })
     .returning({ id: adminUsers.id });
-  return row!.id;
+  return row.id;
 }
 
 /** Code for the secret embedded in an otpauth:// URI, offset in 30s steps. */
@@ -66,11 +66,15 @@ export class TestClient {
     headers: Record<string, string> = {},
   ): Promise<Response> {
     const h = new Headers(headers);
-    if (!h.has("origin")) h.set("origin", ADMIN_ORIGIN);
+    if (!h.has("origin")) {
+      h.set("origin", ADMIN_ORIGIN);
+    }
     h.set("x-forwarded-for", this.ip);
 
     const csrf = this.cookies.get("pf_csrf");
-    if (csrf && !h.has("x-csrf-token")) h.set("x-csrf-token", csrf);
+    if (csrf && !h.has("x-csrf-token")) {
+      h.set("x-csrf-token", csrf);
+    }
     if (this.cookies.size > 0) {
       h.set("cookie", [...this.cookies].map(([k, v]) => `${k}=${v}`).join("; "));
     }
@@ -116,8 +120,11 @@ export class TestClient {
       const name = pair.slice(0, eq).trim();
       const value = pair.slice(eq + 1).trim();
       const cleared = value === "" || attributes.some((a) => /^\s*max-age=0\s*$/i.test(a));
-      if (cleared) this.cookies.delete(name);
-      else this.cookies.set(name, value);
+      if (cleared) {
+        this.cookies.delete(name);
+      } else {
+        this.cookies.set(name, value);
+      }
     }
   }
 }

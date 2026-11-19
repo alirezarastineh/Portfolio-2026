@@ -40,7 +40,7 @@ const content: AppContent = {
       cover: null,
       readingMinutes: 3,
       alternates: { en: "/en/writing/evals-first", de: null },
-    } as unknown as AppContent["posts"][number],
+    },
   ],
 };
 const copy = ASK_COPY.en;
@@ -133,13 +133,15 @@ describe("complete", () => {
   });
 });
 
+const helpLabels = (options: Parameters<typeof helpLines>[2] = {}) =>
+  helpLines(ASK_COPY.en, "AI", options).map((l) => l.label);
+
 describe("local answers", () => {
   it("lists match in help only while the server offers it, after the tour (visitor plan V20)", () => {
-    const labels = (options = {}) => helpLines(ASK_COPY.en, "AI", options).map((l) => l.label);
-    expect(labels()).not.toContain("match role|project|problem");
-    const on = labels({ match: true });
+    expect(helpLabels()).not.toContain("match role|project|problem");
+    const on = helpLabels({ match: true });
     expect(on.indexOf("match role|project|problem")).toBe(on.indexOf("cv") - 1);
-    expect(labels({ match: true, scorecard: true })).toContain("evals");
+    expect(helpLabels({ match: true, scorecard: true })).toContain("evals");
   });
 
   it("runs a help row's command, and leaves one that needs a word in the prompt (plan 4 U11)", () => {
@@ -162,20 +164,27 @@ describe("local answers", () => {
       (l) => l.run,
     );
     for (const row of rows) {
-      for (const { run, command } of labelCommands(row.label!)) {
+      if (!row.label) {
+        throw new Error(`Missing label for help row: ${row.text}`);
+      }
+      for (const { run, command } of labelCommands(row.label)) {
         // What a button would type is what the prompt understands.
-        if (run) expect(parseInput(command).kind).toBe("local");
+        if (run) {
+          expect(parseInput(command).kind).toBe("local");
+        }
       }
     }
   });
 
   it("asks about the page on a case study or a post, and only there (plan 4 U12)", () => {
-    const copy = ASK_COPY.en.pageQuestions;
-    expect(pageQuestions("/work/atlas", content, copy)?.[0]).toBe("What problem did Atlas solve?");
-    expect(pageQuestions("/writing/evals-first", content, copy)).toEqual(copy.post);
-    expect(pageQuestions("/work/gone", content, copy)).toBeNull();
-    expect(pageQuestions("/writing", content, copy)).toBeNull();
-    expect(pageQuestions("/", content, copy)).toBeNull();
+    const questions = ASK_COPY.en.pageQuestions;
+    expect(pageQuestions("/work/atlas", content, questions)?.[0]).toBe(
+      "What problem did Atlas solve?",
+    );
+    expect(pageQuestions("/writing/evals-first", content, questions)).toEqual(questions.post);
+    expect(pageQuestions("/work/gone", content, questions)).toBeNull();
+    expect(pageQuestions("/writing", content, questions)).toBeNull();
+    expect(pageQuestions("/", content, questions)).toBeNull();
   });
 
   it("offers a usage line's choices as lines that run them (plan 4 U11)", () => {
@@ -193,7 +202,7 @@ describe("local answers", () => {
 
   it("prints a project and says when there is none", () => {
     const lines = projectLines(content, "en", "Atlas", copy);
-    expect(lines[0]!.text).toMatch(/^Atlas — /);
+    expect(lines[0].text).toMatch(/^Atlas — /);
     expect(lines.at(-1)).toMatchObject({ href: "/en/work/atlas", internal: true });
     expect(projectLines(content, "en", "nope", copy)).toEqual([
       { text: "No project called “nope”. Try `ls projects`.", tone: "error" },
@@ -202,9 +211,9 @@ describe("local answers", () => {
 
   it("answers common questions offline, and always offers contact", () => {
     const lines = offlineLines("Which projects has he built?", content, "en", copy);
-    expect(lines[0]!.text).toBe(copy.offlineIntro);
+    expect(lines[0].text).toBe(copy.offlineIntro);
     expect(lines.some((l) => l.label === "atlas")).toBe(true);
-    expect(lines.at(-1)!.text).toBe(copy.offlineContact);
+    expect(lines.at(-1)?.text).toBe(copy.offlineContact);
     expect(offlineLines("Wo wohnt er?", content, "de", ASK_COPY.de)).toEqual(
       expect.arrayContaining(whoamiLines(content, "de", ASK_COPY.de)),
     );

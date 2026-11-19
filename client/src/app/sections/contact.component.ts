@@ -14,7 +14,7 @@ import {
   untracked,
   viewChild,
 } from "@angular/core";
-import { FormBuilder, ReactiveFormsModule, Validators } from "@angular/forms";
+import { FormBuilder, ReactiveFormsModule, type ValidatorFn, Validators } from "@angular/forms";
 import { RouterLink } from "@angular/router";
 import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideCircleAlert } from "@ng-icons/lucide";
@@ -64,6 +64,16 @@ const TOOL_DESCRIPTION =
 /** Sentence case whatever the CMS sends ("name" reads "Name"). */
 const labelClass = "block text-base font-medium text-foreground first-letter:uppercase";
 const errorClass = "m-0 flex items-start gap-1.5 text-small text-destructive";
+
+const requiredValidator: ValidatorFn = (control) => Validators.required(control);
+const emailValidator: ValidatorFn = (control) => Validators.email(control);
+
+function requiredLength(error: unknown): number {
+  if (typeof error === "object" && error !== null && "requiredLength" in error) {
+    return typeof error.requiredLength === "number" ? error.requiredLength : 0;
+  }
+  return 0;
+}
 
 /**
  * The last section. From `md` the ways to reach him stand at the left (the statement, the email
@@ -452,8 +462,12 @@ export class ContactSectionComponent {
 
   protected readonly announcement = computed(() => {
     const state = this.state();
-    if (state === "submitting") return this.lang.t().contact.sending;
-    if (state === "error") return this.errorMsg();
+    if (state === "submitting") {
+      return this.lang.t().contact.sending;
+    }
+    if (state === "error") {
+      return this.errorMsg();
+    }
     return "";
   });
 
@@ -461,14 +475,11 @@ export class ContactSectionComponent {
   private readonly successMessage = viewChild<ElementRef<HTMLElement>>("success");
 
   readonly form = this.fb.nonNullable.group({
-    name: [this.typed("name"), [Validators.required, Validators.maxLength(120)]],
-    email: [
-      this.typed("email"),
-      [Validators.required, Validators.email, Validators.maxLength(200)],
-    ],
+    name: [this.typed("name"), [requiredValidator, Validators.maxLength(120)]],
+    email: [this.typed("email"), [requiredValidator, emailValidator, Validators.maxLength(200)]],
     message: [
       this.typed("message"),
-      [Validators.required, Validators.minLength(10), Validators.maxLength(4000)],
+      [requiredValidator, Validators.minLength(10), Validators.maxLength(4000)],
     ],
     website: [this.typed("website")],
   });
@@ -485,10 +496,14 @@ export class ContactSectionComponent {
     // conversation it came from can be attached, unticked until they tick it.
     effect(() => {
       const prefill = this.contact.prefill();
-      if (!prefill || !this.isBrowser) return;
+      if (!prefill || !this.isBrowser) {
+        return;
+      }
       untracked(() => {
         this.contact.prefill.set(null);
-        if (this.state() === "success") this.reset();
+        if (this.state() === "success") {
+          this.reset();
+        }
         this.form.controls.message.setValue(prefill.text.slice(0, 4000));
         this.form.controls.message.markAsDirty();
         this.attachable.set(prefill.ask);
@@ -504,7 +519,9 @@ export class ContactSectionComponent {
    * write its own empty value over it as it takes the field over.
    */
   private typed(field: Field | "website"): string {
-    if (!this.isBrowser) return "";
+    if (!this.isBrowser) {
+      return "";
+    }
     const el = this.doc.getElementById(`contact-${field}`);
     return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.value : "";
   }
@@ -530,11 +547,21 @@ export class ContactSectionComponent {
   fieldError(name: Field): string {
     const e = this.form.controls[name].errors;
     const t = this.lang.t().contact;
-    if (!e) return "";
-    if (e["required"]) return t.errorRequired;
-    if (e["email"]) return t.errorEmail;
-    if (e["minlength"]) return fmt(t.errorMinlength, { n: e["minlength"].requiredLength });
-    if (e["maxlength"]) return fmt(t.errorMaxlength, { n: e["maxlength"].requiredLength });
+    if (!e) {
+      return "";
+    }
+    if (e["required"]) {
+      return t.errorRequired;
+    }
+    if (e["email"]) {
+      return t.errorEmail;
+    }
+    if (e["minlength"]) {
+      return fmt(t.errorMinlength, { n: requiredLength(e["minlength"]) });
+    }
+    if (e["maxlength"]) {
+      return fmt(t.errorMaxlength, { n: requiredLength(e["maxlength"]) });
+    }
     return t.errorInvalid;
   }
 
@@ -568,7 +595,9 @@ export class ContactSectionComponent {
   }
 
   private async fetchTurnstile(): Promise<string | null> {
-    if (!TURNSTILE_SITE_KEY) return "";
+    if (!TURNSTILE_SITE_KEY) {
+      return "";
+    }
     try {
       return await turnstileToken(this.lang.lang());
     } catch {
@@ -578,7 +607,9 @@ export class ContactSectionComponent {
   }
 
   async submit(): Promise<void> {
-    if (this.state() === "submitting" || this.state() === "success") return;
+    if (this.state() === "submitting" || this.state() === "success") {
+      return;
+    }
     const raw = this.form.getRawValue();
 
     // A bot filled the honeypot: look sent, send nothing.
@@ -588,13 +619,17 @@ export class ContactSectionComponent {
     }
 
     const data = this.validateForm();
-    if (!data) return;
+    if (!data) {
+      return;
+    }
 
     this.state.set("submitting");
     this.errorMsg.set("");
 
     const turnstile = await this.fetchTurnstile();
-    if (turnstile === null) return;
+    if (turnstile === null) {
+      return;
+    }
 
     // The page language, so the inbox shows which language to reply in. A
     // hand-off says so; its conversation goes only with the visitor's tick.
@@ -606,8 +641,11 @@ export class ContactSectionComponent {
       ...(ask ? { origin: "ask" as const } : {}),
       ...(ask && this.attach() ? { ask } : {}),
     });
-    if (result.ok) this.succeed();
-    else this.fail(this.humanize(result.error));
+    if (result.ok) {
+      this.succeed();
+    } else {
+      this.fail(this.humanize(result.error));
+    }
   }
 
   reset(): void {
@@ -642,7 +680,9 @@ export class ContactSectionComponent {
 
   private focusFirstInvalid(): void {
     const first = FIELDS.find((name) => this.form.controls[name].invalid);
-    if (first) document.getElementById(`contact-${first}`)?.focus();
+    if (first) {
+      document.getElementById(`contact-${first}`)?.focus();
+    }
   }
 
   private firstField(): HTMLElement | null {

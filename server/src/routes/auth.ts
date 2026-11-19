@@ -51,7 +51,10 @@ import {
   verifyTotp,
 } from "../lib/totp.js";
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 /** Identical for unknown email and wrong password — no account enumeration. */
 const INVALID_CREDENTIALS = { error: "invalid_credentials" } as const;
@@ -67,7 +70,9 @@ const inFlight = new Set<string>();
 function oneAtATime(keyOf: (c: Context) => string): MiddlewareHandler {
   return async (c, next) => {
     const key = keyOf(c);
-    if (inFlight.has(key)) return c.json({ error: "rate_limited" }, 429);
+    if (inFlight.has(key)) {
+      return c.json({ error: "rate_limited" }, 429);
+    }
     inFlight.add(key);
     try {
       await next();
@@ -85,10 +90,15 @@ const reauthKey = (c: Context) => reauthBucket(c.get("session").userId);
  */
 const reauthLimit: MiddlewareHandler = async (c, next) => {
   const key = reauthKey(c);
-  if (await tooManyAttempts(key, REAUTH_LIMIT)) return c.json({ error: "rate_limited" }, 429);
+  if (await tooManyAttempts(key, REAUTH_LIMIT)) {
+    return c.json({ error: "rate_limited" }, 429);
+  }
   await next();
-  if (c.res.status === 401) await recordAttempt(key, "fail");
-  else if (c.res.ok) await clearBucket(key);
+  if (c.res.status === 401) {
+    await recordAttempt(key, "fail");
+  } else if (c.res.ok) {
+    await clearBucket(key);
+  }
 };
 
 export const authRouter = new Hono();

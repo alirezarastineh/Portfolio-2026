@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures";
+import { expect, fetchText, test } from "./fixtures";
 
 const SITE = "https://alirezarastineh.me";
 
@@ -77,14 +77,16 @@ test.describe("head", () => {
     });
 
     test(`/${locale} ships one valid JSON-LD graph describing the person`, async ({ request }) => {
-      const html = await (await request.get(`/${locale}`)).text();
+      const html = await fetchText(request, `/${locale}`);
       const blocks = [
         ...html.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g),
       ];
       expect(blocks).toHaveLength(1);
 
       const graph = JSON.stringify(JSON.parse(blocks[0]?.[1] ?? "null"));
-      for (const type of ['"ProfilePage"', '"Person"', '"WebSite"']) expect(graph).toContain(type);
+      for (const type of ['"ProfilePage"', '"Person"', '"WebSite"']) {
+        expect(graph).toContain(type);
+      }
       expect(graph).toContain(`"inLanguage":"${locale}"`);
     });
   }
@@ -120,14 +122,20 @@ test.describe("content BFF (v2)", () => {
   test("answers 404 for a doc that does not exist, and for the retired v1 route", async ({
     request,
   }) => {
-    expect((await request.get("/api/v2/content/en/posts/nope")).status()).toBe(404);
-    expect((await request.get("/api/v2/content/en/secrets/x")).status()).toBe(404);
-    expect((await request.get("/api/v2/content/fr")).status()).toBe(400);
-    expect((await request.get("/api/v1/content/en")).status()).toBe(404);
+    const [posts, secrets, fr, v1] = await Promise.all([
+      request.get("/api/v2/content/en/posts/nope"),
+      request.get("/api/v2/content/en/secrets/x"),
+      request.get("/api/v2/content/fr"),
+      request.get("/api/v1/content/en"),
+    ]);
+    expect(posts.status()).toBe(404);
+    expect(secrets.status()).toBe(404);
+    expect(fr.status()).toBe(400);
+    expect(v1.status()).toBe(404);
   });
 
   test("renders a legal page from its CMS doc, server-side", async ({ request }) => {
-    const html = await (await request.get("/en/legal/privacy")).text();
+    const html = await fetchText(request, "/en/legal/privacy");
     expect(html).toContain('<div class="prose-body">');
     expect(html).toMatch(/<h2[^>]*>Hosting and server logs<\/h2>/);
     // The anchors the sanitizer strips, back in the server's HTML: a shared `#section` link works.
@@ -138,7 +146,7 @@ test.describe("content BFF (v2)", () => {
 
 test.describe("crawler surface", () => {
   test("sitemap lists every page in both languages with alternates", async ({ request }) => {
-    const xml = await (await request.get("/sitemap.xml")).text();
+    const xml = await fetchText(request, "/sitemap.xml");
     for (const path of [
       "/en",
       "/de",
@@ -153,7 +161,7 @@ test.describe("crawler surface", () => {
   });
 
   test("robots.txt keeps crawlers out of the admin and the BFF", async ({ request }) => {
-    const robots = await (await request.get("/robots.txt")).text();
+    const robots = await fetchText(request, "/robots.txt");
     expect(robots).toContain("Disallow: /admin");
     expect(robots).toContain("Disallow: /api/");
   });

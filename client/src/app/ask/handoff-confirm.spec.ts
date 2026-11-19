@@ -2,15 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import { confirmHandoff } from "./handoff-confirm";
 
-const noWait = async () => undefined;
+const noWait = () => Promise.resolve();
 
 function answers(...statuses: (number | "throw")[]) {
   const calls: number[] = [];
-  const post = async () => {
-    const status = statuses[Math.min(calls.length, statuses.length - 1)]!;
+  const post = () => {
+    const status = statuses[Math.min(calls.length, statuses.length - 1)];
     calls.push(calls.length + 1);
-    if (status === "throw") throw new Error("offline");
-    return { status };
+    if (status === "throw") {
+      return Promise.reject(new Error("offline"));
+    }
+    return Promise.resolve({ status });
   };
   return { post, calls };
 }

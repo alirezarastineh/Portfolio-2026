@@ -55,15 +55,21 @@ export function rrf(lists: readonly (readonly string[])[], k = RRF_K): Map<strin
 export function normalise(vector: readonly number[]): Float32Array {
   const out = Float32Array.from(vector);
   let sum = 0;
-  for (const v of out) sum += v * v;
+  for (const v of out) {
+    sum += v * v;
+  }
   const length = Math.sqrt(sum) || 1;
-  for (let i = 0; i < out.length; i++) out[i]! /= length;
+  for (const [i, element] of out.entries()) {
+    out[i] = element / length;
+  }
   return out;
 }
 
 function dot(a: Float32Array, b: Float32Array): number {
   let sum = 0;
-  for (let i = 0; i < a.length && i < b.length; i++) sum += a[i]! * b[i]!;
+  for (let i = 0; i < a.length && i < b.length; i++) {
+    sum += a[i] * b[i];
+  }
   return sum;
 }
 
@@ -79,7 +85,9 @@ const models = new WeakMap<AskConfig, EmbeddingModelV4>();
 
 function geminiModel(config: AskConfig): EmbeddingModelV4 | null {
   // No key, or the boot check found no such model: BM25 alone.
-  if (!config.gemini.apiKey || capsOf(config.embeddings.model).missing) return null;
+  if (!config.gemini.apiKey || capsOf(config.embeddings.model).missing) {
+    return null;
+  }
   let model = models.get(config);
   if (!model) {
     model = createGoogle({ apiKey: config.gemini.apiKey }).embeddingModel(config.embeddings.model);
@@ -132,7 +140,9 @@ export function setEmbeddingDeps(next: Partial<EmbeddingDeps> | null): void {
  * search by meaning and every backfill (found by the paid `--retrieval`).
  */
 export function embeddingTokens(reported: number | undefined, texts: readonly string[]): number {
-  if (reported !== undefined && Number.isFinite(reported) && reported >= 0) return reported;
+  if (reported !== undefined && Number.isFinite(reported) && reported >= 0) {
+    return reported;
+  }
   return texts.reduce((sum, text) => sum + countTokens(text), 0);
 }
 
@@ -162,7 +172,9 @@ const slot = (model: string, hash: string) => `${model}:${hash}`;
 async function loadVectors(corpus: AskCorpus, config: AskConfig): Promise<void> {
   const { model } = config.embeddings;
   const key = `${model}|${corpus.key}`;
-  if (loaded.has(key)) return;
+  if (loaded.has(key)) {
+    return;
+  }
   const hashes = [...new Set(corpus.search.chunks.map((c) => c.hash))].filter(
     (h) => !vectors.has(slot(model, h)),
   );
@@ -171,7 +183,9 @@ async function loadVectors(corpus: AskCorpus, config: AskConfig): Promise<void> 
       .select({ hash: aiEmbeddings.contentHash, vector: aiEmbeddings.vector })
       .from(aiEmbeddings)
       .where(and(eq(aiEmbeddings.model, model), inArray(aiEmbeddings.contentHash, hashes)));
-    for (const row of rows) vectors.set(slot(model, row.hash), Float32Array.from(row.vector));
+    for (const row of rows) {
+      vectors.set(slot(model, row.hash), Float32Array.from(row.vector));
+    }
   }
   loaded.add(key);
 }
@@ -184,7 +198,9 @@ function withVectors(
   const out: { chunk: Chunk; vector: Float32Array }[] = [];
   for (const chunk of corpus.search.chunks) {
     const vector = vectors.get(slot(config.embeddings.model, chunk.hash));
-    if (vector) out.push({ chunk, vector });
+    if (vector) {
+      out.push({ chunk, vector });
+    }
   }
   return out;
 }
@@ -193,7 +209,9 @@ function withVectors(
 function missing(corpus: AskCorpus, config: AskConfig): Chunk[] {
   const seen = new Set<string>();
   return corpus.search.chunks.filter((c) => {
-    if (seen.has(c.hash) || vectors.has(slot(config.embeddings.model, c.hash))) return false;
+    if (seen.has(c.hash) || vectors.has(slot(config.embeddings.model, c.hash))) {
+      return false;
+    }
     seen.add(c.hash);
     return true;
   });
@@ -209,7 +227,7 @@ async function embedChunks(chunks: readonly Chunk[], config: AskConfig, model: E
     },
   });
   return {
-    vectors: embeddings.map(normalise),
+    vectors: embeddings.map((vector) => normalise(vector)),
     tokens: embeddingTokens(
       usage.tokens,
       chunks.map((c) => c.text),
@@ -233,10 +251,14 @@ async function backfillBatch(
   config: AskConfig,
   model: EmbeddingModelV4,
 ): Promise<void> {
-  if (offset >= todo.length) return;
+  if (offset >= todo.length) {
+    return;
+  }
   // Asked afresh before each batch; stopped by a fence, the next question tries again.
   verdict = undefined;
-  if (!(await deps.available(config))) return;
+  if (!(await deps.available(config))) {
+    return;
+  }
   const batch = todo.slice(offset, offset + BATCH);
   const embedded = await embedChunks(batch, config, model);
   await getDb()
@@ -245,12 +267,12 @@ async function backfillBatch(
       batch.map((c, j) => ({
         contentHash: c.hash,
         model: config.embeddings.model,
-        dims: embedded.vectors[j]!.length,
-        vector: [...embedded.vectors[j]!],
+        dims: embedded.vectors[j].length,
+        vector: [...embedded.vectors[j]],
       })),
     )
     .onConflictDoNothing();
-  batch.forEach((c, j) => vectors.set(slot(config.embeddings.model, c.hash), embedded.vectors[j]!));
+  batch.forEach((c, j) => vectors.set(slot(config.embeddings.model, c.hash), embedded.vectors[j]));
   await deps.record([usageCall(config.embeddings.model, embedded.tokens)]);
   return backfillBatch(todo, offset + BATCH, config, model);
 }
@@ -269,7 +291,9 @@ export function backfillEmbeddings(corpus: AskCorpus, config: AskConfig): Promis
   backfilling ??= (async () => {
     try {
       const model = deps.model(config);
-      if (!model) return;
+      if (!model) {
+        return;
+      }
       await loadVectors(corpus, config);
       await backfillBatch(missing(corpus, config), 0, config, model);
       const current = [...new Set(corpus.search.chunks.map((c) => c.hash))];
@@ -297,10 +321,12 @@ async function embedMemoryBatch(
   model: EmbeddingModelV4,
   calls: ModelCall[],
 ): Promise<void> {
-  if (offset >= todo.length) return;
+  if (offset >= todo.length) {
+    return;
+  }
   const batch = todo.slice(offset, offset + BATCH);
   const done = await embedChunks(batch, config, model);
-  batch.forEach((c, j) => vectors.set(slot(config.embeddings.model, c.hash), done.vectors[j]!));
+  batch.forEach((c, j) => vectors.set(slot(config.embeddings.model, c.hash), done.vectors[j]));
   calls.push(usageCall(config.embeddings.model, done.tokens));
   return embedMemoryBatch(todo, offset + BATCH, config, model, calls);
 }
@@ -332,7 +358,7 @@ const queries = new Map<string, Float32Array>();
 
 /** The same question, however typed, is one cache entry. */
 export function normaliseQuery(text: string): string {
-  return text.trim().toLowerCase().replace(/\s+/g, " ");
+  return text.trim().toLowerCase().replaceAll(/\s+/g, " ");
 }
 
 /** Where a query's spend goes: written as the `embeddings` feature, and/or kept for the answer. */
@@ -368,10 +394,17 @@ async function embedQuery(
   });
   const vector = normalise(embedding);
   queries.set(key, vector);
-  if (queries.size > QUERY_CACHE) queries.delete(queries.keys().next().value!);
+  if (queries.size > QUERY_CACHE) {
+    const oldest = queries.keys().next().value;
+    if (oldest !== undefined) {
+      queries.delete(oldest);
+    }
+  }
   const call = usageCall(config.embeddings.model, embeddingTokens(usage.tokens, [text]));
   spend.calls?.push(call);
-  if (spend.record) await deps.record([call]);
+  if (spend.record) {
+    await deps.record([call]);
+  }
   return vector;
 }
 
@@ -403,16 +436,24 @@ export async function hybridSearch(
     hits: corpus.search.search(query, { locale: reading, ...(kinds ? { kinds } : {}), limit }),
     semantic: false,
   });
-  if (!config.embeddings.enabled) return bm25Only();
+  if (!config.embeddings.enabled) {
+    return bm25Only();
+  }
   const model = deps.model(config);
-  if (!model) return bm25Only();
+  if (!model) {
+    return bm25Only();
+  }
   try {
     await loadVectors(corpus, config);
-    if (missing(corpus, config).length) return bm25Only();
+    if (missing(corpus, config).length) {
+      return bm25Only();
+    }
     const pool = withVectors(corpus, config).filter(
       ({ chunk }) => !kinds?.length || kinds.includes(chunk.kind),
     );
-    if (!pool.length || !(await deps.available(config))) return bm25Only();
+    if (!pool.length || !(await deps.available(config))) {
+      return bm25Only();
+    }
     const q = await embedQuery(query, config, model, options.spend);
     // Each list breaks its own ties for the reading language, so equal documents in two
     // languages fuse with the reader's first.

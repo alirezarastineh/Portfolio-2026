@@ -20,7 +20,7 @@ import { contentTargets, parseKey, readTarget, SEO_LONG, targetKey } from "./tar
 
 beforeEach(async () => {
   await resetDb();
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => undefined);
   await seed(); // the editors' drafts, both languages
 });
 
@@ -29,9 +29,15 @@ async function firstProject() {
   const texts = await getDb()
     .select()
     .from(projectTranslations)
-    .where(eq(projectTranslations.projectId, project!.id));
-  const text = (locale: Locale) => texts.find((t) => t.locale === locale)!;
-  return { ...project!, en: text("en"), de: text("de") };
+    .where(eq(projectTranslations.projectId, project.id));
+  const text = (locale: Locale) => {
+    const found = texts.find((t) => t.locale === locale);
+    if (!found) {
+      throw new Error(`Missing ${locale} translation`);
+    }
+    return found;
+  };
+  return { ...project, en: text("en"), de: text("de") };
 }
 
 async function setProjectText(
@@ -53,11 +59,17 @@ async function setLeaf(section: "ui" | "seo", locale: Locale, path: string, valu
     .select()
     .from(contentDocuments)
     .where(and(eq(contentDocuments.section, section), eq(contentDocuments.locale, locale)));
-  const data = structuredClone(row!.data) as Record<string, unknown>;
+  const data = structuredClone(row.data) as Record<string, unknown>;
   const keys = path.split(".");
   let node = data;
-  for (const key of keys.slice(0, -1)) node = node[key] as Record<string, unknown>;
-  node[keys.at(-1)!] = value;
+  for (const key of keys.slice(0, -1)) {
+    node = node[key] as Record<string, unknown>;
+  }
+  const leafKey = keys.at(-1);
+  if (leafKey === undefined) {
+    throw new Error(`Invalid path: ${path}`);
+  }
+  node[leafKey] = value;
   await getDb()
     .update(contentDocuments)
     .set({ data })
@@ -69,7 +81,7 @@ async function leaf(section: "ui" | "seo", locale: Locale, path: string): Promis
     .select()
     .from(contentDocuments)
     .where(and(eq(contentDocuments.section, section), eq(contentDocuments.locale, locale)));
-  return path.split(".").reduce<unknown>((node, key) => (node as never)[key], row!.data) as string;
+  return path.split(".").reduce<unknown>((node, key) => (node as never)[key], row.data) as string;
 }
 
 async function addImage(
@@ -90,7 +102,7 @@ async function addImage(
       altDe: alt.de ?? null,
     })
     .returning({ id: mediaAssets.id });
-  return row!.id;
+  return row.id;
 }
 
 async function addPost(
@@ -98,16 +110,22 @@ async function addPost(
   translations: Partial<Record<Locale, { title: string; excerpt?: string; body?: string }>>,
 ) {
   const [post] = await getDb().insert(posts).values({ slug }).returning({ id: posts.id });
-  for (const [locale, text] of Object.entries(translations)) {
-    await getDb()
-      .insert(postTranslations)
-      .values({ postId: post!.id, locale: locale as Locale, excerpt: "", body: "", ...text });
-  }
-  return post!.id;
+  await Object.entries(translations).reduce(
+    (chain, [locale, text]) =>
+      chain.then(async () => {
+        await getDb()
+          .insert(postTranslations)
+          .values({ postId: post.id, locale: locale as Locale, excerpt: "", body: "", ...text });
+      }),
+    Promise.resolve(),
+  );
+  return post.id;
 }
 
-const keys = async (...args: Parameters<typeof contentTargets>) =>
-  (await contentTargets(...args)).map((t) => t.key);
+const keys = async (...args: Parameters<typeof contentTargets>) => {
+  const targets = await contentTargets(...args);
+  return targets.map((t) => t.key);
+};
 
 describe("the content agent's plan (plan phase 29)", () => {
   it("plans a translation for each text field filled in one language and empty in the other, both ways", async () => {
@@ -197,7 +215,8 @@ describe("the content agent's plan (plan phase 29)", () => {
 
     const alone = await contentTargets(["seo"], 100);
     expect(alone.map((t) => t.key)).toEqual(expect.arrayContaining([seoKey("en"), seoKey("de")]));
-    expect(alone.find((t) => t.key === seoKey("de"))!.source).toContain(project.de.name);
+    const deTarget = alone.find((t) => t.key === seoKey("de"));
+    expect(deTarget?.source).toContain(project.de.name);
 
     // The English one is over-long itself: not carried into German, drafted from the page.
     const overLong = await keys(["translations", "seo"], 100);
@@ -231,14 +250,18 @@ describe("the content agent's plan (plan phase 29)", () => {
     const project = await firstProject();
     await setProjectText(project.id, "de", { hook: "" });
     const key = `translations|project|${project.id}|hook|de`;
-    expect(parseKey(key)).toEqual({
+    const parsed = parseKey(key);
+    expect(parsed).toEqual({
       goal: "translations",
       kind: "project",
       entityId: project.id,
       field: "hook",
       locale: "de",
     });
-    expect(targetKey(parseKey(key)!)).toBe(key);
+    if (!parsed) {
+      throw new Error("Expected parsed key");
+    }
+    expect(targetKey(parsed)).toBe(key);
     expect(await readTarget(key, ["translations"])).toMatchObject({ gap: true, current: "" });
 
     await setProjectText(project.id, "de", { hook: "Ein Haken" });
@@ -259,7 +282,9 @@ describe("the content agent's plan (plan phase 29)", () => {
     const project = await firstProject();
     const glossary = await contentGlossary();
     expect(glossary).toContain(project.en.name);
-    for (const item of project.stack as string[]) expect(glossary).toContain(item);
+    for (const item of project.stack) {
+      expect(glossary).toContain(item);
+    }
     expect(new Set(glossary.map((t) => t.toLowerCase())).size).toBe(glossary.length);
     expect(glossary.length).toBeLessThanOrEqual(GLOSSARY_MAX);
   });

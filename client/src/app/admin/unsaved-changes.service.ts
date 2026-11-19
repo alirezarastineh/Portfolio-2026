@@ -39,7 +39,9 @@ export class UnsavedChangesService {
   /** Editors call this whenever their form's dirty state changes. */
   set(id: string, isDirty: boolean): void {
     this.dirty.update((current) => {
-      if (current.has(id) === isDirty) return current;
+      if (current.has(id) === isDirty) {
+        return current;
+      }
       const next = new Set(current);
       if (isDirty) {
         next.add(id);
@@ -68,10 +70,14 @@ export class UnsavedChangesService {
    * always-on handler disables the back/forward cache.
    */
   private syncBeforeUnload(): void {
-    if (!isPlatformBrowser(this.platform)) return;
+    if (!isPlatformBrowser(this.platform)) {
+      return;
+    }
 
     const shouldListen = this.dirty().size > 0;
-    if (shouldListen === this.listening) return;
+    if (shouldListen === this.listening) {
+      return;
+    }
 
     if (shouldListen) {
       globalThis.addEventListener("beforeunload", beforeUnloadHandler);
@@ -95,12 +101,18 @@ function beforeUnloadHandler(event: BeforeUnloadEvent): void {
 export const unsavedChangesGuard: CanDeactivateFn<unknown> = async (_page, _route, from, to) => {
   const unsaved = inject(UnsavedChangesService);
   // Under the sign-in dialog the page cannot be left: no second question over it.
-  if (inject(AdminSessionService, { optional: true })?.lost()) return false;
-  if (!unsaved.hasAny()) return true;
+  if (inject(AdminSessionService, { optional: true })?.lost()) {
+    return false;
+  }
+  if (!unsaved.hasAny()) {
+    return true;
+  }
   // Its query or fragment changing keeps the page and its edits (Words' filters, Find's row); the
   // router asks this guard then too. An entry edited in place (`?edit=<id>`, Experience) is a place,
   // and so is a file's panel (`?file=<id>`, Media), once open: opening one leaves nothing behind.
-  if (to?.url && from?.url && samePlace(from.url, to.url)) return true;
+  if (to?.url && from?.url && samePlace(from.url, to.url)) {
+    return true;
+  }
 
   const leave = await inject(ConfirmService).ask({
     title: "Discard unsaved changes?",
@@ -111,13 +123,15 @@ export const unsavedChangesGuard: CanDeactivateFn<unknown> = async (_page, _rout
     destructive: true,
   });
 
-  if (leave) unsaved.clearAll();
+  if (leave) {
+    unsaved.clearAll();
+  }
   return leave;
 };
 
 /** The page, the entry open in it (`edit`) and the file whose panel is open (`file`). */
 function placeOf(url: string): { path: string; edit: string; file: string } {
-  const [path = "", query = ""] = url.split("#")[0]!.split("?");
+  const [path = "", query = ""] = url.split("#")[0].split("?");
   const params = new URLSearchParams(query);
   return { path, edit: params.get("edit") ?? "", file: params.get("file") ?? "" };
 }

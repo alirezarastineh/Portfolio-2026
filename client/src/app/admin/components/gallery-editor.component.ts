@@ -71,7 +71,7 @@ const MAX = 30;
             <img
               [src]="preview(item.path)"
               alt=""
-              class="h-14 w-24 shrink-0 rounded border border-border object-cover"
+              class="h-14 w-24 shrink-0 rounded-sm border border-border object-cover"
             />
             <!-- The captions of the languages shown, each growing with its text. -->
             <div

@@ -10,7 +10,7 @@ function call(model: string, overrides: Partial<ModelCall> = {}): ModelCall {
     answerOnly: false,
     ttftMs: 400,
     usage: {
-      inputTokens: { total: 1_000, noCache: 400, cacheRead: 600, cacheWrite: 0 },
+      inputTokens: { total: 1000, noCache: 400, cacheRead: 600, cacheWrite: 0 },
       outputTokens: { total: 50, text: 50, reasoning: 0 },
     },
     finishReason: "stop",
@@ -60,7 +60,7 @@ describe("buildAnswerTrace", () => {
           model: "nemotron",
           answerOnly: false,
           ttftMs: 400,
-          tokens: { input: 1_000, cached: 600, output: 50, thoughts: 0 },
+          tokens: { input: 1000, cached: 600, output: 50, thoughts: 0 },
           finishReason: "tool-calls",
           passedOver: [{ model: "gemini-3.5-flash-lite", outcome: "rate-limited", ms: 120 }],
           tools: [
@@ -94,7 +94,7 @@ describe("buildAnswerTrace", () => {
         ],
       },
     ];
-    const input = buildAnswerTrace(recorded, trace).steps[0]!.tools[0]!.input;
+    const input = buildAnswerTrace(recorded, trace).steps[0].tools[0].input;
     expect(input).toContain("[email]");
     expect(input).toContain("[number]");
     expect(input).not.toContain("jane@example.com");
@@ -114,7 +114,7 @@ describe("buildAnswerTrace", () => {
         tools: [{ id: "t", name: "search_portfolio", input: {}, outcome: null, resultChars: 0 }],
       },
     ];
-    expect(buildAnswerTrace(recorded, trace).steps[0]!.tools[0]!.outcome).toBe("cut-off");
+    expect(buildAnswerTrace(recorded, trace).steps[0].tools[0].outcome).toBe("cut-off");
   });
 
   it("adds the step no model could answer, with what was tried", () => {
@@ -171,7 +171,7 @@ describe("buildAnswerTrace", () => {
         ],
       },
     ];
-    expect(buildAnswerTrace(recorded, trace).steps[0]!.tools[0]).toEqual({
+    expect(buildAnswerTrace(recorded, trace).steps[0].tools[0]).toEqual({
       name: "search_portfolio",
       input: '{"query":"llm ops"}',
       outcome: "ok",
@@ -183,7 +183,7 @@ describe("buildAnswerTrace", () => {
 
   it("records the core the answer read, when given", () => {
     const trace: Trace = { startedAt: 0, firstTokenAt: null, attempts: [], calls: [] };
-    const core = { locale: "de" as const, layout: "locale" as const, tokens: 1_557 };
+    const core = { locale: "de" as const, layout: "locale" as const, tokens: 1557 };
     expect(buildAnswerTrace([], trace, core)).toEqual({ v: 1, steps: [], core });
     expect(buildAnswerTrace([], trace)).not.toHaveProperty("core");
   });

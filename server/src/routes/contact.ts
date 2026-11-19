@@ -53,7 +53,9 @@ async function attachedConversation(ask: {
         eq(aiMessages.source, "terminal"),
       ),
     );
-  if (!answer) return null;
+  if (!answer) {
+    return null;
+  }
   const rows = await getDb()
     .select({
       question: aiMessages.questionRedacted,
@@ -93,7 +95,8 @@ const RETENTION_MS = 180 * 24 * 60 * 60 * 1000;
  */
 const processSalt = randomBytes(16).toString("hex");
 export function hashIp(ip: string): string {
-  const salt = process.env.IP_HASH_SALT?.trim() || processSalt;
+  const trimmedSalt = process.env.IP_HASH_SALT?.trim();
+  const salt = trimmedSalt === undefined || trimmedSalt === "" ? processSalt : trimmedSalt;
   return createHash("sha256").update(`${salt}:${ip}`).digest("hex");
 }
 
@@ -143,7 +146,9 @@ contactRouter.post(
     // A conversation that is not this visitor's is left out, never refused:
     // their message is what matters.
     const attached = body.ask ? await attachedConversation(body.ask) : null;
-    if (body.ask && !attached) console.warn("[contact] hand-off conversation not attached");
+    if (body.ask && !attached) {
+      console.warn("[contact] hand-off conversation not attached");
+    }
 
     const mailer = isMailerConfigured();
     const [stored] = await getDb()
@@ -161,15 +166,15 @@ contactRouter.post(
       })
       .returning({ id: contactMessages.id });
 
-    if (!mailer) {
-      console.warn("[contact] RESEND_API_KEY missing; message stored, email skipped");
-    } else {
+    if (mailer) {
       const result = await sendContactEmail({
         name: body.name,
         email: body.email,
         message: body.message,
       });
-      if (!result.ok) console.error("[contact] send failed:", result.error);
+      if (!result.ok) {
+        console.error("[contact] send failed:", result.error);
+      }
       await getDb()
         .update(contactMessages)
         .set(
@@ -177,7 +182,9 @@ contactRouter.post(
             ? { mailStatus: "sent" }
             : { mailStatus: "failed", mailError: (result.error ?? "send_failed").slice(0, 500) },
         )
-        .where(eq(contactMessages.id, stored!.id));
+        .where(eq(contactMessages.id, stored.id));
+    } else {
+      console.warn("[contact] RESEND_API_KEY missing; message stored, email skipped");
     }
 
     // Stored is what matters to the sender: the message is safe even when the
@@ -195,7 +202,9 @@ export async function pruneContactMessages(): Promise<void> {
 let pruneTimer: NodeJS.Timeout | undefined;
 
 export function startContactPruning(): void {
-  if (pruneTimer) return;
+  if (pruneTimer) {
+    return;
+  }
   pruneTimer = setInterval(
     () => {
       void pruneContactMessages().catch((error) =>

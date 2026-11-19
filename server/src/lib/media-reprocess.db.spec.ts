@@ -28,7 +28,7 @@ async function legacyAsset(bytes: Buffer, ext: string): Promise<{ id: string; fi
       checksumSha256: sha256(bytes),
     })
     .returning({ id: mediaAssets.id });
-  return { id: row!.id, filename };
+  return { id: row.id, filename };
 }
 
 async function gpsPhoto(): Promise<Buffer> {
@@ -41,6 +41,21 @@ async function gpsPhoto(): Promise<Buffer> {
     .toBuffer();
 }
 
+function compareStrings(a: string, b: string): number {
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+}
+
+function readStoredMedia(filename: string): Buffer {
+  const path = resolveMediaPath(filename);
+  if (!path) {
+    throw new Error(`expected resolved media path for ${filename}`);
+  }
+  return readFileSync(path);
+}
+
 describe("reprocessMedia", () => {
   it("strips EXIF from an old upload and adds its variants and blur", async () => {
     const original = await gpsPhoto();
@@ -49,28 +64,30 @@ describe("reprocessMedia", () => {
     const summary = await reprocessMedia();
     expect(summary).toEqual({ processed: [asset.filename], missing: [], failed: [] });
 
-    const stored = readFileSync(resolveMediaPath(asset.filename)!);
-    expect((await sharp(stored).metadata()).exif).toBeUndefined();
+    const stored = readStoredMedia(asset.filename);
+    const meta = await sharp(stored).metadata();
+    expect(meta.exif).toBeUndefined();
     expect(stored.includes(Buffer.from("PhoneCo"))).toBe(false);
 
     const [row] = await getDb().select().from(mediaAssets).where(eq(mediaAssets.id, asset.id));
     expect(row).toMatchObject({ width: 1000, height: 700, byteSize: stored.length });
-    expect(row!.blurDataUri).toMatch(/^data:image\/webp;base64,/);
+    expect(row.blurDataUri).toMatch(/^data:image\/webp;base64,/);
     // The checksum is of the uploaded bytes and stays, so re-uploading still dedupes.
-    expect(row!.checksumSha256.equals(sha256(original))).toBe(true);
+    expect(row.checksumSha256.equals(sha256(original))).toBe(true);
 
     const variants = await getDb()
       .select()
       .from(mediaVariants)
       .where(eq(mediaVariants.assetId, asset.id));
-    expect(variants.map((v) => `${v.format}:${v.width}`).sort()).toEqual([
+    expect(variants.map((v) => `${v.format}:${v.width}`).sort(compareStrings)).toEqual([
       "avif:480",
       "avif:768",
       "webp:480",
       "webp:768",
     ]);
-    for (const v of variants)
-      expect(readFileSync(resolveMediaPath(v.filename)!)).toHaveLength(v.byteSize);
+    for (const v of variants) {
+      expect(readStoredMedia(v.filename)).toHaveLength(v.byteSize);
+    }
   });
 
   it("does nothing on a second run", async () => {
@@ -85,7 +102,7 @@ describe("reprocessMedia", () => {
 
     const summary = await reprocessMedia({ dryRun: true });
     expect(summary.processed).toEqual([asset.filename]);
-    expect(readFileSync(resolveMediaPath(asset.filename)!).equals(original)).toBe(true);
+    expect(readStoredMedia(asset.filename).equals(original)).toBe(true);
     expect(await getDb().select().from(mediaVariants)).toEqual([]);
   });
 
@@ -101,7 +118,7 @@ describe("reprocessMedia", () => {
       })
       .returning({ filename: mediaAssets.filename });
 
-    expect(await reprocessMedia()).toEqual({ processed: [], missing: [row!.filename], failed: [] });
+    expect(await reprocessMedia()).toEqual({ processed: [], missing: [row.filename], failed: [] });
   });
 
   it("leaves GIFs alone", async () => {
@@ -112,7 +129,8 @@ describe("reprocessMedia", () => {
       .toBuffer();
     const asset = await legacyAsset(gif, "gif");
 
-    expect((await reprocessMedia()).processed).toEqual([]);
-    expect(readFileSync(resolveMediaPath(asset.filename)!).equals(gif)).toBe(true);
+    const summary = await reprocessMedia();
+    expect(summary.processed).toEqual([]);
+    expect(readStoredMedia(asset.filename).equals(gif)).toBe(true);
   });
 });

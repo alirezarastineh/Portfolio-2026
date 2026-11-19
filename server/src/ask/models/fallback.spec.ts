@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { LanguageModelV4CallOptions, LanguageModelV4StreamPart } from "@ai-sdk/provider";
+import type {
+  LanguageModelV4,
+  LanguageModelV4CallOptions,
+  LanguageModelV4StreamPart,
+} from "@ai-sdk/provider";
 import { MockLanguageModelV4 } from "ai/test";
 
 import {
@@ -40,16 +44,21 @@ function fallback(entries: FallbackOptions["entries"], extra: Partial<FallbackOp
     trace,
     // Far from any answer here: a loaded CI box took over 200 ms to deliver a mock's first
     // chunk and failed over. The timeout tests set their own deadline.
-    firstChunkTimeoutMs: 5_000,
-    requestTimeoutMs: 2_000,
+    firstChunkTimeoutMs: 5000,
+    requestTimeoutMs: 2000,
     maxRetries: 1,
     retryBaseDelayMs: 1,
     retryMaxDelayMs: 2,
     estimateTokens: () => 100,
-    sleep: async () => undefined,
+    sleep: () => Promise.resolve(),
     ...extra,
   });
   return { model, trace };
+}
+
+async function streamOf(model: LanguageModelV4, options: LanguageModelV4CallOptions) {
+  const res = await model.doStream(options);
+  return drain(res.stream);
 }
 
 function textOf(parts: LanguageModelV4StreamPart[]): string {
@@ -64,20 +73,20 @@ describe("createFallbackModel", () => {
     const b = scripted([textTurn("unused")]);
     const { model, trace } = fallback([mockEntry("a", a.model), mockEntry("b", b.model)]);
 
-    const parts = await drain((await model.doStream(call)).stream);
+    const parts = await streamOf(model, call);
 
     expect(textOf(parts)).toBe("Hello world");
     expect(b.calls).toHaveLength(0);
     expect(trace.attempts.map((x) => x.outcome)).toEqual(["ok"]);
     expect(trace.calls[0]).toMatchObject({ model: "a", finishReason: "stop" });
-    expect(trace.calls[0]!.usage?.inputTokens.total).toBe(100);
+    expect(trace.calls[0].usage?.inputTokens.total).toBe(100);
     expect(trace.firstTokenAt).not.toBeNull();
   });
 
   it("times the first token by the first part a visitor could see, not by a thought", async () => {
     // Plan phase 23: the admin's answers return thoughts first; a thought still meets the
     // first-chunk deadline, but the first token is the text's, as in a visitor's answer.
-    let clock = 1_000;
+    let clock = 1000;
     let push!: ReadableStreamDefaultController<LanguageModelV4StreamPart>;
     const parts = new ReadableStream<LanguageModelV4StreamPart>({
       start: (c) => {
@@ -96,7 +105,7 @@ describe("createFallbackModel", () => {
     const { stream } = await model.doStream(call);
     expect(trace.firstTokenAt).toBeNull();
 
-    clock = 1_500;
+    clock = 1500;
     push.enqueue({ type: "reasoning-end", id: "r" });
     push.enqueue({ type: "text-start", id: "t" });
     push.enqueue({ type: "text-delta", id: "t", delta: "Hello" });
@@ -107,8 +116,8 @@ describe("createFallbackModel", () => {
 
     expect(textOf(out)).toBe("Hello");
     expect(out.some((p) => p.type === "reasoning-delta")).toBe(true);
-    expect(trace.calls[0]!.ttftMs).toBe(500);
-    expect(trace.firstTokenAt).toBe(1_500);
+    expect(trace.calls[0].ttftMs).toBe(500);
+    expect(trace.firstTokenAt).toBe(1500);
   });
 
   it("holds a model asked for its thoughts to the visitors' deadline for its first text", async () => {
@@ -128,12 +137,14 @@ describe("createFallbackModel", () => {
                 c.enqueue({ type: "reasoning-end", id: "r" });
                 setTimeout(() => {
                   try {
-                    for (const part of textTurn("slow").slice(1)) c.enqueue(part);
+                    for (const part of textTurn("slow").slice(1)) {
+                      c.enqueue(part);
+                    }
                     c.close();
                   } catch {
                     // Cancelled: the fallback moved on.
                   }
-                }, 2_000);
+                }, 2000);
               },
             }),
           }),
@@ -148,7 +159,7 @@ describe("createFallbackModel", () => {
       ],
       deadline,
     );
-    expect(textOf(await drain((await asked.model.doStream(call)).stream))).toBe("fast");
+    expect(textOf(await streamOf(asked.model, call))).toBe("fast");
     expect(asked.trace.attempts.map((x) => `${x.model}:${x.outcome}`)).toEqual([
       "a:timeout",
       "b:ok",
@@ -159,7 +170,7 @@ describe("createFallbackModel", () => {
       [mockEntry("c", thinker("c")), mockEntry("d", scripted([textTurn("unused")]).model)],
       deadline,
     );
-    const parts = await drain((await unasked.model.doStream(call)).stream);
+    const parts = await streamOf(unasked.model, call);
     expect(textOf(parts)).toBe("slow");
     expect(unasked.trace.attempts.map((x) => `${x.model}:${x.outcome}`)).toEqual(["c:ok"]);
   });
@@ -169,7 +180,7 @@ describe("createFallbackModel", () => {
     const b = scripted([textTurn("from b")]);
     const first = fallback([mockEntry("a", a.model), mockEntry("b", b.model)]);
 
-    expect(textOf(await drain((await first.model.doStream(call)).stream))).toBe("from b");
+    expect(textOf(await streamOf(first.model, call))).toBe("from b");
     expect(first.trace.attempts.map((x) => `${x.model}:${x.outcome}`)).toEqual([
       "a:rate-limited",
       "b:ok",
@@ -178,14 +189,17 @@ describe("createFallbackModel", () => {
 
     // The breaker is open: the next answer skips `a` without calling it.
     const second = fallback([mockEntry("a", a.model), mockEntry("b", b.model)]);
-    await drain((await second.model.doStream(call)).stream);
+    await streamOf(second.model, call);
     expect(a.calls).toHaveLength(1);
     expect(second.trace.attempts[0]).toMatchObject({ model: "a", outcome: "skipped-open" });
 
     const [state] = breakerSnapshot(["a"]);
-    expect(state!.state).toBe("open");
+    expect(state.state).toBe("open");
     // Retry-After (120 s) outlasts the default pause.
-    expect(Date.parse(state!.openUntil!) - Date.now()).toBeGreaterThan(100_000);
+    expect(state.openUntil).not.toBeNull();
+    if (state.openUntil) {
+      expect(Date.parse(state.openUntil) - Date.now()).toBeGreaterThan(100_000);
+    }
   });
 
   it("can honor Retry-After once for an eval before opening the breaker", async () => {
@@ -195,23 +209,26 @@ describe("createFallbackModel", () => {
       modelId: "flaky-rate-limit",
       doStream: async (options) => {
         calls++;
-        if (calls === 1) throw apiError(429, { "retry-after": "120" });
+        if (calls === 1) {
+          throw apiError(429, { "retry-after": "120" });
+        }
         return recovered.model.doStream(options);
       },
     });
     const waits: number[] = [];
     const { model, trace } = fallback([mockEntry("a", flaky)], {
       rateLimitRetry: { maxRetries: 1, defaultDelayMs: 60_000, maxDelayMs: 30_000 },
-      sleep: async (ms) => {
+      sleep: (ms) => {
         waits.push(ms);
+        return Promise.resolve();
       },
     });
 
-    expect(textOf(await drain((await model.doStream(call)).stream))).toBe("recovered");
+    expect(textOf(await streamOf(model, call))).toBe("recovered");
     expect(calls).toBe(2);
     expect(waits).toEqual([30_000]);
     expect(trace.attempts.map((x) => x.outcome)).toEqual(["ok"]);
-    expect(breakerSnapshot(["a"])[0]!.state).toBe("closed");
+    expect(breakerSnapshot(["a"])[0].state).toBe("closed");
   });
 
   it("stops a rate-limit wait as soon as the request is aborted", async () => {
@@ -228,7 +245,14 @@ describe("createFallbackModel", () => {
       sleep: (_ms, signal?: AbortSignal) =>
         new Promise<void>((_resolve, reject) => {
           waitStarted();
-          signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+          signal?.addEventListener(
+            "abort",
+            () => {
+              const reason: unknown = signal.reason;
+              reject(reason instanceof Error ? reason : new Error("aborted"));
+            },
+            { once: true },
+          );
         }),
     });
 
@@ -237,7 +261,9 @@ describe("createFallbackModel", () => {
     controller.abort(cancelled);
     const outcome = await Promise.race([
       Promise.resolve(request).catch((error: unknown) => error),
-      new Promise<string>((resolve) => setTimeout(() => resolve("still waiting"), 25)),
+      new Promise<string>((resolve) => {
+        setTimeout(() => resolve("still waiting"), 25);
+      }),
     ]);
 
     expect(outcome).toBe(cancelled);
@@ -251,7 +277,7 @@ describe("createFallbackModel", () => {
       maxRetries: 2,
     });
 
-    await drain((await model.doStream(call)).stream);
+    await streamOf(model, call);
 
     expect(a.calls).toHaveLength(3);
     expect(trace.attempts.map((x) => x.outcome)).toEqual(["server-error", "ok"]);
@@ -264,10 +290,10 @@ describe("createFallbackModel", () => {
       maxRetries: 3,
     });
 
-    await drain((await model.doStream(call)).stream);
+    await streamOf(model, call);
 
     expect(a.calls).toHaveLength(1);
-    expect(trace.attempts[0]!.outcome).toBe("client-error");
+    expect(trace.attempts[0].outcome).toBe("client-error");
   });
 
   it("falls back when a model sends nothing before the first-chunk timeout", async () => {
@@ -277,15 +303,15 @@ describe("createFallbackModel", () => {
     // margins: on a loaded CI box (Woodpecker #38) the mock missed 30 ms, and mocks have
     // taken over 200 ms there.
     const { model, trace } = fallback([mockEntry("a", a.model), mockEntry("b", b.model)], {
-      firstChunkTimeoutMs: 1_000,
+      firstChunkTimeoutMs: 1000,
     });
 
-    const parts = await drain((await model.doStream(call)).stream);
+    const parts = await streamOf(model, call);
 
     expect(textOf(parts)).toBe("fast");
     expect(trace.attempts.map((x) => x.outcome)).toEqual(["timeout", "ok"]);
     // The silent request was aborted, not left running.
-    expect(a.calls[0]!.abortSignal?.aborted).toBe(true);
+    expect(a.calls[0].abortSignal?.aborted).toBe(true);
   });
 
   it("never switches once text has streamed: the stream ends with an error instead", async () => {
@@ -293,17 +319,15 @@ describe("createFallbackModel", () => {
     const b = scripted([textTurn("second answer")]);
     const { model, trace } = fallback([mockEntry("a", a.model), mockEntry("b", b.model)]);
 
-    const parts = await drain((await model.doStream(call)).stream);
+    const parts = await streamOf(model, call);
 
     expect(textOf(parts)).toBe("Partial ");
     expect(parts.at(-1)?.type).toBe("error");
     // Named the provider's failure: an outage to the evals and the visitor, not the model's.
     const last = parts.at(-1) as { error: unknown };
     expect(last.error).toBeInstanceOf(ProviderStreamError);
-    expect(last.error).toMatchObject({
-      model: "a",
-      cause: expect.objectContaining({ statusCode: 500 }),
-    });
+    expect(last.error).toMatchObject({ model: "a" });
+    expect((last.error as ProviderStreamError).cause).toMatchObject({ statusCode: 500 });
     expect(errorCode(last.error)).toBe("unavailable");
     expect(b.calls).toHaveLength(0);
     expect(trace.calls.map((c) => c.model)).toEqual(["a"]);
@@ -313,25 +337,26 @@ describe("createFallbackModel", () => {
     const small = scripted([textTurn("summary answer")]);
     const skipped = fallback([mockEntry("glm", small.model, { tools: false })]);
     await expect(skipped.model.doStream(withTools)).rejects.toBeInstanceOf(AllModelsFailedError);
-    expect(skipped.trace.attempts[0]!.outcome).toBe("skipped-capability");
+    expect(skipped.trace.attempts[0].outcome).toBe("skipped-capability");
 
     const rebuilt = fallback([mockEntry("glm", small.model, { tools: false })], {
       answerOnly: (options) => ({ ...options, tools: undefined }),
     });
-    await drain((await rebuilt.model.doStream(withTools)).stream);
-    expect(small.calls.at(-1)!.tools).toBeUndefined();
-    expect(rebuilt.trace.calls[0]!.answerOnly).toBe(true);
+    await streamOf(rebuilt.model, withTools);
+    expect(small.calls.at(-1)).toBeDefined();
+    expect(small.calls.at(-1)?.tools).toBeUndefined();
+    expect(rebuilt.trace.calls[0].answerOnly).toBe(true);
   });
 
   it("skips a model whose context window cannot hold the prompt", async () => {
     const tiny = scripted([textTurn("x")]);
     const big = scripted([textTurn("fits")]);
     const { model, trace } = fallback(
-      [mockEntry("tiny", tiny.model, { contextWindow: 1_000 }), mockEntry("big", big.model)],
-      { estimateTokens: () => 5_000 },
+      [mockEntry("tiny", tiny.model, { contextWindow: 1000 }), mockEntry("big", big.model)],
+      { estimateTokens: () => 5000 },
     );
 
-    await drain((await model.doStream(call)).stream);
+    await streamOf(model, call);
 
     expect(tiny.calls).toHaveLength(0);
     expect(trace.attempts.map((x) => x.outcome)).toEqual(["skipped-context", "ok"]);
@@ -346,7 +371,7 @@ describe("createFallbackModel", () => {
 
     const error = await model.doStream(call).then(
       () => null,
-      (e: unknown) => e,
+      (error_: unknown) => error_,
     );
     expect(error).toBeInstanceOf(AllModelsFailedError);
     expect((error as AllModelsFailedError).attempts.map((a) => `${a.model}:${a.outcome}`)).toEqual([
@@ -367,7 +392,7 @@ describe("createFallbackModel", () => {
       ],
       { maxRetries: 0, onFailover: (next) => moves.push(next) },
     );
-    expect(textOf(await drain((await model.doStream(call)).stream))).toBe("From c.");
+    expect(textOf(await streamOf(model, call))).toBe("From c.");
     expect(moves).toEqual([
       { position: 2, of: 3 },
       { position: 3, of: 3 },
@@ -382,7 +407,7 @@ describe("createFallbackModel", () => {
       ],
       { onFailover: (next) => quiet.push(next) },
     );
-    expect(textOf(await drain((await skipping.doStream(call)).stream))).toBe("From d.");
+    expect(textOf(await streamOf(skipping, call))).toBe("From d.");
     expect(quiet).toEqual([]);
   });
 
@@ -404,11 +429,8 @@ describe("createFallbackModel", () => {
       providerOptions: { google: { thinkingConfig: { thinkingLevel: "low" } } },
     };
     const { model } = fallback([entry]);
-    await drain(
-      (await model.doStream({ ...call, providerOptions: { google: { labels: { app: "x" } } } }))
-        .stream,
-    );
-    expect(a.calls[0]!.providerOptions).toEqual({
+    await streamOf(model, { ...call, providerOptions: { google: { labels: { app: "x" } } } });
+    expect(a.calls[0].providerOptions).toEqual({
       google: { labels: { app: "x" }, thinkingConfig: { thinkingLevel: "low" } },
     });
   });
@@ -417,10 +439,12 @@ describe("createFallbackModel", () => {
 describe("circuit breaker", () => {
   it("opens after three failures and lets one probe through once the pause is over", () => {
     const t0 = 1_000_000;
-    for (let i = 0; i < 2; i++) recordFailure("m", { error: "boom" }, t0);
+    for (let i = 0; i < 2; i++) {
+      recordFailure("m", { error: "boom" }, t0);
+    }
     expect(tryAcquire("m", t0)).toBe(true);
     recordFailure("m", { error: "boom" }, t0);
-    expect(tryAcquire("m", t0 + 1_000)).toBe(false);
+    expect(tryAcquire("m", t0 + 1000)).toBe(false);
 
     const later = t0 + 61_000;
     expect(tryAcquire("m", later)).toBe(true);
@@ -428,7 +452,7 @@ describe("circuit breaker", () => {
     expect(tryAcquire("m", later)).toBe(false);
     // A failed probe opens it again at once.
     recordFailure("m", { error: "still down" }, later);
-    expect(tryAcquire("m", later + 1_000)).toBe(false);
+    expect(tryAcquire("m", later + 1000)).toBe(false);
   });
 });
 

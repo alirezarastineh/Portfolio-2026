@@ -54,7 +54,14 @@ export async function insertProposal(proposal: NewProposal & { runId: string }):
     .values(proposal)
     .onConflictDoNothing()
     .returning({ id: aiProposals.id });
-  return row?.id ?? (await proposalFor(proposal.runId, proposal))!.id;
+  if (row) {
+    return row.id;
+  }
+  const existing = await proposalFor(proposal.runId, proposal);
+  if (!existing) {
+    throw new Error("Proposal conflict could not be resolved");
+  }
+  return existing.id;
 }
 
 /** The proposals, newest first, of a run or in one of some statuses. */
@@ -63,8 +70,12 @@ export async function listProposals(
   limit = 200,
 ): Promise<Proposal[]> {
   const where: SQL[] = [];
-  if (filter.runId) where.push(eq(aiProposals.runId, filter.runId));
-  if (filter.statuses?.length) where.push(inArray(aiProposals.status, [...filter.statuses]));
+  if (filter.runId) {
+    where.push(eq(aiProposals.runId, filter.runId));
+  }
+  if (filter.statuses?.length) {
+    where.push(inArray(aiProposals.status, [...filter.statuses]));
+  }
   return getDb()
     .select()
     .from(aiProposals)

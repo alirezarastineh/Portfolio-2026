@@ -1,8 +1,12 @@
 import type { MiddlewareHandler } from "hono";
 
 function logLevel(status: number): "error" | "warn" | "info" {
-  if (status >= 500) return "error";
-  if (status >= 400) return "warn";
+  if (status >= 500) {
+    return "error";
+  }
+  if (status >= 400) {
+    return "warn";
+  }
   return "info";
 }
 
@@ -17,7 +21,9 @@ export const requestLog: MiddlewareHandler = async (c, next) => {
   await next();
 
   // The container healthcheck polls every 10s; logging it would drown the rest.
-  if (c.req.path === "/health") return;
+  if (c.req.path === "/health") {
+    return;
+  }
 
   const status = c.res.status;
   console.log(

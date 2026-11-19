@@ -38,7 +38,9 @@ const warned = new Set<string>();
 
 export function priceOf(model: string, at: Date): Price {
   // OpenRouter's free variants carry the suffix in their id.
-  if (model.endsWith(":free")) return FREE[0]!;
+  if (model.endsWith(":free")) {
+    return FREE[0];
+  }
   const table = PRICES[model];
   if (!table) {
     if (!warned.has(model)) {
@@ -48,8 +50,12 @@ export function priceOf(model: string, at: Date): Price {
     return UNKNOWN;
   }
   const day = at.toISOString().slice(0, 10);
-  let current = table[0]!;
-  for (const price of table) if (price.from <= day) current = price;
+  let current = table[0];
+  for (const price of table) {
+    if (price.from <= day) {
+      current = price;
+    }
+  }
   return current;
 }
 
@@ -61,7 +67,9 @@ export interface TokenCounts {
 }
 
 export function tokenCounts(usage: LanguageModelV4Usage | null | undefined): TokenCounts {
-  if (!usage) return { input: 0, cached: 0, output: 0, thoughts: 0 };
+  if (!usage) {
+    return { input: 0, cached: 0, output: 0, thoughts: 0 };
+  }
   const thoughts = usage.outputTokens.reasoning ?? 0;
   return {
     input: usage.inputTokens.total ?? 0,

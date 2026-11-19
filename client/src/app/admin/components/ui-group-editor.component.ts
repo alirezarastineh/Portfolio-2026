@@ -167,7 +167,9 @@ export class UiGroupEditorComponent implements OnInit {
   protected readonly livePreview = computed<LiveCompose | null>(() => {
     const value = this.value();
     const group = this.group();
-    if (!value || !this.live()) return null;
+    if (!value || !this.live()) {
+      return null;
+    }
     return (base, locale) => withUi(base, locale, { [group]: value });
   });
 
@@ -183,7 +185,7 @@ export class UiGroupEditorComponent implements OnInit {
   private readonly ui = inject(UiSectionService);
   private readonly unsaved = inject(UnsavedChangesService);
   private readonly confirm = inject(ConfirmService);
-  private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   /** The review, for the trace's draft state; absent in unit tests. */
   private readonly pulse = inject(AdminPulseService, { optional: true });
   private readonly previewPanel = inject(LivePreviewService, { optional: true });
@@ -228,7 +230,9 @@ export class UiGroupEditorComponent implements OnInit {
    */
   readonly value = computed<Record<Locale, StringRecord> | null>(() => {
     this.revision();
-    if (!this.pristine) return null;
+    if (!this.pristine) {
+      return null;
+    }
     const raw = this.form.getRawValue() as Record<Locale, StringRecord>;
     return { en: { ...this.pristine.en, ...raw.en }, de: { ...this.pristine.de, ...raw.de } };
   });
@@ -244,8 +248,11 @@ export class UiGroupEditorComponent implements OnInit {
     for (const field of this.shown()) {
       const title = field.section ?? this.title();
       const last = sections.at(-1);
-      if (last?.title === title) last.fields.push(field);
-      else sections.push({ id: title.toLowerCase().replaceAll(" ", "-"), title, fields: [field] });
+      if (last?.title === title) {
+        last.fields.push(field);
+      } else {
+        sections.push({ id: title.toLowerCase().replaceAll(" ", "-"), title, fields: [field] });
+      }
     }
     return sections;
   });
@@ -274,7 +281,9 @@ export class UiGroupEditorComponent implements OnInit {
 
   /** Fields saved to the draft and not live; null until the review or a save here says. */
   protected readonly notLive = computed(() => {
-    if (!this.pulse?.marks() && this.savedHere().size === 0) return null;
+    if (!this.pulse?.marks() && this.savedHere().size === 0) {
+      return null;
+    }
     return Object.values(this.trace()).filter((state) => state === "draft").length;
   });
 
@@ -308,7 +317,7 @@ export class UiGroupEditorComponent implements OnInit {
       },
       current: () => {
         this.revision();
-        return this.loaded() ? (this.form.getRawValue() as Record<Locale, StringRecord>) : null;
+        return this.loaded() ? this.form.getRawValue() : null;
       },
       restore: (value) => {
         this.form.patchValue(value);
@@ -322,12 +331,14 @@ export class UiGroupEditorComponent implements OnInit {
   // (NG0950). By ngOnInit every input is bound.
   ngOnInit(): void {
     const stored = storedView(this.group());
-    if (stored) this.view.set(stored);
+    if (stored) {
+      this.view.set(stored);
+    }
     void this.load();
   }
 
   protected control(locale: Locale, key: string): FormControl<string> {
-    return this.form.controls[locale].controls[key] as FormControl<string>;
+    return this.form.controls[locale].controls[key];
   }
 
   /** After a failed load: asks again, with the placeholder back meanwhile. */
@@ -342,7 +353,9 @@ export class UiGroupEditorComponent implements OnInit {
     this.loading.set(false);
 
     // The page says so, with a retry; `loaded` stays false.
-    if (!loaded) return;
+    if (!loaded) {
+      return;
+    }
 
     // Controls are added here rather than declared up front because the field
     // list is an input and is not known until the caller binds it.
@@ -351,8 +364,11 @@ export class UiGroupEditorComponent implements OnInit {
       const group = this.form.controls[locale];
       for (const field of this.fields()) {
         const text = value?.[field.key] ?? "";
-        if (group.controls[field.key]) group.controls[field.key]!.reset(text);
-        else group.addControl(field.key, this.fb.nonNullable.control(text));
+        if (group.controls[field.key]) {
+          group.controls[field.key].reset(text);
+        } else {
+          group.addControl(field.key, this.fb.nonNullable.control(text));
+        }
       }
     }
 
@@ -362,7 +378,7 @@ export class UiGroupEditorComponent implements OnInit {
       de: loaded.value.de as unknown as StringRecord,
     };
     this.form.markAsPristine();
-    this.baseline = this.form.getRawValue() as Record<Locale, StringRecord>;
+    this.baseline = this.form.getRawValue();
     this.revision.update((v) => v + 1);
     this.unsaved.clear(`ui:${this.group()}`);
     this.loaded.set(true);
@@ -370,7 +386,9 @@ export class UiGroupEditorComponent implements OnInit {
 
   /** Back to what is saved; the toast's Undo brings the edits back. */
   discard(): () => void {
-    if (!this.pristine || !this.baseline) return () => undefined;
+    if (!this.pristine || !this.baseline) {
+      return () => undefined;
+    }
     const edits = this.form.getRawValue();
     this.form.reset(this.baseline);
     this.form.markAsPristine();
@@ -386,8 +404,12 @@ export class UiGroupEditorComponent implements OnInit {
 
   /** Resolves to whether the group is saved (true too when there was nothing to save). */
   async save(): Promise<boolean> {
-    if (this.saving()) return false;
-    if (!this.dirty()) return true;
+    if (this.saving()) {
+      return false;
+    }
+    if (!this.dirty()) {
+      return true;
+    }
     this.saving.set(true);
 
     const raw = this.form.getRawValue() as Record<Locale, StringRecord>;
@@ -406,8 +428,11 @@ export class UiGroupEditorComponent implements OnInit {
 
     if (!result.ok) {
       if (result.reason === "stale") {
-        if (await askStale(this.confirm)) await this.load();
-        else this.updatedAt = result.version ?? this.updatedAt;
+        if (await askStale(this.confirm)) {
+          await this.load();
+        } else {
+          this.updatedAt = result.version ?? this.updatedAt;
+        }
       } else if (result.reason === "invalid") {
         const unplaced = applyIssues(result.issues, ([, locale, key]) =>
           isLocale(locale) && typeof key === "string"
@@ -457,6 +482,8 @@ export class UiGroupEditorComponent implements OnInit {
     const shown = this.shownView();
     const hidden = locales.find((l): l is Locale => isLocale(l) && shown !== "both" && l !== shown);
     // One language at a time on a narrow editor: the one with the problem.
-    if (hidden) this.view.set(this.wide() ? "both" : hidden);
+    if (hidden) {
+      this.view.set(this.wide() ? "both" : hidden);
+    }
   }
 }

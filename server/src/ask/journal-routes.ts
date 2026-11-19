@@ -65,7 +65,9 @@ journalRouter.get(
       JournalStatus,
       number
     >;
-    for (const row of counted) counts[row.status] = row.n;
+    for (const row of counted) {
+      counts[row.status] = row.n;
+    }
     return c.json({ entries: await views(rows), counts });
   },
 );
@@ -84,38 +86,47 @@ const diagnoseInput = z.object({
 journalRouter.post("/diagnose", zValidator("json", diagnoseInput, invalid), async (c) => {
   const { messageId, expected } = c.req.valid("json");
   const answer = await loadAnswer(messageId);
-  if (!answer) return c.json({ error: "not_found" }, 404);
+  if (!answer) {
+    return c.json({ error: "not_found" }, 404);
+  }
   const existing = await entryFor(messageId);
   if (existing && existing.status !== "proposed") {
     return c.json({ error: "already_journaled", detail: { id: existing.id } }, 409);
   }
   const corpora = await loadCorpora(answer);
-  if (!corpora.snapshot && !corpora.live) return c.json({ error: "corpus_unavailable" }, 503);
+  if (!corpora.snapshot && !corpora.live) {
+    return c.json({ error: "corpus_unavailable" }, 503);
+  }
   const existingNamed = existing ? namedIn(existing.diagnosis) : null;
   const named = expected === undefined ? existingNamed : expected;
   if (named && !namesKnownDocument(corpora, answer, named)) {
     return c.json({ error: "unknown_document" }, 400);
   }
   const diagnosis = diagnose({ answer, ...corpora, expected: named, replay: existing?.replay });
-  const entry = existing
-    ? await reanalysed(existing, diagnosis)
-    : await createEntry(messageId, diagnosis);
+  if (!existing) {
+    const entry = await createEntry(messageId, diagnosis);
+    const [view] = await views([entry]);
+    return c.json({ entry: view }, 201);
+  }
+  const entry = await reanalysed(existing, diagnosis);
   // Decided by the admin in between: it is theirs now.
-  if (!entry) return c.json({ error: "already_journaled", detail: { id: existing!.id } }, 409);
+  if (!entry) {
+    return c.json({ error: "already_journaled", detail: { id: existing.id } }, 409);
+  }
   const [view] = await views([entry]);
-  return c.json({ entry: view }, existing ? 200 : 201);
+  return c.json({ entry: view }, 200);
 });
 
 const text = (max: number) => z.string().trim().max(max);
 const patchInput = z.object({
   status: z.enum(JOURNAL_STATUSES).optional(),
-  rootCause: text(2_000).optional(),
+  rootCause: text(2000).optional(),
   fixType: z.enum(FIX_TYPES).nullable().optional(),
-  fix: text(2_000).optional(),
+  fix: text(2000).optional(),
   /** A FAQ id, a prompt version, a document id, a model, a setting. */
   fixRef: text(200).nullable().optional(),
   caseId: z.uuid().nullable().optional(),
-  heuristic: text(1_000).optional(),
+  heuristic: text(1000).optional(),
 });
 
 /**
@@ -127,7 +138,9 @@ const patchInput = z.object({
 journalRouter.patch("/:id", idParam, zValidator("json", patchInput, invalid), async (c) => {
   const patch = c.req.valid("json");
   const row = await getEntry(c.req.valid("param").id);
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
   const status = patch.status ?? row.status;
   if (status !== row.status && !TRANSITIONS[row.status].includes(status)) {
     return c.json({ error: "bad_transition" }, 409);
@@ -137,17 +150,22 @@ journalRouter.patch("/:id", idParam, zValidator("json", patchInput, invalid), as
       .select({ id: aiEvalCases.id })
       .from(aiEvalCases)
       .where(eq(aiEvalCases.id, patch.caseId));
-    if (!found) return c.json({ error: "unknown_case" }, 400);
+    if (!found) {
+      return c.json({ error: "unknown_case" }, 400);
+    }
   }
+  const nextFixRef = patch.fixRef === "" ? null : patch.fixRef;
   const fields = {
     rootCause: patch.rootCause ?? row.rootCause,
     heuristic: patch.heuristic ?? row.heuristic,
     fixType: patch.fixType === undefined ? row.fixType : patch.fixType,
-    fixRef: patch.fixRef === undefined ? row.fixRef : patch.fixRef || null,
+    fixRef: nextFixRef === undefined ? row.fixRef : nextFixRef,
     caseId: patch.caseId === undefined ? row.caseId : patch.caseId,
   };
   const problem = decisionProblem(status, fields);
-  if (problem) return c.json({ error: problem }, 400);
+  if (problem) {
+    return c.json({ error: problem }, 400);
+  }
 
   const now = new Date();
   const statusChange =
@@ -166,7 +184,7 @@ journalRouter.patch("/:id", idParam, zValidator("json", patchInput, invalid), as
     })
     .where(eq(aiJournal.id, row.id))
     .returning();
-  const [view] = await views([updated!]);
+  const [view] = await views([updated]);
   return c.json({ entry: view });
 });
 
@@ -176,6 +194,8 @@ journalRouter.delete("/:id", idParam, async (c) => {
     .delete(aiJournal)
     .where(eq(aiJournal.id, c.req.valid("param").id))
     .returning({ id: aiJournal.id });
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) {
+    return c.json({ error: "not_found" }, 404);
+  }
   return c.json({ ok: true });
 });

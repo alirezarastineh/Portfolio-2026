@@ -356,7 +356,9 @@ export class AssistantPerceptionComponent implements OnInit {
   private async load(): Promise<void> {
     const mine = ++this.loading;
     const result = await this.api.assistantPerception(this.days());
-    if (mine !== this.loading) return;
+    if (mine !== this.loading) {
+      return;
+    }
     if (result.ok) {
       this.view.set(result.data);
       this.failed.set(false);

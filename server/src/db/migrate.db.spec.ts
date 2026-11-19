@@ -31,9 +31,17 @@ async function withClient<T>(url: string, run: (client: pg.Client) => Promise<T>
   }
 }
 
+function testDatabaseUrl(): string {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error("DATABASE_URL must be set for db tests");
+  }
+  return url;
+}
+
 describe("migrations", () => {
   it("are idempotent through a dedicated owner connection", async () => {
-    vi.stubEnv("MIGRATION_DATABASE_URL", process.env.DATABASE_URL!);
+    vi.stubEnv("MIGRATION_DATABASE_URL", process.env.DATABASE_URL);
     // True: they ran (nothing left to apply is still a run).
     await expect(runMigrations()).resolves.toBe(true);
   });
@@ -41,7 +49,7 @@ describe("migrations", () => {
 
 describe("create-app-role.sql", () => {
   it("gives the app role row access but no schema changes", async () => {
-    const ownerUrl = process.env.DATABASE_URL!;
+    const ownerUrl = testDatabaseUrl();
     await withClient(ownerUrl, (owner) => owner.query(roleScriptSql()));
 
     const appUrl = new URL(ownerUrl);
@@ -65,7 +73,7 @@ describe("create-app-role.sql", () => {
   });
 
   it("can be re-run safely", async () => {
-    const ownerUrl = process.env.DATABASE_URL!;
+    const ownerUrl = testDatabaseUrl();
     await withClient(ownerUrl, (owner) => owner.query(roleScriptSql()));
     await expect(
       withClient(ownerUrl, (owner) => owner.query(roleScriptSql())),
@@ -94,12 +102,18 @@ describe("create-umami-db.sql", () => {
     await withClient(ownerUrl, async (owner) => {
       await owner.query(setup);
       const { rows } = await owner.query<{ "?column?": string }>(generator);
-      for (const row of rows) await owner.query(row["?column?"]);
+      await rows.reduce(
+        (chain, row) =>
+          chain.then(async () => {
+            await owner.query(row["?column?"]);
+          }),
+        Promise.resolve(),
+      );
     });
   }
 
   it("creates a separate database the umami role owns, walled off from the portfolio", async () => {
-    const ownerUrl = process.env.DATABASE_URL!;
+    const ownerUrl = testDatabaseUrl();
     await runUmamiScript(ownerUrl);
     await runUmamiScript(ownerUrl); // idempotent
 

@@ -46,7 +46,9 @@ export interface FaithfulnessView {
 
 /** "0.93, 1 of 12 below 0.8", or a dash with nothing judged. */
 export function faithfulLine(stats: JudgedStats): string {
-  if (!stats.judged || stats.faithfulness === null) return "–";
+  if (!stats.judged || stats.faithfulness === null) {
+    return "–";
+  }
   return `${stats.faithfulness.toFixed(2)}, ${stats.below} of ${stats.judged} below 0.8`;
 }
 
@@ -67,10 +69,12 @@ export const routeLabel = (route: string): string => ROUTES[route] ?? route;
 /** "judged by gemini-flash-lite (12) and gemini-flash (2)", and the judge now when it differs. */
 export function judgesLine(view: Pick<FaithfulnessView, "judge" | "judges">): string {
   const now = view.judge ?? "none: no judge may read visitor answers";
-  if (!view.judges.length) return `nothing judged yet (the judge now: ${now})`;
+  if (!view.judges.length) {
+    return `nothing judged yet (the judge now: ${now})`;
+  }
   const names = view.judges.map((j) => `${j.model} (${j.judged})`);
   const by = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0];
-  const same = view.judges.length === 1 && view.judges[0]!.model === view.judge;
+  const same = view.judges.length === 1 && view.judges[0].model === view.judge;
   return same ? `judged by ${by}` : `judged by ${by}; the judge now: ${now}`;
 }
 
@@ -81,7 +85,11 @@ export function nightlyLine(run: NightlyRun | null): string {
   }
   const of = run.day ? ` of ${run.day}` : "";
   const count = `${run.judged} of ${run.total} ${run.total === 1 ? "answer" : "answers"}${of}`;
-  if (run.status === "done") return `The last night judged ${count} ($${run.usd.toFixed(4)}).`;
-  if (run.status === "queued" || run.status === "running") return `Judging ${count} now.`;
+  if (run.status === "done") {
+    return `The last night judged ${count} ($${run.usd.toFixed(4)}).`;
+  }
+  if (run.status === "queued" || run.status === "running") {
+    return `Judging ${count} now.`;
+  }
   return `The last night stopped after ${count}: ${run.error ?? run.status}`;
 }

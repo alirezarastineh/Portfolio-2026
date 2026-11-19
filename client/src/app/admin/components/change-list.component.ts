@@ -59,7 +59,7 @@ export class ChangeListComponent {
   /** Open on each row: the review's way to the editor; History's view shows what a roll back does. */
   readonly links = input(true);
   /** An Open was followed: the dialog around it closes. */
-  readonly opened = output<void>();
+  readonly opened = output();
 
   protected idOf(page: string): string {
     return `changes-${page.toLowerCase().replaceAll(/[^a-z]+/g, "-")}`;

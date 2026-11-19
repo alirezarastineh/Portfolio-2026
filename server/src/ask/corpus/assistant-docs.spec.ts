@@ -53,12 +53,17 @@ describe("defaultSystemCard", () => {
 
         it("names the models and none of the tools", () => {
           expect(card).toContain(config.gemini.model);
-          expect(card).toContain(config.gemini.deepModel!);
-          for (const tool of TOOL_NAMES) expect(card).not.toContain(tool);
+          expect(config.gemini.deepModel).toBeTruthy();
+          expect(card).toContain(String(config.gemini.deepModel));
+          for (const tool of TOOL_NAMES) {
+            expect(card).not.toContain(tool);
+          }
         });
 
         it("holds no piece and no run of the instructions", () => {
-          for (const piece of PROMPT_LEAKS) expect(card).not.toMatch(new RegExp(piece, "i"));
+          for (const piece of PROMPT_LEAKS) {
+            expect(card).not.toMatch(new RegExp(piece, "i"));
+          }
           expect(runsOf(card).filter((run) => instructions.has(run))).toEqual([]);
         });
 
@@ -82,8 +87,8 @@ describe("defaultSystemCard", () => {
 describe("the system card's date (visitor plan V21)", () => {
   it("is the day the default's words last changed: new words need a new day", () => {
     // New words fail here: set SYSTEM_CARD_UPDATED to the day they changed, then this hash.
-    const words = LOCALES.map((locale) => defaultSystemCard(locale, configs.plain)).join("\n");
-    const hash = createHash("sha256").update(words).digest("hex").slice(0, 12);
+    const cardWords = LOCALES.map((locale) => defaultSystemCard(locale, configs.plain)).join("\n");
+    const hash = createHash("sha256").update(cardWords).digest("hex").slice(0, 12);
     expect([SYSTEM_CARD_UPDATED, hash]).toEqual(["2026-11-04", "32ccd24cae86"]);
   });
 

@@ -24,6 +24,12 @@ const effect = (applications: number, successes: number) => ({
   value: applications ? successes / applications : null,
 });
 
+const entry = (status: JournalEntry["status"], words: string[]) =>
+  ({
+    status,
+    diagnosis: { located: words.length ? { words } : null },
+  }) as unknown as JournalEntry;
+
 describe("lessons in the admin (plan phase 25)", () => {
   it("says a lesson's effect as counts until there are five applications", () => {
     expect(effectLine(null)).toBe("Not applied yet: nothing to measure.");
@@ -40,11 +46,6 @@ describe("lessons in the admin (plan phase 25)", () => {
   });
 
   it("promotes three decided entries, with the corpus words they found as a first scope", () => {
-    const entry = (status: JournalEntry["status"], words: string[]) =>
-      ({
-        status,
-        diagnosis: { located: words.length ? { words } : null },
-      }) as unknown as JournalEntry;
     const picked = [
       entry("accepted", ["visa", "germany"]),
       entry("fixed", ["visa", "permit"]),

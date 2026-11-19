@@ -160,15 +160,15 @@
   }
   /* eslint-enable css/use-baseline */
 
-  :root:root:has(app-admin-layout):not(:has(app-admin-preview-frame)) .press {
-    transition:
-      color var(--dur-2) var(--ease-out),
-      background-color var(--dur-2) var(--ease-out),
-      border-color var(--dur-2) var(--ease-out),
-      scale var(--dur-1) var(--ease-out);
-  }
-
   @media (prefers-reduced-motion: no-preference) {
+    :root:root:has(app-admin-layout):not(:has(app-admin-preview-frame)) .press {
+      transition:
+        color var(--dur-2) var(--ease-out),
+        background-color var(--dur-2) var(--ease-out),
+        border-color var(--dur-2) var(--ease-out),
+        scale var(--dur-1) var(--ease-out);
+    }
+
     :root:root:has(app-admin-layout):not(:has(app-admin-preview-frame)) .press:active {
       scale: 0.98;
     }

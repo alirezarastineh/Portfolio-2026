@@ -126,7 +126,9 @@ export interface Crumb {
  */
 export function crumbsFor(path: string, edit: string | null = null): Crumb[] {
   const item = navItemFor(path);
-  if (!item) return [];
+  if (!item) {
+    return [];
+  }
   const parent = item.parent ? navItemFor(item.parent) : null;
   const slug = /^\/admin\/(?:projects|writing)\/([^/]+)$/.exec(path)?.[1];
   const entry = edit && path === "/admin/experience" ? edit : null;

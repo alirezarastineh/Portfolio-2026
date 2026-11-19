@@ -17,11 +17,15 @@ export const SESSION_LOST: ReadonlySet<string> = new Set(["unauthenticated", "to
 
 /** The double-submit CSRF token, for requests made outside HttpClient (the playground stream). */
 export function readCsrfCookie(): string | null {
-  if (typeof document === "undefined") return null;
+  if (typeof document === "undefined") {
+    return null;
+  }
 
   for (const part of document.cookie.split(";")) {
     const [name, ...rest] = part.trim().split("=");
-    if (name === CSRF_COOKIE) return decodeURIComponent(rest.join("="));
+    if (name === CSRF_COOKIE) {
+      return decodeURIComponent(rest.join("="));
+    }
   }
   return null;
 }
@@ -50,7 +54,9 @@ export function isAdminCall(url: string): boolean {
  * serialized into the SSR payload.
  */
 export const adminApiInterceptor: HttpInterceptorFn = (req, next) => {
-  if (!isAdminCall(req.url)) return next(req);
+  if (!isAdminCall(req.url)) {
+    return next(req);
+  }
 
   const isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   const session = inject(AdminSessionService);

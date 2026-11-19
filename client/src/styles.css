@@ -40,13 +40,12 @@ body {
 }
 
 html {
-  scroll-behavior: smooth;
   scroll-padding-top: 5rem;
 }
 
-@media (prefers-reduced-motion: reduce) {
+@media (prefers-reduced-motion: no-preference) {
   html {
-    scroll-behavior: auto;
+    scroll-behavior: smooth;
   }
 }
 
@@ -185,14 +184,16 @@ a {
   animation: none;
 }
 
-::view-transition-old(root),
-::view-transition-old(*):only-child {
-  animation: vt-out 120ms var(--ease-in) both;
-}
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-old(*):only-child {
+    animation: vt-out 120ms var(--ease-in) both;
+  }
 
-::view-transition-new(root),
-::view-transition-new(*):only-child {
-  animation: vt-in var(--vt-in) var(--ease-emph) both;
+  ::view-transition-new(root),
+  ::view-transition-new(*):only-child {
+    animation: vt-in var(--vt-in) var(--ease-emph) both;
+  }
 }
 
 @keyframes vt-out {

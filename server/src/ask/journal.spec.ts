@@ -102,7 +102,7 @@ function answer(overrides: Partial<DiagnosisAnswer> = {}): DiagnosisAnswer {
     route: "lite",
     finishReason: "stop",
     ttftMs: 700,
-    totalMs: 1_800,
+    totalMs: 1800,
     flags: [],
     checked: true,
     feedback: null,
@@ -125,12 +125,77 @@ const run = (overrides: Partial<DiagnosisInput> = {}): JournalDiagnosis =>
     ...overrides,
   });
 
-const hypothesis = (d: JournalDiagnosis, id: HypothesisId) =>
-  d.hypotheses.find((h) => h.id === id)!;
+const hypothesis = (d: JournalDiagnosis, id: HypothesisId) => {
+  const found = d.hypotheses.find((h) => h.id === id);
+  if (!found) {
+    throw new Error(`missing hypothesis ${id}`);
+  }
+  return found;
+};
 const observations = (d: JournalDiagnosis, id: HypothesisId, supports: boolean) =>
   hypothesis(d, id)
     .evidence.filter((e) => e.supports === supports)
     .map((e) => e.observation);
+
+/** The eval fixture's `fact-llm-ops`: the post found by meaning, cited, never fetched past the cut. */
+function llmOps(expected?: string): JournalDiagnosis {
+  const corpus = fixtureAskCorpus(fixtureConfig());
+  const id = "post:llm-in-production@en";
+  return diagnose({
+    answer: answer({
+      question: "Has he written about LLM ops?",
+      answer: "He wrote about shipping language models to real users [^post:llm-in-production@en].",
+      citedIds: [id],
+      toolCalls: ["search_portfolio"],
+      trace: trace([
+        step([
+          tool(
+            "search_portfolio",
+            { query: "LLM ops" },
+            { hits: [id, "post:evals-first@en"], semantic: true },
+          ),
+        ]),
+        step(),
+      ]),
+    }),
+    snapshot: corpus.documents,
+    live: corpus.documents,
+    projectNames: corpus.projects.map((p) => p.name),
+    expected,
+  });
+}
+
+const makeReplay = (...results: ReplayResult[]) => ({
+  runId: "00000000-0000-4000-8000-000000000001",
+  at: "2026-10-07T10:00:00.000Z",
+  corpusKey: "live#1",
+  results,
+});
+
+const visitorEvidence = (d: JournalDiagnosis, id: HypothesisId) =>
+  hypothesis(d, id).evidence.filter((e) => e.experiment === "visitor");
+
+const fillLines = (line: string) => `${line}\n`.repeat(60);
+
+const replayResult = (chain: "lite" | "deep", over: Partial<ReplayResult> = {}): ReplayResult => ({
+  chain,
+  model: chain === "lite" ? MODEL : "gemini-3.7-flash",
+  finishReason: "stop",
+  answered: true,
+  unknown: false,
+  cited: ["project:long@en"],
+  flags: [],
+  usd: 0.001,
+  unavailable: false,
+  ...over,
+});
+
+const replayed = (d: JournalDiagnosis) =>
+  d.hypotheses.flatMap((h) =>
+    h.evidence
+      .filter((e) => e.experiment === "replay")
+      .map((e) => `${h.id} ${e.supports ? "+" : "-"} ${e.observation}`),
+  );
 
 describe("the question's words", () => {
   it("keeps what it asks about, without function words, placeholders or repeats", () => {
@@ -175,8 +240,12 @@ describe("the question's words", () => {
       ["contract", "contrast"],
       ["migrate", "migraine"],
     ];
-    for (const [a, b] of same) expect(sameWord(a, b), `${a}/${b}`).toBe(true);
-    for (const [a, b] of different) expect(sameWord(a, b), `${a}/${b}`).toBe(false);
+    for (const [a, b] of same) {
+      expect(sameWord(a, b), `${a}/${b}`).toBe(true);
+    }
+    for (const [a, b] of different) {
+      expect(sameWord(a, b), `${a}/${b}`).toBe(false);
+    }
   });
 });
 
@@ -210,9 +279,13 @@ describe("diagnose", () => {
       held: heldText(LONG).length,
       length: LONG.text.length,
     });
-    expect(d.located!.held).toBeLessThanOrEqual(coreLimit(LONG)!);
+    const limit = coreLimit(LONG);
+    if (limit === undefined || !d.located) {
+      throw new Error("expected located document and core limit");
+    }
+    expect(d.located.held).toBeLessThanOrEqual(limit);
     expect(observations(d, "context-unused", true)).toEqual([
-      `The core held project:long@en cut at ${d.located!.held.toLocaleString("en-GB")} of ${LONG.text.length.toLocaleString("en-GB")} characters; migrated, clusters, kubernetes lie past the cut`,
+      `The core held project:long@en cut at ${d.located.held.toLocaleString("en-GB")} of ${LONG.text.length.toLocaleString("en-GB")} characters; migrated, clusters, kubernetes lie past the cut`,
       "It never fetched project:long@en",
     ]);
     // The fact is there, a search finds it, the first model answered, nothing failed.
@@ -226,7 +299,7 @@ describe("diagnose", () => {
     expect(d.proposal).toMatchObject({
       fixType: "content",
       fixRef: "project:long@en",
-      fix: `Promote project:long@en (Overview → Perception holds it whole), or move the fact before the cut at ${d.located!.held.toLocaleString("en-GB")} characters.`,
+      fix: `Promote project:long@en (Overview → Perception holds it whole), or move the fact before the cut at ${d.located.held.toLocaleString("en-GB")} characters.`,
     });
     expect(d.proposal.rootCause).toMatch(
       /^Context clipped or unused: The core held project:long@en/,
@@ -367,46 +440,18 @@ describe("diagnose", () => {
     ]);
   });
 
-  /** The eval fixture's `fact-llm-ops`: the post found by meaning, cited, never fetched past the cut. */
-  function llmOps(expected?: string): JournalDiagnosis {
-    const corpus = fixtureAskCorpus(fixtureConfig());
-    const id = "post:llm-in-production@en";
-    return diagnose({
-      answer: answer({
-        question: "Has he written about LLM ops?",
-        answer:
-          "He wrote about shipping language models to real users [^post:llm-in-production@en].",
-        citedIds: [id],
-        toolCalls: ["search_portfolio"],
-        trace: trace([
-          step([
-            tool(
-              "search_portfolio",
-              { query: "LLM ops" },
-              { hits: [id, "post:evals-first@en"], semantic: true },
-            ),
-          ]),
-          step(),
-        ]),
-      }),
-      snapshot: corpus.documents,
-      live: corpus.documents,
-      projectNames: corpus.projects.map((p) => p.name),
-      expected,
-    });
-  }
-
   it("reads the LLM-ops failure as clipped context on its own: cited, read in part, never fetched", () => {
     const id = "post:llm-in-production@en";
     const d = llmOps();
     // Its words are not the post's (a synonym), so the fact is not placed…
     expect(d.located).toBeNull();
     // …but the answer cited a post it read only in part: the absence is not established.
-    const partly = expect.stringMatching(
-      /^It cited post:llm-in-production@en but read only its first 1,[0-9]{3} of [0-9,]+ characters, and never fetched the rest/,
-    );
-    expect(observations(d, "context-unused", true)).toEqual([partly]);
-    expect(observations(d, "content-missing", false)).toEqual([partly]);
+    const partlyPattern =
+      /^It cited post:llm-in-production@en but read only its first 1,\d{3} of [\d,]+ characters, and never fetched the rest/;
+    expect(observations(d, "context-unused", true)).toEqual([expect.stringMatching(partlyPattern)]);
+    expect(observations(d, "content-missing", false)).toEqual([
+      expect.stringMatching(partlyPattern),
+    ]);
     expect(d.leading).toBe("context-unused");
     expect(d.proposal).toMatchObject({ fixType: "content", fixRef: id });
     expect(d.proposal.fix).toMatch(/^Promote post:llm-in-production@en/);
@@ -420,7 +465,7 @@ describe("diagnose", () => {
     expect(d.located).toMatchObject({ id, named: true, position: "clipped", words: [] });
     expect(d.leading).toBe("context-unused");
     expect(observations(d, "context-unused", true)).toEqual([
-      expect.stringMatching(/^The core held post:llm-in-production@en cut at 1,[0-9]{3} of /),
+      expect.stringMatching(/^The core held post:llm-in-production@en cut at 1,\d{3} of /),
       "It never fetched post:llm-in-production@en",
       "It cited post:llm-in-production@en, the document that holds the answer, and still fell short",
     ]);
@@ -438,14 +483,14 @@ describe("diagnose", () => {
         answer: "",
         model: null,
         finishReason: "error:unavailable",
-        attempts: [{ model: MODEL, outcome: "timeout", ms: 6_000 }],
+        attempts: [{ model: MODEL, outcome: "timeout", ms: 6000 }],
         trace: trace([
           step([], {
             model: null,
             ttftMs: null,
             tokens: null,
             finishReason: null,
-            passedOver: [{ model: MODEL, outcome: "timeout", ms: 6_000 }],
+            passedOver: [{ model: MODEL, outcome: "timeout", ms: 6000 }],
           }),
         ]),
       }),
@@ -582,18 +627,11 @@ describe("diagnose", () => {
       unavailable: false,
       ...over,
     });
-    const replay = (results: ReplayResult[]) => ({
-      runId: "00000000-0000-4000-8000-000000000001",
-      at: "2026-10-07T10:00:00.000Z",
-      corpusKey: "live#1",
-      results,
-    });
-
     const deepAnswers = run({
-      replay: replay([
+      replay: makeReplay(
         result("lite", { answered: false, unknown: true }),
         result("deep", { cited: ["project:long@en"] }),
-      ]),
+      ),
     });
     expect(deepAnswers.replayed).toBe(true);
     expect(observations(deepAnswers, "under-routed", true)).toContain(
@@ -602,10 +640,10 @@ describe("diagnose", () => {
 
     // "Almost working" counts against: the deep chain found the document and still failed.
     const almost = run({
-      replay: replay([
+      replay: makeReplay(
         result("lite", { answered: false, unknown: true }),
         result("deep", { answered: false, unknown: true, cited: ["project:long@en"] }),
-      ]),
+      ),
     });
     const observation =
       "Replayed on the deep chain, gemini-3.7-flash cited project:long@en and still said it isn't there";
@@ -617,7 +655,9 @@ describe("diagnose", () => {
     );
     expect(almost.leading).toBe("context-unused");
 
-    const down = run({ replay: replay([result("lite", { unavailable: true, answered: false })]) });
+    const down = run({
+      replay: makeReplay(result("lite", { unavailable: true, answered: false })),
+    });
     expect(down.untested).toContain("The replay on the lite chain found no model answering.");
   });
 
@@ -661,12 +701,9 @@ describe("diagnose", () => {
   });
 
   it("weighs the visitor's reason for a thumbs-down, for the hypotheses it points at (visitor plan V2)", () => {
-    const visitor = (d: JournalDiagnosis, id: HypothesisId) =>
-      hypothesis(d, id).evidence.filter((e) => e.experiment === "visitor");
-
     const wrong = run({ answer: answer({ feedback: -1, downReason: "wrong" }) });
     for (const id of ["content-missing", "context-unused", "degraded-model"] as const) {
-      expect(visitor(wrong, id)).toEqual([
+      expect(visitorEvidence(wrong, id)).toEqual([
         {
           experiment: "visitor",
           supports: true,
@@ -674,13 +711,13 @@ describe("diagnose", () => {
         },
       ]);
     }
-    expect(visitor(wrong, "retrieval-miss")).toEqual([]);
+    expect(visitorEvidence(wrong, "retrieval-miss")).toEqual([]);
 
     const unanswered = run({ answer: answer({ feedback: -1, downReason: "unanswered" }) });
     for (const id of ["retrieval-miss", "under-routed"] as const) {
-      expect(visitor(unanswered, id)).toHaveLength(1);
+      expect(visitorEvidence(unanswered, id)).toHaveLength(1);
     }
-    expect(visitor(unanswered, "content-missing")).toEqual([]);
+    expect(visitorEvidence(unanswered, "content-missing")).toEqual([]);
 
     // "Too long or too short" is the prompt's matter, and a reason without a thumbs-down is none.
     const length = run({ answer: answer({ feedback: -1, downReason: "length" }) });
@@ -694,19 +731,20 @@ describe("diagnose", () => {
 });
 
 describe("each experiment's other outcomes", () => {
-  const filler = (line: string) => `${line}\n`.repeat(60);
-
   it("places a fact before the cut (held) as context unused, with nothing to retrieve", () => {
     const early: CorpusDocument = {
       ...LONG,
       id: "project:early@en",
       title: "Early",
-      text: `In 2023 he migrated the clusters to Kubernetes.\n${filler("A long case study line about the platform and its teams.")}`,
+      text: `In 2023 he migrated the clusters to Kubernetes.\n${fillLines("A long case study line about the platform and its teams.")}`,
     };
-    const d = run({ snapshot: [DOCS[0]!, early], live: [DOCS[0]!, early] });
+    const d = run({ snapshot: [DOCS[0], early], live: [DOCS[0], early] });
     expect(d.located).toMatchObject({ id: "project:early@en", position: "held" });
+    if (!d.located) {
+      throw new Error("expected located");
+    }
     expect(observations(d, "context-unused", true)).toEqual([
-      `The core held project:early@en cut at ${d.located!.held.toLocaleString("en-GB")} of ${early.text.length.toLocaleString("en-GB")} characters, with the matching words before the cut`,
+      `The core held project:early@en cut at ${d.located.held.toLocaleString("en-GB")} of ${early.text.length.toLocaleString("en-GB")} characters, with the matching words before the cut`,
     ]);
     expect(observations(d, "retrieval-miss", false)).toEqual([
       "Nothing had to be retrieved: project:early@en was in context",
@@ -745,10 +783,10 @@ describe("each experiment's other outcomes", () => {
       locale: "de",
       title: "Grenzen",
       url: "/de/writing/grenzen",
-      text: `${filler("Eine Zeile über Kosten und Modelle.")}Jede Funktion hat eine Obergrenze pro Tag.`,
+      text: `${fillLines("Eine Zeile über Kosten und Modelle.")}Jede Funktion hat eine Obergrenze pro Tag.`,
     };
     // Without the other German post, which has the same words.
-    const docs = [DOCS[0]!, DOCS[2]!, lang];
+    const docs = [DOCS[0], DOCS[2], lang];
     const d = run({
       snapshot: docs,
       live: docs,
@@ -773,7 +811,7 @@ describe("each experiment's other outcomes", () => {
       url: "/en#about",
       text: "Q: Did he move clusters to Kubernetes?\nA: Yes, he migrated them in 2023.",
     };
-    const docs = [DOCS[0]!, faq];
+    const docs = [DOCS[0], faq];
     const d = run({
       snapshot: docs,
       live: docs,
@@ -852,7 +890,7 @@ describe("each experiment's other outcomes", () => {
         model: "nemotron-ultra",
         trace: null,
         attempts: [
-          { model: MODEL, outcome: "timeout", ms: 6_000 },
+          { model: MODEL, outcome: "timeout", ms: 6000 },
           { model: "nemotron-ultra", outcome: "ok", ms: 900 },
         ],
       }),
@@ -923,7 +961,7 @@ describe("each experiment's other outcomes", () => {
       "The provider's content filter stopped it",
     ]);
     const silent = run({
-      answer: answer({ answer: "", finishReason: "aborted", ttftMs: null, totalMs: 4_000 }),
+      answer: answer({ answer: "", finishReason: "aborted", ttftMs: null, totalMs: 4000 }),
     });
     expect(observations(silent, "infrastructure", true)).toEqual([
       "The visitor left after 4,000 ms with no first token",
@@ -943,39 +981,19 @@ describe("each experiment's other outcomes", () => {
 });
 
 describe("a replay's evidence, chain by chain", () => {
-  const result = (chain: "lite" | "deep", over: Partial<ReplayResult> = {}): ReplayResult => ({
-    chain,
-    model: chain === "lite" ? MODEL : "gemini-3.7-flash",
-    finishReason: "stop",
-    answered: true,
-    unknown: false,
-    cited: ["project:long@en"],
-    flags: [],
-    usd: 0.001,
-    unavailable: false,
-    ...over,
-  });
   const failing = { answered: false, unknown: true, cited: [] };
   const down = { unavailable: true, answered: false };
-  const replay = (...results: ReplayResult[]) => ({
-    runId: "00000000-0000-4000-8000-000000000001",
-    at: "2026-10-07T10:00:00.000Z",
-    corpusKey: "live#1",
-    results,
-  });
-  const replayed = (d: JournalDiagnosis) =>
-    d.hypotheses.flatMap((h) =>
-      h.evidence
-        .filter((e) => e.experiment === "replay")
-        .map((e) => `${h.id} ${e.supports ? "+" : "-"} ${e.observation}`),
-    );
 
   it("reads both chains answering as a failure that did not repeat", () => {
-    expect(replayed(run({ replay: replay(result("lite"), result("deep")) }))).toEqual([
+    expect(
+      replayed(run({ replay: makeReplay(replayResult("lite"), replayResult("deep")) })),
+    ).toEqual([
       "infrastructure + Replayed today, both chains answer it: the failure did not repeat",
     ]);
     // Only the lite chain answering says the same; the deep chain's miss is noise.
-    expect(replayed(run({ replay: replay(result("lite"), result("deep", failing)) }))).toEqual([
+    expect(
+      replayed(run({ replay: makeReplay(replayResult("lite"), replayResult("deep", failing)) })),
+    ).toEqual([
       "infrastructure + Replayed today, the lite chain answers it: the failure did not repeat",
     ]);
   });
@@ -983,7 +1001,7 @@ describe("a replay's evidence, chain by chain", () => {
   it("reads the chains answering, once the fact was added since, as content that was missing", () => {
     const d = run({
       snapshot: DOCS.filter((doc) => doc.id !== LONG.id),
-      replay: replay(result("lite"), result("deep")),
+      replay: makeReplay(replayResult("lite"), replayResult("deep")),
     });
     expect(replayed(d)).toEqual([
       "content-missing + Replayed today, both chains answer it, now that project:long@en has it",
@@ -992,28 +1010,28 @@ describe("a replay's evidence, chain by chain", () => {
 
   it("decides by the chain that answered the visitor: deep for an answer routed or moved there", () => {
     const onDeep = (...results: ReplayResult[]) =>
-      replayed(run({ answer: answer({ route: "deep" }), replay: replay(...results) }));
-    expect(onDeep(result("lite", failing), result("deep"))).toEqual([
+      replayed(run({ answer: answer({ route: "deep" }), replay: makeReplay(...results) }));
+    expect(onDeep(replayResult("lite", failing), replayResult("deep"))).toEqual([
       "infrastructure + Replayed today, the deep chain answers it: the failure did not repeat",
     ]);
     // The visitor's chain fails again where the lite one answers: the model, never the route.
-    expect(onDeep(result("lite"), result("deep", failing))).toEqual([
+    expect(onDeep(replayResult("lite"), replayResult("deep", failing))).toEqual([
       `degraded-model + Replayed today, the lite chain answers it (${MODEL}); the deep chain, which answered the visitor, does not (gemini-3.7-flash)`,
     ]);
-    expect(onDeep(result("lite", failing), result("deep", failing))).toEqual([
+    expect(onDeep(replayResult("lite", failing), replayResult("deep", failing))).toEqual([
       "degraded-model - Replayed today, both chains fail it: not the model",
       "infrastructure - Replayed today, both chains fail it: not a passing outage",
     ]);
     const moved = run({
       answer: answer({ route: "lite→deep" }),
-      replay: replay(result("lite", failing), result("deep")),
+      replay: makeReplay(replayResult("lite", failing), replayResult("deep")),
     });
     expect(replayed(moved)).toEqual([
       "infrastructure + Replayed today, the deep chain answers it: the failure did not repeat",
     ]);
     const deepDown = run({
       answer: answer({ route: "deep" }),
-      replay: replay(result("lite"), result("deep", down)),
+      replay: makeReplay(replayResult("lite"), replayResult("deep", down)),
     });
     expect(replayed(deepDown)).toEqual([]);
     expect(deepDown.untested).toContain(
@@ -1022,11 +1040,13 @@ describe("a replay's evidence, chain by chain", () => {
   });
 
   it("reads one chain alone for what it can say, and nothing more", () => {
-    expect(replayed(run({ replay: replay(result("lite", failing)) }))).toEqual([
+    expect(replayed(run({ replay: makeReplay(replayResult("lite", failing)) }))).toEqual([
       "infrastructure - Replayed today, the lite chain fails it again: not a passing outage",
     ]);
     // The lite chain down: the deep chain answering says nothing about the route.
-    const deepOnly = run({ replay: replay(result("lite", down), result("deep")) });
+    const deepOnly = run({
+      replay: makeReplay(replayResult("lite", down), replayResult("deep")),
+    });
     expect(replayed(deepOnly)).toEqual([]);
     expect(deepOnly.untested).toEqual(
       expect.arrayContaining([
@@ -1034,7 +1054,9 @@ describe("a replay's evidence, chain by chain", () => {
         "Only the deep chain answered the replay: with no lite answer to compare, it says nothing about the route.",
       ]),
     );
-    const deepFails = run({ replay: replay(result("lite", down), result("deep", failing)) });
+    const deepFails = run({
+      replay: makeReplay(replayResult("lite", down), replayResult("deep", failing)),
+    });
     expect(replayed(deepFails)).toEqual([
       "degraded-model - Replayed today, the deep chain fails it too: not the model",
       "under-routed - Replayed today, the deep chain fails it too: not the route",

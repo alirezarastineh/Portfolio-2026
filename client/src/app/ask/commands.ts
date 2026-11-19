@@ -102,15 +102,21 @@ const EXACT: Record<string, LocalCommand> = {
  */
 export function parseInput(raw: string): Parsed {
   const text = raw.trim();
-  if (!text) return { kind: "empty" };
-  const normal = text.toLowerCase().replace(/\s+/g, " ");
+  if (!text) {
+    return { kind: "empty" };
+  }
+  const normal = text.toLowerCase().replaceAll(/\s+/g, " ");
 
   const exact = EXACT[normal];
-  if (exact) return { kind: "local", name: exact, arg: "" };
-  if (/^sudo hire( alireza)?\b/.test(normal)) return { kind: "local", name: "sudo", arg: "" };
+  if (exact) {
+    return { kind: "local", name: exact, arg: "" };
+  }
+  if (/^sudo hire( alireza)?\b/.test(normal)) {
+    return { kind: "local", name: "sudo", arg: "" };
+  }
 
   const [head, ...rest] = text.split(/\s+/);
-  return withArgument(head!.toLowerCase(), rest) ?? { kind: "ask", text, deep: false };
+  return withArgument(head.toLowerCase(), rest) ?? { kind: "ask", text, deep: false };
 }
 
 function parseLocalCommand(head: string, arg: string, count: number): Parsed | null {
@@ -141,15 +147,21 @@ function parseLocalCommand(head: string, arg: string, count: number): Parsed | n
 /** A command that takes words after its name, when it has as many as it takes; null otherwise. */
 function withArgument(head: string, rest: readonly string[]): Parsed | null {
   const arg = rest.join(" ");
-  if (head === "ask") return arg ? { kind: "ask", text: arg, deep: false } : null;
-  if (head === "deep") return arg ? { kind: "ask", text: arg, deep: true } : null;
+  if (head === "ask") {
+    return arg ? { kind: "ask", text: arg, deep: false } : null;
+  }
+  if (head === "deep") {
+    return arg ? { kind: "ask", text: arg, deep: true } : null;
+  }
   return parseLocalCommand(head, arg, rest.length);
 }
 
 /** Completes a command or a project name; null when nothing (or too much) matches. */
 export function complete(input: string, content: AppContent): string | null {
   const lower = input.toLowerCase();
-  if (!lower) return null;
+  if (!lower) {
+    return null;
+  }
   const argFor = /^(cat|open|cd) (.*)$/.exec(lower);
   if (argFor) {
     const candidates = [
@@ -158,11 +170,11 @@ export function complete(input: string, content: AppContent): string | null {
         ? []
         : ["projects", "experience", "skills", "writing", "about", "contact"]),
       ...(argFor[1] === "cat" ? [] : content.posts.map((p) => p.slug)),
-    ].filter((c) => c.startsWith(argFor[2]!));
+    ].filter((c) => c.startsWith(argFor[2]));
     return candidates.length === 1 ? `${argFor[1]} ${candidates[0]}` : null;
   }
   const matches = COMMANDS.filter((c) => c.startsWith(lower) && c !== lower);
-  return matches.length === 1 ? matches[0]! : null;
+  return matches.length === 1 ? matches[0] : null;
 }
 
 export interface OutLine {
@@ -224,13 +236,16 @@ export function helpLines(
 ): OutLine[] {
   const rows = [...copy.help.rows];
   // After the tour's rows, as the help's order goes: explore, then hand over.
-  if (options.match)
+  if (options.match) {
     rows.splice(
       rows.findIndex(([label]) => label === "cv"),
       0,
       copy.help.match,
     );
-  if (options.scorecard) rows.splice(-1, 0, copy.help.evals);
+  }
+  if (options.scorecard) {
+    rows.splice(-1, 0, copy.help.evals);
+  }
   return [
     { text: copy.help.title, tone: "dim" },
     ...rows.map(([label, text]) => ({ label, text, run: true })),
@@ -268,7 +283,9 @@ export function whoamiLines(content: AppContent, locale: Locale, copy: AskCopy):
 }
 
 export function projectListLines(content: AppContent, locale: Locale, copy: AskCopy): OutLine[] {
-  if (!content.projects.length) return [{ text: copy.cmd.noProjects, tone: "dim" }];
+  if (!content.projects.length) {
+    return [{ text: copy.cmd.noProjects, tone: "dim" }];
+  }
   return content.projects.map((p) => ({
     label: p.slug,
     text: [
@@ -288,7 +305,9 @@ export function projectLines(
   copy: AskCopy,
 ): OutLine[] {
   const p = projectBySlug(content, name);
-  if (!p) return [{ text: fmt(copy.cmd.unknownProject, { x: name }), tone: "error" }];
+  if (!p) {
+    return [{ text: fmt(copy.cmd.unknownProject, { x: name }), tone: "error" }];
+  }
   return [
     { text: `${p.name} — ${p.descriptor}`, tone: "accent" },
     ...(p.hook ? [{ text: p.hook }] : []),
@@ -309,7 +328,9 @@ export function projectLines(
 }
 
 export function skillLines(content: AppContent, copy: AskCopy): OutLine[] {
-  if (!content.skills.length) return [{ text: copy.cmd.noSkills, tone: "dim" }];
+  if (!content.skills.length) {
+    return [{ text: copy.cmd.noSkills, tone: "dim" }];
+  }
   return content.skills.map((s) => ({ label: s.title, text: s.items.join(", ") }));
 }
 
@@ -318,16 +339,29 @@ const SECTIONS = ["projects", "experience", "skills", "writing", "about", "conta
 /** Where `open <arg>` goes: a section, a case study, a post, or nowhere. */
 export function openTarget(content: AppContent, locale: Locale, arg: string): string | null {
   const wanted = arg.trim().toLowerCase().replace(/^#/, "").replace(/\/$/, "");
-  if (!wanted) return null;
-  if (["home", "~", "/", "."].includes(wanted)) return `/${locale}`;
-  if (wanted === "work") return `/${locale}#projects`;
-  if (wanted === "writing" && content.posts.length) return `/${locale}/writing`;
-  if ((SECTIONS as readonly string[]).includes(wanted)) return `/${locale}#${wanted}`;
+  if (!wanted) {
+    return null;
+  }
+  if (["home", "~", "/", "."].includes(wanted)) {
+    return `/${locale}`;
+  }
+  if (wanted === "work") {
+    return `/${locale}#projects`;
+  }
+  if (wanted === "writing" && content.posts.length) {
+    return `/${locale}/writing`;
+  }
+  if ((SECTIONS as readonly string[]).includes(wanted)) {
+    return `/${locale}#${wanted}`;
+  }
   const project = projectBySlug(content, wanted);
-  if (project)
+  if (project) {
     return project.hasCaseStudy ? `/${locale}/work/${project.slug}` : `/${locale}#projects`;
+  }
   const post = content.posts.find((p) => p.slug === wanted || p.title.toLowerCase() === wanted);
-  if (post) return `/${locale}/writing/${post.slug}`;
+  if (post) {
+    return `/${locale}/writing/${post.slug}`;
+  }
   // Section names as the page shows them ("Selected Work", "Werdegang").
   const byHeading: [string, string][] = [
     [content.ui.projects.heading, "projects"],

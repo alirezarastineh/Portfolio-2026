@@ -56,6 +56,13 @@ async function finished(answer: ReturnType<typeof streamAnswer>) {
   return { chunks, meta, outcome: await answer.done };
 }
 
+const byCodePoint = (a: string, b: string): number => {
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+};
+
 beforeEach(() => resetBreakers());
 
 describe("the receipt", () => {
@@ -80,7 +87,7 @@ describe("the receipt", () => {
       },
       { toolNames: ["search_portfolio"], cited: 1, dropped: [] },
     );
-    expect(Object.keys(all).sort()).toEqual([...RECEIPT_FIELDS].sort());
+    expect(Object.keys(all).sort(byCodePoint)).toEqual([...RECEIPT_FIELDS].sort(byCodePoint));
     expect(all).toEqual({
       lookups: 1,
       sources: 1,
@@ -201,7 +208,9 @@ describe("the failover status", () => {
     for await (const m of readUIMessageStream({
       stream: new ReadableStream<UIMessageChunk>({
         start(c) {
-          for (const chunk of chunks) c.enqueue(chunk);
+          for (const chunk of chunks) {
+            c.enqueue(chunk);
+          }
           c.close();
         },
       }),

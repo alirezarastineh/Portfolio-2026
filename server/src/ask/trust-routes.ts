@@ -48,9 +48,13 @@ trustRouter.get("/", async (c) => {
  * calls. Like the nightly one, never from a laptop on the production tunnel.
  */
 trustRouter.post("/check", async (c) => {
-  if (askOnTunnel()) return c.json({ error: "remote_database" }, 409);
+  if (askOnTunnel()) {
+    return c.json({ error: "remote_database" }, 409);
+  }
   const check = await runTrustCheck();
-  if (!check) return c.json({ error: "already_checking" }, 409);
+  if (!check) {
+    return c.json({ error: "already_checking" }, 409);
+  }
   return c.json({
     checked: check.verdicts.length,
     demoted: check.demoted,
@@ -64,7 +68,8 @@ trustRouter.post(
   zValidator("json", z.object({ subject: z.string().min(1).max(200) }), invalid),
   async (c) => {
     const { subject } = c.req.valid("json");
-    if (!(await readDemotions()).some((d) => d.subject === subject)) {
+    const demotions = await readDemotions();
+    if (!demotions.some((d) => d.subject === subject)) {
       return c.json({ error: "not_demoted" }, 404);
     }
     await audit({
@@ -85,7 +90,9 @@ trustRouter.post(
     result.success ? undefined : c.json({ error: "invalid_id" }, 400),
   ),
   async (c) => {
-    if (!(await markSeen(c.req.valid("param").id))) return c.json({ error: "not_found" }, 404);
+    if (!(await markSeen(c.req.valid("param").id))) {
+      return c.json({ error: "not_found" }, 404);
+    }
     return c.json({ ok: true });
   },
 );

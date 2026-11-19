@@ -99,7 +99,9 @@ export class ShortcutSheetComponent {
  * `?`), not already handled, and focus not in something that takes text.
  */
 export function isShortcutTarget(event: KeyboardEvent): boolean {
-  if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return false;
+  if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
+    return false;
+  }
   return !typingIn(event);
 }
 
@@ -108,16 +110,22 @@ export function isShortcutTarget(event: KeyboardEvent): boolean {
  * Windows reports with Ctrl and Alt held). Never in a field or a dialog.
  */
 export function isRailKey(event: KeyboardEvent): boolean {
-  if (event.key !== "[" || event.defaultPrevented || event.metaKey) return false;
+  if (event.key !== "[" || event.defaultPrevented || event.metaKey) {
+    return false;
+  }
   const altGr = event.getModifierState?.("AltGraph") ?? false;
-  if (!altGr && (event.ctrlKey || event.altKey)) return false;
+  if (!altGr && (event.ctrlKey || event.altKey)) {
+    return false;
+  }
   return !typingIn(event);
 }
 
 /** Focus is in something that takes text, in a dialog, or in a menu (it types ahead): the key is its own. */
 function typingIn(event: KeyboardEvent): boolean {
   const target = event.target as HTMLElement | null;
-  if (!target || typeof target.closest !== "function") return false;
+  if (!target || typeof target.closest !== "function") {
+    return false;
+  }
   return !!target.closest(
     "input, textarea, select, [contenteditable]:not([contenteditable='false']), [role=textbox], [role=combobox], [role=dialog], [role=alertdialog], [role=menu], [role=menubar]",
   );

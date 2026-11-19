@@ -7,10 +7,10 @@ import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 
 const cli = createRequire(import.meta.url).resolve("@playwright/test/cli");
-const { status } = spawnSync(
+const result = spawnSync(
   process.execPath,
   [cli, "test", "--project=visual", ...process.argv.slice(2)],
   { stdio: "inherit", env: { ...process.env, E2E_VISUAL: "1" } },
 );
 
-process.exit(status ?? 1);
+process.exit(result.status ?? 1);

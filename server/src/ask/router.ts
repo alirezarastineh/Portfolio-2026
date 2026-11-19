@@ -273,7 +273,11 @@ const JUDGMENT = [
 
 /** The newspaper test's topic, if the question touches one. */
 export function sensitivityOf(text: string): Sensitivity | null {
-  for (const [pattern, topic] of SENSITIVE_PATTERNS) if (pattern.test(text)) return topic;
+  for (const [pattern, topic] of SENSITIVE_PATTERNS) {
+    if (pattern.test(text)) {
+      return topic;
+    }
+  }
   return null;
 }
 
@@ -299,9 +303,13 @@ export function routeQuestion(
   const deep = options.forceDeep
     ? "command"
     : deepReason(text, options.projectNames, options.pageProject);
-  if (deep && options.deepAllowed) return decide("deep", deep);
+  if (deep && options.deepAllowed) {
+    return decide("deep", deep);
+  }
   // The deep route is closed: a question it would take is still no lookup.
-  if (deep) return decide("lite", deep === "command" ? "deep-off" : `${deep}+deep-off`);
+  if (deep) {
+    return decide("lite", deep === "command" ? "deep-off" : `${deep}+deep-off`);
+  }
   return withLookup(decide("lite", "default"), text);
 }
 
@@ -316,13 +324,17 @@ function deepReason(
   pageProject?: string,
 ): string | null {
   for (const [pattern, reason] of DEEP_PATTERNS) {
-    if (pattern.test(text)) return reason;
+    if (pattern.test(text)) {
+      return reason;
+    }
   }
   const lower = text.toLowerCase();
   const named = projectNames.filter(
     (name) => name.length > 2 && lower.includes(name.toLowerCase()),
   );
-  if (pageProject) named.push(pageProject);
+  if (pageProject) {
+    named.push(pageProject);
+  }
   return new Set(named.map((n) => n.toLowerCase())).size >= 2 ? "multi-project" : null;
 }
 
@@ -332,9 +344,15 @@ function deepReason(
  */
 function withLookup(decision: RouteDecision, text: string): RouteDecision {
   const question = text.trim();
-  if (decision.sensitive || question.split(/\s+/).length > LOOKUP_MAX_WORDS) return decision;
-  if (!LOOKUP_PATTERNS.some((pattern) => pattern.test(question))) return decision;
-  if (JUDGMENT.some((pattern) => pattern.test(question))) return decision;
+  if (decision.sensitive || question.split(/\s+/).length > LOOKUP_MAX_WORDS) {
+    return decision;
+  }
+  if (!LOOKUP_PATTERNS.some((pattern) => pattern.test(question))) {
+    return decision;
+  }
+  if (JUDGMENT.some((pattern) => pattern.test(question))) {
+    return decision;
+  }
   return { ...decision, reason: `${decision.reason}+lookup`, lookup: true };
 }
 
@@ -365,7 +383,9 @@ export function escalationOf(steps: readonly StepToolResults[]): Escalation | nu
   const fetched = new Set<string>();
   for (const result of steps.flatMap((step) => step.toolResults)) {
     const reason = escalationAfter(result, fetched);
-    if (reason) return reason;
+    if (reason) {
+      return reason;
+    }
   }
   return null;
 }
@@ -378,10 +398,14 @@ function escalationAfter(
   const result = (output ?? {}) as { id?: unknown; results?: unknown };
   if (toolName === "get_document") {
     const project = projectOf(result.id);
-    if (project) fetched.add(project);
+    if (project) {
+      fetched.add(project);
+    }
     return fetched.size >= 2 ? "projects-fetched" : null;
   }
-  if (toolName !== "search_portfolio" || !Array.isArray(result.results)) return null;
+  if (toolName !== "search_portfolio" || !Array.isArray(result.results)) {
+    return null;
+  }
   const [first, second] = (result.results as ({ id?: unknown } | null)[]).map((hit) =>
     projectOf(hit?.id),
   );
@@ -398,8 +422,14 @@ export type RouteLabel = Route | typeof ESCALATED_ROUTE | "lookup" | "sensitive"
  */
 export function routeLabels(decision: RouteDecision, escalated: boolean): RouteLabel[] {
   const labels: RouteLabel[] = [decision.route];
-  if (escalated) labels.push(ESCALATED_ROUTE);
-  if (decision.lookup) labels.push("lookup");
-  if (decision.sensitive) labels.push("sensitive");
+  if (escalated) {
+    labels.push(ESCALATED_ROUTE);
+  }
+  if (decision.lookup) {
+    labels.push("lookup");
+  }
+  if (decision.sensitive) {
+    labels.push("sensitive");
+  }
   return labels;
 }

@@ -3,7 +3,6 @@ import { isAnswered, isHelpful, percentile, rephrased, type OutcomeRow } from ".
 import { ESCALATED_ROUTE } from "./router.js";
 
 // Moved to outcomes.ts (visitor plan V2, which needs it there too); still exported from here.
-export { percentile };
 
 /**
  * The router's report (plan phase 20): how a window's visitor answers were
@@ -39,9 +38,15 @@ export const ROUTE_TIERS: readonly RouteTier[] = [
 ];
 
 export function tierOf(row: Pick<RouterRow, "route" | "routing">): RouteTier {
-  if (row.route === "answer-only") return "answer-only";
-  if (row.route === ESCALATED_ROUTE) return "escalated";
-  if (row.route === "deep") return "deep";
+  if (row.route === "answer-only") {
+    return "answer-only";
+  }
+  if (row.route === ESCALATED_ROUTE) {
+    return "escalated";
+  }
+  if (row.route === "deep") {
+    return "deep";
+  }
   return row.routing?.lookup ? "lookup" : "lite";
 }
 
@@ -105,8 +110,12 @@ function falseSimpleReasons(row: RouterRow, again: ReadonlySet<string>): FalseSi
   if (row.flags.some((flag) => (UNDER_SERVED as readonly string[]).includes(flag))) {
     reasons.push("flagged");
   }
-  if (row.feedback === -1) reasons.push("thumbs-down");
-  if (again.has(row.id)) reasons.push("rephrased");
+  if (row.feedback === -1) {
+    reasons.push("thumbs-down");
+  }
+  if (again.has(row.id)) {
+    reasons.push("rephrased");
+  }
   return reasons;
 }
 
@@ -128,17 +137,27 @@ function tierStats(tier: RouteTier, rows: readonly RouterRow[], again: ReadonlyS
 
 function count<T extends string>(values: readonly T[]): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const value of values) counts[value] = (counts[value] ?? 0) + 1;
+  for (const value of values) {
+    counts[value] = (counts[value] ?? 0) + 1;
+  }
   return counts;
 }
 
 export function routerReport(rows: readonly RouterRow[]): RouterReport {
   const again = rephrased(rows);
-  const byTier = new Map<RouteTier, RouterRow[]>(ROUTE_TIERS.map((tier) => [tier, []]));
-  for (const row of rows) byTier.get(tierOf(row))!.push(row);
+  const byTier: Record<RouteTier, RouterRow[]> = {
+    lookup: [],
+    lite: [],
+    escalated: [],
+    deep: [],
+    "answer-only": [],
+  };
+  for (const row of rows) {
+    byTier[tierOf(row)].push(row);
+  }
 
   // Kept simple: lite or lookup, answered, and never moved up.
-  const kept = [...byTier.get("lite")!, ...byTier.get("lookup")!].filter(isAnswered);
+  const kept = [...byTier.lite, ...byTier.lookup].filter(isAnswered);
   const candidates = kept
     .map((row) => ({ row, reasons: falseSimpleReasons(row, again) }))
     .filter(({ reasons }) => reasons.length > 0)
@@ -148,15 +167,19 @@ export function routerReport(rows: readonly RouterRow[]): RouterReport {
     "thumbs-down": 0,
     rephrased: 0,
   };
-  for (const { reasons } of candidates) for (const reason of reasons) byReason[reason]++;
+  for (const { reasons } of candidates) {
+    for (const reason of reasons) {
+      byReason[reason]++;
+    }
+  }
 
-  const escalated = byTier.get("escalated")!;
-  const routedLite = escalated.length + byTier.get("lite")!.length + byTier.get("lookup")!.length;
+  const escalated = byTier.escalated;
+  const routedLite = escalated.length + byTier.lite.length + byTier.lookup.length;
   const sensitive = rows.flatMap((row) => (row.routing?.sensitive ? [row.routing.sensitive] : []));
 
   return {
     answers: rows.length,
-    tiers: ROUTE_TIERS.map((tier) => tierStats(tier, byTier.get(tier)!, again)),
+    tiers: ROUTE_TIERS.map((tier) => tierStats(tier, byTier[tier], again)),
     sensitive: { answers: sensitive.length, byTopic: count(sensitive) },
     escalation: {
       answers: escalated.length,
@@ -178,3 +201,5 @@ export function routerReport(rows: readonly RouterRow[]): RouterReport {
     },
   };
 }
+
+export { percentile } from "./outcomes.js";

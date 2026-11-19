@@ -1,4 +1,4 @@
-import { Hono, type Context } from "hono";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
@@ -159,7 +159,7 @@ export function createMcpRouter(origins: readonly string[]): Hono {
   const router = new Hono();
 
   // The transport's rule holds for every method: a present Origin that is not the site's is refused.
-  router.use("*", async (c, next) => {
+  const checkOrigin: MiddlewareHandler = async (c, next) => {
     const origin = c.req.header("origin");
     if (origin !== undefined && !origins.includes(origin)) {
       countMcp("refused:origin");
@@ -170,7 +170,8 @@ export function createMcpRouter(origins: readonly string[]): Hono {
       );
     }
     await next();
-  });
+  };
+  router.use("*", checkOrigin);
 
   // No stream to open and no session to end: POST only.
   router.on(["GET", "DELETE"], "/", (c) => {

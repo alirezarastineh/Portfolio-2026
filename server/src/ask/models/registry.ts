@@ -106,7 +106,9 @@ export function isFreeModel(id: string): boolean {
 
 /** The configured models the free-tier guard leaves out of every chain; none while it is off. */
 export function excludedModels(config: AskConfig): string[] {
-  if (!config.freeOnly) return [];
+  if (!config.freeOnly) {
+    return [];
+  }
   const named = [
     ...config.openrouter.models,
     ...config.insightFallbackModels,
@@ -180,15 +182,22 @@ function providers(config: AskConfig): Providers {
 
 function entry(config: AskConfig, id: string, thinking: Thinking | null): ModelEntry | null {
   // The free-tier guard (D16): a model that bills is left out of every chain, a pairwise side too.
-  if (config.freeOnly && !isFreeModel(id)) return null;
+  if (config.freeOnly && !isFreeModel(id)) {
+    return null;
+  }
   const provider = providerOf(id);
   const { google, openrouter } = providers(config);
   const key = `${provider}:${id}`;
   let model = modelCache.get(key);
   if (!model) {
-    if (provider === "gemini" && google) model = google(id);
-    else if (provider === "openrouter" && openrouter) model = openrouter.chat(id);
-    if (!model) return null;
+    if (provider === "gemini" && google) {
+      model = google(id);
+    } else if (provider === "openrouter" && openrouter) {
+      model = openrouter.chat(id);
+    }
+    if (!model) {
+      return null;
+    }
     modelCache.set(key, model);
   }
   const caps = capsOf(id);
@@ -210,17 +219,25 @@ function collectLiteModels(
   gemini: [string, Thinking | null][],
 ): void {
   gemini.push([geminiConfig.model, "low"]);
-  if (geminiConfig.deepModel) gemini.push([geminiConfig.deepModel, "low"]);
-  if (geminiConfig.fallbackModel) gemini.push([geminiConfig.fallbackModel, null]);
+  if (geminiConfig.deepModel) {
+    gemini.push([geminiConfig.deepModel, "low"]);
+  }
+  if (geminiConfig.fallbackModel) {
+    gemini.push([geminiConfig.fallbackModel, null]);
+  }
 }
 
 function collectDeepModels(
   geminiConfig: AskConfig["gemini"],
   gemini: [string, Thinking | null][],
 ): void {
-  if (geminiConfig.deepModel) gemini.push([geminiConfig.deepModel, "medium"]);
+  if (geminiConfig.deepModel) {
+    gemini.push([geminiConfig.deepModel, "medium"]);
+  }
   gemini.push([geminiConfig.model, "low"]);
-  if (geminiConfig.fallbackModel) gemini.push([geminiConfig.fallbackModel, null]);
+  if (geminiConfig.fallbackModel) {
+    gemini.push([geminiConfig.fallbackModel, null]);
+  }
 }
 
 function collectCopilotModels(
@@ -235,8 +252,12 @@ function collectCopilotModels(
     openrouter.unshift(first);
   }
   const { model, deepModel } = config.gemini;
-  if (deepModel && deepModel !== first) gemini.push([deepModel, "low"]);
-  if (model !== first) gemini.push([model, "low"]);
+  if (deepModel && deepModel !== first) {
+    gemini.push([deepModel, "low"]);
+  }
+  if (model !== first) {
+    gemini.push([model, "low"]);
+  }
 }
 
 /** The default judge, when `SERVER_AI_JUDGE_MODELS` names none: the deep model, or the main one. */
@@ -306,7 +327,9 @@ export function buildChain(config: AskConfig, role: ChainRole): ModelEntry[] {
   const chain: ModelEntry[] = [];
   for (const provider of config.providerPriority) {
     for (const e of byProvider[provider]) {
-      if (seen.has(e.id)) continue;
+      if (seen.has(e.id)) {
+        continue;
+      }
       seen.add(e.id);
       chain.push(e);
     }
@@ -326,13 +349,15 @@ export function withMinimalThinking(chain: readonly ModelEntry[], primary: strin
   const [first, ...rest] = chain;
   const google = first?.providerOptions?.["google"] as
     { thinkingConfig?: Record<string, unknown> } | undefined;
-  if (first?.id !== primary || !google?.thinkingConfig) return [...chain];
+  if (first?.id !== primary || !google?.thinkingConfig) {
+    return [...chain];
+  }
   const thinkingConfig = { ...google.thinkingConfig, thinkingLevel: "minimal" };
   return [
     {
       ...first,
       providerOptions: { ...first.providerOptions, google: { ...google, thinkingConfig } },
-    } as ModelEntry,
+    },
     ...rest,
   ];
 }
@@ -343,16 +368,18 @@ export function withMinimalThinking(chain: readonly ModelEntry[], primary: strin
  * to keep. A visitor's chain never goes through here.
  */
 export function withThoughts(chain: readonly ModelEntry[]): ModelEntry[] {
-  return chain.map((entry) => {
-    const google = entry.providerOptions?.["google"] as
+  return chain.map((item) => {
+    const google = item.providerOptions?.["google"] as
       { thinkingConfig?: Record<string, unknown> } | undefined;
-    if (!google?.thinkingConfig) return entry;
+    if (!google?.thinkingConfig) {
+      return item;
+    }
     const thinkingConfig = { ...google.thinkingConfig, includeThoughts: true };
     return {
-      ...entry,
-      providerOptions: { ...entry.providerOptions, google: { ...google, thinkingConfig } },
+      ...item,
+      providerOptions: { ...item.providerOptions, google: { ...google, thinkingConfig } },
       thoughts: true,
-    } as ModelEntry;
+    };
   });
 }
 
@@ -363,7 +390,9 @@ export function withThoughts(chain: readonly ModelEntry[]): ModelEntry[] {
  * no key.
  */
 export function variantChain(config: AskConfig, variant: string): ModelEntry[] | null {
-  if (variant === "lite" || variant === "deep") return buildChain(config, variant);
+  if (variant === "lite" || variant === "deep") {
+    return buildChain(config, variant);
+  }
   const one = entry(config, variant, providerOf(variant) === "gemini" ? "low" : null);
   return one ? [one] : null;
 }
@@ -372,7 +401,9 @@ export function variantChain(config: AskConfig, variant: string): ModelEntry[] |
 export function configuredModels(config: AskConfig): string[] {
   const ids = new Set<string>();
   for (const role of ["lite", "deep", "insight", "copilot"] as const) {
-    for (const e of buildChain(config, role)) ids.add(e.id);
+    for (const e of buildChain(config, role)) {
+      ids.add(e.id);
+    }
   }
   return [...ids];
 }
@@ -417,9 +448,13 @@ async function checkGeminiModel(
       console.error(`[ask] model ${id} does not exist on the Gemini API; skipping it`);
       return;
     }
-    if (!res.ok) return;
+    if (!res.ok) {
+      return;
+    }
     const info = (await res.json()) as { inputTokenLimit?: number };
-    if (info.inputTokenLimit) learned.set(id, { contextWindow: info.inputTokenLimit });
+    if (info.inputTokenLimit) {
+      learned.set(id, { contextWindow: info.inputTokenLimit });
+    }
   } catch (error) {
     console.warn(`[ask] could not check ${id}`, (error as Error).message);
   }
@@ -436,7 +471,9 @@ async function checkOpenRouterModels(
       headers: { authorization: `Bearer ${config.openrouter.apiKey}` },
       signal,
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      return;
+    }
     const list = (await res.json()) as {
       data?: { id: string; context_length?: number; supported_parameters?: string[] }[];
     };
@@ -477,10 +514,9 @@ export async function checkModels(
   const signal = AbortSignal.timeout(10_000);
 
   const geminiIds = ids.filter((id) => providerOf(id) === "gemini");
-  if (config.gemini.apiKey) {
-    await Promise.all(
-      geminiIds.map((id) => checkGeminiModel(id, config.gemini.apiKey!, fetchImpl, signal)),
-    );
+  const geminiKey = config.gemini.apiKey;
+  if (geminiKey) {
+    await Promise.all(geminiIds.map((id) => checkGeminiModel(id, geminiKey, fetchImpl, signal)));
   }
 
   const openrouterIds = ids.filter((id) => providerOf(id) === "openrouter");

@@ -31,7 +31,9 @@ export async function readImageDescriptions(db: DbExecutor = getDb()): Promise<I
   for (const row of rows) {
     const texts = { en: row.en?.trim(), de: row.de?.trim() };
     const kept = Object.fromEntries(Object.entries(texts).filter(([, text]) => text));
-    if (Object.keys(kept).length) found.set(row.file, kept);
+    if (Object.keys(kept).length) {
+      found.set(row.file, kept);
+    }
   }
   return found;
 }
@@ -45,7 +47,9 @@ export function imageDescriptions(now = Date.now()): Promise<ImageDescriptions> 
     const value = readImageDescriptions();
     cache = { at: now, value };
     value.catch(() => {
-      if (cache?.value === value) cache = undefined;
+      if (cache?.value === value) {
+        cache = undefined;
+      }
     });
   }
   return cache.value;

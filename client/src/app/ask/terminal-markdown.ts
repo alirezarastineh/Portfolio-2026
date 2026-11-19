@@ -43,25 +43,25 @@ interface MatchedInline {
 
 function matchCode(slice: string): MatchedInline | null {
   const m = CODE_RE.exec(slice);
-  return m ? { length: m[0].length, node: { t: "code", v: m[2]! } } : null;
+  return m ? { length: m[0].length, node: { t: "code", v: m[2] } } : null;
 }
 
 function matchBracket(slice: string, options: RenderOptions): MatchedInline | null {
   const cite = CITE_RE.exec(slice);
   if (cite) {
-    const n = options.cite(cite[1]!);
+    const n = options.cite(cite[1]);
     return {
       length: cite[0].length,
-      node: n !== null ? { t: "cite", id: cite[1]!, n } : [],
+      node: n === null ? [] : { t: "cite", id: cite[1], n },
     };
   }
   const link = LINK_RE.exec(slice);
   if (link) {
-    const kind = options.link(link[2]!);
-    const inner = renderInline(link[1]!, options);
+    const kind = options.link(link[2]);
+    const inner = renderInline(link[1], options);
     return {
       length: link[0].length,
-      node: kind ? { t: "link", href: link[2]!, internal: kind === "internal", c: inner } : inner,
+      node: kind ? { t: "link", href: link[2], internal: kind === "internal", c: inner } : inner,
     };
   }
   return null;
@@ -73,16 +73,16 @@ function matchAsterisk(text: string, i: number, options: RenderOptions): Matched
   if (strong) {
     return {
       length: strong[0].length,
-      node: { t: "strong", c: renderInline(strong[1]!, options) },
+      node: { t: "strong", c: renderInline(strong[1], options) },
     };
   }
   const prev = i > 0 ? text[i - 1] : " ";
-  if (!/\w/.test(prev!)) {
+  if (!/\w/.test(prev)) {
     const em = EM_RE.exec(slice);
     if (em) {
       return {
         length: em[0].length,
-        node: { t: "em", c: renderInline(em[1]!, options) },
+        node: { t: "em", c: renderInline(em[1], options) },
       };
     }
   }
@@ -91,21 +91,32 @@ function matchAsterisk(text: string, i: number, options: RenderOptions): Matched
 
 function matchInlineAt(text: string, i: number, options: RenderOptions): MatchedInline | null {
   const ch = text[i];
-  if (ch === "`") return matchCode(text.slice(i));
-  if (ch === "[") return matchBracket(text.slice(i), options);
-  if (ch === "*") return matchAsterisk(text, i, options);
+  if (ch === "`") {
+    return matchCode(text.slice(i));
+  }
+  if (ch === "[") {
+    return matchBracket(text.slice(i), options);
+  }
+  if (ch === "*") {
+    return matchAsterisk(text, i, options);
+  }
   return null;
 }
 
 function pushInline(out: Inline[], node: Inline): void {
   const last = out.at(-1);
-  if (node.t === "text" && last?.t === "text") last.v += node.v;
-  else out.push(node);
+  if (node.t === "text" && last?.t === "text") {
+    last.v += node.v;
+  } else {
+    out.push(node);
+  }
 }
 
 function appendNodes(out: Inline[], node: Inline | Inline[]): void {
   if (Array.isArray(node)) {
-    for (const n of node) pushInline(out, n);
+    for (const n of node) {
+      pushInline(out, n);
+    }
   } else {
     pushInline(out, node);
   }
@@ -121,12 +132,16 @@ export function renderInline(text: string, options: RenderOptions): Inline[] {
       i++;
       continue;
     }
-    if (i > at) pushInline(out, { t: "text", v: text.slice(at, i) });
+    if (i > at) {
+      pushInline(out, { t: "text", v: text.slice(at, i) });
+    }
     appendNodes(out, matched.node);
     i += matched.length;
     at = i;
   }
-  if (at < text.length) pushInline(out, { t: "text", v: text.slice(at) });
+  if (at < text.length) {
+    pushInline(out, { t: "text", v: text.slice(at) });
+  }
   return out;
 }
 
@@ -138,11 +153,13 @@ const HEADING = /^\s{0,3}#{1,6}\s+(\S.*)$/;
 function parseFence(lines: string[], startIndex: number): { code: string; nextIndex: number } {
   const code: string[] = [];
   let i = startIndex + 1;
-  while (i < lines.length && !FENCE.test(lines[i]!)) {
-    code.push(lines[i]!);
+  while (i < lines.length && !FENCE.test(lines[i])) {
+    code.push(lines[i]);
     i++;
   }
-  if (i < lines.length) i++;
+  if (i < lines.length) {
+    i++;
+  }
   return { code: code.join("\n"), nextIndex: i };
 }
 
@@ -154,10 +171,10 @@ function parseList(
   const items: string[] = [];
   let i = startIndex;
   while (i < lines.length) {
-    const current = lines[i]!;
+    const current = lines[i];
     const item = ordered ? NUMBERED.exec(current) : BULLET.exec(current);
     if (item) {
-      items.push(ordered ? item[2]! : item[1]!);
+      items.push(ordered ? item[2] : item[1]);
       i++;
     } else if (current.trim() && /^\s{2,}/.test(current) && items.length) {
       items[items.length - 1] += ` ${current.trim()}`;
@@ -171,7 +188,7 @@ function parseList(
 
 export function renderMarkdown(text: string, options: RenderOptions): Block[] {
   const blocks: Block[] = [];
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const lines = text.replaceAll(/\r\n?/g, "\n").split("\n");
   let paragraph: string[] = [];
 
   const flush = () => {
@@ -183,7 +200,7 @@ export function renderMarkdown(text: string, options: RenderOptions): Block[] {
 
   let i = 0;
   while (i < lines.length) {
-    const line = lines[i]!;
+    const line = lines[i];
 
     if (FENCE.test(line)) {
       flush();
@@ -216,7 +233,7 @@ export function renderMarkdown(text: string, options: RenderOptions): Block[] {
     const heading = HEADING.exec(line);
     if (heading) {
       flush();
-      blocks.push({ t: "p", c: [{ t: "strong", c: renderInline(heading[1]!, options) }] });
+      blocks.push({ t: "p", c: [{ t: "strong", c: renderInline(heading[1], options) }] });
       i++;
       continue;
     }
@@ -231,7 +248,9 @@ export function renderMarkdown(text: string, options: RenderOptions): Block[] {
 export function citationOrder(text: string): string[] {
   const seen: string[] = [];
   for (const m of text.matchAll(/\[\^([^\]\s]+)\]/g)) {
-    if (!seen.includes(m[1]!)) seen.push(m[1]!);
+    if (!seen.includes(m[1])) {
+      seen.push(m[1]);
+    }
   }
   return seen;
 }
@@ -253,11 +272,11 @@ export function footnotesFor<S extends { id: string }>(
 /** The answer as a screen reader should hear it once: no markers, no Markdown. */
 export function plainText(text: string): string {
   return text
-    .replace(/ ?\[\^[^\]\s]{1,100}\]/g, "")
-    .replace(/```[^\n]{0,100}\n?/g, "")
-    .replace(/\*\*([^*\n]{1,1000})\*\*/g, "$1")
-    .replace(/`([^`\n]{1,1000})`/g, "$1")
-    .replace(/\[([^\]\n]{1,500})\]\([^)\n]{1,1000}\)/g, "$1")
+    .replaceAll(/ ?\[\^[^\]\s]{1,100}\]/g, "")
+    .replaceAll(/```[^\n]{0,100}\n?/g, "")
+    .replaceAll(/\*\*([^*\n]{1,1000})\*\*/g, "$1")
+    .replaceAll(/`([^`\n]{1,1000})`/g, "$1")
+    .replaceAll(/\[([^\]\n]{1,500})\]\([^)\n]{1,1000}\)/g, "$1")
     .split("\n")
     .map((line) => line.trimEnd())
     .join("\n")

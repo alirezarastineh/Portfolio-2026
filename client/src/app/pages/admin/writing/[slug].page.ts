@@ -81,11 +81,14 @@ function blankTranslation(): PostTranslationInput {
   return { title: "", excerpt: "", body: "", seoTitle: "", seoDescription: "" };
 }
 
+const pad = (n: number): string => String(n).padStart(2, "0");
+
 /** `2026-09-22T10:30` in the browser's time zone, as a `datetime-local` wants it. */
 function toLocalInput(iso: string | null): string {
-  if (!iso) return "";
+  if (!iso) {
+    return "";
+  }
   const date = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
@@ -96,8 +99,13 @@ function onSite(p: PostRow): boolean {
 
 /** "Draft", "Scheduled for 3 Dec", "Published": the list's words. */
 function statusOf(p: PostRow): string {
-  if (p.status === "draft") return "Draft";
-  return onSite(p) ? "Published" : `Scheduled for ${DAY_MONTH.format(Date.parse(p.publishedAt!))}`;
+  if (p.status === "draft") {
+    return "Draft";
+  }
+  if (onSite(p) || !p.publishedAt) {
+    return "Published";
+  }
+  return `Scheduled for ${DAY_MONTH.format(Date.parse(p.publishedAt))}`;
 }
 
 /** The texts edited in the bilingual field, one control per language. */
@@ -557,7 +565,7 @@ export default class AdminPostEditorPage implements OnInit {
     return found?.ok ? [found.data.post] : null;
   });
 
-  private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private gone = false;
 
   protected readonly allLocales = LOCALES;
@@ -594,7 +602,9 @@ export default class AdminPostEditorPage implements OnInit {
   /** The view, within the languages the post has: one on, that one. */
   protected readonly shownView = computed<LocaleView>(() => {
     const on = this.versions();
-    if (on.length < 2) return on[0] ?? "en";
+    if (on.length < 2) {
+      return on[0] ?? "en";
+    }
     return this.view() === "both" && !this.wide() ? "en" : this.view();
   });
   protected readonly locales = computed<Locale[]>(() => {
@@ -615,11 +625,14 @@ export default class AdminPostEditorPage implements OnInit {
 
   protected readonly title = computed(() => {
     const p = this.post();
+    const candidates = [
+      p?.translations.en?.title,
+      p?.translations.de?.title,
+      p?.slug,
+      this.route.snapshot.paramMap.get("slug"),
+    ];
     return (
-      p?.translations.en?.title ||
-      p?.translations.de?.title ||
-      p?.slug ||
-      this.route.snapshot.paramMap.get("slug") ||
+      candidates.find((value): value is string => typeof value === "string" && value !== "") ??
       "Post"
     );
   });
@@ -634,7 +647,9 @@ export default class AdminPostEditorPage implements OnInit {
   protected readonly previewPath = computed(() => {
     this.revision();
     const saved = this.pristine;
-    if (!saved) return null;
+    if (!saved) {
+      return null;
+    }
     const locale = saved.translations.en ? "en" : "de";
     return `/admin/preview/${locale}/writing/${encodeURIComponent(saved.slug)}`;
   });
@@ -668,7 +683,9 @@ export default class AdminPostEditorPage implements OnInit {
     this.revision();
     const now = this.post();
     const base = this.pristine;
-    if (!now || !base) return {};
+    if (!now || !base) {
+      return {};
+    }
     const marks = this.pulse?.marks() ?? null;
     const saved = this.savedHere();
     const live = onSite(base);
@@ -697,21 +714,27 @@ export default class AdminPostEditorPage implements OnInit {
         const [en, de] = [at("en", key), at("de", key)];
         return [key, typeof en === "string" && typeof de === "string" ? { en, de } : null];
       }),
-    ) as Record<string, Record<Locale, string> | null>;
+    );
   });
 
   /** Fields saved to the draft and not live; null for a post not on the site, or while unknown. */
   protected readonly notLive = computed(() => {
     this.revision();
-    if (!this.pristine || !onSite(this.pristine)) return null;
-    if (!this.pulse?.marks() && this.savedHere().size === 0) return null;
+    if (!this.pristine || !onSite(this.pristine)) {
+      return null;
+    }
+    if (!this.pulse?.marks() && this.savedHere().size === 0) {
+      return null;
+    }
     return Object.values(this.trace()).filter((state) => state === "draft").length;
   });
 
   /** The sections for the rail: how far along each is, its trace, and the last save's problems in it. */
   protected readonly outline = computed<OutlineItem[]>(() => {
     const p = this.post();
-    if (!p) return [];
+    if (!p) {
+      return [];
+    }
     const trace = this.trace();
     const problems = this.issues.entries().map(([path]) => path);
     return postOutline(p, problems).map((item) => ({
@@ -743,7 +766,9 @@ export default class AdminPostEditorPage implements OnInit {
       for (const locale of LOCALES) {
         this.controls[key][locale].valueChanges.subscribe((value) => {
           const translation = this.post()?.translations[locale];
-          if (translation && value !== translation[key]) this.patchText(locale, { [key]: value });
+          if (translation && value !== translation[key]) {
+            this.patchText(locale, { [key]: value });
+          }
         });
       }
     }
@@ -799,7 +824,9 @@ export default class AdminPostEditorPage implements OnInit {
 
   private postText(locale: Locale): string {
     const t = this.post()?.translations[locale];
-    if (!t) return "";
+    if (!t) {
+      return "";
+    }
     return [t.title, t.excerpt, t.body].filter(Boolean).join("\n");
   }
 
@@ -829,7 +856,9 @@ export default class AdminPostEditorPage implements OnInit {
     const found = result?.ok ? result.data.post : null;
     this.post.set(found ? structuredClone(found) : null);
     this.pristine = found ? structuredClone(found) : null;
-    if (found) this.versionsCheck.remember([found]);
+    if (found) {
+      this.versionsCheck.remember([found]);
+    }
     this.revision.update((v) => v + 1);
     this.fill(true);
   }
@@ -841,7 +870,9 @@ export default class AdminPostEditorPage implements OnInit {
         const control = this.controls[key][locale];
         const value = this.post()?.translations[locale]?.[key] ?? "";
         // A reset abandons the field's own drafts and its Undo: only where the text moved, or on a load.
-        if (fresh || control.value !== value) control.reset(value);
+        if (fresh || control.value !== value) {
+          control.reset(value);
+        }
       }
     }
   }
@@ -904,7 +935,9 @@ export default class AdminPostEditorPage implements OnInit {
     this.revision.update((v) => v + 1);
     // `translations` is patched whole; its per-field messages clear in patchText.
     for (const key of Object.keys(change)) {
-      if (key !== "translations") this.issues.resolve(key);
+      if (key !== "translations") {
+        this.issues.resolve(key);
+      }
     }
   }
 
@@ -930,18 +963,23 @@ export default class AdminPostEditorPage implements OnInit {
    */
   protected async setLocale(locale: Locale, exists: boolean): Promise<void> {
     const current = this.post();
-    if (!current) return;
+    if (!current) {
+      return;
+    }
     this.issues.resolve("translations");
     if (exists) {
       this.putTranslation(locale, this.setAside()[locale] ?? blankTranslation());
       this.setAside.update((kept) => ({ ...kept, [locale]: undefined }));
       return;
     }
-    const text = current.translations[locale];
-    const typed = text && Object.values(text).some((v) => v.trim() !== "" && v !== "<p></p>");
-    this.setAside.update((kept) => ({ ...kept, [locale]: typed ? text : undefined }));
+    const translation = current.translations[locale];
+    const typed =
+      translation && Object.values(translation).some((v) => v.trim() !== "" && v !== "<p></p>");
+    this.setAside.update((kept) => ({ ...kept, [locale]: typed ? translation : undefined }));
     this.putTranslation(locale, null);
-    if (!typed || this.asked.has(locale)) return;
+    if (!typed || this.asked.has(locale)) {
+      return;
+    }
 
     const remove = await this.confirm.ask({
       title: `Remove the ${LANGUAGE[locale]} version when you save?`,
@@ -954,7 +992,7 @@ export default class AdminPostEditorPage implements OnInit {
       this.asked.add(locale);
       return;
     }
-    this.putTranslation(locale, text);
+    this.putTranslation(locale, translation);
     this.setAside.update((kept) => ({ ...kept, [locale]: undefined }));
   }
 
@@ -969,11 +1007,15 @@ export default class AdminPostEditorPage implements OnInit {
   protected patchText(locale: Locale, change: Partial<PostTranslationInput>): void {
     const current = this.post();
     const translation = current?.translations[locale];
-    if (!current || !translation) return;
+    if (!current || !translation) {
+      return;
+    }
     this.patch({
       translations: { ...current.translations, [locale]: { ...translation, ...change } },
     });
-    for (const key of Object.keys(change)) this.issues.resolve(`translations.${locale}.${key}`);
+    for (const key of Object.keys(change)) {
+      this.issues.resolve(`translations.${locale}.${key}`);
+    }
   }
 
   protected chooseCover(asset: MediaAsset | null): void {
@@ -1001,7 +1043,9 @@ export default class AdminPostEditorPage implements OnInit {
 
   protected async save(): Promise<void> {
     const current = this.post();
-    if (!current || this.saving()) return;
+    if (!current || this.saving()) {
+      return;
+    }
 
     this.saving.set(true);
     if (!(await this.versionsCheck.mayOverwrite([current.id], this.title()))) {
@@ -1022,12 +1066,19 @@ export default class AdminPostEditorPage implements OnInit {
       canonicalUrl: current.canonicalUrl.trim(),
       translations: current.translations,
     });
-    if (result.ok) await this.versionsCheck.refresh();
+    if (result.ok) {
+      await this.versionsCheck.refresh();
+    }
     this.saving.set(false);
     ended(result.ok);
-    if (this.gone) return;
-    if (result.ok) this.saved(current);
-    else this.refused(result.error, result.issues ?? []);
+    if (this.gone) {
+      return;
+    }
+    if (result.ok) {
+      this.saved(current);
+    } else {
+      this.refused(result.error, result.issues ?? []);
+    }
   }
 
   /** A refused save: its problems on their fields, the first focused, in the language that shows them. */
@@ -1047,14 +1098,20 @@ export default class AdminPostEditorPage implements OnInit {
     const other = issues.find((i) => isLocale(i.path[1]) && shown !== "both" && i.path[1] !== shown)
       ?.path[1] as Locale | undefined;
     // A problem in the language not shown: show it (both where both fit), then place the problems.
-    if (other) this.view.set(this.wide() ? "both" : other);
+    if (other) {
+      this.view.set(this.wide() ? "both" : other);
+    }
     afterNextRender(
       () => {
-        if (this.gone) return;
+        if (this.gone) {
+          return;
+        }
         for (const { key } of PLAIN_FIELDS) {
           for (const locale of LOCALES) {
             const message = this.textIssue(locale, key);
-            if (message) this.controls[key][locale].setErrors({ server: message });
+            if (message) {
+              this.controls[key][locale].setErrors({ server: message });
+            }
           }
         }
         focusFirstInvalid(this.host.nativeElement);
@@ -1073,13 +1130,19 @@ export default class AdminPostEditorPage implements OnInit {
     const at = Date.now();
     this.savedHere.update((marks) => {
       const next = new Map(marks);
-      for (const [key, state] of Object.entries(before)) if (state === "unsaved") next.set(key, at);
+      for (const [key, state] of Object.entries(before)) {
+        if (state === "unsaved") {
+          next.set(key, at);
+        }
+      }
       return next;
     });
     this.revision.update((v) => v + 1);
     this.issues.clear();
     for (const { key } of PLAIN_FIELDS) {
-      for (const locale of LOCALES) this.controls[key][locale].markAsPristine();
+      for (const locale of LOCALES) {
+        this.controls[key][locale].markAsPristine();
+      }
     }
     this.savedAt.set(at);
     // The route is keyed by slug, so keep the URL in step after a rename (saved: the guard lets it by).

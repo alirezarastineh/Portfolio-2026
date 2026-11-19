@@ -136,18 +136,19 @@ const plural = (noun: string): string =>
 
     <ng-template #menu let-i>
       <hlm-dropdown-menu class="w-44">
-        <button hlmDropdownMenuItem [disabled]="i === 0" (triggered)="move(i, -1)">
+        <button hlmDropdownMenuItem type="button" [disabled]="i === 0" (triggered)="move(i, -1)">
           Move left
         </button>
         <button
           hlmDropdownMenuItem
+          type="button"
           [disabled]="i === entries().length - 1"
           (triggered)="move(i, 1)"
         >
           Move right
         </button>
         <hlm-dropdown-menu-separator />
-        <button hlmDropdownMenuItem (triggered)="remove(i)">Remove</button>
+        <button hlmDropdownMenuItem type="button" (triggered)="remove(i)">Remove</button>
       </hlm-dropdown-menu>
     </ng-template>
   `,
@@ -198,8 +199,9 @@ export class TokenFieldComponent {
         if (
           incoming.length === this.lastEmitted.length &&
           incoming.every((v, i) => v === this.lastEmitted[i])
-        )
+        ) {
           return;
+        }
         this.entries.set(incoming.map((value) => ({ id: ++tokens, value })));
         this.lastEmitted = [...incoming];
       });
@@ -253,12 +255,16 @@ export class TokenFieldComponent {
     const added = list.length - this.entries().length;
     if (added) {
       this.set(list);
-      const last = list.at(-1)!;
+      const last = list.at(-1);
       this.said.set(
-        added === 1 ? `${last.value} added, ${list.length} of ${list.length}.` : `${added} added.`,
+        added === 1 && last
+          ? `${last.value} added, ${list.length} of ${list.length}.`
+          : `${added} added.`,
       );
     }
-    if (reason) this.said.set(reason);
+    if (reason) {
+      this.said.set(reason);
+    }
     this.refused.set(reason);
     return refused.join(", ");
   }
@@ -266,12 +272,17 @@ export class TokenFieldComponent {
   protected remove(index: number): void {
     const list = [...this.entries()];
     const [gone] = list.splice(index, 1);
-    if (!gone) return;
+    if (!gone) {
+      return;
+    }
     this.set(list);
     this.said.set(`${gone.value} removed.`);
     // Its neighbour takes the focus, else the field.
-    if (list.length) this.focusToken(Math.min(index, list.length - 1));
-    else this.afterRender(() => this.field()[0]?.nativeElement.focus());
+    if (list.length) {
+      this.focusToken(Math.min(index, list.length - 1));
+    } else {
+      this.afterRender(() => this.field()[0]?.nativeElement.focus());
+    }
   }
 
   protected move(index: number, by: -1 | 1): void {
@@ -284,10 +295,12 @@ export class TokenFieldComponent {
 
   private moveTo(from: number, to: number): void {
     const list = [...this.entries()];
-    if (from === to || to < 0 || to >= list.length) return;
+    if (from === to || to < 0 || to >= list.length) {
+      return;
+    }
     moveItemInArray(list, from, to);
     this.set(list);
-    this.said.set(`${list[to]!.value} moved to ${to + 1} of ${list.length}.`);
+    this.said.set(`${list[to].value} moved to ${to + 1} of ${list.length}.`);
     this.focusToken(to);
   }
 

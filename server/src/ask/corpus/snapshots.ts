@@ -50,7 +50,9 @@ const recorded = new Set<string>();
 
 export async function recordSnapshot(corpus: AskCorpus): Promise<void> {
   const key = snapshotKey(corpus);
-  if (recorded.has(key)) return;
+  if (recorded.has(key)) {
+    return;
+  }
   await getDb()
     .insert(aiCorpusSnapshots)
     .values({

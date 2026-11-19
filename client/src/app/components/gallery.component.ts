@@ -64,7 +64,7 @@ import { PictureComponent } from "./picture.component";
         <li>
           <figure class="m-0 flex flex-col gap-2">
             <a
-              class="block aspect-16/10 touch-manipulation overflow-hidden rounded border border-border bg-card transition-colors hover:border-border-strong"
+              class="block aspect-16/10 touch-manipulation overflow-hidden rounded-sm border border-border bg-card transition-colors hover:border-border-strong"
               [href]="image.src"
               [attr.aria-label]="openLabel(i)"
               (click)="open(i, $event)"
@@ -83,6 +83,7 @@ import { PictureComponent } from "./picture.component";
 
     <dialog
       #dialog
+      tabindex="-1"
       class="m-0 h-dvh max-h-none w-screen max-w-none overscroll-contain bg-background p-0 text-foreground"
       [attr.aria-label]="label()"
       (close)="current.set(null)"
@@ -98,7 +99,7 @@ import { PictureComponent } from "./picture.component";
             <app-picture
               [image]="image"
               sizes="100vw"
-              imgClass="block max-h-[max(10rem,min(78vh,calc(100dvh_-_11rem)))] w-auto max-w-full rounded object-contain"
+              imgClass="block max-h-[max(10rem,min(78vh,calc(100dvh-11rem)))] w-auto max-w-full rounded-sm object-contain"
             />
             <figcaption class="flex max-w-2xl flex-col gap-1 text-center text-muted-foreground">
               <span class="text-data">{{ (current() ?? 0) + 1 }} / {{ images().length }}</span>
@@ -181,10 +182,14 @@ export class GalleryComponent {
       return;
     }
     const dialog = this.dialog().nativeElement;
-    if (typeof dialog.showModal !== "function") return;
+    if (typeof dialog.showModal !== "function") {
+      return;
+    }
     event.preventDefault();
     this.current.set(i);
-    if (!dialog.open) dialog.showModal();
+    if (!dialog.open) {
+      dialog.showModal();
+    }
   }
 
   protected close(): void {
@@ -194,20 +199,28 @@ export class GalleryComponent {
   protected step(delta: number): void {
     const n = this.images().length;
     const i = this.current();
-    if (i === null || n === 0) return;
+    if (i === null || n === 0) {
+      return;
+    }
     this.current.set((i + delta + n) % n);
   }
 
   protected onKey(event: KeyboardEvent): void {
-    if (event.key === "ArrowLeft") this.step(-1);
-    else if (event.key === "ArrowRight") this.step(1);
-    else return;
+    if (event.key === "ArrowLeft") {
+      this.step(-1);
+    } else if (event.key === "ArrowRight") {
+      this.step(1);
+    } else {
+      return;
+    }
     event.preventDefault();
   }
 
   /** A click on the area around the image, not on the image or a button. */
   protected closeOnBackdrop(event: MouseEvent): void {
     const target = event.target as Element | null;
-    if (target === event.currentTarget || target?.hasAttribute("data-dismiss")) this.close();
+    if (target === event.currentTarget || target?.hasAttribute("data-dismiss")) {
+      this.close();
+    }
   }
 }

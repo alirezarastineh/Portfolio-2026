@@ -39,7 +39,9 @@ export class UiSectionService {
 
   async loadGroup<K extends UiGroup>(group: K): Promise<UiGroupLoad<K> | null> {
     const result = await this.api.getSection<AppTranslations>("ui");
-    if (!result.ok) return null;
+    if (!result.ok) {
+      return null;
+    }
 
     return {
       value: {
@@ -55,7 +57,9 @@ export class UiSectionService {
     groups: readonly K[],
   ): Promise<{ value: Record<Locale, Pick<AppTranslations, K>>; updatedAt: string | null } | null> {
     const result = await this.api.getSection<AppTranslations>("ui");
-    if (!result.ok) return null;
+    if (!result.ok) {
+      return null;
+    }
     const pick = (doc: AppTranslations) =>
       Object.fromEntries(groups.map((g) => [g, structuredClone(doc[g])])) as Pick<
         AppTranslations,
@@ -84,7 +88,9 @@ export class UiSectionService {
     owned: OwnedGroups,
   ): Promise<{ updatedAt: string | null; unchanged: boolean; changed: UiGroup[] } | null> {
     const fresh = await this.api.getSection<AppTranslations>("ui");
-    if (!fresh.ok) return null;
+    if (!fresh.ok) {
+      return null;
+    }
     const { en, de } = fresh.data.data;
     const changed = (Object.keys(owned) as UiGroup[]).filter(
       (group) => countChangedFields(owned[group], { en: en[group], de: de[group] }) > 0,
@@ -110,12 +116,17 @@ export class UiSectionService {
       const latest = await this.latest(owned);
       version = latest?.updatedAt ?? null;
       changed = latest?.changed ?? [];
-      if (latest?.unchanged) saved = await this.api.patchUiGroups(groups, latest.updatedAt);
+      if (latest?.unchanged) {
+        saved = await this.api.patchUiGroups(groups, latest.updatedAt);
+      }
     }
-    if (saved.ok) return { ok: true, updatedAt: saved.data.updatedAt };
+    if (saved.ok) {
+      return { ok: true, updatedAt: saved.data.updatedAt };
+    }
 
-    if (saved.status === 409)
+    if (saved.status === 409) {
       return { ok: false, reason: "stale", error: "stale", version, changed };
+    }
     if (saved.status === 400) {
       return {
         ok: false,

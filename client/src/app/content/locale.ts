@@ -26,14 +26,20 @@ export function otherLocale(locale: Locale): Locale {
 }
 
 export function parseLocaleCookie(cookieHeader: string | undefined | null): Locale | null {
-  if (!cookieHeader) return null;
+  if (!cookieHeader) {
+    return null;
+  }
 
   for (const part of cookieHeader.split(";")) {
     const [name, ...rest] = part.trim().split("=");
-    if (name !== LOCALE_COOKIE) continue;
+    if (name !== LOCALE_COOKIE) {
+      continue;
+    }
     try {
       const value = decodeURIComponent(rest.join("="));
-      if (isLocale(value)) return value;
+      if (isLocale(value)) {
+        return value;
+      }
     } catch {
       // A malformed cookie is simply not a preference.
     }
@@ -43,7 +49,9 @@ export function parseLocaleCookie(cookieHeader: string | undefined | null): Loca
 
 /** `de-DE,de;q=0.9,en;q=0.8` → `de`. The highest-ranked supported language wins. */
 export function parseAcceptLanguage(header: string | undefined | null): Locale | null {
-  if (!header) return null;
+  if (!header) {
+    return null;
+  }
 
   const ranked = header
     .split(",")
@@ -57,7 +65,9 @@ export function parseAcceptLanguage(header: string | undefined | null): Locale |
 
   for (const { tag } of ranked) {
     const base = tag.split("-")[0];
-    if (isLocale(base)) return base;
+    if (isLocale(base)) {
+      return base;
+    }
   }
   return null;
 }
@@ -146,9 +156,11 @@ export function localeRedirect(
   }
 
   const match = /^\/(en|de)(\/.*)?$/i.exec(path);
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
 
-  const locale = match[1]!.toLowerCase();
+  const locale = match[1].toLowerCase();
   let rest = match[2] ?? "";
   while (rest.endsWith("/")) {
     rest = rest.slice(0, -1);

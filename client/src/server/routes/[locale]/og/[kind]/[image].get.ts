@@ -75,7 +75,9 @@ function loadFonts(): Promise<OgFonts> {
     const assets = useStorage("assets:server");
     const read = async (file: string) => {
       const raw = await assets.getItemRaw<Uint8Array>(`og/${file}`);
-      if (!raw) throw new Error(`[og] missing server asset og/${file}`);
+      if (!raw) {
+        throw new Error(`[og] missing server asset og/${file}`);
+      }
       return Buffer.from(raw);
     };
     return {
@@ -127,12 +129,16 @@ async function store(file: string, png: Buffer): Promise<void> {
 
 /** Keeps the newest cards: old ones belong to content that has since changed. */
 async function prune(): Promise<void> {
-  const names = (await readdir(CACHE_DIR)).filter((name) => name.endsWith(".png"));
-  if (names.length <= CACHE_LIMIT) return;
+  const entries = await readdir(CACHE_DIR);
+  const names = entries.filter((name) => name.endsWith(".png"));
+  if (names.length <= CACHE_LIMIT) {
+    return;
+  }
   const files = await Promise.all(
     names.map(async (name) => {
       const path = join(CACHE_DIR, name);
-      return { path, mtime: (await stat(path)).mtimeMs };
+      const info = await stat(path);
+      return { path, mtime: info.mtimeMs };
     }),
   );
   files.sort((a, b) => b.mtime - a.mtime);

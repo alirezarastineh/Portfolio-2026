@@ -43,11 +43,18 @@ async function loadEmbeddedPostgres() {
   const before = new Map(events.map((event) => [event, new Set(process.listeners(event))]));
   const { default: EmbeddedPostgres } = await import("embedded-postgres");
   for (const event of events) {
+    const existing = before.get(event);
     for (const listener of process.listeners(event)) {
-      if (!before.get(event)!.has(listener)) process.removeListener(event, listener);
+      if (!existing?.has(listener)) {
+        process.removeListener(event, listener);
+      }
     }
   }
   return EmbeddedPostgres;
+}
+
+async function noop(): Promise<void> {
+  /* no embedded cluster started when TEST_DATABASE_URL is provided */
 }
 
 /**
@@ -58,7 +65,7 @@ async function loadEmbeddedPostgres() {
  */
 export default async function setup(project: TestProject): Promise<() => Promise<void>> {
   let url = process.env.TEST_DATABASE_URL;
-  let teardown = async () => {};
+  let teardown: () => Promise<void> = noop;
 
   if (!url) {
     const EmbeddedPostgres = await loadEmbeddedPostgres();
@@ -73,7 +80,9 @@ export default async function setup(project: TestProject): Promise<() => Promise
       // UTF-8 like production (the postgres image's default). Left to initdb,
       // Windows picks WIN1252, which cannot store characters such as "−".
       initdbFlags: ["--encoding=UTF8", "--locale=C"],
-      onLog: () => {},
+      onLog: () => {
+        /* silence postgres startup logs during test setup */
+      },
     });
 
     await cluster.initialise();
@@ -82,7 +91,9 @@ export default async function setup(project: TestProject): Promise<() => Promise
     url = `postgresql://postgres:postgres@127.0.0.1:${port}/${TEST_DB}`;
 
     teardown = async () => {
-      await cluster.stop().catch(() => {});
+      await cluster.stop().catch(() => {
+        /* best-effort cluster shutdown */
+      });
       // Windows can hold the data files for a moment after the server exits.
       rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     };

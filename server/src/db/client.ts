@@ -23,7 +23,7 @@ export function getPool(): pg.Pool {
     connectionString: connectionString(),
     max: Number.parseInt(process.env.DATABASE_POOL_MAX ?? "10", 10),
     idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 5_000,
+    connectionTimeoutMillis: 5000,
     // Stops a runaway query from pinning a connection for the container's lifetime.
     statement_timeout: 15_000,
   });

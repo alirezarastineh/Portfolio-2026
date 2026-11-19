@@ -9,9 +9,35 @@ import { callTool, DOCUMENT_CHARS } from "./tools.js";
 
 const fixture = fixtureAskCorpus(fixtureConfig());
 
+function docById(corpus: AskCorpus, id: string) {
+  const doc = corpus.byId.get(id);
+  if (!doc) {
+    throw new Error(`Missing fixture document: ${id}`);
+  }
+  return doc;
+}
+
+function callToolResult(corpus: AskCorpus, name: string, args: Record<string, unknown>) {
+  const result = callTool(corpus, name, args);
+  if (!result) {
+    throw new Error(`Unknown tool: ${name}`);
+  }
+  return result;
+}
+
+const urlOf = (corpus: AskCorpus) =>
+  (
+    callToolResult(corpus, "get_document", { id: "profile@en" }).structuredContent as {
+      url: string;
+    }
+  ).url;
+
+const structured = (name: string, args: Record<string, unknown>, corpus = fixture) =>
+  callToolResult(corpus, name, args).structuredContent;
+
 /** The fixture with the English profile's text replaced. */
 function withProfile(text: string, siteUrl?: string): AskCorpus {
-  const profile = { ...fixture.byId.get("profile@en")!, text };
+  const profile = { ...docById(fixture, "profile@en"), text };
   return {
     ...fixture,
     ...(siteUrl ? { siteUrl } : {}),
@@ -22,9 +48,9 @@ function withProfile(text: string, siteUrl?: string): AskCorpus {
 describe("get_document", () => {
   it("cuts a document past 40,000 characters, and says so", () => {
     const long = `${"a".repeat(DOCUMENT_CHARS)}the part past the cut`;
-    const read = callTool(withProfile(long), "get_document", { id: "profile@en" });
-    expect(read?.isError).toBeUndefined();
-    const doc = read!.structuredContent as { text: string; truncated?: boolean };
+    const read = callToolResult(withProfile(long), "get_document", { id: "profile@en" });
+    expect(read.isError).toBeUndefined();
+    const doc = read.structuredContent as { text: string; truncated?: boolean };
     expect(doc.truncated).toBe(true);
     expect(doc.text).toHaveLength(DOCUMENT_CHARS + 1);
     expect(doc.text.endsWith("a…")).toBe(true);
@@ -32,28 +58,23 @@ describe("get_document", () => {
   });
 
   it("hands a document of exactly the limit whole", () => {
-    const read = callTool(withProfile("b".repeat(DOCUMENT_CHARS)), "get_document", {
+    const read = callToolResult(withProfile("b".repeat(DOCUMENT_CHARS)), "get_document", {
       id: "profile",
     });
-    const doc = read!.structuredContent as { text: string; truncated?: boolean };
+    const doc = read.structuredContent as { text: string; truncated?: boolean };
     expect(doc.truncated).toBeUndefined();
     expect(doc.text).toHaveLength(DOCUMENT_CHARS);
   });
 
   it("makes the url absolute with the site's origin, and leaves it as it is without one", () => {
-    const url = (corpus: AskCorpus) =>
-      (callTool(corpus, "get_document", { id: "profile@en" })!.structuredContent as { url: string })
-        .url;
-    const path = fixture.byId.get("profile@en")!.url;
-    expect(url(withProfile("short"))).toBe(path);
-    expect(url(withProfile("short", "https://example.test"))).toBe(`https://example.test${path}`);
+    const path = docById(fixture, "profile@en").url;
+    expect(urlOf(withProfile("short"))).toBe(path);
+    expect(urlOf(withProfile("short", "https://example.test"))).toBe(`https://example.test${path}`);
   });
 });
 
 describe("the day a document last changed, and its related documents (visitor plan V21)", () => {
   const FAQ = "faq:a1c2e3f4@en";
-  const structured = (name: string, args: Record<string, unknown>, corpus = fixture) =>
-    callTool(corpus, name, args)!.structuredContent;
 
   it("get_document gives both, before the text", () => {
     const doc = structured("get_document", { id: FAQ });
@@ -63,7 +84,7 @@ describe("the day a document last changed, and its related documents (visitor pl
   });
 
   it("get_document leaves out what a document does not have", () => {
-    const bare = { ...fixture.byId.get(FAQ)! };
+    const bare = { ...docById(fixture, FAQ) };
     delete bare.updated;
     delete bare.related;
     const corpus = { ...fixture, byId: new Map(fixture.byId).set(FAQ, bare) };
@@ -78,9 +99,12 @@ describe("the day a document last changed, and its related documents (visitor pl
     };
     expect(results).toContainEqual(expect.objectContaining({ id: FAQ, updated: "2026-09-01" }));
     for (const hit of results) {
-      const day = fixture.byId.get(hit.id)!.updated;
-      if (day) expect(hit.updated).toBe(day);
-      else expect(hit).not.toHaveProperty("updated");
+      const day = docById(fixture, hit.id).updated;
+      if (day) {
+        expect(hit.updated).toBe(day);
+      } else {
+        expect(hit).not.toHaveProperty("updated");
+      }
     }
   });
 });

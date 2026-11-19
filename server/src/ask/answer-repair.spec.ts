@@ -40,8 +40,10 @@ function failingOn(failing: number[], turns: LanguageModelV4StreamPart[][], mode
     modelId,
     doStream: (options) => {
       calls.push(options);
-      if (failing.includes(calls.length)) return Promise.reject(apiError(400));
-      const chunks = turns[Math.min(calls.length - 1, turns.length - 1)]!;
+      if (failing.includes(calls.length)) {
+        return Promise.reject(apiError(400));
+      }
+      const chunks = turns[Math.min(calls.length - 1, turns.length - 1)];
       return Promise.resolve({ stream: simulateReadableStream({ chunks, chunkDelayInMs: null }) });
     },
   });
@@ -70,7 +72,7 @@ async function answer(
     abortSignal: new AbortController().signal,
     persist: false,
   });
-  const chunks = (await drain(stream)) as UIMessageChunk[];
+  const chunks = await drain(stream);
   return { chunks, outcome: await done, calls: model.calls };
 }
 
@@ -79,12 +81,19 @@ async function browserMessage(chunks: UIMessageChunk[]): Promise<AskUIMessage> {
   let last: AskUIMessage | undefined;
   const stream = new ReadableStream<UIMessageChunk>({
     start(controller) {
-      for (const chunk of chunks) controller.enqueue(chunk);
+      for (const chunk of chunks) {
+        controller.enqueue(chunk);
+      }
       controller.close();
     },
   });
-  for await (const message of readUIMessageStream<AskUIMessage>({ stream })) last = message;
-  return last!;
+  for await (const message of readUIMessageStream<AskUIMessage>({ stream })) {
+    last = message;
+  }
+  if (!last) {
+    throw new Error("Expected at least one UI message in stream");
+  }
+  return last;
 }
 
 /** The finish's metadata; the stream has exactly one finish and no separate metadata chunk. */
@@ -102,6 +111,24 @@ function sentText(call: LanguageModelV4CallOptions): string {
 
 /** Whether a call was the repair: the only one told the repair line. */
 const isRepair = (call: LanguageModelV4CallOptions) => sentText(call).includes(REPAIR_LEAD);
+
+async function expectFixedLineClose(language: Locale) {
+  resetBreakers();
+  const { chunks, outcome, calls } = await answer(scripted([EMPTY]), {
+    question: language === "de" ? "Wo wohnt er genau?" : "Where does he live exactly?",
+    language,
+  });
+  expect(calls).toHaveLength(2);
+  expect(outcome.text).toBe(closingLine(language));
+  expect(outcome.repair).toEqual({ reason: "no-words", by: "fixed-line" });
+  expect(outcome.finishReason).toBe("stop");
+  expect(outcome.checks.flags).toEqual(["repaired"]);
+  const metadata = finishMetadata(chunks);
+  const message = await browserMessage(chunks);
+  expect(verifyAnswer(SESSION, outcome.messageId, messageText(message), metadata.sig ?? "")).toBe(
+    true,
+  );
+}
 
 describe("an answer without words gets one repair (visitor plan V5)", () => {
   beforeEach(() => resetBreakers());
@@ -124,9 +151,9 @@ describe("an answer without words gets one repair (visitor plan V5)", () => {
 
     // The repair's request: tools off, the answer's own instructions, what the hand-off
     // returned, then the line, last.
-    const repair = calls[1]!;
+    const repair = calls[1];
     expect(repair.tools ?? []).toHaveLength(0);
-    expect(repair.prompt[0]).toEqual(calls[0]!.prompt[0]);
+    expect(repair.prompt[0]).toEqual(calls[0].prompt[0]);
     const sent = sentText(repair);
     expect(sent).toContain("handoff_contact");
     expect(sent).toContain(summary);
@@ -142,7 +169,7 @@ describe("an answer without words gets one repair (visitor plan V5)", () => {
     expect(metadata.finishReason).toBe("stop");
     const message = await browserMessage(chunks);
     expect(messageText(message)).toBe(words);
-    expect(verifyAnswer(SESSION, outcome.messageId, messageText(message), metadata.sig!)).toBe(
+    expect(verifyAnswer(SESSION, outcome.messageId, messageText(message), metadata.sig ?? "")).toBe(
       true,
     );
   });
@@ -165,23 +192,8 @@ describe("an answer without words gets one repair (visitor plan V5)", () => {
   });
 
   it("empty twice: the fixed line closes it in the answer's language, with no third call", async () => {
-    for (const language of ["en", "de"] as const) {
-      resetBreakers();
-      const { chunks, outcome, calls } = await answer(scripted([EMPTY]), {
-        question: language === "de" ? "Wo wohnt er genau?" : "Where does he live exactly?",
-        language,
-      });
-      expect(calls).toHaveLength(2);
-      expect(outcome.text).toBe(closingLine(language));
-      expect(outcome.repair).toEqual({ reason: "no-words", by: "fixed-line" });
-      expect(outcome.finishReason).toBe("stop");
-      expect(outcome.checks.flags).toEqual(["repaired"]);
-      const metadata = finishMetadata(chunks);
-      const message = await browserMessage(chunks);
-      expect(verifyAnswer(SESSION, outcome.messageId, messageText(message), metadata.sig!)).toBe(
-        true,
-      );
-    }
+    await expectFixedLineClose("en");
+    await expectFixedLineClose("de");
   });
 
   it("a content filter or an error is never repaired", async () => {
@@ -197,7 +209,7 @@ describe("an answer without words gets one repair (visitor plan V5)", () => {
     // A tool no name can mean: the agent tries each round, then the answer fails.
     const failed = await answer(scripted([toolTurn("delete_everything", {})]));
     expect(failed.outcome.finishReason).toBe("error:error");
-    expect(failed.calls.some(isRepair)).toBe(false);
+    expect(failed.calls.some((call) => isRepair(call))).toBe(false);
     expect(failed.outcome.repair).toBeNull();
   });
 
@@ -293,7 +305,7 @@ describe("an answer without words gets one repair (visitor plan V5)", () => {
     const message = await browserMessage(chunks);
     expect(messageText(message)).toBe(outcome.text);
     expect(
-      verifyAnswer(SESSION, outcome.messageId, outcome.text, finishMetadata(chunks).sig!),
+      verifyAnswer(SESSION, outcome.messageId, outcome.text, finishMetadata(chunks).sig ?? ""),
     ).toBe(true);
   });
 });
@@ -309,8 +321,8 @@ describe("the repair's parts", () => {
         ],
       },
     ]);
-    expect(lookups[0]!.output).toHaveLength(FETCH_CLIP + 1);
-    expect(lookups[0]!.output.endsWith("…")).toBe(true);
+    expect(lookups[0].output).toHaveLength(FETCH_CLIP + 1);
+    expect(lookups[0].output.endsWith("…")).toBe(true);
     expect(lookups[1]).toEqual({
       tool: "search_portfolio",
       input: '{"query":"rag"}',
@@ -324,9 +336,9 @@ describe("the repair's parts", () => {
       [{ tool: "navigate", input: "{}", output: "{}" }],
     );
     expect(messages).toHaveLength(1);
-    const content = messages[0]!.content as { type: string; text: string }[];
-    expect(content[0]!.text).toBe(wrapVisitor("Hi", "en"));
-    expect(content[1]!.text.endsWith(REPAIR_LINE)).toBe(true);
+    const content = messages[0].content as { type: string; text: string }[];
+    expect(content[0].text).toBe(wrapVisitor("Hi", "en"));
+    expect(content[1].text.endsWith(REPAIR_LINE)).toBe(true);
     // After an answer (never the case today), the turn stands alone.
     expect(repairMessages([{ role: "assistant", content: "x" }], [])).toHaveLength(2);
   });
@@ -338,7 +350,9 @@ describe("the repair's parts", () => {
       merge(stream: ReadableStream<UIMessageChunk>) {
         reads.push(
           (async () => {
-            for await (const chunk of stream) written.push(chunk);
+            for await (const chunk of stream) {
+              written.push(chunk);
+            }
           })(),
         );
       },

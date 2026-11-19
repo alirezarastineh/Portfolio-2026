@@ -15,6 +15,7 @@ const proposal = (status: Proposal["status"]) => ({ status, createdAt: HOUR_AGO 
 const faq = (status: FaqProposal["status"]) => ({ status, createdAt: HOUR_AGO }) as FaqProposal;
 const reviews = (queued: number, reviewed: number) =>
   ({ week: "2026-W40", stats: { answers: 12, queued, reviewed } }) as ReviewQueue;
+const copy = (editor: string, page: string, href: string) => ({ editor, page, href, at: 1 });
 
 /** Nothing waits anywhere, every source answered. */
 const NONE: TodayFacts = {
@@ -125,7 +126,7 @@ describe("Today's Needs you", () => {
       "1 draft from the content agent",
     ]);
     expect(rows[1]).toMatchObject({ action: "Assistant", link: "/admin/assistant" });
-    expect(rows[1]!.query).toBeUndefined();
+    expect(rows[1].query).toBeUndefined();
   });
 
   it("leaves out a source that has not answered rather than guessing", () => {
@@ -136,8 +137,6 @@ describe("Today's Needs you", () => {
 });
 
 describe("a recovery copy's page", () => {
-  const copy = (editor: string, page: string, href: string) => ({ editor, page, href, at: 1 });
-
   it("follows its editor to where it moved: the old label pages to Words, Socials to Profile", () => {
     expect(copyHome(copy("ui:contact", "Contact copy", "/admin/contact"))).toMatchObject({
       page: "Words",

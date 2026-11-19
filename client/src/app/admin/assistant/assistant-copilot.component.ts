@@ -199,7 +199,7 @@ export class AssistantCopilotComponent implements OnInit {
   protected readonly models = modelsLabel;
   protected readonly gates = gateNames;
   protected readonly checks = checksLine;
-  protected readonly leads = (ids: readonly string[]) => ids.map(leadName).join(", ");
+  protected readonly leads = (ids: readonly string[]) => ids.map((id) => leadName(id)).join(", ");
 
   ngOnInit(): void {
     void this.load();

@@ -61,6 +61,13 @@ function toDraft(s: AssistantSettings): Draft {
   };
 }
 
+const suggestionLines = (text: string): string[] =>
+  text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length >= 3)
+    .slice(0, 6);
+
 /**
  * What can change without a deploy: the admin's switch, the daily budget, the
  * deep model, what the rest may spend of it, suggested questions, and the "how
@@ -364,8 +371,11 @@ export class AssistantSettingsComponent implements OnInit {
     const result = await this.api.assistantSettings();
     if (!result.ok) {
       // With settings on screen (a reload after a save), a toast; before, the page says so.
-      if (this.draft()) toast.error("Could not load the settings", { description: result.error });
-      else this.loadError.set(result.error);
+      if (this.draft()) {
+        toast.error("Could not load the settings", { description: result.error });
+      } else {
+        this.loadError.set(result.error);
+      }
       return;
     }
     const draft = toDraft(result.data.settings);
@@ -403,13 +413,17 @@ export class AssistantSettingsComponent implements OnInit {
   protected discard(): void {
     const edits = this.draft();
     const saved = this.saved();
-    if (saved) this.draft.set(structuredClone(saved));
+    if (saved) {
+      this.draft.set(structuredClone(saved));
+    }
     toastDiscarded(() => this.draft.set(edits));
   }
 
   protected async save(): Promise<void> {
     const d = this.draft();
-    if (!d) return;
+    if (!d) {
+      return;
+    }
     const budget = d.budget.trim() === "" ? null : Number(d.budget);
     if (budget !== null && !(budget >= 0.01 && budget <= 100)) {
       toast.error("The budget must be between 0.01 and 100 USD, or empty");
@@ -420,18 +434,15 @@ export class AssistantSettingsComponent implements OnInit {
       toast.error(spend.error);
       return;
     }
-    const lines = (text: string) =>
-      text
-        .split("\n")
-        .map((l) => l.trim())
-        .filter((l) => l.length >= 3)
-        .slice(0, 6);
     const input: AssistantSettingsInput = {
       enabled: d.enabled,
       dailyBudgetUsd: budget,
       deepEnabled: d.deepEnabled,
       publicScorecard: d.publicScorecard,
-      suggestedQuestions: { en: lines(d.suggestions.en), de: lines(d.suggestions.de) },
+      suggestedQuestions: {
+        en: suggestionLines(d.suggestions.en),
+        de: suggestionLines(d.suggestions.de),
+      },
       systemCard: { en: d.systemCard.en.trim(), de: d.systemCard.de.trim() },
       ...spend.value,
     };

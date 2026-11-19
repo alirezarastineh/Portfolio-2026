@@ -13,8 +13,12 @@ function memoryStorage(): Storage {
     clear: () => items.clear(),
     getItem: (key) => items.get(key) ?? null,
     key: (i) => [...items.keys()][i] ?? null,
-    removeItem: (key) => void items.delete(key),
-    setItem: (key, value) => void items.set(key, value),
+    removeItem: (key) => {
+      items.delete(key);
+    },
+    setItem: (key, value) => {
+      items.set(key, value);
+    },
   };
 }
 

@@ -190,7 +190,9 @@ const COUNT_LIMIT = 12;
 
 /** Whether a figure must be in what the answer cited: not an ordinal, a time, or a bare count. */
 function owesSource(figure: Figure): boolean {
-  if (figure.optional) return false;
+  if (figure.optional) {
+    return false;
+  }
   return figure.unit !== "" || !/^\d+$/.test(figure.value) || Number(figure.value) > COUNT_LIMIT;
 }
 
@@ -204,7 +206,7 @@ function owesSource(figure: Figure): boolean {
 export function ungroundedFigures(
   input: Pick<CheckInput, "text" | "question" | "citedTexts" | "careful">,
 ): string[] {
-  const figures = numbersOf(input.text.replace(MARKERS, " ").replace(LINKED, " ")).filter(
+  const figures = numbersOf(input.text.replaceAll(MARKERS, " ").replaceAll(LINKED, " ")).filter(
     (figure) => !figure.optional,
   );
   if (input.careful && !HAS_MARKER.test(input.text)) {
@@ -212,9 +214,9 @@ export function ungroundedFigures(
   }
   const sources = [...(input.citedTexts ?? []), input.question ?? ""];
   const known = new Set(sources.flatMap((text) => numbersOf(text).map((figure) => figure.value)));
-  return [...new Set(figures.filter(owesSource).map((figure) => figure.value))].filter(
-    (value) => !known.has(value),
-  );
+  return [
+    ...new Set(figures.filter((figure) => owesSource(figure)).map((figure) => figure.value)),
+  ].filter((value) => !known.has(value));
 }
 
 /** The canary is a leak whoever wrote it first: pasting it must not hide a translated leak. */
@@ -237,19 +239,21 @@ export function leakReached(
   };
   return (
     CANARY.test(shown) ||
-    LEAKS.some(theirs) ||
-    KEY_SHAPES.some(theirs) ||
+    LEAKS.some((pattern) => theirs(pattern)) ||
+    KEY_SHAPES.some((pattern) => theirs(pattern)) ||
     (input.secrets ?? []).some((s) => s.length >= 8 && shown.includes(s))
   );
 }
 
 export function checkAnswer(input: CheckInput): AnswerChecks {
   const flags: CheckFlag[] = [];
-  const prose = input.text.replace(MARKERS, "").trim();
+  const prose = input.text.replaceAll(MARKERS, "").trim();
   const failed = input.finishReason.startsWith("error") || input.finishReason === "aborted";
 
   const detected = detectLanguage(prose);
-  if (detected && detected !== (input.language ?? input.locale)) flags.push("language");
+  if (detected && detected !== (input.language ?? input.locale)) {
+    flags.push("language");
+  }
 
   const words = prose.split(/\s+/).filter(Boolean).length;
   const saysAbsent = UNKNOWN.test(prose) && !FIGURE.test(prose);
@@ -263,17 +267,33 @@ export function checkAnswer(input: CheckInput): AnswerChecks {
   }
 
   // Removed by the guard, or found in what was shown: either way it was written.
-  if (input.guarded?.length || leakReached(input)) flags.push("leak");
+  if (input.guarded?.length || leakReached(input)) {
+    flags.push("leak");
+  }
   if (!prose && !failed && !input.toolNames.some((name) => ACTIONS.has(name))) {
     flags.push("empty");
   }
-  if (input.droppedCitations.length) flags.push("invented-citation");
-  if (ungroundedFigures(input).length) flags.push("ungrounded-figure");
-  if (input.steps >= input.maxRounds) flags.push("max-rounds");
-  if (input.degraded) flags.push("degraded");
-  if (input.finishReason === "content-filter") flags.push("blocked");
-  if (input.repaired) flags.push("repaired");
-  if (looksLikeInjection(input.question ?? "")) flags.push("injection-attempt");
+  if (input.droppedCitations.length) {
+    flags.push("invented-citation");
+  }
+  if (ungroundedFigures(input).length) {
+    flags.push("ungrounded-figure");
+  }
+  if (input.steps >= input.maxRounds) {
+    flags.push("max-rounds");
+  }
+  if (input.degraded) {
+    flags.push("degraded");
+  }
+  if (input.finishReason === "content-filter") {
+    flags.push("blocked");
+  }
+  if (input.repaired) {
+    flags.push("repaired");
+  }
+  if (looksLikeInjection(input.question ?? "")) {
+    flags.push("injection-attempt");
+  }
   return { v: 1, flags };
 }
 
@@ -302,7 +322,7 @@ const SENTENCE_END = /[.!?…]["'”’»)\]]*$/u;
 
 /** A text's words, as the verifier reads them: no fence, no markers, on one line. */
 const proseOf = (text: string) =>
-  withoutFence(text).replace(MARKERS, " ").replace(/\s+/g, " ").trim();
+  withoutFence(text).replaceAll(MARKERS, " ").replaceAll(/\s+/g, " ").trim();
 
 /** A text as an echo is compared: its words, lower case, no end mark. */
 const echoForm = (text: string) =>
@@ -329,15 +349,21 @@ export function answerShape(
     !HAS_MARKER.test(own) &&
     !SENTENCE_END.test(prose);
   let hollow: AnswerShape["hollow"];
-  if (stub) hollow = "stub";
-  else if (!prose && parts.some(echoed)) hollow = "echo";
+  if (stub) {
+    hollow = "stub";
+  } else if (!prose && parts.some((part) => echoed(part))) {
+    hollow = "echo";
+  }
 
   const actions = [...new Set(record.toolCalls.map((call) => call.name))].filter(
     (name): name is AnswerShape["actions"][number] => ACTIONS.has(name),
   );
   let ending: AnswerShape["ending"] = "finished";
-  if (record.error || record.aborted) ending = "failed";
-  else if (record.finishReason === "content-filter") ending = "filtered";
+  if (record.error || record.aborted) {
+    ending = "failed";
+  } else if (record.finishReason === "content-filter") {
+    ending = "filtered";
+  }
   return { words: prose !== "" && !stub, ...(hollow ? { hollow } : {}), actions, ending };
 }
 
@@ -356,6 +382,8 @@ export function repairReason(shape: AnswerShape): RepairReason | null {
   if (shape.words || shape.ending !== "finished" || shape.actions.includes("navigate")) {
     return null;
   }
-  if (shape.actions.includes("handoff_contact")) return "handoff-without-words";
+  if (shape.actions.includes("handoff_contact")) {
+    return "handoff-without-words";
+  }
   return shape.hollow ?? "no-words";
 }

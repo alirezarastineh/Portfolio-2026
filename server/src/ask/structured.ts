@@ -56,13 +56,21 @@ export function instructionIn(
   guard: LeakGuard | null,
   visitorText: string,
 ): string | null {
-  if (looksLikeInjection(text)) return "it reads as an instruction";
-  if (LINK.test(text)) return "it holds a link";
-  if (FENCE_TAG.test(text)) return "it holds a visitor tag";
+  if (looksLikeInjection(text)) {
+    return "it reads as an instruction";
+  }
+  if (LINK.test(text)) {
+    return "it holds a link";
+  }
+  if (FENCE_TAG.test(text)) {
+    return "it holds a visitor tag";
+  }
   if (guard) {
     const hits = new LeakTally();
     scanChunk(guard, newScanState(), text, true, hits, echoOf(visitorText));
-    if (hits.kinds().size) return "it repeats the instructions";
+    if (hits.kinds().size) {
+      return "it repeats the instructions";
+    }
   }
   return null;
 }
@@ -85,7 +93,9 @@ export function guardFor(
   const key = `${name}:${corpus.key}`;
   let guard = guardMemo.get(key);
   if (!guard) {
-    if (guardMemo.size >= 16) guardMemo.clear();
+    if (guardMemo.size >= 16) {
+      guardMemo.clear();
+    }
     guard = buildLeakGuard({
       instructions: instructions(),
       corpusTexts: corpus.documents.map((d) => d.text),
@@ -135,17 +145,17 @@ export function structuredAsk<T>(options: {
     onFailover: options.onFailover,
     estimateTokens: (call) => countTokens(JSON.stringify(call.prompt)),
   });
-  return async (messages) =>
-    (
-      await generateText({
-        model,
-        instructions: options.instructions,
-        messages,
-        output: Output.object({ schema: options.schema }),
-        abortSignal: options.abortSignal,
-        ...options.call,
-      })
-    ).output as T;
+  return async (messages) => {
+    const result = await generateText({
+      model,
+      instructions: options.instructions,
+      messages,
+      output: Output.object({ schema: options.schema }),
+      abortSignal: options.abortSignal,
+      ...options.call,
+    });
+    return result.output;
+  };
 }
 
 /** The repair turn: the request, the answer as the model's own, the exact failures; checked again. */
@@ -183,7 +193,9 @@ export function closingStream(
 ): ReadableStream<UIMessageChunk> {
   let finished = false;
   const end = async (ending: "finished" | "aborted", error?: unknown) => {
-    if (finished) return;
+    if (finished) {
+      return;
+    }
     finished = true;
     await finish(ending, error);
   };
@@ -218,7 +230,9 @@ export function finishReasonOf(
   signal: AbortSignal,
   failure: unknown,
 ): string {
-  if (ending === "aborted" || signal.aborted) return "aborted";
+  if (ending === "aborted" || signal.aborted) {
+    return "aborted";
+  }
   return failure ? "error:error" : "stop";
 }
 
@@ -238,8 +252,12 @@ export async function logRow(options: {
   label: string;
 }): Promise<void> {
   try {
-    if (options.calls.length) await recordUsage(options.calls, options.feature);
-    if (wasForgotten(options.sessionHash)) return;
+    if (options.calls.length) {
+      await recordUsage(options.calls, options.feature);
+    }
+    if (wasForgotten(options.sessionHash)) {
+      return;
+    }
     await logAnswer(options.entry());
     await recordSnapshot(options.corpus);
   } catch (error) {

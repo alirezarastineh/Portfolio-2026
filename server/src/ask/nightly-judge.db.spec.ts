@@ -41,7 +41,7 @@ const judgePrompts: string[] = [];
 
 const judge = new MockLanguageModelV4({
   modelId: "judge",
-  doGenerate: async (options) => {
+  doGenerate: (options) => {
     const prompt = JSON.stringify(options.prompt);
     judgePrompts.push(prompt);
     // An answer that invents a figure is judged unfaithful.
@@ -49,12 +49,12 @@ const judge = new MockLanguageModelV4({
     const verdict = unfaithful
       ? { faithfulness: 0.4, helpfulness: 2, unsupported: ["99%"] }
       : { faithfulness: 1, helpfulness: 5, unsupported: [] };
-    return {
+    return Promise.resolve({
       content: [{ type: "text", text: JSON.stringify(verdict) }],
       finishReason: { unified: "stop", raw: "stop" },
       usage: usage(50, 10),
       warnings: [],
-    };
+    });
   },
 });
 const lite = scripted([textTurn("Atlas cut escalations by 38% [^project:atlas@en].")]);
@@ -66,7 +66,7 @@ const app = createApp({
       role === "judge"
         ? [mockEntry(judgeId, judge)]
         : [mockEntry("gemini-3.5-flash-lite", lite.model)],
-    corpus: async (c) => fixtureCorpus(c),
+    corpus: (c) => Promise.resolve(fixtureCorpus(c)),
     evalPacing: null,
   },
 });
@@ -112,7 +112,7 @@ async function seed(
     .insert(aiMessages)
     .values(
       answers.map((a, i) => ({
-        id: ids[i]!,
+        id: ids[i],
         createdAt: new Date((a.day ?? yesterday.start).getTime() + (a.minutes ?? i) * 60_000),
         sessionHash: `s${i}`,
         locale: "en" as const,
@@ -147,8 +147,10 @@ interface RunView {
   run: { id: string; status: string; error: string | null; params: { picks: unknown[] } };
   items: { key: string; status: string; usd: number }[];
 }
-const read = async (id: string) =>
-  (await (await admin.get(`/admin/assistant/runs/${id}`)).json()) as RunView;
+const read = async (id: string): Promise<RunView> => {
+  const res = await admin.get(`/admin/assistant/runs/${id}`);
+  return (await res.json()) as RunView;
+};
 // A run works in the background: 15 s, as content-work.db.spec.ts waits for one. A
 // loaded CI agent runs the db specs several times slower, and 3 s timed out twice
 // beside the nightly's e2e (Woodpecker #101).
@@ -158,12 +160,32 @@ const until = (id: string, test: (view: RunView) => boolean) =>
     return test(view) ? view : undefined;
   }, 15_000);
 
-const verdicts = async () =>
-  new Map(
-    (await getDb().select({ id: aiMessages.id, judge: aiMessages.judge }).from(aiMessages)).map(
-      (r) => [r.id, r.judge],
-    ),
-  );
+const verdicts = async () => {
+  const rows = await getDb()
+    .select({ id: aiMessages.id, judge: aiMessages.judge })
+    .from(aiMessages);
+  return new Map(rows.map((r) => [r.id, r.judge]));
+};
+
+const codePointSort = (a: string, b: string): number => {
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+};
+
+const unfaithfulSummary = (judged: number) => ({
+  judged,
+  helpfulness: 2,
+  below: judged,
+});
+
+const totalSpend = async () => {
+  const rows = await getDb().select().from(aiUsageFeatures);
+  return rows.reduce((sum, r) => sum + r.usd, 0);
+};
+
+const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000);
 
 const nightlyAudit = () =>
   getDb()
@@ -180,26 +202,30 @@ describe("a night's run", () => {
     );
     const [before] = await seed([{ day: new Date(yesterday.start.getTime() - 86_400_000) }]);
     const [today] = await seed([{ day: yesterday.end }]);
-    await getDb().insert(aiFeedback).values({ messageId: day[12]!, value: -1 });
+    await getDb().insert(aiFeedback).values({ messageId: day[12], value: -1 });
     await nightlyOn();
 
     const started = await startNightly(config, NOW);
-    expect(started).toMatchObject({ run: expect.any(String) });
-    const id = (started as { run: string }).run;
+    expect("run" in started).toBe(true);
+    if (!("run" in started)) {
+      throw new Error("expected nightly run to start");
+    }
+    expect(typeof started.run).toBe("string");
+    const id = started.run;
     const done = await until(id, (v) => v.run.status === "done");
 
     // 5 % of 20, at least 3: a sample of 3, then the flagged ones it did not draw.
     const picks = done.run.params.picks as { id: string; pick: string }[];
     const sampled = picks.filter((p) => p.pick === "sample").map((p) => p.id);
     expect(sampled).toHaveLength(3);
-    const flagged = [day[4]!, day[9]!, day[12]!];
+    const flagged = [day[4], day[9], day[12]];
     // In the night's own (hashed) order, which moves with the day: compared as a set.
     expect(
       picks
         .filter((p) => p.pick === "flagged")
         .map((p) => p.id)
-        .sort(),
-    ).toEqual(flagged.filter((f) => !sampled.includes(f)).sort());
+        .sort(codePointSort),
+    ).toEqual(flagged.filter((f) => !sampled.includes(f)).sort(codePointSort));
     const all = await verdicts();
     for (const pick of picks) {
       expect(all.get(pick.id)).toMatchObject({
@@ -211,8 +237,8 @@ describe("a night's run", () => {
       });
     }
     const picked = new Set(picks.map((p) => p.id));
-    for (const id of [...day, before!, today!].filter((m) => !picked.has(m))) {
-      expect(all.get(id)).toBeNull();
+    for (const msgId of [...day, before, today].filter((m) => !picked.has(m))) {
+      expect(all.get(msgId)).toBeNull();
     }
 
     // Spent as the nightly judge's, one verdict a pick (its cap: the next test).
@@ -228,7 +254,7 @@ describe("a night's run", () => {
 
     const [allowed] = await nightlyAudit();
     expect(allowed).toMatchObject({ actor: "system", target: id, decision: "allowed" });
-    expect(allowed!.reason).toBe(
+    expect(allowed.reason).toBe(
       `${picks.length} answers of ${yesterday.day} to judge: 3 sampled, ${picks.length - 3} flagged`,
     );
   });
@@ -247,28 +273,27 @@ describe("a night's run", () => {
       "pending",
       "pending",
     ]);
-    const spend = async () =>
-      (await getDb().select().from(aiUsageFeatures)).reduce((sum, r) => sum + r.usd, 0);
-    expect(await spend()).toBeCloseTo(2 * VERDICT_USD, 12);
-    expect(await spend()).toBeLessThan(VERDICT_USD * 2.5);
+    expect(await totalSpend()).toBeCloseTo(2 * VERDICT_USD, 12);
+    expect(await totalSpend()).toBeLessThan(VERDICT_USD * 2.5);
 
     // Resumed the same day, the run projects the next answer from those it judged: still under.
-    expect((await admin.post(`/admin/assistant/runs/${started.run}/resume`, {})).status).toBe(202);
+    const firstResume = await admin.post(`/admin/assistant/runs/${started.run}/resume`, {});
+    expect(firstResume.status).toBe(202);
     const again = await until(started.run, (v) => v.run.status === "failed");
     expect(again.items.filter((i) => i.status === "done")).toHaveLength(2);
-    expect(await spend()).toBeLessThan(VERDICT_USD * 2.5);
+    expect(await totalSpend()).toBeLessThan(VERDICT_USD * 2.5);
     expect(judgePrompts).toHaveLength(2);
 
     // With the cap raised, the night resumes and judges only what was left.
     await nightlyOn(VERDICT_USD * 10);
-    expect((await admin.post(`/admin/assistant/runs/${started.run}/resume`, {})).status).toBe(202);
+    const secondResume = await admin.post(`/admin/assistant/runs/${started.run}/resume`, {});
+    expect(secondResume.status).toBe(202);
     const done = await until(started.run, (v) => v.run.status === "done");
     expect(done.items.map((i) => i.status)).toEqual(["done", "done", "done", "done", "done"]);
     expect(judgePrompts).toHaveLength(5);
   });
 
   it("projects from the last seven nights only, never from a calibration run", async () => {
-    const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000);
     const run = async (nightly: boolean, at: Date, usd: number) => {
       const [row] = await getDb()
         .insert(aiRuns)
@@ -281,12 +306,15 @@ describe("a night's run", () => {
         .returning({ id: aiRuns.id, kind: aiRuns.kind, params: aiRuns.params });
       await getDb()
         .insert(aiRunItems)
-        .values({ runId: row!.id, key: "m_lookback01", position: 0, status: "done", usd });
-      return row!;
+        .values({ runId: row.id, key: "m_lookback01", position: 0, status: "done", usd });
+      return row;
     };
     // The eighth night back cost ten verdicts, a calibration run twenty: neither counts.
     await run(true, minutesAgo(80), 10 * VERDICT_USD);
-    for (let i = 7; i >= 1; i--) await run(true, minutesAgo(i * 10), VERDICT_USD);
+    await [7, 6, 5, 4, 3, 2, 1].reduce(
+      (prev, i) => prev.then(() => run(true, minutesAgo(i * 10), VERDICT_USD)),
+      Promise.resolve<unknown>(undefined),
+    );
     const calibration = await run(false, minutesAgo(5), 20 * VERDICT_USD);
     const [tonight] = await getDb()
       .insert(aiRuns)
@@ -296,9 +324,9 @@ describe("a night's run", () => {
         params: { nightly: true, day: "2026-10-06", picks: [] },
       })
       .returning({ id: aiRuns.id, kind: aiRuns.kind, params: aiRuns.params });
-    expect(await dearestItemUsd(tonight!)).toBeCloseTo(VERDICT_USD, 15);
+    expect(await dearestItemUsd(tonight)).toBeCloseTo(VERDICT_USD, 15);
     // A calibration run looks at calibration runs only.
-    expect(await dearestItemUsd({ ...calibration, id: tonight!.id })).toBeCloseTo(
+    expect(await dearestItemUsd({ ...calibration, id: tonight.id })).toBeCloseTo(
       20 * VERDICT_USD,
       15,
     );
@@ -316,7 +344,7 @@ describe("a night's run", () => {
       })
       .returning({ id: aiRuns.id });
     await getDb().insert(aiRunItems).values({
-      runId: before!.id,
+      runId: before.id,
       key: "m_before0001",
       position: 0,
       status: "done",
@@ -360,12 +388,13 @@ describe("a night's run", () => {
     await until(started.run, (v) => v.run.status === "done");
 
     expect(judgePrompts).toHaveLength(2);
-    const order = (await read(started.run)).items.map((i) => i.key);
-    const promptFor = (id: string) => judgePrompts[order.indexOf(id)]!;
-    expect(promptFor(kept!)).toContain("SNAPSHOT-ONLY");
+    const runView = await read(started.run);
+    const order = runView.items.map((i) => i.key);
+    const promptFor = (id: string) => judgePrompts[order.indexOf(id)];
+    expect(promptFor(kept)).toContain("SNAPSHOT-ONLY");
     // No snapshot kept: today's corpus.
-    expect(promptFor(gone!)).not.toContain("SNAPSHOT-ONLY");
-    expect(promptFor(gone!)).toContain("[project:atlas@en]");
+    expect(promptFor(gone)).not.toContain("SNAPSHOT-ONLY");
+    expect(promptFor(gone)).toContain("[project:atlas@en]");
   });
 
   it("puts an answer judged unfaithful in the week's review queue", async () => {
@@ -373,11 +402,11 @@ describe("a night's run", () => {
     await nightlyOn();
     const started = (await startNightly(config, NOW)) as { run: string };
     await until(started.run, (v) => v.run.status === "done");
-    expect((await verdicts()).get(bad!)).toMatchObject({ faithfulness: 0.4, pick: "sample" });
+    const allVerdicts = await verdicts();
+    expect(allVerdicts.get(bad)).toMatchObject({ faithfulness: 0.4, pick: "sample" });
 
-    const week = (await (
-      await admin.get(`/admin/assistant/reviews?week=${isoWeek(yesterday.start)}`)
-    ).json()) as {
+    const weekRes = await admin.get(`/admin/assistant/reviews?week=${isoWeek(yesterday.start)}`);
+    const week = (await weekRes.json()) as {
       queue: { message: { id: string }; reasons: string[] }[];
     };
     expect(week.queue.find((e) => e.message.id === bad)?.reasons).toEqual(["judge:unfaithful"]);
@@ -397,18 +426,30 @@ describe("a night's run", () => {
 
     const res = await admin.get("/admin/assistant/faithfulness?days=30");
     expect(res.status).toBe(200);
-    const unfaithful = (judged: number) => ({
-      judged,
-      faithfulness: expect.closeTo(0.4, 10),
-      helpfulness: 2,
-      below: judged,
-    });
-    expect(await res.json()).toMatchObject({
+    const body = (await res.json()) as {
+      byModel: {
+        key: string;
+        sampled: { faithfulness: number };
+        all: { faithfulness: number };
+      }[];
+      byRoute: {
+        key: string;
+        sampled: { faithfulness: number };
+        all: { faithfulness: number };
+      }[];
+    };
+    expect(body).toMatchObject({
       days: 30,
       judge: "gemini-3.5-flash-lite",
       judges: [{ model: "gemini-3.5-flash-lite", judged: 4 }],
-      byModel: [{ key: "gemini-3.5-flash-lite", sampled: unfaithful(3), all: unfaithful(4) }],
-      byRoute: [{ key: "lite", sampled: unfaithful(3), all: unfaithful(4) }],
+      byModel: [
+        {
+          key: "gemini-3.5-flash-lite",
+          sampled: unfaithfulSummary(3),
+          all: unfaithfulSummary(4),
+        },
+      ],
+      byRoute: [{ key: "lite", sampled: unfaithfulSummary(3), all: unfaithfulSummary(4) }],
       nightly: {
         id: started.run,
         day: yesterday.day,
@@ -418,9 +459,15 @@ describe("a night's run", () => {
         error: null,
       },
     });
-    expect((await admin.get("/admin/assistant/faithfulness?days=0")).status).toBe(400);
+    expect(body.byModel[0].sampled.faithfulness).toBeCloseTo(0.4, 10);
+    expect(body.byModel[0].all.faithfulness).toBeCloseTo(0.4, 10);
+    expect(body.byRoute[0].sampled.faithfulness).toBeCloseTo(0.4, 10);
+    expect(body.byRoute[0].all.faithfulness).toBeCloseTo(0.4, 10);
+    const badDays = await admin.get("/admin/assistant/faithfulness?days=0");
+    expect(badDays.status).toBe(400);
     const stranger = new TestClient(app, "198.51.100.8");
-    expect((await stranger.get("/admin/assistant/faithfulness")).status).toBe(401);
+    const unauth = await stranger.get("/admin/assistant/faithfulness");
+    expect(unauth.status).toBe(401);
   });
 });
 
@@ -445,9 +492,9 @@ describe("judge runs from before the nightly judge", () => {
     await getDb()
       .insert(aiRunItems)
       .values([
-        { runId: old!.id, key: "m_oldjudge01", position: 0, status: "done", result: quoted },
+        { runId: old.id, key: "m_oldjudge01", position: 0, status: "done", result: quoted },
         // Another kind's item is left as it is.
-        { runId: evalRun!.id, key: "fact-atlas", position: 0, status: "done", result: quoted },
+        { runId: evalRun.id, key: "fact-atlas", position: 0, status: "done", result: quoted },
       ]);
     // The statement DEPLOYMENT.md gives, as psql receives it.
     const scrub = sql.raw(`
@@ -500,7 +547,8 @@ describe("a night that does not run", () => {
     await seed([{ finishReason: "error:timeout" }, { finishReason: "aborted" }]);
     expect(await startNightly(config, NOW)).toEqual({ refused: "nothing_to_judge" });
 
-    expect((await nightlyAudit()).map((r) => [r.decision, r.target, r.reason])).toEqual([
+    const auditRows = await nightlyAudit();
+    expect(auditRows.map((r) => [r.decision, r.target, r.reason])).toEqual([
       ["denied", yesterday.day, "the nightly judge is switched off"],
       ["denied", yesterday.day, "no judge may read visitor answers (SERVER_AI_JUDGE_MODELS)"],
       ["denied", yesterday.day, "another paid run is going"],

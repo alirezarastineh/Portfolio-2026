@@ -135,24 +135,38 @@ export class AnswerSignals {
   private async drain(messageId: string): Promise<void> {
     this.running.add(messageId);
     try {
-      do {
-        this.dirty.delete(messageId);
-        const { sessionId, totals } = this.totals.get(messageId)!;
-        const landed = await this.retry(() => this.send(sessionId, messageId, totals, false));
-        // It stays pending when it did not land: the page's last word sends it.
-        if (!landed) return;
-        if (!this.dirty.has(messageId)) this.pending.delete(messageId);
-      } while (this.dirty.has(messageId));
+      await this.drainStep(messageId);
     } finally {
       this.running.delete(messageId);
     }
   }
 
+  private async drainStep(messageId: string): Promise<void> {
+    this.dirty.delete(messageId);
+    const current = this.totals.get(messageId);
+    if (!current) {
+      return;
+    }
+    const { sessionId, totals } = current;
+    const landed = await this.retry(() => this.send(sessionId, messageId, totals, false));
+    // It stays pending when it did not land: the page's last word sends it.
+    if (!landed) {
+      return;
+    }
+    if (!this.dirty.has(messageId)) {
+      this.pending.delete(messageId);
+      return;
+    }
+    await this.drainStep(messageId);
+  }
+
   /** What has not landed, once more, as the page goes: a `keepalive` request outlives it. */
   flush(): void {
     for (const messageId of this.pending) {
-      const { sessionId, totals } = this.totals.get(messageId)!;
-      void this.send(sessionId, messageId, totals, true).catch(() => undefined);
+      const current = this.totals.get(messageId);
+      if (current) {
+        void this.send(current.sessionId, messageId, current.totals, true).catch(() => undefined);
+      }
     }
     this.pending.clear();
   }

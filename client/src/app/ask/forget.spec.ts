@@ -10,9 +10,14 @@ function storage(entries: Record<string, string>) {
   const data = new Map(Object.entries(entries));
   return {
     data,
-    removeItem: (key: string) => void data.delete(key),
+    removeItem: (key: string) => {
+      data.delete(key);
+    },
   };
 }
+
+const respond = (status: number, body: unknown) =>
+  Promise.resolve(new Response(JSON.stringify(body), { status }));
 
 describe("forget in the browser (visitor plan V14)", () => {
   it("clears what the terminal kept on this device, and nothing else", () => {
@@ -48,8 +53,6 @@ describe("forget in the browser (visitor plan V14)", () => {
   });
 
   it("reads how many answers the log deleted, or why it could not", async () => {
-    const respond = (status: number, body: unknown) =>
-      Promise.resolve(new Response(JSON.stringify(body), { status }));
     expect(await forgetConversation(() => respond(200, { ok: true, deleted: 3 }))).toEqual({
       ok: true,
       deleted: 3,

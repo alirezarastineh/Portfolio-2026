@@ -31,11 +31,14 @@ export async function oneShot<T>(
 ): Promise<{ ok: true; value: T; trace: Trace } | { ok: false; error: string }> {
   const { feature, chain: chainRole } = ONE_SHOT[role];
   const state = await availability(config, await readAiSettings(), feature);
-  if (state.state !== "ok") return { ok: false, error: refusal(state) };
+  if (state.state !== "ok") {
+    return { ok: false, error: refusal(state) };
+  }
   const all = askChain(config, chainRole);
-  const chain = all.filter(accepts);
-  if (!chain.length)
+  const chain = all.filter((entry) => accepts(entry));
+  if (!chain.length) {
     return { ok: false, error: all.length ? "no_model_for_this" : "assistant_off" };
+  }
   const trace = newTrace();
   const model = fallbackModel(config, chain, trace);
   try {
@@ -91,9 +94,10 @@ export function skillModels(
   accepts: (entry: ModelEntry) => boolean,
 ): SkillSession | { ok: false; error: string } {
   const all = askChain(config, "copilot");
-  const writers = all.filter(accepts);
-  if (!writers.length)
+  const writers = all.filter((entry) => accepts(entry));
+  if (!writers.length) {
     return { ok: false, error: all.length ? "no_model_for_this" : "assistant_off" };
+  }
   const judges = askChain(config, "judge");
   const writing = newTrace();
   const judging = newTrace();
@@ -120,9 +124,13 @@ export async function copilotSession<T>(
   run: (models: SkillSession["models"]) => Promise<T>,
 ): Promise<{ ok: true; value: T; model: string } | { ok: false; error: string }> {
   const state = await availability(config, await readAiSettings(), "copilot");
-  if (state.state !== "ok") return { ok: false, error: refusal(state) };
+  if (state.state !== "ok") {
+    return { ok: false, error: refusal(state) };
+  }
   const session = skillModels(config, accepts);
-  if (!session.ok) return session;
+  if (!session.ok) {
+    return session;
+  }
   try {
     const value = await run(session.models);
     return { ok: true, value, model: session.model() };

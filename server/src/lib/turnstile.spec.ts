@@ -2,10 +2,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { turnstileEnabled, VerifiedSessions, verifyTurnstile } from "./turnstile.js";
 
-function answer(body: unknown, status = 200): typeof fetch {
-  return vi.fn(
-    async () => new Response(JSON.stringify(body), { status }),
-  ) as unknown as typeof fetch;
+function answer(body: unknown, status = 200) {
+  return vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify(body), { status })));
+}
+
+function bodyText(init: RequestInit | undefined): string {
+  const body = init?.body;
+  if (typeof body === "string") {
+    return body;
+  }
+  if (body instanceof URLSearchParams) {
+    return body.toString();
+  }
+  return "";
 }
 
 afterEach(() => {
@@ -24,11 +33,13 @@ describe("verifyTurnstile", () => {
     process.env.TURNSTILE_SECRET_KEY = "secret";
     const fetchImpl = answer({ success: true });
     expect(await verifyTurnstile("token", "203.0.113.1", fetchImpl)).toBe(true);
-    const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    const call = fetchImpl.mock.calls[0];
+    if (!call) {
+      throw new Error("expected fetch to be called");
+    }
+    const [url, init] = call;
     expect(url).toContain("siteverify");
-    expect(String((init as RequestInit).body)).toBe(
-      "secret=secret&response=token&remoteip=203.0.113.1",
-    );
+    expect(bodyText(init)).toBe("secret=secret&response=token&remoteip=203.0.113.1");
   });
 
   it("refuses a missing or rejected token", async () => {
@@ -39,10 +50,8 @@ describe("verifyTurnstile", () => {
 
   it("lets a request through when Cloudflare cannot answer", async () => {
     process.env.TURNSTILE_SECRET_KEY = "secret";
-    const down = vi.fn(async () => {
-      throw new TypeError("fetch failed");
-    }) as unknown as typeof fetch;
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const down = vi.fn<typeof fetch>(() => Promise.reject(new TypeError("fetch failed")));
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
     expect(await verifyTurnstile("token", "ip", down)).toBe(true);
     expect(await verifyTurnstile("token", "ip", answer({}, 502))).toBe(true);
   });
@@ -50,10 +59,10 @@ describe("verifyTurnstile", () => {
 
 describe("VerifiedSessions", () => {
   it("remembers a session until it expires, and forgets the oldest past the cap", () => {
-    const sessions = new VerifiedSessions(1_000, 2);
+    const sessions = new VerifiedSessions(1000, 2);
     sessions.add("a", 0);
     expect(sessions.has("a", 999)).toBe(true);
-    expect(sessions.has("a", 1_000)).toBe(false);
+    expect(sessions.has("a", 1000)).toBe(false);
 
     sessions.add("b", 0);
     sessions.add("c", 0);

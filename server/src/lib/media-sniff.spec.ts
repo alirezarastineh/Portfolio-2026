@@ -33,7 +33,7 @@ const JPEG = (() => {
 const WEBP_VP8L = (() => {
   const b = pad([...Buffer.from("RIFF", "ascii"), 0, 0, 0, 0, ...Buffer.from("WEBPVP8L", "ascii")]);
   // 14 bits width-1, then 14 bits height-1.
-  b.writeUInt32LE((99 & 0x3fff) | ((49 & 0x3fff) << 14), 21);
+  b.writeUInt32LE((99 & 0x3f_ff) | ((49 & 0x3f_ff) << 14), 21);
   return b;
 })();
 

@@ -25,6 +25,16 @@ import { AskStore } from "./ask.store";
 /** Marks the history entry an open sheet adds, so a phone's Back can close it. */
 const SHEET_ENTRY = "askSheet";
 
+function sheetEntry(state: unknown): boolean {
+  return (
+    !!state && typeof state === "object" && (state as Record<string, unknown>)[SHEET_ENTRY] === true
+  );
+}
+
+function stateObject(state: unknown): Record<string, unknown> {
+  return state && typeof state === "object" ? (state as Record<string, unknown>) : {};
+}
+
 /**
  * The assistant on every page (plan 4 U8–U11): one non-modal dialog, opened with
  * `show()` at every width, so the page stays usable beside it. From 1024px it
@@ -363,7 +373,9 @@ export class AskSheetComponent {
   /** `● online` or `● resting`, once the prompt's code knows. */
   protected readonly status = computed(() => {
     const state = this.launcher.assistant();
-    if (!state) return null;
+    if (!state) {
+      return null;
+    }
     const about = CHROME[this.lang.lang()].about;
     return state === "online"
       ? { label: about.online, live: true }
@@ -389,12 +401,13 @@ export class AskSheetComponent {
       this.doc.documentElement.classList.toggle("overflow-hidden", sheet);
       if (open && !dialog.open) {
         this.returnFocus = this.doc.activeElement as HTMLElement | null;
-        this.pageTop = this.doc.defaultView!.scrollY;
+        this.pageTop = this.doc.defaultView?.scrollY ?? 0;
         dialog.show();
         // The dialog first: on a phone the prompt's keyboard would cover what it opened to (claim).
         dialog.focus();
-        if (sheet && !this.history.state?.[SHEET_ENTRY]) {
-          this.history.pushState({ ...this.history.state, [SHEET_ENTRY]: true }, "");
+        const history = this.history;
+        if (sheet && history && !sheetEntry(history.state)) {
+          history.pushState({ ...stateObject(history.state), [SHEET_ENTRY]: true }, "");
         }
       } else if (!open && dialog.open) {
         // Focus goes back to the opener, unless the page has it: the hand-off's form, or
@@ -414,7 +427,9 @@ export class AskSheetComponent {
         this.returnFocus = null;
       }
       // At opening, and while it is open: a reader's button beside the panel.
-      if (open && this.launcher.takeFocus()) this.askConsole()?.claim();
+      if (open && this.launcher.takeFocus()) {
+        this.askConsole()?.claim();
+      }
       this.fit();
     });
 
@@ -428,8 +443,8 @@ export class AskSheetComponent {
     });
   }
 
-  private get history(): History {
-    return this.doc.defaultView!.history;
+  private get history(): (Omit<History, "state"> & { readonly state: unknown }) | undefined {
+    return this.doc.defaultView?.history;
   }
 
   /** A command from the ⋯ menu, run as if typed. */
@@ -441,7 +456,10 @@ export class AskSheetComponent {
   /** The visitor's own close, which also takes back the history entry a phone's sheet added. */
   protected dismiss(): void {
     this.launcher.closeSheet();
-    if (this.history.state?.[SHEET_ENTRY]) this.history.back();
+    const history = this.history;
+    if (history && sheetEntry(history.state)) {
+      history.back();
+    }
   }
 
   /**
@@ -466,7 +484,10 @@ export class AskSheetComponent {
    * before the router's own scroll.
    */
   protected onHistory(event: PopStateEvent): void {
-    const view = this.doc.defaultView!;
+    const view = this.doc.defaultView;
+    if (!view) {
+      return;
+    }
     const { pathname, search, hash } = view.location;
     if (this.router.url === pathname + search + hash) {
       const top = this.pageTop;
@@ -474,10 +495,15 @@ export class AskSheetComponent {
         .pipe(first((routerEvent) => routerEvent instanceof Scroll))
         .subscribe(() => queueMicrotask(() => view.scrollTo({ top, behavior: "instant" })));
     }
-    if (!this.launcher.narrow()) return;
-    const ours = event.state?.[SHEET_ENTRY] === true;
-    if (ours && !this.launcher.sheetOpen()) this.launcher.openSheet();
-    else if (!ours) this.launcher.closeSheet();
+    if (!this.launcher.narrow()) {
+      return;
+    }
+    const ours = sheetEntry(event.state);
+    if (ours && !this.launcher.sheetOpen()) {
+      this.launcher.openSheet();
+    } else if (!ours) {
+      this.launcher.closeSheet();
+    }
   }
 
   /**
@@ -487,8 +513,12 @@ export class AskSheetComponent {
    */
   protected onEscape(event: Event): void {
     const { isComposing, defaultPrevented } = event as KeyboardEvent;
-    if (!this.launcher.sheetOpen() || isComposing || defaultPrevented) return;
-    if (this.doc.querySelector("dialog:modal, #ask-menu:popover-open")) return;
+    if (!this.launcher.sheetOpen() || isComposing || defaultPrevented) {
+      return;
+    }
+    if (this.doc.querySelector("dialog:modal, #ask-menu:popover-open")) {
+      return;
+    }
     this.dismiss();
   }
 }

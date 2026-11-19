@@ -15,7 +15,9 @@ import { readRequestNonce, writeRequestNonce } from "./request-nonce";
 
 function addScript(doc: Document, attrs: Record<string, string>, text = ""): HTMLScriptElement {
   const script = doc.createElement("script");
-  for (const [name, value] of Object.entries(attrs)) script.setAttribute(name, value);
+  for (const [name, value] of Object.entries(attrs)) {
+    script.setAttribute(name, value);
+  }
   script.textContent = text;
   doc.body.appendChild(script);
   return script;
@@ -77,16 +79,16 @@ describe("stampKnownScripts", () => {
   });
 });
 
-describe("provideRequestCspNonce", () => {
-  function setUp(request: object | null) {
-    TestBed.configureTestingModule({
-      providers: [
-        ...(request ? [{ provide: REQUEST, useValue: request }] : []),
-        provideRequestCspNonce(),
-      ],
-    });
-  }
+function setUp(request: object | null): void {
+  TestBed.configureTestingModule({
+    providers: [
+      ...(request ? [{ provide: REQUEST, useValue: request }] : []),
+      provideRequestCspNonce(),
+    ],
+  });
+}
 
+describe("provideRequestCspNonce", () => {
   it("gives Angular the nonce Nitro stored on the request", () => {
     const req = {};
     writeRequestNonce(req, "from-nitro");
@@ -94,13 +96,15 @@ describe("provideRequestCspNonce", () => {
     expect(TestBed.inject(CSP_NONCE)).toBe("from-nitro");
   });
 
-  it("stamps the contract script before the HTML is serialized", () => {
+  it("stamps the contract script before the HTML is serialized", async () => {
     const req = {};
     writeRequestNonce(req, "from-nitro");
     setUp(req);
     const contract = addScript(TestBed.inject(DOCUMENT), { id: EVENT_DISPATCH_SCRIPT_ID });
 
-    for (const callback of TestBed.inject(BEFORE_APP_SERIALIZED)) callback();
+    await Promise.all(
+      TestBed.inject(BEFORE_APP_SERIALIZED).map((callback) => Promise.resolve(callback())),
+    );
 
     expect(contract.getAttribute("nonce")).toBe("from-nitro");
   });
