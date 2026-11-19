@@ -245,6 +245,20 @@ describe("projects", () => {
   });
 });
 
+/** The skill group `core`, its title in English and (with " (de)") in German. */
+function skillGroup(title: string, items: string[]) {
+  return {
+    id: "core",
+    icon: "cpu",
+    span: "lg",
+    items,
+    translations: {
+      en: { title, caption: "", narrative: "" },
+      de: { title: `${title} (de)`, caption: "", narrative: "" },
+    },
+  };
+}
+
 describe("skills and socials", () => {
   it("accepts any registry-style icon key and rejects anything else", async () => {
     const ok = await client.post("/admin/socials", {
@@ -277,6 +291,86 @@ describe("skills and socials", () => {
     const again = await client.post("/admin/skills", skill);
     expect(again.status).toBe(409);
     expect(await again.json()).toEqual({ error: "duplicate_id" });
+  });
+
+  it("lists, updates and deletes a link; a link that is gone answers 404", async () => {
+    const link = { label: "GitHub", href: "https://github.com/someone", icon: "github" };
+    const created = await client.post("/admin/socials", link);
+    const id = ((await created.json()) as { social: { id: string } }).social.id;
+    const list = async () => {
+      const res = await client.get("/admin/socials");
+      const body = (await res.json()) as {
+        socials: { id: string; href: string; isVisible: boolean }[];
+      };
+      return body.socials;
+    };
+
+    const refused = await client.put(`/admin/socials/${id}`, { ...link, label: "" });
+    expect(refused.status).toBe(400);
+    const updated = await client.put(`/admin/socials/${id}`, {
+      ...link,
+      href: "https://github.com/another",
+      isVisible: false,
+    });
+    expect(updated.status).toBe(200);
+    expect(await list()).toEqual([
+      expect.objectContaining({ id, href: "https://github.com/another", isVisible: false }),
+    ]);
+
+    const removed = await client.delete(`/admin/socials/${id}`);
+    expect(removed.status).toBe(200);
+    const removedAgain = await client.delete(`/admin/socials/${id}`);
+    expect(removedAgain.status).toBe(404);
+    const updatedGone = await client.put(`/admin/socials/${id}`, link);
+    expect(updatedGone.status).toBe(404);
+    expect(await list()).toEqual([]);
+  });
+
+  it("lists, updates and deletes a skill group; its id stays, and one that is gone answers 404", async () => {
+    const created = await client.post("/admin/skills", skillGroup("Core", ["TypeScript"]));
+    expect(created.status).toBe(201);
+    const list = async () => {
+      const res = await client.get("/admin/skills");
+      const body = (await res.json()) as {
+        skills: {
+          id: string;
+          items: string[];
+          isVisible: boolean;
+          translations: Record<string, { title: string }>;
+        }[];
+      };
+      return body.skills;
+    };
+
+    const renamed = await client.put("/admin/skills/core", {
+      ...skillGroup("Core", []),
+      id: "other",
+    });
+    expect(renamed.status).toBe(400);
+    expect(await renamed.json()).toEqual({ error: "id_immutable" });
+    const refused = await client.put("/admin/skills/core", {
+      ...skillGroup("Core", []),
+      span: "huge",
+    });
+    expect(refused.status).toBe(400);
+    const updated = await client.put("/admin/skills/core", {
+      ...skillGroup("Kernel", ["TypeScript", "Go"]),
+      isVisible: false,
+    });
+    expect(updated.status).toBe(200);
+    const listed = await list();
+    expect(listed).toEqual([
+      expect.objectContaining({ id: "core", items: ["TypeScript", "Go"], isVisible: false }),
+    ]);
+    expect(listed[0].translations["de"].title).toBe("Kernel (de)");
+
+    const removed = await client.delete("/admin/skills/core");
+    expect(removed.status).toBe(200);
+    const updatedGone = await client.put("/admin/skills/core", skillGroup("Core", []));
+    expect(updatedGone.status).toBe(404);
+    const removedAgain = await client.delete("/admin/skills/core");
+    expect(removedAgain.status).toBe(404);
+    expect(await list()).toEqual([]);
   });
 });
 
