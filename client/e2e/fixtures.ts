@@ -94,11 +94,18 @@ async function watchProblems(page: Page): Promise<PageProblems> {
   return problems;
 }
 
+/** The test server's origin, for a project that names no `baseURL`. */
+function originOf(baseURL = "http://127.0.0.1"): string {
+  return new URL(baseURL).origin;
+}
+
 export const test = base.extend<{ problems: PageProblems }>({
-  page: async ({ page, baseURL = "http://127.0.0.1" }, use) => {
+  // Playwright reads a fixture's parameter names from its source: a default value there
+  // ("baseURL = …") is refused as an unknown fixture, so the default lives in `originOf`.
+  page: async ({ page, baseURL }, use) => {
     // Hermetic: nothing leaves the test server — not the API baked into the
     // build, not analytics, not error reporting.
-    const origin = new URL(baseURL).origin;
+    const origin = originOf(baseURL);
     await page.route(
       (url) => url.origin !== origin && url.protocol.startsWith("http"),
       (route) => route.abort("blockedbyclient"),
