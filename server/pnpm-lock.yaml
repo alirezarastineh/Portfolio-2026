@@ -14,8 +14,8 @@ importers:
         specifier: ^4.0.39
         version: 4.0.39
       "@hono/node-server":
-        specifier: ^2.1.9
-        version: 2.1.9(hono@4.13.19)
+        specifier: ^2.1.11
+        version: 2.1.11(hono@4.13.19)
       "@hono/zod-validator":
         specifier: ^0.9.1
         version: 0.9.1(hono@4.13.19)(zod@4.6.7)
@@ -1103,10 +1103,10 @@ packages:
       }
     engines: { node: ">=18.0.0" }
 
-  "@hono/node-server@2.1.9":
+  "@hono/node-server@2.1.11":
     resolution:
       {
-        integrity: sha512-Sk4NQd3GFY0WZWCzndwFMPwJhtD0y9qjsQ+pjID0/03nK9pxyBCUoUHCho8QYBLBVhi0ssL8UkNPHqbgSOFPIQ==,
+        integrity: sha512-KzKz9vl4vvr1vgLHamj+g5uonbrj5NwAdO3yzOS6cd2HjALVeOgTgeZOyAzNxejbkfOOPIcvuf/Tg8l1pEFLog==,
       }
     engines: { node: ">=20" }
     peerDependencies:
@@ -5377,7 +5377,7 @@ snapshots:
 
   "@google/generative-ai@0.24.1": {}
 
-  "@hono/node-server@2.1.9(hono@4.13.19)":
+  "@hono/node-server@2.1.11(hono@4.13.19)":
     dependencies:
       hono: 4.13.19
 
