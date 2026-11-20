@@ -6,7 +6,7 @@ import markdown from "@eslint/markdown";
 import sonarjs from "eslint-plugin-sonarjs";
 import unicorn from "eslint-plugin-unicorn";
 import { defineConfig, globalIgnores } from "eslint/config";
-import type { Linter } from "eslint";
+import type { ESLint, Linter, Rule } from "eslint";
 
 const jsFiles = ["**/*.{js,mjs,cjs,ts,mts,cts}"];
 const tsFiles = ["**/*.{ts,mts,cts}"];
@@ -123,6 +123,200 @@ const sonarCoreRules: Linter.RulesRecord = {
   radix: "error",
 };
 
+interface TsTypeLike {
+  getNonNullableType(): TsTypeLike;
+  getProperty(name: string): unknown;
+  getCallSignatures(): TsSignatureLike[];
+  isUnion?: () => boolean;
+  types?: TsTypeLike[];
+}
+
+interface TsSignatureLike {
+  parameters: unknown[];
+}
+
+interface TsTypeCheckerLike {
+  isArrayType(type: TsTypeLike): boolean;
+  isTupleType(type: TsTypeLike): boolean;
+  isTypeAssignableTo(source: TsTypeLike, target: TsTypeLike): boolean;
+  getTypeAtLocation(node: unknown): TsTypeLike;
+  getTypeOfSymbolAtLocation(symbol: unknown, node: unknown): TsTypeLike;
+}
+
+interface TsParserServicesLike {
+  program?: { getTypeChecker(): TsTypeCheckerLike } | null;
+  esTreeNodeToTSNodeMap?: { get(node: unknown): unknown } | null;
+}
+
+const isArrayOrTupleType = (type: TsTypeLike, checker: TsTypeCheckerLike): boolean => {
+  if (checker.isArrayType(type) || checker.isTupleType(type)) {
+    return true;
+  }
+  if (type.isUnion?.() && type.types && type.types.length > 0) {
+    return type.types.every((member) => isArrayOrTupleType(member, checker));
+  }
+  return false;
+};
+
+const extractReturnExpression = (fn: Rule.Node) => {
+  if (
+    (fn.type !== "ArrowFunctionExpression" && fn.type !== "FunctionExpression") ||
+    fn.async ||
+    fn.generator ||
+    fn.params.length !== 1
+  ) {
+    return null;
+  }
+  const param = fn.params[0];
+  if (param.type !== "Identifier") {
+    return null;
+  }
+  if (fn.body.type !== "BlockStatement") {
+    return { fn, param, expr: fn.body };
+  }
+  const stmt = fn.body.body[0];
+  if (fn.body.body.length !== 1 || stmt?.type !== "ReturnStatement" || !stmt.argument) {
+    return null;
+  }
+  return { fn, param, expr: stmt.argument };
+};
+
+const isStaticNaN = (node: Rule.Node): boolean => node.type === "Identifier" && node.name === "NaN";
+
+const matchParamEquality = (
+  extracted: NonNullable<ReturnType<typeof extractReturnExpression>>,
+  context: Rule.RuleContext,
+) => {
+  const { fn, param, expr } = extracted;
+  if (expr.type !== "BinaryExpression" || expr.operator !== "===") {
+    return null;
+  }
+  let paramIdent: typeof param | null = null;
+  let searchExpr: Rule.Node | null = null;
+  if (expr.left.type === "Identifier" && expr.left.name === param.name) {
+    paramIdent = expr.left;
+    searchExpr = expr.right as Rule.Node;
+  } else if (expr.right.type === "Identifier" && expr.right.name === param.name) {
+    paramIdent = expr.right;
+    searchExpr = expr.left as Rule.Node;
+  }
+  if (!paramIdent || !searchExpr || isStaticNaN(searchExpr)) {
+    return null;
+  }
+  const scope = context.sourceCode.getScope(fn);
+  const paramVar = scope.variables.find((variable) => variable.name === param.name);
+  const hasExtraParamRef = paramVar?.references.some(
+    (ref) => ref.identifier !== paramIdent && ref.identifier !== param,
+  );
+  if (!paramVar || hasExtraParamRef) {
+    return null;
+  }
+  if (
+    fn.type === "FunctionExpression" &&
+    (context.sourceCode
+      .getTokens(fn)
+      .some((token) => token.type === "Keyword" && token.value === "this") ||
+      scope.through.some((ref) => ref.identifier.name === "arguments"))
+  ) {
+    return null;
+  }
+  return searchExpr;
+};
+
+const isSkippedByUnicornIncludes = (
+  callNode: Rule.Node,
+  receiverNode: Rule.Node,
+  searchExpr: Rule.Node,
+  context: Rule.RuleContext,
+): boolean => {
+  const services = context.sourceCode.parserServices as TsParserServicesLike | undefined;
+  if (!services?.program || !services.esTreeNodeToTSNodeMap) {
+    return false;
+  }
+  const checker = services.program.getTypeChecker();
+  const receiverType = checker
+    .getTypeAtLocation(services.esTreeNodeToTSNodeMap.get(receiverNode))
+    .getNonNullableType();
+  if (!isArrayOrTupleType(receiverType, checker)) {
+    return false;
+  }
+  const includesSymbol = receiverType.getProperty("includes");
+  if (!includesSymbol) {
+    return true;
+  }
+  const tsCall = services.esTreeNodeToTSNodeMap.get(callNode);
+  const paramSymbol = checker
+    .getTypeOfSymbolAtLocation(includesSymbol, tsCall)
+    .getCallSignatures()
+    .at(0)
+    ?.parameters.at(0);
+  if (!paramSymbol) {
+    return true;
+  }
+  const searchType = checker.getTypeAtLocation(services.esTreeNodeToTSNodeMap.get(searchExpr));
+  const paramType = checker.getTypeOfSymbolAtLocation(paramSymbol, tsCall);
+  return !checker.isTypeAssignableTo(searchType, paramType);
+};
+
+// unicorn/prefer-includes skips `.some(x => x === value)` when `value`'s type is wider than the array's element type (SonarQube S7765 still flags it).
+const preferIncludesOverSomeRule: Rule.RuleModule = {
+  meta: {
+    type: "suggestion",
+    docs: {
+      description: "Require .includes() instead of .some() for existence checks (Sonar S7765).",
+    },
+    schema: [],
+    messages: {
+      preferIncludes:
+        "Use `.includes()` instead of `.some()` when checking value existence (sonarqube typescript:S7765).",
+    },
+  },
+  create(context) {
+    return {
+      CallExpression(callNode) {
+        if (
+          callNode.optional ||
+          callNode.arguments.length !== 1 ||
+          callNode.callee.type !== "MemberExpression" ||
+          callNode.callee.computed ||
+          callNode.callee.property.type !== "Identifier" ||
+          callNode.callee.property.name !== "some"
+        ) {
+          return;
+        }
+        const callback = callNode.arguments[0] as Rule.Node;
+        const extracted = extractReturnExpression(callback);
+        if (!extracted) {
+          return;
+        }
+        const searchExpr = matchParamEquality(extracted, context);
+        if (!searchExpr) {
+          return;
+        }
+        if (
+          isSkippedByUnicornIncludes(
+            callNode,
+            callNode.callee.object as Rule.Node,
+            searchExpr,
+            context,
+          )
+        ) {
+          context.report({
+            node: callNode.callee.property,
+            messageId: "preferIncludes",
+          });
+        }
+      },
+    };
+  },
+};
+
+const sonarCompatPlugin: ESLint.Plugin = {
+  rules: {
+    "prefer-includes": preferIncludesOverSomeRule,
+  },
+};
+
 const scopeToFiles = (config: Linter.Config, files: string[]): Linter.Config => {
   if (config.ignores && Object.keys(config).length <= 2 && !config.rules && !config.plugins) {
     return config;
@@ -161,6 +355,7 @@ export default defineConfig([
   },
   {
     files: tsFiles,
+    plugins: { "sonar-compat": sonarCompatPlugin },
     languageOptions: {
       parserOptions: {
         project: ["./tsconfig.json", "./tsconfig.spec.json"],
@@ -168,6 +363,7 @@ export default defineConfig([
       },
     },
     rules: {
+      "sonar-compat/prefer-includes": "error",
       "@typescript-eslint/consistent-type-definitions": "off",
       "@typescript-eslint/default-param-last": "error",
       "@typescript-eslint/dot-notation": [
