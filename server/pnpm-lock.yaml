@@ -35,8 +35,8 @@ importers:
         specifier: ^3.1.0
         version: 3.1.0(ai@7.0.177(zod@4.6.7))(zod@4.6.7)
       "@sentry/node":
-        specifier: ^11.14.0
-        version: 11.14.0
+        specifier: ^11.15.0
+        version: 11.15.0
       ai:
         specifier: ^7.0.177
         version: 7.0.177(zod@4.6.7)
@@ -114,8 +114,8 @@ importers:
         specifier: ^0.31.11
         version: 0.31.11
       embedded-postgres:
-        specifier: 18.6.0-beta.19
-        version: 18.6.0-beta.19
+        specifier: 18.7.0-beta.19
+        version: 18.7.0-beta.19
       eslint:
         specifier: ^10.15.0
         version: 10.15.0(jiti@2.7.0)(supports-color@8.1.1)
@@ -245,73 +245,73 @@ packages:
         integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==,
       }
 
-  "@embedded-postgres/darwin-arm64@18.6.0-beta.19":
+  "@embedded-postgres/darwin-arm64@18.7.0-beta.19":
     resolution:
       {
-        integrity: sha512-FHuiAR1sQUw8J6M+UVFlzd1D8oP4rlL+16Zgd1STqCCzWmO6dFjXBCEQ2I1JaGVQKOE85NlCjNNKuy8RiIrsqw==,
+        integrity: sha512-cUehAUPzwxweDYLrzYDvAQSV7Ie9+19RbT7m+jhOCQoykjjWFInPu0FB+58k/nlyQ8xIkjEzFg/OTMQg4wgRdw==,
       }
     engines: { node: ">=16" }
     cpu: [arm64]
     os: [darwin]
 
-  "@embedded-postgres/darwin-x64@18.6.0-beta.19":
+  "@embedded-postgres/darwin-x64@18.7.0-beta.19":
     resolution:
       {
-        integrity: sha512-ipQDDcoc72moknp3QHP3sgj90/ZG6IqBhN9mdd1eOfBEwJUJXESfuoyNiTwUc4PoNDmnx51nRqQwzxoKMUwSTw==,
+        integrity: sha512-Je4cD+On7Pn78jsMMmtYifYr1GAx+VakJgrEuhjeePwWCFRm+p97UIIlQajBV+fbG2gLhLzp2YurJ8625LgB0w==,
       }
     engines: { node: ">=16" }
     cpu: [x64]
     os: [darwin]
 
-  "@embedded-postgres/linux-arm64@18.6.0-beta.19":
+  "@embedded-postgres/linux-arm64@18.7.0-beta.19":
     resolution:
       {
-        integrity: sha512-mDNZiZkT+Wyxh+BD8HH1n603ircuVLSbQT2bVQeC0D7vk7zPO+54RNRUuC7H0RyTlU6l4FxOxjE6D1Yun1JgMg==,
+        integrity: sha512-8Vf8dz6zlaU6KkohjHbMWN4T7/ptHfRIcWP0kh7PTpnXUxAgPGOZAMvud9MFWloM9cEqpHkCYyhWTaXrQodaig==,
       }
     engines: { node: ">=16" }
     cpu: [arm64]
     os: [linux]
 
-  "@embedded-postgres/linux-arm@18.6.0-beta.19":
+  "@embedded-postgres/linux-arm@18.7.0-beta.19":
     resolution:
       {
-        integrity: sha512-rA1uII2C1Z9WW4ArxhY0lTfexdS0HGDHn6VwrYA8/ZIPiVsi1I0f9PG+2FS0fH0tjwRGgQ4RNoeWENx9eyCc8w==,
+        integrity: sha512-MCaIErFlwRGQgCuCD+G+NPvZJXMlaCIwsUQqbZhx15nnFhF+QjgHPAidT0jU6VY/ZKKnZTIWmYLR2mXLWepW8A==,
       }
     engines: { node: ">=16" }
     cpu: [arm]
     os: [linux]
 
-  "@embedded-postgres/linux-ia32@18.6.0-beta.19":
+  "@embedded-postgres/linux-ia32@18.7.0-beta.19":
     resolution:
       {
-        integrity: sha512-QdncW2uOfZLIgZqhl7VH8DCW4EJNNMA1xUrEpFP3k1vZ+jrjmj2f7KN0cakUZiCjIlMGx3VoBqfqEANWj63GCQ==,
+        integrity: sha512-N8wfDEPPbID2yOSGR7PTXWG415TVrg0Tq9L45pLSRUnj4wdDitTO3fz9ew6SniQcIoJ6AZ8J8j1IRWqsC9xFPg==,
       }
     engines: { node: ">=16" }
     cpu: [ia32]
     os: [linux]
 
-  "@embedded-postgres/linux-ppc64@18.6.0-beta.19":
+  "@embedded-postgres/linux-ppc64@18.7.0-beta.19":
     resolution:
       {
-        integrity: sha512-vi8Gk01tgDboOdsoWtWHou6TABrj3zec7ORmz0yefTCED5J4PtvRpx3wdG3K6Emg2VCMVjG7JuF/fUlsehw5gA==,
+        integrity: sha512-omV3yrfu7u+PnmXJlAS+DgVln4xVqxMebhUU7GNDqK1nDHB+revzo8wDXIwANnriHA62MP6CITOkFg3duXJ3ng==,
       }
     engines: { node: ">=16" }
     cpu: [ppc64]
     os: [linux]
 
-  "@embedded-postgres/linux-x64@18.6.0-beta.19":
+  "@embedded-postgres/linux-x64@18.7.0-beta.19":
     resolution:
       {
-        integrity: sha512-U7sqNsI2M5OPAClnptT05bGSnos4IESgUesNytwvgXQ9L4GKY1mnJciXab6CE1pWm3Kes4/UrsZVJJZKBMFZbw==,
+        integrity: sha512-AtioykrKVZ5N+LNJWnxt1GW3p7yol7/s5nfcvnIpYR6jlCk+c3hHyHgc2c4tK5yeXC/+0uS1Wt53giu22C2yOA==,
       }
     engines: { node: ">=16" }
     cpu: [x64]
     os: [linux]
 
-  "@embedded-postgres/windows-x64@18.6.0-beta.19":
+  "@embedded-postgres/windows-x64@18.7.0-beta.19":
     resolution:
       {
-        integrity: sha512-fp8d8f+6WfJQftX0D+l1vUTLPwCN5hlhV/g/KI5zDBwHURmta6ph3/kJeEOVirtbczO/pKQlqM4cELB2c7Sp7Q==,
+        integrity: sha512-kDpdkqevQukNc6SLj4X0C97RaDFz2OM5JhxDiDXoAv5R9+AdYZjdNED56aZPuE0z46cCTchna++RBnQph5i7gQ==,
       }
     engines: { node: ">=16" }
     cpu: [x64]
@@ -2137,10 +2137,10 @@ packages:
         integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==,
       }
 
-  "@sentry/bundler-plugins@11.14.0":
+  "@sentry/bundler-plugins@11.15.0":
     resolution:
       {
-        integrity: sha512-Afi4P+OLJP/fRjbt3h4r8ujBC9KulU9RB1pBhe8PgGHddo5hpXdn2eoDQMHPTnADqNONqqCP1DzbGwFmxVQkXA==,
+        integrity: sha512-SyqRR0H8DbVNQRaUNDy9mCQSqCVlYKxbmXkSErCOIUjfNWujsyVK5fnl5aIIYbDrj1Vy1TX8gAkmyPfMbMD/QQ==,
       }
     engines: { node: ">=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0" }
     peerDependencies:
@@ -2159,40 +2159,40 @@ packages:
       }
     engines: { node: ">=14" }
 
-  "@sentry/core@11.14.0":
+  "@sentry/core@11.15.0":
     resolution:
       {
-        integrity: sha512-toRRdaZnm0anz/4gEkzyZC0yTCvR4R7U+024WQfjCwgklIFaYo9mjIBoElU8MJ1Sske0/RyvA0zltHfra6PvsQ==,
+        integrity: sha512-zsprEOu/voisojJFnDIhPd+GhycAli/aqjV752eQHiNOrAwAvigCadsSh2ND5e1AEycvSmZTxOOhCNjWzSZ4Ng==,
       }
     engines: { node: ">=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0" }
 
-  "@sentry/node@11.14.0":
+  "@sentry/node@11.15.0":
     resolution:
       {
-        integrity: sha512-dAxkiRg7vwI1j+/bv4EbshmtrGHmS6CeX1+4SFSYbvTqUSAd6GYGFnIeLdW2NcX2Y6qG7zKz9svv/wreCm7m8g==,
+        integrity: sha512-D+DXJGsJDeVJA6r5QZmLmym626ffg9Zrr4Z1b4wxURdyfwSYhQoBq7QhrrUFnF5tgHfV/iq1+ZyhFav7COqKIg==,
       }
     engines: { node: ">=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0" }
 
-  "@sentry/opentelemetry@11.14.0":
+  "@sentry/opentelemetry@11.15.0":
     resolution:
       {
-        integrity: sha512-K+Vg7nNnGg90w1QSvNDWJSABeuDnvqGxHEcBtjkrzApqz3CDQ0bq6q9dG8B5af1QT3YPGsQh7RG9qqDkxClcBQ==,
+        integrity: sha512-0RoIi7EBuE2kl+HnixJIIdAEipELawed7ejUrWjidiNpSIMk6hygUON5SYfk0vZkFn+uEPsy3GN5hR7Re8g+NA==,
       }
     engines: { node: ">=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0" }
     peerDependencies:
       "@opentelemetry/api": ^1.9.0
 
-  "@sentry/server-runtime-injection@11.14.0":
+  "@sentry/server-runtime-injection@11.15.0":
     resolution:
       {
-        integrity: sha512-oYNxjgEqHWsyuVk6lCcKlOH8NFbQ0kJfdfUqxVQpg9T0iaBcMEDPeDaZ9RRRhv7ybKV6KQbMMUhGhdIN9lyieQ==,
+        integrity: sha512-aNOpbh1w1ivyoTqS2eOtC5O49KJL+i+xVd6KRyzVYldOKNtWdBATXPTjiUtTlH0ItnOgzg1cL4YAEhcd3vUqwg==,
       }
     engines: { node: ">=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0" }
 
-  "@sentry/server-utils@11.14.0":
+  "@sentry/server-utils@11.15.0":
     resolution:
       {
-        integrity: sha512-ipL76Amg5yX9Lkoo++6xdy0Gnmci08AoY8ygM9ECYflWLYlBMxDf/6jMnsqKjV4M6O2bUg+KR3IoSrviy0jlwA==,
+        integrity: sha512-ASBVOTAaXLNL3P2icwKgnLBH1kljLFybXcQCvSH4WseZAxeLQJYm90N5p2LhWTpM+7E8uClQtbWzxYcLjUG7RA==,
       }
     engines: { node: ">=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0" }
 
@@ -2977,10 +2977,10 @@ packages:
         integrity: sha512-I0dPyEsiaYAlbGJlr0SdRRGSWk9BpOz8AIo/4f93A6bAGuN3YafmT71rpss72SA05isaAkcAOYcW0F0H48om4Q==,
       }
 
-  embedded-postgres@18.6.0-beta.19:
+  embedded-postgres@18.7.0-beta.19:
     resolution:
       {
-        integrity: sha512-EInqEn8wqfzbP0+mpdPNdu4CrzgMEzU6dg/mYsjgGXpXqf9oqtwq7CRXDV8295+tN7ONecrsaOm3knWk+xtRsg==,
+        integrity: sha512-qD7IQcjGFc+F5W+XQaUAz0RWtQ+Hpl/yw9Jh2/wbJzs/9hbZ6J0H5su4pKA7sgV730vfwNiFLREj9jJ8Ket1Lg==,
       }
     engines: { node: ">=16" }
 
@@ -3717,12 +3717,6 @@ packages:
         integrity: sha512-U4N8FgzmWxc8k1VH8Kr6lQg18U7Fjvby6wXHVRX/ZZ7IwWbRMgrRbP0Wrb5q5NVinryp4SQampHKdvtecItxUg==,
       }
     engines: { node: 20 || >=22 }
-
-  magic-string@1.4.3:
-    resolution:
-      {
-        integrity: sha512-z12OxmaPGE0F4xlpGdjuAUckipLpQlTAuAmyGhNoD7ODpYUzvDfvtxUbjM/jwznyP178oju/KDdyi220wNJ0RQ==,
-      }
 
   magic-string@1.4.5:
     resolution:
@@ -5053,28 +5047,28 @@ snapshots:
 
   "@drizzle-team/brocli@0.10.2": {}
 
-  "@embedded-postgres/darwin-arm64@18.6.0-beta.19":
+  "@embedded-postgres/darwin-arm64@18.7.0-beta.19":
     optional: true
 
-  "@embedded-postgres/darwin-x64@18.6.0-beta.19":
+  "@embedded-postgres/darwin-x64@18.7.0-beta.19":
     optional: true
 
-  "@embedded-postgres/linux-arm64@18.6.0-beta.19":
+  "@embedded-postgres/linux-arm64@18.7.0-beta.19":
     optional: true
 
-  "@embedded-postgres/linux-arm@18.6.0-beta.19":
+  "@embedded-postgres/linux-arm@18.7.0-beta.19":
     optional: true
 
-  "@embedded-postgres/linux-ia32@18.6.0-beta.19":
+  "@embedded-postgres/linux-ia32@18.7.0-beta.19":
     optional: true
 
-  "@embedded-postgres/linux-ppc64@18.6.0-beta.19":
+  "@embedded-postgres/linux-ppc64@18.7.0-beta.19":
     optional: true
 
-  "@embedded-postgres/linux-x64@18.6.0-beta.19":
+  "@embedded-postgres/linux-x64@18.7.0-beta.19":
     optional: true
 
-  "@embedded-postgres/windows-x64@18.6.0-beta.19":
+  "@embedded-postgres/windows-x64@18.7.0-beta.19":
     optional: true
 
   "@emnapi/runtime@1.11.3":
@@ -5830,50 +5824,50 @@ snapshots:
 
   "@rolldown/pluginutils@1.0.1": {}
 
-  "@sentry/bundler-plugins@11.14.0":
+  "@sentry/bundler-plugins@11.15.0":
     dependencies:
-      "@sentry/core": 11.14.0
+      "@sentry/core": 11.15.0
       dotenv: 17.4.2
       glob: 14.0.6
-      magic-string: 1.4.3
+      magic-string: 1.4.5
       oxc-parser: 0.152.0
       sentry: 0.49.0
 
   "@sentry/conventions@0.33.0": {}
 
-  "@sentry/core@11.14.0":
+  "@sentry/core@11.15.0":
     dependencies:
       "@sentry/conventions": 0.33.0
 
-  "@sentry/node@11.14.0":
+  "@sentry/node@11.15.0":
     dependencies:
       "@opentelemetry/api": 1.9.1
-      "@sentry/bundler-plugins": 11.14.0
+      "@sentry/bundler-plugins": 11.15.0
       "@sentry/conventions": 0.33.0
-      "@sentry/core": 11.14.0
-      "@sentry/opentelemetry": 11.14.0(@opentelemetry/api@1.9.1)
-      "@sentry/server-runtime-injection": 11.14.0
-      "@sentry/server-utils": 11.14.0
+      "@sentry/core": 11.15.0
+      "@sentry/opentelemetry": 11.15.0(@opentelemetry/api@1.9.1)
+      "@sentry/server-runtime-injection": 11.15.0
+      "@sentry/server-utils": 11.15.0
     transitivePeerDependencies:
       - rollup
       - webpack
 
-  "@sentry/opentelemetry@11.14.0(@opentelemetry/api@1.9.1)":
+  "@sentry/opentelemetry@11.15.0(@opentelemetry/api@1.9.1)":
     dependencies:
       "@opentelemetry/api": 1.9.1
       "@sentry/conventions": 0.33.0
-      "@sentry/core": 11.14.0
+      "@sentry/core": 11.15.0
 
-  "@sentry/server-runtime-injection@11.14.0":
+  "@sentry/server-runtime-injection@11.15.0":
     dependencies:
-      "@sentry/core": 11.14.0
-      "@sentry/server-utils": 11.14.0
+      "@sentry/core": 11.15.0
+      "@sentry/server-utils": 11.15.0
 
-  "@sentry/server-utils@11.14.0":
+  "@sentry/server-utils@11.15.0":
     dependencies:
       "@opentelemetry/api": 1.9.1
       "@sentry/conventions": 0.33.0
-      "@sentry/core": 11.14.0
+      "@sentry/core": 11.15.0
 
   "@shikijs/core@4.6.0":
     dependencies:
@@ -6282,19 +6276,19 @@ snapshots:
 
   electron-to-chromium@1.5.490: {}
 
-  embedded-postgres@18.6.0-beta.19:
+  embedded-postgres@18.7.0-beta.19:
     dependencies:
       exit-hook: 5.1.0
       pg: 8.23.1
     optionalDependencies:
-      "@embedded-postgres/darwin-arm64": 18.6.0-beta.19
-      "@embedded-postgres/darwin-x64": 18.6.0-beta.19
-      "@embedded-postgres/linux-arm": 18.6.0-beta.19
-      "@embedded-postgres/linux-arm64": 18.6.0-beta.19
-      "@embedded-postgres/linux-ia32": 18.6.0-beta.19
-      "@embedded-postgres/linux-ppc64": 18.6.0-beta.19
-      "@embedded-postgres/linux-x64": 18.6.0-beta.19
-      "@embedded-postgres/windows-x64": 18.6.0-beta.19
+      "@embedded-postgres/darwin-arm64": 18.7.0-beta.19
+      "@embedded-postgres/darwin-x64": 18.7.0-beta.19
+      "@embedded-postgres/linux-arm": 18.7.0-beta.19
+      "@embedded-postgres/linux-arm64": 18.7.0-beta.19
+      "@embedded-postgres/linux-ia32": 18.7.0-beta.19
+      "@embedded-postgres/linux-ppc64": 18.7.0-beta.19
+      "@embedded-postgres/linux-x64": 18.7.0-beta.19
+      "@embedded-postgres/windows-x64": 18.7.0-beta.19
     transitivePeerDependencies:
       - pg-native
 
@@ -6765,10 +6759,6 @@ snapshots:
   longest-streak@3.1.0: {}
 
   lru-cache@11.5.3: {}
-
-  magic-string@1.4.3:
-    dependencies:
-      "@jridgewell/sourcemap-codec": 1.6.0
 
   magic-string@1.4.5:
     dependencies:

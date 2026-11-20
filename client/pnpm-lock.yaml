@@ -53,8 +53,8 @@ importers:
         specifier: ^2.6.2
         version: 2.6.2
       "@sentry/browser":
-        specifier: ^11.14.0
-        version: 11.14.0
+        specifier: ^11.15.0
+        version: 11.15.0
       "@spartan-ng/brain":
         specifier: 1.9.0
         version: 1.9.0(b8d96696de3bec9693f015b2dcd85e89)
@@ -116,8 +116,8 @@ importers:
         specifier: ^0.63.2
         version: 0.63.2
       tailwind-merge:
-        specifier: ^3.7.0
-        version: 3.7.0
+        specifier: ^3.7.1
+        version: 3.7.1
       tailwindcss:
         specifier: ^4.3.5
         version: 4.3.5
@@ -5485,17 +5485,17 @@ packages:
         yarn: ">= 1.13.0",
       }
 
-  "@sentry/browser-utils@11.14.0":
+  "@sentry/browser-utils@11.15.0":
     resolution:
       {
-        integrity: sha512-QyMFyX9l7vXUCYJ7DoE0Au13oFoOmJLB1XPk0tnq3XI8DYoBUP8i1I32xtVJ9O0XR2r2Kc/e3RIKY3Bxl2/BAw==,
+        integrity: sha512-P4DVs11PqLpll5GDfRdqh6s2RRi3/LP7v7CCGjTfebjyKL/lud/QebZ4UsZzgHF1vhwjy/QCM2w4FaCoqr20pw==,
       }
     engines: { node: ">=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0" }
 
-  "@sentry/browser@11.14.0":
+  "@sentry/browser@11.15.0":
     resolution:
       {
-        integrity: sha512-LqcMvAv6FOoJW7hB1kXT1vQqbm1+FZjFm5ZyWE2CUR7hO6rEY+qyUMoCdBgPiJRYVJMWau6wp5BRowWqvoSAeA==,
+        integrity: sha512-oo2X3opEAgJ5I3doQjMagQLxvK3mtKw+mR0t2R0mVBHBFxxEVsVitj+mIH03Z1aZLqOyfhe0cO8DKbLTfTN8JQ==,
       }
     engines: { node: ">=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0" }
 
@@ -5535,17 +5535,17 @@ packages:
       }
     engines: { node: ">=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0" }
 
-  "@sentry/core@11.14.0":
+  "@sentry/core@11.15.0":
     resolution:
       {
-        integrity: sha512-toRRdaZnm0anz/4gEkzyZC0yTCvR4R7U+024WQfjCwgklIFaYo9mjIBoElU8MJ1Sske0/RyvA0zltHfra6PvsQ==,
+        integrity: sha512-zsprEOu/voisojJFnDIhPd+GhycAli/aqjV752eQHiNOrAwAvigCadsSh2ND5e1AEycvSmZTxOOhCNjWzSZ4Ng==,
       }
     engines: { node: ">=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0" }
 
-  "@sentry/feedback@11.14.0":
+  "@sentry/feedback@11.15.0":
     resolution:
       {
-        integrity: sha512-g6/UMRie3Cb4GE+0/fmxWmV0dtPDqrsk7298X4DiG1TPSj4EMB7JtTGjLaRCQyRhCHEoL2XfqQDFS2pWdNXOow==,
+        integrity: sha512-4WYfm1poYb2A8IbMXGjkOo+LFPTj27FUJYeCVNSRKEKuuySqdMcjfk8U9Si2cKEcJjFpvhITREiyNm77q91kyg==,
       }
     engines: { node: ">=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0" }
 
@@ -5565,17 +5565,17 @@ packages:
     peerDependencies:
       "@opentelemetry/api": ^1.9.0
 
-  "@sentry/replay-canvas@11.14.0":
+  "@sentry/replay-canvas@11.15.0":
     resolution:
       {
-        integrity: sha512-eKkWsIMv/EP2aCGkzuYDSdhCrRD6bc5WhfhFUPTTWcM4s9E+FFUBFZc8CBlIUBNomnPjUg4W0N9gvdg16ungvw==,
+        integrity: sha512-vZXVJrHtnzTo21zHC/uNUJH5L2yP4L3/M2m+ctZgQykma5vgN9ljof3zp0Yo8JGO3hAZZ9fV8EdFKtHrfPtJSQ==,
       }
     engines: { node: ">=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0" }
 
-  "@sentry/replay@11.14.0":
+  "@sentry/replay@11.15.0":
     resolution:
       {
-        integrity: sha512-qGgTWOmGkSWokXLDung64T2EzQONIQJL1ahtHAd5XF9QvGQG6208sLM6ctXoh1wcyONnoRmVdabjQeY27QSPHA==,
+        integrity: sha512-HgfH4B0y88OzdYADL45/jy/CCxB9+XtWOWxZG/luaXiScAO7q5q4B3FogqnP9k/81r/0uf6cGXODWitFB9o9dw==,
       }
     engines: { node: ">=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0" }
 
@@ -14164,10 +14164,10 @@ packages:
       "@eslint/css":
         optional: true
 
-  tailwind-merge@3.7.0:
+  tailwind-merge@3.7.1:
     resolution:
       {
-        integrity: sha512-XPPUyAc+cvspz3lHTcR/QgPfW2A0lv/xQNIjX3HGhLR+Nq2lHaLq5MtTesHn8GUr3W3DguT2KT5x3NVgRtYwmA==,
+        integrity: sha512-v7y4BV4FUlO8exj/4M5UXKeoowDiuugVUg3tkMNIyOUCOHy5xp8+5aWQeXCtZ2491sUV1YPsVeM9EveZ6/xuZQ==,
       }
 
   tailwindcss@4.3.5:
@@ -19168,20 +19168,20 @@ snapshots:
     transitivePeerDependencies:
       - chokidar
 
-  "@sentry/browser-utils@11.14.0":
+  "@sentry/browser-utils@11.15.0":
     dependencies:
       "@sentry/conventions": 0.33.0
-      "@sentry/core": 11.14.0
+      "@sentry/core": 11.15.0
       web-vitals: 6.2.3
 
-  "@sentry/browser@11.14.0":
+  "@sentry/browser@11.15.0":
     dependencies:
-      "@sentry/browser-utils": 11.14.0
+      "@sentry/browser-utils": 11.15.0
       "@sentry/conventions": 0.33.0
-      "@sentry/core": 11.14.0
-      "@sentry/feedback": 11.14.0
-      "@sentry/replay": 11.14.0
-      "@sentry/replay-canvas": 11.14.0
+      "@sentry/core": 11.15.0
+      "@sentry/feedback": 11.15.0
+      "@sentry/replay": 11.15.0
+      "@sentry/replay-canvas": 11.15.0
 
   "@sentry/bundler-plugins@11.10.0(rollup@4.60.2)(webpack@5.106.2(esbuild@0.28.2))":
     dependencies:
@@ -19204,13 +19204,13 @@ snapshots:
     dependencies:
       "@sentry/conventions": 0.29.0
 
-  "@sentry/core@11.14.0":
+  "@sentry/core@11.15.0":
     dependencies:
       "@sentry/conventions": 0.33.0
 
-  "@sentry/feedback@11.14.0":
+  "@sentry/feedback@11.15.0":
     dependencies:
-      "@sentry/core": 11.14.0
+      "@sentry/core": 11.15.0
 
   "@sentry/node@11.10.0(rollup@4.60.2)(webpack@5.106.2(esbuild@0.28.2))":
     dependencies:
@@ -19231,15 +19231,15 @@ snapshots:
       "@sentry/conventions": 0.29.0
       "@sentry/core": 11.10.0
 
-  "@sentry/replay-canvas@11.14.0":
+  "@sentry/replay-canvas@11.15.0":
     dependencies:
-      "@sentry/core": 11.14.0
-      "@sentry/replay": 11.14.0
+      "@sentry/core": 11.15.0
+      "@sentry/replay": 11.15.0
 
-  "@sentry/replay@11.14.0":
+  "@sentry/replay@11.15.0":
     dependencies:
-      "@sentry/browser-utils": 11.14.0
-      "@sentry/core": 11.14.0
+      "@sentry/browser-utils": 11.15.0
+      "@sentry/core": 11.15.0
 
   "@sentry/server-runtime-injection@11.10.0":
     dependencies:
@@ -19296,7 +19296,7 @@ snapshots:
       postcss: 8.5.33
       postcss-selector-parser: 7.1.1
       semver: 7.5.4
-      tailwind-merge: 3.7.0
+      tailwind-merge: 3.7.1
       ts-morph: 25.0.1
       tslib: 2.9.1
       typescript: 6.0.3
@@ -25102,7 +25102,7 @@ snapshots:
     optionalDependencies:
       "@eslint/css": 2.0.1
 
-  tailwind-merge@3.7.0: {}
+  tailwind-merge@3.7.1: {}
 
   tailwindcss@4.3.5: {}
 
