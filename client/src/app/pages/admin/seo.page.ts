@@ -16,6 +16,7 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmButton } from "@spartan-ng/helm/button";
 
 import { AdminApiService, type ApiIssue } from "../../admin/admin-api.service";
+import { apiWords } from "../../admin/api-words";
 import { countChangedFields } from "../../admin/changed-fields";
 import { liveText, rollUp, traceOf, type TraceState } from "../../admin/change-trace";
 import { BilingualFieldComponent } from "../../admin/components/bilingual-field.component";
@@ -504,7 +505,7 @@ export default class AdminSeoPage implements OnInit {
 
     if (!result.ok) {
       if (this.loaded()) {
-        toast.error("Could not load SEO", { description: result.error });
+        toast.error("Could not load SEO", { description: apiWords(result.error) });
       }
       return;
     }

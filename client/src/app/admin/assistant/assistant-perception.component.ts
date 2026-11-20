@@ -4,6 +4,7 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmButton } from "@spartan-ng/helm/button";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import {
   cacheShare,
   documentRows,
@@ -364,7 +365,7 @@ export class AssistantPerceptionComponent implements OnInit {
       this.failed.set(false);
     } else {
       this.failed.set(true);
-      toast.error("Could not load the perception figures", { description: result.error });
+      toast.error("Could not load the perception figures", { description: apiWords(result.error) });
     }
   }
 
@@ -380,7 +381,7 @@ export class AssistantPerceptionComponent implements OnInit {
     const result = await this.api.setCorpusTiers(withTier(v.tiers, id, tier));
     this.saving.set(false);
     if (!result.ok) {
-      toast.error("Could not change the tiers", { description: result.error });
+      toast.error("Could not change the tiers", { description: apiWords(result.error) });
       return;
     }
     toast.success(tier ? "Tier applied" : "Tier removed", {

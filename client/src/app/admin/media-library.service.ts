@@ -1,20 +1,13 @@
 import { computed, inject, Injectable, signal } from "@angular/core";
 
 import { AdminApiService, type MediaAsset } from "./admin-api.service";
+import { apiWords } from "./api-words";
 
 /** Matches the API's MEDIA_MAX_BYTES (10 MiB). */
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 /** What the library takes: the images the API processes, and PDFs. */
 export const UPLOAD_ACCEPT = "image/png,image/jpeg,image/webp,image/avif,image/gif,application/pdf";
-
-export const UPLOAD_ERRORS: Record<string, string> = {
-  file_too_large: "That file is over 10 MB. Compress it and try again.",
-  image_too_large: "That image is over 50 megapixels. Scale it down and try again.",
-  unsupported_media_type: "Only PNG, JPEG, WebP, AVIF, GIF and PDF are accepted.",
-  missing_file: "No file was received.",
-  invalid_upload: "The upload could not be read.",
-};
 
 export type Uploaded =
   { ok: true; asset: MediaAsset; deduped: boolean } | { ok: false; message: string };
@@ -78,11 +71,11 @@ export class MediaLibraryService {
    */
   async upload(file: File, onProgress?: (percent: number) => void): Promise<Uploaded> {
     if (file.size > MAX_UPLOAD_BYTES) {
-      return { ok: false, message: UPLOAD_ERRORS["file_too_large"] };
+      return { ok: false, message: apiWords("file_too_large") };
     }
     const result = await this.api.uploadMedia(file, onProgress);
     if (!result.ok) {
-      return { ok: false, message: UPLOAD_ERRORS[result.error] ?? result.error };
+      return { ok: false, message: apiWords(result.error) };
     }
     await this.load(true);
     return { ok: true, asset: result.data.media, deduped: result.data.deduped ?? false };

@@ -3,6 +3,7 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import {
   checksLine,
   gateNames,
@@ -212,7 +213,7 @@ export class AssistantCopilotComponent implements OnInit {
       this.failed.set(false);
     } else {
       this.failed.set(true);
-      toast.error("Could not load the copilot's skills", { description: result.error });
+      toast.error("Could not load the copilot's skills", { description: apiWords(result.error) });
     }
   }
 }

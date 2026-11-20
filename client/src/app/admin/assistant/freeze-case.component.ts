@@ -15,6 +15,7 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmButton } from "@spartan-ng/helm/button";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import type { ConversationRow } from "../assistant-types";
 import { freezeRequest } from "../eval-cases";
 import { UnsavedChangesService } from "../unsaved-changes.service";
@@ -255,7 +256,7 @@ export class FreezeCaseComponent {
     this.saving.set(false);
     if (!result.ok) {
       toast.error("Could not freeze the answer", {
-        description: REFUSALS[result.error] ?? result.error,
+        description: REFUSALS[result.error] ?? apiWords(result.error),
       });
       return;
     }

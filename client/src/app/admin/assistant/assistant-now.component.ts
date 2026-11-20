@@ -23,6 +23,7 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmButton } from "@spartan-ng/helm/button";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import { filterStatuses } from "../agent";
 import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
 import { noticeLine } from "../lessons";
@@ -410,7 +411,7 @@ export class AssistantNowComponent implements OnInit {
   protected async seen(id: string): Promise<void> {
     const result = await this.api.insightsSeen(id);
     if (!result.ok) {
-      toast.error("Could not mark the insights seen", { description: result.error });
+      toast.error("Could not mark the insights seen", { description: apiWords(result.error) });
       return;
     }
     this.pulse.assistant.update((h) => (h ? { ...h, learning: { notice: null } } : h));

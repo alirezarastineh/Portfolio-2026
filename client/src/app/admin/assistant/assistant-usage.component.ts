@@ -12,6 +12,7 @@ import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 
 import { KpiTileComponent } from "../components/kpi-tile.component";
+import { apiWords } from "../api-words";
 import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
 import { AdminApiService } from "../admin-api.service";
 import {
@@ -152,7 +153,7 @@ interface ModelTotal {
             <p class="m-0 text-sm text-muted-foreground">
               @if (e.on) {
                 Search by meaning ({{ e.model }}): {{ e.embedded | number }} of
-                {{ e.chunks | number }} passages have a vector; the switch is in Settings →
+                {{ e.chunks | number }} passages have a vector; the switch is in Settings, under
                 Spending.
               } @else {
                 Search by meaning is off on this server (SERVER_AI_EMBEDDINGS): the search matches
@@ -421,7 +422,7 @@ export class AssistantUsageComponent implements OnInit {
         de: by?.de.totalTokens ?? null,
       });
     } else {
-      toast.error("Gemini could not count", { description: result.error });
+      toast.error("Gemini could not count", { description: apiWords(result.error) });
     }
   }
 }

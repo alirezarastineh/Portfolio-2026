@@ -1,4 +1,3 @@
-import { DecimalPipe } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
@@ -11,77 +10,55 @@ import {
 } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { toast } from "@spartan-ng/brain/sonner";
-
-import { RecoveryService } from "../recovery.service";
-import { toastDiscarded, toastNotSaved } from "../save-feedback";
-import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
 import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmSwitch } from "@spartan-ng/helm/switch";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
 import type { Locale } from "../../content/schema";
-import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
 import { AdminApiService } from "../admin-api.service";
-import type { AssistantEnv, AssistantSettings, AssistantSettingsInput } from "../assistant-types";
-import { countChangedFields } from "../changed-fields";
-import { SaveBarComponent } from "../components/editor-chrome.component";
-import { AdminPulseService } from "../pulse.service";
+import { apiWords } from "../api-words";
 import {
-  CAPPED,
-  featureLabel,
-  spendDraft,
-  spendInput,
-  SWITCHES,
-  type SpendDraft,
-} from "../spending";
+  FEATURE_WORDS,
+  hasSwitch,
+  liveChanges,
+  settingsInput,
+  toDraft,
+  type SettingsDraft,
+} from "../assistant-settings";
+import type { AssistantEnv, ChainModel } from "../assistant-types";
+import { countChangedFields } from "../changed-fields";
+import { ConfirmService } from "../components/confirm-dialog.component";
+import { SaveBarComponent } from "../components/editor-chrome.component";
+import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
+import { usd } from "../now";
+import { AdminPulseService } from "../pulse.service";
+import { RecoveryService } from "../recovery.service";
+import { toastDiscarded, toastNotSaved } from "../save-feedback";
+import { CAPPED, featureLabel, type SpendDraft } from "../spending";
 import { UnsavedChangesService } from "../unsaved-changes.service";
 
 const LOCALES: Locale[] = ["en", "de"];
+const LANGUAGE: Record<Locale, string> = { en: "English", de: "German" };
 
-interface Draft {
-  enabled: boolean;
-  budget: string;
-  deepEnabled: boolean;
-  publicScorecard: boolean;
-  suggestions: Record<Locale, string>;
-  systemCard: Record<Locale, string>;
-  spend: SpendDraft;
-}
-
-function toDraft(s: AssistantSettings): Draft {
-  return {
-    enabled: s.enabled,
-    budget: s.dailyBudgetUsd === null ? "" : String(s.dailyBudgetUsd),
-    deepEnabled: s.deepEnabled,
-    // An API from before the scorecard sends nothing: it is not published.
-    publicScorecard: s.publicScorecard === true,
-    suggestions: { en: s.suggestedQuestions.en.join("\n"), de: s.suggestedQuestions.de.join("\n") },
-    systemCard: { ...s.systemCard },
-    spend: spendDraft(s),
-  };
-}
-
-const suggestionLines = (text: string): string[] =>
-  text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length >= 3)
-    .slice(0, 6);
+/** The deploy's chains, in the order and the words Settings shows them. */
+const ROLES = [
+  { role: "lite", name: "Lite answers" },
+  { role: "deep", name: "Deep answers" },
+  { role: "copilot", name: "Copilot" },
+  { role: "insight", name: "Insights" },
+] as const;
 
 /**
- * What can change without a deploy: the admin's switch, the daily budget, the
- * deep model, what the rest may spend of it, suggested questions, and the "how
- * this assistant works" text. Live on save (no publish). Below, read-only,
- * what the deploy configured.
+ * What can change without a deploy, saved once and live at once (plan 5, U19): the service's
+ * switches, the budget and what the admin's tools may spend of it, feature by feature, and what
+ * visitors read. A save asks first and says what goes live. Below, read-only, what the deploy set.
  */
 @Component({
   selector: "app-assistant-settings",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    DecimalPipe,
     FormsModule,
-    HlmBadge,
     HlmField,
     HlmFieldLabel,
     HlmInput,
@@ -99,217 +76,252 @@ const suggestionLines = (text: string): string[] =>
       <app-form-skeleton [rows]="5" label="Loading the settings…" />
     } @else {
       @let d = draft()!;
-      <div class="flex flex-col gap-6">
-        <!-- Each switch: its label names it, the hint describes it (admin-ui rule). -->
-        <div class="flex items-center gap-3 text-sm">
-          <hlm-switch
-            id="ask-enabled"
-            aria-describedby="ask-enabled-hint"
-            [checked]="d.enabled"
-            (checkedChange)="patch({ enabled: $event })"
-          />
-          <div>
-            <label for="ask-enabled">Assistant on</label>
-            <p id="ask-enabled-hint" class="m-0 text-hint text-muted-foreground">
-              Off, visitors get the offline shell. The playground and evals still work.
-            </p>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-3 text-sm">
-          <hlm-switch
-            id="ask-deep"
-            aria-describedby="ask-deep-hint"
-            [checked]="d.deepEnabled"
-            (checkedChange)="patch({ deepEnabled: $event })"
-          />
-          <div>
-            <label for="ask-deep">Deep model for comparisons and architecture questions</label>
-            <p id="ask-deep-hint" class="m-0 text-hint text-muted-foreground">
-              Switches itself off for the rest of the day at 80 % of the budget.
-            </p>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-3 text-sm">
-          <hlm-switch
-            id="ask-scorecard"
-            aria-describedby="ask-scorecard-hint"
-            [checked]="d.publicScorecard"
-            (checkedChange)="patch({ publicScorecard: $event })"
-          />
-          <div>
-            <label for="ask-scorecard">Public scorecard</label>
-            <p id="ask-scorecard-hint" class="m-0 text-hint text-muted-foreground">
-              Visitors read the recorded eval run and 30 days of live checks with
-              <code>evals</code>: aggregates only. Off, the scorecard answers 404.
-            </p>
-          </div>
-        </div>
-
-        <div hlmField class="max-w-xs">
-          <label hlmFieldLabel for="ask-budget">Daily budget (USD)</label>
-          <input
-            hlmInput
-            id="ask-budget"
-            type="number"
-            min="0.01"
-            max="100"
-            step="0.01"
-            [placeholder]="'default: ' + (env()?.defaultBudgetUsd ?? '')"
-            [ngModel]="d.budget"
-            (ngModelChange)="patch({ budget: $event === null ? '' : String($event) })"
-          />
-          <p class="m-0 text-hint text-muted-foreground">
-            The visitors' assistant may spend all of it; everything else stops at the line below.
-            Empty = the deploy's default.
-          </p>
-        </div>
-
-        <fieldset class="flex flex-col gap-4 rounded-lg border border-border p-4">
-          <legend class="px-1 text-sm font-medium">Spending</legend>
-          <div hlmField class="max-w-xs">
-            <label hlmFieldLabel for="ask-reserve">Kept for visitors (% of the budget)</label>
-            <input
-              hlmInput
-              id="ask-reserve"
-              type="number"
-              min="0"
-              max="90"
-              step="1"
-              aria-describedby="ask-reserve-hint"
-              [ngModel]="d.spend.reserve"
-              (ngModelChange)="patchSpend({ reserve: $event === null ? '' : String($event) })"
+      <div class="flex flex-col gap-8">
+        <section class="flex flex-col gap-4" aria-labelledby="settings-service">
+          <h2 id="settings-service" class="m-0 text-section-title">The visitors' assistant</h2>
+          <!-- Each switch: its label names it, the hint describes it (admin-ui rule). -->
+          <div class="flex items-start gap-3 text-sm">
+            <hlm-switch
+              id="ask-enabled"
+              aria-describedby="ask-enabled-hint"
+              [checked]="d.enabled"
+              (checkedChange)="patch({ enabled: $event })"
             />
-            <p id="ask-reserve-hint" class="m-0 text-hint text-muted-foreground">
-              The copilot, insights, the playground and runs stop once the day's spend reaches the
-              rest, so they cannot put visitors into "resting". At 0 % they may spend the whole
-              budget.
-            </p>
+            <div>
+              <label for="ask-enabled">Answer visitors</label>
+              <p
+                id="ask-enabled-hint"
+                class="m-0 max-w-prose text-hint text-pretty text-muted-foreground"
+              >
+                Off, the visitors' assistant says it is offline; the Playground and your runs still
+                work.
+              </p>
+            </div>
           </div>
-          @for (s of switches; track s.feature) {
-            <div class="flex items-center gap-3 text-sm">
-              <hlm-switch
-                [id]="'ask-feature-' + s.feature"
-                [aria-describedby]="'ask-feature-' + s.feature + '-hint'"
-                [checked]="d.spend.switches[s.feature]"
-                (checkedChange)="patchSwitch(s.feature, $event)"
-              />
-              <div>
-                <label [for]="'ask-feature-' + s.feature">{{ s.label }}</label>
-                <p
-                  [id]="'ask-feature-' + s.feature + '-hint'"
-                  class="m-0 text-xs text-muted-foreground"
-                >
-                  {{ s.hint }}
-                </p>
-              </div>
+          <div class="flex items-start gap-3 text-sm">
+            <hlm-switch
+              id="ask-deep"
+              aria-describedby="ask-deep-hint"
+              [checked]="d.deepEnabled"
+              (checkedChange)="patch({ deepEnabled: $event })"
+            />
+            <div>
+              <label for="ask-deep">Deep model for comparisons and architecture questions</label>
+              <p
+                id="ask-deep-hint"
+                class="m-0 max-w-prose text-hint text-pretty text-muted-foreground"
+              >
+                It switches itself off for the rest of the day once today's spend reaches 80 % of
+                the budget.
+              </p>
             </div>
-          }
-          <!-- The legend names what each field is: a cap, in USD, per day. -->
-          <fieldset class="flex flex-col gap-2">
-            <legend class="text-sm">Daily cap per feature (USD)</legend>
-            <p class="m-0 text-hint text-muted-foreground">Empty = only the reserve line.</p>
-            <div class="grid gap-3 sm:grid-cols-3">
-              @for (f of capped; track f) {
-                <div hlmField>
-                  <label hlmFieldLabel [for]="'ask-cap-' + f">{{ label(f) }}</label>
-                  <input
-                    hlmInput
-                    type="number"
-                    min="0.01"
-                    max="100"
-                    step="0.01"
-                    placeholder="no cap"
-                    [id]="'ask-cap-' + f"
-                    [ngModel]="d.spend.caps[f]"
-                    (ngModelChange)="patchCap(f, $event)"
-                  />
-                </div>
-              }
+          </div>
+          <div class="flex items-start gap-3 text-sm">
+            <hlm-switch
+              id="ask-scorecard"
+              aria-describedby="ask-scorecard-hint"
+              [checked]="d.publicScorecard"
+              (checkedChange)="patch({ publicScorecard: $event })"
+            />
+            <div>
+              <label for="ask-scorecard">Public scorecard</label>
+              <p
+                id="ask-scorecard-hint"
+                class="m-0 max-w-prose text-hint text-pretty text-muted-foreground"
+              >
+                Visitors read the recorded eval run and 30 days of live checks, totals only, with
+                the <code translate="no">evals</code> command. Off, it is not published.
+              </p>
             </div>
-          </fieldset>
-        </fieldset>
+          </div>
+        </section>
 
-        @for (locale of locales; track locale) {
-          <fieldset class="flex flex-col gap-3 rounded-lg border border-border p-4">
-            <legend class="px-1 text-xs font-medium text-muted-foreground">
-              {{ locale.toUpperCase() }}
-            </legend>
+        <section class="flex flex-col gap-4" aria-labelledby="settings-spending">
+          <h2 id="settings-spending" class="m-0 text-section-title">Spending</h2>
+          <div class="grid gap-x-8 gap-y-4 sm:grid-cols-2">
             <div hlmField>
-              <label hlmFieldLabel [for]="'ask-suggest-' + locale"
-                >Suggested questions (one per line, up to 6)</label
+              <label hlmFieldLabel for="ask-budget">Daily budget (USD)</label>
+              <input
+                hlmInput
+                id="ask-budget"
+                type="number"
+                inputmode="decimal"
+                autocomplete="off"
+                min="0.01"
+                max="100"
+                step="0.01"
+                [aria-describedby]="'ask-budget-hint'"
+                [placeholder]="deployBudget()"
+                [ngModel]="d.budget"
+                (ngModelChange)="patch({ budget: $event === null ? '' : String($event) })"
+              />
+              <p
+                id="ask-budget-hint"
+                class="m-0 max-w-prose text-hint text-pretty text-muted-foreground"
               >
-              <textarea
-                hlmTextarea
-                rows="4"
-                [id]="'ask-suggest-' + locale"
-                [ngModel]="d.suggestions[locale]"
-                (ngModelChange)="patchLocale('suggestions', locale, $event)"
-              ></textarea>
+                Empty: the deploy's {{ deployBudget() }}. Visitors' answers may spend all of it.
+              </p>
             </div>
             <div hlmField>
-              <label hlmFieldLabel [for]="'ask-card-' + locale"
-                >How this assistant works (cited when asked)</label
+              <label hlmFieldLabel for="ask-reserve">Kept for visitors (% of the budget)</label>
+              <input
+                hlmInput
+                id="ask-reserve"
+                type="number"
+                inputmode="numeric"
+                autocomplete="off"
+                min="0"
+                max="90"
+                step="1"
+                [aria-describedby]="'ask-reserve-hint'"
+                [ngModel]="d.spend.reserve"
+                (ngModelChange)="patchSpend({ reserve: $event === null ? '' : String($event) })"
+              />
+              <p
+                id="ask-reserve-hint"
+                class="m-0 max-w-prose text-hint text-pretty text-muted-foreground"
               >
-              <textarea
-                hlmTextarea
-                rows="6"
-                [id]="'ask-card-' + locale"
-                placeholder="Empty: the built-in description, which names the configured models."
-                [ngModel]="d.systemCard[locale]"
-                (ngModelChange)="patchLocale('systemCard', locale, $event)"
-              ></textarea>
+                The reserve line: the admin's tools stop once today's spend reaches
+                {{ reserveLine() }}. At 0 % they may spend it all.
+              </p>
             </div>
-          </fieldset>
-        }
+          </div>
+          <!-- One row a feature: what it spends on, its switch, its cap; an off feature's cap is
+               hidden and kept, and a save still sends it. -->
+          <ul class="m-0 list-none border-b border-border p-0" role="list">
+            @for (f of capped; track f) {
+              <li
+                class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2 border-t border-border py-3 sm:grid-cols-[minmax(0,1fr)_auto_8rem]"
+              >
+                <div class="min-w-0 text-sm">
+                  @if (hasSwitch(f)) {
+                    <label class="font-medium" [for]="'ask-feature-' + f">{{ label(f) }}</label>
+                  } @else {
+                    <p class="m-0 font-medium">{{ label(f) }}</p>
+                  }
+                  <p
+                    [id]="'ask-feature-' + f + '-hint'"
+                    class="m-0 max-w-prose text-hint text-pretty text-muted-foreground"
+                  >
+                    {{ words[f] }}
+                  </p>
+                </div>
+                <div class="pt-0.5">
+                  @if (hasSwitch(f)) {
+                    <hlm-switch
+                      [id]="'ask-feature-' + f"
+                      [aria-describedby]="'ask-feature-' + f + '-hint'"
+                      [checked]="d.spend.switches[f]"
+                      (checkedChange)="patchSwitch(f, $event)"
+                    />
+                  }
+                </div>
+                @if (!hasSwitch(f) || d.spend.switches[f]) {
+                  <div hlmField class="col-span-2 sm:col-span-1">
+                    <label hlmFieldLabel [for]="'ask-cap-' + f"
+                      >Daily cap<span class="sr-only"> for {{ label(f) }}</span> (USD)</label
+                    >
+                    <input
+                      hlmInput
+                      type="number"
+                      inputmode="decimal"
+                      autocomplete="off"
+                      min="0.01"
+                      max="100"
+                      step="0.01"
+                      placeholder="no cap"
+                      [id]="'ask-cap-' + f"
+                      [ngModel]="d.spend.caps[f]"
+                      (ngModelChange)="patchCap(f, $event)"
+                    />
+                  </div>
+                }
+              </li>
+            }
+          </ul>
+          <p class="m-0 max-w-prose text-hint text-pretty text-muted-foreground">
+            An empty cap means none of its own: the feature stops at the reserve line, and Match a
+            brief at the whole budget.
+          </p>
+        </section>
+
+        <section class="flex flex-col gap-4" aria-labelledby="settings-visitors">
+          <h2 id="settings-visitors" class="m-0 text-section-title">What visitors read</h2>
+          <div class="grid gap-4 lg:grid-cols-2">
+            @for (locale of locales; track locale) {
+              <div hlmField>
+                <label hlmFieldLabel [for]="'ask-suggest-' + locale"
+                  >Suggested questions in {{ language[locale] }}</label
+                >
+                <textarea
+                  hlmTextarea
+                  autocomplete="off"
+                  rows="4"
+                  [attr.lang]="locale"
+                  [id]="'ask-suggest-' + locale"
+                  [aria-describedby]="'ask-suggest-hint'"
+                  [ngModel]="d.suggestions[locale]"
+                  (ngModelChange)="patchLocale('suggestions', locale, $event)"
+                ></textarea>
+              </div>
+            }
+            @for (locale of locales; track locale) {
+              <div hlmField>
+                <label hlmFieldLabel [for]="'ask-card-' + locale"
+                  >How this assistant works, in {{ language[locale] }}</label
+                >
+                <textarea
+                  hlmTextarea
+                  autocomplete="off"
+                  rows="6"
+                  placeholder="Empty: the built-in description, which names the configured models."
+                  [attr.lang]="locale"
+                  [id]="'ask-card-' + locale"
+                  [aria-describedby]="'ask-card-hint'"
+                  [ngModel]="d.systemCard[locale]"
+                  (ngModelChange)="patchLocale('systemCard', locale, $event)"
+                ></textarea>
+              </div>
+            }
+          </div>
+          <p
+            id="ask-suggest-hint"
+            class="m-0 max-w-prose text-hint text-pretty text-muted-foreground"
+          >
+            Suggested questions: one a line, up to 6; the visitors' assistant offers them before the
+            first question.
+          </p>
+          <p id="ask-card-hint" class="m-0 max-w-prose text-hint text-pretty text-muted-foreground">
+            How this assistant works: cited when a visitor asks how it works.
+          </p>
+        </section>
 
         @if (env(); as e) {
-          <section
-            class="flex flex-col gap-3 rounded-lg border border-dashed border-border p-4 text-sm"
-          >
-            <h2 class="m-0 text-sm font-medium">From the deploy (.env)</h2>
-            <p class="m-0 flex flex-wrap gap-2">
-              <span hlmBadge [variant]="e.enabled ? 'default' : 'destructive'"
-                >SERVER_AI_ENABLED={{ e.enabled }}</span
-              >
-              <span hlmBadge [variant]="e.keys.gemini ? 'outline' : 'destructive'"
-                >Gemini key {{ e.keys.gemini ? "set" : "missing" }}</span
-              >
-              <span hlmBadge [variant]="e.keys.openrouter ? 'outline' : 'secondary'"
-                >OpenRouter key {{ e.keys.openrouter ? "set" : "missing" }}</span
-              >
+          <section class="flex flex-col gap-2 text-sm" aria-labelledby="settings-deploy">
+            <h2 id="settings-deploy" class="m-0 text-section-title">From the deploy, read-only</h2>
+            <p class="m-0">
+              The deploy switches the assistant {{ e.enabled ? "on" : "off" }} (<code translate="no"
+                >SERVER_AI_ENABLED</code
+              >). Gemini key {{ e.keys.gemini ? "set" : "missing" }}; OpenRouter key
+              {{ e.keys.openrouter ? "set" : "missing" }}.
             </p>
             @if (e.unavailableReason) {
-              <p class="m-0 text-destructive">Unavailable: {{ e.unavailableReason }}</p>
+              <p class="m-0 text-destructive">It cannot answer: {{ e.unavailableReason }}.</p>
             }
-            @for (role of roles; track role) {
-              <div>
-                <p class="m-0 text-hint text-muted-foreground">{{ role }}</p>
-                <p class="m-0 font-data text-xs">
-                  @for (m of e.chains[role]; track m.id; let last = $last) {
-                    <span
-                      [class.line-through]="!m.available"
-                      [title]="
-                        (m.contextWindow | number) +
-                        ' tokens' +
-                        (m.tools ? ', tools' : ', no tools')
-                      "
-                      >{{ m.id }}</span
-                    >
-                    @if (!last) {
-                      <span class="text-muted-foreground"> → </span>
-                    }
-                  } @empty {
-                    <span class="text-muted-foreground">none</span>
-                  }
-                </p>
-              </div>
-            }
-            <p class="m-0 text-hint text-muted-foreground">
-              {{ e.limits.ratePerHour }}/h and {{ e.limits.ratePerDay }}/day per visitor ·
-              {{ e.limits.maxConcurrent }} streams at once · {{ e.limits.maxOutputTokens }} output
-              tokens · {{ e.limits.historyTurns }} turns of memory · prompt {{ e.prompt }}
+            <dl class="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
+              @for (r of roles; track r.role) {
+                <dt class="text-muted-foreground">{{ r.name }}</dt>
+                <dd class="m-0 font-data text-xs wrap-anywhere" translate="no">
+                  {{ chain(e.chains[r.role]) }}
+                </dd>
+              }
+            </dl>
+            <p class="m-0 max-w-prose text-hint text-pretty text-muted-foreground">
+              Each visitor may ask {{ e.limits.ratePerHour }} questions an hour and
+              {{ e.limits.ratePerDay }} a day; {{ e.limits.maxConcurrent }} answers stream at once;
+              an answer has at most {{ e.limits.maxOutputTokens }} tokens; the assistant remembers
+              {{ e.limits.historyTurns }} turns. Prompt version
+              <span class="font-data" translate="no">{{ e.prompt }}</span>.
             </p>
           </section>
         }
@@ -319,7 +331,7 @@ const suggestionLines = (text: string): string[] =>
         [saving]="saving()"
         [changes]="changes()"
         saveLabel="Save"
-        hint="live immediately, no publish needed"
+        hint="live at once"
         (save)="save()"
         (discard)="discard()"
       />
@@ -328,17 +340,20 @@ const suggestionLines = (text: string): string[] =>
 })
 export class AssistantSettingsComponent implements OnInit {
   private readonly api = inject(AdminApiService);
+  private readonly confirm = inject(ConfirmService);
   private readonly pulse = inject(AdminPulseService);
 
   protected readonly locales = LOCALES;
-  protected readonly roles = ["lite", "deep", "copilot", "insight"] as const;
+  protected readonly language = LANGUAGE;
+  protected readonly roles = ROLES;
   protected readonly String = String;
   protected readonly capped = CAPPED;
-  protected readonly switches = SWITCHES;
+  protected readonly words = FEATURE_WORDS;
+  protected readonly hasSwitch = hasSwitch;
   protected readonly label = featureLabel;
 
-  private readonly saved = signal<Draft | null>(null);
-  protected readonly draft = signal<Draft | null>(null);
+  private readonly saved = signal<SettingsDraft | null>(null);
+  protected readonly draft = signal<SettingsDraft | null>(null);
   protected readonly env = signal<AssistantEnv | null>(null);
   /** The API's reason when the settings did not arrive. */
   protected readonly loadError = signal<string | null>(null);
@@ -347,6 +362,25 @@ export class AssistantSettingsComponent implements OnInit {
     () => JSON.stringify(this.draft()) !== JSON.stringify(this.saved()),
   );
   protected readonly changes = computed(() => countChangedFields(this.saved(), this.draft()));
+
+  /** "$2.00": the budget an empty field leaves to the deploy. */
+  protected readonly deployBudget = computed(() => {
+    const deploy = this.env()?.defaultBudgetUsd;
+    return deploy === undefined ? "default" : usd(deploy);
+  });
+
+  /** Where the admin's tools stop, worked out from the two fields as typed: "$1.00 of $2.00". */
+  protected readonly reserveLine = computed(() => {
+    const d = this.draft();
+    const typed = d && d.budget.trim() !== "" ? Number(d.budget) : this.env()?.defaultBudgetUsd;
+    const reserve = d && d.spend.reserve.trim() !== "" ? Number(d.spend.reserve) / 100 : Number.NaN;
+    // NaN fails every comparison: a field mid-edit says the line in words only.
+    const known = typed !== undefined && typed > 0 && reserve >= 0 && reserve <= 0.9;
+    if (!known) {
+      return "the rest of the budget";
+    }
+    return `${usd(typed * (1 - reserve))} of ${usd(typed)}`;
+  });
 
   constructor() {
     const unsaved = inject(UnsavedChangesService);
@@ -374,7 +408,7 @@ export class AssistantSettingsComponent implements OnInit {
     if (!result.ok) {
       // With settings on screen (a reload after a save), a toast; before, the page says so.
       if (this.draft()) {
-        toast.error("Could not load the settings", { description: result.error });
+        toast.error("Could not load the settings", { description: apiWords(result.error) });
       } else {
         this.loadError.set(result.error);
       }
@@ -386,7 +420,15 @@ export class AssistantSettingsComponent implements OnInit {
     this.env.set(result.data.env);
   }
 
-  protected patch(values: Partial<Draft>): void {
+  /** A chain in words: "gemini-flash-lite, then gemini-flash (not available)". */
+  protected chain(models: readonly ChainModel[]): string {
+    if (models.length === 0) {
+      return "none";
+    }
+    return models.map((m) => (m.available ? m.id : `${m.id} (not available)`)).join(", then ");
+  }
+
+  protected patch(values: Partial<SettingsDraft>): void {
     this.draft.update((d) => (d ? { ...d, ...values } : d));
   }
 
@@ -421,35 +463,35 @@ export class AssistantSettingsComponent implements OnInit {
     toastDiscarded(() => this.draft.set(edits));
   }
 
+  /**
+   * Everything here is live once saved, so a save says what goes live and asks first. Cancel,
+   * Escape and a click outside send nothing and keep the draft; the dialog gives the focus back.
+   */
   protected async save(): Promise<void> {
     const d = this.draft();
-    if (!d) {
+    const saved = this.saved();
+    if (!d || !saved) {
       return;
     }
-    const budget = d.budget.trim() === "" ? null : Number(d.budget);
-    if (budget !== null && !(budget >= 0.01 && budget <= 100)) {
-      toast.error("The budget must be between 0.01 and 100 USD, or empty");
+    const input = settingsInput(d);
+    if (!input.ok) {
+      toast.error(input.error);
       return;
     }
-    const spend = spendInput(d.spend);
-    if (!spend.ok) {
-      toast.error(spend.error);
-      return;
+    const changes = liveChanges(saved, d, this.env()?.defaultBudgetUsd ?? null);
+    if (changes.length > 0) {
+      const go = await this.confirm.ask({
+        title: "Put these changes live?",
+        description: "Settings apply as soon as they are saved; there is no publish step.",
+        items: changes,
+        confirmLabel: "Save and go live",
+      });
+      if (!go) {
+        return;
+      }
     }
-    const input: AssistantSettingsInput = {
-      enabled: d.enabled,
-      dailyBudgetUsd: budget,
-      deepEnabled: d.deepEnabled,
-      publicScorecard: d.publicScorecard,
-      suggestedQuestions: {
-        en: suggestionLines(d.suggestions.en),
-        de: suggestionLines(d.suggestions.de),
-      },
-      systemCard: { en: d.systemCard.en.trim(), de: d.systemCard.de.trim() },
-      ...spend.value,
-    };
     this.saving.set(true);
-    const result = await this.api.saveAssistantSettings(input);
+    const result = await this.api.saveAssistantSettings(input.value);
     this.saving.set(false);
     if (!result.ok) {
       toastNotSaved(result.error);
@@ -458,7 +500,7 @@ export class AssistantSettingsComponent implements OnInit {
     const draft = toDraft(result.data.settings);
     this.saved.set(draft);
     this.draft.set(structuredClone(draft));
-    toast.success("Saved — live now");
+    toast.success("Saved and live now");
     // A switch or a cap moves what each feature may spend: the paid buttons follow at once.
     void this.pulse.refresh(["assistant"]);
   }

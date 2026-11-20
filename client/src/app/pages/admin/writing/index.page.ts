@@ -17,6 +17,7 @@ import { HlmDropdownMenuImports } from "@spartan-ng/helm/dropdown-menu";
 import { HlmTableImports } from "@spartan-ng/helm/table";
 
 import { AdminApiService, type PostListRow } from "../../../admin/admin-api.service";
+import { apiWords } from "../../../admin/api-words";
 import { createBlankPost } from "../../../admin/create-entities";
 import { ConfirmService } from "../../../admin/components/confirm-dialog.component";
 import {
@@ -241,7 +242,7 @@ export default class AdminWritingPage implements OnInit {
     const result = await createBlankPost(this.api);
     this.adding.set(false);
     if (!result.ok) {
-      toast.error("Could not add post", { description: result.error });
+      toast.error("Could not add post", { description: apiWords(result.error) });
       return;
     }
     void this.router.navigate(["/admin/writing", result.slug]);
@@ -263,7 +264,7 @@ export default class AdminWritingPage implements OnInit {
     const result = await this.api.deletePost(row.id);
     if (!result.ok) {
       this.rows.set(previous);
-      toast.error("Could not delete", { description: result.error });
+      toast.error("Could not delete", { description: apiWords(result.error) });
       return;
     }
     this.recovery.forget("post", row.id);

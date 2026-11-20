@@ -10,6 +10,7 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmButton } from "@spartan-ng/helm/button";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import { ConfirmService } from "../components/confirm-dialog.component";
 import { sortCases, STALE_LABELS, type EvalCaseRow } from "../eval-cases";
 
@@ -114,7 +115,7 @@ export class AssistantEvalCasesComponent implements OnInit {
     if (result.ok) {
       this.rows.set(result.data.cases);
     } else {
-      toast.error("Could not load the eval cases", { description: result.error });
+      toast.error("Could not load the eval cases", { description: apiWords(result.error) });
     }
   }
 
@@ -124,7 +125,7 @@ export class AssistantEvalCasesComponent implements OnInit {
     const result = await this.api.setEvalCaseStatus(row.id, status);
     this.busy.set(false);
     if (!result.ok) {
-      toast.error("Could not change the case", { description: result.error });
+      toast.error("Could not change the case", { description: apiWords(result.error) });
       return;
     }
     await this.load();
@@ -144,7 +145,7 @@ export class AssistantEvalCasesComponent implements OnInit {
     const result = await this.api.deleteEvalCase(row.id);
     this.busy.set(false);
     if (!result.ok) {
-      toast.error("Not deleted", { description: result.error });
+      toast.error("Not deleted", { description: apiWords(result.error) });
       return;
     }
     await this.load();

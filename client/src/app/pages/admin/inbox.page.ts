@@ -21,6 +21,7 @@ import {
   type MessageRow,
   type MessageStatus,
 } from "../../admin/admin-api.service";
+import { apiWords } from "../../admin/api-words";
 import {
   FormSkeletonComponent,
   LoadErrorComponent,
@@ -497,7 +498,7 @@ export default class AdminInboxPage implements OnInit {
   protected async setStatus(message: MessageRow, status: MessageStatus): Promise<void> {
     const result = await this.api.setMessageStatus(message.id, status);
     if (!result.ok) {
-      toast.error("Not changed", { description: result.error });
+      toast.error("Not changed", { description: apiWords(result.error) });
       return;
     }
     if (inFilter(this.filter(), status)) {

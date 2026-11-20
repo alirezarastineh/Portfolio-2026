@@ -24,6 +24,7 @@ import { HlmInput } from "@spartan-ng/helm/input";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import { CopilotLedger } from "../copilot-ledger";
 import { draftOffer, type CopilotDraft, type DraftOffer } from "../copilot-skills";
 import { toastUndo } from "../save-feedback";
@@ -108,11 +109,11 @@ const serverError = (control: FormControl<string>): string | null =>
                 [disabled]="!!aiBusy()"
                 (click)="aiTranslate('en')"
                 [attr.aria-label]="
-                  'Translate → DE: the English ' + label() + ' into German, with AI'
+                  'Translate → DE: the English ' + label() + ' into German, with AI (paid)'
                 "
               >
                 <ng-icon name="lucideSparkles" size="12" aria-hidden="true" />
-                <span class="ml-1">{{ aiBusy() === "de" ? "…" : "translate → DE" }}</span>
+                <span class="ml-1">{{ aiBusy() === "de" ? "…" : "translate → DE" }} (paid)</span>
               </button>
               <button
                 hlmBtn
@@ -123,11 +124,11 @@ const serverError = (control: FormControl<string>): string | null =>
                 [disabled]="!!aiBusy()"
                 (click)="aiTranslate('de')"
                 [attr.aria-label]="
-                  '→ EN: translate the German ' + label() + ' into English, with AI'
+                  '→ EN: translate the German ' + label() + ' into English, with AI (paid)'
                 "
               >
                 <ng-icon name="lucideSparkles" size="12" aria-hidden="true" />
-                <span class="ml-1">{{ aiBusy() === "en" ? "…" : "→ EN" }}</span>
+                <span class="ml-1">{{ aiBusy() === "en" ? "…" : "→ EN" }} (paid)</span>
               </button>
             }
             <button
@@ -138,10 +139,10 @@ const serverError = (control: FormControl<string>): string | null =>
               class="h-6 px-2 text-xs text-muted-foreground"
               [disabled]="!!aiBusy()"
               (click)="aiTighten()"
-              [attr.aria-label]="'Tighten the ' + label() + ' with AI'"
+              [attr.aria-label]="'Tighten the ' + label() + ' with AI (paid)'"
             >
               <ng-icon name="lucideSparkles" size="12" aria-hidden="true" />
-              <span class="ml-1">{{ aiBusy() === "tighten" ? "…" : "tighten" }}</span>
+              <span class="ml-1">{{ aiBusy() === "tighten" ? "…" : "tighten" }} (paid)</span>
             </button>
           }
         </span>
@@ -417,7 +418,7 @@ export class FieldPairComponent {
     });
     this.aiBusy.set(null);
     if (!result.ok) {
-      toast.error("No translation", { description: result.error });
+      toast.error("No translation", { description: apiWords(result.error) });
       return;
     }
     const undo = this.undoOf(to);
@@ -473,7 +474,7 @@ export class FieldPairComponent {
       ...(this.maxLength() ? { maxLength: this.maxLength() } : {}),
     });
     if (!result.ok) {
-      toast.error("Not tightened", { description: result.error });
+      toast.error("Not tightened", { description: apiWords(result.error) });
       return { ok: false };
     }
     const undo = this.undoOf(locale);

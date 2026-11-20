@@ -3012,36 +3012,45 @@ test.describe("admin", () => {
 
     await openView(page, "Settings");
     await page.getByLabel("Kept for visitors (% of the budget)", { exact: true }).fill("60");
-    await page.getByLabel("Eval runs", { exact: true }).fill("0.5");
-    // Its cap: the number field (the switch has the same name).
-    await page.getByRole("spinbutton", { name: "Admin agents", exact: true }).fill("0.05");
+    await page.getByLabel("Daily cap for Eval runs (USD)", { exact: true }).fill("0.5");
+    // Admin agents is off: its cap is out of sight, kept as it is (plan 5, U19).
+    await expect(
+      page.getByRole("spinbutton", { name: "Daily cap for Admin agents (USD)", exact: true }),
+    ).toHaveCount(0);
     // Each switch is named by its own label alone, its hint left out.
     const named = (name: string) => page.getByRole("switch", { name, exact: true });
     await expect(named("Deep model for comparisons and architecture questions")).toBeChecked();
     await expect(named("Judge runs")).toHaveAccessibleDescription(/agrees with you/);
     await expect(named("Admin agents")).not.toBeChecked();
-    await expect(named("Admin agents")).toHaveAccessibleDescription(/failure journal/);
+    // Everything it funds (plan 5, U19).
+    await expect(named("Admin agents")).toHaveAccessibleDescription(
+      /The content agent's runs, the journal's replays and the FAQ proposals/,
+    );
     await expect(named("Automatic insights")).not.toBeChecked();
     await expect(named("Automatic insights")).toHaveAccessibleDescription(/nightly check/);
     await expect(named("Nightly judge")).not.toBeChecked();
     await expect(named("Nightly judge")).toHaveAccessibleDescription(/review queue/);
     await expect(named("Match a brief")).not.toBeChecked();
-    await expect(named("Match a brief")).toHaveAccessibleDescription(/reserve up to its cap/);
-    await expect(page.getByRole("spinbutton", { name: "Match a brief", exact: true })).toHaveValue(
-      "0.1",
+    await expect(named("Match a brief")).toHaveAccessibleDescription(
+      /visitors' share, up to its cap/,
     );
     await named("Match a brief").click();
+    // Switched on, its cap shows, as it was kept.
+    await expect(
+      page.getByRole("spinbutton", { name: "Daily cap for Match a brief (USD)", exact: true }),
+    ).toHaveValue("0.1");
     // The public scorecard (visitor plan V13): unpublished until switched on.
     await expect(named("Public scorecard")).not.toBeChecked();
-    await expect(named("Public scorecard")).toHaveAccessibleDescription(/aggregates only/);
+    await expect(named("Public scorecard")).toHaveAccessibleDescription(/totals only/);
     await named("Public scorecard").click();
     await named("Copilot").click();
     await page.getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByRole("button", { name: "Save and go live", exact: true }).click();
     await expect.poll(() => savedSettings).toHaveLength(1);
     expect(savedSettings[0]).toMatchObject({
       publicScorecard: true,
       publicReserve: 0.6,
-      featureCaps: { match: 0.1, eval: 0.5, copilot: null, pairwise: null, agent: 0.05 },
+      featureCaps: { match: 0.1, eval: 0.5, copilot: null, pairwise: null, agent: null },
       featureSwitches: {
         match: true,
         copilot: false,
@@ -3159,15 +3168,19 @@ test.describe("admin", () => {
     await expect(check.getByText(/more than 20 % of its last 30 answers failed/)).toBeVisible();
     await expect(check.getByText("demote route:deep")).toBeVisible();
     const registry = page.getByRole("region", { name: "Who may do what" });
-    // Named levels (plan 5, U18): the words, never the L0–L3 code.
-    await expect(registry.getByRole("row", { name: /publish/ })).toContainText("People only");
-    await expect(registry.getByRole("row", { name: /navigate/ })).toContainText(
+    // Named levels (plan 5, U18) and each action in words (U19): never the L0–L3 code or the action's name.
+    await expect(registry.getByRole("row", { name: /Publishes the draft/ })).toContainText(
+      "People only",
+    );
+    await expect(registry.getByRole("row", { name: /Opens a page of this site/ })).toContainText(
       "Acts, reversibly; reviewed after",
     );
     await expect(registry.getByText(/\bL[0-3]\b/)).toHaveCount(0);
-    await expect(registry.getByRole("row", { name: /agent\.apply/ })).toContainText("not built");
+    await expect(
+      registry.getByRole("row", { name: /Applies a content draft you accepted/ }),
+    ).toContainText("not built");
     await check.getByRole("button", { name: "Check now", exact: true }).click();
-    await expect(page.getByText("4 checked · 0 demoted", { exact: true })).toBeVisible();
+    await expect(page.getByText("4 checked, 0 demoted", { exact: true })).toBeVisible();
     await expect
       .poll(() => posted)
       .toEqual([
@@ -3409,7 +3422,7 @@ test.describe("admin", () => {
     const compare = page.getByRole("region", { name: "Compare two answerers" });
     await expect(compare.getByLabel("A")).toHaveValue("lite");
     await compare.getByLabel("B").fill("deep");
-    await compare.getByRole("button", { name: "Compare", exact: true }).click();
+    await compare.getByRole("button", { name: "Compare (paid)", exact: true }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Compare" }).click();
 
     await expect(
@@ -15438,11 +15451,11 @@ test.describe("Now, and the paid buttons a stopped feature turns off", () => {
 
     await openView(page, "Quality");
     const evals = "Eval runs: stopped at its cap. Settings";
-    await pressStopped(page, page.getByRole("button", { name: "Run the evals" }), evals);
-    await pressStopped(page, page.getByRole("button", { name: "Resume the run" }), evals);
+    await pressStopped(page, page.getByRole("button", { name: "Run the evals (paid)" }), evals);
+    await pressStopped(page, page.getByRole("button", { name: "Resume the run (paid)" }), evals);
     await pressStopped(
       page,
-      page.getByRole("button", { name: "Compare", exact: true }),
+      page.getByRole("button", { name: "Compare (paid)", exact: true }),
       "Pairwise runs: budget spent. Settings",
     );
     // Enter in a field submits the form: still nothing.
@@ -15451,7 +15464,7 @@ test.describe("Now, and the paid buttons a stopped feature turns off", () => {
     await openView(page, "Reviews");
     await pressStopped(
       page,
-      page.getByRole("button", { name: "Judge 3 reviewed answers" }),
+      page.getByRole("button", { name: "Judge 3 reviewed answers (paid)" }),
       "Judge runs: switched off. Settings",
     );
 
@@ -15472,10 +15485,14 @@ test.describe("Now, and the paid buttons a stopped feature turns off", () => {
     const insights = "Insights: stopped at the reserve line. Settings";
     await pressStopped(
       page,
-      page.getByRole("button", { name: "Analyse visitor questions" }),
+      page.getByRole("button", { name: "Analyse visitor questions (paid)" }),
       insights,
     );
-    await pressStopped(page, page.getByRole("button", { name: "Refresh", exact: true }), insights);
+    await pressStopped(
+      page,
+      page.getByRole("button", { name: "Refresh (paid)", exact: true }),
+      insights,
+    );
     await pressStopped(
       page,
       page.getByRole("button", { name: "Draft an FAQ proposal (paid)" }),
@@ -15484,7 +15501,7 @@ test.describe("Now, and the paid buttons a stopped feature turns off", () => {
     await page.getByRole("button", { name: "New entry" }).click();
     await page.locator("#faq-q-en").fill("Do you work remotely?");
     await page.locator("#faq-q-de").fill("Arbeiten Sie remote?");
-    const drafts = page.getByRole("button", { name: "Draft an answer from the portfolio" });
+    const drafts = page.getByRole("button", { name: "Draft an answer from the portfolio (paid)" });
     await expect(drafts).toHaveCount(2);
     await pressStopped(page, drafts.first(), "Copilot: switched off. Settings");
     await pressStopped(page, drafts.last(), "Copilot: switched off. Settings");
@@ -15539,13 +15556,14 @@ test.describe("Now, and the paid buttons a stopped feature turns off", () => {
       },
     });
     await openAdmin(page, "/admin/assistant?view=quality");
-    const run = page.getByRole("button", { name: "Run the evals" });
+    const run = page.getByRole("button", { name: "Run the evals (paid)" });
     await expect(run).toHaveAttribute("aria-disabled", "true");
 
     await openView(page, "Settings");
-    await page.getByLabel("Eval runs", { exact: true }).fill("0.5");
+    await page.getByLabel("Daily cap for Eval runs (USD)", { exact: true }).fill("0.5");
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByText("Saved — live now")).toBeVisible();
+    await page.getByRole("button", { name: "Save and go live", exact: true }).click();
+    await expect(page.getByText("Saved and live now", { exact: true })).toBeVisible();
     await openView(page, "Quality");
     await expect(run).not.toHaveAttribute("aria-disabled");
     await expect(page.locator("#stop-eval")).toHaveCount(0);
@@ -15607,6 +15625,328 @@ test.describe("Now, and the paid buttons a stopped feature turns off", () => {
       await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
       await expect(page.locator("#stop-eval")).toBeVisible();
       await expect(page.locator("[role=status] .sr-only")).toHaveCount(0);
+      expect(await axeViolations(page)).toEqual([]);
+    });
+  }
+});
+
+/** The audit log as the server writes it: a settings change, a run a line stopped, a demotion. */
+function wordedAudit(): Record<string, unknown>[] {
+  const row = {
+    at: HOUR_AGO,
+    alternatives: [],
+    alert: false,
+    seenAt: null,
+  };
+  return [
+    {
+      ...row,
+      id: 31,
+      actor: "admin",
+      action: "settings.update",
+      target: "settings",
+      decision: "allowed",
+      reason: "enabled true → false; featureCaps.eval null → 0.5",
+    },
+    {
+      ...row,
+      id: 32,
+      actor: "agent",
+      action: "run.spend",
+      target: "r_evals",
+      decision: "denied",
+      reason: "eval run stopped before case-12: reserve_reached",
+    },
+    {
+      ...row,
+      id: 33,
+      actor: "system",
+      action: "demote",
+      target: "route:deep",
+      decision: "allowed",
+      reason: "8 of 30 answers failed (27 %; ceiling 20 %)",
+    },
+  ];
+}
+
+/**
+ * `target` and the sticky save bar do not overlap: a focused control is never under it. The trust part comes after
+ * the form, below the bar, which sticks only within Settings' own block.
+ */
+async function clearOfSaveBar(page: Page, target: Locator): Promise<void> {
+  const [box, bar] = await Promise.all([
+    target.boundingBox(),
+    page.locator("app-save-bar").boundingBox(),
+  ]);
+  const clear =
+    box && bar
+      ? Math.round(box.y + box.height) <= Math.round(bar.y) + 1 ||
+        Math.round(box.y) >= Math.round(bar.y + bar.height) - 1
+      : false;
+  expect(clear).toBe(true);
+}
+
+test.describe("Settings, spending and trust, in words", () => {
+  test("a save asks first and says what goes live; Cancel, Escape and a click outside send nothing, and the focus returns to Save", async ({
+    page,
+    baseURL,
+  }) => {
+    const puts: unknown[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "PUT /admin/assistant/settings": (_n: number, sent: unknown) => {
+        puts.push(sent);
+        return { status: 200, body: { ok: true, settings: assistantSettings({ enabled: false }) } };
+      },
+    });
+    await openAdmin(page, "/admin/assistant?view=settings");
+    const answer = page.getByRole("switch", { name: "Answer visitors", exact: true });
+    await answer.click();
+    await expect(answer).not.toBeChecked();
+    const save = page.getByRole("button", { name: "Save", exact: true });
+    const question = page.getByText("Put these changes live?", { exact: true });
+    const change = page.getByText("Answer visitors: off (was on)", { exact: true });
+
+    // By the keyboard: Enter on Save asks; Cancel, by Enter too, sends nothing.
+    await save.focus();
+    await page.keyboard.press("Enter");
+    await expect(question).toBeVisible();
+    await expect(change).toBeVisible();
+    await page.getByRole("button", { name: "Cancel", exact: true }).press("Enter");
+    await expect(question).toHaveCount(0);
+    await expect(save).toBeFocused();
+
+    // Escape.
+    await page.keyboard.press("Enter");
+    await expect(question).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(question).toHaveCount(0);
+    await expect(save).toBeFocused();
+
+    // A click outside the question.
+    await page.keyboard.press("Enter");
+    await expect(question).toBeVisible();
+    await page.mouse.click(8, 8);
+    await expect(question).toHaveCount(0);
+    await expect(save).toBeFocused();
+
+    // Ctrl+S from a field asks the same, and Escape puts the focus back in the field.
+    const budget = page.locator("#ask-budget");
+    await budget.focus();
+    await page.keyboard.press("Control+s");
+    await expect(question).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(budget).toBeFocused();
+
+    // The draft stayed, and nothing went.
+    await expect(answer).not.toBeChecked();
+    await expect(save).toBeEnabled();
+    expect(puts).toEqual([]);
+
+    // Save and go live sends it, once.
+    await save.click();
+    await page.getByRole("button", { name: "Save and go live", exact: true }).click();
+    await expect(page.getByText("Saved and live now", { exact: true })).toBeVisible();
+    await expect.poll(() => puts.length).toBe(1);
+    expect(puts[0]).toMatchObject({ enabled: false });
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a feature switched off hides its cap and keeps it: the save still sends it", async ({
+    page,
+    baseURL,
+  }) => {
+    const puts: unknown[] = [];
+    const caps = { ...assistantSettings().featureCaps, copilot: 0.3 };
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/settings": {
+        settings: assistantSettings({ featureCaps: caps }),
+        env: ASSISTANT_ENV,
+      },
+      "PUT /admin/assistant/settings": (_n: number, sent: unknown) => {
+        puts.push(sent);
+        return {
+          status: 200,
+          body: { ok: true, settings: assistantSettings({ featureCaps: caps }) },
+        };
+      },
+    });
+    await openAdmin(page, "/admin/assistant?view=settings");
+    const cap = page.getByRole("spinbutton", { name: "Daily cap for Copilot (USD)", exact: true });
+    await expect(cap).toHaveValue("0.3");
+    // Match a brief is off in the fixture: its cap of $0.10 is kept out of sight.
+    await expect(
+      page.getByRole("spinbutton", { name: "Daily cap for Match a brief (USD)", exact: true }),
+    ).toHaveCount(0);
+
+    await page.getByRole("switch", { name: "Copilot", exact: true }).click();
+    await expect(cap).toHaveCount(0);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText("Copilot: off (was on)", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Save and go live", exact: true }).click();
+    await expect.poll(() => puts.length).toBe(1);
+    expect(puts[0]).toMatchObject({
+      featureCaps: { copilot: 0.3, match: 0.1 },
+      featureSwitches: { copilot: false, match: false },
+    });
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a refused save and a failed run say what happened in words, never the API's code", async ({
+    page,
+    baseURL,
+  }) => {
+    const unmocked = await fakeApi(page, baseURL, {
+      "PUT /admin/assistant/settings": () => ({ status: 400, body: { error: "invalid_input" } }),
+      "POST /admin/assistant/runs": () => ({ status: 503, body: { error: "reserve_reached" } }),
+    });
+    await openAdmin(page, "/admin/assistant?view=settings");
+    await page.locator("#ask-budget").fill("3");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(
+      page.getByText("Daily budget: $3.00 (was the deploy's $2.00)", { exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Save and go live", exact: true }).click();
+    await expect(page.getByText("Not saved", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(
+        "Something in it is missing or out of bounds: check the fields, then try again.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(page.getByText("invalid_input")).toHaveCount(0);
+    // The draft stays for another try.
+    await expect(page.locator("#ask-budget")).toHaveValue("3");
+
+    await viewLink(page, "Quality").click();
+    await discardAsk(page).getByRole("button", { name: "Discard and leave" }).click();
+    await page.getByRole("button", { name: "Run the evals (paid)", exact: true }).click();
+    await page.getByRole("button", { name: "Run evals", exact: true }).click();
+    await expect(page.getByText("The evals did not start", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Today's spend reached the reserve line: the rest is kept for visitors.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.getByText("reserve_reached")).toHaveCount(0);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the registry and the audit log in words; Show where it is enforced from the keyboard", async ({
+    page,
+    baseURL,
+  }) => {
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/trust": trustView({ audit: wordedAudit() }),
+    });
+    await openAdmin(page, "/admin/assistant?view=settings");
+    const registry = page.getByRole("region", { name: "Who may do what" });
+    await expect(
+      registry.getByRole("row", { name: /The visitors' assistant Opens a page of this site/ }),
+    ).toContainText("Nobody");
+    await expect(registry.getByRole("row", { name: /You Publishes the draft/ })).toContainText(
+      "People only",
+    );
+    await expect(registry.getByText("tools.ts allowedPath")).toHaveCount(0);
+
+    const show = registry.getByRole("button", { name: "Show where it is enforced" });
+    await expect(show).toHaveAttribute("aria-expanded", "false");
+    await show.focus();
+    await page.keyboard.press("Enter");
+    const hide = registry.getByRole("button", { name: "Hide where it is enforced" });
+    await expect(hide).toBeFocused();
+    await expect(hide).toHaveAttribute("aria-expanded", "true");
+    await expect(registry.getByText("tools.ts allowedPath", { exact: true })).toBeVisible();
+    await page.keyboard.press("Space");
+    await expect(show).toBeFocused();
+    await expect(registry.getByText("tools.ts allowedPath")).toHaveCount(0);
+
+    const log = page.getByRole("region", { name: "Audit log" });
+    await expect(log.getByRole("row", { name: /You Changed the settings/ })).toContainText(
+      "Done: Answer visitors: off (was on); Daily cap for Eval runs: $0.50 (was none)",
+    );
+    await expect(log.getByRole("row", { name: /An agent Stopped a paid run/ })).toContainText(
+      "Refused: Eval runs stopped before case-12. Today's spend reached the reserve line",
+    );
+    await expect(
+      log.getByRole("row", { name: /The server Took out of the visitors' service/ }),
+    ).toContainText("the deep route");
+    await runSequentially(
+      ["featureCaps", "reserve_reached", "route:deep", "settings.update"],
+      async (code) => {
+        await expect(log.getByText(code)).toHaveCount(0);
+      },
+    );
+    expect(unmocked).toEqual([]);
+  });
+
+  for (const width of [1280, 390]) {
+    test(`Settings works from the keyboard at ${width}: every control in reading order, clear of the save bar`, async ({
+      page,
+      baseURL,
+    }) => {
+      // Thirty stops, each scrolled into view.
+      test.slow();
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
+      await page.emulateMedia({ colorScheme: width === 390 ? "light" : "dark" });
+      await fakeApi(page, baseURL);
+      await openAdmin(page, "/admin/assistant?view=settings");
+      await expect(page.locator("#ask-budget")).toBeVisible();
+      const named = (name: string) => page.getByRole("switch", { name, exact: true });
+      const cap = (name: string) =>
+        page.getByRole("spinbutton", { name: `Daily cap for ${name} (USD)`, exact: true });
+      await viewLink(page, "Settings").focus();
+      const stops = [
+        named("Answer visitors"),
+        named("Deep model for comparisons and architecture questions"),
+        named("Public scorecard"),
+        page.locator("#ask-budget"),
+        page.locator("#ask-reserve"),
+        named("Match a brief"),
+        cap("Playground"),
+        named("Copilot"),
+        cap("Copilot"),
+        cap("Insights"),
+        named("Automatic insights"),
+        cap("Eval runs"),
+        cap("Pairwise runs"),
+        named("Judge runs"),
+        cap("Judge runs"),
+        named("Nightly judge"),
+        named("Search by meaning"),
+        named("Admin agents"),
+        page.locator("#ask-suggest-en"),
+        page.locator("#ask-suggest-de"),
+        page.locator("#ask-card-en"),
+        page.locator("#ask-card-de"),
+        page.getByRole("button", { name: "Check now", exact: true }),
+        page.getByRole("button", { name: "Show where it is enforced" }),
+      ];
+      await runSequentially(stops, async (stop) => {
+        await tabTo(page, stop);
+        await expect(stop).toBeInViewport();
+        await clearOfSaveBar(page, stop);
+      });
+    });
+  }
+
+  for (const colorScheme of ["dark", "light"] as const) {
+    test(`Settings, its question and the rules shown in full, in the ${colorScheme} theme, have no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await fakeApi(page, baseURL, {
+        "GET /admin/assistant/trust": trustView({ audit: wordedAudit() }),
+      });
+      await openAdmin(page, "/admin/assistant?view=settings");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+      await page.getByRole("button", { name: "Show where it is enforced" }).click();
+      await expect(page.getByText("tools.ts allowedPath", { exact: true })).toBeVisible();
+      expect(await axeViolations(page)).toEqual([]);
+
+      await page.getByRole("switch", { name: "Copilot", exact: true }).click();
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await expect(page.getByText("Copilot: off (was on)", { exact: true })).toBeVisible();
       expect(await axeViolations(page)).toEqual([]);
     });
   }

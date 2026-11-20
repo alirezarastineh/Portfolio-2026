@@ -1,3 +1,4 @@
+import { apiWords } from "./api-words";
 import type { InsightsNotice, InsightTopic } from "./assistant-types";
 import { HEURISTIC_MIN_WORDS, type JournalEntry } from "./journal";
 
@@ -225,7 +226,7 @@ export function lessonRefusal(error: string, detail?: unknown): string {
     const reason = (detail as { reason?: unknown } | undefined)?.reason;
     return typeof reason === "string" ? `Not corroborated: ${reason}.` : "Not corroborated yet.";
   }
-  return REFUSALS[error] ?? error;
+  return REFUSALS[error] ?? apiWords(error);
 }
 
 /** Why the form cannot send this lesson yet; null when it can. */

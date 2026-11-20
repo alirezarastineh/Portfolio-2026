@@ -73,6 +73,7 @@ import { HlmToaster } from "@spartan-ng/helm/sonner";
 import { filter } from "rxjs";
 
 import { adminApiInterceptor } from "../admin/admin-api.interceptor";
+import { apiWords } from "../admin/api-words";
 import { adminAuthGuard } from "../admin/admin-auth.guard";
 import { AdminApiService } from "../admin/admin-api.service";
 import { addAdminStyles } from "../admin/admin-styles";
@@ -1191,7 +1192,7 @@ export default class AdminLayout {
   protected readonly newProject = async (): Promise<void> => {
     const created = await createBlankProject(this.api);
     if (!created.ok) {
-      toast.error("Could not add project", { description: created.error });
+      toast.error("Could not add project", { description: apiWords(created.error) });
       return;
     }
     await this.openCreated(["/admin/projects", created.slug], "Project added");
@@ -1200,7 +1201,7 @@ export default class AdminLayout {
   protected readonly newPost = async (): Promise<void> => {
     const created = await createBlankPost(this.api);
     if (!created.ok) {
-      toast.error("Could not create the post", { description: created.error });
+      toast.error("Could not create the post", { description: apiWords(created.error) });
       return;
     }
     await this.openCreated(["/admin/writing", created.slug], "Post created");

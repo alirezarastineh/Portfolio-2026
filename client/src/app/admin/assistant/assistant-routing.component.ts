@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@ang
 import { toast } from "@spartan-ng/brain/sonner";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import { WINDOWS } from "../perception";
 import {
   escalationLine,
@@ -167,7 +168,7 @@ export class AssistantRoutingComponent implements OnInit {
       this.failed.set(false);
     } else {
       this.failed.set(true);
-      toast.error("Could not load the routing figures", { description: result.error });
+      toast.error("Could not load the routing figures", { description: apiWords(result.error) });
     }
   }
 }

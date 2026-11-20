@@ -231,7 +231,7 @@ export class SaveBarComponent {
       return changes > 0 ? changedFieldsLabel(changes) : "unsaved changes";
     }
     const at = this.savedAt();
-    return at ? `saved at ${formatTime(at)} — ${this.hint()}` : `saved — ${this.hint()}`;
+    return at ? `saved at ${formatTime(at)}, ${this.hint()}` : `saved, ${this.hint()}`;
   });
 
   /** The status, and a parity that flips whenever its text does. */

@@ -14,6 +14,7 @@ import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import type { RunItem, RunRow } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
 import { LoadErrorComponent } from "../components/load-state.component";
@@ -69,7 +70,7 @@ const POLL_MS = 2000;
           [disabled]="busy() || !!activeRun()"
           (click)="start()"
         >
-          Run the evals
+          Run the evals (paid)
         </button>
         @if (activeRun(); as running) {
           @if (running.kind === "eval") {
@@ -156,7 +157,7 @@ const POLL_MS = 2000;
                 [disabled]="busy()"
                 (click)="resume(v.run)"
               >
-                Resume the run
+                Resume the run (paid)
               </button>
             </div>
           }
@@ -407,7 +408,7 @@ export class AssistantEvalsComponent implements OnInit {
     // With runs on screen, a toast; before, the history says so, with Try again.
     if (!list.ok) {
       if (this.runs().length) {
-        toast.error("Could not load the eval runs", { description: list.error });
+        toast.error("Could not load the eval runs", { description: apiWords(list.error) });
       } else {
         this.loadError.set(true);
       }
@@ -435,7 +436,7 @@ export class AssistantEvalsComponent implements OnInit {
     clearTimeout(this.timer);
     const result = await this.api.getRun(id);
     if (!result.ok) {
-      toast.error("Could not load the run", { description: result.error });
+      toast.error("Could not load the run", { description: apiWords(result.error) });
       return;
     }
     if (this.view()?.run.id !== id) {
@@ -467,7 +468,7 @@ export class AssistantEvalsComponent implements OnInit {
     const result = await this.api.startEvalRun();
     this.busy.set(false);
     if (!result.ok) {
-      toast.error("The evals did not start", { description: result.error });
+      toast.error("The evals did not start", { description: apiWords(result.error) });
       await this.load();
       return;
     }
@@ -480,7 +481,7 @@ export class AssistantEvalsComponent implements OnInit {
     const result = await this.api.cancelRun(run.id);
     this.busy.set(false);
     if (!result.ok) {
-      toast.error("Could not cancel the run", { description: result.error });
+      toast.error("Could not cancel the run", { description: apiWords(result.error) });
     }
     await this.open(run.id);
   }
@@ -502,7 +503,7 @@ export class AssistantEvalsComponent implements OnInit {
     const result = await this.api.resumeRun(run.id);
     this.busy.set(false);
     if (!result.ok) {
-      toast.error("Could not resume the run", { description: result.error });
+      toast.error("Could not resume the run", { description: apiWords(result.error) });
       return;
     }
     await this.open(run.id);
@@ -515,7 +516,7 @@ export class AssistantEvalsComponent implements OnInit {
     }
     const result = await this.api.getRun(other.id);
     if (!result.ok) {
-      toast.error("Could not load that run", { description: result.error });
+      toast.error("Could not load that run", { description: apiWords(result.error) });
       return;
     }
     this.comparison.set({

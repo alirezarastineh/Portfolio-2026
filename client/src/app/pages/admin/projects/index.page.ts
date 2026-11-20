@@ -33,6 +33,7 @@ import { HlmSwitch } from "@spartan-ng/helm/switch";
 import { HlmTableImports } from "@spartan-ng/helm/table";
 
 import { AdminApiService, type ProjectListRow } from "../../../admin/admin-api.service";
+import { apiWords } from "../../../admin/api-words";
 import { ConfirmService } from "../../../admin/components/confirm-dialog.component";
 import { RecoveryService } from "../../../admin/recovery.service";
 import { toastNotSaved } from "../../../admin/save-feedback";
@@ -315,7 +316,7 @@ export default class AdminProjectsPage implements OnInit {
     const result = await createBlankProject(this.api);
     this.adding.set(false);
     if (!result.ok) {
-      toast.error("Could not add project", { description: result.error });
+      toast.error("Could not add project", { description: apiWords(result.error) });
       return;
     }
     void this.router.navigate(["/admin/projects", result.slug]);
@@ -341,7 +342,7 @@ export default class AdminProjectsPage implements OnInit {
     const result = await this.api.deleteProject(row.id);
     if (!result.ok) {
       this.rows.set(previous);
-      toast.error("Could not delete", { description: result.error });
+      toast.error("Could not delete", { description: apiWords(result.error) });
       return;
     }
     this.recovery.forget("project", row.id);
@@ -389,7 +390,7 @@ export default class AdminProjectsPage implements OnInit {
 
     if (!result.ok) {
       this.rows.set(previous);
-      toast.error("Could not reorder", { description: result.error });
+      toast.error("Could not reorder", { description: apiWords(result.error) });
     }
   }
 

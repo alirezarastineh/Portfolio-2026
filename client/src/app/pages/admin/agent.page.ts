@@ -89,9 +89,9 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
       <section aria-labelledby="agent-start-title" class="flex flex-col gap-3">
         <h2 id="agent-start-title" class="m-0 text-section-title">Start a run</h2>
         <p class="m-0 text-sm text-muted-foreground">
-          Paid: it spends under Admin agents' switch and cap (Settings → Spending), and stops at its
-          own limit. Each draft is checked, repaired, and ranked or read twice, as the editors'
-          copilot does.
+          Paid: it spends under Admin agents' switch and cap (Settings, under Spending), and stops
+          at its own limit. Each draft is checked, repaired, and ranked or read twice, as the
+          editors' copilot does.
         </p>
         <fieldset class="m-0 flex flex-wrap gap-4 border-0 p-0">
           <legend class="mb-2 text-sm font-medium">What to draft</legend>
@@ -134,7 +134,7 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
             />
           </div>
           <button hlmBtn type="button" [disabled]="!canStart()" (click)="start()">
-            {{ starting() ? "Starting…" : "Start a run" }}
+            {{ starting() ? "Starting…" : "Start a run (paid)" }}
           </button>
         </div>
       </section>
@@ -172,7 +172,7 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
                     </button>
                   } @else if (resumable(run)) {
                     <button hlmBtn variant="outline" size="sm" type="button" (click)="resume(run)">
-                      Resume
+                      Resume (paid)
                     </button>
                   }
                 </span>

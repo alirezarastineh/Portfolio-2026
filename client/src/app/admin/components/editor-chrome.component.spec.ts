@@ -85,7 +85,7 @@ describe("SaveBarComponent", () => {
 
   it("says whether the editor is unsaved, saving, saved or has problems", () => {
     const { host, fixture, status } = setup();
-    expect(status()).toMatch(/^saved — /);
+    expect(status()).toMatch(/^saved, publish to go live$/);
 
     host.dirty.set(true);
     fixture.detectChanges();
@@ -98,7 +98,7 @@ describe("SaveBarComponent", () => {
     host.saving.set(false);
     host.dirty.set(false);
     fixture.detectChanges();
-    expect(status()).toMatch(/^saved at .+ — publish to go live/);
+    expect(status()).toMatch(/^saved at .+, publish to go live$/);
 
     host.problems.set(2);
     fixture.detectChanges();

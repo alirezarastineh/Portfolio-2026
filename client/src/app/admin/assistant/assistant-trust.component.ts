@@ -13,6 +13,7 @@ import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import type { AuditRow, Demotion, TrustView } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
 import { AdminPulseService } from "../pulse.service";
@@ -20,6 +21,15 @@ import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-st
 import { WAITING_ROW } from "../now";
 import { absoluteTime, relativeTime } from "../relative-time";
 import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
+import {
+  actionWords,
+  actorWords,
+  approverWords,
+  auditAction,
+  auditReason,
+  auditTarget,
+  outcomeWords,
+} from "../trust-words";
 
 /**
  * Trust (plan phase 14): what needs a person (alerts, demotions), the last
@@ -99,7 +109,7 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
       } @else {
         <section class="flex flex-col gap-2" aria-labelledby="trust-check">
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <h2 id="trust-check" class="m-0 text-sm font-medium">Nightly check</h2>
+            <h2 id="trust-check" class="m-0 text-section-title">Nightly check</h2>
             <button
               hlmBtn
               size="sm"
@@ -111,16 +121,21 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
               Check now
             </button>
           </div>
-          <p class="m-0 text-hint text-muted-foreground">{{ rules(v.rules) }}</p>
+          <p class="m-0 max-w-prose text-hint text-pretty text-muted-foreground">
+            {{ rules(v.rules) }}
+          </p>
           @if (v.lastCheck; as last) {
-            <p class="m-0 text-hint text-muted-foreground" [title]="absolute(last.at)">
+            <p
+              class="m-0 max-w-prose text-hint text-pretty text-muted-foreground"
+              [title]="absolute(last.at)"
+            >
               {{ relative(last.at) }}: {{ last.reason }}
             </p>
             <ul class="m-0 flex list-none flex-col gap-1 p-0 text-xs" role="list">
               @for (verdict of last.alternatives; track verdict.option) {
                 <li>
-                  <span class="font-data">{{ verdict.option }}</span>
-                  <span class="text-muted-foreground"> · {{ verdict.why }}</span>
+                  <span class="font-data" translate="no">{{ verdict.option }}</span>:
+                  <span class="text-muted-foreground">{{ verdict.why }}</span>
                 </li>
               }
             </ul>
@@ -132,31 +147,49 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
         </section>
 
         <section class="flex flex-col gap-2" aria-labelledby="trust-registry">
-          <h2 id="trust-registry" class="m-0 text-sm font-medium">Who may do what</h2>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="trust-registry" class="m-0 text-section-title">Who may do what</h2>
+            <!-- The server's own text, code paths and all, on request (plan 5, U19). -->
+            <button
+              type="button"
+              class="min-h-6 touch-manipulation text-sm underline decoration-muted-foreground underline-offset-4 hover:decoration-foreground pointer-coarse:min-h-11"
+              aria-controls="trust-registry-table"
+              [attr.aria-expanded]="where()"
+              (click)="where.set(!where())"
+            >
+              {{ where() ? "Hide where it is enforced" : "Show where it is enforced" }}
+            </button>
+          </div>
           <div class="overflow-x-auto rounded-lg border border-border">
-            <table class="w-full text-sm">
+            <table id="trust-registry-table" class="w-full text-sm">
+              <caption class="sr-only">
+                Each action, who does it, how far it may go alone, and who approves it
+              </caption>
               <thead class="text-left text-xs text-muted-foreground">
                 <tr>
-                  <th class="p-2 font-normal">Action</th>
-                  <th class="p-2 font-normal">Level</th>
-                  <th class="p-2 font-normal">Approves</th>
-                  <th class="p-2 font-normal">Enforced by</th>
+                  <th scope="col" class="p-2 font-normal">Who</th>
+                  <th scope="col" class="p-2 font-normal">What</th>
+                  <th scope="col" class="p-2 font-normal">Level</th>
+                  <th scope="col" class="p-2 font-normal">Approves</th>
                 </tr>
               </thead>
               <tbody>
                 @for (entry of v.registry; track entry.action) {
                   <tr class="border-t border-border align-top">
-                    <td class="p-2 font-data text-xs">
-                      {{ entry.action }}
+                    <td class="p-2">{{ actor(entry) }}</td>
+                    <td class="p-2">
+                      {{ what(entry.action) }}
                       @if (!entry.built) {
                         <span hlmBadge variant="outline" class="ms-1">not built</span>
                       }
+                      @if (where()) {
+                        <span class="mt-1 block text-hint text-pretty text-muted-foreground">{{
+                          entry.enforcement
+                        }}</span>
+                      }
                     </td>
-                    <td class="p-2 text-xs">{{ level(entry.level) }}</td>
-                    <td class="p-2 text-xs">
-                      {{ entry.approver === "none" ? "–" : entry.approver }}
-                    </td>
-                    <td class="p-2 text-xs text-muted-foreground">{{ entry.enforcement }}</td>
+                    <td class="p-2">{{ level(entry.level) }}</td>
+                    <td class="p-2">{{ approver(entry.approver) }}</td>
                   </tr>
                 }
               </tbody>
@@ -165,36 +198,47 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
         </section>
 
         <section class="flex flex-col gap-2" aria-labelledby="trust-log">
-          <h2 id="trust-log" class="m-0 text-sm font-medium">Audit log</h2>
+          <h2 id="trust-log" class="m-0 text-section-title">Audit log</h2>
           <div class="overflow-x-auto rounded-lg border border-border">
             <table class="w-full text-sm">
+              <caption class="sr-only">
+                What was done, by whom, and how it ended, newest first
+              </caption>
               <thead class="text-left text-xs text-muted-foreground">
                 <tr>
-                  <th class="p-2 font-normal">When</th>
-                  <th class="p-2 font-normal">Who</th>
-                  <th class="p-2 font-normal">What</th>
-                  <th class="p-2 font-normal">Decision and why</th>
+                  <th scope="col" class="p-2 font-normal">When</th>
+                  <th scope="col" class="p-2 font-normal">Who</th>
+                  <th scope="col" class="p-2 font-normal">What</th>
+                  <th scope="col" class="p-2 font-normal">Outcome and why</th>
                 </tr>
               </thead>
               <tbody>
                 @for (row of v.audit; track row.id) {
-                  <tr class="border-t border-border align-top text-xs">
+                  <tr class="border-t border-border align-top">
                     <td class="p-2 whitespace-nowrap" [title]="absolute(row.at)">
                       {{ relative(row.at) }}
                     </td>
-                    <td class="p-2">{{ row.actor }}</td>
+                    <td class="p-2">{{ actor(row) }}</td>
                     <td class="p-2">
-                      {{ action(row) }}
-                      <span class="block font-data text-muted-foreground">{{ row.target }}</span>
+                      {{ happened(row) }}
+                      @if (target(row.target); as t) {
+                        <span
+                          class="block text-muted-foreground"
+                          [class.font-data]="t.id"
+                          [attr.translate]="t.id ? 'no' : null"
+                          [class.text-xs]="t.id"
+                          >{{ t.text }}</span
+                        >
+                      }
                     </td>
                     <td class="p-2">
-                      {{ row.decision
-                      }}<span class="text-muted-foreground"> · {{ row.reason }}</span>
+                      {{ outcome(row.decision) }}:
+                      <span class="text-muted-foreground">{{ reason(row) }}</span>
                     </td>
                   </tr>
                 } @empty {
                   <tr>
-                    <td class="p-2 text-xs text-muted-foreground" colspan="4">Nothing yet.</td>
+                    <td class="p-2 text-muted-foreground" colspan="4">Nothing yet.</td>
                   </tr>
                 }
               </tbody>
@@ -228,6 +272,16 @@ export class AssistantTrustComponent implements OnInit {
   protected readonly subject = subjectLabel;
   protected readonly action = actionLabel;
   protected readonly rules = rulesLine;
+  /** The registry and the log in words (Settings). */
+  protected readonly actor = actorWords;
+  protected readonly what = actionWords;
+  protected readonly approver = approverWords;
+  protected readonly happened = auditAction;
+  protected readonly target = auditTarget;
+  protected readonly outcome = outcomeWords;
+  protected readonly reason = auditReason;
+  /** "Show where it is enforced": the registry's own text under each action. */
+  protected readonly where = signal(false);
 
   /** "the deep route" → "The deep route": a row's words start a sentence. */
   protected first(words: string): string {
@@ -252,7 +306,7 @@ export class AssistantTrustComponent implements OnInit {
     if (result.ok) {
       this.view.set(result.data);
     } else if (this.view()) {
-      toast.error("Could not load trust", { description: result.error });
+      toast.error("Could not load trust", { description: apiWords(result.error) });
     } else {
       this.loadError.set(result.error);
     }
@@ -269,7 +323,7 @@ export class AssistantTrustComponent implements OnInit {
     const result = await this.api.trustAlertSeen(row.id);
     this.busy.set(false);
     if (!result.ok) {
-      toast.error("Not marked seen", { description: result.error });
+      toast.error("Not marked seen", { description: apiWords(result.error) });
     }
     await this.changed();
     if (result.ok) {
@@ -290,7 +344,7 @@ export class AssistantTrustComponent implements OnInit {
     const result = await this.api.trustReinstate(demotion.subject);
     this.busy.set(false);
     if (!result.ok) {
-      toast.error("Not reinstated", { description: result.error });
+      toast.error("Not reinstated", { description: apiWords(result.error) });
       return;
     }
     toast.success(`${subjectLabel(demotion.subject)} is back in service`);
@@ -310,12 +364,12 @@ export class AssistantTrustComponent implements OnInit {
     const result = await this.api.trustCheck();
     this.busy.set(false);
     if (!result.ok) {
-      toast.error("The check did not run", { description: result.error });
+      toast.error("The check did not run", { description: apiWords(result.error) });
       return;
     }
     const { checked, demoted, refused } = result.data;
-    const refusals = refused.length ? ` · ${refused.length} refused` : "";
-    toast.success(`${checked} checked · ${demoted.length} demoted${refusals}`);
+    const refusals = refused.length ? `, ${refused.length} refused` : "";
+    toast.success(`${checked} checked, ${demoted.length} demoted${refusals}`);
     await this.changed();
   }
 

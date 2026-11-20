@@ -15,6 +15,7 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmButton } from "@spartan-ng/helm/button";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import type { RunItem, RunRow } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
 import { canResume, isActive, progressShare } from "../eval-runs";
@@ -93,7 +94,7 @@ const POLL_MS = 2000;
           [attr.aria-describedby]="stop() ? 'stop-pairwise' : null"
           [disabled]="!canStart()"
         >
-          Compare
+          Compare (paid)
         </button>
         @if (active(); as running) {
           @if (running.kind === "pairwise") {
@@ -158,7 +159,7 @@ const POLL_MS = 2000;
                 [disabled]="busy()"
                 (click)="resume(v.run)"
               >
-                Resume the comparison
+                Resume the comparison (paid)
               </button>
             </div>
           }
@@ -307,7 +308,7 @@ export class AssistantPairwiseComponent implements OnInit {
       this.answerers.set(status.data.answerers);
     }
     if (!list.ok) {
-      toast.error("Could not load the runs", { description: list.error });
+      toast.error("Could not load the runs", { description: apiWords(list.error) });
       return;
     }
     this.runs.set(list.data.runs);
@@ -321,7 +322,7 @@ export class AssistantPairwiseComponent implements OnInit {
     clearTimeout(this.timer);
     const result = await this.api.getRun(id);
     if (!result.ok) {
-      toast.error("Could not load the comparison", { description: result.error });
+      toast.error("Could not load the comparison", { description: apiWords(result.error) });
       return;
     }
     this.view.set(result.data);
@@ -350,7 +351,7 @@ export class AssistantPairwiseComponent implements OnInit {
     const result = await this.api.startPairwiseRun(a, b);
     this.busy.set(false);
     if (!result.ok) {
-      toast.error("The comparison did not start", { description: result.error });
+      toast.error("The comparison did not start", { description: apiWords(result.error) });
       return;
     }
     this.used.set([this.a(), this.b()]);
@@ -363,7 +364,7 @@ export class AssistantPairwiseComponent implements OnInit {
     const result = await this.api.cancelRun(run.id);
     this.busy.set(false);
     if (!result.ok) {
-      toast.error("Could not cancel the comparison", { description: result.error });
+      toast.error("Could not cancel the comparison", { description: apiWords(result.error) });
     }
     await this.open(run.id);
   }
@@ -385,7 +386,7 @@ export class AssistantPairwiseComponent implements OnInit {
     const result = await this.api.resumeRun(run.id);
     this.busy.set(false);
     if (!result.ok) {
-      toast.error("Could not resume the comparison", { description: result.error });
+      toast.error("Could not resume the comparison", { description: apiWords(result.error) });
       return;
     }
     await this.open(run.id);

@@ -14,6 +14,7 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmButton } from "@spartan-ng/helm/button";
 
 import type { Locale } from "../../content/schema";
+import { apiWords } from "../api-words";
 import { AdminApiService } from "../admin-api.service";
 import type { CopilotInput } from "../assistant-types";
 import { CopilotLedger } from "../copilot-ledger";
@@ -47,10 +48,13 @@ export type PageDraftRequest = WithoutPage<Extract<CopilotInput, { text: string;
       class="h-6 px-2 text-xs text-muted-foreground"
       [disabled]="busy()"
       (click)="run()"
-      [attr.aria-label]="'Suggest a ' + name() + ' in ' + locale().toUpperCase() + ' with AI'"
     >
+      <!-- Named by its words: "suggest a summary in EN with AI (paid)", "(paid)" in sight too. -->
       <ng-icon name="lucideSparkles" size="12" aria-hidden="true" />
-      <span class="ml-1">{{ busy() ? "…" : "suggest" }}</span>
+      <span class="ml-1">{{ busy() ? "…" : "suggest" }}</span><span class="sr-only">
+        a {{ name() }} in {{ locale().toUpperCase() }} with AI</span
+      >
+      (paid)
     </button>
     <app-draft-offer
       [offer]="shownOffer()"
@@ -111,7 +115,7 @@ export class CopilotSuggestComponent {
     const result = await this.api.copilot({ ...this.request(), text, locale: this.locale() });
     this.busy.set(false);
     if (!result.ok) {
-      toast.error("No suggestion", { description: result.error });
+      toast.error("No suggestion", { description: apiWords(result.error) });
       return;
     }
     // Back after the editor closed: the draft never lands.

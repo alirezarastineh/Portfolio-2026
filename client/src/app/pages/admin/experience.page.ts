@@ -51,6 +51,7 @@ import {
   type ExperienceRow,
   type MediaAsset,
 } from "../../admin/admin-api.service";
+import { apiWords } from "../../admin/api-words";
 import { ChangedElsewhere } from "../../admin/changed-elsewhere";
 import { countChangedFields } from "../../admin/changed-fields";
 import { inDraft, rollUp, stateOf, TRACE_WORDS, type TraceState } from "../../admin/change-trace";
@@ -1233,7 +1234,7 @@ export default class AdminExperiencePage implements OnInit {
     const result = await this.api.deleteExperience(row.id);
     if (!result.ok) {
       this.rows.set(previous);
-      toast.error("Could not delete", { description: result.error });
+      toast.error("Could not delete", { description: apiWords(result.error) });
       return;
     }
     this.recovery.forget("experience-entry", row.id);
@@ -1279,7 +1280,7 @@ export default class AdminExperiencePage implements OnInit {
     );
     if (!result.ok) {
       this.rows.set(previous);
-      toast.error("Could not reorder", { description: result.error });
+      toast.error("Could not reorder", { description: apiWords(result.error) });
       return;
     }
     // A reorder is an edit to every row, so it moves their versions.

@@ -18,6 +18,7 @@ import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmSpinner } from "@spartan-ng/helm/spinner";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import type { InsightTopic } from "../assistant-types";
 import { FaqDraftsService } from "../faq-drafts.service";
 import { faqProposalWords } from "../faq-proposals";
@@ -66,7 +67,7 @@ import { LessonFormComponent } from "./lesson-form.component";
           @if (loading()) {
             <hlm-spinner class="size-4" />
           } @else {
-            Analyse visitor questions
+            Analyse visitor questions (paid)
           }
         </button>
         @if (topics() !== null) {
@@ -81,7 +82,7 @@ import { LessonFormComponent } from "./lesson-form.component";
             [disabled]="loading()"
             (click)="analyse(true)"
           >
-            Refresh
+            Refresh (paid)
           </button>
           <span class="text-hint text-muted-foreground">
             {{ analysed() }} question(s){{ cached() ? " · cached" : "" }}
@@ -338,7 +339,7 @@ export class AssistantInsightsComponent implements OnInit {
     }
     this.loading.set(false);
     if (!result.ok) {
-      toast.error("No insights", { description: result.error });
+      toast.error("No insights", { description: apiWords(result.error) });
       return;
     }
     // The topics and the run they come from, from one answer: a lesson names that run.

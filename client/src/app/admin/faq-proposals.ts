@@ -1,4 +1,5 @@
 import type { Locale } from "../content/schema";
+import { apiWords } from "./api-words";
 import type { FaqInput } from "./assistant-types";
 import { REFUSALS } from "./journal";
 import { lessonProblem, lessonRefusal, scopeFromTitle, scopeWords } from "./lessons";
@@ -215,9 +216,8 @@ const WORDS: Record<string, string> = {
   lesson_elsewhere: "That lesson is about something else.",
   lesson_applied: "That lesson was applied meanwhile: pick another, or a new one.",
   lesson_retired: "That lesson was retired: pick another, or a new one.",
+  // The request itself; the rest as everywhere (`api-words.ts`).
   http_404: "This API does not know FAQ proposals yet: deploy the API first.",
-  network_error: "The API did not answer: check the connection, then try again.",
-  request_failed: "The request failed: try again.",
 };
 
 export function faqProposalWords(error: string, detail?: unknown): string {
@@ -229,8 +229,5 @@ export function faqProposalWords(error: string, detail?: unknown): string {
     const which = typeof locale === "string" ? ` (${locale.toUpperCase()})` : "";
     return `The question${which} reads as an instruction to the assistant, which the FAQ does not take from a draft: rewrite it.`;
   }
-  if (/^http_5\d\d$/.test(error)) {
-    return `The API failed (HTTP ${error.slice(5)}): try again; its log says why.`;
-  }
-  return WORDS[error] ?? error;
+  return WORDS[error] ?? apiWords(error);
 }

@@ -16,6 +16,7 @@ import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmToggleGroupImports } from "@spartan-ng/helm/toggle-group";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import { FormSkeletonComponent } from "../components/load-state.component";
 import {
   STATUSES,
@@ -253,7 +254,7 @@ export class AssistantJournalComponent implements OnInit {
     if (result.ok) {
       this.data.set(result.data);
     } else {
-      toast.error("Could not load the journal", { description: result.error });
+      toast.error("Could not load the journal", { description: apiWords(result.error) });
     }
   }
 

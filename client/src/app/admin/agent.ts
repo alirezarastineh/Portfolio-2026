@@ -1,4 +1,5 @@
 import type { Locale } from "../content/schema";
+import { apiWords } from "./api-words";
 import type { RunRow } from "./assistant-types";
 import { REFUSALS } from "./journal";
 
@@ -164,18 +165,11 @@ const AGENT_WORDS: Record<string, string> = {
   invalid_input: "The text does not fit the field.",
   not_found: "That proposal is gone.",
   failed: "It failed on the server and nothing was written: try it again.",
-  // The request itself.
+  // The request itself; the rest as everywhere (`api-words.ts`).
   http_404: "This API does not know the content agent yet: deploy the API first.",
-  network_error: "The API did not answer: check the connection, then try again.",
-  request_failed: "The request failed: try again.",
 };
 
-export function agentWords(code: string): string {
-  if (/^http_5\d\d$/.test(code)) {
-    return `The API failed (HTTP ${code.slice(5)}): try again; its log says why.`;
-  }
-  return AGENT_WORDS[code] ?? code;
-}
+export const agentWords = (code: string): string => AGENT_WORDS[code] ?? apiWords(code);
 
 /** Why a run did not start, in words: its limits, when they are what the server refused. */
 export const startWords = (code: string): string =>

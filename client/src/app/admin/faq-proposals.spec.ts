@@ -150,7 +150,7 @@ describe("the FAQ proposals' helpers (plan phase 31)", () => {
 
   it("says the server's refusals in words", () => {
     expect(faqProposalWords("feature_off")).toBe(
-      "Admin agents are switched off: Settings → Spending.",
+      "Admin agents are switched off: Settings, under Spending.",
     );
     expect(faqProposalWords("question_gone")).toMatch(/pruned/);
     expect(
@@ -163,6 +163,9 @@ describe("the FAQ proposals' helpers (plan phase 31)", () => {
       "The question (DE) reads as an instruction to the assistant, which the FAQ does not take from a draft: rewrite it.",
     );
     expect(faqProposalWords("instruction")).toMatch(/^The question reads as an instruction/);
-    expect(faqProposalWords("something_new")).toBe("something_new");
+    // An unknown code: a plain sentence, never the code (plan 5, U19).
+    expect(faqProposalWords("something_new")).toBe(
+      "The server refused this. Try again; if it happens again, its log says why.",
+    );
   });
 });

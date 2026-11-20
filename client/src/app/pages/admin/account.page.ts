@@ -15,6 +15,7 @@ import { HlmField, HlmFieldLabel } from "@spartan-ng/helm/field";
 import { HlmInput } from "@spartan-ng/helm/input";
 
 import { AdminApiService, type AdminSessionRow } from "../../admin/admin-api.service";
+import { apiWords } from "../../admin/api-words";
 import { AdminSessionService } from "../../admin/admin-session.service";
 import {
   FormSkeletonComponent,
@@ -257,9 +258,9 @@ export default class AdminAccountPage implements OnInit {
     this.busy.set(false);
 
     if (!result.ok) {
-      toast.error("Could not start enrolment", {
-        description: result.error === "invalid_credentials" ? "Wrong password." : result.error,
-      });
+      const words =
+        result.error === "invalid_credentials" ? "Wrong password." : apiWords(result.error);
+      toast.error("Could not start enrolment", { description: words });
       return;
     }
 
@@ -300,10 +301,11 @@ export default class AdminAccountPage implements OnInit {
     this.busy.set(false);
 
     if (!result.ok) {
-      toast.error("Could not change password", {
-        description:
-          result.error === "invalid_credentials" ? "Current password is wrong." : result.error,
-      });
+      const words =
+        result.error === "invalid_credentials"
+          ? "Current password is wrong."
+          : apiWords(result.error);
+      toast.error("Could not change password", { description: words });
       return;
     }
 
@@ -315,7 +317,7 @@ export default class AdminAccountPage implements OnInit {
   protected async revoke(row: AdminSessionRow): Promise<void> {
     const result = await this.api.revokeSession(row.id);
     if (!result.ok) {
-      toast.error("Could not revoke", { description: result.error });
+      toast.error("Could not revoke", { description: apiWords(result.error) });
       return;
     }
     await this.loadSessions();
@@ -324,7 +326,7 @@ export default class AdminAccountPage implements OnInit {
   protected async signOutEverywhere(): Promise<void> {
     const result = await this.api.revokeSession("others");
     if (!result.ok) {
-      toast.error("Could not sign out other sessions", { description: result.error });
+      toast.error("Could not sign out other sessions", { description: apiWords(result.error) });
       return;
     }
     await this.loadSessions();

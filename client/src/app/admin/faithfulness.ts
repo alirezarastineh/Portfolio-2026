@@ -81,7 +81,7 @@ export function judgesLine(view: Pick<FaithfulnessView, "judge" | "judges">): st
 /** The last night in one sentence. */
 export function nightlyLine(run: NightlyRun | null): string {
   if (!run) {
-    return "The nightly judge has not run yet: it starts once switched on (Settings → Spending → Nightly judge).";
+    return "The nightly judge has not run yet: it starts once switched on (Settings, under Spending: Nightly judge).";
   }
   const of = run.day ? ` of ${run.day}` : "";
   const count = `${run.judged} of ${run.total} ${run.total === 1 ? "answer" : "answers"}${of}`;

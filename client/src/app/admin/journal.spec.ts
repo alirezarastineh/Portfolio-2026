@@ -116,7 +116,7 @@ describe("the failure journal in the admin (plan phase 24)", () => {
     expect(decisionProblem("fixed", { ...fields, fixType: "prompt", caseId: "c1" })).toBeNull();
     expect(NEXT.proposed).toEqual(["accepted", "retired"]);
     expect(NEXT.retired).toEqual(["proposed"]);
-    expect(refusal("feature_off")).toBe("Admin agents are switched off: Settings → Spending.");
-    expect(refusal("http_500")).toBe("http_500");
+    expect(refusal("feature_off")).toBe("Admin agents are switched off: Settings, under Spending.");
+    expect(refusal("http_500")).toBe("The API failed (HTTP 500): try again; its log says why.");
   });
 });

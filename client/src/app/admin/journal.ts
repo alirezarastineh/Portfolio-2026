@@ -1,4 +1,5 @@
 import type { Locale } from "../content/schema";
+import { apiWords } from "./api-words";
 import type { RunRow } from "./assistant-types";
 
 /**
@@ -311,7 +312,7 @@ export const REFUSALS: Record<string, string> = {
   vague_heuristic: `The heuristic needs at least ${HEURISTIC_MIN_WORDS} words.`,
   missing_fix: "Name the fix or freeze a regression case first.",
   unknown_case: "That eval case does not exist.",
-  feature_off: "Admin agents are switched off: Settings → Spending.",
+  feature_off: "Admin agents are switched off: Settings, under Spending.",
   cap_reached: "Admin agents reached their daily cap.",
   reserve_reached: "Today's spend reached the share kept for visitors.",
   assistant_resting: "Today's budget is spent.",
@@ -322,7 +323,7 @@ export const REFUSALS: Record<string, string> = {
   no_chain: "No chain is configured to replay on.",
 };
 
-export const refusal = (code: string): string => REFUSALS[code] ?? code;
+export const refusal = (code: string): string => REFUSALS[code] ?? apiWords(code);
 
 /** Runs a resume picks up (runs/runner.ts). */
 const RESUMABLE = new Set<RunRow["status"]>(["failed", "interrupted", "cancelled"]);

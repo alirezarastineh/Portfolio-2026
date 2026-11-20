@@ -22,6 +22,7 @@ import { HlmSwitch } from "@spartan-ng/helm/switch";
 import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
 import type { Locale } from "../../content/schema";
+import { apiWords } from "../api-words";
 import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
 import { AdminApiService } from "../admin-api.service";
 import type { FaqEntry, FaqInput } from "../assistant-types";
@@ -140,7 +141,7 @@ function emptyForm(question = ""): Form {
                   [disabled]="drafting() || f.text[locale].question.trim().length < 3"
                   (click)="draftAnswer(locale)"
                 >
-                  Draft an answer from the portfolio
+                  Draft an answer from the portfolio (paid)
                 </button>
               </div>
             </fieldset>
@@ -413,7 +414,7 @@ export class AssistantFaqComponent implements OnInit {
     const result = await this.api.copilot({ task: "faq-answer", question, locale });
     this.drafting.set(false);
     if (!result.ok) {
-      toast.error("No draft", { description: result.error });
+      toast.error("No draft", { description: apiWords(result.error) });
       return;
     }
     // The form closed or changed meanwhile: the draft never lands.
@@ -486,7 +487,7 @@ export class AssistantFaqComponent implements OnInit {
     this.entries.set(list);
     const result = await this.api.reorderFaq(list.map((e) => e.id));
     if (!result.ok) {
-      toast.error("Order not saved", { description: result.error });
+      toast.error("Order not saved", { description: apiWords(result.error) });
       await this.load();
     }
   }
@@ -503,7 +504,7 @@ export class AssistantFaqComponent implements OnInit {
     }
     const result = await this.api.deleteFaq(entry.id);
     if (!result.ok) {
-      toast.error("Not deleted", { description: result.error });
+      toast.error("Not deleted", { description: apiWords(result.error) });
       return;
     }
     this.recovery.forget("faq", entry.id);

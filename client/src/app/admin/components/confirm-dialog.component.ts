@@ -2,11 +2,13 @@ import { ChangeDetectionStrategy, Component, inject, Injectable } from "@angular
 import { firstValueFrom } from "rxjs";
 import { BrnDialogRef, injectBrnDialogContext } from "@spartan-ng/brain/dialog";
 import { HlmButton } from "@spartan-ng/helm/button";
-import { HlmDialogService } from "@spartan-ng/helm/dialog";
+import { HlmDialogDescription, HlmDialogService, HlmDialogTitle } from "@spartan-ng/helm/dialog";
 
 export interface ConfirmOptions {
   title: string;
   description: string;
+  /** What it does, a line each, under the description (Settings' changes). */
+  items?: readonly string[];
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
@@ -15,13 +17,21 @@ export interface ConfirmOptions {
 @Component({
   selector: "app-confirm-dialog",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmButton],
+  imports: [HlmButton, HlmDialogDescription, HlmDialogTitle],
   host: { class: "block" },
   template: `
     <div class="flex flex-col gap-4">
       <div class="flex flex-col gap-1.5">
-        <h2 class="m-0 text-base font-semibold wrap-anywhere">{{ context.title }}</h2>
-        <p class="m-0 text-sm text-muted-foreground wrap-anywhere">{{ context.description }}</p>
+        <!-- The title names the dialog and the description describes it (axe's aria-dialog-name). -->
+        <h2 hlmDialogTitle class="m-0 wrap-anywhere">{{ context.title }}</h2>
+        <p hlmDialogDescription class="m-0 wrap-anywhere">{{ context.description }}</p>
+        @if (context.items?.length) {
+          <ul class="m-0 flex list-disc flex-col gap-1 ps-5 text-sm wrap-anywhere">
+            @for (item of context.items; track $index) {
+              <li>{{ item }}</li>
+            }
+          </ul>
+        }
       </div>
       <div class="flex justify-end gap-2">
         <button hlmBtn variant="ghost" type="button" (click)="close(false)">

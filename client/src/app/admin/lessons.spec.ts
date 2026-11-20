@@ -95,7 +95,9 @@ describe("lessons in the admin (plan phase 25)", () => {
     expect(lessonRefusal("bad_transition")).toBe(
       "The lesson changed meanwhile: reload the journal.",
     );
-    expect(lessonRefusal("http_500")).toBe("http_500");
+    expect(lessonRefusal("http_500")).toBe(
+      "The API failed (HTTP 500): try again; its log says why.",
+    );
     expect(lessonRefusal("invalid_input")).toMatch(/^Something in the lesson is out of bounds/);
   });
 

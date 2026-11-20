@@ -47,43 +47,15 @@ export const CAPPED: FencedFeature[] = [
   "agent",
 ];
 
-/** The switches the Settings form offers. */
-export const SWITCHES: { feature: SwitchedFeature; label: string; hint: string }[] = [
-  {
-    feature: "match",
-    label: "Match a brief",
-    hint: "Visitors paste a role, a project or a problem on the match page, and the assistant checks it against the published work: two model calls, more only to repair. It spends inside the visitors' reserve up to its cap. The nightly trust check closes it when its critic takes back more than a fifth of its rows; reinstate it on Now, the Assistant's first view.",
-  },
-  {
-    feature: "copilot",
-    label: "Copilot",
-    hint: "Suggestions in the editors: translate, tighten, SEO, FAQ answers, alt text, image descriptions.",
-  },
-  {
-    feature: "judge",
-    label: "Judge runs",
-    hint: "Scoring reviewed visitor answers, to see how far the judge agrees with you.",
-  },
-  {
-    feature: "nightlyJudge",
-    label: "Nightly judge",
-    hint: "Each night at 02:30 UTC, judges a sample of the day's visitor answers and every flagged one against what they read; an unfaithful one goes to the review queue.",
-  },
-  {
-    feature: "embeddings",
-    label: "Search by meaning",
-    hint: "The assistant's search finds synonyms and the other language: Gemini embeds the published content and each search. The server needs SERVER_AI_EMBEDDINGS as well.",
-  },
-  {
-    feature: "autoInsights",
-    label: "Automatic insights",
-    hint: "Insights run by themselves when the nightly check sees more answers failing: once per rise, shown on Now, the Assistant's first view, until you mark them seen.",
-  },
-  {
-    feature: "agent",
-    label: "Admin agents",
-    hint: "Replays from the failure journal: a diagnosed answer's question answered again on the lite and the deep chain, after you confirm each one.",
-  },
+/** The features the Settings form offers a switch for (their words: `assistant-settings.ts`). */
+export const SWITCHED: readonly SwitchedFeature[] = [
+  "match",
+  "copilot",
+  "judge",
+  "nightlyJudge",
+  "embeddings",
+  "autoInsights",
+  "agent",
 ];
 
 export type FeatureState = SpendToday["features"][number]["state"];
@@ -179,7 +151,7 @@ export function spendDraft(settings: AssistantSettings): SpendDraft {
       }),
     ),
     switches: Object.fromEntries(
-      SWITCHES.map(({ feature }) => [feature, settings.featureSwitches?.[feature] ?? true]),
+      SWITCHED.map((feature) => [feature, settings.featureSwitches?.[feature] ?? true]),
     ),
   };
 }
@@ -207,7 +179,7 @@ export function spendInput(
     featureCaps[feature] = cap;
   }
   const featureSwitches: Partial<Record<SwitchedFeature, boolean>> = {};
-  for (const { feature } of SWITCHES) {
+  for (const feature of SWITCHED) {
     featureSwitches[feature] = draft.switches[feature] ?? true;
   }
   return {

@@ -5,6 +5,7 @@ import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmToggleGroupImports } from "@spartan-ng/helm/toggle-group";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import {
   checkLabel,
   checkTone,
@@ -239,7 +240,7 @@ export class AssistantConversationsComponent implements OnInit {
     if (result.ok) {
       this.rows.set(result.data.messages);
     } else {
-      toast.error("Could not load conversations", { description: result.error });
+      toast.error("Could not load conversations", { description: apiWords(result.error) });
     }
   }
 

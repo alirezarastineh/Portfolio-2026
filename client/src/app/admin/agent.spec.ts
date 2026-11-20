@@ -96,10 +96,15 @@ describe("the Agent page's helpers (plan phase 30)", () => {
   });
 
   it("says the server's refusals in words, and shows a field's text without its markup", () => {
-    expect(agentWords("feature_off")).toBe("Admin agents are switched off: Settings → Spending.");
+    expect(agentWords("feature_off")).toBe(
+      "Admin agents are switched off: Settings, under Spending.",
+    );
     expect(agentWords("stale")).toMatch(/nothing was overwritten/);
     expect(agentWords("not_found")).toBe("That proposal is gone.");
-    expect(agentWords("something_new")).toBe("something_new");
+    // An unknown code: a plain sentence, never the code (plan 5, U19).
+    expect(agentWords("something_new")).toBe(
+      "The server refused this. Try again; if it happens again, its log says why.",
+    );
     // The request's own failures, never a raw code.
     expect(agentWords("http_404")).toMatch(/deploy the API first/);
     expect(agentWords("http_502")).toBe("The API failed (HTTP 502): try again; its log says why.");

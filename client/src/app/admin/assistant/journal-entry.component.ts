@@ -27,6 +27,7 @@ import type { RunRow } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
 import { isActive } from "../eval-runs";
 import { FaqDraftsService } from "../faq-drafts.service";
+import { apiWords } from "../api-words";
 import { faqProposalWords } from "../faq-proposals";
 import {
   decisionProblem,
@@ -640,7 +641,7 @@ export class JournalEntryComponent {
     const go = await this.confirm.ask({
       title: "Resume the replay (paid)?",
       description:
-        "Only the chains that did not answer are asked again, on today's corpus. It spends as Admin agents (Settings → Spending).",
+        "Only the chains that did not answer are asked again, on today's corpus. It spends as Admin agents (Settings, under Spending).",
       confirmLabel: "Resume",
     });
     if (!go) {
@@ -736,7 +737,7 @@ export class JournalEntryComponent {
     const go = await this.confirm.ask({
       title: "Replay this question (paid)?",
       description:
-        "It is answered again on today's corpus by the lite and the deep chain: two answers, about $0.002–0.005 at paid prices, nothing on the free tier. It spends as Admin agents (Settings → Spending).",
+        "It is answered again on today's corpus by the lite and the deep chain: two answers, about $0.002–0.005 at paid prices, nothing on the free tier. It spends as Admin agents (Settings, under Spending).",
       confirmLabel: "Replay",
     });
     if (!go) {
@@ -771,7 +772,8 @@ export class JournalEntryComponent {
       return;
     }
     this.replaying.set(false);
-    const error = result.ok ? result.data.run.error : result.error;
+    // A run's own error is the server's sentence; a refused read is a code.
+    const error = result.ok ? result.data.run.error : apiWords(result.error);
     if (error) {
       toast.error("The replay stopped", { description: error });
     }

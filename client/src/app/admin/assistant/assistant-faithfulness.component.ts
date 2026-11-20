@@ -9,6 +9,7 @@ import {
 import { toast } from "@spartan-ng/brain/sonner";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import {
   faithfulLine,
   helpfulLine,
@@ -162,7 +163,9 @@ export class AssistantFaithfulnessComponent implements OnInit {
       this.failed.set(false);
     } else {
       this.failed.set(true);
-      toast.error("Could not load the faithfulness figures", { description: result.error });
+      toast.error("Could not load the faithfulness figures", {
+        description: apiWords(result.error),
+      });
     }
   }
 }

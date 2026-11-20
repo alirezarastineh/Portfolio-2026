@@ -2,6 +2,7 @@ import { toast } from "@spartan-ng/brain/sonner";
 
 import { SESSION_LOST } from "./admin-api.interceptor";
 import type { ApiIssue } from "./admin-api.service";
+import { apiWords } from "./api-words";
 import type { ConfirmService } from "./components/confirm-dialog.component";
 import { issueSummary } from "./issues";
 
@@ -23,12 +24,12 @@ export function askStale(confirm: ConfirmService, what = "This section"): Promis
   });
 }
 
-/** A save that failed for a reason of its own: a lost session says what to do next. */
+/** A save that failed for a reason of its own, in words: a lost session says what to do next. */
 export function toastNotSaved(error: string, title = "Not saved"): void {
   if (SESSION_LOST.has(error)) {
     toast.error("Not saved: you were signed out. Sign in, then save again.");
   } else {
-    toast.error(title, { description: error });
+    toast.error(title, { description: apiWords(error) });
   }
 }
 

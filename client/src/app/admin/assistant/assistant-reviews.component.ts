@@ -16,6 +16,7 @@ import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import { checkLabel, reasonLabel } from "../answer-trace";
 import {
   REVIEW_LABELS,
@@ -265,7 +266,8 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
                   [disabled]="judging()"
                   (click)="judgeReviewed(j.unjudged)"
                 >
-                  Judge {{ j.unjudged }} reviewed {{ j.unjudged === 1 ? "answer" : "answers" }}
+                  Judge {{ j.unjudged }} reviewed
+                  {{ j.unjudged === 1 ? "answer" : "answers" }} (paid)
                 </button>
               </div>
               @if (stop(); as reason) {
@@ -359,7 +361,7 @@ export class AssistantReviewsComponent implements OnInit {
     const started = await this.api.startJudgeRun();
     if (!started.ok) {
       this.judging.set(false);
-      toast.error("The judge did not start", { description: started.error });
+      toast.error("The judge did not start", { description: apiWords(started.error) });
       return;
     }
     this.follow(started.data.id);
@@ -394,7 +396,7 @@ export class AssistantReviewsComponent implements OnInit {
     this.loading.set(false);
     if (!result.ok) {
       if (this.data()) {
-        toast.error("Could not load the review queue", { description: result.error });
+        toast.error("Could not load the review queue", { description: apiWords(result.error) });
       } else {
         this.loadError.set(result.error);
       }
@@ -443,7 +445,7 @@ export class AssistantReviewsComponent implements OnInit {
     });
     this.saving.set(false);
     if (!result.ok) {
-      toast.error("Could not save the review", { description: result.error });
+      toast.error("Could not save the review", { description: apiWords(result.error) });
       return;
     }
     // The saved one counts as reviewed now; the next still to do opens.

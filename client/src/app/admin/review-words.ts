@@ -1,5 +1,6 @@
 import type { Locale } from "../content/schema";
 import { SESSION_LOST } from "./admin-api.interceptor";
+import { apiWords } from "./api-words";
 import { editorLinkFor } from "./editor-links";
 import type { DiffKind } from "./json-diff";
 import { navItemFor, PAGES } from "./nav";
@@ -377,17 +378,6 @@ export function wordChanges(
   return groups;
 }
 
-/** Why the server would not reach or take it, in words; an unknown code as itself. */
-function serverWords(code: string): string {
-  if (SESSION_LOST.has(code)) {
-    return "You were signed out. Sign in, then try again.";
-  }
-  if (code === "request_failed" || /^http_5\d\d$/.test(code)) {
-    return "The server did not answer. Try again.";
-  }
-  return `The server refused it (${code}).`;
-}
-
 /** A refused publish, in one sentence: what happened and what to do. */
 export function publishRefusal(code: string): string {
   if (code === "invalid_draft") {
@@ -402,7 +392,7 @@ export function publishRefusal(code: string): string {
   if (code === "request_failed" || /^http_5\d\d$/.test(code)) {
     return "Not published: the server did not answer, so nothing went live. Try again.";
   }
-  return `Not published: the server refused it (${code}).`;
+  return `Not published. ${apiWords(code)}`;
 }
 
 /** A refused roll back or restore, in words. */
@@ -417,6 +407,6 @@ export function publicationProblem(code: string): string {
     case "not_found":
       return "That publication no longer exists.";
     default:
-      return serverWords(code);
+      return apiWords(code);
   }
 }

@@ -74,7 +74,8 @@ function mounted(copilot: (input?: unknown) => Promise<unknown>, german = "", ma
   fixture.detectChanges();
   const button = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll("button")).find(
     (b) =>
-      b.getAttribute("aria-label") === "Translate → DE: the English Greeting into German, with AI",
+      b.getAttribute("aria-label") ===
+      "Translate → DE: the English Greeting into German, with AI (paid)",
   );
   if (!button) {
     throw new Error("Expected translate button");

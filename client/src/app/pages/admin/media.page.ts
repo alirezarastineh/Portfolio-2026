@@ -37,6 +37,7 @@ import {
   type MediaAsset,
   type MediaReconcile,
 } from "../../admin/admin-api.service";
+import { apiWords } from "../../admin/api-words";
 import type { RouteMeta } from "@analogjs/router";
 
 import { ChangedElsewhere } from "../../admin/changed-elsewhere";
@@ -87,12 +88,6 @@ const MATCHES: Record<Filter, (asset: MediaAsset) => boolean> = {
 };
 
 const LOCALES: readonly Locale[] = ["en", "de"];
-
-/** A delete the server refused, in words; any other code passes through as it came. */
-const NOT_DELETED: Record<string, string> = {
-  media_in_use: "The draft uses it now: change those places first.",
-  media_in_use_live: "The live site shows it now: publish without it first.",
-};
 
 function filterFrom(value: string | null): Filter {
   return FILTERS.find((f) => f.id === value)?.id ?? "all";
@@ -437,13 +432,16 @@ function textsOf(asset: MediaAsset): { id: string; updatedAt: string } {
                     type="button"
                     class="h-6 px-2 text-xs text-muted-foreground"
                     [disabled]="suggesting() !== null"
-                    [attr.aria-label]="
-                      'Suggest alt text in ' + (locale === 'en' ? 'English' : 'German') + ' with AI'
-                    "
                     (click)="suggest(asset, locale)"
                   >
+                    <!-- Named by its words: "suggest alt text in English with AI (paid)". -->
                     <ng-icon name="lucideSparkles" size="12" aria-hidden="true" />
-                    <span class="ml-1">{{ suggesting() === locale ? "…" : "suggest" }}</span>
+                    <span class="ml-1">{{ suggesting() === locale ? "…" : "suggest" }}</span><span
+                      class="sr-only"
+                    >
+                      alt text in {{ locale === "en" ? "English" : "German" }} with AI</span
+                    >
+                    (paid)
                   </button>
                   <app-draft-offer
                     class="self-stretch"
@@ -476,15 +474,16 @@ function textsOf(asset: MediaAsset): { id: string; updatedAt: string } {
                     type="button"
                     class="h-6 px-2 text-xs text-muted-foreground"
                     [disabled]="describing() !== null"
-                    [attr.aria-label]="
-                      'Describe the image in ' +
-                      (locale === 'en' ? 'English' : 'German') +
-                      ' with AI'
-                    "
                     (click)="describe(asset, locale)"
                   >
+                    <!-- Named by its words: "describe the image in English with AI (paid)". -->
                     <ng-icon name="lucideSparkles" size="12" aria-hidden="true" />
-                    <span class="ml-1">{{ describing() === locale ? "…" : "describe" }}</span>
+                    <span class="ml-1">{{ describing() === locale ? "…" : "describe" }}</span><span
+                      class="sr-only"
+                    >
+                      the image in {{ locale === "en" ? "English" : "German" }} with AI</span
+                    >
+                    (paid)
                   </button>
                   <app-draft-offer
                     class="self-stretch"
@@ -1055,7 +1054,7 @@ export default class AdminMediaPage implements OnInit {
     const result = await this.api.copilot({ task: "alt", mediaId: asset.id, locale });
     this.suggesting.set(null);
     if (!result.ok) {
-      toast.error("No suggestion", { description: result.error });
+      toast.error("No suggestion", { description: apiWords(result.error) });
       return;
     }
     // Closed, or another file opened meanwhile: the draft never lands (in either file).
@@ -1078,7 +1077,7 @@ export default class AdminMediaPage implements OnInit {
     const result = await this.api.copilot({ task: "describe", mediaId: asset.id, locale });
     this.describing.set(null);
     if (!result.ok) {
-      toast.error("No description", { description: result.error });
+      toast.error("No description", { description: apiWords(result.error) });
       return;
     }
     if (!this.landsOn(asset)) {
@@ -1134,7 +1133,7 @@ export default class AdminMediaPage implements OnInit {
     }
     if (!result.ok) {
       // The panel and its text stay: the file is still here.
-      toast.error("Not deleted", { description: NOT_DELETED[result.error] ?? result.error });
+      toast.error("Not deleted", { description: apiWords(result.error) });
       return;
     }
     this.backup.drop(asset.id);
@@ -1219,7 +1218,7 @@ export default class AdminMediaPage implements OnInit {
     const result = await this.api.cleanupMedia(ids, includeHistory);
     this.deleting.set(false);
     if (!result.ok) {
-      toast.error("Not deleted", { description: NOT_DELETED[result.error] ?? result.error });
+      toast.error("Not deleted", { description: apiWords(result.error) });
       return;
     }
     this.selected.set(new Set());

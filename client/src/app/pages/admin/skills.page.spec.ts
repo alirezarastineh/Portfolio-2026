@@ -174,7 +174,10 @@ describe("AdminSkillsPage.save", () => {
 
     expect(page["changedIds"]()).toEqual(["backend"]);
     expect(page["saving"]()).toBe(false);
-    expect(toastSpy).toHaveBeenCalledWith("Not saved", { description: "server_down" });
+    // A code the admin has no words for reads as a plain sentence, never the code (plan 5, U19).
+    expect(toastSpy).toHaveBeenCalledWith("Not saved", {
+      description: "The server refused this. Try again; if it happens again, its log says why.",
+    });
   });
 
   it("aborts without updating when the overwrite confirmation is declined", async () => {

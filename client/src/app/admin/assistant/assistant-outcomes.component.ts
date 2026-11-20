@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@ang
 import { toast } from "@spartan-ng/brain/sonner";
 
 import { AdminApiService } from "../admin-api.service";
+import { apiWords } from "../api-words";
 import { LoadErrorComponent } from "../components/load-state.component";
 import {
   browserTiles,
@@ -166,7 +167,7 @@ export class AssistantOutcomesComponent implements OnInit {
     if (result.ok) {
       this.view.set(result.data);
     } else if (this.view()) {
-      toast.error("Could not load the outcomes", { description: result.error });
+      toast.error("Could not load the outcomes", { description: apiWords(result.error) });
     }
     this.loadError.set(!result.ok && !this.view());
   }
@@ -192,7 +193,7 @@ export class AssistantOutcomesComponent implements OnInit {
     const result = await this.api.setPrimaryMetric(metric);
     this.saving.set(false);
     if (!result.ok) {
-      toast.error("Could not change the primary metric", { description: result.error });
+      toast.error("Could not change the primary metric", { description: apiWords(result.error) });
       return;
     }
     await this.load();
