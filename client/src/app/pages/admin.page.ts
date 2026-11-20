@@ -152,7 +152,14 @@ const PUBLISH: Record<PublishState, { word: string; icon: string | null }> = {
 };
 
 type ActionId =
-  "publish" | "preview-en" | "preview-de" | "new-project" | "new-post" | "theme" | "keys";
+  | "publish"
+  | "preview-en"
+  | "preview-de"
+  | "new-project"
+  | "new-post"
+  | "playground"
+  | "theme"
+  | "keys";
 
 interface PaletteAction {
   id: ActionId;
@@ -939,6 +946,7 @@ export default class AdminLayout {
     },
     { id: "new-project", label: "New project", icon: "lucidePlus" },
     { id: "new-post", label: "New post", icon: "lucidePlus" },
+    { id: "playground", label: "Ask the draft in the Playground…", icon: "lucideBot" },
     { id: "theme", label: this.themeLabel(), icon: "lucideSunMoon" },
     { id: "keys", label: "Keyboard shortcuts", icon: "lucideKeyboard", key: "?" },
   ]);
@@ -1138,6 +1146,7 @@ export default class AdminLayout {
       "preview-de": this.previewDe,
       "new-project": this.newProject,
       "new-post": this.newPost,
+      playground: this.openPlayground,
       theme: this.toggleTheme,
       keys: this.showShortcuts,
     };
@@ -1170,6 +1179,14 @@ export default class AdminLayout {
     openTab(`/admin/preview/de${this.currentItem()?.preview ?? ""}`);
   protected readonly toggleTheme = (): void => this.theme.toggle();
   protected readonly showShortcuts = (): void => this.shortcutsOpen.set(true);
+  /** The Playground lives in the Assistant's page: open it there, going there first from any other. */
+  protected readonly openPlayground = (): void => {
+    if (this.router.url.split("?")[0] === "/admin/assistant") {
+      this.pulse.playgroundOpen.set(true);
+    } else {
+      void this.router.navigateByUrl("/admin/assistant?view=playground");
+    }
+  };
 
   protected readonly newProject = async (): Promise<void> => {
     const created = await createBlankProject(this.api);

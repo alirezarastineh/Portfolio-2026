@@ -173,6 +173,23 @@ describe("unsavedChangesGuard", () => {
     expect(confirm.asked).toBe(2);
   });
 
+  it("asks when the Assistant's view changes: `view` is a place (Now has none)", async () => {
+    const { service, confirm } = setup();
+    service.set("assistant-settings", true);
+    confirm.answer = false;
+
+    expect(await runGuard("/admin/assistant?view=settings", "/admin/assistant")).toBe(false);
+    expect(await runGuard("/admin/assistant?view=settings", "/admin/assistant?view=quality")).toBe(
+      false,
+    );
+    expect(await runGuard("/admin/assistant", "/admin/assistant?view=settings")).toBe(false);
+    expect(confirm.asked).toBe(3);
+    expect(
+      await runGuard("/admin/assistant?view=settings", "/admin/assistant?view=settings#x"),
+    ).toBe(true);
+    expect(confirm.asked).toBe(3);
+  });
+
   it("stays put under the sign-in dialog, without a second question", async () => {
     const { service, confirm } = setup(true);
     service.set("seo", true);

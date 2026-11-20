@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   inject,
   input,
@@ -16,12 +17,16 @@ import { HlmButton } from "@spartan-ng/helm/button";
 import { AdminApiService } from "../admin-api.service";
 import type { ConversationRow } from "../assistant-types";
 import { freezeRequest } from "../eval-cases";
+import { UnsavedChangesService } from "../unsaved-changes.service";
 
 const REFUSALS: Record<string, string> = {
   no_snapshot:
     "This answer's corpus has no snapshot: it was answered before snapshots were kept, so it cannot be re-run as it was.",
   not_found: "This answer is gone (pruned after 90 days) or is not a visitor's.",
 };
+
+/** Each form on the page tells the guard of its own typed text. */
+let forms = 0;
 
 /**
  * "Freeze as eval case": a visitor's answer becomes a production eval case
@@ -190,6 +195,21 @@ export class FreezeCaseComponent {
         this.earlierOf = null;
       });
     });
+    // Open, not frozen, and its words changed: switching views asks first.
+    const unsaved = inject(UnsavedChangesService);
+    const key = `freeze-case-${++forms}`;
+    effect(() => {
+      const message = this.message();
+      unsaved.set(
+        key,
+        this.open() &&
+          !this.frozen() &&
+          (this.question() !== message.question ||
+            this.mustCite() !== message.citedIds.join(", ") ||
+            this.mustInclude().trim() !== ""),
+      );
+    });
+    inject(DestroyRef).onDestroy(() => unsaved.clear(key));
   }
 
   protected openForm(): void {

@@ -2,6 +2,9 @@ import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  computed,
+  DestroyRef,
+  effect,
   ElementRef,
   inject,
   Injector,
@@ -17,8 +20,10 @@ import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
 
 import { AdminApiService } from "../admin-api.service";
+import { sameValue } from "../changed-fields";
 import { ConfirmService } from "../components/confirm-dialog.component";
 import { RecoveryService } from "../recovery.service";
+import { UnsavedChangesService } from "../unsaved-changes.service";
 import {
   APPLIED_AS,
   appliedLabel,
@@ -216,30 +221,42 @@ export class JournalLessonsComponent {
   private readonly headings = viewChildren<ElementRef<HTMLElement>>("heading");
   private readonly listHeading = viewChild.required<ElementRef<HTMLElement>>("listHeading");
 
+  /** Each lesson's fix as saved; null before the list is in. */
+  private readonly savedFixes = computed(() => {
+    const list = this.lessons();
+    if (!list.length) {
+      return null;
+    }
+    return Object.fromEntries(
+      list.map((l) => [l.id, { as: l.appliedAs ?? "faq", ref: l.appliedRef ?? "" }]),
+    );
+  });
+  /** Each lesson's fix as typed. */
+  private readonly typedFixes = computed(() =>
+    Object.fromEntries(
+      this.lessons().map((l) => [
+        l.id,
+        {
+          as: this.draftAs()[l.id] ?? l.appliedAs ?? "faq",
+          ref: this.draftRef()[l.id] ?? l.appliedRef ?? "",
+        },
+      ]),
+    ),
+  );
+
   constructor() {
+    const unsaved = inject(UnsavedChangesService);
+    // A fix typed and not saved: switching views asks first.
+    effect(() =>
+      unsaved.set("journal-lessons", !sameValue(this.savedFixes() ?? {}, this.typedFixes())),
+    );
+    inject(DestroyRef).onDestroy(() => unsaved.clear("journal-lessons"));
     // Each lesson's typed fix by its id; nothing is looked for before the list is in.
     inject(RecoveryService).track({
       editor: "journal-lessons",
       rows: true,
-      saved: () => {
-        const list = this.lessons();
-        if (!list.length) {
-          return null;
-        }
-        return Object.fromEntries(
-          list.map((l) => [l.id, { as: l.appliedAs ?? "faq", ref: l.appliedRef ?? "" }]),
-        );
-      },
-      current: () =>
-        Object.fromEntries(
-          this.lessons().map((l) => [
-            l.id,
-            {
-              as: this.draftAs()[l.id] ?? l.appliedAs ?? "faq",
-              ref: this.draftRef()[l.id] ?? l.appliedRef ?? "",
-            },
-          ]),
-        ),
+      saved: this.savedFixes,
+      current: this.typedFixes,
       restore: (typed) => {
         const rows = Object.entries(typed);
         this.draftAs.set(Object.fromEntries(rows.map(([id, row]) => [id, row.as])));

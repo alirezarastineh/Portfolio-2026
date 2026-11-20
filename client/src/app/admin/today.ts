@@ -24,10 +24,8 @@ export interface TodayRow {
 export interface TodayFacts {
   totpOff: boolean;
   reconcile: MediaReconcile | null;
-  /** The assistant's state in words (`assistantAlert`): the rail says the same. */
+  /** The assistant's state in words (`assistantAlert`): the rail says the same; Now settles it. */
   alert: string | null;
-  /** The alert is about trust (an alert or a demotion): the Trust tab settles it. */
-  trust: boolean;
   messages: MessageRow[] | null;
   /** The newest copy of each page kept in this browser, newest first. */
   copies: { page: string; href: string; at: number }[];
@@ -92,9 +90,8 @@ export function needsYou(facts: TodayFacts, now = Date.now()): TodayRow[] {
     rows.push({
       words: facts.alert,
       when: "",
-      ...(facts.trust
-        ? { action: "Trust", ...assistant("trust") }
-        : { action: "Assistant", link: "/admin/assistant" }),
+      action: "Assistant",
+      link: "/admin/assistant",
       sign: "error",
     });
   }
@@ -116,7 +113,7 @@ export function needsYou(facts: TodayFacts, now = Date.now()): TodayRow[] {
       link: copy.href,
     });
   }
-  // The Reviews tab's own sum: "1 of 3 reviewed".
+  // The Reviews view's own sum: "1 of 3 reviewed".
   const unreviewed = reviews ? Math.max(0, reviews.stats.queued - reviews.stats.reviewed) : 0;
   if (reviews && unreviewed) {
     rows.push({
@@ -140,11 +137,11 @@ export function needsYou(facts: TodayFacts, now = Date.now()): TodayRow[] {
     rows.push({
       words: count(faqOpen.length, "FAQ proposal", "FAQ proposals"),
       when: newest(faqOpen, now),
-      action: "FAQ",
-      ...assistant("faq"),
+      action: "Questions",
+      ...assistant("questions"),
     });
   }
-  // The Journal tab's counts ("Proposed 1"); the newest of each, by its status.
+  // The Journal view's counts ("Proposed 1"); the newest of each, by its status.
   if (journal?.counts.proposed) {
     rows.push({
       words: count(journal.counts.proposed, "journal entry proposed", "journal entries proposed"),

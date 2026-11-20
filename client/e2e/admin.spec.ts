@@ -1035,6 +1035,8 @@ function defaults(): Record<string, unknown> {
       answerers: ["lite", "deep", "gemini-flash-lite", "gemini-flash"],
     },
     "GET /admin/assistant/eval-cases": { cases: [] },
+    // The Playground's panel reads an answer's cost from the answers' log (plan 5, U18).
+    "GET /admin/assistant/conversations": { messages: [] },
     // What "Freeze as eval case" offers as earlier questions, for the answers the tests freeze.
     "GET /admin/assistant/eval-cases/earlier/m_freeze0001": { questions: [] },
     "GET /admin/assistant/eval-cases/earlier/m_diagnose01": { questions: [] },
@@ -1346,8 +1348,17 @@ function legalTab(page: Page, name: "Imprint" | "Privacy") {
   return page.getByRole("tab", { name: new RegExp(`^${name}`) });
 }
 
-function clickTab(page: Page, name: string) {
-  return page.getByRole("tab", { name, exact: true }).click();
+/** An Assistant view's link in its row (plan 5, U18). */
+function viewLink(page: Page, name: string) {
+  return page
+    .getByRole("navigation", { name: "Assistant views" })
+    .getByRole("link", { name, exact: true });
+}
+
+/** Opens an Assistant view by its link, and waits until the row marks it. */
+async function openView(page: Page, name: string): Promise<void> {
+  await viewLink(page, name).click();
+  await expect(viewLink(page, name)).toHaveAttribute("aria-current", "true");
 }
 
 async function tabTo(page: Page, target: Locator): Promise<void> {
@@ -1781,7 +1792,7 @@ test.describe("admin", () => {
         chosen.push(r.postDataJSON());
       }
     });
-    await openAdmin(page, "/admin/assistant");
+    await openAdmin(page, "/admin/assistant?view=quality");
 
     const outcomes = page.getByRole("region", { name: "Outcomes" });
     await expect(
@@ -1861,6 +1872,8 @@ test.describe("admin", () => {
       page.getByText(/Search by meaning \(gemini-embedding-2\): 28 of 30 passages have a vector/),
     ).toBeVisible();
 
+    // Perception is a report: it lives in Quality (plan 5, U18).
+    await openView(page, "Quality");
     const perception = page.getByRole("region", { name: "Perception" });
     await expect(perception.getByText("1,341 / 1,557")).toBeVisible();
     await expect(
@@ -1933,7 +1946,7 @@ test.describe("admin", () => {
         windows.push(new URL(r.url()).searchParams.get("days"));
       }
     });
-    await openAdmin(page, "/admin/assistant");
+    await openAdmin(page, "/admin/assistant?view=quality");
 
     const routing = page.getByRole("region", { name: "Routing" });
     await expect(
@@ -2029,16 +2042,28 @@ test.describe("admin", () => {
     await expect(sheet.getByText("Archive the open message")).toBeVisible();
   });
 
-  test("the assistant's tabs stay on one row on a phone", async ({ page, baseURL }) => {
+  test("the assistant's seven views stay on one row on a phone, the current one in sight", async ({
+    page,
+    baseURL,
+  }) => {
     await fakeApi(page, baseURL);
     await page.setViewportSize({ width: 390, height: 844 });
-    await openAdmin(page, "/admin/assistant");
+    await openAdmin(page, "/admin/assistant?view=settings");
 
-    const tabs = page.getByRole("tablist", { name: "Assistant sections" });
-    await expect(tabs.getByRole("tab")).toHaveCount(11);
-    const tabsBox = await tabs.boundingBox();
-    expect(tabsBox?.height ?? 99).toBeLessThan(44);
-    await expect(page.getByText("Answering")).toBeVisible();
+    const views = page.getByRole("navigation", { name: "Assistant views" });
+    await expect(views.getByRole("link")).toHaveText([
+      "Now",
+      "Conversations",
+      "Reviews",
+      "Questions",
+      "Journal",
+      "Quality",
+      "Settings",
+    ]);
+    const box = await views.boundingBox();
+    expect(box?.height ?? 99).toBeLessThan(44);
+    await expect(viewLink(page, "Settings")).toHaveAttribute("aria-current", "true");
+    await expect(viewLink(page, "Settings")).toBeInViewport({ ratio: 1 });
   });
 
   test("the Copilot tab shows each skill's keep rate per version, and flags one kept under half the time", async ({
@@ -2047,7 +2072,7 @@ test.describe("admin", () => {
   }) => {
     const unmocked = await fakeApi(page, baseURL);
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Copilot" }).click();
+    await openView(page, "Quality");
 
     const section = page.getByRole("region", { name: "The copilot's skills" });
     await expect(section.getByRole("heading", { level: 3 })).toHaveText([
@@ -2581,7 +2606,7 @@ test.describe("admin", () => {
       }
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "FAQ" }).click();
+    await openView(page, "Questions");
 
     const english = page.locator("fieldset").first();
     const draft = english.getByRole("button", { name: "Draft an answer from the portfolio" });
@@ -2706,7 +2731,7 @@ test.describe("admin", () => {
       }
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "FAQ" }).click();
+    await openView(page, "Questions");
 
     await page.getByRole("button", { name: "New entry" }).click();
     await page.locator("#faq-q-en").fill("Is he open to relocating?");
@@ -2893,7 +2918,7 @@ test.describe("admin", () => {
     await expect(agents).toContainText("4");
     await expect(agents).toContainText(/search_portfolio 3\s*· 1 refused \(rate_limited 1\)/);
 
-    await page.getByRole("tab", { name: "Conversations" }).click();
+    await openView(page, "Conversations");
     await expect(
       page.getByText("dropped (invented, never shown): project:nebula@en"),
     ).toBeVisible();
@@ -2948,7 +2973,7 @@ test.describe("admin", () => {
     // Match a brief (visitor plan V20): off until switched on, with its small cap.
     await expect(spend.getByRole("row", { name: /Match a brief/ })).toContainText("switched off");
 
-    await page.getByRole("tab", { name: "Settings" }).click();
+    await openView(page, "Settings");
     await page.getByLabel("Kept for visitors (% of the budget)", { exact: true }).fill("60");
     await page.getByLabel("Eval runs", { exact: true }).fill("0.5");
     // Its cap: the number field (the switch has the same name).
@@ -2992,7 +3017,7 @@ test.describe("admin", () => {
     expect(unmocked).toEqual([]);
   });
 
-  test("the Overview points to Trust, where an alert is marked seen and a demotion reinstated", async ({
+  test("Now holds trust's alerts and demotions, settled there; Settings holds its rules", async ({
     page,
     baseURL,
   }) => {
@@ -3065,28 +3090,20 @@ test.describe("admin", () => {
         posted.push(`${new URL(r.url()).pathname} ${r.postData() ?? ""}`);
       }
     });
+    // Now holds what waits (plan 5, U18): the rail and the header say so in words.
     await openAdmin(page, "/admin/assistant");
-
     await expect(
-      page.getByText("1 alert and the deep route is demoted: see the Trust tab", {
-        exact: true,
-      }),
+      page
+        .locator("[data-slot=sidebar-inner]")
+        .getByRole("link", { name: "Assistant, 1 trust alert and the deep route is demoted" }),
     ).toBeVisible();
-    // The page header says so too, until it is resolved.
     await expect(page.getByText("needs a look")).toBeVisible();
-    await page.getByRole("button", { name: "Open Trust", exact: true }).click();
-    await expect(page.getByRole("tab", { name: "Trust" })).toHaveAttribute("aria-selected", "true");
+    await expect(viewLink(page, "Now")).toHaveAttribute("aria-current", "true");
 
     const alerts = page.getByRole("region", { name: "Alerts" });
     await expect(
       alerts.getByText("leak: the answer repeated a piece of the system prompt"),
     ).toBeVisible();
-    const check = page.getByRole("region", { name: "Nightly check" });
-    await expect(check.getByText(/more than 20 % of its last 30 answers failed/)).toBeVisible();
-    await expect(check.getByText("demote route:deep")).toBeVisible();
-    const registry = page.getByRole("region", { name: "Who may do what" });
-    await expect(registry.getByRole("row", { name: /publish/ })).toContainText("people only");
-    await expect(registry.getByRole("row", { name: /agent\.apply/ })).toContainText("not built");
 
     await alerts.getByRole("button", { name: "Seen", exact: true }).click();
     const demoted = page.getByRole("region", { name: "Demoted" });
@@ -3099,6 +3116,14 @@ test.describe("admin", () => {
     // Resolved here, cleared there: no reload needed.
     await expect(page.getByText("needs a look")).toHaveCount(0);
 
+    // The rules and the log are configuration: Settings holds them.
+    await openView(page, "Settings");
+    const check = page.getByRole("region", { name: "Nightly check" });
+    await expect(check.getByText(/more than 20 % of its last 30 answers failed/)).toBeVisible();
+    await expect(check.getByText("demote route:deep")).toBeVisible();
+    const registry = page.getByRole("region", { name: "Who may do what" });
+    await expect(registry.getByRole("row", { name: /publish/ })).toContainText("people only");
+    await expect(registry.getByRole("row", { name: /agent\.apply/ })).toContainText("not built");
     await check.getByRole("button", { name: "Check now", exact: true }).click();
     await expect(page.getByText("4 checked · 0 demoted", { exact: true })).toBeVisible();
     await expect
@@ -3117,47 +3142,11 @@ test.describe("admin", () => {
   }) => {
     const unmocked = await fakeApi(page, baseURL);
     // Plan phase 23: the playground's answers stream their thoughts (a UI message stream).
-    const chunks = [
-      { type: "start", messageId: "m_playground01", messageMetadata: { createdAt: Date.now() } },
-      { type: "start-step" },
-      { type: "reasoning-start", id: "r1" },
-      { type: "reasoning-delta", id: "r1", delta: "The profile says Berlin; cite it." },
-      { type: "reasoning-end", id: "r1" },
-      { type: "text-start", id: "t1" },
-      { type: "text-delta", id: "t1", delta: "He is based in Berlin [^profile@en]." },
-      { type: "text-end", id: "t1" },
-      { type: "finish-step" },
-      { type: "finish", finishReason: "stop", messageMetadata: { model: "gemini-3.5-flash-lite" } },
-    ];
-    // Registered after the fake API, so it answers this one call.
-    await page.route(
-      (url) => url.pathname === "/admin/assistant/playground",
-      (route) => {
-        const request = route.request();
-        const headers = {
-          ...CORS,
-          "access-control-allow-origin": request.headers()["origin"] ?? "*",
-        };
-        if (request.method() === "OPTIONS") {
-          return route.fulfill({ status: 204, headers });
-        }
-        return route.fulfill({
-          status: 200,
-          headers: {
-            ...headers,
-            "content-type": "text/event-stream",
-            "x-vercel-ai-ui-message-stream": "v1",
-          },
-          body: [...chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`), "data: [DONE]\n\n"].join(
-            "",
-          ),
-        });
-      },
-    );
+    await fakePlayground(page);
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Playground" }).click();
+    await page.getByRole("button", { name: "Playground", exact: true }).click();
     await page.getByLabel("Question for the draft assistant").fill("Where is he based?");
-    await page.getByRole("button", { name: "Ask", exact: true }).click();
+    await page.getByRole("button", { name: "Ask (paid)", exact: true }).click();
 
     const answer = page.getByText("He is based in Berlin [^profile@en].");
     await expect(answer).toBeVisible();
@@ -3280,7 +3269,7 @@ test.describe("admin", () => {
       }),
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Evals" }).click();
+    await openView(page, "Quality");
 
     await expect(page.getByText("1 of 3 cases done")).toBeVisible();
     await expect(page.getByRole("button", { name: "Cancel the run" })).toBeVisible();
@@ -3373,7 +3362,7 @@ test.describe("admin", () => {
       }
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Evals" }).click();
+    await openView(page, "Quality");
 
     const compare = page.getByRole("region", { name: "Compare two answerers" });
     await expect(compare.getByLabel("A")).toHaveValue("lite");
@@ -3420,7 +3409,7 @@ test.describe("admin", () => {
       }),
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Reviews" }).click();
+    await openView(page, "Reviews");
 
     const panel = page.getByRole("region", { name: "The judge against reviewers" });
     await expect(
@@ -3469,7 +3458,7 @@ test.describe("admin", () => {
       },
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Evals" }).click();
+    await openView(page, "Quality");
 
     const resume = page.getByRole("button", { name: "Resume the run" });
     await resume.click();
@@ -3540,7 +3529,7 @@ test.describe("admin", () => {
     });
     await openAdmin(page, "/admin/assistant");
 
-    await page.getByRole("tab", { name: "Conversations" }).click();
+    await openView(page, "Conversations");
     await page.getByRole("button", { name: "Freeze as eval case" }).click();
     await expect(page.getByLabel("Must cite (ids, comma-separated)")).toHaveValue(
       "project:atlas@en",
@@ -3573,7 +3562,7 @@ test.describe("admin", () => {
       },
     ]);
 
-    await page.getByRole("tab", { name: "Evals" }).click();
+    await openView(page, "Quality");
     const cases = page.getByRole("region", { name: "Production eval cases" });
     // The stale one first: what it cites is gone from the live corpus.
     await expect(cases.getByRole("listitem").first()).toContainText("What did Vesper do?");
@@ -3688,7 +3677,7 @@ test.describe("admin", () => {
     await openAdmin(page, "/admin/assistant");
 
     // Diagnose, no model: one line under the answer, then the journal.
-    await page.getByRole("tab", { name: "Conversations" }).click();
+    await openView(page, "Conversations");
     const diagnose = page.getByRole("button", { name: "Diagnose" });
     // Described by the question it acts on: every answer has its own button.
     await expect(diagnose).toHaveAccessibleDescription("Did he move the clusters to Kubernetes?");
@@ -3701,10 +3690,7 @@ test.describe("admin", () => {
       page.getByRole("status").filter({ hasText: "Diagnosis: H3 Context clipped or unused" }),
     ).toBeAttached();
     await page.getByRole("button", { name: "Open in the journal" }).click();
-    await expect(page.getByRole("tab", { name: "Journal" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    await expect(viewLink(page, "Journal")).toHaveAttribute("aria-current", "true");
     const journal = page.getByRole("region", { name: "Failure journal" });
     // The entry it came for, its evidence open: for and against, as counted.
     await expect(journal.getByText("It never fetched project:long@en")).toBeVisible();
@@ -3814,7 +3800,7 @@ test.describe("admin", () => {
       }
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Journal" }).click();
+    await openView(page, "Journal");
     const journal = page.getByRole("region", { name: "Failure journal" });
 
     // Not anchored: a text regex meets the raw text, and the template leaves a space before it.
@@ -3844,7 +3830,7 @@ test.describe("admin", () => {
       },
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Journal" }).click();
+    await openView(page, "Journal");
     const journal = page.getByRole("region", { name: "Failure journal" });
     await expect(
       journal.getByText(/The answer is gone, deleted by the visitor or pruned after 90 days/),
@@ -3914,7 +3900,7 @@ test.describe("admin", () => {
       }
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Journal" }).click();
+    await openView(page, "Journal");
 
     // Lessons first, the book's retrieval order; then the entries they come from.
     const lessons = page.getByRole("region", { name: "Lessons" });
@@ -4062,7 +4048,7 @@ test.describe("admin", () => {
       }
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Insights" }).click();
+    await openView(page, "Questions");
 
     // The last run kept: no model call to see it.
     await expect(page.getByText("Kafka and streaming", { exact: true })).toBeVisible();
@@ -4112,10 +4098,7 @@ test.describe("admin", () => {
     // The form is gone: focus lands on the way to the lesson.
     await expect(page.locator(":focus")).toHaveText("Open the Journal");
     await page.locator(":focus").click();
-    await expect(page.getByRole("tab", { name: "Journal" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    await expect(viewLink(page, "Journal")).toHaveAttribute("aria-current", "true");
     expect(unmocked).toEqual([]);
   });
 
@@ -4167,7 +4150,7 @@ test.describe("admin", () => {
       }
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Insights" }).click();
+    await openView(page, "Questions");
     await expect(page.getByText("Kafka and streaming", { exact: true })).toBeVisible();
 
     // Run again: the topics and the run a lesson names come from the same answer.
@@ -4221,7 +4204,7 @@ test.describe("admin", () => {
       [`DELETE /admin/assistant/lessons/${LESSON_ID}`]: { ok: true },
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Journal" }).click();
+    await openView(page, "Journal");
     const lessons = page.getByRole("region", { name: "Lessons" });
     const card = lessons.getByRole("article", { name: LESSON_STATEMENT });
     await expect(card.getByText(/Reopened .*: measured again from then\./)).toBeVisible();
@@ -4272,12 +4255,9 @@ test.describe("admin", () => {
     const open = page.getByRole("button", { name: "Open Insights" });
     await expect(open).toHaveAccessibleDescription(line);
     await open.click();
-    await expect(page.getByRole("tab", { name: "Insights" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    await expect(viewLink(page, "Questions")).toHaveAttribute("aria-current", "true");
 
-    await page.getByRole("tab", { name: "Overview" }).click();
+    await openView(page, "Now");
     const done = page.getByRole("button", { name: "Seen", exact: true });
     await expect(done).toHaveAccessibleDescription(line);
     await done.click();
@@ -4334,7 +4314,7 @@ test.describe("admin", () => {
         asked.push(new URL(r.url()).search);
       }
     });
-    await openAdmin(page, "/admin/assistant");
+    await openAdmin(page, "/admin/assistant?view=quality");
 
     const section = page.getByRole("region", { name: "Faithfulness" });
     const byModel = section.getByRole("table", { name: "Judged faithfulness by model" });
@@ -4400,7 +4380,7 @@ test.describe("admin", () => {
       "PUT /admin/assistant/reviews/m_review0001": { ok: true, reviewedAt: NOW },
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Reviews" }).click();
+    await openView(page, "Reviews");
 
     await expect(page.getByText("0 of 2 reviewed · 12 answers this week")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Where is Alireza based?" })).toBeVisible();
@@ -5036,20 +5016,25 @@ test.describe("admin", () => {
       updatedAt: NOW,
     };
     const sent: { url: string; body: unknown }[] = [];
+    // The FAQ sits above Insights and reads again when a proposal lands: answers follow the accept.
+    let acceptedYet = false;
     const unmocked = await fakeApi(page, baseURL, {
       "GET /admin/assistant/insights": { snapshot, trigger: null },
       "POST /admin/assistant/faq-proposals": () => ({ status: 201, body: { proposal: open } }),
-      "GET /admin/assistant/faq-proposals": (n: number) => ({
+      "GET /admin/assistant/faq-proposals": () => ({
         status: 200,
-        body: { proposals: n === 1 ? [open] : [accepted] },
+        body: { proposals: acceptedYet ? [accepted] : [open] },
       }),
-      "GET /admin/assistant/faq": (n: number) => ({
+      "GET /admin/assistant/faq": () => ({
         status: 200,
-        body: { faq: n === 1 ? [] : [entry] },
+        body: { faq: acceptedYet ? [entry] : [] },
       }),
-      [`POST /admin/assistant/faq-proposals/${open.id}/accept`]: {
-        proposal: accepted,
-        linked: { journal: false, lesson: LESSON_ID },
+      [`POST /admin/assistant/faq-proposals/${open.id}/accept`]: () => {
+        acceptedYet = true;
+        return {
+          status: 200,
+          body: { proposal: accepted, linked: { journal: false, lesson: LESSON_ID } },
+        };
       },
     });
     page.on("request", (r) => {
@@ -5058,7 +5043,7 @@ test.describe("admin", () => {
       }
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Insights" }).click();
+    await openView(page, "Questions");
 
     // Paid, and named by its topic.
     const draftIt = page.getByRole("button", { name: "Draft an FAQ proposal (paid)" });
@@ -5071,8 +5056,8 @@ test.describe("admin", () => {
         body: { source: "insight", snapshotId: SNAPSHOT_ID, topic: 0 },
       });
 
-    // The FAQ tab, the proposal's heading focused.
-    await expect(page.getByRole("tab", { name: "FAQ" })).toHaveAttribute("aria-selected", "true");
+    // Questions, the FAQ above Insights: the proposal's heading focused.
+    await expect(viewLink(page, "Questions")).toHaveAttribute("aria-current", "true");
     const heading =
       "From the insight topic “Relocation and remote work” (6 questions, not answered)";
     await expect(page.locator(":focus")).toHaveText(heading);
@@ -5185,7 +5170,7 @@ test.describe("admin", () => {
       }
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Journal" }).click();
+    await openView(page, "Journal");
     await page.getByRole("button", { name: "Draft an FAQ proposal (paid)" }).click();
     await expect
       .poll(() => sent[0])
@@ -5270,32 +5255,42 @@ test.describe("admin", () => {
       newLesson:
         "a lesson from the journal needs 3 accepted or fixed entries: make it in the Journal, then link it here",
     });
+    // The FAQ sits above Insights and reads again when a proposal lands: the list follows the
+    // decisions, and `listed` counts the reads since the last one.
+    let rejected = false;
+    let decidedElsewhere = false;
     let listed = 0;
     const unmocked = await fakeApi(page, baseURL, {
       "GET /admin/assistant/insights": { snapshot: faqSnapshot, trigger: null },
       "POST /admin/assistant/faq-proposals": () => ({ status: 201, body: { proposal: drafted } }),
-      "GET /admin/assistant/faq-proposals": (n: number) => {
-        listed = n;
-        let proposals: ReturnType<typeof faqProposalRow>[] = [];
-        if (n === 1) {
-          proposals = [drafted, other];
-        } else if (n === 2) {
+      "GET /admin/assistant/faq-proposals": () => {
+        listed += 1;
+        let proposals = [drafted, other];
+        if (decidedElsewhere) {
+          proposals = [];
+        } else if (rejected) {
           proposals = [drafted];
         }
         return { status: 200, body: { proposals } };
       },
       "GET /admin/assistant/faq": { faq: [] },
-      [`POST /admin/assistant/faq-proposals/${other.id}/reject`]: {
-        proposal: { ...other, status: "rejected" },
+      [`POST /admin/assistant/faq-proposals/${other.id}/reject`]: () => {
+        rejected = true;
+        listed = 0;
+        return { status: 200, body: { proposal: { ...other, status: "rejected" } } };
       },
       // Refused for its question first; then decided in another tab meanwhile.
-      [`POST /admin/assistant/faq-proposals/${drafted.id}/accept`]: (n: number) =>
-        n === 1
-          ? { status: 400, body: { error: "instruction", detail: { locale: "en" } } }
-          : { status: 409, body: { error: "not_open" } },
+      [`POST /admin/assistant/faq-proposals/${drafted.id}/accept`]: (n: number) => {
+        if (n === 1) {
+          return { status: 400, body: { error: "instruction", detail: { locale: "en" } } };
+        }
+        decidedElsewhere = true;
+        listed = 0;
+        return { status: 409, body: { error: "not_open" } };
+      },
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Insights" }).click();
+    await openView(page, "Questions");
     await page.getByRole("button", { name: "Draft an FAQ proposal (paid)" }).click();
     const heading =
       "From the insight topic “Relocation and remote work” (6 questions, not answered)";
@@ -5308,7 +5303,7 @@ test.describe("admin", () => {
       .getByRole("article", { name: "From a journal entry: “Does he speak German?”" })
       .getByRole("button", { name: "Reject" })
       .click();
-    await expect.poll(() => listed).toBe(2);
+    await expect.poll(() => listed).toBeGreaterThan(0);
     await expect(proposals.getByRole("article")).toHaveCount(1);
     await page.evaluate(
       () =>
@@ -5337,13 +5332,13 @@ test.describe("admin", () => {
     await expect(
       proposals.getByText("Not done: It was decided already, here or in another tab."),
     ).toBeAttached();
-    await expect.poll(() => listed).toBe(3);
+    await expect.poll(() => listed).toBeGreaterThan(0);
     await expect(proposals.getByRole("article")).toHaveCount(0);
     await expect(proposals.getByRole("heading", { name: "Proposals" })).toBeFocused();
     expect(unmocked).toEqual([]);
   });
 
-  test("a proposal drafted while the admin moved on to the FAQ tab shows there when it lands", async ({
+  test("a proposal drafted from Insights shows in the FAQ above it when it lands", async ({
     page,
     baseURL,
   }) => {
@@ -5360,26 +5355,28 @@ test.describe("admin", () => {
       "GET /admin/assistant/faq": { faq: [] },
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "Insights" }).click();
+    await openView(page, "Questions");
     await page.getByRole("button", { name: "Draft an FAQ proposal (paid)" }).click();
-    // Off to the FAQ tab while it drafts: nothing proposed there yet.
-    await page.getByRole("tab", { name: "FAQ" }).click();
+    // The FAQ sits above Insights in Questions (plan 5, U18): nothing proposed there yet.
     const proposals = page.getByRole("region", { name: "Proposals" });
     await expect(proposals.getByText("No proposals wait for you.", { exact: false })).toBeVisible();
 
     late.release();
-    // Landed: said in a toast, and the open FAQ tab reads its list again to show it.
-    await expect(page.getByText("FAQ proposal drafted: it waits in the FAQ tab.")).toBeVisible();
+    // Landed: the FAQ reads its list again to show it, and its heading takes the focus (the
+    // toast says it only to an Insights left meanwhile).
     await expect.poll(() => listed).toBe(2);
     await expect(
       proposals.getByRole("article", {
         name: /^From the insight topic “Relocation and remote work”/,
       }),
     ).toBeVisible();
+    await expect(page.locator(":focus")).toHaveText(
+      "From the insight topic “Relocation and remote work” (6 questions, not answered)",
+    );
     expect(unmocked).toEqual([]);
   });
 
-  test("an FAQ proposal decided after its tab was left is said in a toast, and throws nothing", async ({
+  test("an FAQ proposal decided after its view was left is said in a toast, and throws nothing", async ({
     page,
     baseURL,
     problems,
@@ -5398,11 +5395,11 @@ test.describe("admin", () => {
       [`POST /admin/assistant/faq-proposals/${open.id}/accept`]: late.answer,
     });
     await openAdmin(page, "/admin/assistant");
-    await page.getByRole("tab", { name: "FAQ" }).click();
+    await openView(page, "Questions");
     const card = page.getByRole("region", { name: "Proposals" }).getByRole("article");
     await card.locator("select").selectOption("none");
     await card.getByRole("button", { name: "Accept" }).click();
-    await page.getByRole("tab", { name: "Overview" }).click();
+    await openView(page, "Now");
     const answered = page.waitForResponse((r) => r.url().endsWith(`/${open.id}/accept`));
     late.release();
     await answered;
@@ -6351,8 +6348,8 @@ function skillCardTitleInput(p: Page, id: string) {
   return p.locator(`#skill-${id}-title-en`);
 }
 
-function openAssistantTab(name: string) {
-  return (page: Page) => page.getByRole("tab", { name, exact: true }).click();
+function openAssistantView(name: string) {
+  return (page: Page) => openView(page, name);
 }
 
 test.describe("the recovery copy", () => {
@@ -7313,7 +7310,7 @@ test.describe("the recovery copy", () => {
     {
       name: "Assistant Settings",
       path: "/admin/assistant",
-      open: openAssistantTab("Settings"),
+      open: openAssistantView("Settings"),
       typed: [byIdField("#ask-suggest-en", "What did he build?")],
       keys: ["assistant-settings||suggestions.en"],
     },
@@ -7322,7 +7319,7 @@ test.describe("the recovery copy", () => {
       path: "/admin/assistant",
       answers: { "GET /admin/assistant/faq": { faq: [] } },
       open: async (page) => {
-        await openAssistantTab("FAQ")(page);
+        await openAssistantView("Questions")(page);
         await page.getByRole("button", { name: "New entry" }).click();
       },
       typed: [
@@ -7338,7 +7335,7 @@ test.describe("the recovery copy", () => {
         "GET /admin/assistant/faq": { faq: [] },
         "GET /admin/assistant/faq-proposals": { proposals: [faqProposalRow()] },
       },
-      open: openAssistantTab("FAQ"),
+      open: openAssistantView("Questions"),
       typed: [byIdField(`#faq-proposal-${faqProposalRow().id}-a-en`, "Yes, anywhere in the EU.")],
       keys: [`faq-proposals|${faqProposalRow().id}|text.en.answer`],
     },
@@ -7351,7 +7348,7 @@ test.describe("the recovery copy", () => {
           counts: { proposed: 1, accepted: 0, fixed: 0, retired: 0 },
         },
       },
-      open: openAssistantTab("Journal"),
+      open: openAssistantView("Journal"),
       typed: [
         byIdField("textarea[name=journal-root-cause]", "The fact sat past the cut."),
         byIdField("textarea[name=journal-heuristic]", "Keep key facts early in a document."),
@@ -7367,7 +7364,7 @@ test.describe("the recovery copy", () => {
           counts: { proposed: 1, active: 0, retired: 0 },
         },
       },
-      open: openAssistantTab("Journal"),
+      open: openAssistantView("Journal"),
       typed: [byNameField("Reference", "faq:relocation")],
       keys: [`journal-lessons|${LESSON_ID}|ref`],
     },
@@ -7623,7 +7620,7 @@ test.describe("telling the truth", () => {
     {
       name: "Evals",
       path: "/admin/assistant",
-      open: "Evals",
+      open: "Quality",
       endpoint: "GET /admin/assistant/runs",
       says: "Could not load the eval runs",
       ok: { runs: [] },
@@ -7647,7 +7644,7 @@ test.describe("telling the truth", () => {
     {
       name: "Insights",
       path: "/admin/assistant",
-      open: "Insights",
+      open: "Questions",
       endpoint: "GET /admin/assistant/insights",
       says: "Could not load the last analysis",
       ok: { snapshot: null, trigger: null },
@@ -7656,6 +7653,7 @@ test.describe("telling the truth", () => {
     {
       name: "Outcomes",
       path: "/admin/assistant",
+      open: "Quality",
       endpoint: "GET /admin/assistant/outcomes",
       says: "Could not load the outcomes",
       ok: outcomesView("helpfulRate", false),
@@ -7674,7 +7672,7 @@ test.describe("telling the truth", () => {
       });
       await openAdmin(page, failed.path);
       if (failed.open) {
-        await clickTab(page, failed.open);
+        await openView(page, failed.open);
       }
 
       const error = page.getByRole("alert").filter({ hasText: failed.says });
@@ -7706,7 +7704,7 @@ test.describe("telling the truth", () => {
     });
     const saves = sentTo(page, "PUT", "/admin/assistant/reviews/m_review0001");
     await openAdmin(page, "/admin/assistant");
-    await clickTab(page, "Reviews");
+    await openView(page, "Reviews");
     await expect(page.getByRole("button", { name: "Save and next" })).toBeVisible();
 
     // The key the defect names, on a fresh answer, with the focus off any field.
@@ -8028,7 +8026,9 @@ test.describe("telling the truth", () => {
     await expect(page.locator("#about-terminalOutputContact-label")).toHaveText(
       "Tour: closing line",
     );
-    await openAdmin(page, "/admin/assistant");
+    // Perception's documents are named in Quality.
+    await openAdmin(page, "/admin/assistant?view=quality");
+    await expect(page.getByRole("region", { name: "Perception" })).toBeVisible();
     await expect(page.getByText("The About terminal")).toHaveCount(0);
   });
 });
@@ -8525,12 +8525,9 @@ test.describe("Today", () => {
     await follow(/^2 new messages/, /\/admin\/inbox\?filter=new$/);
     await expect(page.getByRole("region", { name: "Messages" }).getByRole("button")).toHaveCount(2);
 
-    // Reviews: 2 of the week's 3 still open; the tab says 1 of 3 reviewed.
+    // Reviews: 2 of the week's 3 still open; the view says 1 of 3 reviewed.
     await follow(/^2 of 3 answers still to review this week/, /\/admin\/assistant\?view=reviews$/);
-    await expect(page.getByRole("tab", { name: "Reviews" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    await expect(viewLink(page, "Reviews")).toHaveAttribute("aria-current", "true");
     await expect(page.getByText("1 of 3 reviewed · 12 answers this week")).toBeVisible();
 
     // The content agent: a drafted and an undrafted one wait; the applied one does not.
@@ -8540,12 +8537,12 @@ test.describe("Today", () => {
     ).toHaveCount(2);
 
     // FAQ proposals: one open, one accepted.
-    await follow(/^1 FAQ proposal/, /\/admin\/assistant\?view=faq$/);
+    await follow(/^1 FAQ proposal/, /\/admin\/assistant\?view=questions$/);
     await expect(page.getByRole("region", { name: "Proposals" }).getByRole("article")).toHaveCount(
       1,
     );
 
-    // The journal and its lessons, each by the status the Journal tab names.
+    // The journal and its lessons, each by the status the Journal names.
     await follow(/^1 journal entry proposed/, /\/admin\/assistant\?view=journal$/);
     await expect(
       page
@@ -8557,12 +8554,10 @@ test.describe("Today", () => {
       page.getByRole("region", { name: "Lessons" }).getByText("Proposed", { exact: true }),
     ).toHaveCount(1);
 
-    // A trust alert: the health route's count, the rail's words, and the Trust tab's list.
+    // A trust alert: the health route's count, the rail's words, and Now's list.
     await openAdmin(page, "/admin");
-    await expect(
-      rail.getByRole("link", { name: "Assistant, 1 alert: see the Trust tab" }),
-    ).toBeVisible();
-    await follow(/^1 alert: see the Trust tab/, /\/admin\/assistant\?view=trust$/);
+    await expect(rail.getByRole("link", { name: "Assistant, 1 trust alert" })).toBeVisible();
+    await follow(/^1 trust alert/, /\/admin\/assistant$/);
     await expect(
       page.getByRole("region", { name: "Alerts" }).getByRole("button", { name: "Seen" }),
     ).toHaveCount(1);
@@ -9031,15 +9026,24 @@ test.describe("the admin's own look", () => {
       }
       await expect(page.locator("[role=status] .sr-only")).toHaveCount(0);
       const problems = await typeProblems(page);
-      const tabs = path === "/admin/assistant" ? await page.getByRole("tab").all() : [];
-      await runSequentially(tabs, async (tab) => {
-        await tab.click();
-        await expect(tab).toHaveAttribute("aria-selected", "true");
+      const views =
+        path === "/admin/assistant"
+          ? await page.getByRole("navigation", { name: "Assistant views" }).getByRole("link").all()
+          : [];
+      await runSequentially(views, async (link) => {
+        await link.click();
+        await expect(link).toHaveAttribute("aria-current", "true");
         await expect(page.locator("[role=status] .sr-only")).toHaveCount(0);
-        const name = await tab.innerText();
-        const tabProblems = await typeProblems(page);
-        problems.push(...tabProblems.map((problem) => `${name}: ${problem}`));
+        const name = await link.innerText();
+        const viewProblems = await typeProblems(page);
+        problems.push(...viewProblems.map((problem) => `${name}: ${problem}`));
       });
+      if (path === "/admin/assistant") {
+        await page.getByRole("button", { name: "Playground", exact: true }).click();
+        await expect(page.getByLabel("Question for the draft assistant")).toBeVisible();
+        const panelProblems = await typeProblems(page);
+        problems.push(...panelProblems.map((problem) => `Playground: ${problem}`));
+      }
       expect([...new Set(problems)]).toEqual([]);
     });
   }
@@ -14464,6 +14468,433 @@ test.describe("admin accessibility", () => {
           targets: v.nodes.slice(0, 5).map((n) => n.target.join(" ")),
         })),
       ).toEqual([]);
+    });
+  }
+});
+
+/** The playground's one answer, streamed as the server streams it (a UI message stream). */
+const PLAYGROUND_ANSWER = [
+  { type: "start", messageId: "m_playground01", messageMetadata: { createdAt: Date.now() } },
+  { type: "start-step" },
+  { type: "reasoning-start", id: "r1" },
+  { type: "reasoning-delta", id: "r1", delta: "The profile says Berlin; cite it." },
+  { type: "reasoning-end", id: "r1" },
+  { type: "text-start", id: "t1" },
+  { type: "text-delta", id: "t1", delta: "He is based in Berlin [^profile@en]." },
+  { type: "text-end", id: "t1" },
+  { type: "finish-step" },
+  { type: "finish", finishReason: "stop", messageMetadata: { model: "gemini-3.5-flash-lite" } },
+];
+
+/** Answers the playground with that stream, after the fake API so it wins; returns the questions sent. */
+async function fakePlayground(page: Page): Promise<unknown[]> {
+  const asked: unknown[] = [];
+  await page.route(
+    (url) => url.pathname === "/admin/assistant/playground",
+    (route) => {
+      const request = route.request();
+      const headers = {
+        ...CORS,
+        "access-control-allow-origin": request.headers()["origin"] ?? "*",
+      };
+      if (request.method() === "OPTIONS") {
+        return route.fulfill({ status: 204, headers });
+      }
+      asked.push(request.postDataJSON());
+      return route.fulfill({
+        status: 200,
+        headers: {
+          ...headers,
+          "content-type": "text/event-stream",
+          "x-vercel-ai-ui-message-stream": "v1",
+        },
+        body: [
+          ...PLAYGROUND_ANSWER.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`),
+          "data: [DONE]\n\n",
+        ].join(""),
+      });
+    },
+  );
+  return asked;
+}
+
+function playgroundQuestion(page: Page) {
+  return page.getByLabel("Question for the draft assistant");
+}
+
+/** The guard's question; brain's container has no box, so its words are what a test reads. */
+function discardAsk(page: Page) {
+  return alertDialog(page).filter({ hasText: "Discard unsaved changes?" });
+}
+
+/** One answer waiting for a review, a diagnosed journal entry, one visitor answer: typed text in each view. */
+function assistantWithWork(): Record<string, unknown> {
+  return {
+    "GET /admin/assistant/reviews": {
+      week: "2026-W40",
+      previous: null,
+      next: null,
+      queue: [
+        {
+          message: answerRow("m_review0001", "What did you build?"),
+          reasons: [],
+          sampled: true,
+          review: null,
+        },
+      ],
+      stats: { answers: 1, queued: 1, reviewed: 0, labels: noVerdicts() },
+    },
+    "GET /admin/assistant/journal": {
+      entries: [journalEntry()],
+      counts: { proposed: 1, accepted: 0, fixed: 0, retired: 0 },
+    },
+    "GET /admin/assistant/conversations": {
+      messages: [answerRow("m_freeze0001", "What did you build?")],
+    },
+  };
+}
+
+/** The Assistant's views and the Playground's panel (plan 5, U18, Part M1). */
+test.describe("the Assistant's views and the Playground panel", () => {
+  test("unsaved settings ask before a view switch by a link, Back or Forward; Stay keeps the text and the address", async ({
+    page,
+    baseURL,
+  }) => {
+    const unmocked = await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/assistant");
+    await openView(page, "Reviews");
+    await openView(page, "Settings");
+    const budget = page.locator("#ask-budget");
+    await budget.fill("7");
+
+    // Back: asks, and Stay keeps the text and the view's address.
+    await page.goBack();
+    await expect(discardAsk(page)).toContainText("Leaving now loses them.");
+    await discardAsk(page).getByRole("button", { name: "Stay" }).click();
+    await expect(page).toHaveURL(/\/admin\/assistant\?view=settings$/);
+    await expect(budget).toHaveValue("7");
+
+    // A view's link asks too; Discard lets the switch through.
+    await viewLink(page, "Quality").click();
+    await expect(discardAsk(page)).toContainText("Leaving now loses them.");
+    await discardAsk(page).getByRole("button", { name: "Stay" }).click();
+    await expect(viewLink(page, "Settings")).toHaveAttribute("aria-current", "true");
+    await expect(budget).toHaveValue("7");
+    await viewLink(page, "Quality").click();
+    await discardAsk(page).getByRole("button", { name: "Discard and leave" }).click();
+    await expect(page).toHaveURL(/\/admin\/assistant\?view=quality$/);
+
+    // Forward: Settings again, Back to it with nothing typed (no question), typed, then Forward asks.
+    await openView(page, "Settings");
+    await openView(page, "Reviews");
+    await page.goBack();
+    await expect(page).toHaveURL(/\/admin\/assistant\?view=settings$/);
+    await expect(budget).toBeVisible();
+    await budget.fill("9");
+    await page.goForward();
+    await expect(discardAsk(page)).toContainText("Leaving now loses them.");
+    await discardAsk(page).getByRole("button", { name: "Stay" }).click();
+    await expect(page).toHaveURL(/\/admin\/assistant\?view=settings$/);
+    await expect(budget).toHaveValue("9");
+    expect(unmocked).toEqual([]);
+  });
+
+  const TYPED: {
+    view: string;
+    open?: (page: Page) => Promise<void>;
+    field: (page: Page) => Locator;
+  }[] = [
+    {
+      view: "Questions",
+      open: (page) => page.getByRole("button", { name: "New entry" }).click(),
+      field: (page) => page.locator("#faq-q-en"),
+    },
+    { view: "Reviews", field: (page) => page.getByLabel("Note (optional)") },
+    {
+      view: "Journal",
+      open: (page) => page.locator("app-journal-entry summary").first().click(),
+      field: (page) => page.locator("textarea[name=journal-root-cause]"),
+    },
+    {
+      view: "Conversations",
+      open: (page) => page.getByRole("button", { name: "Freeze as eval case" }).first().click(),
+      field: (page) => page.locator("textarea[name=freeze-question]"),
+    },
+    { view: "Quality", field: (page) => page.getByLabel("A", { exact: true }) },
+  ];
+  for (const typed of TYPED) {
+    test(`typed text in ${typed.view} asks before another view opens, and Stay keeps it`, async ({
+      page,
+      baseURL,
+    }) => {
+      const unmocked = await fakeApi(page, baseURL, assistantWithWork());
+      await openAdmin(page, "/admin/assistant");
+      await openView(page, typed.view);
+      await typed.open?.(page);
+      await typed.field(page).fill("Typed in this view");
+
+      await viewLink(page, "Now").click();
+      await expect(discardAsk(page)).toContainText("Leaving now loses them.");
+      await discardAsk(page).getByRole("button", { name: "Stay" }).click();
+      await expect(viewLink(page, typed.view)).toHaveAttribute("aria-current", "true");
+      await expect(typed.field(page)).toHaveValue("Typed in this view");
+      expect(unmocked).toEqual([]);
+    });
+  }
+
+  test("a copy typed in a view comes back in that view, from Today's row", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin");
+    await plantCopies(page, [
+      {
+        editor: "faq",
+        item: "new",
+        field: "text.en.question",
+        value: "Do you work remotely?",
+        base: "",
+        at: Date.now(),
+        page: "Assistant",
+        href: "/admin/assistant",
+      },
+    ]);
+    await openAdmin(page, "/admin");
+    await page
+      .getByRole("region", { name: "Needs you" })
+      .getByRole("link", { name: /^Unsaved edits in Assistant/ })
+      .click();
+    await expect(page).toHaveURL(/\/admin\/assistant\?view=questions$/);
+    await expect(page.locator("#faq-q-en")).toHaveValue("Do you work remotely?");
+    await expect(recoveryBanner(page)).toBeVisible();
+  });
+
+  test("each view has its address, survives a reload, and Back and Forward walk the views", async ({
+    page,
+    baseURL,
+  }) => {
+    // Seven views, each loaded and reloaded: more than one page's time.
+    test.slow();
+    const unmocked = await fakeApi(page, baseURL);
+    const HOSTS: [string, string, string][] = [
+      ["Now", "/admin/assistant", "app-assistant-overview"],
+      ["Conversations", "/admin/assistant?view=conversations", "app-assistant-conversations"],
+      ["Reviews", "/admin/assistant?view=reviews", "app-assistant-reviews"],
+      ["Questions", "/admin/assistant?view=questions", "app-assistant-insights"],
+      ["Journal", "/admin/assistant?view=journal", "app-assistant-journal"],
+      ["Quality", "/admin/assistant?view=quality", "app-assistant-outcomes"],
+      ["Settings", "/admin/assistant?view=settings", "app-assistant-settings"],
+    ];
+    await runSequentially(HOSTS, async ([name, path, host]) => {
+      await openAdmin(page, path);
+      await expect(viewLink(page, name)).toHaveAttribute("aria-current", "true");
+      await expect(viewLink(page, name)).toHaveAttribute("href", path);
+      await expect(page.locator(host)).toBeAttached();
+      await page.reload();
+      await expect(viewLink(page, name)).toHaveAttribute("aria-current", "true");
+      await expect(page.locator(host)).toBeAttached();
+    });
+
+    await openAdmin(page, "/admin/assistant");
+    await openView(page, "Reviews");
+    await openView(page, "Quality");
+    await page.goBack();
+    await expect(page).toHaveURL(/\/admin\/assistant\?view=reviews$/);
+    await expect(viewLink(page, "Reviews")).toHaveAttribute("aria-current", "true");
+    await page.goBack();
+    await expect(page).toHaveURL(/\/admin\/assistant$/);
+    await expect(viewLink(page, "Now")).toHaveAttribute("aria-current", "true");
+    await page.goForward();
+    await expect(page).toHaveURL(/\/admin\/assistant\?view=reviews$/);
+    await expect(page.locator("app-assistant-reviews")).toBeAttached();
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the eleven tabs' old names land on their views, and a name it does not know on Now", async ({
+    page,
+    baseURL,
+  }) => {
+    // Thirteen pages: more than one page's time.
+    test.slow();
+    await fakeApi(page, baseURL);
+    const OLD: [string, string, RegExp][] = [
+      ["overview", "Now", /\/admin\/assistant$/],
+      ["settings", "Settings", /\/admin\/assistant\?view=settings$/],
+      ["faq", "Questions", /\/admin\/assistant\?view=questions$/],
+      ["conversations", "Conversations", /\/admin\/assistant\?view=conversations$/],
+      ["reviews", "Reviews", /\/admin\/assistant\?view=reviews$/],
+      ["insights", "Questions", /\/admin\/assistant\?view=questions$/],
+      ["evals", "Quality", /\/admin\/assistant\?view=quality$/],
+      ["journal", "Journal", /\/admin\/assistant\?view=journal$/],
+      ["copilot", "Quality", /\/admin\/assistant\?view=quality$/],
+      ["trust", "Now", /\/admin\/assistant$/],
+      ["now", "Now", /\/admin\/assistant$/],
+      ["nothing-here", "Now", /\/admin\/assistant$/],
+    ];
+    await runSequentially(OLD, async ([old, view, address]) => {
+      await openAdmin(page, `/admin/assistant?view=${old}`);
+      await expect(page).toHaveURL(address);
+      await expect(viewLink(page, view)).toHaveAttribute("aria-current", "true");
+    });
+
+    // The Playground's old tab opens its panel over Now, and the address lets it go.
+    await openAdmin(page, "/admin/assistant?view=playground");
+    await expect(playgroundQuestion(page)).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/assistant$/);
+    await page.keyboard.press("Escape");
+    await expect(playgroundQuestion(page)).toHaveCount(0);
+    await expect(viewLink(page, "Now")).toHaveAttribute("aria-current", "true");
+  });
+
+  test("the Playground says (paid) before Ask, shows each answer's cost, and keeps the conversation across views", async ({
+    page,
+    baseURL,
+    browserName,
+    problems,
+  }) => {
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/conversations": {
+        messages: [answerRow("m_playground01", "Where is he based?", { usd: 0.0004 })],
+      },
+    });
+    const asked = await fakePlayground(page);
+    await openAdmin(page, "/admin/assistant");
+    const open = page.getByRole("button", { name: "Playground", exact: true });
+    await open.click();
+    await expect(playgroundQuestion(page)).toBeFocused();
+    await expect(page.getByText("Each question is a paid call.", { exact: false })).toBeVisible();
+    const ask = page.getByRole("button", { name: "Ask (paid)", exact: true });
+    await expect(ask).toBeVisible();
+    expect(asked).toEqual([]);
+
+    await playgroundQuestion(page).fill("Where is he based?");
+    await ask.click();
+    await expect(page.getByText("He is based in Berlin [^profile@en].")).toBeVisible();
+    // The stream carries tokens: the answer's cost comes from its log, by its id.
+    await expect(page.getByText("gemini-3.5-flash-lite; $0.0004", { exact: true })).toBeVisible();
+    expect(asked).toHaveLength(1);
+
+    // Typed and not asked, then closed: the conversation and the question wait in the panel.
+    await playgroundQuestion(page).fill("And his stack?");
+    await page.keyboard.press("Escape");
+    await expect(playgroundQuestion(page)).toHaveCount(0);
+    // The focus goes back to the button (WebKit never focuses a clicked button, so there it has
+    // none to go back to: the keyboard cases cover it).
+    if (browserName !== "webkit") {
+      await expect(open).toBeFocused();
+    }
+    await openView(page, "Reviews");
+    await open.click();
+    await expect(page.getByText("He is based in Berlin [^profile@en].")).toBeVisible();
+    await expect(playgroundQuestion(page)).toHaveValue("And his stack?");
+    expect(asked).toHaveLength(1);
+    expect(problems.consoleErrors).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("Find opens the Playground on the Assistant from any page, and asks nothing on opening", async ({
+    page,
+    baseURL,
+  }) => {
+    // Find's content search reads these as it searches.
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/posts": { posts: [] },
+      "GET /admin/experiences": { experiences: [] },
+    });
+    const asked = await fakePlayground(page);
+    await openAdmin(page, "/admin/about");
+    await page.keyboard.press("Control+k");
+    await expect(
+      page.getByRole("combobox", { name: "Find a page, an action or content…" }),
+    ).toBeFocused();
+    await page.keyboard.type("playground");
+    const option = page.getByRole("option", { name: /^Ask the draft in the Playground/ });
+    await expect(option).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("Enter");
+    await expect(playgroundQuestion(page)).toBeFocused();
+    // The panel lives in the Assistant's page: Find went there, to Now.
+    await expect(page).toHaveURL(/\/admin\/assistant$/);
+    await page.keyboard.press("Escape");
+    await expect(playgroundQuestion(page)).toHaveCount(0);
+    expect(asked).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  for (const width of [1280, 390]) {
+    test(`the views and the panel work from the keyboard at ${width}`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await fakeApi(page, baseURL);
+      await openAdmin(page, "/admin/assistant");
+      const open = page.getByRole("button", { name: "Playground", exact: true });
+      await open.focus();
+      await runSequentially(
+        ["Now", "Conversations", "Reviews", "Questions", "Journal", "Quality", "Settings"],
+        (name) => tabTo(page, viewLink(page, name)),
+      );
+      await page.keyboard.press("Enter");
+      await expect(page).toHaveURL(/\/admin\/assistant\?view=settings$/);
+      // The link keeps the focus, in sight; the view below has its code.
+      await expect(viewLink(page, "Settings")).toBeFocused();
+      await expect(viewLink(page, "Settings")).toBeInViewport({ ratio: 1 });
+      await expect(page.locator("#ask-budget")).toBeVisible();
+
+      await open.focus();
+      await page.keyboard.press("Enter");
+      await expect(playgroundQuestion(page)).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(open).toBeFocused();
+    });
+  }
+
+  for (const colorScheme of ["dark", "light"] as const) {
+    for (const view of [
+      "now",
+      "conversations",
+      "reviews",
+      "questions",
+      "journal",
+      "quality",
+      "settings",
+    ]) {
+      test(`the ${view} view in the ${colorScheme} theme has no accessibility violations`, async ({
+        page,
+        baseURL,
+      }) => {
+        await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+        await fakeApi(page, baseURL, assistantWithWork());
+        await openAdmin(
+          page,
+          view === "now" ? "/admin/assistant" : `/admin/assistant?view=${view}`,
+        );
+        await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+        await expect(page.locator("[role=status] .sr-only")).toHaveCount(0);
+        await settled(page);
+        expect(await axeViolations(page)).toEqual([]);
+      });
+    }
+
+    test(`the Playground with an answer, in the ${colorScheme} theme, has no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await fakeApi(page, baseURL, {
+        "GET /admin/assistant/conversations": {
+          messages: [answerRow("m_playground01", "Where is he based?", { usd: 0.0004 })],
+        },
+      });
+      await fakePlayground(page);
+      await openAdmin(page, "/admin/assistant");
+      await page.getByRole("button", { name: "Playground", exact: true }).click();
+      await playgroundQuestion(page).fill("Where is he based?");
+      await page.getByRole("button", { name: "Ask (paid)", exact: true }).click();
+      await expect(page.getByText("gemini-3.5-flash-lite; $0.0004", { exact: true })).toBeVisible();
+      await settled(page);
+      expect(await axeViolations(page)).toEqual([]);
     });
   }
 });

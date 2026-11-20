@@ -118,7 +118,7 @@ describe("assistantAlert", () => {
     const demoted = [{ subject: "route:deep", at: "2026-10-01T03:00:00.000Z", reason: "7 of 30" }];
     const failures = { answers: 4, failures: 2, fallbackRate: 0, models: [] };
     expect(assistantAlert(health({ trust: { alerts: 1, demoted }, last24h: failures }))).toBe(
-      "1 alert and the deep route is demoted: see the Trust tab",
+      "1 trust alert and the deep route is demoted",
     );
     expect(assistantAlert(health({ trust: { alerts: 0, demoted: [] } }))).toBeNull();
   });

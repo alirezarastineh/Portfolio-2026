@@ -4,6 +4,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   inject,
   OnInit,
   PLATFORM_ID,
@@ -31,6 +32,7 @@ import { stepFrom } from "../inbox";
 import { calibrationLine, type JudgeStatus } from "../pairwise";
 import { FreezeCaseComponent } from "./freeze-case.component";
 import { cycleLabel, emptyLabels, goodShare, LABEL_NAMES, nextUnreviewed } from "../review-queue";
+import { UnsavedChangesService } from "../unsaved-changes.service";
 
 const POLL_MS = 2000;
 
@@ -300,6 +302,13 @@ export class AssistantReviewsComponent implements OnInit {
   protected readonly selected = computed(
     () => this.queue().find((e) => e.message.id === this.selectedId()) ?? null,
   );
+
+  constructor() {
+    const unsaved = inject(UnsavedChangesService);
+    // A note typed and not saved: switching views asks first.
+    effect(() => unsaved.set("review-note", this.note() !== (this.selected()?.review?.note ?? "")));
+    this.destroyRef.onDestroy(() => unsaved.clear("review-note"));
+  }
 
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => clearTimeout(this.timer));

@@ -54,14 +54,14 @@ export function trustAlert(trust: AssistantHealth["trust"]): string | null {
   }
   const parts: string[] = [];
   if (trust.alerts) {
-    parts.push(trust.alerts === 1 ? "1 alert" : `${trust.alerts} alerts`);
+    parts.push(trust.alerts === 1 ? "1 trust alert" : `${trust.alerts} trust alerts`);
   }
   if (trust.demoted.length === 1) {
     parts.push(`${subjectLabel(trust.demoted[0].subject)} is demoted`);
   } else if (trust.demoted.length > 1) {
     parts.push(`${trust.demoted.length} demotions`);
   }
-  return parts.length ? `${parts.join(" and ")}: see the Trust tab` : null;
+  return parts.length ? parts.join(" and ") : null;
 }
 
 const ACTIONS: Partial<Record<string, string>> = {

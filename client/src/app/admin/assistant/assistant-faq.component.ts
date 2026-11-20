@@ -1,10 +1,12 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
   DestroyRef,
   effect,
   inject,
+  Injector,
   input,
   OnInit,
   output,
@@ -23,8 +25,10 @@ import type { Locale } from "../../content/schema";
 import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
 import { AdminApiService } from "../admin-api.service";
 import type { FaqEntry, FaqInput } from "../assistant-types";
+import { sameValue } from "../changed-fields";
 import { ConfirmService } from "../components/confirm-dialog.component";
 import { RecoveryService, type RecoveryHandle } from "../recovery.service";
+import { UnsavedChangesService } from "../unsaved-changes.service";
 import { toastNotSaved } from "../save-feedback";
 import { DraftOfferComponent } from "../components/draft-offer.component";
 import { CopilotLedger } from "../copilot-ledger";
@@ -249,8 +253,15 @@ export class AssistantFaqComponent implements OnInit {
     return !offer.tracked || this.ledger.waits(`faq:${locale}`) ? offer.value : null;
   }
   private gone = false;
+  private readonly injector = inject(Injector);
+  /** The open form differs from what it opened with: switching views asks first. */
+  private readonly dirty = computed(() => {
+    const form = this.form();
+    return form !== null && !sameValue(this.opened(), form);
+  });
 
   constructor() {
+    // Insights sits below in the same view: its question opens a new entry, which takes the focus.
     effect(() => {
       const question = this.seed();
       if (!question) {
@@ -259,8 +270,13 @@ export class AssistantFaqComponent implements OnInit {
       untracked(() => {
         this.replaceForm(emptyForm(question));
         this.seedTaken.emit();
+        afterNextRender(() => document.getElementById("faq-q-en")?.focus(), {
+          injector: this.injector,
+        });
       });
     });
+    const unsaved = inject(UnsavedChangesService);
+    effect(() => unsaved.set("faq", this.dirty()));
     // A proposal drafted in Insights or the Journal lands while this tab is open: read the list
     // again, so it shows (the ones announced before this tab opened are in its first read).
     const since = this.drafts.drafted()?.n ?? 0;
@@ -274,6 +290,7 @@ export class AssistantFaqComponent implements OnInit {
     inject(DestroyRef).onDestroy(() => {
       this.gone = true;
       this.ledger.abandonPrefix("faq:");
+      unsaved.clear("faq");
     });
     this.backup = this.recovery.track<Form>({
       editor: "faq",

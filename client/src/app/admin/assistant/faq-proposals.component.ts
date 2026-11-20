@@ -21,7 +21,9 @@ import { HlmTextarea } from "@spartan-ng/helm/textarea";
 
 import type { Locale } from "../../content/schema";
 import { AdminApiService } from "../admin-api.service";
+import { sameValue } from "../changed-fields";
 import { RecoveryService, type RecoveryHandle } from "../recovery.service";
+import { UnsavedChangesService } from "../unsaved-changes.service";
 import {
   acceptBody,
   acceptForm,
@@ -236,7 +238,21 @@ export class FaqProposalsComponent {
   private readonly backup: RecoveryHandle;
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => (this.gone = true));
+    const unsaved = inject(UnsavedChangesService);
+    // An edited proposal not yet decided (one whose decision is on its way is not): switching
+    // views asks first.
+    effect(() =>
+      unsaved.set(
+        "faq-proposals",
+        this.proposals().some(
+          (p) => p.id !== this.busy() && !sameValue(this.formOf(p), acceptForm(p)),
+        ),
+      ),
+    );
+    inject(DestroyRef).onDestroy(() => {
+      this.gone = true;
+      unsaved.clear("faq-proposals");
+    });
     // Each proposal's edits by its id; nothing is looked for before the list is in.
     this.backup = inject(RecoveryService).track({
       editor: "faq-proposals",

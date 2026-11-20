@@ -52,7 +52,7 @@ export const SWITCHES: { feature: SwitchedFeature; label: string; hint: string }
   {
     feature: "match",
     label: "Match a brief",
-    hint: "Visitors paste a role, a project or a problem on the match page, and the assistant checks it against the published work: two model calls, more only to repair. It spends inside the visitors' reserve up to its cap. The nightly trust check closes it when its critic takes back more than a fifth of its rows; reinstate it on the Trust tab.",
+    hint: "Visitors paste a role, a project or a problem on the match page, and the assistant checks it against the published work: two model calls, more only to repair. It spends inside the visitors' reserve up to its cap. The nightly trust check closes it when its critic takes back more than a fifth of its rows; reinstate it on Now, the Assistant's first view.",
   },
   {
     feature: "copilot",
@@ -77,7 +77,7 @@ export const SWITCHES: { feature: SwitchedFeature; label: string; hint: string }
   {
     feature: "autoInsights",
     label: "Automatic insights",
-    hint: "Insights run by themselves when the nightly check sees more answers failing: once per rise, shown on the Overview until you mark them seen.",
+    hint: "Insights run by themselves when the nightly check sees more answers failing: once per rise, shown on Now, the Assistant's first view, until you mark them seen.",
   },
   {
     feature: "agent",

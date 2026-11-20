@@ -16,9 +16,9 @@ describe("trust in the admin", () => {
   it("says what waits for a person, or nothing", () => {
     expect(trustAlert(undefined)).toBeNull();
     expect(trustAlert({ alerts: 0, demoted: [] })).toBeNull();
-    expect(trustAlert({ alerts: 2, demoted: [] })).toBe("2 alerts: see the Trust tab");
+    expect(trustAlert({ alerts: 2, demoted: [] })).toBe("2 trust alerts");
     expect(trustAlert({ alerts: 0, demoted: [demotion("model:a"), demotion("route:deep")] })).toBe(
-      "2 demotions: see the Trust tab",
+      "2 demotions",
     );
   });
 

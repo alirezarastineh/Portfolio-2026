@@ -79,6 +79,8 @@ export class AdminPulseService {
   readonly failed = signal<ReadonlySet<PulsePart>>(new Set());
 
   readonly publishOpen = signal(false);
+  /** The Playground's panel (plan 5, U18), in the Assistant's page: its header and Find open it. */
+  readonly playgroundOpen = signal(false);
   /** Bumped after each publish that wrote something, for lists of publications to reload. */
   readonly publishes = signal(0);
 

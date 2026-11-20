@@ -4,6 +4,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   inject,
   OnInit,
   PLATFORM_ID,
@@ -17,6 +18,7 @@ import { AdminApiService } from "../admin-api.service";
 import type { RunItem, RunRow } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
 import { canResume, isActive, progressShare } from "../eval-runs";
+import { UnsavedChangesService } from "../unsaved-changes.service";
 import {
   OUTCOME_LABELS,
   pairwiseResults,
@@ -230,6 +232,8 @@ export class AssistantPairwiseComponent implements OnInit {
   protected readonly a = signal("lite");
   protected readonly b = signal("deep");
   protected readonly answerers = signal<string[]>(["lite", "deep"]);
+  /** The pair as it opened, or as the last comparison started with it. */
+  private readonly used = signal<readonly [string, string]>(["lite", "deep"]);
   protected readonly judge = signal<string | null>(null);
   protected readonly runs = signal<RunRow[]>([]);
   protected readonly view = signal<{ run: RunRow; items: RunItem[] } | null>(null);
@@ -257,6 +261,16 @@ export class AssistantPairwiseComponent implements OnInit {
   protected readonly tallyRows = tallyRows;
   protected readonly verdictLine = verdictLine;
   protected readonly percent = percent;
+
+  constructor() {
+    const unsaved = inject(UnsavedChangesService);
+    // A pair typed and not compared yet: switching views asks first.
+    effect(() => {
+      const [a, b] = this.used();
+      unsaved.set("pairwise", this.a() !== a || this.b() !== b);
+    });
+    this.destroyRef.onDestroy(() => unsaved.clear("pairwise"));
+  }
 
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => clearTimeout(this.timer));
@@ -316,6 +330,7 @@ export class AssistantPairwiseComponent implements OnInit {
       toast.error("The comparison did not start", { description: result.error });
       return;
     }
+    this.used.set([this.a(), this.b()]);
     await this.refreshList();
     await this.open(result.data.id);
   }

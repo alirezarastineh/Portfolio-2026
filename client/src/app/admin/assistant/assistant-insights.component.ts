@@ -152,7 +152,7 @@ import { LessonFormComponent } from "./lesson-form.component";
               }
               @if (made() === $index) {
                 <p class="m-0 text-xs">
-                  Lesson made: it is in the Journal tab, under Lessons.
+                  Lesson made: it is in the Journal, under Lessons.
                   <button
                     #journalLink
                     hlmBtn
@@ -329,7 +329,7 @@ export class AssistantInsightsComponent implements OnInit {
     this.drafts.announce(result.data.proposal.id);
     // Left meanwhile: the proposal waits all the same; only announce it.
     if (this.gone) {
-      toast.success("FAQ proposal drafted: it waits in the FAQ tab.");
+      toast.success("FAQ proposal drafted: it waits in Questions.");
       return;
     }
     this.toFaqProposal.emit(result.data.proposal.id);
@@ -346,7 +346,7 @@ export class AssistantInsightsComponent implements OnInit {
   protected lessonMade(topic: number): void {
     this.lessonFor.set(null);
     this.made.set(topic);
-    this.said.set("Lesson made: it is in the Journal tab, under Lessons.");
+    this.said.set("Lesson made: it is in the Journal, under Lessons.");
     // The form is gone: the admin lands on the way to the lesson.
     afterNextRender(() => this.journalLink()?.nativeElement.focus(), {
       injector: this.injector,

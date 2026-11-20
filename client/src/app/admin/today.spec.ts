@@ -22,7 +22,6 @@ const NONE: TodayFacts = {
   totpOff: false,
   reconcile: { missingFiles: [], orphanFiles: [], totalAssets: 0, totalBytes: 0 },
   alert: null,
-  trust: false,
   messages: [mail("read")],
   copies: [],
   reviews: reviews(0, 0),
@@ -41,8 +40,7 @@ const ALL: TodayFacts = {
     totalAssets: 3,
     totalBytes: 1,
   },
-  alert: "1 alert: see the Trust tab",
-  trust: true,
+  alert: "1 trust alert",
   messages: [mail("new"), mail("spam"), mail("new"), mail("read")],
   copies: [{ page: "About", href: "/admin/about", at: Date.now() }],
   reviews: reviews(3, 1),
@@ -67,12 +65,12 @@ describe("Today's Needs you", () => {
     expect(needsYou(ALL).map((row) => row.action)).toEqual([
       "Turn it on",
       "Media",
-      "Trust",
+      "Assistant",
       "Inbox",
       "Open",
       "Reviews",
       "Content agent",
-      "FAQ",
+      "Questions",
       "Journal",
       "Journal",
     ]);
@@ -82,7 +80,7 @@ describe("Today's Needs you", () => {
     expect(needsYou(ALL).map((row) => row.words)).toEqual([
       "Two-factor authentication is off: your password alone signs in to this admin.",
       "Media and database are out of step: 2 records without a file, 1 file without a record.",
-      "1 alert: see the Trust tab",
+      "1 trust alert",
       "2 new messages",
       "Unsaved edits in About, kept in this browser",
       "2 of 3 answers still to review this week",
@@ -98,18 +96,18 @@ describe("Today's Needs you", () => {
     expect(links).toEqual([
       ["/admin/account", null],
       ["/admin/media", null],
-      ["/admin/assistant", { view: "trust" }],
+      ["/admin/assistant", null],
       ["/admin/inbox", { filter: "new" }],
       ["/admin/about", null],
       ["/admin/assistant", { view: "reviews" }],
       ["/admin/agent", null],
-      ["/admin/assistant", { view: "faq" }],
+      ["/admin/assistant", { view: "questions" }],
       ["/admin/assistant", { view: "journal" }],
       ["/admin/assistant", { view: "journal" }],
     ]);
   });
 
-  it("says one as one, and sends a failing model to the Overview", () => {
+  it("says one as one, and sends a failing model to the Assistant", () => {
     const rows = needsYou({
       ...NONE,
       alert: "A model is failing: its breaker is open",

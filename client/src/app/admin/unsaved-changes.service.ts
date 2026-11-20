@@ -109,15 +109,15 @@ export const unsavedChangesGuard: CanDeactivateFn<unknown> = async (_page, _rout
   }
   // Its query or fragment changing keeps the page and its edits (Words' filters, Find's row); the
   // router asks this guard then too. An entry edited in place (`?edit=<id>`, Experience) is a place,
-  // and so is a file's panel (`?file=<id>`, Media), once open: opening one leaves nothing behind.
+  // and so is a file's panel (`?file=<id>`, Media), once open: opening one leaves nothing behind. The
+  // Assistant's view (`?view=`, none for Now) is a place too: its views hold different editors.
   if (to?.url && from?.url && samePlace(from.url, to.url)) {
     return true;
   }
 
   const leave = await inject(ConfirmService).ask({
     title: "Discard unsaved changes?",
-    description:
-      "This section has edits that have not been saved to the draft. Leaving now loses them.",
+    description: "This section has edits that have not been saved. Leaving now loses them.",
     confirmLabel: "Discard and leave",
     cancelLabel: "Stay",
     destructive: true,
@@ -129,15 +129,25 @@ export const unsavedChangesGuard: CanDeactivateFn<unknown> = async (_page, _rout
   return leave;
 };
 
-/** The page, the entry open in it (`edit`) and the file whose panel is open (`file`). */
-function placeOf(url: string): { path: string; edit: string; file: string } {
+/** The page, the entry open in it (`edit`), the file whose panel is open (`file`) and the Assistant's view. */
+function placeOf(url: string): { path: string; edit: string; file: string; view: string } {
   const [path = "", query = ""] = url.split("#")[0].split("?");
   const params = new URLSearchParams(query);
-  return { path, edit: params.get("edit") ?? "", file: params.get("file") ?? "" };
+  return {
+    path,
+    edit: params.get("edit") ?? "",
+    file: params.get("file") ?? "",
+    view: params.get("view") ?? "",
+  };
 }
 
 function samePlace(fromUrl: string, toUrl: string): boolean {
   const from = placeOf(fromUrl);
   const to = placeOf(toUrl);
-  return from.path === to.path && from.edit === to.edit && (!from.file || from.file === to.file);
+  return (
+    from.path === to.path &&
+    from.edit === to.edit &&
+    from.view === to.view &&
+    (!from.file || from.file === to.file)
+  );
 }

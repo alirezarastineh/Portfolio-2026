@@ -32,7 +32,6 @@ import type { AssistantHealth, AssistantUsage } from "../assistant-types";
 import { noticeLine } from "../lessons";
 import { mcpSummary } from "../mcp-usage";
 import { featureRows, stateLabel } from "../spending";
-import { trustAlert } from "../trust";
 
 interface ModelTotal {
   model: string;
@@ -74,16 +73,6 @@ interface ModelTotal {
       <app-form-skeleton kind="list" [rows]="3" label="Loading the assistant's health…" />
     } @else {
       @let h = health()!;
-      @if (trustLine(); as line) {
-        <div
-          class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/40 p-3 text-sm"
-        >
-          <p class="m-0">{{ line }}</p>
-          <button hlmBtn size="sm" variant="outline" type="button" (click)="toTrust.emit()">
-            Open Trust
-          </button>
-        </div>
-      }
       <!-- Insights the nightly check ran when failures rose (plan phase 25), until seen. -->
       @if (h.learning?.notice; as notice) {
         <div
@@ -527,13 +516,7 @@ export class AssistantOverviewComponent implements OnInit {
     return Math.min(100, (state.spentUsd / state.budgetUsd) * 100);
   });
 
-  /** Asks the page to open the Trust tab. */
-  readonly toTrust = output();
-
-  /** An alert or a demotion waiting for a person, in a sentence. */
-  protected readonly trustLine = computed(() => trustAlert(this.health()?.trust));
-
-  /** Asks the page to open the Insights tab. */
+  /** Asks the page to open Insights, in Questions. */
   readonly toInsights = output();
 
   protected readonly noticeText = noticeLine;

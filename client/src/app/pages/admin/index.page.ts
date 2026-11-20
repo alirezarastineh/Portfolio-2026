@@ -32,7 +32,6 @@ import { AdminPulseService, type PulsePart } from "../../admin/pulse.service";
 import { RecoveryService, type RecoveryCopy } from "../../admin/recovery.service";
 import { absoluteTime, relativeTime } from "../../admin/relative-time";
 import { copyHome, needsYou, TODAY_ROW } from "../../admin/today";
-import { trustAlert } from "../../admin/trust";
 
 /** Today's own reads, beside the pulse's: the media check and each queue's count. */
 type Source = "reconcile" | "reviews" | "proposals" | "faq" | "journal" | "lessons";
@@ -243,7 +242,6 @@ export default class AdminDashboardPage implements OnInit {
       totpOff: this.session.user()?.totpEnrolled === false,
       reconcile: this.reconcile(),
       alert: this.pulse.assistantAlert(),
-      trust: trustAlert(this.pulse.assistant()?.trust) !== null,
       messages: this.pulse.messages(),
       copies: (this.copies() ?? []).map(({ page, href, at }) => ({ page, href, at })),
       reviews: this.reviews(),

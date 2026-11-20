@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  Injectable,
+  signal,
+} from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { Chat } from "@ai-sdk/angular";
 import { HlmButton } from "@spartan-ng/helm/button";
@@ -9,6 +16,7 @@ import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
 import type { Locale } from "../../content/schema";
 import { AdminApiService } from "../admin-api.service";
 import { readCsrfCookie } from "../admin-api.interceptor";
+import { seconds, usd } from "../outcomes";
 
 interface Meta {
   sig?: string;
@@ -27,116 +35,34 @@ function sessionId(): string {
   return btoa(String.fromCodePoint(...bytes)).replaceAll(/[+/=]/g, "x");
 }
 
+const pause = (ms: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const NUMBER = new Intl.NumberFormat("en");
+
+/** How long to wait each time for an answer's log: it is written just after its stream ends. */
+const COST_WAITS = [0, 1000, 3000];
+
 /**
- * The assistant against the draft content: what it would answer after the
- * next publish. Same agent, tools and fallback chain as visitors get; logged
- * apart (`source = playground`), no rate limits, cost counted.
+ * The Playground's conversation (plan 5, U18). It outlives the panel's sheet: closing it or
+ * switching views keeps the question, the answers and their costs until New conversation, a
+ * reload or leaving the Assistant. The panel provides it; not root, which cannot see the layout's
+ * `AdminApiService`.
  */
-@Component({
-  selector: "app-assistant-playground",
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, HlmButton, HlmSwitch, HlmTextarea],
-  host: { class: "block" },
-  template: `
-    <div class="flex flex-col gap-4">
-      <div class="flex flex-wrap items-center gap-4 text-sm">
-        <label class="flex items-center gap-2">
-          Language
-          <select
-            class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 text-sm pointer-coarse:text-base"
-            [(ngModel)]="locale"
-          >
-            <option value="en">English</option>
-            <option value="de">Deutsch</option>
-          </select>
-        </label>
-        <label class="flex items-center gap-2">
-          <hlm-switch [checked]="deep()" (checkedChange)="deep.set($event)" />
-          Deep model
-        </label>
-        <button hlmBtn type="button" variant="ghost" size="sm" (click)="clear()">
-          New conversation
-        </button>
-      </div>
-
-      <div
-        class="flex flex-col gap-4 rounded-lg border border-border bg-card p-4 text-sm"
-        role="log"
-        aria-live="off"
-      >
-        @for (m of messages(); track m.id) {
-          @if (m.role === "user") {
-            <p class="m-0 text-accent-orange">&gt; {{ text(m) }}</p>
-          } @else {
-            <div class="flex flex-col gap-1">
-              @if (reasoning(m); as thought) {
-                <!-- Plan phase 23: the model's thoughts, for the admin only; evidence, not proof. -->
-                <details class="rounded-md border border-border px-2 py-1 text-xs">
-                  <summary class="cursor-pointer text-muted-foreground">Reasoning</summary>
-                  <p class="m-0 mt-1 whitespace-pre-wrap text-muted-foreground">{{ thought }}</p>
-                </details>
-              }
-              @for (step of steps(m); track $index) {
-                <p class="m-0 text-muted-foreground">› {{ step }}</p>
-              }
-              <p class="m-0 whitespace-pre-wrap">{{ text(m) }}</p>
-              @if (sources(m).length) {
-                <ol class="m-0 pl-5 text-xs text-muted-foreground">
-                  @for (s of sources(m); track s.id) {
-                    <li>{{ s.id }} — {{ s.title }} ({{ s.url }})</li>
-                  }
-                </ol>
-              }
-              @if (m.metadata; as meta) {
-                @if (meta.model) {
-                  <p class="m-0 text-hint text-muted-foreground">
-                    ── {{ meta.model }}{{ meta.fallback ? " (fallback)" : "" }} · {{ meta.route }} ·
-                    {{ ((meta.totalMs ?? 0) / 1000).toFixed(1) }} s · {{ meta.tokens?.input }} in /
-                    {{ meta.tokens?.cached }} cached / {{ meta.tokens?.output }} out ──
-                  </p>
-                }
-              }
-            </div>
-          }
-        } @empty {
-          <p class="m-0 text-muted-foreground">Ask something the draft should answer.</p>
-        }
-        @if (status() === "submitted") {
-          <p class="m-0 text-muted-foreground">thinking…</p>
-        }
-        @if (error(); as e) {
-          <p class="m-0 text-destructive">{{ e }}</p>
-        }
-      </div>
-
-      <form class="flex flex-col gap-2" (submit)="$event.preventDefault(); send()">
-        <textarea
-          hlmTextarea
-          rows="2"
-          aria-label="Question for the draft assistant"
-          [(ngModel)]="question"
-          name="question"
-          (keydown.enter)="onEnter($any($event))"
-        ></textarea>
-        <div class="flex gap-2">
-          <button hlmBtn type="submit" [disabled]="busy()">Ask</button>
-          @if (busy()) {
-            <button hlmBtn variant="outline" type="button" (click)="chat.stop()">Stop</button>
-          }
-        </div>
-      </form>
-    </div>
-  `,
-})
-export class AssistantPlaygroundComponent {
+@Injectable()
+export class PlaygroundSession {
   private readonly api = inject(AdminApiService);
 
-  protected locale: Locale = "en";
-  protected question = "";
-  protected readonly deep = signal(false);
+  readonly locale = signal<Locale>("en");
+  readonly question = signal("");
+  readonly deep = signal(false);
+  /** Each answer's cost from the answers' log; null once it was looked for and not found. */
+  readonly costs = signal<ReadonlyMap<string, number | null>>(new Map());
   private session = sessionId();
 
-  protected readonly chat = new Chat<PlaygroundMessage>({
+  readonly chat = new Chat<PlaygroundMessage>({
     transport: new DefaultChatTransport<PlaygroundMessage>({
       api: `${this.api.baseUrl}/admin/assistant/playground`,
       credentials: "include",
@@ -144,7 +70,7 @@ export class AssistantPlaygroundComponent {
       prepareSendMessagesRequest: ({ messages }) => ({
         body: {
           sessionId: this.session,
-          locale: this.locale,
+          locale: this.locale(),
           ...(this.deep() ? { deep: true } : {}),
           messages: messages.slice(-16).map((m) => ({
             id: m.id,
@@ -157,42 +83,165 @@ export class AssistantPlaygroundComponent {
         },
       }),
     }),
+    onFinish: ({ message }) => void this.findCost(message.id),
   });
 
-  protected readonly messages = computed(() => this.chat.messages);
-  protected readonly status = computed(() => this.chat.status);
-  protected readonly busy = computed(() => ["submitted", "streaming"].includes(this.status()));
-  protected readonly error = computed(() => {
-    const error = this.chat.error;
-    if (!error) {
-      return null;
-    }
-    const body = (error as { responseBody?: string }).responseBody;
-    return body ? `Failed: ${body}` : `Failed: ${error.message}`;
-  });
-
-  protected send(): void {
-    const text = this.question.trim();
-    if (!text || this.busy()) {
+  send(): void {
+    const text = this.question().trim();
+    if (!text || ["submitted", "streaming"].includes(this.chat.status)) {
       return;
     }
-    this.question = "";
+    this.question.set("");
     void this.chat.sendMessage({ text });
   }
 
-  /** Enter asks; Shift+Enter is a new line. */
-  protected onEnter(event: KeyboardEvent): void {
-    if (event.shiftKey) {
+  clear(): void {
+    void this.chat.stop();
+    this.chat.messages = [];
+    this.costs.set(new Map());
+    this.session = sessionId();
+  }
+
+  /** The stream carries tokens, not dollars: the cost comes from the answer's log, by its id. */
+  private async findCost(id: string, waits: readonly number[] = COST_WAITS): Promise<void> {
+    if (waits.length === 0) {
+      this.costs.update((all) => new Map(all).set(id, null));
+      return;
+    }
+    const [wait, ...later] = waits;
+    await pause(wait);
+    const result = await this.api.assistantConversations("all", "playground");
+    const row = result.ok ? result.data.messages.find((m) => m.id === id) : undefined;
+    if (row) {
+      this.costs.update((all) => new Map(all).set(id, row.usd));
+      return;
+    }
+    await this.findCost(id, later);
+  }
+}
+
+/**
+ * The assistant against the draft content: what it would answer after the
+ * next publish. Same agent, tools and fallback chain as visitors get; logged
+ * apart (`source = playground`), no rate limits, cost counted. Each question
+ * is a paid call: Ask says so, and each answer ends with its cost.
+ */
+@Component({
+  selector: "app-assistant-playground",
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [FormsModule, HlmButton, HlmSwitch, HlmTextarea],
+  host: { class: "flex flex-col gap-4" },
+  template: `
+    <div class="flex flex-wrap items-center gap-4 text-sm">
+      <label class="flex items-center gap-2">
+        Language
+        <select
+          class="h-9 rounded-lg border border-input-line bg-card px-2 text-sm text-foreground pointer-coarse:h-11 pointer-coarse:text-base"
+          [ngModel]="s.locale()"
+          (ngModelChange)="s.locale.set($event)"
+        >
+          <option value="en">English</option>
+          <option value="de">German</option>
+        </select>
+      </label>
+      <label class="flex items-center gap-2">
+        <hlm-switch [checked]="s.deep()" (checkedChange)="s.deep.set($event)" />
+        Deep model
+      </label>
+      <button hlmBtn type="button" variant="ghost" size="sm" (click)="s.clear()">
+        New conversation
+      </button>
+    </div>
+
+    <div class="flex flex-col gap-4 text-sm" role="log" aria-live="off">
+      @for (m of messages(); track m.id) {
+        @if (m.role === "user") {
+          <p class="m-0 font-medium">{{ text(m) }}</p>
+        } @else {
+          <div class="flex flex-col gap-1">
+            @if (reasoning(m); as thought) {
+              <!-- Plan phase 23: the model's thoughts, for the admin only; evidence, not proof. -->
+              <details class="rounded-md border border-border px-2 py-1 text-xs">
+                <summary class="cursor-pointer text-muted-foreground">Reasoning</summary>
+                <p class="m-0 mt-1 whitespace-pre-wrap text-muted-foreground">{{ thought }}</p>
+              </details>
+            }
+            @for (step of steps(m); track $index) {
+              <p class="m-0 font-data text-xs text-muted-foreground">{{ step }}</p>
+            }
+            <p class="m-0 whitespace-pre-wrap" [textContent]="text(m)"></p>
+            @if (sources(m).length) {
+              <ol class="m-0 pl-5 text-xs text-muted-foreground">
+                @for (source of sources(m); track source.id) {
+                  <li>
+                    <span class="font-data">{{ source.id }}</span>: {{ source.title }},
+                    {{ source.url }}
+                  </li>
+                }
+              </ol>
+            }
+            @if (metaLine(m); as line) {
+              <p class="m-0 text-hint text-muted-foreground">{{ line }}</p>
+            }
+          </div>
+        }
+      } @empty {
+        <p class="m-0 text-muted-foreground">Ask something the draft should answer.</p>
+      }
+      @if (status() === "submitted") {
+        <p class="m-0 text-muted-foreground">Thinking…</p>
+      }
+      @if (error(); as e) {
+        <p class="m-0 text-destructive">{{ e }}</p>
+      }
+    </div>
+
+    <form class="flex flex-col gap-2" (submit)="$event.preventDefault(); s.send()">
+      <label for="playground-question" class="text-sm font-medium">
+        Question for the draft assistant
+      </label>
+      <textarea
+        id="playground-question"
+        hlmTextarea
+        rows="2"
+        name="question"
+        autocomplete="off"
+        [ngModel]="s.question()"
+        (ngModelChange)="s.question.set($event)"
+        (keydown.enter)="onEnter($event)"
+      ></textarea>
+      <div class="flex gap-2">
+        <button hlmBtn type="submit" [disabled]="busy()">Ask (paid)</button>
+        @if (busy()) {
+          <button hlmBtn variant="outline" type="button" (click)="s.chat.stop()">Stop</button>
+        }
+      </div>
+    </form>
+  `,
+})
+export class AssistantPlaygroundComponent {
+  protected readonly s = inject(PlaygroundSession);
+
+  protected readonly messages = computed(() => this.s.chat.messages);
+  protected readonly status = computed(() => this.s.chat.status);
+  protected readonly busy = computed(() => ["submitted", "streaming"].includes(this.status()));
+  protected readonly error = computed(() => {
+    const error = this.s.chat.error;
+    if (!error) {
+      return null;
+    }
+    const body =
+      "responseBody" in error && typeof error.responseBody === "string" ? error.responseBody : "";
+    return `Failed: ${body || error.message}`;
+  });
+
+  /** Enter asks; Shift+Enter is a new line, and Enter while composing ends the word. */
+  protected onEnter(event: Event): void {
+    if (!(event instanceof KeyboardEvent) || event.shiftKey || event.isComposing) {
       return;
     }
     event.preventDefault();
-    this.send();
-  }
-
-  protected clear(): void {
-    void this.chat.stop();
-    this.chat.messages = [];
-    this.session = sessionId();
+    this.s.send();
   }
 
   protected text(m: PlaygroundMessage): string {
@@ -222,5 +271,33 @@ export class AssistantPlaygroundComponent {
     return m.parts.flatMap((p) =>
       p.type === "source-url" ? [{ id: p.sourceId, url: p.url, title: p.title ?? "" }] : [],
     );
+  }
+
+  /** "gemini-flash, lite route, 1.4 s; 1,203 tokens in, 900 cached, 80 out; $0.0004". */
+  protected metaLine(m: PlaygroundMessage): string | null {
+    const meta = m.metadata;
+    if (!meta?.model) {
+      return null;
+    }
+    const answered = [
+      `${meta.model}${meta.fallback ? " (a fallback)" : ""}`,
+      meta.route ? `${meta.route} route` : "",
+      meta.totalMs === undefined ? "" : seconds(meta.totalMs),
+    ];
+    const tokens = meta.tokens
+      ? `${NUMBER.format(meta.tokens.input)} tokens in, ${NUMBER.format(meta.tokens.cached)} cached, ${NUMBER.format(meta.tokens.output)} out`
+      : "";
+    return [answered.filter(Boolean).join(", "), tokens, this.costWords(m.id)]
+      .filter(Boolean)
+      .join("; ");
+  }
+
+  /** The answer's cost once its log is found; nothing while it is looked for. */
+  private costWords(id: string): string {
+    const cost = this.s.costs().get(id);
+    if (cost === undefined) {
+      return "";
+    }
+    return cost === null ? "cost not logged" : usd(cost);
   }
 }

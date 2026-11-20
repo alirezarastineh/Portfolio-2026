@@ -46,10 +46,15 @@ import {
   type JournalPatch,
   type JournalStatus,
 } from "../journal";
+import { sameValue } from "../changed-fields";
 import { RecoveryService, type RecoveryHandle } from "../recovery.service";
+import { UnsavedChangesService } from "../unsaved-changes.service";
 import { FreezeCaseComponent } from "./freeze-case.component";
 
 const POLL_MS = 2000;
+
+/** Each entry on the page tells the guard of its own unsaved fields. */
+let entries = 0;
 
 /** The fields the admin edits, as the server last had them. */
 interface Fields {
@@ -482,10 +487,25 @@ export class JournalEntryComponent {
   /** Gone (another tab, a filter): a proposal drafted meanwhile is only announced. */
   private gone = false;
 
+  /** The fields as the admin has them now. */
+  private readonly current = computed<Fields>(() => ({
+    rootCause: this.rootCause(),
+    fixType: this.fixType(),
+    fix: this.fix(),
+    fixRef: this.fixRef(),
+    heuristic: this.heuristic(),
+    expected: this.expected(),
+  }));
+
   constructor() {
+    const unsaved = inject(UnsavedChangesService);
+    const unsavedKey = `journal-entry-${++entries}`;
+    // Typed and not saved: switching views asks first.
+    effect(() => unsaved.set(unsavedKey, !sameValue(this.server(), this.current())));
     inject(DestroyRef).onDestroy(() => {
       clearTimeout(this.timer);
       this.gone = true;
+      unsaved.clear(unsavedKey);
     });
     // The entry as the server has it (a save, a new analysis, the list read again): a field
     // follows it unless the admin has typed in it since, so nothing unsaved is lost.
@@ -511,14 +531,7 @@ export class JournalEntryComponent {
       editor: "journal",
       item: () => this.entry().id,
       saved: this.server,
-      current: () => ({
-        rootCause: this.rootCause(),
-        fixType: this.fixType(),
-        fix: this.fix(),
-        fixRef: this.fixRef(),
-        heuristic: this.heuristic(),
-        expected: this.expected(),
-      }),
+      current: this.current,
       restore: (fields) => {
         this.rootCause.set(fields.rootCause);
         this.fixType.set(fields.fixType);
@@ -684,7 +697,7 @@ export class JournalEntryComponent {
     // An FAQ tab open meanwhile reads its list again.
     this.drafts.announce(result.data.proposal.id);
     if (this.gone) {
-      toast.success("FAQ proposal drafted: it waits in the FAQ tab.");
+      toast.success("FAQ proposal drafted: it waits in Questions.");
       return;
     }
     this.toFaqProposal.emit(result.data.proposal.id);

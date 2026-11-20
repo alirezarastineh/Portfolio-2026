@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, inject, input, OnInit, signal } from "@angular/core";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
@@ -15,7 +15,8 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
  * Trust (plan phase 14): what needs a person (alerts, demotions), the last
  * nightly check and what it considered, who may do what, and the audit log.
  * The monitor demotes a model or the deep route on stored evidence; only the
- * admin reinstates. No action here calls a model.
+ * admin reinstates. No action here calls a model. In two parts (plan 5, U18):
+ * what waits on Now, the rules in Settings.
  */
 @Component({
   selector: "app-assistant-trust",
@@ -29,173 +30,176 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
       <app-form-skeleton kind="list" [rows]="3" label="Loading trust…" />
     } @else {
       @let v = view()!;
-      <section class="flex flex-col gap-2" aria-labelledby="trust-alerts">
-        <h2 id="trust-alerts" class="m-0 text-sm font-medium">Alerts</h2>
-        @for (row of v.alerts; track row.id) {
-          <div
-            class="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-destructive/40 p-3 text-sm"
-          >
-            <div class="flex min-w-0 flex-col gap-1">
-              <p class="m-0">{{ action(row) }} · {{ subject(row.target) }}</p>
-              <p class="m-0 text-hint text-muted-foreground">{{ row.reason }}</p>
-              <p class="m-0 text-hint text-muted-foreground" [title]="absolute(row.at)">
-                {{ relative(row.at) }}
-              </p>
-            </div>
-            <button
-              hlmBtn
-              size="sm"
-              variant="outline"
-              type="button"
-              [disabled]="busy()"
-              (click)="seen(row)"
+      @if (part() === "waiting") {
+        <section class="flex flex-col gap-2" aria-labelledby="trust-alerts">
+          <h2 id="trust-alerts" class="m-0 text-sm font-medium">Alerts</h2>
+          @for (row of v.alerts; track row.id) {
+            <div
+              class="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-destructive/40 p-3 text-sm"
             >
-              Seen
-            </button>
-          </div>
-        } @empty {
-          <p class="m-0 text-hint text-muted-foreground">Nothing waits for you.</p>
-        }
-      </section>
-
-      <section class="flex flex-col gap-2" aria-labelledby="trust-demoted">
-        <h2 id="trust-demoted" class="m-0 text-sm font-medium">Demoted</h2>
-        <p class="m-0 text-hint text-muted-foreground">
-          Out of the visitors' service until you reinstate it. The playground, evals and pairwise
-          runs still use it, so you can check it first.
-        </p>
-        @for (d of v.demoted; track d.subject) {
-          <div
-            class="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border p-3 text-sm"
-          >
-            <div class="flex min-w-0 flex-col gap-1">
-              <p class="m-0">{{ subject(d.subject) }}</p>
-              <p class="m-0 text-hint text-muted-foreground">{{ d.reason }}</p>
-              <p class="m-0 text-hint text-muted-foreground" [title]="absolute(d.at)">
-                since {{ relative(d.at) }}
-              </p>
+              <div class="flex min-w-0 flex-col gap-1">
+                <p class="m-0">{{ action(row) }} · {{ subject(row.target) }}</p>
+                <p class="m-0 text-hint text-muted-foreground">{{ row.reason }}</p>
+                <p class="m-0 text-hint text-muted-foreground" [title]="absolute(row.at)">
+                  {{ relative(row.at) }}
+                </p>
+              </div>
+              <button
+                hlmBtn
+                size="sm"
+                variant="outline"
+                type="button"
+                [disabled]="busy()"
+                (click)="seen(row)"
+              >
+                Seen
+              </button>
             </div>
-            <button
-              hlmBtn
-              size="sm"
-              variant="outline"
-              type="button"
-              [disabled]="busy()"
-              (click)="reinstate(d)"
-            >
-              Reinstate
-            </button>
-          </div>
-        } @empty {
-          <p class="m-0 text-hint text-muted-foreground">Every model and route is in service.</p>
-        }
-      </section>
+          } @empty {
+            <p class="m-0 text-hint text-muted-foreground">Nothing waits for you.</p>
+          }
+        </section>
 
-      <section class="flex flex-col gap-2" aria-labelledby="trust-check">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="trust-check" class="m-0 text-sm font-medium">Nightly check</h2>
-          <button
-            hlmBtn
-            size="sm"
-            variant="outline"
-            type="button"
-            [disabled]="busy()"
-            (click)="check()"
-          >
-            Check now
-          </button>
-        </div>
-        <p class="m-0 text-hint text-muted-foreground">{{ rules(v.rules) }}</p>
-        @if (v.lastCheck; as last) {
-          <p class="m-0 text-hint text-muted-foreground" [title]="absolute(last.at)">
-            {{ relative(last.at) }}: {{ last.reason }}
-          </p>
-          <ul class="m-0 flex list-none flex-col gap-1 p-0 text-xs" role="list">
-            @for (verdict of last.alternatives; track verdict.option) {
-              <li>
-                <span class="font-data">{{ verdict.option }}</span>
-                <span class="text-muted-foreground"> · {{ verdict.why }}</span>
-              </li>
-            }
-          </ul>
-        } @else {
+        <section class="flex flex-col gap-2" aria-labelledby="trust-demoted">
+          <h2 id="trust-demoted" class="m-0 text-sm font-medium">Demoted</h2>
           <p class="m-0 text-hint text-muted-foreground">
-            Not run yet: it runs at 03:00 UTC on the server, or now.
+            Out of the visitors' service until you reinstate it. The playground, evals and pairwise
+            runs still use it, so you can check it first.
           </p>
-        }
-      </section>
-
-      <section class="flex flex-col gap-2" aria-labelledby="trust-registry">
-        <h2 id="trust-registry" class="m-0 text-sm font-medium">Who may do what</h2>
-        <div class="overflow-x-auto rounded-lg border border-border">
-          <table class="w-full text-sm">
-            <thead class="text-left text-xs text-muted-foreground">
-              <tr>
-                <th class="p-2 font-normal">Action</th>
-                <th class="p-2 font-normal">Level</th>
-                <th class="p-2 font-normal">Approves</th>
-                <th class="p-2 font-normal">Enforced by</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (entry of v.registry; track entry.action) {
-                <tr class="border-t border-border align-top">
-                  <td class="p-2 font-data text-xs">
-                    {{ entry.action }}
-                    @if (!entry.built) {
-                      <span hlmBadge variant="outline" class="ms-1">not built</span>
-                    }
-                  </td>
-                  <td class="p-2 text-xs">
-                    <span class="font-data">{{ entry.level }}</span> · {{ level(entry.level) }}
-                  </td>
-                  <td class="p-2 text-xs">
-                    {{ entry.approver === "none" ? "–" : entry.approver }}
-                  </td>
-                  <td class="p-2 text-xs text-muted-foreground">{{ entry.enforcement }}</td>
-                </tr>
+          @for (d of v.demoted; track d.subject) {
+            <div
+              class="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border p-3 text-sm"
+            >
+              <div class="flex min-w-0 flex-col gap-1">
+                <p class="m-0">{{ subject(d.subject) }}</p>
+                <p class="m-0 text-hint text-muted-foreground">{{ d.reason }}</p>
+                <p class="m-0 text-hint text-muted-foreground" [title]="absolute(d.at)">
+                  since {{ relative(d.at) }}
+                </p>
+              </div>
+              <button
+                hlmBtn
+                size="sm"
+                variant="outline"
+                type="button"
+                [disabled]="busy()"
+                (click)="reinstate(d)"
+              >
+                Reinstate
+              </button>
+            </div>
+          } @empty {
+            <p class="m-0 text-hint text-muted-foreground">Every model and route is in service.</p>
+          }
+        </section>
+      } @else {
+        <section class="flex flex-col gap-2" aria-labelledby="trust-check">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="trust-check" class="m-0 text-sm font-medium">Nightly check</h2>
+            <button
+              hlmBtn
+              size="sm"
+              variant="outline"
+              type="button"
+              [disabled]="busy()"
+              (click)="check()"
+            >
+              Check now
+            </button>
+          </div>
+          <p class="m-0 text-hint text-muted-foreground">{{ rules(v.rules) }}</p>
+          @if (v.lastCheck; as last) {
+            <p class="m-0 text-hint text-muted-foreground" [title]="absolute(last.at)">
+              {{ relative(last.at) }}: {{ last.reason }}
+            </p>
+            <ul class="m-0 flex list-none flex-col gap-1 p-0 text-xs" role="list">
+              @for (verdict of last.alternatives; track verdict.option) {
+                <li>
+                  <span class="font-data">{{ verdict.option }}</span>
+                  <span class="text-muted-foreground"> · {{ verdict.why }}</span>
+                </li>
               }
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </ul>
+          } @else {
+            <p class="m-0 text-hint text-muted-foreground">
+              Not run yet: it runs at 03:00 UTC on the server, or now.
+            </p>
+          }
+        </section>
 
-      <section class="flex flex-col gap-2" aria-labelledby="trust-log">
-        <h2 id="trust-log" class="m-0 text-sm font-medium">Audit log</h2>
-        <div class="overflow-x-auto rounded-lg border border-border">
-          <table class="w-full text-sm">
-            <thead class="text-left text-xs text-muted-foreground">
-              <tr>
-                <th class="p-2 font-normal">When</th>
-                <th class="p-2 font-normal">Who</th>
-                <th class="p-2 font-normal">What</th>
-                <th class="p-2 font-normal">Decision and why</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (row of v.audit; track row.id) {
-                <tr class="border-t border-border align-top text-xs">
-                  <td class="p-2 whitespace-nowrap" [title]="absolute(row.at)">
-                    {{ relative(row.at) }}
-                  </td>
-                  <td class="p-2">{{ row.actor }}</td>
-                  <td class="p-2">
-                    {{ action(row) }}
-                    <span class="block font-data text-muted-foreground">{{ row.target }}</span>
-                  </td>
-                  <td class="p-2">
-                    {{ row.decision }}<span class="text-muted-foreground"> · {{ row.reason }}</span>
-                  </td>
-                </tr>
-              } @empty {
+        <section class="flex flex-col gap-2" aria-labelledby="trust-registry">
+          <h2 id="trust-registry" class="m-0 text-sm font-medium">Who may do what</h2>
+          <div class="overflow-x-auto rounded-lg border border-border">
+            <table class="w-full text-sm">
+              <thead class="text-left text-xs text-muted-foreground">
                 <tr>
-                  <td class="p-2 text-xs text-muted-foreground" colspan="4">Nothing yet.</td>
+                  <th class="p-2 font-normal">Action</th>
+                  <th class="p-2 font-normal">Level</th>
+                  <th class="p-2 font-normal">Approves</th>
+                  <th class="p-2 font-normal">Enforced by</th>
                 </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                @for (entry of v.registry; track entry.action) {
+                  <tr class="border-t border-border align-top">
+                    <td class="p-2 font-data text-xs">
+                      {{ entry.action }}
+                      @if (!entry.built) {
+                        <span hlmBadge variant="outline" class="ms-1">not built</span>
+                      }
+                    </td>
+                    <td class="p-2 text-xs">
+                      <span class="font-data">{{ entry.level }}</span> · {{ level(entry.level) }}
+                    </td>
+                    <td class="p-2 text-xs">
+                      {{ entry.approver === "none" ? "–" : entry.approver }}
+                    </td>
+                    <td class="p-2 text-xs text-muted-foreground">{{ entry.enforcement }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="flex flex-col gap-2" aria-labelledby="trust-log">
+          <h2 id="trust-log" class="m-0 text-sm font-medium">Audit log</h2>
+          <div class="overflow-x-auto rounded-lg border border-border">
+            <table class="w-full text-sm">
+              <thead class="text-left text-xs text-muted-foreground">
+                <tr>
+                  <th class="p-2 font-normal">When</th>
+                  <th class="p-2 font-normal">Who</th>
+                  <th class="p-2 font-normal">What</th>
+                  <th class="p-2 font-normal">Decision and why</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of v.audit; track row.id) {
+                  <tr class="border-t border-border align-top text-xs">
+                    <td class="p-2 whitespace-nowrap" [title]="absolute(row.at)">
+                      {{ relative(row.at) }}
+                    </td>
+                    <td class="p-2">{{ row.actor }}</td>
+                    <td class="p-2">
+                      {{ action(row) }}
+                      <span class="block font-data text-muted-foreground">{{ row.target }}</span>
+                    </td>
+                    <td class="p-2">
+                      {{ row.decision
+                      }}<span class="text-muted-foreground"> · {{ row.reason }}</span>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td class="p-2 text-xs text-muted-foreground" colspan="4">Nothing yet.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
     }
   `,
 })
@@ -204,6 +208,9 @@ export class AssistantTrustComponent implements OnInit {
   private readonly confirm = inject(ConfirmService);
   /** The sidebar's and the header's "needs a look" read the pulse: told at once. */
   private readonly pulse = inject(AdminPulseService);
+
+  /** What waits for a person (Now), or the rules and the log (Settings). */
+  readonly part = input<"waiting" | "rules">("rules");
 
   protected readonly view = signal<TrustView | null>(null);
   protected readonly loadError = signal<string | null>(null);

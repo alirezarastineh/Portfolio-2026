@@ -3,6 +3,8 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
+  effect,
   ElementRef,
   inject,
   Injector,
@@ -17,6 +19,7 @@ import { toast } from "@spartan-ng/brain/sonner";
 import { HlmButton } from "@spartan-ng/helm/button";
 
 import { AdminApiService } from "../admin-api.service";
+import { UnsavedChangesService } from "../unsaved-changes.service";
 import {
   lessonProblem,
   lessonRefusal,
@@ -126,6 +129,22 @@ export class LessonFormComponent {
   constructor() {
     // Opened by a button that stays: the admin lands on the form.
     afterNextRender(() => this.title().nativeElement.focus());
+    // A rule typed or a scope changed and not sent: switching views asks first.
+    const unsaved = inject(UnsavedChangesService);
+    let key: string | null = null;
+    effect(() => {
+      key = this.id("typed");
+      unsaved.set(
+        key,
+        this.statement().trim() !== "" ||
+          (this.scopeEdited && this.scopeText() !== this.scope().join(", ")),
+      );
+    });
+    inject(DestroyRef).onDestroy(() => {
+      if (key) {
+        unsaved.clear(key);
+      }
+    });
   }
 
   protected id(part: string): string {
