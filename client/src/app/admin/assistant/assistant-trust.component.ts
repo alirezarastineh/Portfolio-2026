@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, inject, input, OnInit, signal } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  inject,
+  input,
+  OnInit,
+  output,
+  signal,
+} from "@angular/core";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
@@ -8,6 +17,7 @@ import type { AuditRow, Demotion, TrustView } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
 import { AdminPulseService } from "../pulse.service";
 import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
+import { WAITING_ROW } from "../now";
 import { absoluteTime, relativeTime } from "../relative-time";
 import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
 
@@ -25,23 +35,26 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
   host: { class: "flex flex-col gap-8" },
   template: `
     @if (loadError(); as reason) {
-      <app-load-error title="Could not load trust" [reason]="reason" (retry)="reload()" />
+      <app-load-error compact title="Could not load trust" [reason]="reason" (retry)="reload()" />
     } @else if (!view()) {
-      <app-form-skeleton kind="list" [rows]="3" label="Loading trust…" />
+      @if (part() === "rules") {
+        <app-form-skeleton kind="list" [rows]="3" label="Loading trust…" />
+      }
     } @else {
       @let v = view()!;
       @if (part() === "waiting") {
-        <section class="flex flex-col gap-2" aria-labelledby="trust-alerts">
-          <h2 id="trust-alerts" class="m-0 text-sm font-medium">Alerts</h2>
+        <!-- Rows in Now's "Waits for you" (plan 5, U18), which says when nothing waits. -->
+        <ul class="m-0 list-none p-0" role="list">
           @for (row of v.alerts; track row.id) {
-            <div
-              class="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-destructive/40 p-3 text-sm"
-            >
-              <div class="flex min-w-0 flex-col gap-1">
-                <p class="m-0">{{ action(row) }} · {{ subject(row.target) }}</p>
-                <p class="m-0 text-hint text-muted-foreground">{{ row.reason }}</p>
-                <p class="m-0 text-hint text-muted-foreground" [title]="absolute(row.at)">
-                  {{ relative(row.at) }}
+            <li [class]="waitingRow">
+              <div class="min-w-0">
+                <p [id]="'trust-alert-' + row.id" class="m-0">
+                  {{ first(action(row)) }}: {{ subject(row.target) }}
+                </p>
+                <p class="m-0 text-hint text-muted-foreground">
+                  <time [attr.datetime]="row.at" [title]="absolute(row.at)">{{
+                    first(relative(row.at))
+                  }}</time>: {{ row.reason }}
                 </p>
               </div>
               <button
@@ -49,32 +62,24 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
                 size="sm"
                 variant="outline"
                 type="button"
+                [attr.aria-describedby]="'trust-alert-' + row.id"
                 [disabled]="busy()"
                 (click)="seen(row)"
               >
                 Seen
               </button>
-            </div>
-          } @empty {
-            <p class="m-0 text-hint text-muted-foreground">Nothing waits for you.</p>
+            </li>
           }
-        </section>
-
-        <section class="flex flex-col gap-2" aria-labelledby="trust-demoted">
-          <h2 id="trust-demoted" class="m-0 text-sm font-medium">Demoted</h2>
-          <p class="m-0 text-hint text-muted-foreground">
-            Out of the visitors' service until you reinstate it. The playground, evals and pairwise
-            runs still use it, so you can check it first.
-          </p>
           @for (d of v.demoted; track d.subject) {
-            <div
-              class="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border p-3 text-sm"
-            >
-              <div class="flex min-w-0 flex-col gap-1">
-                <p class="m-0">{{ subject(d.subject) }}</p>
-                <p class="m-0 text-hint text-muted-foreground">{{ d.reason }}</p>
-                <p class="m-0 text-hint text-muted-foreground" [title]="absolute(d.at)">
-                  since {{ relative(d.at) }}
+            <li [class]="waitingRow">
+              <div class="min-w-0">
+                <p [id]="'trust-demoted-' + $index" class="m-0">
+                  {{ first(subject(d.subject)) }} is out of the visitors' service
+                </p>
+                <p class="m-0 text-hint text-muted-foreground">
+                  Demoted
+                  <time [attr.datetime]="d.at" [title]="absolute(d.at)">{{ relative(d.at) }}</time>:
+                  {{ d.reason }}
                 </p>
               </div>
               <button
@@ -82,16 +87,15 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
                 size="sm"
                 variant="outline"
                 type="button"
+                [attr.aria-describedby]="'trust-demoted-' + $index"
                 [disabled]="busy()"
                 (click)="reinstate(d)"
               >
                 Reinstate
               </button>
-            </div>
-          } @empty {
-            <p class="m-0 text-hint text-muted-foreground">Every model and route is in service.</p>
+            </li>
           }
-        </section>
+        </ul>
       } @else {
         <section class="flex flex-col gap-2" aria-labelledby="trust-check">
           <div class="flex flex-wrap items-center justify-between gap-2">
@@ -148,9 +152,7 @@ import { actionLabel, levelLabel, rulesLine, subjectLabel } from "../trust";
                         <span hlmBadge variant="outline" class="ms-1">not built</span>
                       }
                     </td>
-                    <td class="p-2 text-xs">
-                      <span class="font-data">{{ entry.level }}</span> · {{ level(entry.level) }}
-                    </td>
+                    <td class="p-2 text-xs">{{ level(entry.level) }}</td>
                     <td class="p-2 text-xs">
                       {{ entry.approver === "none" ? "–" : entry.approver }}
                     </td>
@@ -211,15 +213,30 @@ export class AssistantTrustComponent implements OnInit {
 
   /** What waits for a person (Now), or the rules and the log (Settings). */
   readonly part = input<"waiting" | "rules">("rules");
+  /** A row's Seen or Reinstate is done and its button gone: Now takes the focus. */
+  readonly acted = output();
 
   protected readonly view = signal<TrustView | null>(null);
   protected readonly loadError = signal<string | null>(null);
   protected readonly busy = signal(false);
+  private gone = false;
+
+  /** A row of Now's "Waits for you", as its own rows. */
+  protected readonly waitingRow = WAITING_ROW;
 
   protected readonly level = levelLabel;
   protected readonly subject = subjectLabel;
   protected readonly action = actionLabel;
   protected readonly rules = rulesLine;
+
+  /** "the deep route" → "The deep route": a row's words start a sentence. */
+  protected first(words: string): string {
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  }
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => (this.gone = true));
+  }
 
   ngOnInit(): void {
     void this.load();
@@ -255,12 +272,15 @@ export class AssistantTrustComponent implements OnInit {
       toast.error("Not marked seen", { description: result.error });
     }
     await this.changed();
+    if (result.ok) {
+      this.done();
+    }
   }
 
   protected async reinstate(demotion: Demotion): Promise<void> {
     const go = await this.confirm.ask({
       title: `Reinstate ${subjectLabel(demotion.subject)}?`,
-      description: `Visitors get it again at once. It was demoted because: ${demotion.reason}.`,
+      description: `Visitors get it again at once. It was demoted because: ${demotion.reason}. The Playground, evals and pairwise runs still use it, so you can check it there first.`,
       confirmLabel: "Reinstate",
     });
     if (!go) {
@@ -275,6 +295,14 @@ export class AssistantTrustComponent implements OnInit {
     }
     toast.success(`${subjectLabel(demotion.subject)} is back in service`);
     await this.changed();
+    this.done();
+  }
+
+  /** Still here once the row is gone: Now moves the focus (plan 5, admin-ui.md). */
+  private done(): void {
+    if (!this.gone) {
+      this.acted.emit();
+    }
   }
 
   protected async check(): Promise<void> {

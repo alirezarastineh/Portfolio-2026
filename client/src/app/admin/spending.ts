@@ -98,6 +98,24 @@ const STATE_LABELS: Record<FeatureState, string> = {
 
 export const stateLabel = (state: FeatureState): string => STATE_LABELS[state];
 
+/**
+ * Why `feature`'s next call would be refused, in words ("Eval runs: stopped at its cap."), or null
+ * while it may spend. Unknown (no health yet, an older API, a feature it does not list) is null:
+ * the button stays and the server decides. Its paid buttons turn off with these words (plan 5, U18).
+ */
+export function featureStop(spend: SpendToday | undefined, feature: SpendFeature): string | null {
+  const state = spend?.features.find((f) => f.feature === feature);
+  if (!state || state.state === "ok") {
+    return null;
+  }
+  // Off without its own switch off: the deploy turned the assistant off (`guard.ts` `offReason`).
+  const words =
+    state.state === "off" && state.switchedOn !== false
+      ? "the assistant is off on this server"
+      : stateLabel(state.state);
+  return `${featureLabel(feature)}: ${words}.`;
+}
+
 export interface FeatureRow {
   feature: string;
   label: string;

@@ -65,7 +65,7 @@ import {
               <tr>
                 <th class="p-2 font-normal">Tier</th>
                 <th class="p-2 text-right font-normal">Answers</th>
-                <th class="p-2 text-right font-normal">First token, median / 90th</th>
+                <th class="p-2 text-right font-normal">First word, typical / slowest 1 in 10</th>
                 <th class="p-2 text-right font-normal">Cost</th>
                 <th class="p-2 text-right font-normal">Helpful</th>
               </tr>

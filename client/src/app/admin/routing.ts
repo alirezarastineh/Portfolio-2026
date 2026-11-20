@@ -137,5 +137,5 @@ export function sensitiveLine(view: RouterView): string | null {
     .sort(([, a], [, b]) => b - a)
     .map(([topic, n]) => `${TOPIC_LABELS[topic] ?? topic} ${n}`)
     .join(", ");
-  return `Careful answers (the newspaper test): ${s.answers} (${topics})`;
+  return `Careful answers, on topics that would look bad quoted in a newspaper: ${s.answers} (${topics})`;
 }

@@ -6,12 +6,13 @@ import type { AssistantHealth, AuditRow, TrustLevel, TrustRules } from "./assist
  * tab, the Overview and the pulse share it.
  */
 
+/** Each level's name: the registry shows these, never the L0–L3 code (plan 5, U18). */
 const LEVELS: Record<TrustLevel, string> = {
-  L0: "suggests; a person approves each one",
-  L1: "acts, reversibly; reviewed after",
-  L2: "acts within bounds",
-  L3: "acts alone",
-  human: "people only",
+  L0: "Suggests; a person approves each one",
+  L1: "Acts, reversibly; reviewed after",
+  L2: "Acts within bounds",
+  L3: "Acts alone",
+  human: "People only",
 };
 
 export const levelLabel = (level: TrustLevel): string => LEVELS[level];

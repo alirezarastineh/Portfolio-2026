@@ -47,8 +47,11 @@ import {
   type JournalStatus,
 } from "../journal";
 import { sameValue } from "../changed-fields";
+import { AdminPulseService } from "../pulse.service";
 import { RecoveryService, type RecoveryHandle } from "../recovery.service";
+import { featureStop } from "../spending";
 import { UnsavedChangesService } from "../unsaved-changes.service";
+import { FeatureStopComponent } from "./feature-stop.component";
 import { FreezeCaseComponent } from "./freeze-case.component";
 
 const POLL_MS = 2000;
@@ -84,7 +87,7 @@ const DECISIONS: Record<JournalStatus, string> = {
 @Component({
   selector: "app-journal-entry",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, FreezeCaseComponent, HlmBadge, HlmButton],
+  imports: [FeatureStopComponent, FormsModule, FreezeCaseComponent, HlmBadge, HlmButton],
   host: { class: "block" },
   template: `
     @let e = entry();
@@ -342,13 +345,22 @@ const DECISIONS: Record<JournalStatus, string> = {
         }
         @if (replayable()) {
           <!-- A replay that stopped is resumed: only the chains left answer (and spend). -->
+          <!-- Paid, as Admin agents: off while those would be refused, saying why (plan 5, U18). -->
           @if (resumable(); as run) {
             <button
               hlmBtn
               size="sm"
               variant="outline"
               type="button"
-              [attr.aria-describedby]="'journal-' + e.id + ' journal-stopped-' + e.id"
+              class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+              [attr.aria-disabled]="stop() ? 'true' : null"
+              [attr.aria-describedby]="
+                'journal-' +
+                e.id +
+                ' journal-stopped-' +
+                e.id +
+                (stop() ? ' stop-agent-' + e.id : '')
+              "
               [disabled]="replaying()"
               (click)="resume(run.id)"
             >
@@ -360,7 +372,9 @@ const DECISIONS: Record<JournalStatus, string> = {
               size="sm"
               variant="outline"
               type="button"
-              [attr.aria-describedby]="'journal-' + e.id"
+              class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+              [attr.aria-disabled]="stop() ? 'true' : null"
+              [attr.aria-describedby]="'journal-' + e.id + (stop() ? ' stop-agent-' + e.id : '')"
               [disabled]="replaying()"
               (click)="replayIt()"
             >
@@ -374,7 +388,9 @@ const DECISIONS: Record<JournalStatus, string> = {
             size="sm"
             variant="outline"
             type="button"
-            [attr.aria-describedby]="'journal-' + e.id"
+            class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+            [attr.aria-disabled]="stop() ? 'true' : null"
+            [attr.aria-describedby]="'journal-' + e.id + (stop() ? ' stop-agent-' + e.id : '')"
             [disabled]="drafting()"
             (click)="draftProposal()"
           >
@@ -397,6 +413,9 @@ const DECISIONS: Record<JournalStatus, string> = {
           The last replay stopped: {{ run.error ?? run.status }}
         </p>
       }
+      @if ((replayable() || proposable()) && stop(); as reason) {
+        <app-feature-stop [noteId]="'stop-agent-' + e.id" [reason]="reason" />
+      }
       <!-- Always in the page, so what is put in it is announced. -->
       <p class="m-0 text-hint text-muted-foreground" role="status">{{ status() }}</p>
     </article>
@@ -407,6 +426,9 @@ export class JournalEntryComponent {
   private readonly drafts = inject(FaqDraftsService);
   private readonly confirm = inject(ConfirmService);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  private readonly pulse = inject(AdminPulseService);
+  /** Why Admin agents would be refused now, or null: the replay and the FAQ draft say so. */
+  protected readonly stop = computed(() => featureStop(this.pulse.assistant()?.spend, "agent"));
 
   readonly entry = input.required<JournalEntry>();
   /** Shows the evidence open (the entry the admin came to see). */
@@ -612,6 +634,9 @@ export class JournalEntryComponent {
 
   /** A replay that stopped, resumed: only the chains that did not answer are asked. Paid. */
   protected async resume(runId: string): Promise<void> {
+    if (this.stop()) {
+      return;
+    }
     const go = await this.confirm.ask({
       title: "Resume the replay (paid)?",
       description:
@@ -677,7 +702,7 @@ export class JournalEntryComponent {
    * in the FAQ tab. An entry with an open proposal gets that one back.
    */
   protected async draftProposal(): Promise<void> {
-    if (this.drafting()) {
+    if (this.drafting() || this.stop()) {
       return;
     }
     this.drafting.set(true);
@@ -705,6 +730,9 @@ export class JournalEntryComponent {
 
   /** A paid background run: the question answered again on both chains. */
   protected async replayIt(): Promise<void> {
+    if (this.stop()) {
+      return;
+    }
     const go = await this.confirm.ask({
       title: "Replay this question (paid)?",
       description:

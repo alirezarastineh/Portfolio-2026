@@ -942,12 +942,14 @@ function defaults(): Record<string, unknown> {
         budgetUsd: 2,
         publicReserve: 0.5,
         reserveLineUsd: 1,
+        // Eval runs and the admin agents may spend: the paid buttons tests press work (plan 5,
+        // U18 turns a stopped feature's buttons off; its own cases stop them).
         features: [
           { feature: "terminal", spentUsd: 0.12, capUsd: null, switchedOn: null, state: "ok" },
           { feature: "match", spentUsd: 0, capUsd: 0.1, switchedOn: false, state: "off" },
-          { feature: "eval", spentUsd: 0.3, capUsd: 0.3, switchedOn: null, state: "cap" },
+          { feature: "eval", spentUsd: 0.3, capUsd: null, switchedOn: null, state: "ok" },
           { feature: "copilot", spentUsd: 0, capUsd: null, switchedOn: true, state: "ok" },
-          { feature: "agent", spentUsd: 0, capUsd: null, switchedOn: false, state: "off" },
+          { feature: "agent", spentUsd: 0, capUsd: null, switchedOn: true, state: "ok" },
           { feature: "autoInsights", spentUsd: 0, capUsd: null, switchedOn: false, state: "off" },
           { feature: "nightlyJudge", spentUsd: 0, capUsd: null, switchedOn: false, state: "off" },
         ],
@@ -1496,7 +1498,7 @@ test.describe("admin", () => {
     const needs = page.getByRole("region", { name: "Needs you" });
     await expect(needs.getByRole("link", { name: /^2 new messages/ })).toBeVisible();
     await expect(
-      needs.getByRole("link", { name: /^A model is failing: its breaker is open/ }),
+      needs.getByRole("link", { name: /^A model is paused after failures/ }),
     ).toBeVisible();
     await expect(
       page
@@ -1507,7 +1509,9 @@ test.describe("admin", () => {
     const rail = page.locator("[data-slot=sidebar-inner]");
     await expect(rail.getByRole("link", { name: "Inbox, 2 new" })).toBeVisible();
     await expect(rail.getByRole("link", { name: "Today, 1 translation to check" })).toBeVisible();
-    await expect(rail.getByRole("link", { name: /^Assistant, A model is failing/ })).toBeVisible();
+    await expect(
+      rail.getByRole("link", { name: /^Assistant, A model is paused after failures/ }),
+    ).toBeVisible();
 
     // One Publish, the top bar's: Today has none of its own, and it opens the one review.
     await expect(main.getByRole("button", { name: /publish/i })).toHaveCount(0);
@@ -1798,11 +1802,12 @@ test.describe("admin", () => {
     await expect(
       outcomes.getByText("4 offered → 2 confirmed (50 %) → 1 sent (50 %)"),
     ).toBeVisible();
-    // What the visitors' browsers saw (visitor plan V2), beside the server's first token.
+    // What the visitors' browsers saw (visitor plan V2), beside the server's first word.
     const browser = outcomes.getByRole("region", { name: /In the visitor's browser/ });
     await expect(browser).toContainText("12 answers reported");
+    await expect(browser).toContainText("First word as visitors saw it, typical / slowest 1 in 20");
     await expect(browser).toContainText("1.4 s / 6.2 s");
-    await expect(browser).toContainText("the server's first token: 0.9 s / 5.1 s");
+    await expect(browser).toContainText("the server's first word: 0.9 s / 5.1 s");
     await expect(browser).toContainText("👎 by reason: 1 wrong or made up");
     await settled(page);
     const { violations } = await new AxeBuilder({ page })
@@ -1858,9 +1863,10 @@ test.describe("admin", () => {
         windows.push(new URL(r.url()).searchParams.get("days"));
       }
     });
-    await openAdmin(page, "/admin/assistant");
+    // Perception and what the assistant knows are reports: Quality holds them (plan 5, U18).
+    await openAdmin(page, "/admin/assistant?view=quality");
 
-    // The prefix per answer language, in the corpus line above.
+    // The prefix per answer language, in the corpus line.
     await expect(
       page.getByText(
         /per answer language: English 5,666 characters, about 1,341 tokens; German 6,059, about 1,557/,
@@ -1872,8 +1878,6 @@ test.describe("admin", () => {
       page.getByText(/Search by meaning \(gemini-embedding-2\): 28 of 30 passages have a vector/),
     ).toBeVisible();
 
-    // Perception is a report: it lives in Quality (plan 5, U18).
-    await openView(page, "Quality");
     const perception = page.getByRole("region", { name: "Perception" });
     await expect(perception.getByText("1,341 / 1,557")).toBeVisible();
     await expect(
@@ -1961,8 +1965,14 @@ test.describe("admin", () => {
     await expect(
       routing.getByText(/3 moved up to the deep chain mid-answer \(8 % of those routed lite\)/),
     ).toBeVisible();
+    // The newspaper test, said in full (plan 5, U18); the first word's two times, in words.
     await expect(
-      routing.getByText("Careful answers (the newspaper test): 3 (pay and rates 2, family 1)."),
+      routing.getByText(
+        "Careful answers, on topics that would look bad quoted in a newspaper: 3 (pay and rates 2, family 1).",
+      ),
+    ).toBeVisible();
+    await expect(
+      routing.getByRole("columnheader", { name: "First word, typical / slowest 1 in 10" }),
     ).toBeVisible();
     const candidate = routing.getByRole("listitem").filter({ hasText: "scaled the furthest" });
     await expect(candidate).toContainText("lite · thumbs-down · m_falsesimple01");
@@ -2905,7 +2915,8 @@ test.describe("admin", () => {
         ],
       },
     });
-    await openAdmin(page, "/admin/assistant");
+    // The signals are a report: Quality holds them (plan 5, U18).
+    await openAdmin(page, "/admin/assistant?view=quality");
 
     const signals = page.getByRole("region", { name: "Signals" });
     await expect(
@@ -2931,12 +2942,31 @@ test.describe("admin", () => {
     expect(unmocked).toEqual([]);
   });
 
-  test("the Overview shows spend by feature, and Settings fences what the rest may spend", async ({
+  test("Now draws today's spend against the budget, Quality keeps it by feature, and Settings fences what the rest may spend", async ({
     page,
     baseURL,
   }) => {
     const savedSettings: Record<string, unknown>[] = [];
     const unmocked = await fakeApi(page, baseURL, {
+      // The fences at work: eval runs at their cap, the admin agents and three more switched off.
+      "GET /admin/assistant/health": {
+        ...todayHealth(),
+        spend: {
+          totalUsd: 0.42,
+          budgetUsd: 2,
+          publicReserve: 0.5,
+          reserveLineUsd: 1,
+          features: [
+            { feature: "terminal", spentUsd: 0.12, capUsd: null, switchedOn: null, state: "ok" },
+            { feature: "match", spentUsd: 0, capUsd: 0.1, switchedOn: false, state: "off" },
+            { feature: "eval", spentUsd: 0.3, capUsd: 0.3, switchedOn: null, state: "cap" },
+            { feature: "copilot", spentUsd: 0, capUsd: null, switchedOn: true, state: "ok" },
+            { feature: "agent", spentUsd: 0, capUsd: null, switchedOn: false, state: "off" },
+            { feature: "autoInsights", spentUsd: 0, capUsd: null, switchedOn: false, state: "off" },
+            { feature: "nightlyJudge", spentUsd: 0, capUsd: null, switchedOn: false, state: "off" },
+          ],
+        },
+      },
       "PUT /admin/assistant/settings": () => ({
         status: 200,
         body: { ok: true, settings: assistantSettings({ publicReserve: 0.6 }) },
@@ -2949,13 +2979,20 @@ test.describe("admin", () => {
     });
     await openAdmin(page, "/admin/assistant");
 
+    // Now (plan 5, U18): the day against the budget, and the line where the admin's tools stop.
+    // The free-tier guard (visitor plan V1): the sums are list prices.
+    const today = page.getByRole("region", { name: "Spent today" });
     await expect(
-      page.getByText("All but the visitors' assistant stop at $1.00 (50 % kept for visitors)"),
+      today.getByText(
+        /The admin's tools stop at the line, \$1\.00: the rest is kept for visitors\. List prices: the free tier bills nothing\./,
+      ),
     ).toBeVisible();
-    // The free-tier guard (visitor plan V1): the spend is a list-price figure, and what it left out.
-    await expect(
-      page.getByText("List-price equivalent: the free tier bills nothing"),
-    ).toBeVisible();
+    await expect(today.getByRole("listitem").filter({ hasText: "Eval runs" })).toContainText(
+      "stopped at its cap",
+    );
+
+    // Quality keeps the table by feature, and what the guard left out.
+    await openView(page, "Quality");
     await expect(page.getByText("Left out by the free-tier guard, since they bill:")).toContainText(
       "vendor/paid-model",
     );
@@ -3100,19 +3137,19 @@ test.describe("admin", () => {
     await expect(page.getByText("needs a look")).toBeVisible();
     await expect(viewLink(page, "Now")).toHaveAttribute("aria-current", "true");
 
-    const alerts = page.getByRole("region", { name: "Alerts" });
+    // Rows of "Waits for you" (plan 5, U18), each settled where it shows.
+    const waits = page.getByRole("region", { name: "Waits for you" });
     await expect(
-      alerts.getByText("leak: the answer repeated a piece of the system prompt"),
+      waits.getByText(/leak: the answer repeated a piece of the system prompt/),
     ).toBeVisible();
 
-    await alerts.getByRole("button", { name: "Seen", exact: true }).click();
-    const demoted = page.getByRole("region", { name: "Demoted" });
-    await demoted.getByRole("button", { name: "Reinstate", exact: true }).click();
+    await waits.getByRole("button", { name: "Seen", exact: true }).click();
+    await waits.getByRole("button", { name: "Reinstate", exact: true }).click();
     await page
       .getByRole("alertdialog")
       .getByRole("button", { name: "Reinstate", exact: true })
       .click();
-    await expect(demoted.getByText("Every model and route is in service.")).toBeVisible();
+    await expect(waits.getByText("Nothing waits for you.")).toBeVisible();
     // Resolved here, cleared there: no reload needed.
     await expect(page.getByText("needs a look")).toHaveCount(0);
 
@@ -3122,7 +3159,12 @@ test.describe("admin", () => {
     await expect(check.getByText(/more than 20 % of its last 30 answers failed/)).toBeVisible();
     await expect(check.getByText("demote route:deep")).toBeVisible();
     const registry = page.getByRole("region", { name: "Who may do what" });
-    await expect(registry.getByRole("row", { name: /publish/ })).toContainText("people only");
+    // Named levels (plan 5, U18): the words, never the L0–L3 code.
+    await expect(registry.getByRole("row", { name: /publish/ })).toContainText("People only");
+    await expect(registry.getByRole("row", { name: /navigate/ })).toContainText(
+      "Acts, reversibly; reviewed after",
+    );
+    await expect(registry.getByText(/\bL[0-3]\b/)).toHaveCount(0);
     await expect(registry.getByRole("row", { name: /agent\.apply/ })).toContainText("not built");
     await check.getByRole("button", { name: "Check now", exact: true }).click();
     await expect(page.getByText("4 checked · 0 demoted", { exact: true })).toBeVisible();
@@ -4244,27 +4286,29 @@ test.describe("admin", () => {
     await openAdmin(page, "/admin/assistant");
 
     const line = `Insights ran by themselves (${RISE}): 1 topic the assistant could not answer.`;
-    await expect(page.getByText(line)).toBeVisible();
+    // A row of Now's "Waits for you" (plan 5, U18).
+    const waits = page.getByRole("region", { name: "Waits for you" });
+    await expect(waits.getByText(line)).toBeVisible();
     await settled(page);
     const { violations } = await new AxeBuilder({ page })
-      .include("#insights-notice-box")
+      .include("app-assistant-now")
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
       .analyze();
     expect(violations.map((v) => v.id)).toEqual([]);
-    // Its buttons say which notice they act on.
-    const open = page.getByRole("button", { name: "Open Insights" });
+    // Its link and button say which notice they act on.
+    const open = waits.getByRole("link", { name: "Open Insights" });
     await expect(open).toHaveAccessibleDescription(line);
     await open.click();
     await expect(viewLink(page, "Questions")).toHaveAttribute("aria-current", "true");
 
     await openView(page, "Now");
-    const done = page.getByRole("button", { name: "Seen", exact: true });
+    const done = waits.getByRole("button", { name: "Seen", exact: true });
     await expect(done).toHaveAccessibleDescription(line);
     await done.click();
     await expect.poll(() => seen).toHaveLength(1);
     await expect(page.getByText(line)).toHaveCount(0);
-    // The button went with the notice: focus lands on the Overview's first heading.
-    await expect(page.locator(":focus")).toHaveAttribute("id", "assistant-glance");
+    // The button went with the notice: the list's heading takes the focus.
+    await expect(waits.getByRole("heading", { name: "Waits for you" })).toBeFocused();
     expect(unmocked).toEqual([]);
   });
 
@@ -4375,9 +4419,14 @@ test.describe("admin", () => {
       ],
       stats: { answers: 12, queued: 2, reviewed: reviewed ? 1 : 0, labels: noVerdicts() },
     });
+    // By state, not by call: Now reads the week too, for its count (plan 5, U18).
+    let reviewed = false;
     const unmocked = await fakeApi(page, baseURL, {
-      "GET /admin/assistant/reviews": (call: number) => ({ status: 200, body: week(call > 1) }),
-      "PUT /admin/assistant/reviews/m_review0001": { ok: true, reviewedAt: NOW },
+      "GET /admin/assistant/reviews": () => ({ status: 200, body: week(reviewed) }),
+      "PUT /admin/assistant/reviews/m_review0001": () => {
+        reviewed = true;
+        return { status: 200, body: { ok: true, reviewedAt: NOW } };
+      },
     });
     await openAdmin(page, "/admin/assistant");
     await openView(page, "Reviews");
@@ -5149,19 +5198,22 @@ test.describe("admin", () => {
         "a lesson from the journal needs 3 accepted or fixed entries: make it in the Journal, then link it here",
     });
     const sent: { url: string; body: unknown }[] = [];
+    // By state, not by call: Now reads the proposals too, for its count (plan 5, U18).
+    let rejected = false;
     const unmocked = await fakeApi(page, baseURL, {
       "GET /admin/assistant/journal": {
         entries: [journalEntry({ fixType: "faq", fixRef: null })],
         counts: { proposed: 1, accepted: 0, fixed: 0, retired: 0 },
       },
       "POST /admin/assistant/faq-proposals": () => ({ status: 201, body: { proposal: gap } }),
-      "GET /admin/assistant/faq-proposals": (n: number) => ({
+      "GET /admin/assistant/faq-proposals": () => ({
         status: 200,
-        body: { proposals: n === 1 ? [gap] : [{ ...gap, status: "rejected" }] },
+        body: { proposals: rejected ? [{ ...gap, status: "rejected" }] : [gap] },
       }),
       "GET /admin/assistant/faq": { faq: [] },
-      [`POST /admin/assistant/faq-proposals/${gap.id}/reject`]: {
-        proposal: { ...gap, status: "rejected" },
+      [`POST /admin/assistant/faq-proposals/${gap.id}/reject`]: () => {
+        rejected = true;
+        return { status: 200, body: { proposal: { ...gap, status: "rejected" } } };
       },
     });
     page.on("request", (r) => {
@@ -5344,13 +5396,21 @@ test.describe("admin", () => {
   }) => {
     const drafted = faqProposalRow();
     const late = heldReply({ status: 201, body: { proposal: drafted } });
-    let listed = 0;
+    // By state, not by call: Now reads the proposals too, for its count (plan 5, U18).
+    let landed = false;
+    let listedSince = 0;
     const unmocked = await fakeApi(page, baseURL, {
       "GET /admin/assistant/insights": { snapshot: faqSnapshot, trigger: null },
-      "POST /admin/assistant/faq-proposals": late.answer,
-      "GET /admin/assistant/faq-proposals": (n: number) => {
-        listed = n;
-        return { status: 200, body: { proposals: n === 1 ? [] : [drafted] } };
+      "POST /admin/assistant/faq-proposals": async () => {
+        const reply = await late.answer();
+        landed = true;
+        return reply;
+      },
+      "GET /admin/assistant/faq-proposals": () => {
+        if (landed) {
+          listedSince += 1;
+        }
+        return { status: 200, body: { proposals: landed ? [drafted] : [] } };
       },
       "GET /admin/assistant/faq": { faq: [] },
     });
@@ -5364,7 +5424,7 @@ test.describe("admin", () => {
     late.release();
     // Landed: the FAQ reads its list again to show it, and its heading takes the focus (the
     // toast says it only to an Insights left meanwhile).
-    await expect.poll(() => listed).toBe(2);
+    await expect.poll(() => listedSince).toBe(1);
     await expect(
       proposals.getByRole("article", {
         name: /^From the insight topic “Relocation and remote work”/,
@@ -8054,7 +8114,9 @@ test.describe("the shell", () => {
     expect(hrefs).toEqual([...RAIL.map(([, path]) => path), "/admin/account"]);
     await expect(rail.getByRole("link", { name: "Today, 1 translation to check" })).toBeVisible();
     await expect(rail.getByRole("link", { name: "Inbox, 2 new" })).toBeVisible();
-    await expect(rail.getByRole("link", { name: /^Assistant, A model is failing/ })).toBeVisible();
+    await expect(
+      rail.getByRole("link", { name: /^Assistant, A model is paused after failures/ }),
+    ).toBeVisible();
     // The rail marks its entry; the breadcrumb holds the page's one aria-current="page".
     await expect(rail.getByRole("link", { name: "Work", exact: true })).toHaveAttribute(
       "aria-current",
@@ -8559,7 +8621,7 @@ test.describe("Today", () => {
     await expect(rail.getByRole("link", { name: "Assistant, 1 trust alert" })).toBeVisible();
     await follow(/^1 trust alert/, /\/admin\/assistant$/);
     await expect(
-      page.getByRole("region", { name: "Alerts" }).getByRole("button", { name: "Seen" }),
+      page.getByRole("region", { name: "Waits for you" }).getByRole("button", { name: "Seen" }),
     ).toHaveCount(1);
     expect(unmocked).toEqual([]);
   });
@@ -14678,7 +14740,7 @@ test.describe("the Assistant's views and the Playground panel", () => {
     test.slow();
     const unmocked = await fakeApi(page, baseURL);
     const HOSTS: [string, string, string][] = [
-      ["Now", "/admin/assistant", "app-assistant-overview"],
+      ["Now", "/admin/assistant", "app-assistant-now"],
       ["Conversations", "/admin/assistant?view=conversations", "app-assistant-conversations"],
       ["Reviews", "/admin/assistant?view=reviews", "app-assistant-reviews"],
       ["Questions", "/admin/assistant?view=questions", "app-assistant-insights"],
@@ -14894,6 +14956,657 @@ test.describe("the Assistant's views and the Playground panel", () => {
       await page.getByRole("button", { name: "Ask (paid)", exact: true }).click();
       await expect(page.getByText("gemini-3.5-flash-lite; $0.0004", { exact: true })).toBeVisible();
       await settled(page);
+      expect(await axeViolations(page)).toEqual([]);
+    });
+  }
+});
+
+/** A provider's own words when its quota is spent, at their real length. */
+const QUOTA_ERROR =
+  "[429 Too Many Requests] You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.";
+
+const minutesFromNow = (minutes: number) => new Date(Date.now() + minutes * 60_000).toISOString();
+
+/** The trust monitor's own words for a demoted deep route (`server/src/ask/trust.ts`). */
+const DEEP_EVIDENCE = "9 of 30 answers failed (30 %; ceiling 20 %)";
+
+const BUSY_DEMOTION = {
+  subject: "route:deep",
+  at: minutesFromNow(-125),
+  reason: DEEP_EVIDENCE,
+};
+
+const BUSY_ALERT = {
+  id: 41,
+  at: minutesFromNow(-125),
+  actor: "system",
+  action: "demote",
+  target: "route:deep",
+  decision: "allowed",
+  reason: DEEP_EVIDENCE,
+  alternatives: [],
+  alert: true,
+  seenAt: null,
+};
+
+/** A busy day's health at real length: four models (one paused, one trying again), five features spent, five off. */
+function busyHealth(trust: { alerts: number; demoted: unknown[] }): Record<string, unknown> {
+  const breaker = (model: string, change: Record<string, unknown>) => ({
+    model,
+    state: "closed",
+    openUntil: null,
+    consecutiveFailures: 0,
+    lastSuccessAt: minutesFromNow(-1),
+    lastFailureAt: null,
+    lastError: null,
+    p50TtftMs: null,
+    ...change,
+  });
+  const feature = (name: string, spentUsd: number, change: Record<string, unknown>) => ({
+    feature: name,
+    spentUsd,
+    capUsd: null,
+    switchedOn: null,
+    state: "ok",
+    ...change,
+  });
+  const off = { switchedOn: false, state: "off" };
+  return {
+    state: { state: "ok", deepAllowed: false, spentUsd: 0.559, budgetUsd: 2 },
+    spend: {
+      totalUsd: 0.559,
+      budgetUsd: 2,
+      publicReserve: 0.5,
+      reserveLineUsd: 1,
+      features: [
+        feature("terminal", 0.182, {}),
+        feature("match", 0, { ...off, capUsd: 0.1 }),
+        feature("playground", 0.006, {}),
+        feature("copilot", 0.041, { switchedOn: true }),
+        feature("insights", 0, {}),
+        feature("eval", 0.3, { capUsd: 0.3, state: "cap" }),
+        feature("pairwise", 0, {}),
+        feature("judge", 0.03, { switchedOn: true }),
+        feature("autoInsights", 0, off),
+        feature("agent", 0, off),
+        feature("embeddings", 0, off),
+        feature("nightlyJudge", 0, off),
+      ],
+    },
+    trust,
+    learning: { notice: null },
+    inFlight: 2,
+    models: { freeOnly: true, excluded: ["vendor/paid-model"] },
+    breakers: [
+      breaker("gemini-3.5-flash-lite", { p50TtftMs: 610 }),
+      breaker("gemini-3.7-flash", {
+        state: "open",
+        openUntil: minutesFromNow(4),
+        consecutiveFailures: 3,
+        lastSuccessAt: minutesFromNow(-40),
+        lastFailureAt: minutesFromNow(-1),
+        lastError: QUOTA_ERROR,
+        p50TtftMs: 1400,
+      }),
+      breaker("openrouter/qwen/qwen3-32b:free", {
+        state: "half-open",
+        openUntil: minutesFromNow(-2),
+        consecutiveFailures: 3,
+        lastSuccessAt: minutesFromNow(-90),
+        lastFailureAt: minutesFromNow(-7),
+        lastError: "503 Service Unavailable: the model is overloaded. Please try again later.",
+      }),
+      breaker("gemini-3.7-pro", { p50TtftMs: 2600 }),
+    ],
+    last24h: {
+      answers: 47,
+      failures: 3,
+      fallbackRate: 0.13,
+      models: [
+        { model: "gemini-3.5-flash-lite", answers: 31, p50TtftMs: 610, p95TtftMs: 1840 },
+        { model: "gemini-3.7-flash", answers: 9, p50TtftMs: 1400, p95TtftMs: 6900 },
+        { model: "gemini-3.7-pro", answers: 7, p50TtftMs: 2600, p95TtftMs: 7400 },
+      ],
+    },
+    corpus: null,
+  };
+}
+
+/**
+ * A busy day at real length: a trust alert with its demotion and something in every queue
+ * (`waitingQueues`). What Now holds on one screen at 1280×800 (plan 5, U18, Part M2).
+ */
+function busyDay(): Record<string, unknown> {
+  return {
+    ...waitingQueues(),
+    "GET /admin/assistant/health": busyHealth({ alerts: 1, demoted: [BUSY_DEMOTION] }),
+    "GET /admin/assistant/trust": trustView({
+      alerts: [BUSY_ALERT],
+      demoted: [BUSY_DEMOTION],
+      audit: [BUSY_ALERT],
+    }),
+  };
+}
+
+/** An insights run with one topic: Refresh and its FAQ proposal show. */
+const STOP_SNAPSHOT = {
+  id: SNAPSHOT_ID,
+  createdAt: HOUR_AGO,
+  trigger: "admin",
+  analysed: 64,
+  newestMessageId: "m_newest0001",
+  newestAt: HOUR_AGO,
+  topics: [
+    {
+      title: "Relocation and remote work",
+      summary: "Visitors ask whether he would move for a role.",
+      questions: 6,
+      examples: ["Would he move to Berlin?"],
+      unanswered: true,
+    },
+  ],
+  reason: "",
+  usd: 0.0004,
+  seenAt: HOUR_AGO,
+};
+
+/** A feature that spent nothing today, in `state`. */
+const stopped = (feature: string, state: string, switchedOn: boolean | null) => ({
+  feature,
+  spentUsd: 0,
+  capUsd: null,
+  switchedOn,
+  state,
+});
+
+/** The health with each paid feature stopped for a reason of its own; eval runs as `evalState`. */
+function stoppedHealth(evalState: string): Record<string, unknown> {
+  return {
+    ...todayHealth(),
+    spend: {
+      totalUsd: 1.2,
+      budgetUsd: 2,
+      publicReserve: 0.5,
+      reserveLineUsd: 1,
+      features: [
+        stopped("terminal", "ok", null),
+        stopped("insights", "reserve", null),
+        stopped("copilot", "off", false),
+        stopped("eval", evalState, null),
+        stopped("pairwise", "budget", null),
+        stopped("judge", "off", false),
+        stopped("agent", "off", false),
+        stopped("playground", "reserve", null),
+      ],
+    },
+  };
+}
+
+/** Every paid feature stopped, and every paid button on its screen. */
+function everyFeatureStopped(): Record<string, unknown> {
+  const run = {
+    id: "r-eval",
+    kind: "eval",
+    status: "interrupted",
+    params: {},
+    progress: { total: 3, done: 1, failed: 0, unavailable: 0 },
+    summary: null,
+    usd: 0.002,
+    error: null,
+    createdAt: HOUR_AGO,
+    startedAt: HOUR_AGO,
+    finishedAt: HOUR_AGO,
+    heartbeatAt: HOUR_AGO,
+    live: false,
+  };
+  return {
+    "GET /admin/assistant/health": stoppedHealth("cap"),
+    "GET /admin/assistant/insights": { snapshot: STOP_SNAPSHOT, trigger: null },
+    "GET /admin/assistant/runs": { runs: [run] },
+    "GET /admin/assistant/runs/r-eval": { run, items: [] },
+    "GET /admin/assistant/judge": {
+      fixtureJudge: "gemini-flash-lite",
+      visitorJudge: "gemini-flash-lite",
+      calibration: {
+        pairs: 0,
+        agree: 0,
+        agreement: null,
+        calibrated: null,
+        judgeLenient: 0,
+        judgeStrict: 0,
+      },
+      unjudged: 3,
+      answerers: ["lite", "deep", "gemini-flash-lite", "gemini-flash"],
+    },
+    // No other fix named: the entry offers its FAQ draft too.
+    "GET /admin/assistant/journal": {
+      entries: [journalEntry({ fixType: null, fixRef: null })],
+      counts: { proposed: 1, accepted: 0, fixed: 0, retired: 0 },
+    },
+  };
+}
+
+/** Every request a paid button sends: none may go while its feature is stopped. */
+function paidRequests(page: Page): string[] {
+  const sent: string[] = [];
+  const paid =
+    /^\/admin\/(?:ai\/copilot|assistant\/(?:insights|runs|faq-proposals|playground|runs\/[^/]+\/resume))$/;
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() === "POST" && paid.test(path)) {
+      sent.push(path);
+    }
+  });
+  return sent;
+}
+
+/** A stopped button stays a stop: it says why, and a click, Enter or Space opens and sends nothing. */
+async function pressStopped(
+  page: Page,
+  button: Locator,
+  description: string | RegExp,
+): Promise<void> {
+  await expect(button).toHaveAttribute("aria-disabled", "true");
+  await expect(button).toHaveAccessibleDescription(description);
+  await button.focus();
+  await expect(button).toBeFocused();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Space");
+  await button.click({ force: true });
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+}
+
+/** Now on one screen, and the paid buttons a stopped feature turns off (plan 5, U18, Part M2). */
+test.describe("Now, and the paid buttons a stopped feature turns off", () => {
+  for (const colorScheme of ["dark", "light"] as const) {
+    test(`Now fits 1280×800 with a busy day at real length, in the ${colorScheme} theme`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      const unmocked = await fakeApi(page, baseURL, busyDay());
+      await openAdmin(page, "/admin/assistant");
+      const waits = page.getByRole("region", { name: "Waits for you" });
+      // Everything has arrived: trust's rows, the queues, the spend and the models.
+      await expect(waits.getByRole("button", { name: "Reinstate", exact: true })).toBeVisible();
+      await expect(waits.getByRole("link", { name: /^1 lesson proposed/ })).toBeVisible();
+      await expect(page.getByRole("region", { name: "Models" }).getByRole("listitem")).toHaveCount(
+        4,
+      );
+      await settled(page);
+      // Nothing scrolls, and each of Now's four parts ends inside the window.
+      expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(
+        800,
+      );
+      const names = ["State", "Waits for you", "Spent today", "Models"];
+      const boxes = await Promise.all(
+        names.map((name) => page.getByRole("region", { name, exact: true }).boundingBox()),
+      );
+      expect(
+        boxes.map((box, i) => [names[i], box ? Math.round(box.y + box.height) <= 800 : "missing"]),
+      ).toEqual(names.map((name) => [name, true]));
+      expect(unmocked).toEqual([]);
+    });
+  }
+
+  test("Now says the state, today's spend, each model and what waits, in words", async ({
+    page,
+    baseURL,
+  }) => {
+    const unmocked = await fakeApi(page, baseURL, busyDay());
+    await openAdmin(page, "/admin/assistant");
+
+    await expect(page.getByRole("region", { name: "State" }).getByRole("paragraph")).toHaveText(
+      "Answering, one model paused. 47 answers in the last 24 hours: 3 failed, 13 % from a fallback model. 2 answers streaming now. The deep model is off: over 80 % of the budget is spent, or Settings turned it off.",
+    );
+
+    // One bar per feature that spent today on the day's scale, most spent first; the rest named.
+    const spend = page.getByRole("region", { name: "Spent today" });
+    await expect(spend.getByRole("listitem")).toHaveText([
+      /^\$0\.56\s*of \$2\.00$/,
+      /^Eval runs\s*\$0\.30\s*stopped at its cap$/,
+      /^Visitors' assistant\s*\$0\.18$/,
+      /^Copilot\s*\$0\.04$/,
+      /^Judge runs\s*\$0\.03$/,
+      /^Playground\s*<\$0\.01$/,
+    ]);
+    await expect(spend.getByText(/The admin's tools stop at the line/)).toHaveText(
+      "The admin's tools stop at the line, $1.00: the rest is kept for visitors. List prices: the free tier bills nothing. Switched off: Match a brief, Automatic insights, Admin agents, Search by meaning and Nightly judge. Settings",
+    );
+    await expect(spend.getByRole("link", { name: "Settings" })).toHaveAttribute(
+      "href",
+      "/admin/assistant?view=settings",
+    );
+
+    // Each model in words, the paused one first with the provider's own reason; no jargon.
+    const clock = String.raw`\d{1,2}:\d{2}(?:\s?[AP]M)?`;
+    await expect(page.getByRole("region", { name: "Models" }).getByRole("listitem")).toHaveText([
+      new RegExp(
+        String.raw`^gemini-3\.7-flash: paused after 3 failures at ${clock}, until ${clock}\s*\[429 Too Many Requests\]`,
+      ),
+      /^openrouter\/qwen\/qwen3-32b:free: trying again: the next question tests it\s*503 Service Unavailable/,
+      "gemini-3.5-flash-lite: answering; first word in 0.6 s, 1.8 s for the slowest 1 in 20",
+      "gemini-3.7-pro: answering; first word in 2.6 s, 7.4 s for the slowest 1 in 20",
+    ]);
+    await expect(page.getByRole("main").getByText(/breaker|p50|p95/i)).toHaveCount(0);
+
+    // What waits: trust's rows, each with its button, then the queues' counts in one sentence.
+    const waits = page.getByRole("region", { name: "Waits for you" });
+    await expect(waits.getByRole("listitem")).toHaveText([
+      // Raw text: the template's line breaks leave a space at either end.
+      /^\s*Demotion: the deep route\s*2 hours ago: 9 of 30 answers failed \(30 %; ceiling 20 %\)\s*Seen\s*$/,
+      /^\s*The deep route is out of the visitors' service\s*Demoted 2 hours ago: 9 of 30 answers failed \(30 %; ceiling 20 %\)\s*Reinstate\s*$/,
+    ]);
+    await expect(waits.getByText(/In the queues:/)).toHaveText(
+      "In the queues: 2 of 3 answers still to review this week, 2 drafts from the content agent, 1 FAQ proposal, 1 journal entry proposed and 1 lesson proposed.",
+    );
+    await expect(waits.getByRole("link")).toHaveText([
+      "2 of 3 answers still to review this week",
+      "2 drafts from the content agent",
+      "1 FAQ proposal",
+      "1 journal entry proposed",
+      "1 lesson proposed",
+    ]);
+    await expect(waits.getByText("Nothing waits for you.")).toHaveCount(0);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("each queue's count on Now is Today's and its own screen's, one click away", async ({
+    page,
+    baseURL,
+  }) => {
+    // Today, Now and five queue screens: more than one page's time.
+    test.slow();
+    const unmocked = await fakeApi(page, baseURL, waitingQueues());
+    // The five queues' rows: reviews, the content agent's drafts, FAQ, journal, lessons.
+    const queueLink = /^\d+ (?:of \d+ answers|drafts? from|FAQ|journal|lessons?)/;
+    const words = [
+      "2 of 3 answers still to review this week",
+      "2 drafts from the content agent",
+      "1 FAQ proposal",
+      "1 journal entry proposed",
+      "1 lesson proposed",
+    ];
+    // Text, not innerText: Playwright 1.65's Firefox crashes reading innerText after it has worked
+    // out these links' names (as in axe, `fixtures.ts`). Today's rows add a time and an action.
+    await openAdmin(page, "/admin");
+    await expect(
+      page.getByRole("region", { name: "Needs you" }).getByRole("link", { name: queueLink }),
+    ).toHaveText(words.map((row) => new RegExp(String.raw`^\s*${row}`)));
+
+    await openAdmin(page, "/admin/assistant");
+    const waits = page.getByRole("region", { name: "Waits for you" });
+    await expect(waits.getByRole("link", { name: queueLink })).toHaveText(words);
+
+    /** Follows a row of Now's to its screen. */
+    const follow = async (name: RegExp, url: RegExp) => {
+      if (!page.url().endsWith("/admin/assistant")) {
+        await openAdmin(page, "/admin/assistant");
+      }
+      await waits.getByRole("link", { name }).click();
+      await expect(page).toHaveURL(url);
+    };
+    await follow(/^2 of 3 answers still to review this week/, /\/admin\/assistant\?view=reviews$/);
+    await expect(page.getByText("1 of 3 reviewed · 12 answers this week")).toBeVisible();
+    await follow(/^2 drafts from the content agent/, /\/admin\/agent$/);
+    await expect(
+      page.getByRole("region", { name: "Proposals" }).getByRole("checkbox", { name: /^Select / }),
+    ).toHaveCount(2);
+    await follow(/^1 FAQ proposal/, /\/admin\/assistant\?view=questions$/);
+    await expect(page.getByRole("region", { name: "Proposals" }).getByRole("article")).toHaveCount(
+      1,
+    );
+    await follow(/^1 journal entry proposed/, /\/admin\/assistant\?view=journal$/);
+    await expect(
+      page
+        .getByRole("group", { name: "Journal filter" })
+        .getByRole("button", { name: "Proposed 1" }),
+    ).toBeVisible();
+    await follow(/^1 lesson proposed/, /\/admin\/assistant\?view=journal$/);
+    await expect(
+      page.getByRole("region", { name: "Lessons" }).getByText("Proposed", { exact: true }),
+    ).toHaveCount(1);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("Seen and Reinstate from the keyboard: the row goes, and Waits for you takes the focus", async ({
+    page,
+    baseURL,
+  }) => {
+    let seen = false;
+    let reinstated = false;
+    const unmocked = await fakeApi(page, baseURL, {
+      ...busyDay(),
+      "GET /admin/assistant/health": () => ({
+        status: 200,
+        body: busyHealth({ alerts: seen ? 0 : 1, demoted: reinstated ? [] : [BUSY_DEMOTION] }),
+      }),
+      "GET /admin/assistant/trust": () => ({
+        status: 200,
+        body: trustView({
+          alerts: seen ? [] : [BUSY_ALERT],
+          demoted: reinstated ? [] : [BUSY_DEMOTION],
+          audit: [BUSY_ALERT],
+        }),
+      }),
+      "POST /admin/assistant/trust/alerts/41/seen": () => {
+        seen = true;
+        return { status: 200, body: { ok: true } };
+      },
+      "POST /admin/assistant/trust/reinstate": () => {
+        reinstated = true;
+        return { status: 200, body: { ok: true } };
+      },
+    });
+    await openAdmin(page, "/admin/assistant");
+    const waits = page.getByRole("region", { name: "Waits for you" });
+    const heading = waits.getByRole("heading", { name: "Waits for you" });
+
+    const seenButton = waits.getByRole("button", { name: "Seen", exact: true });
+    await expect(seenButton).toHaveAccessibleDescription("Demotion: the deep route");
+    await seenButton.focus();
+    await page.keyboard.press("Enter");
+    await expect(seenButton).toHaveCount(0);
+    await expect(heading).toBeFocused();
+
+    const reinstate = waits.getByRole("button", { name: "Reinstate", exact: true });
+    await expect(reinstate).toHaveAccessibleDescription(
+      "The deep route is out of the visitors' service",
+    );
+    await reinstate.focus();
+    await page.keyboard.press("Enter");
+    const confirm = page.getByRole("alertdialog");
+    await expect(
+      confirm.getByText(/The Playground, evals and pairwise runs still use it/),
+    ).toBeVisible();
+    await confirm.getByRole("button", { name: "Reinstate", exact: true }).press("Enter");
+    await expect(reinstate).toHaveCount(0);
+    await expect(heading).toBeFocused();
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a stopped feature's paid buttons stay stops: they say why, and a click, Enter or Space sends nothing", async ({
+    page,
+    baseURL,
+  }) => {
+    // Four views and the panel, every paid button pressed three ways: more than one page's time.
+    test.slow();
+    const unmocked = await fakeApi(page, baseURL, everyFeatureStopped());
+    const sent = paidRequests(page);
+    await openAdmin(page, "/admin/assistant");
+
+    await openView(page, "Quality");
+    const evals = "Eval runs: stopped at its cap. Settings";
+    await pressStopped(page, page.getByRole("button", { name: "Run the evals" }), evals);
+    await pressStopped(page, page.getByRole("button", { name: "Resume the run" }), evals);
+    await pressStopped(
+      page,
+      page.getByRole("button", { name: "Compare", exact: true }),
+      "Pairwise runs: budget spent. Settings",
+    );
+    // Enter in a field submits the form: still nothing.
+    await page.getByLabel("A", { exact: true }).press("Enter");
+
+    await openView(page, "Reviews");
+    await pressStopped(
+      page,
+      page.getByRole("button", { name: "Judge 3 reviewed answers" }),
+      "Judge runs: switched off. Settings",
+    );
+
+    await openView(page, "Journal");
+    const agents = /Admin agents: switched off\. Settings$/;
+    await pressStopped(
+      page,
+      page.getByRole("button", { name: "Replay on both chains (paid)" }),
+      agents,
+    );
+    await pressStopped(
+      page,
+      page.getByRole("button", { name: "Draft an FAQ proposal (paid)" }),
+      agents,
+    );
+
+    await openView(page, "Questions");
+    const insights = "Insights: stopped at the reserve line. Settings";
+    await pressStopped(
+      page,
+      page.getByRole("button", { name: "Analyse visitor questions" }),
+      insights,
+    );
+    await pressStopped(page, page.getByRole("button", { name: "Refresh", exact: true }), insights);
+    await pressStopped(
+      page,
+      page.getByRole("button", { name: "Draft an FAQ proposal (paid)" }),
+      "Relocation and remote work Admin agents: switched off. Settings",
+    );
+    await page.getByRole("button", { name: "New entry" }).click();
+    await page.locator("#faq-q-en").fill("Do you work remotely?");
+    await page.locator("#faq-q-de").fill("Arbeiten Sie remote?");
+    const drafts = page.getByRole("button", { name: "Draft an answer from the portfolio" });
+    await expect(drafts).toHaveCount(2);
+    await pressStopped(page, drafts.first(), "Copilot: switched off. Settings");
+    await pressStopped(page, drafts.last(), "Copilot: switched off. Settings");
+
+    await page.getByRole("button", { name: "Playground", exact: true }).click();
+    await pressStopped(
+      page,
+      page.getByRole("button", { name: "Ask (paid)", exact: true }),
+      "Playground: stopped at the reserve line. Settings",
+    );
+    // Enter in the question asks: still nothing.
+    await playgroundQuestion(page).fill("Where is he based?");
+    await playgroundQuestion(page).press("Enter");
+
+    expect(sent).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a stop's Settings link opens Settings; in the Playground it closes the panel first", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, everyFeatureStopped());
+    await openAdmin(page, "/admin/assistant?view=quality");
+    await page.locator("#stop-eval").getByRole("link", { name: "Settings", exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/assistant\?view=settings$/);
+    await expect(page.locator("#ask-budget")).toBeVisible();
+
+    await openView(page, "Quality");
+    await page.getByRole("button", { name: "Playground", exact: true }).click();
+    await page
+      .locator("#stop-playground")
+      .getByRole("link", { name: "Settings", exact: true })
+      .click();
+    await expect(playgroundQuestion(page)).toHaveCount(0);
+    await expect(page).toHaveURL(/\/admin\/assistant\?view=settings$/);
+    await expect(page.locator("#ask-budget")).toBeVisible();
+  });
+
+  test("a feature switched on in Settings frees its buttons at once", async ({ page, baseURL }) => {
+    let savedYet = false;
+    const unmocked = await fakeApi(page, baseURL, {
+      ...everyFeatureStopped(),
+      // Once saved, the server lets eval runs spend again.
+      "GET /admin/assistant/health": () => ({
+        status: 200,
+        body: stoppedHealth(savedYet ? "ok" : "cap"),
+      }),
+      "PUT /admin/assistant/settings": () => {
+        savedYet = true;
+        return { status: 200, body: { ok: true, settings: assistantSettings() } };
+      },
+    });
+    await openAdmin(page, "/admin/assistant?view=quality");
+    const run = page.getByRole("button", { name: "Run the evals" });
+    await expect(run).toHaveAttribute("aria-disabled", "true");
+
+    await openView(page, "Settings");
+    await page.getByLabel("Eval runs", { exact: true }).fill("0.5");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText("Saved — live now")).toBeVisible();
+    await openView(page, "Quality");
+    await expect(run).not.toHaveAttribute("aria-disabled");
+    await expect(page.locator("#stop-eval")).toHaveCount(0);
+    expect(unmocked).toEqual([]);
+  });
+
+  for (const width of [1280, 390]) {
+    test(`Now works from the keyboard at ${width}: every control in reading order, in sight`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
+      await fakeApi(page, baseURL, busyDay());
+      await openAdmin(page, "/admin/assistant");
+      const waits = page.getByRole("region", { name: "Waits for you" });
+      await expect(waits.getByRole("link", { name: /^1 lesson proposed/ })).toBeVisible();
+      await viewLink(page, "Settings").focus();
+      const stops = [
+        waits.getByRole("button", { name: "Seen", exact: true }),
+        waits.getByRole("button", { name: "Reinstate", exact: true }),
+        waits.getByRole("link", { name: /^2 of 3 answers still to review/ }),
+        waits.getByRole("link", { name: /^2 drafts from the content agent/ }),
+        waits.getByRole("link", { name: /^1 FAQ proposal/ }),
+        waits.getByRole("link", { name: /^1 journal entry proposed/ }),
+        waits.getByRole("link", { name: /^1 lesson proposed/ }),
+        page.getByRole("region", { name: "Spent today" }).getByRole("link", { name: "Settings" }),
+      ];
+      await runSequentially(stops, async (stop) => {
+        await tabTo(page, stop);
+        await expect(stop).toBeInViewport();
+      });
+    });
+  }
+
+  for (const colorScheme of ["dark", "light"] as const) {
+    test(`Now on a busy day, in the ${colorScheme} theme, has no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await fakeApi(page, baseURL, busyDay());
+      await openAdmin(page, "/admin/assistant");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+      await expect(
+        page
+          .getByRole("region", { name: "Waits for you" })
+          .getByRole("link", { name: /^1 lesson proposed/ }),
+      ).toBeVisible();
+      expect(await axeViolations(page)).toEqual([]);
+    });
+
+    test(`Quality with its paid buttons stopped, in the ${colorScheme} theme, has no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await fakeApi(page, baseURL, everyFeatureStopped());
+      await openAdmin(page, "/admin/assistant?view=quality");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+      await expect(page.locator("#stop-eval")).toBeVisible();
+      await expect(page.locator("[role=status] .sr-only")).toHaveCount(0);
       expect(await axeViolations(page)).toEqual([]);
     });
   }

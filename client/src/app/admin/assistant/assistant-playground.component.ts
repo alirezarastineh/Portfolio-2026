@@ -17,6 +17,9 @@ import type { Locale } from "../../content/schema";
 import { AdminApiService } from "../admin-api.service";
 import { readCsrfCookie } from "../admin-api.interceptor";
 import { seconds, usd } from "../outcomes";
+import { AdminPulseService } from "../pulse.service";
+import { featureStop } from "../spending";
+import { FeatureStopComponent } from "./feature-stop.component";
 
 interface Meta {
   sig?: string;
@@ -129,7 +132,7 @@ export class PlaygroundSession {
 @Component({
   selector: "app-assistant-playground",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, HlmButton, HlmSwitch, HlmTextarea],
+  imports: [FeatureStopComponent, FormsModule, HlmButton, HlmSwitch, HlmTextarea],
   host: { class: "flex flex-col gap-4" },
   template: `
     <div class="flex flex-wrap items-center gap-4 text-sm">
@@ -196,7 +199,7 @@ export class PlaygroundSession {
       }
     </div>
 
-    <form class="flex flex-col gap-2" (submit)="$event.preventDefault(); s.send()">
+    <form class="flex flex-col gap-2" (submit)="$event.preventDefault(); ask()">
       <label for="playground-question" class="text-sm font-medium">
         Question for the draft assistant
       </label>
@@ -211,16 +214,39 @@ export class PlaygroundSession {
         (keydown.enter)="onEnter($event)"
       ></textarea>
       <div class="flex gap-2">
-        <button hlmBtn type="submit" [disabled]="busy()">Ask (paid)</button>
+        <!-- Paid: off while the Playground would be refused; Enter in the question sends nothing then. -->
+        <button
+          hlmBtn
+          type="submit"
+          class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+          [attr.aria-disabled]="stop() ? 'true' : null"
+          [attr.aria-describedby]="stop() ? 'stop-playground' : null"
+          [disabled]="busy()"
+        >
+          Ask (paid)
+        </button>
         @if (busy()) {
           <button hlmBtn variant="outline" type="button" (click)="s.chat.stop()">Stop</button>
         }
       </div>
+      @if (stop(); as reason) {
+        <!-- Settings is behind this panel: following the link closes it. -->
+        <app-feature-stop
+          noteId="stop-playground"
+          [reason]="reason"
+          (followed)="pulse.playgroundOpen.set(false)"
+        />
+      }
     </form>
   `,
 })
 export class AssistantPlaygroundComponent {
   protected readonly s = inject(PlaygroundSession);
+  protected readonly pulse = inject(AdminPulseService);
+  /** Why a question would be refused now, or null: Ask says so, and nothing is sent. */
+  protected readonly stop = computed(() =>
+    featureStop(this.pulse.assistant()?.spend, "playground"),
+  );
 
   protected readonly messages = computed(() => this.s.chat.messages);
   protected readonly status = computed(() => this.s.chat.status);
@@ -241,7 +267,14 @@ export class AssistantPlaygroundComponent {
       return;
     }
     event.preventDefault();
-    this.s.send();
+    this.ask();
+  }
+
+  /** Ask and Enter both come here: a stopped Playground sends nothing. */
+  protected ask(): void {
+    if (!this.stop()) {
+      this.s.send();
+    }
   }
 
   protected text(m: PlaygroundMessage): string {

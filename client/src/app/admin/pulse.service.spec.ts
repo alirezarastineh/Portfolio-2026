@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdminApiService, type MessageRow } from "./admin-api.service";
 import type { AssistantHealth } from "./assistant-types";
-import { AdminPulseService, assistantAlert } from "./pulse.service";
+import { AdminPulseService, assistantAlert, offWords } from "./pulse.service";
 
 const ok = <T>(data: T) => ({ ok: true as const, data });
 const byCodePoint = (a: string, b: string): number => {
@@ -94,7 +94,7 @@ describe("assistantAlert", () => {
     expect(assistantAlert(health())).toBeNull();
   });
 
-  it("names an open breaker first, then failed answers", () => {
+  it("names a paused model first, then failed answers, in words", () => {
     const breaker = {
       model: "m",
       state: "open" as const,
@@ -107,8 +107,13 @@ describe("assistantAlert", () => {
     };
     const failures = { answers: 4, failures: 2, fallbackRate: 0, models: [] };
     expect(assistantAlert(health({ breakers: [breaker], last24h: failures }))).toBe(
-      "A model is failing: its breaker is open",
+      "A model is paused after failures",
     );
+    expect(
+      assistantAlert(
+        health({ breakers: [breaker, { ...breaker, model: "n" }], last24h: failures }),
+      ),
+    ).toBe("2 models are paused after failures");
     expect(assistantAlert(health({ last24h: failures }))).toBe(
       "2 answers failed in the last 24 hours",
     );
@@ -121,6 +126,16 @@ describe("assistantAlert", () => {
       "1 trust alert and the deep route is demoted",
     );
     expect(assistantAlert(health({ trust: { alerts: 0, demoted: [] } }))).toBeNull();
+  });
+});
+
+describe("offWords", () => {
+  it("says why the assistant is off in words, and names a code it does not know", () => {
+    expect(offWords("disabled_by_admin")).toBe("switched off in Settings");
+    expect(offWords("disabled")).toBe("switched off on this server");
+    expect(offWords("unconfigured")).toBe("not set up on this server");
+    // A name every object has is still a code, not a word.
+    expect(offWords("constructor")).toBe("the server's reason: constructor");
   });
 });
 

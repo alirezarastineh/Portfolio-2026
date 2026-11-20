@@ -1,16 +1,11 @@
 import { DecimalPipe } from "@angular/common";
 import {
-  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
-  ElementRef,
   inject,
-  Injector,
   OnInit,
-  output,
   signal,
-  viewChild,
 } from "@angular/core";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmBadge } from "@spartan-ng/helm/badge";
@@ -29,7 +24,6 @@ import {
   type DayRow,
 } from "../answer-trace";
 import type { AssistantHealth, AssistantUsage } from "../assistant-types";
-import { noticeLine } from "../lessons";
 import { mcpSummary } from "../mcp-usage";
 import { featureRows, stateLabel } from "../spending";
 
@@ -43,15 +37,14 @@ interface ModelTotal {
 }
 
 /**
- * The assistant at a glance: is it answering, what has it cost today and
- * which feature spent it (everything but the terminal stops at the visitors'
- * reserve), how fast and how often a fallback answered, each model's breaker, what the
- * corpus weighs, and 30 days of usage. The signals show what is otherwise
- * invisible: whether the fixed prefix is served from the cache, how many
- * requests the gate turned away, and how often a model invented a citation.
+ * The assistant's usage, a report in Quality (plan 5, U18; the Overview's lower half, while Now
+ * says the state, today's spend and the models in words): spending by feature over the period,
+ * what the corpus weighs, and 30 days of usage. The signals show what is otherwise invisible:
+ * whether the fixed prefix is served from the cache, how many requests the gate turned away, and
+ * how often a model invented a citation.
  */
 @Component({
-  selector: "app-assistant-overview",
+  selector: "app-assistant-usage",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DecimalPipe,
@@ -73,120 +66,6 @@ interface ModelTotal {
       <app-form-skeleton kind="list" [rows]="3" label="Loading the assistant's health…" />
     } @else {
       @let h = health()!;
-      <!-- Insights the nightly check ran when failures rose (plan phase 25), until seen. -->
-      @if (h.learning?.notice; as notice) {
-        <div
-          id="insights-notice-box"
-          class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3 text-sm"
-        >
-          <p id="insights-notice" class="m-0">{{ noticeText(notice) }}</p>
-          <div class="flex flex-wrap gap-2">
-            <button
-              hlmBtn
-              size="sm"
-              variant="outline"
-              type="button"
-              aria-describedby="insights-notice"
-              (click)="toInsights.emit()"
-            >
-              Open Insights
-            </button>
-            <button
-              hlmBtn
-              size="sm"
-              variant="ghost"
-              type="button"
-              aria-describedby="insights-notice"
-              (click)="seen(notice.id)"
-            >
-              Seen
-            </button>
-          </div>
-        </div>
-      }
-      <!-- The dashboard's tiles: a figure, what it means, the detail under it. -->
-      <section aria-labelledby="assistant-glance">
-        <h2 #glance id="assistant-glance" class="sr-only" tabindex="-1">
-          The assistant at a glance
-        </h2>
-        <ul class="m-0 grid list-none gap-3 p-0 sm:grid-cols-3" role="list">
-          <li appKpiTile="Status">
-            <p
-              class="m-0 text-figure"
-              [class]="h.state.state === 'ok' ? 'text-foreground' : 'text-destructive'"
-            >
-              {{ stateLabel() }}
-            </p>
-            @if (h.state.state === "off") {
-              <p class="m-0 font-data text-xs text-muted-foreground">{{ h.state.reason }}</p>
-            }
-            <p class="m-0 text-hint text-muted-foreground">
-              {{ h.inFlight }} {{ h.inFlight === 1 ? "answer" : "answers" }} streaming now
-            </p>
-          </li>
-          <li appKpiTile="Spent today (UTC)">
-            @if (h.state.state !== "off") {
-              <p class="m-0 text-figure tabular-nums">
-                \${{ h.state.spentUsd | number: "1.2-4" }}
-                <span class="text-sm font-normal text-muted-foreground"
-                  >of \${{ h.state.budgetUsd | number: "1.2-2" }}</span
-                >
-              </p>
-              <div class="relative h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-                <div
-                  class="h-full rounded-full bg-accent-orange"
-                  [style.width.%]="spentShare()"
-                ></div>
-                @if (h.spend; as s) {
-                  <div
-                    class="absolute inset-y-0 w-0.5 bg-foreground"
-                    [style.left.%]="(1 - s.publicReserve) * 100"
-                  ></div>
-                }
-              </div>
-              @if (h.spend; as s) {
-                <p class="m-0 text-hint text-muted-foreground">
-                  All but the visitors' assistant stop at \${{
-                    s.reserveLineUsd | number: "1.2-2"
-                  }}
-                  ({{ s.publicReserve * 100 | number: "1.0-0" }}
-                  % kept for visitors)
-                </p>
-              }
-              @if (h.models?.freeOnly) {
-                <p class="m-0 text-hint text-muted-foreground">
-                  List-price equivalent: the free tier bills nothing
-                </p>
-              }
-              @if (h.state.state === "ok" && !h.state.deepAllowed) {
-                <p class="m-0 text-hint text-muted-foreground">
-                  Deep model off (over 80 % or disabled)
-                </p>
-              }
-            } @else {
-              <p class="m-0 text-figure text-muted-foreground">—</p>
-            }
-          </li>
-          <li appKpiTile="Last 24 h">
-            <p class="m-0 text-figure tabular-nums">
-              {{ h.last24h.answers }}
-              <span class="text-sm font-normal text-muted-foreground">{{
-                h.last24h.answers === 1 ? "answer" : "answers"
-              }}</span>
-            </p>
-            <p
-              class="m-0 text-xs"
-              [class]="h.last24h.failures ? 'text-destructive' : 'text-muted-foreground'"
-            >
-              {{ h.last24h.failures }} failed
-            </p>
-            <p class="m-0 text-hint text-muted-foreground">
-              {{ h.last24h.fallbackRate * 100 | number: "1.0-1" }} % from a fallback
-            </p>
-          </li>
-        </ul>
-      </section>
-
       @if (h.spend) {
         <section class="flex flex-col gap-2" aria-labelledby="assistant-spend">
           <h2 id="assistant-spend" class="m-0 text-sm font-medium">Spending by feature</h2>
@@ -229,63 +108,16 @@ interface ModelTotal {
               </tbody>
             </table>
           </div>
+          @if (h.models; as guard) {
+            @if (guard.freeOnly && guard.excluded.length) {
+              <p class="m-0 text-hint text-muted-foreground">
+                Left out by the free-tier guard, since they bill:
+                <span class="font-data">{{ guard.excluded.join(", ") }}</span>
+              </p>
+            }
+          }
         </section>
       }
-
-      <section class="flex flex-col gap-2">
-        <h2 class="m-0 text-sm font-medium">Models</h2>
-        @if (h.models; as guard) {
-          @if (!guard.freeOnly) {
-            <p class="m-0 text-xs text-destructive">
-              Free-tier guard off (SERVER_AI_FREE_ONLY=false): models that bill may be called.
-            </p>
-          } @else if (guard.excluded.length) {
-            <p class="m-0 text-hint text-muted-foreground">
-              Left out by the free-tier guard, since they bill:
-              <span class="font-data">{{ guard.excluded.join(", ") }}</span>
-            </p>
-          }
-        }
-        <div class="overflow-x-auto rounded-lg border border-border">
-          <table class="w-full text-sm">
-            <thead class="text-left text-xs text-muted-foreground">
-              <tr>
-                <th class="p-2 font-normal">Model</th>
-                <th class="p-2 font-normal">Breaker</th>
-                <th class="p-2 font-normal">p50 / p95 first token (24 h)</th>
-                <th class="p-2 font-normal">Last success</th>
-                <th class="p-2 font-normal">Last error</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (b of h.breakers; track b.model) {
-                @let stats = modelStats().get(b.model);
-                <tr class="border-t border-border align-top">
-                  <td class="p-2 font-data text-xs">{{ b.model }}</td>
-                  <td class="p-2">
-                    <span hlmBadge [variant]="b.state === 'closed' ? 'outline' : 'destructive'">{{
-                      b.state
-                    }}</span>
-                  </td>
-                  <td class="p-2 font-data text-xs">
-                    @if (stats) {
-                      {{ stats.p50TtftMs ?? "–" }} / {{ stats.p95TtftMs ?? "–" }} ms ({{
-                        stats.answers
-                      }})
-                    } @else {
-                      –
-                    }
-                  </td>
-                  <td class="p-2 text-xs text-muted-foreground">{{ when(b.lastSuccessAt) }}</td>
-                  <td class="max-w-72 p-2 text-xs text-muted-foreground">
-                    {{ b.lastError ?? "" }}
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      </section>
 
       @if (h.corpus; as c) {
         <section class="flex flex-col gap-2">
@@ -486,10 +318,8 @@ interface ModelTotal {
     }
   `,
 })
-export class AssistantOverviewComponent implements OnInit {
+export class AssistantUsageComponent implements OnInit {
   private readonly api = inject(AdminApiService);
-  private readonly injector = inject(Injector);
-  private readonly glance = viewChild<ElementRef<HTMLElement>>("glance");
 
   protected readonly health = signal<AssistantHealth | null>(null);
   protected readonly usage = signal<AssistantUsage | null>(null);
@@ -499,36 +329,10 @@ export class AssistantOverviewComponent implements OnInit {
   /** Gemini's own count of each language's prefix, once asked. */
   protected readonly geminiCount = signal<{ en: number | null; de: number | null } | null>(null);
 
-  /** "Answering", "Resting", "Off": the state in words. */
-  protected readonly stateLabel = computed(() => {
-    const state = this.health()?.state.state;
-    if (state === "ok") {
-      return "Answering";
-    }
-    return state === "resting" ? "Resting" : "Off";
-  });
-
-  protected readonly spentShare = computed(() => {
-    const state = this.health()?.state;
-    if (!state || state.state === "off" || !state.budgetUsd) {
-      return 0;
-    }
-    return Math.min(100, (state.spentUsd / state.budgetUsd) * 100);
-  });
-
-  /** Asks the page to open Insights, in Questions. */
-  readonly toInsights = output();
-
-  protected readonly noticeText = noticeLine;
-
   /** Each feature's spend today and over the period, and what its next call would get. */
   protected readonly features = computed(() => featureRows(this.health()?.spend, this.usage()));
 
   protected readonly stateText = stateLabel;
-
-  protected readonly modelStats = computed(
-    () => new Map((this.health()?.last24h.models ?? []).map((m) => [m.model, m])),
-  );
 
   protected readonly kinds = computed(() => Object.entries(this.health()?.corpus?.documents ?? {}));
 
@@ -606,19 +410,6 @@ export class AssistantOverviewComponent implements OnInit {
     }
   }
 
-  /** The nightly check's insights, seen: the notice goes. */
-  protected async seen(id: string): Promise<void> {
-    const result = await this.api.insightsSeen(id);
-    if (!result.ok) {
-      toast.error("Could not mark the insights seen", { description: result.error });
-      return;
-    }
-    this.health.update((h) => (h ? { ...h, learning: { notice: null } } : h));
-    toast.success("Marked as seen");
-    // The button is gone with the notice: the admin lands on the page's first heading.
-    afterNextRender(() => this.glance()?.nativeElement.focus(), { injector: this.injector });
-  }
-
   protected async count(): Promise<void> {
     this.counting.set(true);
     const result = await this.api.assistantTokenCount();
@@ -632,9 +423,5 @@ export class AssistantOverviewComponent implements OnInit {
     } else {
       toast.error("Gemini could not count", { description: result.error });
     }
-  }
-
-  protected when(iso: string | null): string {
-    return iso ? new Date(iso).toLocaleString() : "never";
   }
 }

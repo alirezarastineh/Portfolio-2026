@@ -25,22 +25,33 @@ const ALL: readonly PulsePart[] = ["status", "review", "messages", "i18n", "assi
 /** What a write can change. The assistant's health is not among them. */
 const AFTER_WRITE: readonly PulsePart[] = ["status", "review", "messages", "i18n"];
 
+/** The server's codes for an assistant that is off (`guard.ts` `offReason`), in words. */
+const OFF_WORDS = new Map([
+  ["disabled", "switched off on this server"],
+  ["unconfigured", "not set up on this server"],
+  ["disabled_by_admin", "switched off in Settings"],
+]);
+
+/** Why the assistant is off, in words; a code this admin does not know is named as the server's. */
+export const offWords = (reason: string): string =>
+  OFF_WORDS.get(reason) ?? `the server's reason: ${reason}`;
+
 /** Why the assistant needs a look, or null while it is answering normally. */
 export function assistantAlert(health: AssistantHealth | null): string | null {
   if (!health) {
     return null;
   }
-  // An alert or a demotion waits for a person; a breaker heals by itself.
+  // An alert or a demotion waits for a person; a paused model comes back by itself.
   const trust = trustAlert(health.trust);
   if (trust) {
     return trust;
   }
   const open = health.breakers.filter((b) => b.state === "open").length;
   if (open === 1) {
-    return "A model is failing: its breaker is open";
+    return "A model is paused after failures";
   }
   if (open > 1) {
-    return `${open} models are failing: their breakers are open`;
+    return `${open} models are paused after failures`;
   }
   const failed = health.last24h.failures;
   if (failed === 1) {

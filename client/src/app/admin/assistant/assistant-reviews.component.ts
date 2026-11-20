@@ -30,6 +30,9 @@ import { isShortcutTarget } from "../components/shortcut-sheet.component";
 import { isActive } from "../eval-runs";
 import { stepFrom } from "../inbox";
 import { calibrationLine, type JudgeStatus } from "../pairwise";
+import { AdminPulseService } from "../pulse.service";
+import { featureStop } from "../spending";
+import { FeatureStopComponent } from "./feature-stop.component";
 import { FreezeCaseComponent } from "./freeze-case.component";
 import { cycleLabel, emptyLabels, goodShare, LABEL_NAMES, nextUnreviewed } from "../review-queue";
 import { UnsavedChangesService } from "../unsaved-changes.service";
@@ -55,6 +58,7 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DecimalPipe,
+    FeatureStopComponent,
     FormsModule,
     FormSkeletonComponent,
     FreezeCaseComponent,
@@ -249,17 +253,24 @@ const VERDICTS: { value: boolean | null; label: string }[] = [
             </p>
             @if (j.unjudged) {
               <div>
+                <!-- Paid: off while a judge run would be refused, and saying why (plan 5, U18). -->
                 <button
                   hlmBtn
                   type="button"
                   size="sm"
                   variant="outline"
+                  class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                  [attr.aria-disabled]="stop() ? 'true' : null"
+                  [attr.aria-describedby]="stop() ? 'stop-judge' : null"
                   [disabled]="judging()"
                   (click)="judgeReviewed(j.unjudged)"
                 >
                   Judge {{ j.unjudged }} reviewed {{ j.unjudged === 1 ? "answer" : "answers" }}
                 </button>
               </div>
+              @if (stop(); as reason) {
+                <app-feature-stop noteId="stop-judge" [reason]="reason" />
+              }
             }
           } @else {
             <p class="m-0 text-hint text-muted-foreground">
@@ -277,6 +288,9 @@ export class AssistantReviewsComponent implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  private readonly pulse = inject(AdminPulseService);
+  /** Why a judge run would be refused now, or null: its button says so and sends nothing. */
+  protected readonly stop = computed(() => featureStop(this.pulse.assistant()?.spend, "judge"));
 
   protected readonly labels = REVIEW_LABELS;
   protected readonly names = LABEL_NAMES;
@@ -329,6 +343,9 @@ export class AssistantReviewsComponent implements OnInit {
 
   /** A paid background run: the judge scores the reviewed answers it has not yet. */
   protected async judgeReviewed(count: number): Promise<void> {
+    if (this.stop()) {
+      return;
+    }
     const go = await this.confirm.ask({
       title: `Judge ${count} reviewed ${count === 1 ? "answer" : "answers"}?`,
       description:

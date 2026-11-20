@@ -36,6 +36,30 @@ export interface TodayFacts {
   lessons: LessonsView | null;
 }
 
+/** The queues that wait for a decision: Today and the Assistant's Now count them alike. */
+export type QueueFacts = Pick<TodayFacts, "reviews" | "proposals" | "faq" | "journal" | "lessons">;
+
+export const QUEUES: readonly (keyof QueueFacts)[] = [
+  "reviews",
+  "proposals",
+  "faq",
+  "journal",
+  "lessons",
+];
+
+/** Each queue's read, named for "Could not check …". */
+export const QUEUE_NAMES: Record<keyof QueueFacts, string> = {
+  reviews: "the answers to review",
+  proposals: "the content agent's drafts",
+  faq: "the FAQ proposals",
+  journal: "the journal",
+  lessons: "the lessons",
+};
+
+/** "the inbox", "the inbox and the journal", "a, b and c". */
+export const sentence = (names: readonly string[]): string =>
+  names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? "");
+
 /** "1 new message", "2 new messages". */
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 

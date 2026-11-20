@@ -26,6 +26,7 @@ import { AdminApiService } from "../admin-api.service";
 import type { AssistantEnv, AssistantSettings, AssistantSettingsInput } from "../assistant-types";
 import { countChangedFields } from "../changed-fields";
 import { SaveBarComponent } from "../components/editor-chrome.component";
+import { AdminPulseService } from "../pulse.service";
 import {
   CAPPED,
   featureLabel,
@@ -327,6 +328,7 @@ const suggestionLines = (text: string): string[] =>
 })
 export class AssistantSettingsComponent implements OnInit {
   private readonly api = inject(AdminApiService);
+  private readonly pulse = inject(AdminPulseService);
 
   protected readonly locales = LOCALES;
   protected readonly roles = ["lite", "deep", "copilot", "insight"] as const;
@@ -457,5 +459,7 @@ export class AssistantSettingsComponent implements OnInit {
     this.saved.set(draft);
     this.draft.set(structuredClone(draft));
     toast.success("Saved — live now");
+    // A switch or a cap moves what each feature may spend: the paid buttons follow at once.
+    void this.pulse.refresh(["assistant"]);
   }
 }

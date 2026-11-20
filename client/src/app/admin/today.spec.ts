@@ -107,10 +107,10 @@ describe("Today's Needs you", () => {
     ]);
   });
 
-  it("says one as one, and sends a failing model to the Assistant", () => {
+  it("says one as one, and sends a paused model to the Assistant", () => {
     const rows = needsYou({
       ...NONE,
-      alert: "A model is failing: its breaker is open",
+      alert: "A model is paused after failures",
       messages: [mail("new")],
       reviews: reviews(1, 0),
       proposals: [proposal("needs_you")],
@@ -118,7 +118,7 @@ describe("Today's Needs you", () => {
     });
     expect(rows.map((row) => row.words)).toEqual([
       "Media and database are out of step: 1 record without a file.",
-      "A model is failing: its breaker is open",
+      "A model is paused after failures",
       "1 new message",
       "1 of 1 answer still to review this week",
       "1 draft from the content agent",

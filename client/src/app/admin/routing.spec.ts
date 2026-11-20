@@ -116,7 +116,7 @@ describe("the router's report in the Overview", () => {
       "3 moved up to the deep chain mid-answer (8 % of those routed lite): 2 fetched two projects, 1 a search spanned two projects",
     );
     expect(sensitiveLine(view())).toBe(
-      "Careful answers (the newspaper test): 3 (pay and rates 2, family 1)",
+      "Careful answers, on topics that would look bad quoted in a newspaper: 3 (pay and rates 2, family 1)",
     );
     expect(escalationLine(view({ escalation: { answers: 0, rate: 0, byReason: {} } }))).toBeNull();
     expect(sensitiveLine(view({ sensitive: { answers: 0, byTopic: {} } }))).toBeNull();

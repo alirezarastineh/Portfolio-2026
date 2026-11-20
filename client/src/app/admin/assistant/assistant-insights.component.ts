@@ -23,6 +23,9 @@ import { FaqDraftsService } from "../faq-drafts.service";
 import { faqProposalWords } from "../faq-proposals";
 import { scopeFromTitle, topicProblem, type InsightSnapshot, type InsightsView } from "../lessons";
 import { LoadErrorComponent } from "../components/load-state.component";
+import { AdminPulseService } from "../pulse.service";
+import { featureStop } from "../spending";
+import { FeatureStopComponent } from "./feature-stop.component";
 import { LessonFormComponent } from "./lesson-form.component";
 
 /**
@@ -36,13 +39,30 @@ import { LessonFormComponent } from "./lesson-form.component";
 @Component({
   selector: "app-assistant-insights",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmBadge, HlmButton, HlmSpinner, LessonFormComponent, LoadErrorComponent],
+  imports: [
+    FeatureStopComponent,
+    HlmBadge,
+    HlmButton,
+    HlmSpinner,
+    LessonFormComponent,
+    LoadErrorComponent,
+  ],
   host: { class: "block" },
   template: `
     <section class="flex flex-col gap-4" aria-labelledby="insights-heading">
       <h2 id="insights-heading" class="m-0 text-base font-semibold">What visitors ask</h2>
       <div class="flex flex-wrap items-center gap-3">
-        <button hlmBtn type="button" size="sm" [disabled]="loading()" (click)="analyse(false)">
+        <!-- Paid: off while Insights would be refused, and saying why (plan 5, U18). -->
+        <button
+          hlmBtn
+          type="button"
+          size="sm"
+          class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+          [attr.aria-disabled]="stop() ? 'true' : null"
+          [attr.aria-describedby]="stop() ? 'stop-insights' : null"
+          [disabled]="loading()"
+          (click)="analyse(false)"
+        >
           @if (loading()) {
             <hlm-spinner class="size-4" />
           } @else {
@@ -55,6 +75,9 @@ import { LessonFormComponent } from "./lesson-form.component";
             type="button"
             variant="ghost"
             size="sm"
+            class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+            [attr.aria-disabled]="stop() ? 'true' : null"
+            [attr.aria-describedby]="stop() ? 'stop-insights' : null"
             [disabled]="loading()"
             (click)="analyse(true)"
           >
@@ -65,6 +88,9 @@ import { LessonFormComponent } from "./lesson-form.component";
           </span>
         }
       </div>
+      @if (stop(); as reason) {
+        <app-feature-stop noteId="stop-insights" [reason]="reason" />
+      }
       <p class="m-0 text-hint text-muted-foreground">
         One model call (a fraction of a cent), counted toward the daily budget. The last run shows
         here without one.
@@ -82,6 +108,9 @@ import { LessonFormComponent } from "./lesson-form.component";
       }
 
       @if (topics(); as list) {
+        @if (snapshotId() && agentStop(); as reason) {
+          <app-feature-stop noteId="stop-agent-insights" [reason]="reason" />
+        }
         <ul class="m-0 flex list-none flex-col gap-3 p-0" role="list">
           @for (topic of list; track $index) {
             <li class="flex flex-col gap-2 rounded-lg border border-border p-4 text-sm">
@@ -119,7 +148,11 @@ import { LessonFormComponent } from "./lesson-form.component";
                     type="button"
                     variant="outline"
                     size="sm"
-                    [attr.aria-describedby]="'insight-topic-' + $index"
+                    class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                    [attr.aria-disabled]="agentStop() ? 'true' : null"
+                    [attr.aria-describedby]="
+                      'insight-topic-' + $index + (agentStop() ? ' stop-agent-insights' : '')
+                    "
                     [disabled]="drafting() !== null"
                     (click)="draftProposal($index)"
                   >
@@ -187,6 +220,13 @@ export class AssistantInsightsComponent implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly drafts = inject(FaqDraftsService);
   private readonly injector = inject(Injector);
+  private readonly pulse = inject(AdminPulseService);
+  /** Why a run would be refused now (Insights), or null: its buttons say so and send nothing. */
+  protected readonly stop = computed(() => featureStop(this.pulse.assistant()?.spend, "insights"));
+  /** The same for the FAQ proposals, which spend as Admin agents (plan phase 31). */
+  protected readonly agentStop = computed(() =>
+    featureStop(this.pulse.assistant()?.spend, "agent"),
+  );
   /** The last run kept and the nightly check's last word; null until loaded. */
   protected readonly view = signal<InsightsView | null>(null);
   protected readonly topics = signal<InsightTopic[] | null>(null);
@@ -285,6 +325,9 @@ export class AssistantInsightsComponent implements OnInit {
   }
 
   protected async analyse(refresh: boolean): Promise<void> {
+    if (this.stop()) {
+      return;
+    }
     const mine = ++this.latest;
     this.loading.set(true);
     this.lessonFor.set(null);
@@ -312,7 +355,7 @@ export class AssistantInsightsComponent implements OnInit {
    */
   protected async draftProposal(topic: number): Promise<void> {
     const snapshotId = this.snapshotId();
-    if (!snapshotId || this.drafting() !== null) {
+    if (!snapshotId || this.drafting() !== null || this.agentStop()) {
       return;
     }
     this.drafting.set(topic);

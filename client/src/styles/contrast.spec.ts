@@ -192,6 +192,23 @@ describe("the admin's pairs", () => {
       expect(ratio(colour(admin, theme, remove), surface)).toBeGreaterThanOrEqual(GRAPHIC);
     });
 
+    it("draws Now's spend bars (plan 5, U18): the fill on its track, the line through both, at 3:1", () => {
+      const now = read("../app/admin/assistant/assistant-now.component.ts");
+      const fillOf = (marker: string) =>
+        new RegExp(String.raw`class="[^"]*${marker}[^"]*\bbg-([\w-]+)`).exec(now)?.[1];
+      const track = fillOf(String.raw`relative h-2\.5`);
+      const bar = fillOf("left-0 rounded-r");
+      const line = fillOf("w-px");
+      expect([track, bar, line]).toEqual(["surface-2", "foreground", "muted-foreground"]);
+      if (!track || !bar || !line) {
+        throw new Error("Expected the spend bars' classes in assistant-now");
+      }
+      const surface = colour(admin, theme, track);
+      expect(ratio(colour(admin, theme, bar), surface)).toBeGreaterThanOrEqual(GRAPHIC);
+      expect(ratio(colour(admin, theme, line), surface)).toBeGreaterThanOrEqual(GRAPHIC);
+      expect(ratio(colour(admin, theme, line), page)).toBeGreaterThanOrEqual(GRAPHIC);
+    });
+
     it("reads the rich text's code block: its surface is a token, under the page's text", () => {
       const editor = read("../app/admin/components/rich-text.component.ts");
       const block = /\.admin-prose pre \{[^}]*?background: ([^;]+);/.exec(editor)?.[1];

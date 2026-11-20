@@ -9,8 +9,10 @@ describe("trust in the admin", () => {
     expect(subjectLabel("model:gemini-3.7-flash")).toBe("the model gemini-3.7-flash");
     expect(subjectLabel("route:deep")).toBe("the deep route");
     expect(subjectLabel("feature:match")).toBe("match a brief");
-    expect(levelLabel("L0")).toBe("suggests; a person approves each one");
-    expect(levelLabel("human")).toBe("people only");
+    // Named levels (plan 5, U18): the words stand alone, without the L0–L3 code.
+    expect(levelLabel("L0")).toBe("Suggests; a person approves each one");
+    expect(levelLabel("L3")).toBe("Acts alone");
+    expect(levelLabel("human")).toBe("People only");
   });
 
   it("says what waits for a person, or nothing", () => {

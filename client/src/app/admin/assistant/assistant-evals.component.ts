@@ -27,6 +27,9 @@ import {
   type ComparisonRow,
 } from "../eval-runs";
 import { judgeMark, type JudgeStatus } from "../pairwise";
+import { AdminPulseService } from "../pulse.service";
+import { featureStop } from "../spending";
+import { FeatureStopComponent } from "./feature-stop.component";
 
 const STATUS_LABELS: Record<RunRow["status"], string> = {
   queued: "waiting to start",
@@ -50,15 +53,19 @@ const POLL_MS = 2000;
 @Component({
   selector: "app-assistant-evals",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, HlmBadge, HlmButton, LoadErrorComponent],
+  imports: [DecimalPipe, FeatureStopComponent, HlmBadge, HlmButton, LoadErrorComponent],
   host: { class: "block" },
   template: `
     <div class="flex flex-col gap-6">
       <div class="flex flex-wrap items-center gap-3">
+        <!-- Paid: off while an eval run would be refused, and saying why (plan 5, U18). -->
         <button
           hlmBtn
           type="button"
           size="sm"
+          class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+          [attr.aria-disabled]="stop() ? 'true' : null"
+          [attr.aria-describedby]="stop() ? 'stop-eval' : null"
           [disabled]="busy() || !!activeRun()"
           (click)="start()"
         >
@@ -86,6 +93,9 @@ const POLL_MS = 2000;
           Runs in the background with free-tier pacing (10–15 minutes); you can leave this page.
         </span>
       </div>
+      @if (stop(); as reason) {
+        <app-feature-stop class="-mt-4" noteId="stop-eval" [reason]="reason" />
+      }
 
       @if (view(); as v) {
         <section class="flex flex-col gap-3" aria-labelledby="eval-run">
@@ -140,6 +150,9 @@ const POLL_MS = 2000;
                 type="button"
                 size="sm"
                 variant="outline"
+                class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                [attr.aria-disabled]="stop() ? 'true' : null"
+                [attr.aria-describedby]="stop() ? 'stop-eval' : null"
                 [disabled]="busy()"
                 (click)="resume(v.run)"
               >
@@ -340,6 +353,9 @@ export class AssistantEvalsComponent implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  private readonly pulse = inject(AdminPulseService);
+  /** Why an eval run would be refused now, or null: Run and Resume say so and send nothing. */
+  protected readonly stop = computed(() => featureStop(this.pulse.assistant()?.spend, "eval"));
 
   /** Every run, whatever its kind; the history lists the eval runs. */
   protected readonly runs = signal<RunRow[]>([]);
@@ -435,6 +451,9 @@ export class AssistantEvalsComponent implements OnInit {
   }
 
   protected async start(): Promise<void> {
+    if (this.stop()) {
+      return;
+    }
     const go = await this.confirm.ask({
       title: "Run the eval suite?",
       description:
@@ -467,6 +486,9 @@ export class AssistantEvalsComponent implements OnInit {
   }
 
   protected async resume(run: RunRow): Promise<void> {
+    if (this.stop()) {
+      return;
+    }
     const left = run.progress.total - run.progress.done;
     const go = await this.confirm.ask({
       title: "Resume the run?",

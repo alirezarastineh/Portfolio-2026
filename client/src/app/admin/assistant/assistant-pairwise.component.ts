@@ -18,7 +18,10 @@ import { AdminApiService } from "../admin-api.service";
 import type { RunItem, RunRow } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
 import { canResume, isActive, progressShare } from "../eval-runs";
+import { AdminPulseService } from "../pulse.service";
+import { featureStop } from "../spending";
 import { UnsavedChangesService } from "../unsaved-changes.service";
+import { FeatureStopComponent } from "./feature-stop.component";
 import {
   OUTCOME_LABELS,
   pairwiseResults,
@@ -41,7 +44,7 @@ const POLL_MS = 2000;
 @Component({
   selector: "app-assistant-pairwise",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, FormsModule, HlmButton],
+  imports: [DecimalPipe, FeatureStopComponent, FormsModule, HlmButton],
   host: { class: "block" },
   template: `
     <section class="flex flex-col gap-3" aria-labelledby="pairwise-title">
@@ -80,7 +83,18 @@ const POLL_MS = 2000;
             <option [value]="option"></option>
           }
         </datalist>
-        <button hlmBtn size="sm" type="submit" [disabled]="!canStart()">Compare</button>
+        <!-- Paid: off while a pairwise run would be refused; Enter in a field sends nothing then. -->
+        <button
+          hlmBtn
+          size="sm"
+          type="submit"
+          class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+          [attr.aria-disabled]="stop() ? 'true' : null"
+          [attr.aria-describedby]="stop() ? 'stop-pairwise' : null"
+          [disabled]="!canStart()"
+        >
+          Compare
+        </button>
         @if (active(); as running) {
           @if (running.kind === "pairwise") {
             <button
@@ -100,6 +114,9 @@ const POLL_MS = 2000;
           }
         }
       </form>
+      @if (stop(); as reason) {
+        <app-feature-stop noteId="stop-pairwise" [reason]="reason" />
+      }
 
       @if (view(); as v) {
         @let s = summaryOf(v.run);
@@ -135,6 +152,9 @@ const POLL_MS = 2000;
                 type="button"
                 size="sm"
                 variant="outline"
+                class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                [attr.aria-disabled]="stop() ? 'true' : null"
+                [attr.aria-describedby]="stop() ? 'stop-pairwise' : null"
                 [disabled]="busy()"
                 (click)="resume(v.run)"
               >
@@ -228,6 +248,9 @@ export class AssistantPairwiseComponent implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  private readonly pulse = inject(AdminPulseService);
+  /** Why a pairwise run would be refused now, or null: Compare and Resume say so, send nothing. */
+  protected readonly stop = computed(() => featureStop(this.pulse.assistant()?.spend, "pairwise"));
 
   protected readonly a = signal("lite");
   protected readonly b = signal("deep");
@@ -310,7 +333,7 @@ export class AssistantPairwiseComponent implements OnInit {
   }
 
   protected async start(): Promise<void> {
-    if (!this.canStart()) {
+    if (!this.canStart() || this.stop()) {
       return;
     }
     const [a, b] = [this.a().trim(), this.b().trim()];
@@ -346,6 +369,9 @@ export class AssistantPairwiseComponent implements OnInit {
   }
 
   protected async resume(run: RunRow): Promise<void> {
+    if (this.stop()) {
+      return;
+    }
     const left = run.progress.total - run.progress.done;
     const go = await this.confirm.ask({
       title: "Resume the comparison?",

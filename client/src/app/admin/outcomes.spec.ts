@@ -81,9 +81,9 @@ describe("outcomes in the admin", () => {
     expect(seconds(null)).toBe("–");
     expect(browserTiles(view)).toEqual([
       {
-        label: "First word, as visitors saw it (p50 / p95)",
+        label: "First word as visitors saw it, typical / slowest 1 in 20",
         value: "0.9 s / 4.0 s",
-        detail: "the server's first token: 0.7 s / –",
+        detail: "the server's first word: 0.7 s / –",
       },
       { label: "Stopped mid-answer", value: "33 %" },
       { label: "Follow-ups clicked", value: "50 %", detail: "of answers offering them" },

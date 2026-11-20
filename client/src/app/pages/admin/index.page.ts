@@ -28,10 +28,10 @@ import type { FaqProposal } from "../../admin/faq-proposals";
 import type { JournalView } from "../../admin/journal";
 import type { LessonsView } from "../../admin/lessons";
 import { AdminSessionService } from "../../admin/admin-session.service";
-import { AdminPulseService, type PulsePart } from "../../admin/pulse.service";
+import { AdminPulseService, offWords, type PulsePart } from "../../admin/pulse.service";
 import { RecoveryService, type RecoveryCopy } from "../../admin/recovery.service";
 import { absoluteTime, relativeTime } from "../../admin/relative-time";
-import { copyHome, needsYou, TODAY_ROW } from "../../admin/today";
+import { copyHome, needsYou, QUEUE_NAMES, sentence, TODAY_ROW } from "../../admin/today";
 
 /** Today's own reads, beside the pulse's: the media check and each queue's count. */
 type Source = "reconcile" | "reviews" | "proposals" | "faq" | "journal" | "lessons";
@@ -49,11 +49,7 @@ const SOURCE_NAMES: Record<Source | "messages" | "assistant", string> = {
   messages: "the inbox",
   assistant: "the assistant",
   reconcile: "the media",
-  reviews: "the answers to review",
-  proposals: "the content agent's drafts",
-  faq: "the FAQ proposals",
-  journal: "the journal",
-  lessons: "the lessons",
+  ...QUEUE_NAMES,
 };
 
 /** Dollars, to the cent; a sliver of a cent still shows as spent. */
@@ -63,10 +59,6 @@ function usd(value: number): string {
   }
   return `$${value.toFixed(2)}`;
 }
-
-/** "the inbox", "the inbox and the journal", "a, b and c". */
-const sentence = (names: readonly string[]): string =>
-  names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? "");
 
 /**
  * Today: where the site stands in two sentences (what is live, the assistant's day, the inbox),
@@ -316,7 +308,7 @@ export default class AdminDashboardPage implements OnInit {
 
   protected readonly assistantOff = computed(() => {
     const state = this.pulse.assistant()?.state;
-    return state?.state === "off" ? state.reason : null;
+    return state?.state === "off" ? offWords(state.reason) : null;
   });
 
   constructor() {

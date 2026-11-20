@@ -96,9 +96,9 @@ export function seconds(ms: number | null): string {
 export function browserTiles(b: BrowserView): { label: string; value: string; detail?: string }[] {
   return [
     {
-      label: "First word, as visitors saw it (p50 / p95)",
+      label: "First word as visitors saw it, typical / slowest 1 in 20",
       value: `${seconds(b.shownP50Ms)} / ${seconds(b.shownP95Ms)}`,
-      detail: `the server's first token: ${seconds(b.serverP50Ms)} / ${seconds(b.serverP95Ms)}`,
+      detail: `the server's first word: ${seconds(b.serverP50Ms)} / ${seconds(b.serverP95Ms)}`,
     },
     { label: "Stopped mid-answer", value: share(b.stopRate) },
     {

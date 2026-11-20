@@ -35,7 +35,10 @@ import { CopilotLedger } from "../copilot-ledger";
 import { draftOffer, type DraftOffer } from "../copilot-skills";
 import { FaqDraftsService } from "../faq-drafts.service";
 import { isOpenProposal, provenanceOf, type FaqProposal } from "../faq-proposals";
+import { AdminPulseService } from "../pulse.service";
+import { featureStop } from "../spending";
 import { FaqProposalsComponent } from "./faq-proposals.component";
+import { FeatureStopComponent } from "./feature-stop.component";
 
 const LOCALES: Locale[] = ["en", "de"];
 
@@ -64,6 +67,7 @@ function emptyForm(question = ""): Form {
   imports: [
     DraftOfferComponent,
     FaqProposalsComponent,
+    FeatureStopComponent,
     FormsModule,
     HlmButton,
     HlmField,
@@ -124,11 +128,15 @@ function emptyForm(question = ""): Form {
                 />
               </div>
               <div>
+                <!-- Paid (Copilot): off while the copilot would be refused, and saying why. -->
                 <button
                   hlmBtn
                   variant="ghost"
                   size="sm"
                   type="button"
+                  class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                  [attr.aria-disabled]="stop() ? 'true' : null"
+                  [attr.aria-describedby]="stop() ? 'stop-copilot-faq' : null"
                   [disabled]="drafting() || f.text[locale].question.trim().length < 3"
                   (click)="draftAnswer(locale)"
                 >
@@ -136,6 +144,9 @@ function emptyForm(question = ""): Form {
                 </button>
               </div>
             </fieldset>
+          }
+          @if (stop(); as reason) {
+            <app-feature-stop noteId="stop-copilot-faq" [reason]="reason" />
           }
           <label class="flex items-center gap-2 text-sm">
             <hlm-switch [checked]="f.isVisible" (checkedChange)="setVisible($event)" />
@@ -219,6 +230,9 @@ export class AssistantFaqComponent implements OnInit {
   /** A drafted answer's verdict, judged when the entry is saved (plan phase 27). */
   private readonly ledger = inject(CopilotLedger);
   private readonly drafts = inject(FaqDraftsService);
+  private readonly pulse = inject(AdminPulseService);
+  /** Why a drafted answer would be refused now (Copilot), or null: the buttons say so. */
+  protected readonly stop = computed(() => featureStop(this.pulse.assistant()?.spend, "copilot"));
 
   protected readonly locales = LOCALES;
   protected readonly entries = signal<FaqEntry[]>([]);
@@ -391,7 +405,7 @@ export class AssistantFaqComponent implements OnInit {
 
   protected async draftAnswer(locale: Locale): Promise<void> {
     const question = this.form()?.text[locale].question.trim();
-    if (!question) {
+    if (!question || this.stop()) {
       return;
     }
     this.drafting.set(true);

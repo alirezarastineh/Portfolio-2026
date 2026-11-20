@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AssistantSettings, SpendFeature, SpendToday } from "./assistant-types";
-import { featureRows, spendDraft, spendInput } from "./spending";
+import { featureRows, featureStop, spendDraft, spendInput } from "./spending";
 
 const settings: AssistantSettings = {
   enabled: true,
@@ -167,5 +167,42 @@ describe("the spending fences in the admin", () => {
       capUsd: null,
       state: null,
     });
+  });
+});
+
+/** A day's spend with one feature in it, `state` as its next call would get. */
+const row = (
+  feature: SpendFeature,
+  state: SpendToday["features"][number]["state"],
+  switchedOn: boolean | null = null,
+): SpendToday => ({
+  totalUsd: 1,
+  budgetUsd: 2,
+  publicReserve: 0.5,
+  reserveLineUsd: 1,
+  features: [{ feature, spentUsd: 0.3, capUsd: 0.3, switchedOn, state }],
+});
+
+describe("featureStop: why a paid button is off (plan 5, U18)", () => {
+  it("says nothing while the next call may spend, or while nobody knows", () => {
+    expect(featureStop(row("eval", "ok"), "eval")).toBeNull();
+    // An older API without the fences, or a feature it does not list: the server decides.
+    expect(featureStop(undefined, "eval")).toBeNull();
+    expect(featureStop(row("eval", "cap"), "pairwise")).toBeNull();
+  });
+
+  it("names the feature and the line it stopped at, in the words the spending table uses", () => {
+    expect(featureStop(row("agent", "off", false), "agent")).toBe("Admin agents: switched off.");
+    expect(featureStop(row("eval", "cap"), "eval")).toBe("Eval runs: stopped at its cap.");
+    expect(featureStop(row("insights", "reserve"), "insights")).toBe(
+      "Insights: stopped at the reserve line.",
+    );
+    expect(featureStop(row("playground", "budget"), "playground")).toBe(
+      "Playground: budget spent.",
+    );
+    // Off without a switch of its own: the deploy turned the assistant off.
+    expect(featureStop(row("pairwise", "off"), "pairwise")).toBe(
+      "Pairwise runs: the assistant is off on this server.",
+    );
   });
 });

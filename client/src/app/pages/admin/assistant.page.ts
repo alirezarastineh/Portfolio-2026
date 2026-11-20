@@ -33,14 +33,15 @@ import { AssistantFaithfulnessComponent } from "../../admin/assistant/assistant-
 import { AssistantFaqComponent } from "../../admin/assistant/assistant-faq.component";
 import { AssistantInsightsComponent } from "../../admin/assistant/assistant-insights.component";
 import { AssistantJournalComponent } from "../../admin/assistant/assistant-journal.component";
+import { AssistantNowComponent } from "../../admin/assistant/assistant-now.component";
 import { AssistantOutcomesComponent } from "../../admin/assistant/assistant-outcomes.component";
 import { AssistantPerceptionComponent } from "../../admin/assistant/assistant-perception.component";
-import { AssistantOverviewComponent } from "../../admin/assistant/assistant-overview.component";
 import { AssistantPairwiseComponent } from "../../admin/assistant/assistant-pairwise.component";
 import { AssistantReviewsComponent } from "../../admin/assistant/assistant-reviews.component";
 import { AssistantRoutingComponent } from "../../admin/assistant/assistant-routing.component";
 import { AssistantSettingsComponent } from "../../admin/assistant/assistant-settings.component";
 import { AssistantTrustComponent } from "../../admin/assistant/assistant-trust.component";
+import { AssistantUsageComponent } from "../../admin/assistant/assistant-usage.component";
 import { PlaygroundPanelComponent } from "../../admin/assistant/playground-panel.component";
 
 export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
@@ -74,14 +75,15 @@ const VIEW_OF_EDITOR: Partial<Record<string, AssistantView>> = {
     AssistantFaqComponent,
     AssistantInsightsComponent,
     AssistantJournalComponent,
+    AssistantNowComponent,
     AssistantOutcomesComponent,
     AssistantPerceptionComponent,
-    AssistantOverviewComponent,
     AssistantPairwiseComponent,
     AssistantReviewsComponent,
     AssistantRoutingComponent,
     AssistantSettingsComponent,
     AssistantTrustComponent,
+    AssistantUsageComponent,
     HlmBadge,
     HlmButton,
     PlaygroundPanelComponent,
@@ -89,7 +91,8 @@ const VIEW_OF_EDITOR: Partial<Record<string, AssistantView>> = {
   ],
   host: { class: "block" },
   template: `
-    <div class="mx-auto flex max-w-4xl flex-col gap-6 pb-12">
+    <!-- Now is one screen at 1280×800 (plan 5, U18): nothing below it to pad for. -->
+    <div class="mx-auto flex max-w-4xl flex-col gap-6" [class.pb-12]="view() !== 'now'">
       <app-page-header
         title="Assistant"
         description="The assistant on the home page's stage, and in its panel on every page: answers from the published portfolio, with citations."
@@ -137,18 +140,9 @@ const VIEW_OF_EDITOR: Partial<Record<string, AssistantView>> = {
         </ul>
       </nav>
 
-      <!-- The Playground: the header's button and Find open it; it keeps its conversation across views. -->
-      <app-playground-panel
-        [open]="pulse.playgroundOpen()"
-        (openChange)="pulse.playgroundOpen.set($event)"
-      />
-
       @switch (view()) {
         @case ("now") {
-          <div class="flex flex-col gap-8">
-            <app-assistant-trust part="waiting" />
-            <app-assistant-overview class="flex flex-col gap-6" (toInsights)="go('questions')" />
-          </div>
+          <app-assistant-now />
         }
         @case ("conversations") {
           <app-assistant-conversations (toJournal)="openJournal($event)" />
@@ -186,6 +180,7 @@ const VIEW_OF_EDITOR: Partial<Record<string, AssistantView>> = {
             <app-assistant-perception />
             <app-assistant-routing />
             <app-assistant-outcomes />
+            <app-assistant-usage class="flex flex-col gap-6" />
           </div>
         }
         @case ("settings") {
@@ -196,6 +191,13 @@ const VIEW_OF_EDITOR: Partial<Record<string, AssistantView>> = {
         }
       }
     </div>
+
+    <!-- The Playground: the header's button and Find open it; it keeps its conversation across views.
+         Outside the column, whose gap its empty host would add. -->
+    <app-playground-panel
+      [open]="pulse.playgroundOpen()"
+      (openChange)="pulse.playgroundOpen.set($event)"
+    />
   `,
 })
 export default class AdminAssistantPage implements OnInit {
