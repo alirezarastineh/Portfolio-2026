@@ -14999,7 +14999,11 @@ test.describe("the Assistant's views and the Playground panel", () => {
     },
     {
       view: "Conversations",
-      open: (page) => page.getByRole("button", { name: "Freeze as eval case" }).first().click(),
+      // An answer's actions sit in its opened row (plan 5, U20).
+      open: async (page) => {
+        await page.getByRole("table").getByRole("button", { expanded: false }).first().click();
+        await page.getByRole("button", { name: "Freeze as eval case" }).first().click();
+      },
       field: (page) => page.locator("textarea[name=freeze-question]"),
     },
     { view: "Quality", field: (page) => page.getByLabel("A", { exact: true }) },
