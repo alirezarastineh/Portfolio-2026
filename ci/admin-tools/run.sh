@@ -30,7 +30,7 @@ step() {
 }
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-  printf '### admin-tools\n\nEvery output is in the `admin-tools` artifact.\n\n' \
+  printf '### admin-tools\n\nEvery output is in the admin-tools artifact.\n\n' \
     >> "$GITHUB_STEP_SUMMARY"
 fi
 step fixtures node gen-fixtures.mjs
