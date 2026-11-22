@@ -20,9 +20,13 @@ const dir = join(process.argv[2] ?? ".", ".github/workflows");
 /** On GitHub, a summary line, and with `level` an annotation too. */
 function github(line, level) {
   const summary = process.env.GITHUB_STEP_SUMMARY;
-  if (!summary) return;
+  if (!summary) {
+    return;
+  }
   appendFileSync(summary, `- ${line}\n`);
-  if (!level) return;
+  if (!level) {
+    return;
+  }
   // Workflow commands escape %, CR and LF in their message.
   const message = line
     .replaceAll("%", "%25")
@@ -43,11 +47,15 @@ for (const file of readdirSync(dir)
     .entries()) {
     const m =
       /^\s*(?:- )?uses:\s*([\w./-]+)@([0-9a-f]{40})\s*#\s*(v[\d.]+)/.exec(line);
-    if (!m) continue;
+    if (!m) {
+      continue;
+    }
     const [, path, sha, version] = m;
     const repo = path.split("/").slice(0, 2).join("/");
     const key = `${repo}@${sha} ${version}`;
-    if (!pins.has(key)) pins.set(key, { repo, sha, version, at: [] });
+    if (!pins.has(key)) {
+      pins.set(key, { repo, sha, version, at: [] });
+    }
     pins.get(key).at.push(`${file}:${i + 1}`);
     uses++;
   }
@@ -57,20 +65,25 @@ const headers = {
   accept: "application/vnd.github+json",
   "user-agent": "portfolio-ci",
 };
-if (process.env.GITHUB_TOKEN)
+if (process.env.GITHUB_TOKEN) {
   headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+}
 async function get(path) {
   const response = await fetch(`https://api.github.com/${path}`, { headers });
-  if (!response.ok)
+  if (!response.ok) {
     throw new Error(`GitHub answered ${response.status} for ${path}`);
+  }
   return response.json();
 }
 
 const parts = (version) => version.replace(/^v/, "").split(".").map(Number);
 const newer = (a, b) => {
   const [x, y] = [parts(a), parts(b)];
-  for (let i = 0; i < 3; i++)
-    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  for (let i = 0; i < 3; i++) {
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) {
+      return (x[i] ?? 0) > (y[i] ?? 0);
+    }
+  }
   return false;
 };
 
@@ -126,16 +139,18 @@ for (const { pin, label, commit, release, error } of checkedPins) {
   const days = Math.floor(
     (Date.now() - Date.parse(release.published_at)) / 86_400_000,
   );
-  if (!newer(latest, pin.version)) notes.push("the latest release");
-  else if (days < WAIT_DAYS)
+  if (!newer(latest, pin.version)) {
+    notes.push("the latest release");
+  } else if (days < WAIT_DAYS) {
     notes.push(
       `${latest} is out (${days} days ago): it is due once ${WAIT_DAYS} days old`,
     );
-  else
+  } else {
     problems.push(
       `${label}: ${latest} has been out for ${days} days: move the pin to its commit ` +
         `(ci/README.md, "Action pins"), reading every release's notes: ${release.html_url}`,
     );
+  }
   const line = `${label}: ${notes.join("; ")}`;
   console.log(line);
   github(line);

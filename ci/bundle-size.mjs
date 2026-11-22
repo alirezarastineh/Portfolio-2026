@@ -27,7 +27,9 @@ if (!dir) {
 const kb = (bytes) => `${(bytes / 1000).toFixed(1)} kB`;
 const signed = (bytes) => `${bytes >= 0 ? "+" : "-"}${kb(Math.abs(bytes))}`;
 const percent = (now, before) => {
-  if (!before) return "new";
+  if (!before) {
+    return "new";
+  }
   const sign = now >= before ? "+" : "";
   const pct = (((now - before) / before) * 100).toFixed(1);
   return `${sign}${pct}%`;
@@ -95,8 +97,9 @@ const watched = `lazy: ${WATCHED.map((name) => {
 console.log(watched);
 // Vite's own chunk-size warning, which this build never prints (plan Phase 3).
 const big = files.filter((f) => f.raw > 500_000);
-if (big.length > 0)
+if (big.length > 0) {
   console.log(`over 500 kB raw: ${big.map((f) => f.name).join(", ")}`);
+}
 
 const env = process.env;
 // On GitHub Actions (the GitHub Actions plan, Phase 4), the totals and the

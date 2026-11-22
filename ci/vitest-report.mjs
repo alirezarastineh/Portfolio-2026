@@ -24,7 +24,9 @@ if (!file) {
 function report(line, level = "notice") {
   (level === "error" ? console.error : console.log)(line);
   const summary = process.env.GITHUB_STEP_SUMMARY;
-  if (!summary) return;
+  if (!summary) {
+    return;
+  }
   appendFileSync(summary, `- ${line}\n`);
   // Workflow commands escape %, CR and LF in their message.
   const message = line

@@ -75,6 +75,7 @@ const sonarUnicornRules: Linter.RulesRecord = {
   "unicorn/prefer-single-call": "error",
   "unicorn/prefer-string-raw": "error",
   "unicorn/prefer-string-replace-all": "error",
+  "unicorn/prefer-string-starts-ends-with": "error",
   "unicorn/prefer-string-trim-start-end": "error",
   "unicorn/prefer-structured-clone": "error",
   "unicorn/prefer-type-error": "error",

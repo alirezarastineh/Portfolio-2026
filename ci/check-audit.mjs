@@ -27,9 +27,13 @@ if (!file || !LEVELS.includes(failOn)) {
 /** On GitHub, a summary line, and with `level` an annotation too. */
 function github(line, level) {
   const summary = process.env.GITHUB_STEP_SUMMARY;
-  if (!summary) return;
+  if (!summary) {
+    return;
+  }
   appendFileSync(summary, `- ${line}\n`);
-  if (!level) return;
+  if (!level) {
+    return;
+  }
   // Workflow commands escape %, CR and LF in their message.
   const message = line
     .replaceAll("%", "%25")
@@ -60,7 +64,9 @@ const totals = `${label}: ${[...LEVELS]
 console.log(totals);
 github(totals, "notice");
 for (const a of advisories) {
-  if (LEVELS.indexOf(a.severity) < LEVELS.indexOf("high")) continue;
+  if (LEVELS.indexOf(a.severity) < LEVELS.indexOf("high")) {
+    continue;
+  }
   const versions = [...new Set(a.findings.map((f) => f.version))].join(", ");
   // The production dependency each path starts from: ".>@sentry/node>glob>…".
   const via = [
@@ -77,7 +83,7 @@ for (const a of advisories) {
   );
 }
 
-const failing = advisories.filter(fails);
+const failing = advisories.filter((advisory) => fails(advisory));
 if (failing.length > 0) {
   const line = `FAIL ${label}: ${failing.length} advisory(ies) at ${failOn} or above`;
   console.error(line);

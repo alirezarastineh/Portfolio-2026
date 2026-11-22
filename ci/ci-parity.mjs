@@ -71,7 +71,9 @@ function section(text, key) {
   const start = lines.findIndex(
     (l) => l === `${key}:` || l.startsWith(`${key}: `),
   );
-  if (start < 0) return [];
+  if (start < 0) {
+    return [];
+  }
   const end = lines.findIndex((l, i) => i > start && /^\S/.test(l));
   return lines.slice(start + 1, end < 0 ? undefined : end);
 }
@@ -99,8 +101,9 @@ function images(text) {
   const found = new Map();
   for (const token of uncomment(text).split(/[\s"'`,[\]{}()]+/)) {
     const m = ref.exec(token);
-    if (m && /\d/.test(m[2]) && !/^\d+$/.test(m[1]))
+    if (m && /\d/.test(m[2]) && !/^\d+$/.test(m[1])) {
       found.set(m[1], new Set([...(found.get(m[1]) ?? []), token]));
+    }
   }
   return found;
 }
@@ -114,19 +117,23 @@ function prPaths(text, ci) {
     const pr = items.find((item) =>
       /event: (\[[^\]]*\b)?pull_request\b/.test(item),
     );
-    if (!pr) return { pr: false, paths: null };
+    if (!pr) {
+      return { pr: false, paths: null };
+    }
     const include = pr.split(/\n +include:\n/)[1];
     return { pr: true, paths: include ? listItems(include) : null };
   }
   const on = `${section(text, "on").join("\n")}\n`;
   const pr = /^ {2}pull_request:.*\n((?: {4}.*\n)*)/m.exec(on);
-  if (!pr) return { pr: false, paths: null };
+  if (!pr) {
+    return { pr: false, paths: null };
+  }
   const paths = /^ {4}paths:\s*\n((?: {6}.*\n)*)/m.exec(pr[1]);
   return { pr: true, paths: paths ? listItems(paths[1]) : null };
 }
 const listItems = (block) =>
   [...uncomment(block).matchAll(/^ +- (.+)$/gm)]
-    .map((m) => m[1].trim().replace(/^"|"$/g, ""))
+    .map((m) => m[1].trim().replaceAll(/^"|"$/g, ""))
     .filter((path) => !ONLY_PATHS.some((only) => only.test(path)))
     .sort((a, b) => a.localeCompare(b));
 
@@ -152,22 +159,29 @@ for (const file of woodpecker) {
   const gh = read(`.github/workflows/${name}.yml`);
   const [a, b] = [steps(wp, "woodpecker"), steps(gh, "github")];
   const pending = PENDING[name] ?? new Set();
-  for (const step of a)
-    if (!b.has(step) && !pending.has(step))
+  for (const step of a) {
+    if (!b.has(step) && !pending.has(step)) {
       problems.push(`${name}: step ${step} is in Woodpecker only`);
+    }
+  }
   for (const step of pending) {
-    if (b.has(step))
+    if (b.has(step)) {
       problems.push(
         `${name}: step ${step} is on GitHub now: take it off ci-parity.mjs's PENDING list`,
       );
-    else if (!a.has(step))
+    } else if (a.has(step)) {
+      waiting.push(`${name} ${step}`);
+    } else {
       problems.push(
         `${name}: step ${step} is PENDING but not in Woodpecker's twin either`,
       );
-    else waiting.push(`${name} ${step}`);
+    }
   }
-  for (const step of b)
-    if (!a.has(step)) problems.push(`${name}: step ${step} is in GitHub only`);
+  for (const step of b) {
+    if (!a.has(step)) {
+      problems.push(`${name}: step ${step} is in GitHub only`);
+    }
+  }
   const [pa, pb] = [prPaths(wp, "woodpecker"), prPaths(gh, "github")];
   if (JSON.stringify(pa) !== JSON.stringify(pb)) {
     problems.push(
@@ -189,12 +203,15 @@ for (const [ci, dir, files] of [
   }
 }
 for (const [name, refs] of pins.github) {
-  if (!pins.woodpecker.has(name)) continue;
+  if (!pins.woodpecker.has(name)) {
+    continue;
+  }
   const all = new Set([...refs, ...pins.woodpecker.get(name)]);
-  if (all.size > 1)
+  if (all.size > 1) {
     problems.push(
       `image ${name} is pinned differently: ${[...all].join(", ")}`,
     );
+  }
 }
 
 // Actions: a full commit SHA, with the version it is in a comment.
@@ -203,7 +220,9 @@ for (const file of github) {
     .split("\n")
     .entries()) {
     const m = /^\s*(?:- )?uses:\s*(\S+)/.exec(line);
-    if (!m || m[1].startsWith("./")) continue;
+    if (!m || m[1].startsWith("./")) {
+      continue;
+    }
     if (
       !/^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/.test(m[1]) ||
       !/#\s*v\d/.test(line)
@@ -216,15 +235,20 @@ for (const file of github) {
 }
 
 const checked = woodpecker.length - unpaired.length - own.length;
+const notes = [
+  [waiting, "steps on Woodpecker alone until a later phase"],
+  [unpaired, "no GitHub twin yet"],
+  [own, "Woodpecker's own"],
+]
+  .filter(([names]) => names.length)
+  .map(([names, label]) => `; ${label}: ${names.join(", ")}`);
 console.log(
-  `parity: ${checked} twin workflow(s), ${pins.github.size} GitHub image(s), ${github.length} GitHub workflow(s) checked` +
-    (waiting.length
-      ? `; steps on Woodpecker alone until a later phase: ${waiting.join(", ")}`
-      : "") +
-    (unpaired.length ? `; no GitHub twin yet: ${unpaired.join(", ")}` : "") +
-    (own.length ? `; Woodpecker's own: ${own.join(", ")}` : ""),
+  `parity: ${checked} twin workflow(s), ${pins.github.size} GitHub image(s), ` +
+    `${github.length} GitHub workflow(s) checked${notes.join("")}`,
 );
 if (problems.length) {
-  for (const problem of problems) console.error(`  FAIL ${problem}`);
+  for (const problem of problems) {
+    console.error(`  FAIL ${problem}`);
+  }
   process.exit(1);
 }

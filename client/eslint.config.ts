@@ -121,6 +121,7 @@ const sonarUnicornRules: Linter.RulesRecord = {
   "unicorn/prefer-single-call": "error",
   "unicorn/prefer-string-raw": "error",
   "unicorn/prefer-string-replace-all": "error",
+  "unicorn/prefer-string-starts-ends-with": "error",
   "unicorn/prefer-string-trim-start-end": "error",
   "unicorn/prefer-structured-clone": "error",
   "unicorn/prefer-type-error": "error",
@@ -741,6 +742,14 @@ export default defineConfig([
     rules: {
       ...sonarCoreRules,
       ...sonarUnicornRules,
+    },
+  },
+  {
+    // Scripts and Playwright specs run outside Domino SSR, where element.dataset is supported.
+    files: ["e2e/**/*.{js,mjs,cjs,ts,mts,cts}", "scripts/**/*.{js,mjs,cjs,ts,mts,cts}"],
+    plugins: { unicorn },
+    rules: {
+      "unicorn/dom-node-dataset": "error",
     },
   },
   ...angular.configs.templateRecommended.map((config) => ({

@@ -25,7 +25,9 @@ const onGitHub = process.env.GITHUB_ACTIONS === "true";
 
 /** On GitHub, an annotation; workflow commands escape %, CR and LF. */
 function annotate(level, line) {
-  if (!onGitHub) return;
+  if (!onGitHub) {
+    return;
+  }
   const message = line
     .replaceAll("%", "%25")
     .replaceAll("\r", "%0D")
@@ -39,9 +41,15 @@ function refuse(reason) {
   process.exit(1);
 }
 
-if (event !== "deployment") refuse(`the event is ${event}, not deployment`);
-if (target !== "production") refuse(`the target is ${target}, not production`);
-if (branch !== "main") refuse(`the pipeline is on ${branch}, not main`);
+if (event !== "deployment") {
+  refuse(`the event is ${event}, not deployment`);
+}
+if (target !== "production") {
+  refuse(`the target is ${target}, not production`);
+}
+if (branch !== "main") {
+  refuse(`the pipeline is on ${branch}, not main`);
+}
 
 /** Each check's result on main's tip: Woodpecker's statuses, or GitHub's runs. */
 async function woodpeckerChecks() {
@@ -72,21 +80,22 @@ async function woodpeckerChecks() {
   );
 }
 
+/** One read of GitHub's API with the workflow's token; a failed answer refuses the deploy. */
+async function get(path, what) {
+  const response = await fetch(`https://api.github.com/repos/${repo}/${path}`, {
+    headers: {
+      accept: "application/vnd.github+json",
+      "user-agent": "portfolio-deploy-guard",
+      authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+    },
+  });
+  if (!response.ok) {
+    refuse(`GitHub answered ${response.status} for ${what}`);
+  }
+  return response.json();
+}
+
 async function githubChecks() {
-  const get = async (path, what) => {
-    const response = await fetch(
-      `https://api.github.com/repos/${repo}/${path}`,
-      {
-        headers: {
-          accept: "application/vnd.github+json",
-          "user-agent": "portfolio-deploy-guard",
-          authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
-        },
-      },
-    );
-    if (!response.ok) refuse(`GitHub answered ${response.status} for ${what}`);
-    return response.json();
-  };
   const main = await get("commits/main", "main");
   if (main.sha !== sha) {
     refuse(
@@ -100,8 +109,9 @@ async function githubChecks() {
   );
   const newest = new Map();
   for (const run of runs) {
-    if (!newest.has(run.name) || run.id > newest.get(run.name).id)
+    if (!newest.has(run.name) || run.id > newest.get(run.name).id) {
       newest.set(run.name, run);
+    }
   }
   return new Map(
     [...newest].map(([name, run]) => [
@@ -113,7 +123,9 @@ async function githubChecks() {
 
 const checks = onGitHub ? await githubChecks() : await woodpeckerChecks();
 const missing = REQUIRED.filter((name) => !checks.has(name));
-if (missing.length > 0) refuse(`no result for ${missing.join(", ")}`);
+if (missing.length > 0) {
+  refuse(`no result for ${missing.join(", ")}`);
+}
 const unfinished = [...checks].filter(([, state]) => state !== "success");
 if (unfinished.length > 0) {
   refuse(unfinished.map(([name, state]) => `${name} is ${state}`).join(", "));

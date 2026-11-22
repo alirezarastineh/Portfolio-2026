@@ -18,10 +18,12 @@ const branch = env.CI_COMMIT_BRANCH || "?";
 const pipelineEvent = env.CI_PIPELINE_EVENT || "?";
 /** What started the pipeline, in a few words. */
 function describeRun() {
-  if (pipelineEvent === "deployment")
+  if (pipelineEvent === "deployment") {
     return `deployment to ${env.CI_PIPELINE_DEPLOY_TARGET || "?"}`;
-  if (pipelineEvent === "manual" && env.NOTIFY_TEST === "1")
+  }
+  if (pipelineEvent === "manual" && env.NOTIFY_TEST === "1") {
     return "manual run, NOTIFY_TEST";
+  }
   return pipelineEvent;
 }
 const run = describeRun();

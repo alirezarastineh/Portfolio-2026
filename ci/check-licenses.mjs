@@ -67,9 +67,13 @@ const allowed = (expression) =>
 /** On GitHub, a summary line, and with `level` an annotation too. */
 function github(line, level) {
   const summary = process.env.GITHUB_STEP_SUMMARY;
-  if (!summary) return;
+  if (!summary) {
+    return;
+  }
   appendFileSync(summary, `- ${line}\n`);
-  if (!level) return;
+  if (!level) {
+    return;
+  }
   // Workflow commands escape %, CR and LF in their message.
   const message = line
     .replaceAll("%", "%25")
@@ -94,14 +98,19 @@ for (const [license, packages] of Object.entries(report).sort(
 )) {
   total += packages.length;
   console.log(`${String(packages.length).padStart(4)} ${license}`);
-  if (allowed(license)) continue;
+  if (allowed(license)) {
+    continue;
+  }
   for (const { name, versions } of packages) {
     const id = `${name}@${versions.join(", ")}`;
     const waiver = WAIVERS.find(
       (w) => w.name.test(name) && w.license === license,
     );
-    if (waiver) waived.push(`${id} (${license}): ${waiver.reason}`);
-    else problems.push(`${id} is ${license}, outside the allowlist`);
+    if (waiver) {
+      waived.push(`${id} (${license}): ${waiver.reason}`);
+    } else {
+      problems.push(`${id} is ${license}, outside the allowlist`);
+    }
   }
 }
 
@@ -112,8 +121,9 @@ for (const line of waived) {
   console.log(`  waived: ${line}`);
   github(`${label}: waived ${line}`);
 }
-if (total === 0)
+if (total === 0) {
   problems.push("no packages listed: was the package installed?");
+}
 if (problems.length > 0) {
   for (const problem of problems) {
     console.error(`FAIL ${problem}`);

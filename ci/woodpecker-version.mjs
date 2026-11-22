@@ -29,9 +29,13 @@ const pins = {
 /** On GitHub, a summary line, and with `level` an annotation too. */
 function github(line, level) {
   const summary = process.env.GITHUB_STEP_SUMMARY;
-  if (!summary) return;
+  if (!summary) {
+    return;
+  }
   appendFileSync(summary, `- ${line}\n`);
-  if (!level) return;
+  if (!level) {
+    return;
+  }
   // Workflow commands escape %, CR and LF in their message.
   const message = line
     .replaceAll("%", "%25")
@@ -52,7 +56,9 @@ const fail = (line) => {
 
 const versions = Object.entries(pins).map(([name, [file, pattern]]) => {
   const version = readFileSync(file, "utf8").match(pattern)?.[1];
-  if (!version) fail(`no ${name} version in ${file}`);
+  if (!version) {
+    fail(`no ${name} version in ${file}`);
+  }
   return [name, version];
 });
 const pinned = versions[0][1];
@@ -70,8 +76,9 @@ const headers = {
   accept: "application/vnd.github+json",
   "user-agent": "portfolio-ci",
 };
-if (process.env.GITHUB_TOKEN)
+if (process.env.GITHUB_TOKEN) {
   headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+}
 const response = await fetch(
   "https://api.github.com/repos/woodpecker-ci/woodpecker/releases/latest",
   { headers },
@@ -88,7 +95,11 @@ const days = Math.floor(
 const parts = (version) => version.split(".").map(Number);
 const newer = (a, b) => {
   const [x, y] = [parts(a), parts(b)];
-  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+  for (let i = 0; i < 3; i++) {
+    if (x[i] !== y[i]) {
+      return x[i] > y[i];
+    }
+  }
   return false;
 };
 
