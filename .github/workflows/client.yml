@@ -24,6 +24,8 @@ on:
       - "ci/code-health.sh"
       - "ci/vitest-report.mjs"
       - "ci/bundle-size.mjs"
+      - "ci/admin-chunks.mjs"
+      - "ci/en-scripts.mjs"
       - "ci/visual.sh"
       - ".github/workflows/client.yml"
   workflow_call:
@@ -221,6 +223,12 @@ jobs:
           path: ${{ runner.temp }}/bundle-size
           key: bundle-size-${{ github.run_id }}-${{ github.run_attempt }}
 
+      # The admin's chunks against plan 5's budgets (the layout's at most 25 KB
+      # brotli), every admin chunk and the admin stylesheet in the summary.
+      - name: admin-chunks
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: node ../ci/admin-chunks.mjs dist/analog/public/assets
+
       # As one tar: the server's node_modules/.nitro is hidden, which an
       # artifact leaves out by default, and its packages link into it, which an
       # artifact would copy as separate packages.
@@ -373,6 +381,38 @@ jobs:
         id: lighthouse
         run: sh ../ci/client.sh lighthouse
 
+      # main's last record of /en's scripts; the key never matches, so the prefix
+      # picks the newest.
+      - name: Restore the /en baseline
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/en-scripts
+          key: en-scripts-${{ github.run_id }}
+          restore-keys: en-scripts-
+
+      # /en's scripts one by one against main's last run (plan 5: visitors pay
+      # nothing for the admin). Fails past +0.1 KB brotli, unless the pushed
+      # commit's message has the line "Visitors-Pay: accepted".
+      - name: en-scripts
+        id: en-scripts
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        env:
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: node ../ci/en-scripts.mjs "$RUNNER_TEMP/en-record.json" "$RUNNER_TEMP/en-scripts/main.json"
+
+      # A push to main that passed: its record is the next baseline.
+      - name: Keep the /en record
+        if: ${{ !cancelled() && github.event_name == 'push' && steps.en-scripts.outcome == 'success' }}
+        run: mkdir -p "$RUNNER_TEMP/en-scripts" && cp "$RUNNER_TEMP/en-record.json" "$RUNNER_TEMP/en-scripts/main.json"
+
+      - name: Save the /en baseline
+        if: ${{ !cancelled() && github.event_name == 'push' && steps.en-scripts.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/en-scripts
+          key: en-scripts-${{ github.run_id }}-${{ github.run_attempt }}
+
       # The reports, pass or fail. .lighthouseci is hidden, which an artifact
       # leaves out unless told.
       - name: Upload the Lighthouse reports
@@ -494,14 +534,15 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # Nightly calls only (Woodpecker plan, Phase 10): the desktop suite in
-  # Firefox and WebKit, Playwright's own builds of them, each on its own
-  # runner. A failure fails the nightly, so GitHub emails it (report only, five
+  # Nightly calls and pushes to main (Woodpecker plan, Phase 10; on pushes since
+  # 2026-11-22, the user's choice, so no Part runs them on the PC): the desktop
+  # suite in Firefox and WebKit, Playwright's own builds of them, each on its
+  # own runner. A failure fails the run, so GitHub emails it (report only, five
   # once went unseen for six nights); one browser's never cancels the other.
   cross-browser:
     name: cross-browser
     needs: build
-    if: ${{ inputs.nightly }}
+    if: ${{ inputs.nightly || github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -578,5 +619,105 @@ jobs:
           path: |
             client/playwright-report/cross-browser/
             client/test-results/cross-browser/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Nightly calls only (since 2026-11-22, the user's choice: the checks each
+  # Part of plan 5 ran on the PC): the admin redesign's tools on the build
+  # (ci/admin-tools/): Impeccable's detector, the layout matrix, the keyboard
+  # walks, the screen-reader audit, the nine tasks, the probes, each view's
+  # chunks, the template sweep, and the admin's screenshots against last
+  # night's. Report only: plan 5 calls them signals.
+  admin-tools:
+    name: admin-tools
+    needs: build
+    if: ${{ inputs.nightly }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      VITE_API_BASE_URL: https://api.alirezarastineh.me
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 12.21.0
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.13.1
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - name: install
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: client-dist
+          path: ${{ runner.temp }}
+
+      - name: Unpack the build
+        run: tar -xf "$RUNNER_TEMP/client-dist.tar"
+
+      # The detector's engine, the release Impeccable 4.8.0 pins (engine 0.1.18),
+      # refused unless its SHA-256 is the one the skill's engine-checksums.txt
+      # names. The tools drive the runner's own Chrome.
+      - name: Fetch the detector's engine
+        env:
+          ENGINE_URL: https://github.com/pbakaus/impeccable/releases/download/engine-v0.1.18/impeccable-linux-x64
+          ENGINE_SHA256: 736ed785e74ae2344d3036127f614ddde5ab520a527d8bc82a891612ef71f648
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/impeccable" "$ENGINE_URL"
+          echo "$ENGINE_SHA256  $RUNNER_TEMP/impeccable" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/impeccable"
+
+      # Last night's admin screenshots; the key never matches, so the prefix
+      # picks the newest.
+      - name: Restore last night's admin shots
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/admin-shots-last
+          key: admin-shots-${{ github.run_id }}
+          restore-keys: admin-shots-
+
+      - name: admin-tools
+        id: admin-tools
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          ADMIN_TOOLS_OUT: ${{ runner.temp }}/admin-tools
+          ADMIN_SHOTS_BEFORE: ${{ runner.temp }}/admin-shots-last
+          IMPECCABLE_BIN: ${{ runner.temp }}/impeccable
+        run: sh ../ci/admin-tools/run.sh
+
+      # Tonight's shots are tomorrow's "before" (none if the shots tool failed).
+      - name: Keep tonight's admin shots
+        id: keep-shots
+        if: ${{ !cancelled() && steps.admin-tools.outcome != 'skipped' }}
+        continue-on-error: true
+        run: |
+          test -d "$RUNNER_TEMP/admin-tools/admin-shots"
+          rm -rf "$RUNNER_TEMP/admin-shots-last"
+          cp -r "$RUNNER_TEMP/admin-tools/admin-shots" "$RUNNER_TEMP/admin-shots-last"
+
+      - name: Save the admin shots
+        if: ${{ !cancelled() && steps.keep-shots.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/admin-shots-last
+          key: admin-shots-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Upload the admin tools' report
+        if: ${{ !cancelled() && steps.admin-tools.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: admin-tools
+          path: ${{ runner.temp }}/admin-tools/
           if-no-files-found: ignore
           retention-days: 14

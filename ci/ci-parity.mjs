@@ -31,7 +31,10 @@ const ONLY = {
     "woodpecker",
   ]),
   // inactivity: GitHub switches schedules off after 60 days without activity.
-  github: new Set(["inactivity"]),
+  // admin-chunks, en-scripts and admin-tools: added 2026-11-22, when Woodpecker
+  // ran no longer (the user keeps its files and runs nothing of it), so the
+  // checks each Part ran on the PC run in CI.
+  github: new Set(["inactivity", "admin-chunks", "en-scripts", "admin-tools"]),
 };
 // Steps a GitHub twin gains in a later phase of the GitHub Actions plan, on
 // Woodpecker alone until then, as { client: new Set(["visual"]) }. Once GitHub
@@ -48,6 +51,9 @@ const ONLY_PATHS = [
   /^\.github\//,
   /^ci\/save-reports\.sh$/,
   /^ci\/smoke\.Dockerfile/,
+  /^ci\/admin-chunks\.mjs$/,
+  /^ci\/en-scripts\.mjs$/,
+  /^ci\/admin-tools\//,
 ];
 
 const problems = [];

@@ -21,7 +21,7 @@ One-liners (`eslint .`, the typechecks) stay inline in both.
 | Woodpecker | GitHub | GitHub's jobs (parallel unless →) | Runs on |
 |---|---|---|---|
 | `server.yaml` | `server.yml` | `checks` · `tests` (unit, db on `postgres:17-alpine`, coverage) | push to `main`, PRs on its paths, the nightly |
-| `client.yaml` | `client.yml` | `checks` · `unit` · `build` → `e2e` · `lighthouse` · `visual` · `cross-browser` (nightly) | push to `main`, PRs on its paths, the nightly |
+| `client.yaml` | `client.yml` | `checks` · `unit` · `build` (with `admin-chunks`) → `e2e` · `lighthouse` (with `en-scripts`) · `visual` · `cross-browser` (push to `main` and nightly) · `admin-tools` (nightly) | push to `main`, PRs on its paths, the nightly |
 | `repo.yaml` | `repo.yml` | `lint`: the infrastructure linters, actionlint, zizmor, the parity check | push to `main`, every PR, the nightly |
 | `images.yaml` | `images.yml` | `images`: both images, their SBOMs, Trivy, the stack smoke test | push to `main`, PRs on its paths, the nightly |
 | `security.yaml` | `security.yml` | `security`: audit, licences, osv-scanner, semgrep | lockfile or check changes, the nightly |
@@ -37,16 +37,35 @@ nightly call as `cron` and a manual run as `manual`. Paths that differ between t
 the environment, with Woodpecker's as the default (`PNPM_STORE`, `TRIVY_CACHE`, `VISUAL_ROOT`).
 
 **Blocking and report only.** These only report, in both: knip, cycles, osv-scanner, semgrep,
-bundle-size, visual and `pnpm outdated`. A report-only step is marked on its own and leaves the
-workflow green (`failure: ignore` on Woodpecker, `continue-on-error` on GitHub). Everything else
-blocks, cross-browser too since 2026-11-16: it runs in the nightly alone, and a failure there is
-emailed. It only reported before, and five failures went unseen for six nights.
+bundle-size, visual and `pnpm outdated`, and on GitHub `admin-tools`. A report-only step is marked
+on its own and leaves the workflow green (`failure: ignore` on Woodpecker, `continue-on-error` on
+GitHub). Everything else blocks, cross-browser too since 2026-11-16: a failure is emailed. It only
+reported before, and five failures went unseen for six nights. Since 2026-11-22 (the user's choice)
+it runs on every push to `main` too, not only nightly.
+
+**GitHub's own checks (2026-11-22,** the checks each Part of the admin redesign ran on the PC; added
+when Woodpecker ran no longer, so they have no Woodpecker twin):
+- **`admin-chunks`** (build): every admin chunk and the admin stylesheet in brotli KB, in the
+  summary; fails when the layout's chunk (`admin.page`) passes 25 KB (`ci/admin-chunks.mjs`).
+- **`en-scripts`** (lighthouse): `/en`'s scripts, one by one, against `main`'s last run, on a phone
+  and a laptop: byte-identical, renamed only, or different. Fails when they grow by more than 0.1 KB
+  brotli, unless the pushed commit's message has the line `Visitors-Pay: accepted` (a package
+  upgrade that grows them on purpose). A push to `main` that passes saves its record as the next
+  baseline (`ci/en-scripts.mjs`).
+- **`admin-tools`** (nightly, its own job): the admin redesign's tools on the build
+  (`ci/admin-tools/run.sh`): Impeccable's detector (its engine fetched and checked against its pinned
+  SHA-256), the layout matrix, the clipped fields, the probes, the keyboard walks at 1280 dark and
+  390 light, the template sweep, each Assistant view's chunks, the nine tasks, the screen-reader
+  audit, and the admin's screenshots pixel-compared with last night's. Report only; everything is in
+  the `admin-tools` artifact. On the PC: `ADMIN_TOOLS_OUT=<folder> node ci/admin-tools/<tool>.mjs`
+  from `ci/admin-tools/`, after `node gen-fixtures.mjs`.
 
 **The parity check.** `ci/ci-parity.mjs` runs in both CIs' `repo` workflow and fails when the two
 definitions drift:
 - a check step (a lower-case step name) is in one twin only, apart from each CI's short list of its
   own: Woodpecker's `owner`, `wait-pg`, `pw-version`, `reports`, `untag`, `email` and `woodpecker`
-  (its own version), GitHub's `inactivity`. `ci-image` is Woodpecker's alone, by design;
+  (its own version), GitHub's `inactivity`, `admin-chunks`, `en-scripts` and `admin-tools`.
+  `ci-image` is Woodpecker's alone, by design;
 - an image both CIs name is pinned to a different tag or digest;
 - a GitHub action isn't pinned to a full commit SHA with its version in a comment;
 - the twins' pull request path filters differ, each CI's own files aside.
@@ -70,9 +89,13 @@ twins, with the same image pin. The parity check fails until both have it.
     week, or a new runner image or Playwright), the comparison says so and passes.
   - **Bundle size:** a push to `main` saves `bundle-size-<run id>-<attempt>`; the others compare
     against the newest.
+  - **`/en`'s scripts:** a push to `main` whose `en-scripts` passed saves `en-scripts-<run id>-<attempt>`
+    (about 0.7 MB); the others compare against the newest. Without one, the step records and passes.
+  - **The admin's screenshots:** each nightly saves `admin-shots-<run id>-<attempt>`, the next
+    night's "before".
 - **Artifacts,** kept 14 days: `server-coverage`, `client-coverage`, `e2e-report`, `lighthouse`,
-  `visual-diff`, `cross-browser-<browser>`, `sbom`. `client-dist` carries the build between jobs for
-  a day.
+  `visual-diff`, `cross-browser-<browser>`, `admin-tools`, `sbom`. `client-dist` carries the build
+  between jobs for a day.
 - **Settings** (Settings → Actions → General): fork pull requests need approval for every external
   contributor; the workflow token reads the contents only and can't create or approve pull
   requests; artifacts and logs are kept 14 days; every action must be pinned to a full-length commit

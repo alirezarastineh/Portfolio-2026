@@ -28,3 +28,6 @@ id_ed25519.pub
 server/.vitest/
 DEPLOYMENT.md
 study-notes/
+# The admin tools' generated fixtures and their local screenshots (ci/admin-tools/).
+ci/admin-tools/fixtures.generated.mjs
+ci/admin-tools/shots/

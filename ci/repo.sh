@@ -14,7 +14,7 @@ case "${1:-}" in
     ;;
   # -x with SCRIPTDIR: the deploy scripts source load-env.sh from their folder.
   shellcheck)
-    shellcheck -x --source-path=SCRIPTDIR deploy/hetzner/*.sh deploy/woodpecker/*.sh ci/*.sh
+    shellcheck -x --source-path=SCRIPTDIR deploy/hetzner/*.sh deploy/woodpecker/*.sh ci/*.sh ci/admin-tools/*.sh
     ;;
   # Waivers, each with its reason, in .hadolint.yaml.
   hadolint)
