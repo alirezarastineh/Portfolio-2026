@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@angular/core";
 import { toast } from "@spartan-ng/brain/sonner";
+import { HlmTableImports } from "@spartan-ng/helm/table";
 
 import { AdminApiService } from "../admin-api.service";
 import { apiWords } from "../api-words";
@@ -25,80 +26,122 @@ import {
  * layer. No single number is trusted: "helpful" is a composite (no flag, not
  * asked again, no 👎, faithful when judged), and the primary metric rotates
  * when it moved less than a point in two weekly reviews (the rotation rule).
+ * A report in words (plan 5, U22): its figures in tables, not tiles.
  */
 @Component({
   selector: "app-assistant-outcomes",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [LoadErrorComponent],
+  imports: [HlmTableImports, LoadErrorComponent],
   host: { class: "block" },
   template: `
     <section class="flex flex-col gap-3" aria-labelledby="assistant-outcomes">
-      <h2 id="assistant-outcomes" class="m-0 text-sm font-medium">Outcomes</h2>
+      <h2 #heading id="assistant-outcomes" tabindex="-1" class="m-0 text-section-title">
+        Outcomes
+      </h2>
       @if (view(); as v) {
         @let o = v.outcomes;
-        <p class="m-0 text-hint text-muted-foreground">
-          The last {{ v.days }} days: {{ o.answered }} answered of {{ o.answers }} questions,
-          {{ usd(o.usd) }} in all.
-        </p>
-        <dl class="m-0 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          @for (tile of tiles(v); track tile.label) {
-            <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
-              <dt class="text-xs text-muted-foreground">{{ tile.label }}</dt>
-              <dd class="m-0 text-section-title tabular-nums">{{ tile.value }}</dd>
-            </div>
-          }
-        </dl>
-        <p class="m-0 text-sm">
-          <span class="text-muted-foreground">Hand-offs:</span> {{ funnelLine(o.funnel) }}
-        </p>
-        <!-- The guided tours (visitor plan V16): not answers, so counted here alone. -->
-        @if (v.tours; as t) {
-          <p class="m-0 text-sm">
-            <span class="text-muted-foreground">Tours:</span> {{ tourLine(t) }}
+        @if (o.answers) {
+          <p class="m-0 max-w-prose text-hint text-muted-foreground">
+            The last {{ v.days }} days: {{ o.answered }} answered of {{ o.answers }} questions,
+            {{ usd(o.usd) }} in all.
           </p>
-        }
-        <!-- Matched briefs (visitor plan V20): no answers either; each kind to the hand-off, and
-             the rows the critic took back, which the nightly trust check watches. -->
-        @if (v.matches; as m) {
-          <p class="m-0 text-sm">
-            <span class="text-muted-foreground">Matches:</span> {{ matchLine(m) }}
+          <div hlmTableContainer>
+            <table hlmTable class="max-w-xl">
+              <caption class="sr-only">
+                The outcomes over the last
+                {{
+                  v.days
+                }}
+                days
+              </caption>
+              <thead hlmTHead>
+                <tr hlmTr>
+                  <th hlmTh scope="col">Measure</th>
+                  <th hlmTh scope="col" class="text-right">Last {{ v.days }} days</th>
+                </tr>
+              </thead>
+              <tbody hlmTBody>
+                @for (row of figures(v); track row.label) {
+                  <tr hlmTr>
+                    <th hlmTh scope="row" class="font-normal">{{ row.label }}</th>
+                    <td hlmTd class="text-right font-data text-xs">{{ row.value }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <p class="m-0 max-w-prose text-sm">
+            <span class="text-muted-foreground">Hand-offs:</span> {{ funnelLine(o.funnel) }}.
           </p>
-          @if (m.runs) {
-            <p class="m-0 text-sm">
-              <span class="text-muted-foreground">Match rows:</span> {{ matchRowsLine(m) }}
+          <!-- The guided tours (visitor plan V16): not answers, so counted here alone. -->
+          @if (v.tours; as t) {
+            <p class="m-0 max-w-prose text-sm">
+              <span class="text-muted-foreground">Tours:</span> {{ tourLine(t) }}.
             </p>
           }
-        }
-
-        <!-- What the visitors' browsers saw (visitor plan V2); an older API sends none. -->
-        @if (v.browser; as b) {
-          <section class="flex flex-col gap-2" aria-labelledby="assistant-browser">
-            <h3 id="assistant-browser" class="m-0 text-sm font-medium">
-              In the visitor's browser
-              <span class="font-normal text-muted-foreground"
-                >({{ b.reported }} {{ b.reported === 1 ? "answer" : "answers" }} reported)</span
-              >
-            </h3>
-            <dl class="m-0 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              @for (tile of browserTiles(b); track tile.label) {
-                <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
-                  <dt class="text-xs text-muted-foreground">{{ tile.label }}</dt>
-                  <dd class="m-0 text-section-title tabular-nums">{{ tile.value }}</dd>
-                  @if (tile.detail) {
-                    <dd class="m-0 text-xs text-muted-foreground">{{ tile.detail }}</dd>
-                  }
-                </div>
-              }
-            </dl>
-            @if (downReasonLine(b); as line) {
-              <p class="m-0 text-sm">{{ line }}</p>
+          <!-- Matched briefs (visitor plan V20): no answers either; each kind to the hand-off, and
+               the rows the critic took back, which the nightly trust check watches. -->
+          @if (v.matches; as m) {
+            <p class="m-0 max-w-prose text-sm">
+              <span class="text-muted-foreground">Matches:</span> {{ matchLine(m) }}.
+            </p>
+            @if (m.runs) {
+              <p class="m-0 max-w-prose text-sm">
+                <span class="text-muted-foreground">Match rows:</span> {{ matchRowsLine(m) }}.
+              </p>
             }
-          </section>
+          }
+
+          <!-- What the visitors' browsers saw (visitor plan V2); an older API sends none. -->
+          @if (v.browser; as b) {
+            <section class="flex flex-col gap-2" aria-labelledby="assistant-browser">
+              <h3 id="assistant-browser" class="m-0 text-sm font-medium">
+                In the visitor's browser
+                <span class="font-normal text-muted-foreground"
+                  >({{ b.reported }} {{ b.reported === 1 ? "answer" : "answers" }} reported)</span
+                >
+              </h3>
+              <div hlmTableContainer>
+                <table hlmTable>
+                  <caption class="sr-only">
+                    What the visitors' browsers saw
+                  </caption>
+                  <thead hlmTHead>
+                    <tr hlmTr>
+                      <th hlmTh scope="col">Measure</th>
+                      <th hlmTh scope="col" class="text-right">Value</th>
+                      <th hlmTh scope="col">Beside it</th>
+                    </tr>
+                  </thead>
+                  <tbody hlmTBody>
+                    @for (tile of browserTiles(b); track tile.label) {
+                      <tr hlmTr>
+                        <th hlmTh scope="row" class="font-normal whitespace-normal">
+                          {{ tile.label }}
+                        </th>
+                        <td hlmTd class="text-right font-data text-xs">{{ tile.value }}</td>
+                        <td hlmTd class="text-xs whitespace-normal text-muted-foreground">
+                          {{ tile.detail ?? "" }}
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              @if (downReasonLine(b); as line) {
+                <p class="m-0 max-w-prose text-sm">{{ line }}</p>
+              }
+            </section>
+          }
+        } @else {
+          <p class="m-0 text-hint text-muted-foreground">
+            No visitor question in the last {{ v.days }} days.
+          </p>
         }
 
-        <div class="flex flex-col gap-2 rounded-lg border border-border p-3 text-sm">
+        <div class="flex flex-col gap-2 text-sm">
           <label class="flex flex-wrap items-center gap-2">
-            <span class="text-muted-foreground">Primary metric</span>
+            <span class="font-medium">Primary metric</span>
             <select
               name="primary-metric"
               class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 text-sm pointer-coarse:text-base"
@@ -114,26 +157,46 @@ import {
               ({{ higher[v.primary.metric] ? "higher is better" : "lower is better" }})
             </span>
           </label>
-          <ol class="m-0 flex list-none flex-wrap gap-2 p-0 font-data text-xs">
-            @for (w of v.primary.weeks; track w.week) {
-              <li class="rounded-sm border border-border px-2 py-1">
-                {{ w.week }}: {{ share(w.value) }}
-              </li>
-            }
-          </ol>
+          @if (v.primary.weeks.length) {
+            <div hlmTableContainer>
+              <table hlmTable class="max-w-xs">
+                <caption class="sr-only">
+                  The primary metric at each weekly review
+                </caption>
+                <thead hlmTHead>
+                  <tr hlmTr>
+                    <th hlmTh scope="col">Week</th>
+                    <th hlmTh scope="col" class="text-right">Value</th>
+                  </tr>
+                </thead>
+                <tbody hlmTBody>
+                  @for (w of v.primary.weeks; track w.week) {
+                    <tr hlmTr class="font-data text-xs">
+                      <th hlmTh scope="row" class="font-normal">{{ w.week }}</th>
+                      <td hlmTd class="text-right">{{ share(w.value) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
           @if (v.primary.rotate) {
-            <p
-              class="m-0 rounded-md border border-accent-orange/40 bg-accent-orange-soft p-2 text-xs"
-            >
+            <p class="m-0 max-w-prose font-medium">
               Flat for two weekly reviews: promote another metric, even though this one still looks
               fine.
             </p>
           }
         </div>
-      } @else if (loadError()) {
-        <app-load-error compact title="Could not load the outcomes" (retry)="retry()" />
+      } @else if (loadError(); as code) {
+        <app-load-error
+          compact
+          title="Could not load the outcomes"
+          [reason]="code"
+          [refocus]="heading"
+          (retry)="retry()"
+        />
       } @else {
-        <p class="m-0 text-hint text-muted-foreground">Loading…</p>
+        <p class="m-0 text-hint text-muted-foreground">Loading the outcomes…</p>
       }
     </section>
   `,
@@ -154,8 +217,8 @@ export class AssistantOutcomesComponent implements OnInit {
   protected readonly matchRowsLine = matchRowsLine;
 
   protected readonly view = signal<OutcomesView | null>(null);
-  /** The outcomes did not arrive: said, with Try again, never "Loading…" for ever. */
-  protected readonly loadError = signal(false);
+  /** Why the outcomes did not arrive (the API's code): said, with Try again, never "Loading…" for ever. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly saving = signal(false);
 
   ngOnInit(): void {
@@ -166,17 +229,20 @@ export class AssistantOutcomesComponent implements OnInit {
     const result = await this.api.assistantOutcomes();
     if (result.ok) {
       this.view.set(result.data);
+      this.loadError.set(null);
     } else if (this.view()) {
       toast.error("Could not load the outcomes", { description: apiWords(result.error) });
+    } else {
+      this.loadError.set(result.error);
     }
-    this.loadError.set(!result.ok && !this.view());
   }
 
   protected retry(): void {
     void this.load();
   }
 
-  protected tiles(v: OutcomesView): { label: string; value: string }[] {
+  /** The month's figures, each a row: its name and its value in words. */
+  protected figures(v: OutcomesView): { label: string; value: string }[] {
     const o = v.outcomes;
     return [
       { label: METRIC_LABELS.helpfulRate, value: share(o.helpfulRate) },

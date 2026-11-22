@@ -209,6 +209,22 @@ describe("the admin's pairs", () => {
       expect(ratio(colour(admin, theme, line), page)).toBeGreaterThanOrEqual(GRAPHIC);
     });
 
+    it.each(["assistant-evals", "assistant-pairwise"])(
+      "draws the %s run's progress bar (plan 5, U22): the fill on its track at 3:1, never the signal",
+      (name) => {
+        const source = read(`../app/admin/assistant/${name}.component.ts`);
+        const track = /class="h-1\.5 overflow-hidden bg-([\w-]+)"/.exec(source)?.[1];
+        const bar = /class="h-full bg-([\w-]+)"/.exec(source)?.[1];
+        expect([track, bar]).toEqual(["surface-2", "foreground"]);
+        if (!track || !bar) {
+          throw new Error(`Expected the progress bar's classes in ${name}`);
+        }
+        expect(
+          ratio(colour(admin, theme, bar), colour(admin, theme, track)),
+        ).toBeGreaterThanOrEqual(GRAPHIC);
+      },
+    );
+
     it("reads the rich text's code block: its surface is a token, under the page's text", () => {
       const editor = read("../app/admin/components/rich-text.component.ts");
       const block = /\.admin-prose pre \{[^}]*?background: ([^;]+);/.exec(editor)?.[1];

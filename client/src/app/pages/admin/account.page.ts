@@ -159,7 +159,8 @@ const required: ValidatorFn = (control) => Validators.required(control);
           } @else if (sessionsError(); as reason) {
             <app-load-error
               compact
-              [title]="'Could not load the sessions (' + reason + ')'"
+              title="Could not load the sessions"
+              [reason]="reason"
               (retry)="reloadSessions()"
             />
           } @else {

@@ -181,8 +181,8 @@ class LiveContentStore {
           <div class="absolute inset-0 overflow-y-auto bg-background p-4">
             <app-load-error
               compact
-              title="Nothing to preview against yet"
-              [reason]="failure()"
+              [title]="failure().title"
+              [reason]="failure().code"
               (retry)="retry()"
             />
           </div>
@@ -220,17 +220,18 @@ export class LivePreviewComponent {
     computation: (view, previous) => (view === "both" ? (previous?.value ?? "en") : view),
   });
   protected readonly base = computed(() => this.preview.base(this.locale()));
+  /** Why there is nothing to preview, in words; the API's code goes to the error's reason (plan 5, U22). */
   protected readonly failure = computed(() => {
     const base = this.base();
     if (base.state !== "failed") {
-      return "";
+      return { title: "", code: "" };
     }
     const n = base.issues.length;
     if (!n) {
-      return base.error;
+      return { title: "Nothing to preview against yet", code: base.error };
     }
     const label = n === 1 ? "problem" : "problems";
-    return `The saved draft has ${n} ${label} to fix before it builds (${base.error}).`;
+    return { title: `The saved draft has ${n} ${label} to fix before it builds`, code: base.error };
   });
 
   /** The page as it would be published with this editor's edits. */

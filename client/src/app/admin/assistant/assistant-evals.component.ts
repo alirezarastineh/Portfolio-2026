@@ -9,22 +9,31 @@ import {
   PLATFORM_ID,
   signal,
 } from "@angular/core";
+import { NgIcon, provideIcons } from "@ng-icons/core";
+import { lucideChevronRight } from "@ng-icons/lucide";
 import { toast } from "@spartan-ng/brain/sonner";
-import { HlmBadge } from "@spartan-ng/helm/badge";
 import { HlmButton } from "@spartan-ng/helm/button";
+import { HlmTableImports } from "@spartan-ng/helm/table";
 
 import { AdminApiService } from "../admin-api.service";
 import { apiWords } from "../api-words";
-import type { RunItem, RunRow } from "../assistant-types";
+import type { EvalCaseResult, RunItem, RunRow } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
 import { LoadErrorComponent } from "../components/load-state.component";
 import {
   canResume,
+  categoryLine,
   compareRuns,
   conversationLine,
+  EVAL_SUITE_CASES,
   isActive,
+  judgedLine,
+  judgeScores,
   passCounts,
   progressShare,
+  resultWord,
+  seconds,
+  statusWord,
   type ComparisonRow,
 } from "../eval-runs";
 import { judgeMark, type JudgeStatus } from "../pairwise";
@@ -32,32 +41,44 @@ import { AdminPulseService } from "../pulse.service";
 import { featureStop } from "../spending";
 import { FeatureStopComponent } from "./feature-stop.component";
 
-const STATUS_LABELS: Record<RunRow["status"], string> = {
-  queued: "waiting to start",
-  running: "running",
-  done: "finished",
-  failed: "stopped",
-  cancelled: "cancelled",
-  interrupted: "interrupted by a restart",
+const POLL_MS = 2000;
+const RESULT_ORDER: Record<EvalCaseResult["status"], number> = {
+  failed: 0,
+  unavailable: 1,
+  passed: 2,
 };
 
-const POLL_MS = 2000;
-
 /**
- * The eval suite as a background run: ~40 questions against a frozen sample
+ * The eval suite as a background run: its questions against a frozen sample
  * portfolio, graded by checks and an LLM judge, the same suite as
  * `pnpm -C server ai:eval`. The run goes on without this page; each case is
  * saved as it is graded, so the page shows progress whenever it is opened, a
  * restart leaves a run that can be resumed, and two runs can be compared case
- * by case.
+ * by case. A report in words (plan 5, U22): headings and ruled tables, its
+ * loading, empty and failed states said in its place.
  */
 @Component({
   selector: "app-assistant-evals",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, FeatureStopComponent, HlmBadge, HlmButton, LoadErrorComponent],
+  imports: [
+    DecimalPipe,
+    FeatureStopComponent,
+    HlmButton,
+    HlmTableImports,
+    LoadErrorComponent,
+    NgIcon,
+  ],
+  viewProviders: [provideIcons({ lucideChevronRight })],
   host: { class: "block" },
   template: `
-    <div class="flex flex-col gap-6">
+    <section class="flex flex-col gap-4" aria-labelledby="evals-title">
+      <div class="flex flex-col gap-1">
+        <h2 id="evals-title" class="m-0 text-section-title">Evals</h2>
+        <p class="m-0 max-w-prose text-hint text-muted-foreground">
+          The suite's {{ suite }} questions against a frozen sample portfolio, graded by checks and
+          a judge.
+        </p>
+      </div>
       <div class="flex flex-wrap items-center gap-3">
         <!-- Paid: off while an eval run would be refused, and saying why (plan 5, U18). -->
         <button
@@ -86,62 +107,50 @@ const POLL_MS = 2000;
             </button>
           } @else {
             <span class="text-hint text-muted-foreground">
-              A {{ running.kind }} run is going; one paid run at a time.
+              Another paid run is going; one at a time.
             </span>
           }
         }
         <span class="text-hint text-muted-foreground">
-          Runs in the background with free-tier pacing (10–15 minutes); you can leave this page.
+          Runs in the background, paced for the free tier; you can leave this page.
         </span>
       </div>
       @if (stop(); as reason) {
-        <app-feature-stop class="-mt-4" noteId="stop-eval" [reason]="reason" />
+        <app-feature-stop class="-mt-2" noteId="stop-eval" [reason]="reason" />
       }
 
       @if (view(); as v) {
         <section class="flex flex-col gap-3" aria-labelledby="eval-run">
-          <h2 id="eval-run" class="m-0 text-sm font-medium">
-            Run of {{ when(v.run.createdAt) }}: {{ statusLabel(v.run) }}
-          </h2>
+          <h3 id="eval-run" class="m-0 text-sm font-medium">
+            Run of {{ when(v.run.createdAt) }}: {{ status(v.run) }}
+          </h3>
           <div
-            class="h-1.5 overflow-hidden rounded-full bg-muted"
+            class="h-1.5 overflow-hidden bg-surface-2"
             role="progressbar"
             aria-label="Cases finished"
             aria-valuemin="0"
             [attr.aria-valuemax]="v.run.progress.total"
             [attr.aria-valuenow]="v.run.progress.done"
           >
-            <div
-              class="h-full rounded-full bg-accent-orange"
-              [style.width.%]="share(v.run) * 100"
-            ></div>
+            <div class="h-full bg-foreground" [style.width.%]="share(v.run) * 100"></div>
           </div>
-          <p class="m-0 flex flex-wrap items-baseline gap-3 text-sm">
+          <p class="m-0 text-sm">
             <strong class="text-section-title tabular-nums"
-              >{{ counts().passed }}/{{ counts().graded }}</strong
+              >{{ counts().passed }} of {{ counts().graded }}</strong
             >
-            <span>passed</span>
-            <span class="text-muted-foreground">
-              {{ v.run.progress.done }} of {{ v.run.progress.total }} cases done · \${{
-                v.run.usd | number: "1.3-4"
-              }}
-            </span>
-            @if (v.run.summary; as s) {
-              <span class="text-muted-foreground">
-                {{ s.promptVersion }} · judged by {{ s.judge ?? "no judge" }}
-              </span>
-              @if (mark(s.judge); as m) {
-                <span hlmBadge [variant]="m === 'uncalibrated' ? 'destructive' : 'outline'">
-                  {{ m }}
-                </span>
-              }
-            }
+            passed. {{ v.run.progress.done }} of {{ v.run.progress.total }} cases done,
+            <span class="font-data">\${{ v.run.usd | number: "1.3-4" }}</span
+            >.
           </p>
-          @if (v.run.error) {
-            <p
-              class="m-0 rounded-md border border-accent-orange/40 bg-accent-orange-soft p-3 text-sm"
-            >
-              {{ v.run.error }}
+          @if (v.run.summary; as s) {
+            <p class="m-0 text-hint text-muted-foreground">{{ judged(s) }}</p>
+            @if (categories(); as line) {
+              <p class="m-0 text-sm">By category: {{ line }}.</p>
+            }
+          }
+          @if (v.run.error; as error) {
+            <p class="m-0 max-w-prose text-sm">
+              <span class="font-medium">Why it stopped:</span> {{ error }}
             </p>
           }
           @if (resumable(v.run)) {
@@ -161,125 +170,152 @@ const POLL_MS = 2000;
               </button>
             </div>
           }
-          @if (v.run.summary; as s) {
-            <p class="m-0 flex flex-wrap gap-2">
-              @for (c of categories(); track c[0]) {
-                <span
-                  hlmBadge
-                  [variant]="
-                    c[1].completed > 0 && c[1].passed < c[1].completed ? 'destructive' : 'outline'
-                  "
-                  >{{ c[0] }} {{ c[1].passed }}/{{ c[1].completed }}</span
-                >
-              }
-            </p>
-          }
-          <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list">
-            @for (r of results(); track r.id) {
-              <li
-                class="rounded-lg border border-border p-3 text-sm"
-                [class.border-destructive]="r.status === 'failed'"
-                [class.border-accent-orange]="r.status === 'unavailable'"
-              >
-                <details>
-                  <summary class="flex cursor-pointer flex-wrap items-center gap-2">
-                    <span
-                      [class.text-destructive]="r.status === 'failed'"
-                      [class.text-accent-orange]="r.status === 'unavailable'"
-                    >
-                      {{ r.status === "unavailable" ? "!" : r.passed ? "✓" : "✗" }}
-                    </span>
-                    <span class="font-data text-xs">{{ r.id }}</span>
-                    <span class="text-hint text-muted-foreground"
-                      >{{ r.model ?? "no model" }} · {{ r.totalMs }} ms</span
-                    >
-                    @if (r.judge) {
-                      <span class="text-hint text-muted-foreground">
-                        judge {{ r.judge.faithfulness | number: "1.2-2" }} /
-                        {{ r.judge.helpfulness }}
-                      </span>
-                    }
-                  </summary>
-                  @if (r.failures.length) {
-                    <ul
-                      class="mt-2 text-xs"
-                      [class.text-destructive]="r.status === 'failed'"
-                      [class.text-accent-orange]="r.status === 'unavailable'"
-                    >
-                      @for (f of r.failures; track $index) {
-                        <li>{{ f }}</li>
-                      }
-                    </ul>
-                  }
-                  @if (r.conversation; as conversation) {
-                    <!-- Visitor plan V3: the turns before the case's question, as sent. -->
-                    <div class="mt-2 flex flex-col gap-1 text-xs">
-                      <p class="m-0 text-muted-foreground">{{ conversationLine(conversation) }}</p>
-                      <ol
-                        class="m-0 flex flex-col gap-1 pl-5"
-                        aria-label="Earlier in the conversation"
+          <div hlmTableContainer>
+            <table hlmTable>
+              <caption class="sr-only">
+                The run's cases, the failed ones first
+              </caption>
+              <thead hlmTHead>
+                <tr hlmTr>
+                  <th hlmTh scope="col">Case</th>
+                  <th hlmTh scope="col">Result</th>
+                  <th hlmTh scope="col">Model</th>
+                  <th hlmTh scope="col" class="text-right">Time</th>
+                  <th hlmTh scope="col" class="text-right">Judged faithful, helpful</th>
+                </tr>
+              </thead>
+              @for (r of results(); track r.id) {
+                <tbody hlmTBody>
+                  <tr hlmTr>
+                    <th hlmTh scope="row" class="font-normal">
+                      <button
+                        type="button"
+                        class="group inline-flex min-h-6 touch-manipulation items-center gap-1.5 pointer-coarse:min-h-11"
+                        [attr.aria-expanded]="isOpen(r.id)"
+                        [attr.aria-controls]="'eval-case-' + r.id"
+                        (click)="toggle(r.id)"
                       >
-                        @for (t of conversation.turns; track $index) {
-                          <li>
-                            <p class="m-0">{{ t.question }}</p>
-                            <p class="m-0 whitespace-pre-wrap text-muted-foreground">
-                              @if (t.forged) {
-                                <span>[forged]</span>
-                              } @else if (t.live) {
-                                <span>[answered live]</span>
-                              }
-                              {{ t.answer || "(no text)" }}
-                            </p>
-                          </li>
+                        <ng-icon
+                          name="lucideChevronRight"
+                          size="14"
+                          class="shrink-0 text-muted-foreground group-aria-expanded:rotate-90"
+                          aria-hidden="true"
+                        />
+                        <span class="font-data text-xs" translate="no">{{ r.id }}</span>
+                      </button>
+                    </th>
+                    <td hlmTd>
+                      <span
+                        [class.text-destructive]="r.status === 'failed'"
+                        [class.text-muted-foreground]="r.status === 'unavailable'"
+                        >{{ result(r) }}</span
+                      >
+                    </td>
+                    <td hlmTd class="font-data text-xs" translate="no">{{ r.model ?? "none" }}</td>
+                    <td hlmTd class="text-right font-data text-xs">{{ time(r.totalMs) }}</td>
+                    <td hlmTd class="text-right font-data text-xs">{{ scores(r.judge) }}</td>
+                  </tr>
+                  <tr hlmTr [id]="'eval-case-' + r.id" [hidden]="!isOpen(r.id)">
+                    <td hlmTd colspan="5" class="whitespace-normal">
+                      <div class="flex max-w-prose flex-col gap-2 py-1 text-sm">
+                        @if (r.failures.length) {
+                          <ul
+                            class="m-0 flex flex-col gap-0.5 pl-5"
+                            [class.text-destructive]="r.status === 'failed'"
+                            [class.text-muted-foreground]="r.status === 'unavailable'"
+                          >
+                            @for (f of r.failures; track $index) {
+                              <li>{{ f }}</li>
+                            }
+                          </ul>
                         }
-                      </ol>
-                    </div>
-                  }
-                  <p class="m-0 mt-2 whitespace-pre-wrap text-foreground/85">
-                    {{ r.answer || "(no text)" }}
-                  </p>
-                  @if (r.tools.length) {
-                    <p class="m-0 mt-1 font-data text-xs text-muted-foreground">
-                      tools: {{ tools(r.tools) }}
-                    </p>
-                  }
-                  @if (r.reasoning) {
-                    <!-- Plan phase 23: how a failed case reasoned; evidence, not proof. -->
-                    <div class="mt-2 rounded-md border border-border px-2 py-1 text-xs">
-                      <p class="m-0 text-muted-foreground">Its reasoning (an excerpt):</p>
-                      <p class="m-0 mt-1 whitespace-pre-wrap text-muted-foreground">
-                        {{ r.reasoning }}
-                      </p>
-                    </div>
-                  }
-                </details>
-              </li>
-            }
-          </ul>
+                        @if (r.conversation; as conversation) {
+                          <!-- Visitor plan V3: the turns before the case's question, as sent. -->
+                          <div class="flex flex-col gap-1 text-xs">
+                            <p class="m-0 text-muted-foreground">
+                              {{ conversationLine(conversation) }}
+                            </p>
+                            <ol
+                              class="m-0 flex flex-col gap-1 pl-5"
+                              aria-label="Earlier in the conversation"
+                            >
+                              @for (t of conversation.turns; track $index) {
+                                <li>
+                                  <p class="m-0">{{ t.question }}</p>
+                                  <p class="m-0 whitespace-pre-wrap text-muted-foreground">
+                                    @if (t.forged) {
+                                      <span>[forged]</span>
+                                    } @else if (t.live) {
+                                      <span>[answered live]</span>
+                                    }
+                                    {{ t.answer || "(no text)" }}
+                                  </p>
+                                </li>
+                              }
+                            </ol>
+                          </div>
+                        }
+                        <p
+                          class="m-0 whitespace-pre-wrap"
+                          [textContent]="r.answer || '(no text)'"
+                        ></p>
+                        @if (r.tools.length) {
+                          <p class="m-0 text-xs text-muted-foreground">
+                            Tools it called: <span class="font-data">{{ tools(r.tools) }}</span>
+                          </p>
+                        }
+                        @if (r.reasoning; as reasoning) {
+                          <!-- Plan phase 23: how a failed case reasoned; evidence, not proof. -->
+                          <div class="flex flex-col gap-1 text-xs text-muted-foreground">
+                            <p class="m-0">Its reasoning (an excerpt):</p>
+                            <p class="m-0 whitespace-pre-wrap" [textContent]="reasoning"></p>
+                          </div>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              } @empty {
+                <tbody hlmTBody>
+                  <tr hlmTr>
+                    <td hlmTd colspan="5" class="text-muted-foreground">No case graded yet.</td>
+                  </tr>
+                </tbody>
+              }
+            </table>
+          </div>
         </section>
       }
 
       @if (comparison(); as c) {
         <section class="flex flex-col gap-2" aria-labelledby="eval-compare">
-          <h2 id="eval-compare" class="m-0 text-sm font-medium">{{ c.label }}</h2>
-          <div class="overflow-x-auto rounded-lg border border-border">
-            <table class="w-full text-sm">
-              <thead class="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th class="p-2 font-normal">Case</th>
-                  <th class="p-2 font-normal">This run</th>
-                  <th class="p-2 font-normal">The other</th>
+          <h3 id="eval-compare" class="m-0 text-sm font-medium">{{ c.label }}</h3>
+          <div hlmTableContainer>
+            <table hlmTable>
+              <caption class="sr-only">
+                Each case in both runs, the changed ones first
+              </caption>
+              <thead hlmTHead>
+                <tr hlmTr>
+                  <th hlmTh scope="col">Case</th>
+                  <th hlmTh scope="col">This run</th>
+                  <th hlmTh scope="col">The other</th>
+                  <th hlmTh scope="col">Changed</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody hlmTBody>
                 @for (row of c.rows; track row.id) {
-                  <tr
-                    class="border-t border-border font-data text-xs"
-                    [class.text-destructive]="row.changed"
-                  >
-                    <td class="p-2">{{ row.id }}</td>
-                    <td class="p-2">{{ row.a }}</td>
-                    <td class="p-2">{{ row.b }}</td>
+                  <tr hlmTr>
+                    <th hlmTh scope="row" class="font-data text-xs font-normal" translate="no">
+                      {{ row.id }}
+                    </th>
+                    <td hlmTd>{{ row.a }}</td>
+                    <td hlmTd>{{ row.b }}</td>
+                    <td hlmTd>
+                      @if (row.changed) {
+                        <span class="text-destructive">changed</span>
+                      }
+                    </td>
                   </tr>
                 }
               </tbody>
@@ -289,37 +325,56 @@ const POLL_MS = 2000;
       }
 
       <section class="flex flex-col gap-2" aria-labelledby="eval-history">
-        <h2 id="eval-history" class="m-0 text-sm font-medium">Past runs</h2>
-        @if (loadError()) {
-          <app-load-error compact title="Could not load the eval runs" (retry)="reload()" />
-        } @else {
-          <div class="overflow-x-auto rounded-lg border border-border">
-            <table class="w-full text-sm">
-              <thead class="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th class="p-2 font-normal">Started</th>
-                  <th class="p-2 font-normal">Status</th>
-                  <th class="p-2 text-right font-normal">Passed</th>
-                  <th class="p-2 text-right font-normal">Cost</th>
-                  <th class="p-2 font-normal"><span class="sr-only">Actions</span></th>
+        <h3 #history id="eval-history" tabindex="-1" class="m-0 text-sm font-medium">Past runs</h3>
+        <div hlmTableContainer>
+          <table hlmTable>
+            <caption class="sr-only">
+              The eval runs, newest first
+            </caption>
+            <thead hlmTHead>
+              <tr hlmTr>
+                <th hlmTh scope="col">Started</th>
+                <th hlmTh scope="col">Status</th>
+                <th hlmTh scope="col" class="text-right">Passed</th>
+                <th hlmTh scope="col" class="text-right">Cost</th>
+                <th hlmTh scope="col"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody hlmTBody>
+              @if (loadError(); as code) {
+                <tr hlmTr>
+                  <td hlmTd colspan="5" class="whitespace-normal">
+                    <app-load-error
+                      compact
+                      title="Could not load the eval runs"
+                      [reason]="code"
+                      [refocus]="history"
+                      (retry)="reload()"
+                    />
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
+              } @else if (!loaded()) {
+                <tr hlmTr>
+                  <td hlmTd colspan="5" class="text-muted-foreground">Loading the eval runs…</td>
+                </tr>
+              } @else {
                 @for (r of evalRuns(); track r.id) {
-                  <tr class="border-t border-border text-xs">
-                    <td class="p-2 font-data">{{ when(r.createdAt) }}</td>
-                    <td class="p-2">{{ statusLabel(r) }}</td>
-                    <td class="p-2 text-right font-data">
+                  <tr hlmTr>
+                    <td hlmTd class="font-data text-xs">{{ when(r.createdAt) }}</td>
+                    <td hlmTd>{{ status(r) }}</td>
+                    <td hlmTd class="text-right font-data text-xs">
                       @if (r.summary; as s) {
-                        {{ s.passed }}/{{ s.completed }}
+                        {{ s.passed }} of {{ s.completed }}
                       } @else {
-                        {{ r.progress.done }}/{{ r.progress.total }} done
+                        {{ r.progress.done }} of {{ r.progress.total }} done
                       }
                     </td>
-                    <td class="p-2 text-right font-data">\${{ r.usd | number: "1.3-4" }}</td>
-                    <td class="flex flex-wrap justify-end gap-2 p-2">
+                    <td hlmTd class="text-right font-data text-xs">
+                      \${{ r.usd | number: "1.3-4" }}
+                    </td>
+                    <td hlmTd class="text-right">
                       <button hlmBtn type="button" size="sm" variant="ghost" (click)="open(r.id)">
-                        Open
+                        Open<span class="sr-only"> the run of {{ when(r.createdAt) }}</span>
                       </button>
                       @if (view(); as v) {
                         @if (v.run.id !== r.id) {
@@ -330,23 +385,25 @@ const POLL_MS = 2000;
                             variant="ghost"
                             (click)="compare(r)"
                           >
-                            Compare
+                            Compare<span class="sr-only">
+                              this run with the run of {{ when(r.createdAt) }}</span
+                            >
                           </button>
                         }
                       }
                     </td>
                   </tr>
                 } @empty {
-                  <tr>
-                    <td class="p-2 text-muted-foreground" colspan="5">No runs yet.</td>
+                  <tr hlmTr>
+                    <td hlmTd colspan="5" class="text-muted-foreground">No eval run yet.</td>
                   </tr>
                 }
-              </tbody>
-            </table>
-          </div>
-        }
+              }
+            </tbody>
+          </table>
+        </div>
       </section>
-    </div>
+    </section>
   `,
 })
 export class AssistantEvalsComponent implements OnInit {
@@ -358,13 +415,18 @@ export class AssistantEvalsComponent implements OnInit {
   /** Why an eval run would be refused now, or null: Run and Resume say so and send nothing. */
   protected readonly stop = computed(() => featureStop(this.pulse.assistant()?.spend, "eval"));
 
+  protected readonly suite = EVAL_SUITE_CASES;
   /** Every run, whatever its kind; the history lists the eval runs. */
   protected readonly runs = signal<RunRow[]>([]);
-  /** The runs did not arrive: the history says so, never "No runs yet". */
-  protected readonly loadError = signal(false);
+  /** The runs arrived at least once: until then the history says it is loading. */
+  protected readonly loaded = signal(false);
+  /** Why the runs did not arrive (the API's code): the history says so, never "No eval run yet". */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly view = signal<{ run: RunRow; items: RunItem[] } | null>(null);
   protected readonly busy = signal(false);
   protected readonly comparison = signal<{ label: string; rows: ComparisonRow[] } | null>(null);
+  /** The cases opened to their evidence. */
+  private readonly opened = signal<ReadonlySet<string>>(new Set());
   private readonly judge = signal<JudgeStatus | null>(null);
   private timer?: ReturnType<typeof setTimeout>;
 
@@ -383,16 +445,23 @@ export class AssistantEvalsComponent implements OnInit {
   });
 
   protected readonly counts = computed(() => passCounts(this.view()?.items ?? []));
+  /** The graded cases, the failed ones first, then the unavailable: a run holds the whole suite. */
   protected readonly results = computed(() =>
-    (this.view()?.items ?? []).flatMap((item) => (item.result ? [item.result] : [])),
+    (this.view()?.items ?? [])
+      .flatMap((item) => (item.result ? [item.result] : []))
+      .toSorted((a, b) => RESULT_ORDER[a.status] - RESULT_ORDER[b.status]),
   );
   protected readonly categories = computed(() =>
-    Object.entries(this.view()?.run.summary?.byCategory ?? {}),
+    categoryLine(this.view()?.run.summary?.byCategory ?? {}),
   );
 
   protected readonly share = progressShare;
   protected readonly resumable = canResume;
   protected readonly conversationLine = conversationLine;
+  protected readonly status = statusWord;
+  protected readonly result = resultWord;
+  protected readonly time = seconds;
+  protected readonly scores = judgeScores;
 
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => clearTimeout(this.timer));
@@ -407,14 +476,15 @@ export class AssistantEvalsComponent implements OnInit {
     }
     // With runs on screen, a toast; before, the history says so, with Try again.
     if (!list.ok) {
-      if (this.runs().length) {
+      if (this.loaded()) {
         toast.error("Could not load the eval runs", { description: apiWords(list.error) });
       } else {
-        this.loadError.set(true);
+        this.loadError.set(list.error);
       }
       return;
     }
-    this.loadError.set(false);
+    this.loadError.set(null);
+    this.loaded.set(true);
     this.runs.set(list.data.runs);
     const evals = this.evalRuns();
     const first = evals.find(isActive) ?? evals[0];
@@ -427,9 +497,23 @@ export class AssistantEvalsComponent implements OnInit {
     void this.load();
   }
 
-  /** Whether reviewers' labels back the judge that scored this run. */
-  protected mark(judge: string | null): string | null {
-    return judgeMark(judge, this.judge());
+  /** "Prompt ask-…, judged by gemini-flash-lite (calibrated)." */
+  protected judged(summary: { promptVersion: string; judge: string | null }): string {
+    return judgedLine(summary, judgeMark(summary.judge, this.judge()));
+  }
+
+  protected isOpen(id: string): boolean {
+    return this.opened().has(id);
+  }
+
+  protected toggle(id: string): void {
+    this.opened.update((open) => {
+      const next = new Set(open);
+      if (!next.delete(id)) {
+        next.add(id);
+      }
+      return next;
+    });
   }
 
   protected async open(id: string): Promise<void> {
@@ -441,6 +525,7 @@ export class AssistantEvalsComponent implements OnInit {
     }
     if (this.view()?.run.id !== id) {
       this.comparison.set(null);
+      this.opened.set(new Set());
     }
     this.view.set(result.data);
     const run = result.data.run;
@@ -456,10 +541,9 @@ export class AssistantEvalsComponent implements OnInit {
       return;
     }
     const go = await this.confirm.ask({
-      title: "Run the eval suite?",
-      description:
-        "About 40 questions go to the configured models, plus a judge for answerable cases. It runs in the background, paced for free-tier limits, and takes 10–15 minutes; its cost counts toward today's budget.",
-      confirmLabel: "Run evals",
+      title: `Run the evals on all ${this.suite} cases?`,
+      description: `Each of the ${this.suite} questions goes to the configured models, and a judge grades the answerable ones. It runs in the background, paced for free-tier limits; its cost counts toward today's budget.`,
+      confirmLabel: "Run the evals",
     });
     if (!go) {
       return;
@@ -532,15 +616,12 @@ export class AssistantEvalsComponent implements OnInit {
     }
   }
 
-  protected statusLabel(run: RunRow): string {
-    return STATUS_LABELS[run.status];
-  }
-
   protected when(iso: string): string {
     return new Date(iso).toLocaleString();
   }
 
+  /** "get_document {"id":"profile@en"}; search {"q":"rag"}": each call and what it asked. */
   protected tools(tools: { name: string; input: unknown }[]): string {
-    return tools.map((t) => `${t.name} ${JSON.stringify(t.input)}`).join(" · ");
+    return tools.map((t) => `${t.name} ${JSON.stringify(t.input)}`).join("; ");
   }
 }

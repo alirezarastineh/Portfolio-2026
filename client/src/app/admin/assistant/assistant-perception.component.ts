@@ -2,9 +2,11 @@ import { DecimalPipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from "@angular/core";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmButton } from "@spartan-ng/helm/button";
+import { HlmTableImports } from "@spartan-ng/helm/table";
 
 import { AdminApiService } from "../admin-api.service";
 import { apiWords } from "../api-words";
+import { LoadErrorComponent } from "../components/load-state.component";
 import {
   cacheShare,
   documentRows,
@@ -27,17 +29,20 @@ import {
  * answer language, the cached share of answers' first and later steps, the
  * re-read ratio, tokens per helpful answer, which documents are fetched and
  * cited, and the corpus tiers. The system only suggests a tier; the admin
- * applies it, and the next question reads the new core.
+ * applies it, and the next question reads the new core. A report in words
+ * (plan 5, U22): its figures a table, not tiles.
  */
 @Component({
   selector: "app-assistant-perception",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, HlmButton],
+  imports: [DecimalPipe, HlmButton, HlmTableImports, LoadErrorComponent],
   host: { class: "block" },
   template: `
     <section class="flex flex-col gap-3" aria-labelledby="assistant-perception">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="assistant-perception" class="m-0 text-sm font-medium">Perception</h2>
+        <h2 #heading id="assistant-perception" tabindex="-1" class="m-0 text-section-title">
+          Perception
+        </h2>
         <label class="flex items-center gap-2 text-xs text-muted-foreground">
           Window
           <select
@@ -54,185 +59,216 @@ import {
         </label>
       </div>
       @if (view(); as v) {
-        <p class="m-0 text-hint text-muted-foreground">
-          What the assistant reads and how it uses it, over the last {{ v.days }} days:
-          {{ v.answers }} visitor {{ v.answers === 1 ? "answer" : "answers" }}.
-        </p>
-        <dl class="m-0 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
-            <dt class="text-xs text-muted-foreground">Prefix, English / German</dt>
-            <dd class="m-0 text-section-title tabular-nums">
-              @if (v.coreTokens; as t) {
-                {{ t.en | number }} / {{ t.de | number }}
-              } @else {
-                –
-              }
-            </dd>
-          </div>
-          <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
-            <dt class="text-xs text-muted-foreground">Cached, first / later steps</dt>
-            <dd class="m-0 text-section-title tabular-nums">
-              {{ cacheShare(v.cache.first) }} / {{ cacheShare(v.cache.later) }}
-            </dd>
-          </div>
-          <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
-            <dt class="text-xs text-muted-foreground">Re-read ratio</dt>
-            <dd
-              class="m-0 text-section-title tabular-nums"
-              [class]="verdict(v) === 'high' ? 'text-destructive' : ''"
-            >
-              {{ percent(v.rereadRatio) }}
-            </dd>
-          </div>
-          <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
-            <dt class="text-xs text-muted-foreground">Input tokens per answer</dt>
-            <dd class="m-0 text-section-title tabular-nums">
-              {{
-                v.tokens.inputPerAnswer === null ? "–" : (v.tokens.inputPerAnswer | number: "1.0-0")
-              }}
-            </dd>
-          </div>
-          <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
-            <dt class="text-xs text-muted-foreground">Tokens per helpful answer</dt>
-            <dd class="m-0 text-section-title tabular-nums">
-              {{ v.tokens.perHelpful === null ? "–" : (v.tokens.perHelpful | number: "1.0-0") }}
-            </dd>
-          </div>
-          <div class="flex flex-col gap-0.5 rounded-lg border border-border p-3">
-            <dt class="text-xs text-muted-foreground">Documents fetched</dt>
-            <dd class="m-0 text-section-title tabular-nums">
-              {{ v.fetches.whole + v.fetches.rest + v.fetches.handle + v.fetches.unknown }}
-            </dd>
-          </div>
-        </dl>
-        <p class="m-0 text-hint text-muted-foreground">
-          Fetches: {{ v.fetches.whole }} re-read a document the prefix held whole (healthy under
-          {{ percent(v.healthyReread) }}), {{ v.fetches.rest }} read the rest of one held cut short,
-          {{ v.fetches.handle }} the other language's version, {{ v.fetches.unknown }} that no
-          snapshot could place. Cached: {{ v.cache.first.steps }} first and
-          {{ v.cache.later.steps }} later steps on models that cache.
-        </p>
-        @if (v.localeMix.length) {
-          <p class="m-0 text-hint text-muted-foreground">{{ localeMixLine(v.localeMix) }}</p>
-        }
-        @if (searchLine(v.search); as line) {
-          <p class="m-0 text-hint text-muted-foreground">Searches: {{ line }}.</p>
-        }
-        @if (windowLine(v); as line) {
-          <p class="m-0 text-hint text-muted-foreground">{{ line }}.</p>
-        }
-        @if (pagesLine(v); as line) {
-          <p class="m-0 text-hint text-muted-foreground">{{ line }}.</p>
-        }
-
-        <div class="overflow-x-auto rounded-lg border border-border">
-          <table class="w-full text-sm">
-            <caption class="sr-only">
-              Before and after a core per language
-            </caption>
-            <thead class="text-left text-xs text-muted-foreground">
-              <tr>
-                <th class="p-2 font-normal">Layout read</th>
-                <th class="p-2 text-right font-normal">Answers</th>
-                <th class="p-2 text-right font-normal">Input tokens</th>
-                <th class="p-2 text-right font-normal">Cost</th>
-                <th class="p-2 text-right font-normal">Cached, first / later</th>
-                <th class="p-2 text-right font-normal">Re-reads</th>
-                <th class="p-2 text-right font-normal">Tokens per helpful</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (r of layouts(v); track r.layout) {
-                <tr class="border-t border-border font-data text-xs">
-                  <th scope="row" class="p-2 text-left font-sans text-sm font-normal">
-                    {{ r.label }}
-                  </th>
-                  <td class="p-2 text-right">{{ r.answers }}</td>
-                  <td class="p-2 text-right">{{ r.inputPerAnswer }}</td>
-                  <td class="p-2 text-right">{{ r.usdPerAnswer }}</td>
-                  <td class="p-2 text-right">{{ r.cached }}</td>
-                  <td class="p-2 text-right">{{ r.reread }}</td>
-                  <td class="p-2 text-right">{{ r.perHelpful }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-
-        <div class="overflow-x-auto rounded-lg border border-border">
-          <table class="w-full text-sm">
-            <caption class="sr-only">
-              The documents answers fetched or cited most
-            </caption>
-            <thead class="text-left text-xs text-muted-foreground">
-              <tr>
-                <th class="p-2 font-normal">Document</th>
-                <th class="p-2 text-right font-normal">Fetched</th>
-                <th class="p-2 text-right font-normal">Cited</th>
-                <th class="p-2 font-normal">Tier</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (d of rows(v); track d.id) {
-                <tr class="border-t border-border">
-                  <td class="p-2">
-                    {{ d.title }}
-                    <span class="font-data text-xs text-muted-foreground">{{ d.id }}</span>
-                  </td>
-                  <td class="p-2 text-right font-data text-xs">{{ d.fetched }}</td>
-                  <td class="p-2 text-right font-data text-xs">{{ d.cited }}</td>
-                  <td class="p-2 text-xs">{{ d.tier ? tierLabel[d.tier] : "–" }}</td>
-                </tr>
-              } @empty {
-                <tr>
-                  <td class="p-2 text-muted-foreground" colspan="4">
-                    No answer fetched or cited a document yet.
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-
-        @if (tools(v).length) {
-          <div class="overflow-x-auto rounded-lg border border-border">
-            <table class="w-full text-sm">
+        @if (v.answers) {
+          <p class="m-0 max-w-prose text-hint text-muted-foreground">
+            What the assistant reads and how it uses it, over the last {{ v.days }} days:
+            {{ v.answers }} visitor {{ v.answers === 1 ? "answer" : "answers" }}.
+          </p>
+          <div hlmTableContainer>
+            <table hlmTable class="max-w-xl">
               <caption class="sr-only">
-                How each tool fared, its calls by outcome
+                What the assistant read, over the last
+                {{
+                  v.days
+                }}
+                days
               </caption>
-              <thead class="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th class="p-2 font-normal">Tool</th>
-                  <th class="p-2 text-right font-normal">Per answer</th>
-                  <th class="p-2 text-right font-normal">Not found</th>
-                  <th class="p-2 text-right font-normal">Not allowed</th>
-                  <th class="p-2 text-right font-normal">No hits</th>
-                  <th class="p-2 text-right font-normal">Repeated</th>
-                  <th class="p-2 text-right font-normal">Over budget</th>
-                  <th class="p-2 text-right font-normal">Then cited</th>
+              <thead hlmTHead>
+                <tr hlmTr>
+                  <th hlmTh scope="col">Measure</th>
+                  <th hlmTh scope="col" class="text-right">Value</th>
                 </tr>
               </thead>
-              <tbody>
-                @for (t of tools(v); track t.name) {
-                  <tr class="border-t border-border font-data text-xs">
-                    <th scope="row" class="p-2 text-left font-normal">{{ t.name }}</th>
-                    <td class="p-2 text-right">{{ t.perAnswer }}</td>
-                    <td class="p-2 text-right">{{ t.notFound }}</td>
-                    <td class="p-2 text-right">{{ t.notAllowed }}</td>
-                    <td class="p-2 text-right">{{ t.noHits }}</td>
-                    <td class="p-2 text-right">{{ t.repeated }}</td>
-                    <td class="p-2 text-right">{{ t.overBudget }}</td>
-                    <td class="p-2 text-right">{{ t.cited }}</td>
+              <tbody hlmTBody>
+                <tr hlmTr>
+                  <th hlmTh scope="row" class="font-normal">Prefix, English / German</th>
+                  <td hlmTd class="text-right font-data text-xs">
+                    @if (v.coreTokens; as t) {
+                      {{ t.en | number }} / {{ t.de | number }} tokens
+                    } @else {
+                      –
+                    }
+                  </td>
+                </tr>
+                <tr hlmTr>
+                  <th hlmTh scope="row" class="font-normal">Cached, first / later steps</th>
+                  <td hlmTd class="text-right font-data text-xs">
+                    {{ cacheShare(v.cache.first) }} / {{ cacheShare(v.cache.later) }}
+                  </td>
+                </tr>
+                <tr hlmTr>
+                  <th hlmTh scope="row" class="font-normal">Re-read ratio</th>
+                  <td hlmTd class="text-right font-data text-xs">
+                    <span>{{ percent(v.rereadRatio) }}</span>
+                    @if (verdict(v) === "high") {
+                      <span class="font-sans text-destructive">, high</span>
+                    }
+                  </td>
+                </tr>
+                <tr hlmTr>
+                  <th hlmTh scope="row" class="font-normal">Input tokens per answer</th>
+                  <td hlmTd class="text-right font-data text-xs">
+                    {{
+                      v.tokens.inputPerAnswer === null
+                        ? "–"
+                        : (v.tokens.inputPerAnswer | number: "1.0-0")
+                    }}
+                  </td>
+                </tr>
+                <tr hlmTr>
+                  <th hlmTh scope="row" class="font-normal">Tokens per helpful answer</th>
+                  <td hlmTd class="text-right font-data text-xs">
+                    {{
+                      v.tokens.perHelpful === null ? "–" : (v.tokens.perHelpful | number: "1.0-0")
+                    }}
+                  </td>
+                </tr>
+                <tr hlmTr>
+                  <th hlmTh scope="row" class="font-normal">Documents fetched</th>
+                  <td hlmTd class="text-right font-data text-xs">
+                    {{ v.fetches.whole + v.fetches.rest + v.fetches.handle + v.fetches.unknown }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="m-0 max-w-prose text-hint text-muted-foreground">
+            Fetches: {{ v.fetches.whole }} re-read a document the prefix held whole (healthy under
+            {{ percent(v.healthyReread) }}), {{ v.fetches.rest }} read the rest of one held cut
+            short, {{ v.fetches.handle }} the other language's version, {{ v.fetches.unknown }} that
+            no snapshot could place. Cached: {{ v.cache.first.steps }} first and
+            {{ v.cache.later.steps }} later steps on models that cache.
+          </p>
+          @if (v.localeMix.length) {
+            <p class="m-0 max-w-prose text-hint text-muted-foreground">
+              {{ localeMixLine(v.localeMix) }}.
+            </p>
+          }
+          @if (searchLine(v.search); as line) {
+            <p class="m-0 max-w-prose text-hint text-muted-foreground">Searches {{ line }}.</p>
+          }
+          @if (windowLine(v); as line) {
+            <p class="m-0 max-w-prose text-hint text-muted-foreground">{{ line }}.</p>
+          }
+          @if (pagesLine(v); as line) {
+            <p class="m-0 max-w-prose text-hint text-muted-foreground">{{ line }}.</p>
+          }
+
+          <div hlmTableContainer>
+            <table hlmTable>
+              <caption class="sr-only">
+                Before and after a core per language
+              </caption>
+              <thead hlmTHead>
+                <tr hlmTr>
+                  <th hlmTh scope="col">Layout read</th>
+                  <th hlmTh scope="col" class="text-right">Answers</th>
+                  <th hlmTh scope="col" class="text-right">Input tokens</th>
+                  <th hlmTh scope="col" class="text-right">Cost</th>
+                  <th hlmTh scope="col" class="text-right">Cached, first / later</th>
+                  <th hlmTh scope="col" class="text-right">Re-reads</th>
+                  <th hlmTh scope="col" class="text-right">Tokens per helpful</th>
+                </tr>
+              </thead>
+              <tbody hlmTBody>
+                @for (r of layouts(v); track r.layout) {
+                  <tr hlmTr class="font-data text-xs">
+                    <th hlmTh scope="row" class="font-sans text-sm font-normal">
+                      {{ r.label }}
+                    </th>
+                    <td hlmTd class="text-right">{{ r.answers }}</td>
+                    <td hlmTd class="text-right">{{ r.inputPerAnswer }}</td>
+                    <td hlmTd class="text-right">{{ r.usdPerAnswer }}</td>
+                    <td hlmTd class="text-right">{{ r.cached }}</td>
+                    <td hlmTd class="text-right">{{ r.reread }}</td>
+                    <td hlmTd class="text-right">{{ r.perHelpful }}</td>
                   </tr>
                 }
               </tbody>
             </table>
           </div>
+
+          <div hlmTableContainer>
+            <table hlmTable>
+              <caption class="sr-only">
+                The documents answers fetched or cited most
+              </caption>
+              <thead hlmTHead>
+                <tr hlmTr>
+                  <th hlmTh scope="col">Document</th>
+                  <th hlmTh scope="col" class="text-right">Fetched</th>
+                  <th hlmTh scope="col" class="text-right">Cited</th>
+                  <th hlmTh scope="col">Tier</th>
+                </tr>
+              </thead>
+              <tbody hlmTBody>
+                @for (d of rows(v); track d.id) {
+                  <tr hlmTr>
+                    <th hlmTh scope="row" class="font-normal whitespace-normal">
+                      {{ d.title }}
+                      <span class="font-data text-xs text-muted-foreground" translate="no">{{
+                        d.id
+                      }}</span>
+                    </th>
+                    <td hlmTd class="text-right font-data text-xs">{{ d.fetched }}</td>
+                    <td hlmTd class="text-right font-data text-xs">{{ d.cited }}</td>
+                    <td hlmTd class="text-xs">{{ d.tier ? tierLabel[d.tier] : "–" }}</td>
+                  </tr>
+                } @empty {
+                  <tr hlmTr>
+                    <td hlmTd colspan="4" class="text-muted-foreground">
+                      No answer fetched or cited a document yet.
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          @if (tools(v).length) {
+            <div hlmTableContainer>
+              <table hlmTable>
+                <caption class="sr-only">
+                  How each tool fared, its calls by outcome
+                </caption>
+                <thead hlmTHead>
+                  <tr hlmTr>
+                    <th hlmTh scope="col">Tool</th>
+                    <th hlmTh scope="col" class="text-right">Per answer</th>
+                    <th hlmTh scope="col" class="text-right">Not found</th>
+                    <th hlmTh scope="col" class="text-right">Not allowed</th>
+                    <th hlmTh scope="col" class="text-right">No hits</th>
+                    <th hlmTh scope="col" class="text-right">Repeated</th>
+                    <th hlmTh scope="col" class="text-right">Over budget</th>
+                    <th hlmTh scope="col" class="text-right">Then cited</th>
+                  </tr>
+                </thead>
+                <tbody hlmTBody>
+                  @for (t of tools(v); track t.name) {
+                    <tr hlmTr class="font-data text-xs">
+                      <th hlmTh scope="row" class="font-normal" translate="no">{{ t.name }}</th>
+                      <td hlmTd class="text-right">{{ t.perAnswer }}</td>
+                      <td hlmTd class="text-right">{{ t.notFound }}</td>
+                      <td hlmTd class="text-right">{{ t.notAllowed }}</td>
+                      <td hlmTd class="text-right">{{ t.noHits }}</td>
+                      <td hlmTd class="text-right">{{ t.repeated }}</td>
+                      <td hlmTd class="text-right">{{ t.overBudget }}</td>
+                      <td hlmTd class="text-right">{{ t.cited }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        } @else {
+          <p class="m-0 text-hint text-muted-foreground">
+            No visitor answer in the last {{ v.days }} days.
+          </p>
         }
 
-        <div class="flex flex-col gap-2 rounded-lg border border-border p-3 text-sm">
+        <div class="flex flex-col gap-2 text-sm">
           <h3 class="m-0 text-sm font-medium">Tier suggestions</h3>
-          <p class="m-0 text-hint text-muted-foreground">
+          <p class="m-0 max-w-prose text-hint text-muted-foreground">
             Promoted: held whole at the front of the prefix (fetched in more than
             {{ percent(v.rules.promoteShare) }} of at least
             {{ v.rules.promoteMinAnswers }} answers). Clipped harder: half its kind's length (no
@@ -288,7 +324,9 @@ import {
               <li class="flex flex-wrap items-center justify-between gap-2">
                 <span
                   >{{ tierLabel[entry.tier] }}: {{ v.titles[entry.id] ?? entry.id }}
-                  <span class="font-data text-xs text-muted-foreground">{{ entry.id }}</span></span
+                  <span class="font-data text-xs text-muted-foreground" translate="no">{{
+                    entry.id
+                  }}</span></span
                 >
                 <button
                   hlmBtn
@@ -309,10 +347,16 @@ import {
             }
           </ul>
         </div>
-      } @else if (failed()) {
-        <p class="m-0 text-xs text-destructive">Could not load the perception figures.</p>
+      } @else if (loadError(); as code) {
+        <app-load-error
+          compact
+          title="Could not load the perception figures"
+          [reason]="code"
+          [refocus]="heading"
+          (retry)="reload()"
+        />
       } @else {
-        <p class="m-0 text-hint text-muted-foreground">Loading…</p>
+        <p class="m-0 text-hint text-muted-foreground">Loading the perception figures…</p>
       }
     </section>
   `,
@@ -321,7 +365,8 @@ export class AssistantPerceptionComponent implements OnInit {
   private readonly api = inject(AdminApiService);
 
   protected readonly view = signal<PerceptionView | null>(null);
-  protected readonly failed = signal(false);
+  /** Why the figures did not arrive (the API's code): said in their place, with Try again. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly saving = signal(false);
   /** The window in days; after a deploy, a short one shows the new layout alone sooner. */
   protected readonly days = signal(30);
@@ -351,6 +396,10 @@ export class AssistantPerceptionComponent implements OnInit {
     void this.load();
   }
 
+  protected reload(): void {
+    void this.load();
+  }
+
   /** The latest load: an earlier, slower one must not overwrite it. */
   private loading = 0;
 
@@ -362,10 +411,12 @@ export class AssistantPerceptionComponent implements OnInit {
     }
     if (result.ok) {
       this.view.set(result.data);
-      this.failed.set(false);
-    } else {
-      this.failed.set(true);
+      this.loadError.set(null);
+    } else if (this.view()) {
+      // Figures on screen stay; the window that did not load says so.
       toast.error("Could not load the perception figures", { description: apiWords(result.error) });
+    } else {
+      this.loadError.set(result.error);
     }
   }
 

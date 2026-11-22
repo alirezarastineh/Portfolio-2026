@@ -1,8 +1,12 @@
+import { DOCUMENT } from "@angular/common";
 import {
   booleanAttribute,
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
+  ElementRef,
+  inject,
   input,
   output,
 } from "@angular/core";
@@ -13,10 +17,12 @@ import { HlmButton } from "@spartan-ng/helm/button";
 import { HlmEmptyImports } from "@spartan-ng/helm/empty";
 import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 
+import { apiWords } from "../api-words";
+
 /**
  * What a page shows when its data did not arrive: what failed, the API's
- * reason, and a way to ask again. It replaces a toast that vanished and a page
- * that then looked empty ("No projects yet.") when it was not.
+ * reason in words, and a way to ask again. It replaces a toast that vanished and
+ * a page that then looked empty ("No projects yet.") when it was not.
  */
 @Component({
   selector: "app-load-error",
@@ -33,8 +39,13 @@ import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
           class="shrink-0 text-muted-foreground"
           aria-hidden="true"
         />
-        <p class="m-0 min-w-0 flex-1 text-sm text-muted-foreground">{{ title() }}</p>
-        <button hlmBtn variant="outline" size="sm" type="button" (click)="retry.emit()">
+        <div class="min-w-0 flex-1 text-sm text-muted-foreground">
+          <p class="m-0">{{ title() }}</p>
+          @if (words(); as why) {
+            <p class="m-0 text-hint">{{ why }}</p>
+          }
+        </div>
+        <button hlmBtn variant="outline" size="sm" type="button" (click)="again()">
           Try again
         </button>
       </div>
@@ -47,13 +58,13 @@ import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
           <h2 hlmEmptyTitle>{{ title() }}</h2>
           <p hlmEmptyDescription>
             {{ description() }}
-            @if (reason()) {
-              <span class="mt-1 block text-data">{{ reason() }}</span>
+            @if (words(); as why) {
+              <span class="mt-1 block">{{ why }}</span>
             }
           </p>
         </div>
         <div hlmEmptyContent>
-          <button hlmBtn variant="outline" type="button" (click)="retry.emit()">
+          <button hlmBtn variant="outline" type="button" (click)="again()">
             <ng-icon name="lucideRefreshCw" size="14" aria-hidden="true" />
             <span class="ml-1.5">Try again</span>
           </button>
@@ -65,11 +76,35 @@ import { HlmSkeleton } from "@spartan-ng/helm/skeleton";
 export class LoadErrorComponent {
   readonly title = input("Could not load this section");
   readonly description = input("Nothing was lost: your saved draft is still there.");
-  /** The API's error code, as it said it. */
+  /** The API's error code, as it said it: shown in words, never as the code (plan 5, U22). */
   readonly reason = input("");
   /** One line, for a card or a tile rather than a whole page. */
   readonly compact = input(false, { transform: booleanAttribute });
+  /**
+   * Where the focus goes when Try again brings the content back and this state goes with its button
+   * (plan 5, U22): the section's heading, say. Without it the focus falls to the page.
+   */
+  readonly refocus = input<HTMLElement | null>(null);
   readonly retry = output();
+  protected readonly words = computed(() => (this.reason() ? apiWords(this.reason()) : ""));
+  private retried = false;
+
+  constructor() {
+    const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+    const doc = inject(DOCUMENT);
+    inject(DestroyRef).onDestroy(() => {
+      const target = this.refocus();
+      const active = doc.activeElement;
+      if (this.retried && target && (!active || active === doc.body || host.contains(active))) {
+        target.focus();
+      }
+    });
+  }
+
+  protected again(): void {
+    this.retried = true;
+    this.retry.emit();
+  }
 }
 
 /**

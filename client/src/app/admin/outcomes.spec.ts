@@ -46,7 +46,7 @@ describe("outcomes in the admin", () => {
       gaps: 3,
     };
     expect(matchLine(m)).toBe(
-      "roles 4 → 1 hand-off (25 %), projects 1 → 0 hand-offs (0 %), problems none",
+      "4 roles led to 1 hand-off (25 %); 1 project led to 0 hand-offs (0 %); no problems",
     );
     expect(matchRowsLine(m)).toBe(
       "12 rows, 2 taken back by the critic (17 %); 3 items nothing published covers",
@@ -56,10 +56,10 @@ describe("outcomes in the admin", () => {
 
   it("reads the hand-off funnel with the share that made each step", () => {
     expect(funnelLine({ offered: 4, confirmed: 2, sent: 1 })).toBe(
-      "4 offered → 2 confirmed (50 %) → 1 sent (50 %)",
+      "4 offered, 2 confirmed (50 %), 1 sent (50 %)",
     );
     expect(funnelLine({ offered: 0, confirmed: 0, sent: 0 })).toBe(
-      "0 offered → 0 confirmed → 0 sent",
+      "0 offered, 0 confirmed, 0 sent",
     );
   });
 

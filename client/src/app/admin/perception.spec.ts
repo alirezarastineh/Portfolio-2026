@@ -88,7 +88,7 @@ describe("perception in the admin", () => {
 
   it("reads the locale mix, older answers included", () => {
     expect(localeMixLine(view().localeMix)).toBe(
-      "English page, English core: 30 · English page, German core: 6 · German page, one core (before): 4",
+      "English page, English core: 30; English page, German core: 6; German page, one core (before): 4",
     );
   });
 
@@ -140,10 +140,10 @@ describe("perception in the admin", () => {
         semantic: { answers: 6, converted: 4 },
         words: { answers: 5, converted: 2 },
       }),
-    ).toBe("By meaning: 4 of 6 led to a citation · By words alone: 2 of 5 led to a citation");
+    ).toBe("by meaning: 4 of 6 led to a citation; by words alone: 2 of 5 led to a citation");
     expect(
       searchLine({ semantic: { answers: 0, converted: 0 }, words: { answers: 3, converted: 1 } }),
-    ).toBe("By words alone: 1 of 3 led to a citation");
+    ).toBe("by words alone: 1 of 3 led to a citation");
     expect(
       searchLine({ semantic: { answers: 0, converted: 0 }, words: { answers: 0, converted: 0 } }),
     ).toBeNull();
@@ -246,7 +246,7 @@ describe("perception in the admin", () => {
       rest: { answers: 1, rounds: null, ttftP50Ms: null, helpful: 0 },
     };
     expect(pagesLine(view({ pages }))).toBe(
-      "Asked on a case study or post: 3 answers (1 with its text) · 1.4 rounds · first token 1.1 s · 67 % helpful; elsewhere: 1 answer · – rounds · first token – · 0 % helpful",
+      "Asked on a case study or post: 3 answers (1 with its text), 1.4 rounds, first word in 1.1 s, 67 % helpful; elsewhere: 1 answer, – rounds, first word in –, 0 % helpful",
     );
     // None asked on a page yet, or an older API.
     const none = { ...pages, pageAware: { ...pages.pageAware, answers: 0 } };
@@ -255,7 +255,7 @@ describe("perception in the admin", () => {
     // About a section, a code block or a selection (V9).
     const focused = { answers: 2, rounds: 1, ttftP50Ms: 800, helpful: 0.5, verified: 1 };
     expect(pagesLine(view({ pages: { ...pages, focused } }))).toBe(
-      "Asked on a case study or post: 3 answers (1 with its text) · 1.4 rounds · first token 1.1 s · 67 % helpful; about a section, code or selection: 2 answers (1 on the page) · 1.0 rounds · first token 0.8 s · 50 % helpful; elsewhere: 1 answer · – rounds · first token – · 0 % helpful",
+      "Asked on a case study or post: 3 answers (1 with its text), 1.4 rounds, first word in 1.1 s, 67 % helpful; about a section, code or selection: 2 answers (1 on the page), 1.0 rounds, first word in 0.8 s, 50 % helpful; elsewhere: 1 answer, – rounds, first word in –, 0 % helpful",
     );
   });
 });

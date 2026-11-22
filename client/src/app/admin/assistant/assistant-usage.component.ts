@@ -69,40 +69,43 @@ interface ModelTotal {
       @let h = health()!;
       @if (h.spend) {
         <section class="flex flex-col gap-2" aria-labelledby="assistant-spend">
-          <h2 id="assistant-spend" class="m-0 text-sm font-medium">Spending by feature</h2>
-          <div class="overflow-x-auto rounded-lg border border-border">
-            <table class="w-full text-sm">
-              <thead class="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th class="p-2 font-normal">Feature</th>
-                  <th class="p-2 text-right font-normal">Today</th>
-                  <th class="p-2 text-right font-normal">Own cap</th>
-                  <th class="p-2 text-right font-normal">30 days</th>
-                  <th class="p-2 font-normal">Now</th>
+          <h2 id="assistant-spend" class="m-0 text-section-title">Spending by feature</h2>
+          <div hlmTableContainer>
+            <table hlmTable>
+              <caption class="sr-only">
+                What each feature spent today and over 30 days, and what its next call gets
+              </caption>
+              <thead hlmTHead>
+                <tr hlmTr>
+                  <th hlmTh scope="col">Feature</th>
+                  <th hlmTh scope="col" class="text-right">Today</th>
+                  <th hlmTh scope="col" class="text-right">Own cap</th>
+                  <th hlmTh scope="col" class="text-right">30 days</th>
+                  <th hlmTh scope="col">Now</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody hlmTBody>
                 @for (f of features(); track f.feature) {
-                  <tr class="border-t border-border">
-                    <td class="p-2">{{ f.label }}</td>
-                    <td class="p-2 text-right font-data text-xs">
+                  <tr hlmTr>
+                    <th hlmTh scope="row" class="font-normal">{{ f.label }}</th>
+                    <td hlmTd class="text-right font-data text-xs">
                       \${{ f.todayUsd | number: "1.2-4" }}
                     </td>
-                    <td class="p-2 text-right font-data text-xs">
+                    <td hlmTd class="text-right font-data text-xs">
                       {{ f.capUsd === null ? "–" : "$" + (f.capUsd | number: "1.2-2") }}
                     </td>
-                    <td class="p-2 text-right font-data text-xs">
+                    <td hlmTd class="text-right font-data text-xs">
                       \${{ f.periodUsd | number: "1.2-4" }}
                     </td>
-                    <td
-                      class="p-2 text-xs"
-                      [class]="
-                        f.state === 'ok' || f.state === null
-                          ? 'text-muted-foreground'
-                          : 'text-destructive'
-                      "
-                    >
-                      {{ f.state ? stateText(f.state) : "–" }}
+                    <td hlmTd class="text-xs">
+                      <span
+                        [class]="
+                          f.state === 'ok' || f.state === null
+                            ? 'text-muted-foreground'
+                            : 'text-destructive'
+                        "
+                        >{{ f.state ? stateText(f.state) : "–" }}</span
+                      >
                     </td>
                   </tr>
                 }
@@ -122,7 +125,7 @@ interface ModelTotal {
 
       @if (h.corpus; as c) {
         <section class="flex flex-col gap-2">
-          <h2 class="m-0 text-sm font-medium">What it knows</h2>
+          <h2 class="m-0 text-section-title">What it knows</h2>
           <div class="flex flex-wrap items-center gap-2 text-sm">
             @for (kind of kinds(); track kind[0]) {
               <span hlmBadge variant="outline">{{ kind[0] }} × {{ kind[1] }}</span>
@@ -134,7 +137,7 @@ interface ModelTotal {
               {{ by.en.chars | number }} characters, about {{ by.en.tokens | number }} tokens;
               German {{ by.de.chars | number }}, about {{ by.de.tokens | number }} (local estimates)
               @if (geminiCount(); as g) {
-                · Gemini counts English {{ g.en === null ? "–" : (g.en | number) }}, German
+                ; Gemini counts English {{ g.en === null ? "–" : (g.en | number) }}, German
                 {{ g.de === null ? "–" : (g.de | number) }}
               }
               .
@@ -144,7 +147,7 @@ interface ModelTotal {
               Prefix sent with every question: {{ c.coreChars | number }} characters, about
               {{ c.coreTokens | number }} tokens (local estimate)
               @if (geminiCount(); as g) {
-                · Gemini counts {{ g.en | number }}
+                ; Gemini counts {{ g.en | number }}
               }
               .
             </p>
@@ -179,7 +182,7 @@ interface ModelTotal {
 
     @if (usage(); as u) {
       <section class="flex flex-col gap-2" aria-labelledby="assistant-signals">
-        <h2 id="assistant-signals" class="m-0 text-sm font-medium">Signals</h2>
+        <h2 id="assistant-signals" class="m-0 text-section-title">Signals</h2>
         <ul class="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 xl:grid-cols-4" role="list">
           <li appKpiTile="Cache hits">
             @if (latestCache(); as c) {
@@ -246,70 +249,78 @@ interface ModelTotal {
       </section>
 
       <section class="flex flex-col gap-2">
-        <h2 class="m-0 text-sm font-medium">Last 30 days</h2>
-        <div class="overflow-x-auto rounded-lg border border-border">
-          <table class="w-full text-sm">
-            <thead class="text-left text-xs text-muted-foreground">
-              <tr>
-                <th class="p-2 font-normal">Model</th>
-                <th class="p-2 text-right font-normal">Calls</th>
-                <th class="p-2 text-right font-normal">Input</th>
-                <th class="p-2 text-right font-normal">Cached</th>
-                <th class="p-2 text-right font-normal">Output</th>
-                <th class="p-2 text-right font-normal">Cost</th>
+        <h2 class="m-0 text-section-title">Last 30 days</h2>
+        <div hlmTableContainer>
+          <table hlmTable>
+            <caption class="sr-only">
+              Each model's calls over the last 30 days
+            </caption>
+            <thead hlmTHead>
+              <tr hlmTr>
+                <th hlmTh scope="col">Model</th>
+                <th hlmTh scope="col" class="text-right">Calls</th>
+                <th hlmTh scope="col" class="text-right">Input</th>
+                <th hlmTh scope="col" class="text-right">Cached</th>
+                <th hlmTh scope="col" class="text-right">Output</th>
+                <th hlmTh scope="col" class="text-right">Cost</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody hlmTBody>
               @for (m of modelTotals(); track m.model) {
-                <tr class="border-t border-border font-data text-xs">
-                  <td class="p-2">{{ m.model }}</td>
-                  <td class="p-2 text-right">{{ m.requests | number }}</td>
-                  <td class="p-2 text-right">{{ m.input | number }}</td>
-                  <td class="p-2 text-right">
+                <tr hlmTr class="font-data text-xs">
+                  <th hlmTh scope="row" class="font-normal" translate="no">{{ m.model }}</th>
+                  <td hlmTd class="text-right">{{ m.requests | number }}</td>
+                  <td hlmTd class="text-right">{{ m.input | number }}</td>
+                  <td hlmTd class="text-right">
                     {{ m.input ? ((m.cached / m.input) * 100 | number: "1.0-0") : 0 }} %
                   </td>
-                  <td class="p-2 text-right">{{ m.output | number }}</td>
-                  <td class="p-2 text-right">\${{ m.usd | number: "1.2-4" }}</td>
+                  <td hlmTd class="text-right">{{ m.output | number }}</td>
+                  <td hlmTd class="text-right">\${{ m.usd | number: "1.2-4" }}</td>
                 </tr>
               } @empty {
-                <tr>
-                  <td class="p-2 text-muted-foreground" colspan="6">No model calls yet.</td>
+                <tr hlmTr>
+                  <td hlmTd class="text-muted-foreground" colspan="6">No model calls yet.</td>
                 </tr>
               }
             </tbody>
           </table>
         </div>
-        <div class="overflow-x-auto rounded-lg border border-border">
-          <table class="w-full text-sm">
-            <thead class="text-left text-xs text-muted-foreground">
-              <tr>
-                <th class="p-2 font-normal">Day</th>
-                <th class="p-2 text-right font-normal">Answers</th>
-                <th class="p-2 text-right font-normal">+1 / −1</th>
-                <th class="p-2 text-right font-normal">Cache hits</th>
-                <th class="p-2 text-right font-normal">Invented</th>
-                <th class="p-2 text-right font-normal">Flagged</th>
-                <th class="p-2 text-right font-normal">Turned away</th>
-                <th class="p-2 text-right font-normal">Cost</th>
+        <div hlmTableContainer>
+          <table hlmTable>
+            <caption class="sr-only">
+              Each day of the last 30
+            </caption>
+            <thead hlmTHead>
+              <tr hlmTr>
+                <th hlmTh scope="col">Day</th>
+                <th hlmTh scope="col" class="text-right">Answers</th>
+                <th hlmTh scope="col" class="text-right">+1 / −1</th>
+                <th hlmTh scope="col" class="text-right">Cache hits</th>
+                <th hlmTh scope="col" class="text-right">Invented</th>
+                <th hlmTh scope="col" class="text-right">Flagged</th>
+                <th hlmTh scope="col" class="text-right">Turned away</th>
+                <th hlmTh scope="col" class="text-right">Cost</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody hlmTBody>
               @for (d of days(); track d.day) {
-                <tr class="border-t border-border font-data text-xs">
-                  <td class="p-2">{{ d.day }}</td>
-                  <td class="p-2 text-right">{{ d.answers }}</td>
-                  <td class="p-2 text-right">{{ d.up }} / {{ d.down }}</td>
-                  <td class="p-2 text-right" [class]="d.cacheWarn ? 'text-destructive' : ''">
-                    {{ d.cache === null ? "–" : (d.cache * 100 | number: "1.0-0") + " %" }}
+                <tr hlmTr class="font-data text-xs">
+                  <th hlmTh scope="row" class="font-normal">{{ d.day }}</th>
+                  <td hlmTd class="text-right">{{ d.answers }}</td>
+                  <td hlmTd class="text-right">{{ d.up }} / {{ d.down }}</td>
+                  <td hlmTd class="text-right">
+                    <span [class.text-destructive]="d.cacheWarn">{{
+                      d.cache === null ? "–" : (d.cache * 100 | number: "1.0-0") + " %"
+                    }}</span>
                   </td>
-                  <td class="p-2 text-right">{{ d.withDropped }}</td>
-                  <td class="p-2 text-right">{{ d.flagged }}</td>
-                  <td class="p-2 text-right" [title]="d.refusedKinds">{{ d.refused }}</td>
-                  <td class="p-2 text-right">\${{ d.usd | number: "1.2-4" }}</td>
+                  <td hlmTd class="text-right">{{ d.withDropped }}</td>
+                  <td hlmTd class="text-right">{{ d.flagged }}</td>
+                  <td hlmTd class="text-right" [title]="d.refusedKinds">{{ d.refused }}</td>
+                  <td hlmTd class="text-right">\${{ d.usd | number: "1.2-4" }}</td>
                 </tr>
               } @empty {
-                <tr>
-                  <td class="p-2 text-muted-foreground" colspan="8">No answers yet.</td>
+                <tr hlmTr>
+                  <td hlmTd class="text-muted-foreground" colspan="8">No answers yet.</td>
                 </tr>
               }
             </tbody>

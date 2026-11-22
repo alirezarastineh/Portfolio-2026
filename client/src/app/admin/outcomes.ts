@@ -159,7 +159,12 @@ export interface MatchCounts {
   gaps: number;
 }
 
-/** "roles 4 → 1 hand-off (25 %), projects 2 → 0 (0 %), problems none"; or that none ran. */
+function count(n: number, one: string): string {
+  const noun = n === 1 ? one : `${one}s`;
+  return `${n} ${noun}`;
+}
+
+/** "4 roles led to 1 hand-off (25 %); 2 projects led to 0 hand-offs (0 %); no problems"; or none ran. */
 export function matchLine(m: MatchCounts): string {
   if (!m.runs) {
     return "No brief matched yet";
@@ -167,12 +172,11 @@ export function matchLine(m: MatchCounts): string {
   const kinds = (["role", "project", "problem"] as const).map((kind) => {
     const k = m.byKind[kind];
     if (!k.runs) {
-      return `${kind}s none`;
+      return `no ${kind}s`;
     }
-    const handoffs = k.handoffs === 1 ? "1 hand-off" : `${k.handoffs} hand-offs`;
-    return `${kind}s ${k.runs} → ${handoffs} (${share(k.handoffRate)})`;
+    return `${count(k.runs, kind)} led to ${count(k.handoffs, "hand-off")} (${share(k.handoffRate)})`;
   });
-  return kinds.join(", ");
+  return kinds.join("; ");
 }
 
 /** "12 rows, 2 taken back by the critic (17 %); 3 items nothing published covers". */
@@ -187,7 +191,9 @@ function funnelStep(part: number, whole: number): string {
   return whole ? ` (${Math.round((part / whole) * 100)} %)` : "";
 }
 
-/** Offered → confirmed → sent, with the share that made each step. */
+/** "4 offered, 2 confirmed (50 %), 1 sent (50 %)": each step with the share of the one before. */
 export function funnelLine(funnel: Outcomes["funnel"]): string {
-  return `${funnel.offered} offered → ${funnel.confirmed} confirmed${funnelStep(funnel.confirmed, funnel.offered)} → ${funnel.sent} sent${funnelStep(funnel.sent, funnel.confirmed)}`;
+  const confirmed = funnelStep(funnel.confirmed, funnel.offered);
+  const sent = funnelStep(funnel.sent, funnel.confirmed);
+  return `${funnel.offered} offered, ${funnel.confirmed} confirmed${confirmed}, ${funnel.sent} sent${sent}`;
 }

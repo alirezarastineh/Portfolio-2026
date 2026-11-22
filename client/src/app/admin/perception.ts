@@ -95,12 +95,12 @@ export interface AnswerGroup {
   helpful: number | null;
 }
 
-/** "3 answers · 1.4 rounds · first token 1.1 s · 67 % helpful", a note after the count. */
+/** "3 answers, 1.4 rounds, first word in 1.1 s, 67 % helpful", a note after the count. */
 function groupLine(group: AnswerGroup, note = ""): string {
   const rounds = group.rounds === null ? "–" : group.rounds.toFixed(1);
   const first = group.ttftP50Ms === null ? "–" : `${(group.ttftP50Ms / 1000).toFixed(1)} s`;
   const answers = `${group.answers} ${group.answers === 1 ? "answer" : "answers"}${note}`;
-  return `${answers} · ${rounds} rounds · first token ${first} · ${percent(group.helpful)} helpful`;
+  return `${answers}, ${rounds} rounds, first word in ${first}, ${percent(group.helpful)} helpful`;
 }
 
 /**
@@ -205,14 +205,14 @@ export function cacheShare(steps: StepCache): string {
   return steps.input ? percent(steps.cached, steps.input) : "–";
 }
 
-/** "English page, English core: 12 · German page, one core (before): 3". */
+/** "English page, English core: 12; German page, one core (before): 3". */
 export function localeMixLine(mix: PerceptionView["localeMix"]): string {
   return mix
     .map((m) => {
       const core = m.reading ? `${LANGUAGE[m.reading]} core` : "one core (before)";
       return `${LANGUAGE[m.page]} page, ${core}: ${m.answers}`;
     })
-    .join(" · ");
+    .join("; ");
 }
 
 /** The tier a document has now, if any. */
@@ -296,14 +296,14 @@ function searchPart(label: string, s: { answers: number; converted: number }): s
   return s.answers ? `${label}: ${s.converted} of ${s.answers} led to a citation` : null;
 }
 
-/** "By meaning: 4 of 6 led to a citation · By words alone: 2 of 5 …", or null without searches. */
+/** "by meaning: 4 of 6 led to a citation; by words alone: 2 of 5 …", or null without searches. */
 export function searchLine(search: PerceptionView["search"]): string | null {
   if (!search || !(search.semantic.answers + search.words.answers)) {
     return null;
   }
-  return [searchPart("By meaning", search.semantic), searchPart("By words alone", search.words)]
+  return [searchPart("by meaning", search.semantic), searchPart("by words alone", search.words)]
     .filter(Boolean)
-    .join(" · ");
+    .join("; ");
 }
 
 /** The re-read ratio against the book's healthy ceiling (a heuristic). */

@@ -1799,9 +1799,7 @@ test.describe("admin", () => {
     await openAdmin(page, "/admin/assistant?view=quality");
 
     const outcomes = page.getByRole("region", { name: "Outcomes" });
-    await expect(
-      outcomes.getByText("4 offered → 2 confirmed (50 %) → 1 sent (50 %)"),
-    ).toBeVisible();
+    await expect(outcomes.getByText("4 offered, 2 confirmed (50 %), 1 sent (50 %)")).toBeVisible();
     // What the visitors' browsers saw (visitor plan V2), beside the server's first word.
     const browser = outcomes.getByRole("region", { name: /In the visitor's browser/ });
     await expect(browser).toContainText("12 answers reported");
@@ -1882,7 +1880,7 @@ test.describe("admin", () => {
     await expect(perception.getByText("1,341 / 1,557")).toBeVisible();
     await expect(
       perception.getByText(
-        "Searches: By meaning: 3 of 5 led to a citation · By words alone: 1 of 4 led to a citation.",
+        "Searches by meaning: 3 of 5 led to a citation; by words alone: 1 of 4 led to a citation.",
       ),
     ).toBeVisible();
     await expect(perception.getByText("0 % / 75 %")).toBeVisible();
@@ -1975,7 +1973,7 @@ test.describe("admin", () => {
       routing.getByRole("columnheader", { name: "First word, typical / slowest 1 in 10" }),
     ).toBeVisible();
     const candidate = routing.getByRole("listitem").filter({ hasText: "scaled the furthest" });
-    await expect(candidate).toContainText("lite · thumbs-down · m_falsesimple01");
+    await expect(candidate).toContainText("lite, thumbs-down, m_falsesimple01");
 
     await settled(page);
     const { violations } = await new AxeBuilder({ page })
@@ -2116,7 +2114,7 @@ test.describe("admin", () => {
       .getByRole("table", { name: "Translate: what became of its drafts, per version" })
       .getByRole("row", { name: /agent proposals/ });
     await expect(agentRow.getByRole("rowheader")).toContainText(
-      "aaaaaaaaaaaa (current) · agent proposals",
+      "aaaaaaaaaaaa (current, agent proposals)",
     );
     await expect(agentRow.getByRole("cell")).toHaveText([
       "6",
@@ -2138,8 +2136,8 @@ test.describe("admin", () => {
         .getByRole("list", { name: "Search description: how each version made its drafts" })
         .getByRole("listitem"),
     ).toHaveText([
-      "bbbbbbbbbbbb · Of 14 drafts: 2 repaired, 1 needed your eye, 3 kept from an alternative.",
-      "cccccccccccc · Of 10 drafts: 0 repaired, 0 needed your eye, 0 kept from an alternative.",
+      "bbbbbbbbbbbb Of 14 drafts: 2 repaired, 1 needed your eye, 3 kept from an alternative.",
+      "cccccccccccc Of 10 drafts: 0 repaired, 0 needed your eye, 0 kept from an alternative.",
     ]);
     await expect(
       seo.getByText("within the limit, long enough, no preamble or quotes, in the right language"),
@@ -3333,19 +3331,19 @@ test.describe("admin", () => {
     // It keeps following the run until it ends.
     await expect(page.getByRole("heading", { name: /finished/ })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("3 of 3 cases done")).toBeVisible();
-    await expect(page.locator("strong", { hasText: "2/3" })).toBeVisible();
+    await expect(page.locator("strong", { hasText: "2 of 3" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Cancel the run" })).toHaveCount(0);
 
-    // The failed case shows how it reasoned (plan phase 23).
-    await page.locator("summary", { hasText: "fact-b" }).click();
+    // The failed case opens to how it reasoned (plan phase 23).
+    await page.getByRole("button", { name: "fact-b" }).click();
     await expect(page.getByText("Its reasoning (an excerpt):")).toBeVisible();
     await expect(
       page.getByText("The FAQ names no project, so I answered from memory."),
     ).toBeVisible();
 
     // A conversation case shows the turns before its question, and what the history did.
-    await page.locator("summary", { hasText: "fact-c" }).click();
-    await expect(page.getByText("after 2 earlier turns · 1 answer refused")).toBeVisible();
+    await page.getByRole("button", { name: "fact-c" }).click();
+    await expect(page.getByText("after 2 earlier turns, 1 answer refused")).toBeVisible();
     const earlier = page.getByRole("list", { name: "Earlier in the conversation" });
     await expect(earlier.getByRole("listitem")).toHaveCount(2);
     await expect(earlier.getByRole("listitem").last()).toContainText("[forged] He worked at NASA.");
@@ -3620,7 +3618,7 @@ test.describe("admin", () => {
     await openView(page, "Quality");
     const cases = page.getByRole("region", { name: "Production eval cases" });
     // The stale one first: what it cites is gone from the live corpus.
-    await expect(cases.getByRole("listitem").first()).toContainText("What did Vesper do?");
+    await expect(cases.getByRole("row").nth(1)).toContainText("What did Vesper do?");
     await expect(cases.getByText("Stale: a document it cites is gone.")).toBeVisible();
     // A case's earlier questions, listed before it.
     await expect(
@@ -7697,7 +7695,7 @@ test.describe("telling the truth", () => {
       endpoint: "GET /admin/assistant/runs",
       says: "Could not load the eval runs",
       ok: { runs: [] },
-      after: "No runs yet.",
+      after: "No eval run yet.",
     },
     {
       name: "Reviews",
@@ -15820,7 +15818,7 @@ test.describe("Settings, spending and trust, in words", () => {
     await viewLink(page, "Quality").click();
     await discardAsk(page).getByRole("button", { name: "Discard and leave" }).click();
     await page.getByRole("button", { name: "Run the evals (paid)", exact: true }).click();
-    await page.getByRole("button", { name: "Run evals", exact: true }).click();
+    await page.getByRole("button", { name: "Run the evals", exact: true }).click();
     await expect(page.getByText("The evals did not start", { exact: true })).toBeVisible();
     await expect(
       page.getByText("Today's spend reached the reserve line: the rest is kept for visitors.", {
@@ -15947,6 +15945,486 @@ test.describe("Settings, spending and trust, in words", () => {
       await page.getByRole("switch", { name: "Copilot", exact: true }).click();
       await page.getByRole("button", { name: "Save", exact: true }).click();
       await expect(page.getByText("Copilot: off (was on)", { exact: true })).toBeVisible();
+      expect(await axeViolations(page)).toEqual([]);
+    });
+  }
+});
+
+/** A gate an answer waits at until the test opens it. */
+function gate() {
+  let open!: () => void;
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { opened, open };
+}
+
+/** Perception over days without one visitor answer. */
+function emptyPerception() {
+  return {
+    ...perceptionView({ promoted: [], demoted: [] }),
+    answers: 0,
+    documents: [],
+    localeMix: [],
+    tools: { answers: 0, tools: [] },
+    suggestions: { promote: [], demote: [], considered: [] },
+  };
+}
+
+/** Routing over days without one visitor answer. */
+function emptyRouting() {
+  const view = routerView();
+  return {
+    ...view,
+    answers: 0,
+    tiers: view.tiers.map((tier) => ({
+      ...tier,
+      answers: 0,
+      p50TtftMs: null,
+      p90TtftMs: null,
+      usdPerAnswer: null,
+      helpfulRate: null,
+    })),
+    sensitive: { answers: 0, byTopic: {} },
+    escalation: { answers: 0, rate: null, byReason: {} },
+    falseSimple: { rate: null, kept: 0, candidates: 0, byReason: {}, listed: [] },
+  };
+}
+
+/** The outcomes over days without one visitor question. */
+function emptyOutcomes() {
+  const view = outcomesView("helpfulRate", false);
+  return {
+    ...view,
+    outcomes: {
+      ...view.outcomes,
+      answers: 0,
+      answered: 0,
+      helpful: 0,
+      funnel: { offered: 0, confirmed: 0, sent: 0 },
+      rated: { up: 0, down: 0 },
+      helpfulRate: null,
+      thumbsUpRate: null,
+      unknownRate: null,
+      rephraseRate: null,
+      usd: 0,
+      costPerAnswered: null,
+      costPerHelpful: null,
+    },
+    browser: null,
+  };
+}
+
+/** One background run of the eval suite, as the API lists it. */
+function evalRun(id: string, status: string, change: Record<string, unknown> = {}) {
+  return {
+    id,
+    kind: "eval",
+    status,
+    params: {},
+    progress: { total: 100, done: 100, failed: 0, unavailable: 0 },
+    summary: null,
+    usd: 0.051,
+    error: null,
+    createdAt: NOW,
+    startedAt: NOW,
+    finishedAt: status === "running" ? null : NOW,
+    heartbeatAt: NOW,
+    live: status === "running",
+    ...change,
+  };
+}
+
+/** A graded case of an eval run, as the run's items carry it. */
+function evalItem(key: string, status: "passed" | "failed" | "unavailable") {
+  return {
+    key,
+    position: 0,
+    status: "done",
+    attempts: 1,
+    usd: 0.001,
+    updatedAt: NOW,
+    result: {
+      id: key,
+      category: "fact",
+      status,
+      passed: status === "passed",
+      failures:
+        status === "passed"
+          ? []
+          : [status === "failed" ? "did not cite project:atlas@en" : "every model was unavailable"],
+      answer: status === "unavailable" ? "" : "Atlas cut escalations by 38%.",
+      cited: [],
+      invented: [],
+      tools: [],
+      model: status === "unavailable" ? null : "gemini-flash-lite",
+      ttftMs: 900,
+      totalMs: 3000,
+      usd: 0.001,
+      judge: null,
+      attempts: [],
+    },
+  };
+}
+
+/** Quality's reports (plan 5, U22, Part N2): each loads, fails and empties in words. */
+test.describe("Quality's reports, in words", () => {
+  /** Each report: its region, what it reads, and its words for loading, failing and nothing. */
+  const REPORTS: {
+    region: string;
+    endpoint: string;
+    loading: string;
+    failed: string;
+    empty: () => unknown;
+    says: string;
+  }[] = [
+    {
+      region: "Past runs",
+      endpoint: "GET /admin/assistant/runs",
+      loading: "Loading the eval runs…",
+      failed: "Could not load the eval runs",
+      empty: () => ({ runs: [] }),
+      says: "No eval run yet.",
+    },
+    {
+      region: "Past comparisons",
+      endpoint: "GET /admin/assistant/runs",
+      loading: "Loading the comparisons…",
+      failed: "Could not load the comparisons",
+      empty: () => ({ runs: [] }),
+      says: "No comparison yet.",
+    },
+    {
+      region: "Production eval cases",
+      endpoint: "GET /admin/assistant/eval-cases",
+      loading: "Loading the eval cases…",
+      failed: "Could not load the eval cases",
+      empty: () => ({ cases: [] }),
+      says: "None yet: freeze one from Conversations or Reviews.",
+    },
+    {
+      region: "The copilot's skills",
+      endpoint: "GET /admin/ai/skills",
+      loading: "Loading the copilot's skills…",
+      failed: "Could not load the copilot's skills",
+      empty: () => ({ ...copilotSkillsView(), skills: [] }),
+      says: "No skill yet.",
+    },
+    {
+      region: "Faithfulness",
+      endpoint: "GET /admin/assistant/faithfulness",
+      loading: "Loading the faithfulness figures…",
+      failed: "Could not load the faithfulness figures",
+      empty: () => defaults()["GET /admin/assistant/faithfulness"],
+      says: "No answer judged in the last 30 days.",
+    },
+    {
+      region: "Perception",
+      endpoint: "GET /admin/assistant/perception",
+      loading: "Loading the perception figures…",
+      failed: "Could not load the perception figures",
+      empty: emptyPerception,
+      says: "No visitor answer in the last 30 days.",
+    },
+    {
+      region: "Routing",
+      endpoint: "GET /admin/assistant/router",
+      loading: "Loading the routing figures…",
+      failed: "Could not load the routing figures",
+      empty: emptyRouting,
+      says: "No visitor answer in the last 7 days.",
+    },
+    {
+      region: "Outcomes",
+      endpoint: "GET /admin/assistant/outcomes",
+      loading: "Loading the outcomes…",
+      failed: "Could not load the outcomes",
+      empty: emptyOutcomes,
+      says: "No visitor question in the last 30 days.",
+    },
+  ];
+
+  for (const report of REPORTS) {
+    test(`${report.region} says it is loading, fails in words with Try again, and says when it holds nothing`, async ({
+      page,
+      baseURL,
+    }) => {
+      // By state, not by call: the report's answer waits at the gate, then fails until the API is back.
+      const { opened, open } = gate();
+      let answering = false;
+      const unmocked = await fakeApi(page, baseURL, {
+        [report.endpoint]: async () => {
+          await opened;
+          return answering
+            ? { status: 200, body: report.empty() }
+            : { status: 503, body: { error: "http_503" } };
+        },
+      });
+      await openAdmin(page, "/admin/assistant");
+      await openView(page, "Quality");
+      const region = page.getByRole("region", { name: report.region, exact: true });
+
+      await expect(region.getByText(report.loading, { exact: true })).toBeVisible();
+      open();
+
+      const failure = region.getByRole("alert");
+      await expect(failure).toContainText(report.failed);
+      await expect(failure).toContainText(
+        "The API failed (HTTP 503): try again; its log says why.",
+      );
+      await expect(region.getByText(report.loading, { exact: true })).toHaveCount(0);
+      await expect(page.getByText("http_503")).toHaveCount(0);
+      // The report says it in its place: no toast on top of it.
+      await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+
+      answering = true;
+      await failure.getByRole("button", { name: "Try again" }).click();
+      await expect(region.getByText(report.says, { exact: true }).first()).toBeVisible();
+      await expect(failure).toHaveCount(0);
+      // Try again went with the failure: the focus goes to the report's heading, not the page's top.
+      await expect(region.getByRole("heading").first()).toBeFocused();
+      expect(unmocked).toEqual([]);
+    });
+  }
+
+  test("the paid runs ask with the suite's 100 cases, and Cancel sends nothing", async ({
+    page,
+    baseURL,
+  }) => {
+    const started = sentTo(page, "POST", "/admin/assistant/runs");
+    const unmocked = await fakeApi(page, baseURL, {
+      "POST /admin/assistant/runs": () => ({ status: 202, body: { id: "r-new" } }),
+    });
+    await openAdmin(page, "/admin/assistant");
+    await openView(page, "Quality");
+
+    await page.getByRole("button", { name: "Run the evals (paid)", exact: true }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog.getByRole("heading")).toHaveText("Run the evals on all 100 cases?");
+    await expect(dialog).toContainText(
+      "Each of the 100 questions goes to the configured models, and a judge grades the answerable ones.",
+    );
+    await expect(dialog).not.toContainText("About 40");
+    await expect(dialog).not.toContainText("minutes");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
+
+    const compare = page.getByRole("region", { name: "Compare two answerers" });
+    await compare.getByRole("button", { name: "Compare (paid)", exact: true }).click();
+    await expect(dialog.getByRole("heading")).toHaveText(
+      "Compare lite with deep on all 100 cases?",
+    );
+    await expect(dialog).toContainText(
+      "Each of the 100 eval cases is answered by both, then judged twice with the answers swapped: 400 model calls",
+    );
+    await expect(dialog).not.toContainText("half an hour");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(started).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("Quality draws no orange: a running run, a stopped run, an unavailable case, a stale case and a flat metric are words", async ({
+    page,
+    baseURL,
+  }) => {
+    const running = evalRun("r1", "running", {
+      progress: { total: 100, done: 3, failed: 0, unavailable: 1 },
+      usd: 0.004,
+    });
+    const stoppedComparison = {
+      ...evalRun("r2", "failed", { progress: { total: 100, done: 40, failed: 0, unavailable: 0 } }),
+      kind: "pairwise",
+      params: { a: "lite", b: "deep", cases: null },
+      error: "Today's budget is spent; resume the run once it resets (midnight UTC).",
+    };
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/runs": { runs: [running, stoppedComparison] },
+      "GET /admin/assistant/runs/r1": {
+        run: running,
+        items: [
+          evalItem("fact-a", "passed"),
+          evalItem("fact-b", "failed"),
+          evalItem("fact-c", "unavailable"),
+        ],
+      },
+      "GET /admin/assistant/runs/r2": { run: stoppedComparison, items: [] },
+      "GET /admin/assistant/eval-cases": {
+        cases: [evalCaseRow("3c1d8a6e-0000-4000-8000-000000000002", "What did Vesper do?", "gone")],
+      },
+      "GET /admin/assistant/outcomes": outcomesView("helpfulRate", true),
+    });
+    await openAdmin(page, "/admin/assistant");
+    await openView(page, "Quality");
+    const comparisons = page.getByRole("region", { name: "Past comparisons", exact: true });
+    await comparisons.getByRole("button", { name: /^Open/ }).click();
+
+    // Each state in words.
+    await expect(page.getByRole("progressbar", { name: "Cases finished" })).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: "Cases compared" })).toBeVisible();
+    await expect(
+      page.getByText("Why it stopped: Today's budget is spent", { exact: false }),
+    ).toBeVisible();
+    const cases = page.getByRole("table", { name: "The run's cases" });
+    await expect(cases.getByRole("row", { name: /fact-c/ })).toContainText("Unavailable");
+    await expect(page.getByText("Stale: a document it cites is gone.")).toBeVisible();
+    await expect(page.getByText("Flat for two weekly reviews", { exact: false })).toBeVisible();
+
+    // Nothing in Quality is filled, edged or written in orange; the focus ring is an outline, never read here.
+    const orange = await page.locator("app-admin-assistant").evaluate((root) => {
+      const probe = document.createElement("span");
+      root.append(probe);
+      // A colour's channels alone: a fill at 40 % is still the same orange.
+      const channels = /\d{1,3}, \d{1,3}, \d{1,3}/;
+      // A token the admin does not define falls back to a colour nothing uses, and is left out.
+      const unset = "rgb(1, 2, 3)";
+      const oranges = new Set<string>();
+      for (const token of ["--signal", "--accent-orange", "--accent-orange-soft"]) {
+        probe.style.color = `var(${token}, ${unset})`;
+        const value = getComputedStyle(probe).color;
+        if (value !== unset) {
+          oranges.add(channels.exec(value)?.[0] ?? value);
+        }
+      }
+      probe.remove();
+      const hits: string[] = [];
+      for (const el of root.querySelectorAll("*")) {
+        const s = getComputedStyle(el);
+        const painted = [
+          s.backgroundColor,
+          s.borderTopColor,
+          s.borderRightColor,
+          s.borderBottomColor,
+          s.borderLeftColor,
+          s.color,
+        ].filter((c) => !c.endsWith(", 0)") && oranges.has(channels.exec(c)?.[0] ?? c));
+        if (painted.length) {
+          hits.push(`${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`);
+        }
+      }
+      return hits;
+    });
+    expect(orange).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  for (const width of [1280, 390]) {
+    test(`Quality works from the keyboard at ${width}: every control in reading order, each in view`, async ({
+      page,
+      baseURL,
+    }) => {
+      // A run open with its cases, a past run, a case, and every report's controls.
+      test.slow();
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
+      await page.emulateMedia({ colorScheme: width === 390 ? "light" : "dark" });
+      const done = evalRun("r1", "done", {
+        summary: {
+          promptVersion: "ask-test",
+          corpus: "eval-fixture-1",
+          judge: "gemini-flash-lite",
+          cases: 100,
+          completed: 100,
+          passed: 99,
+          unavailable: 0,
+          remaining: 0,
+          incomplete: false,
+          passRate: 0.99,
+          byCategory: { fact: { cases: 2, completed: 2, passed: 1, unavailable: 0 } },
+          usd: 0.051,
+          p50TtftMs: 900,
+          p95TotalMs: 3000,
+        },
+      });
+      const older = evalRun("r0", "done", { createdAt: HOUR_AGO });
+      await fakeApi(page, baseURL, {
+        "GET /admin/assistant/runs": { runs: [done, older] },
+        "GET /admin/assistant/runs/r1": {
+          run: done,
+          items: [evalItem("fact-a", "passed"), evalItem("fact-b", "failed")],
+        },
+        "GET /admin/assistant/eval-cases": {
+          cases: [evalCaseRow("3c1d8a6e-0000-4000-8000-000000000002", "What did Vesper do?", null)],
+        },
+      });
+      await openAdmin(page, "/admin/assistant?view=quality");
+      await expect(page.getByRole("table", { name: "The run's cases" })).toBeVisible();
+      await viewLink(page, "Quality").focus();
+      const button = (name: string, scope: Locator = page.locator("main")) =>
+        scope.getByRole("button", { name, exact: true });
+      const pastRuns = page.getByRole("region", { name: "Past runs", exact: true });
+      const evalCases = page.getByRole("region", { name: "Production eval cases", exact: true });
+      const stops = [
+        button("Run the evals (paid)"),
+        // The failed case first.
+        page.getByRole("button", { name: "fact-b" }),
+        page.getByRole("button", { name: "fact-a" }),
+        pastRuns.getByRole("button", { name: /^Open/ }).first(),
+        pastRuns.getByRole("button", { name: /^Open/ }).last(),
+        pastRuns.getByRole("button", { name: /^Compare/ }),
+        page.getByLabel("A", { exact: true }),
+        page.getByLabel("B", { exact: true }),
+        button("Compare (paid)"),
+        evalCases.getByRole("button", { name: /^Retire/ }),
+        evalCases.getByRole("button", { name: /^Delete/ }),
+        page.getByText("What version aaaaaaaaaaaa tells the model"),
+        page.getByText("What version bbbbbbbbbbbb tells the model"),
+        page.getByText("What version dddddddddddd tells the model"),
+        page.getByLabel("Faithfulness window"),
+        page.getByLabel("Perception window"),
+        button("Promote Project One"),
+        page.getByLabel("Routing window"),
+        page.getByLabel("Primary metric"),
+      ];
+      await runSequentially(stops, async (stop) => {
+        await tabTo(page, stop);
+        await expect(stop).toBeInViewport();
+      });
+
+      // A case opens from the keyboard and says what it is.
+      const first = page.getByRole("button", { name: "fact-b" });
+      await first.focus();
+      await page.keyboard.press("Enter");
+      await expect(first).toHaveAttribute("aria-expanded", "true");
+      await expect(page.getByText("did not cite project:atlas@en", { exact: true })).toBeVisible();
+    });
+  }
+
+  for (const colorScheme of ["dark", "light"] as const) {
+    test(`Quality, its reports failed and then a run open with its cases, in the ${colorScheme} theme, has no accessibility violations`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      let failing = true;
+      const reply = (body: unknown) => () =>
+        failing ? { status: 503, body: { error: "http_503" } } : { status: 200, body };
+      const run = evalRun("r1", "done");
+      await fakeApi(page, baseURL, {
+        "GET /admin/assistant/runs": reply({ runs: [run] }),
+        "GET /admin/assistant/runs/r1": {
+          run,
+          items: [
+            evalItem("fact-a", "passed"),
+            evalItem("fact-b", "failed"),
+            evalItem("fact-c", "unavailable"),
+          ],
+        },
+        "GET /admin/assistant/eval-cases": reply({ cases: [] }),
+        "GET /admin/ai/skills": reply(copilotSkillsView()),
+        "GET /admin/assistant/faithfulness": reply(defaults()["GET /admin/assistant/faithfulness"]),
+        "GET /admin/assistant/perception": reply(perceptionView({ promoted: [], demoted: [] })),
+        "GET /admin/assistant/router": reply(routerView()),
+        "GET /admin/assistant/outcomes": reply(outcomesView("helpfulRate", true)),
+      });
+      await openAdmin(page, "/admin/assistant?view=quality");
+      await expect(page.locator("main").getByRole("alert")).toHaveCount(8);
+      expect(await axeViolations(page)).toEqual([]);
+
+      failing = false;
+      await page.reload();
+      await interactive(page);
+      await page.getByRole("button", { name: "fact-b" }).click();
+      await expect(page.getByText("did not cite project:atlas@en", { exact: true })).toBeVisible();
       expect(await axeViolations(page)).toEqual([]);
     });
   }

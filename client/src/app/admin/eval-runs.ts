@@ -6,6 +6,66 @@ import type { EvalCaseResult, EvalConversation, RunItem, RunRow } from "./assist
  * so the component stays thin.
  */
 
+/**
+ * The eval suite's size: every case a run takes when it names none (`EVAL_CASES`,
+ * `server/src/ask/evals/cases.ts`). The API says it only once a run exists, so the paid runs'
+ * questions carry it from here; `eval-runs.spec.ts` counts the server's cases against it.
+ */
+export const EVAL_SUITE_CASES = 100;
+
+const STATUS_WORDS: Record<RunRow["status"], string> = {
+  queued: "waiting to start",
+  running: "running",
+  done: "finished",
+  failed: "stopped",
+  cancelled: "cancelled",
+  interrupted: "interrupted by a restart",
+};
+
+/** A run's state in words: "finished", "stopped", "interrupted by a restart". */
+export function statusWord(run: Pick<RunRow, "status">): string {
+  return STATUS_WORDS[run.status];
+}
+
+const RESULT_WORDS: Record<EvalCaseResult["status"], string> = {
+  passed: "Passed",
+  failed: "Failed",
+  unavailable: "Unavailable",
+};
+
+/** A graded case in a word: it passed, it failed, or no model answered it. */
+export function resultWord(result: Pick<EvalCaseResult, "status">): string {
+  return RESULT_WORDS[result.status];
+}
+
+/** Milliseconds as seconds with one decimal: "3.0 s". */
+export function seconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
+/** The judge's scores, faithfulness (0 to 1) then helpfulness (1 to 5), or a dash unjudged. */
+export function judgeScores(judge: EvalCaseResult["judge"]): string {
+  return judge ? `${judge.faithfulness.toFixed(2)}, ${judge.helpfulness}` : "–";
+}
+
+/** "fact 18 of 18, german 8 of 9": each category's passed cases of those graded. */
+export function categoryLine(
+  byCategory: Readonly<Record<string, { completed: number; passed: number }>>,
+): string {
+  return Object.entries(byCategory)
+    .map(([name, c]) => `${name} ${c.passed} of ${c.completed}`)
+    .join(", ");
+}
+
+/** "Prompt ask-2026-11-02.1, judged by gemini-flash-lite (calibrated)." */
+export function judgedLine(
+  summary: { promptVersion: string; judge: string | null },
+  mark: string | null,
+): string {
+  const how = mark ? ` (${mark})` : "";
+  return `Prompt ${summary.promptVersion}, judged by ${summary.judge ?? "no judge"}${how}.`;
+}
+
 export function isActive(run: Pick<RunRow, "status">): boolean {
   return run.status === "queued" || run.status === "running";
 }
@@ -93,5 +153,5 @@ export function conversationLine(c: EvalConversation): string {
   if (c.windowDropped) {
     parts.push(`${countLabel(c.windowDropped, "question", "questions")} past the window`);
   }
-  return parts.join(" · ");
+  return parts.join(", ");
 }

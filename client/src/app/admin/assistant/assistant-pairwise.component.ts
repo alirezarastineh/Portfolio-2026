@@ -11,14 +11,18 @@ import {
   signal,
 } from "@angular/core";
 import { FormsModule } from "@angular/forms";
+import { NgIcon, provideIcons } from "@ng-icons/core";
+import { lucideChevronRight } from "@ng-icons/lucide";
 import { toast } from "@spartan-ng/brain/sonner";
 import { HlmButton } from "@spartan-ng/helm/button";
+import { HlmTableImports } from "@spartan-ng/helm/table";
 
 import { AdminApiService } from "../admin-api.service";
 import { apiWords } from "../api-words";
 import type { RunItem, RunRow } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
-import { canResume, isActive, progressShare } from "../eval-runs";
+import { LoadErrorComponent } from "../components/load-state.component";
+import { canResume, EVAL_SUITE_CASES, isActive, progressShare, statusWord } from "../eval-runs";
 import { AdminPulseService } from "../pulse.service";
 import { featureStop } from "../spending";
 import { UnsavedChangesService } from "../unsaved-changes.service";
@@ -40,17 +44,26 @@ const POLL_MS = 2000;
  * the eval suite, each case judged twice with the answers' positions swapped;
  * a verdict counts only when both orders agree. For trying a new model
  * release, or the deep route against the lite one. Runs in the background
- * like the evals, one paid run at a time.
+ * like the evals, one paid run at a time. A report in words (plan 5, U22).
  */
 @Component({
   selector: "app-assistant-pairwise",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, FeatureStopComponent, FormsModule, HlmButton],
+  imports: [
+    DecimalPipe,
+    FeatureStopComponent,
+    FormsModule,
+    HlmButton,
+    HlmTableImports,
+    LoadErrorComponent,
+    NgIcon,
+  ],
+  viewProviders: [provideIcons({ lucideChevronRight })],
   host: { class: "block" },
   template: `
     <section class="flex flex-col gap-3" aria-labelledby="pairwise-title">
-      <h2 id="pairwise-title" class="m-0 text-sm font-medium">Compare two answerers</h2>
-      <p class="m-0 text-hint text-muted-foreground">
+      <h2 id="pairwise-title" class="m-0 text-section-title">Compare two answerers</h2>
+      <p class="m-0 max-w-prose text-hint text-muted-foreground">
         A route (lite, deep) or a model id on each side. The judge ({{ judge() ?? "…" }}) reads both
         answers twice, their order swapped; a verdict counts only when both orders agree.
       </p>
@@ -110,7 +123,7 @@ const POLL_MS = 2000;
             </button>
           } @else {
             <span class="text-hint text-muted-foreground"
-              >Another run is going; one at a time.</span
+              >Another paid run is going; one at a time.</span
             >
           }
         }
@@ -121,29 +134,28 @@ const POLL_MS = 2000;
 
       @if (view(); as v) {
         @let s = summaryOf(v.run);
-        <div class="flex flex-col gap-3 rounded-lg border border-border p-3">
-          <h3 class="m-0 text-sm font-medium">
-            {{ label(v.run) }}: {{ v.run.status }} · {{ v.run.progress.done }} of
-            {{ v.run.progress.total }} cases · \${{ v.run.usd | number: "1.3-4" }}
+        <section class="flex flex-col gap-3" aria-labelledby="pairwise-run">
+          <h3 id="pairwise-run" class="m-0 text-sm font-medium">
+            {{ label(v.run) }}: {{ status(v.run) }}
           </h3>
           <div
-            class="h-1.5 overflow-hidden rounded-full bg-muted"
+            class="h-1.5 overflow-hidden bg-surface-2"
             role="progressbar"
             aria-label="Cases compared"
             aria-valuemin="0"
             [attr.aria-valuemax]="v.run.progress.total"
             [attr.aria-valuenow]="v.run.progress.done"
           >
-            <div
-              class="h-full rounded-full bg-accent-orange"
-              [style.width.%]="share(v.run) * 100"
-            ></div>
+            <div class="h-full bg-foreground" [style.width.%]="share(v.run) * 100"></div>
           </div>
-          @if (v.run.error) {
-            <p
-              class="m-0 rounded-md border border-accent-orange/40 bg-accent-orange-soft p-3 text-sm"
-            >
-              {{ v.run.error }}
+          <p class="m-0 text-sm">
+            {{ v.run.progress.done }} of {{ v.run.progress.total }} cases compared,
+            <span class="font-data">\${{ v.run.usd | number: "1.3-4" }}</span
+            >.
+          </p>
+          @if (v.run.error; as error) {
+            <p class="m-0 max-w-prose text-sm">
+              <span class="font-medium">Why it stopped:</span> {{ error }}
             </p>
           }
           @if (resumable(v.run)) {
@@ -164,83 +176,188 @@ const POLL_MS = 2000;
             </div>
           }
           @if (s) {
-            <p class="m-0 text-sm">
+            <p class="m-0 max-w-prose text-sm">
               {{ verdictLine(s) }} Swap agreement
-              <strong class="font-data">{{ percent(s.swapAgreement) }}</strong> · the graders passed
-              A {{ s.passed.a }}, B {{ s.passed.b }} of {{ s.judged }}.
+              <strong class="font-data">{{ percent(s.swapAgreement) }}</strong>; the graders passed
+              A {{ s.passed.a }} and B {{ s.passed.b }} of {{ s.judged }}.
             </p>
-            <div class="overflow-x-auto rounded-lg border border-border">
-              <table class="w-full text-sm">
-                <thead class="text-left text-xs text-muted-foreground">
-                  <tr>
-                    <th class="p-2 font-normal">Category</th>
-                    <th class="p-2 text-right font-normal">A better</th>
-                    <th class="p-2 text-right font-normal">B better</th>
-                    <th class="p-2 text-right font-normal">Tie</th>
-                    <th class="p-2 text-right font-normal">Orders disagree</th>
+            <div hlmTableContainer>
+              <table hlmTable>
+                <caption class="sr-only">
+                  The verdicts by category
+                </caption>
+                <thead hlmTHead>
+                  <tr hlmTr>
+                    <th hlmTh scope="col">Category</th>
+                    <th hlmTh scope="col" class="text-right">A better</th>
+                    <th hlmTh scope="col" class="text-right">B better</th>
+                    <th hlmTh scope="col" class="text-right">Tie</th>
+                    <th hlmTh scope="col" class="text-right">Orders disagree</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody hlmTBody>
                   @for (row of tallyRows(s); track row.category) {
-                    <tr class="border-t border-border font-data text-xs">
-                      <td class="p-2">{{ row.category }}</td>
-                      <td class="p-2 text-right">{{ row.a }}</td>
-                      <td class="p-2 text-right">{{ row.b }}</td>
-                      <td class="p-2 text-right">{{ row.tie }}</td>
-                      <td class="p-2 text-right">{{ row.inconsistent }}</td>
+                    <tr hlmTr>
+                      <th hlmTh scope="row" class="font-normal">{{ row.category }}</th>
+                      <td hlmTd class="text-right font-data text-xs">{{ row.a }}</td>
+                      <td hlmTd class="text-right font-data text-xs">{{ row.b }}</td>
+                      <td hlmTd class="text-right font-data text-xs">{{ row.tie }}</td>
+                      <td hlmTd class="text-right font-data text-xs">{{ row.inconsistent }}</td>
                     </tr>
                   }
                 </tbody>
               </table>
             </div>
           }
-          <ul class="m-0 flex list-none flex-col gap-2 p-0" role="list" aria-label="Cases">
-            @for (r of results(); track r.id) {
-              <li class="rounded-lg border border-border p-2 text-sm">
-                <details>
-                  <summary class="flex cursor-pointer flex-wrap items-center gap-2">
-                    <span class="font-data text-xs">{{ r.id }}</span>
-                    <span class="text-xs">{{ outcomeOf(r) }}</span>
-                    <span class="font-data text-xs text-muted-foreground">
-                      A {{ r.a.failures.length ? "✗" : "✓" }} · B
-                      {{ r.b.failures.length ? "✗" : "✓" }}
-                    </span>
-                  </summary>
-                  <div class="mt-2 grid gap-2 md:grid-cols-2">
-                    <p class="m-0 whitespace-pre-wrap text-xs">
-                      <strong>A</strong> ({{ r.a.model ?? "no model" }}):
-                      {{ r.a.answer || "(no text)" }}
-                    </p>
-                    <p class="m-0 whitespace-pre-wrap text-xs">
-                      <strong>B</strong> ({{ r.b.model ?? "no model" }}):
-                      {{ r.b.answer || "(no text)" }}
-                    </p>
-                  </div>
-                  @if (r.reasons.length) {
-                    <p class="m-0 mt-2 text-hint text-muted-foreground">
-                      Judge: {{ r.reasons.join(" · ") }}
-                    </p>
-                  }
-                </details>
-              </li>
-            }
-          </ul>
-        </div>
+          <div hlmTableContainer>
+            <table hlmTable>
+              <caption class="sr-only">
+                The comparison's cases
+              </caption>
+              <thead hlmTHead>
+                <tr hlmTr>
+                  <th hlmTh scope="col">Case</th>
+                  <th hlmTh scope="col">Verdict</th>
+                  <th hlmTh scope="col">A</th>
+                  <th hlmTh scope="col">B</th>
+                </tr>
+              </thead>
+              @for (r of results(); track r.id) {
+                <tbody hlmTBody>
+                  <tr hlmTr>
+                    <th hlmTh scope="row" class="font-normal">
+                      <button
+                        type="button"
+                        class="group inline-flex min-h-6 touch-manipulation items-center gap-1.5 pointer-coarse:min-h-11"
+                        [attr.aria-expanded]="isOpen(r.id)"
+                        [attr.aria-controls]="'pairwise-case-' + r.id"
+                        (click)="toggle(r.id)"
+                      >
+                        <ng-icon
+                          name="lucideChevronRight"
+                          size="14"
+                          class="shrink-0 text-muted-foreground group-aria-expanded:rotate-90"
+                          aria-hidden="true"
+                        />
+                        <span class="font-data text-xs" translate="no">{{ r.id }}</span>
+                      </button>
+                    </th>
+                    <td hlmTd>{{ outcomeOf(r) }}</td>
+                    <td hlmTd>
+                      <span [class.text-destructive]="r.a.failures.length > 0">{{
+                        r.a.failures.length ? "failed" : "passed"
+                      }}</span>
+                    </td>
+                    <td hlmTd>
+                      <span [class.text-destructive]="r.b.failures.length > 0">{{
+                        r.b.failures.length ? "failed" : "passed"
+                      }}</span>
+                    </td>
+                  </tr>
+                  <tr hlmTr [id]="'pairwise-case-' + r.id" [hidden]="!isOpen(r.id)">
+                    <td hlmTd colspan="4" class="whitespace-normal">
+                      <div class="grid gap-3 py-1 text-sm md:grid-cols-2">
+                        <div class="flex flex-col gap-1">
+                          <p class="m-0 text-xs text-muted-foreground">
+                            A,
+                            <span class="font-data" translate="no">{{
+                              r.a.model ?? "no model"
+                            }}</span>
+                          </p>
+                          <p
+                            class="m-0 whitespace-pre-wrap"
+                            [textContent]="r.a.answer || '(no text)'"
+                          ></p>
+                        </div>
+                        <div class="flex flex-col gap-1">
+                          <p class="m-0 text-xs text-muted-foreground">
+                            B,
+                            <span class="font-data" translate="no">{{
+                              r.b.model ?? "no model"
+                            }}</span>
+                          </p>
+                          <p
+                            class="m-0 whitespace-pre-wrap"
+                            [textContent]="r.b.answer || '(no text)'"
+                          ></p>
+                        </div>
+                      </div>
+                      @if (r.reasons.length) {
+                        <p class="m-0 mt-2 max-w-prose text-hint text-muted-foreground">
+                          The judge: {{ r.reasons.join("; ") }}
+                        </p>
+                      }
+                    </td>
+                  </tr>
+                </tbody>
+              } @empty {
+                <tbody hlmTBody>
+                  <tr hlmTr>
+                    <td hlmTd colspan="4" class="text-muted-foreground">No case compared yet.</td>
+                  </tr>
+                </tbody>
+              }
+            </table>
+          </div>
+        </section>
       }
 
-      @if (history().length) {
-        <ul class="m-0 flex list-none flex-col gap-1 p-0 text-xs" aria-label="Past comparisons">
-          @for (r of history(); track r.id) {
-            <li class="flex flex-wrap items-center gap-2">
-              <span class="font-data">{{ when(r.createdAt) }}</span>
-              <span>{{ label(r) }} · {{ r.status }}</span>
-              <button hlmBtn type="button" size="sm" variant="ghost" (click)="open(r.id)">
-                Open
-              </button>
-            </li>
-          }
-        </ul>
-      }
+      <section class="flex flex-col gap-2" aria-labelledby="pairwise-history">
+        <h3 #historyHeading id="pairwise-history" tabindex="-1" class="m-0 text-sm font-medium">
+          Past comparisons
+        </h3>
+        <div hlmTableContainer>
+          <table hlmTable>
+            <caption class="sr-only">
+              The comparisons, newest first
+            </caption>
+            <thead hlmTHead>
+              <tr hlmTr>
+                <th hlmTh scope="col">Started</th>
+                <th hlmTh scope="col">Answerers</th>
+                <th hlmTh scope="col">Status</th>
+                <th hlmTh scope="col"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody hlmTBody>
+              @if (loadError(); as code) {
+                <tr hlmTr>
+                  <td hlmTd colspan="4" class="whitespace-normal">
+                    <app-load-error
+                      compact
+                      title="Could not load the comparisons"
+                      [reason]="code"
+                      [refocus]="historyHeading"
+                      (retry)="reload()"
+                    />
+                  </td>
+                </tr>
+              } @else if (!loaded()) {
+                <tr hlmTr>
+                  <td hlmTd colspan="4" class="text-muted-foreground">Loading the comparisons…</td>
+                </tr>
+              } @else {
+                @for (r of history(); track r.id) {
+                  <tr hlmTr>
+                    <td hlmTd class="font-data text-xs">{{ when(r.createdAt) }}</td>
+                    <td hlmTd translate="no">{{ label(r) }}</td>
+                    <td hlmTd>{{ status(r) }}</td>
+                    <td hlmTd class="text-right">
+                      <button hlmBtn type="button" size="sm" variant="ghost" (click)="open(r.id)">
+                        Open<span class="sr-only"> the comparison of {{ when(r.createdAt) }}</span>
+                      </button>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr hlmTr>
+                    <td hlmTd colspan="4" class="text-muted-foreground">No comparison yet.</td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
     </section>
   `,
 })
@@ -260,8 +377,14 @@ export class AssistantPairwiseComponent implements OnInit {
   private readonly used = signal<readonly [string, string]>(["lite", "deep"]);
   protected readonly judge = signal<string | null>(null);
   protected readonly runs = signal<RunRow[]>([]);
+  /** The runs arrived at least once: until then the history says it is loading. */
+  protected readonly loaded = signal(false);
+  /** Why the runs did not arrive (the API's code): said in the history, with Try again. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly view = signal<{ run: RunRow; items: RunItem[] } | null>(null);
   protected readonly busy = signal(false);
+  /** The cases opened to both answers. */
+  private readonly opened = signal<ReadonlySet<string>>(new Set());
   private timer?: ReturnType<typeof setTimeout>;
 
   /** Any run going on: one paid run at a time, whatever its kind. */
@@ -285,6 +408,7 @@ export class AssistantPairwiseComponent implements OnInit {
   protected readonly tallyRows = tallyRows;
   protected readonly verdictLine = verdictLine;
   protected readonly percent = percent;
+  protected readonly status = statusWord;
 
   constructor() {
     const unsaved = inject(UnsavedChangesService);
@@ -307,15 +431,40 @@ export class AssistantPairwiseComponent implements OnInit {
       this.judge.set(status.data.fixtureJudge);
       this.answerers.set(status.data.answerers);
     }
+    // With comparisons on screen, a toast; before, the history says so, with Try again.
     if (!list.ok) {
-      toast.error("Could not load the runs", { description: apiWords(list.error) });
+      if (this.loaded()) {
+        toast.error("Could not load the comparisons", { description: apiWords(list.error) });
+      } else {
+        this.loadError.set(list.error);
+      }
       return;
     }
+    this.loadError.set(null);
+    this.loaded.set(true);
     this.runs.set(list.data.runs);
     const going = list.data.runs.find((r) => r.kind === "pairwise" && isActive(r));
     if (going) {
       await this.open(going.id);
     }
+  }
+
+  protected reload(): void {
+    void this.load();
+  }
+
+  protected isOpen(id: string): boolean {
+    return this.opened().has(id);
+  }
+
+  protected toggle(id: string): void {
+    this.opened.update((open) => {
+      const next = new Set(open);
+      if (!next.delete(id)) {
+        next.add(id);
+      }
+      return next;
+    });
   }
 
   protected async open(id: string): Promise<void> {
@@ -324,6 +473,9 @@ export class AssistantPairwiseComponent implements OnInit {
     if (!result.ok) {
       toast.error("Could not load the comparison", { description: apiWords(result.error) });
       return;
+    }
+    if (this.view()?.run.id !== id) {
+      this.opened.set(new Set());
     }
     this.view.set(result.data);
     const run = result.data.run;
@@ -338,10 +490,10 @@ export class AssistantPairwiseComponent implements OnInit {
       return;
     }
     const [a, b] = [this.a().trim(), this.b().trim()];
+    const cases = EVAL_SUITE_CASES;
     const go = await this.confirm.ask({
-      title: `Compare ${a} with ${b}?`,
-      description:
-        "Every eval case is answered by both, then judged twice: four model calls a case, paced for free-tier limits (up to half an hour for the whole suite). Its cost counts toward today's budget.",
+      title: `Compare ${a} with ${b} on all ${cases} cases?`,
+      description: `Each of the ${cases} eval cases is answered by both, then judged twice with the answers swapped: ${cases * 4} model calls, paced for free-tier limits. Its cost counts toward today's budget.`,
       confirmLabel: "Compare",
     });
     if (!go) {
@@ -399,9 +551,13 @@ export class AssistantPairwiseComponent implements OnInit {
     }
   }
 
+  /** "lite against deep": the two answerers the run compares. */
   protected label(run: RunRow): string {
-    const params = run.params as { a?: string; b?: string };
-    return `${params.a ?? "A"} vs ${params.b ?? "B"}`;
+    const side = (key: "a" | "b", fallback: string): string => {
+      const value = run.params[key];
+      return typeof value === "string" ? value : fallback;
+    };
+    return `${side("a", "A")} against ${side("b", "B")}`;
   }
 
   protected outcomeOf(r: PairwiseCaseResult): string {
