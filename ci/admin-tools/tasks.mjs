@@ -12,6 +12,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { answersFor, realReview } from "./data.mjs";
+import * as fx from "./fixtures.generated.mjs";
 import { chromium, inTurn, loaded, open, SPECS, startServer } from "./lib.mjs";
 
 const only = process.argv[2] ? Number(process.argv[2]) : null;
@@ -90,6 +91,39 @@ async function steadyId(page, locator, id, reads) {
   await page.waitForTimeout(100);
   const again = await locator.getAttribute("id");
   return again === id ? id : steadyId(page, locator, again, reads - 1);
+}
+
+/** Task 6's week (plan 5, U20): five answers still to review, each PUT marking its answer reviewed. */
+const TO_REVIEW = [
+  "Where is Alireza based?",
+  "Which stack does he use?",
+  "How does he test prompts?",
+  "Is he open to relocating?",
+  "What did he build with RAG?",
+];
+function fiveToReview() {
+  const ids = TO_REVIEW.map((_, i) => `m_task6_000${i + 1}`);
+  const reviewed = new Map();
+  const week = () => ({
+    week: "2026-W45",
+    previous: "2026-W44",
+    next: null,
+    queue: ids.map((id, i) => ({
+      message: fx.answerRow(id, TO_REVIEW[i]),
+      reasons: i === 0 ? ["thumbs down"] : [],
+      sampled: i > 0,
+      review: reviewed.get(id) ?? null,
+    })),
+    stats: { answers: 42, queued: ids.length, reviewed: reviewed.size, labels: fx.noVerdicts() },
+  });
+  const saves = ids.map((id) => [
+    `PUT /admin/assistant/reviews/${id}`,
+    (_n, request) => {
+      reviewed.set(id, { ...request.postDataJSON(), reviewedAt: NOW });
+      return { status: 200, body: { ok: true, reviewedAt: NOW } };
+    },
+  ]);
+  return { "GET /admin/assistant/reviews": () => ({ status: 200, body: week() }), ...Object.fromEntries(saves) };
 }
 
 /** Each task: its words, the plan's "today" and target, extra answers, and the walk from Today. */
@@ -199,9 +233,9 @@ const TASKS = [
   },
   {
     n: 6,
-    name: "Weekly review of answers (one answer)",
-    target: "One click from Today; keys pick each verdict; Ctrl Enter saves and opens the next",
-    answers: { "PUT /admin/assistant/reviews/*": null },
+    name: "Weekly review of answers (five answers)",
+    target: "One click from Today; 1 2 3 pick each verdict, row after row; Ctrl Enter saves and opens the next; five answers in under 3 minutes",
+    answers: fiveToReview(),
     walk: async (page, act) => {
       const row = page.getByRole("link", { name: /still to review/ }).first();
       if (await row.count()) {
@@ -210,12 +244,17 @@ const TASKS = [
         await act.click(rail(page, "Assistant"), "Assistant in the rail");
         await act.click(page.getByRole("navigation", { name: "Assistant views" }).getByRole("link", { name: "Reviews", exact: true }), "the Reviews view");
       }
-      await page.getByRole("list", { name: "Answers to review" }).waitFor();
-      await act.press("1");
-      const saving = page.waitForRequest((r) => r.method() === "PUT" && r.url().includes("/admin/assistant/reviews/"));
-      await act.press("s");
-      await saving;
-      return "one answer reviewed";
+      await page.getByRole("listbox", { name: "Answers to review" }).waitFor();
+      // Plan 5, U20: five verdicts per answer from the keys, then Ctrl Enter saves and opens the next.
+      await inTurn(TO_REVIEW, async (question) => {
+        await page.getByRole("heading", { name: question, exact: true }).waitFor();
+        await inTurn(["1", "1", "1", "2", "3"], (key) => act.press(key));
+        const saving = page.waitForRequest((r) => r.method() === "PUT" && r.url().includes("/admin/assistant/reviews/"));
+        await act.press("Control+Enter");
+        await saving;
+      });
+      await page.getByRole("heading", { name: /^Every answer of week \d+ is reviewed\.$/ }).waitFor();
+      return `${TO_REVIEW.length} answers reviewed, then the done state`;
     },
   },
   {
@@ -293,13 +332,6 @@ const results = [];
 /** One task, walked from the dashboard: its actions, scrolling, time and outcome. */
 async function runTask(task) {
   const answers = { ...answersFor("/admin"), ...task.answers };
-  // A wildcard write: any review's PUT answers ok.
-  if ("PUT /admin/assistant/reviews/*" in answers) {
-    delete answers["PUT /admin/assistant/reviews/*"];
-    for (const id of ["m_review0001", "m_review0002", "r1", "r2"]) {
-      answers[`PUT /admin/assistant/reviews/${id}`] = { ok: true, reviewedAt: NOW };
-    }
-  }
   const s = await open(browser, origin, answers, {
     path: "/admin",
     size: { width: 1280, height: 800 },

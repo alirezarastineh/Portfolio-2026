@@ -371,14 +371,15 @@ await probe("E29 draft tab: stage asks for real", async () => {
   await context.close();
 });
 
-await probe("R01 Reviews: S on a fresh answer", async () => {
+// Plan 5, U20: Ctrl Enter saves now (S went); on a fresh answer, nothing pressed, it must send nothing.
+await probe("R01 Reviews: Save and next on a fresh answer", async () => {
   const puts = [];
   const a = answers();
   a["PUT /admin/assistant/reviews/m_review0001"] = (n, req) => { puts.push(req.postDataJSON()); return { status: 200, body: { ok: true, reviewedAt: fx.NOW } }; };
   const { page, context } = await open(browser, origin, a, { path: "/admin/assistant?view=reviews" });
   await loaded(page);
   await page.evaluate(() => document.activeElement?.blur?.());
-  await page.keyboard.press("s");
+  await page.keyboard.press("Control+Enter");
   await page.waitForTimeout(700);
   log("R01", puts.length ? "CONFIRMED" : "STRUCK", JSON.stringify(puts[0]));
   await context.close();

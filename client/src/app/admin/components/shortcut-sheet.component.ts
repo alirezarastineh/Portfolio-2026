@@ -8,7 +8,7 @@ interface Shortcut {
 }
 
 const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform ?? "");
-const MOD = MAC ? "⌘" : "Ctrl";
+export const MOD = MAC ? "⌘" : "Ctrl";
 
 /** The keyboard shortcuts, by where they work. Plain letters never fire while typing in a field. */
 export const SHORTCUTS: { where: string; items: Shortcut[] }[] = [
@@ -46,10 +46,11 @@ export const SHORTCUTS: { where: string; items: Shortcut[] }[] = [
   {
     where: "In the assistant's reviews",
     items: [
-      { keys: ["J"], does: "Next answer" },
+      { keys: ["J"], does: "Next answer; what you picked stays with this one" },
       { keys: ["K"], does: "Previous answer" },
-      { keys: ["1–5"], does: "Cycle a verdict: good, not good, does not apply" },
-      { keys: ["S"], does: "Save the review and open the next answer" },
+      { keys: ["↑", "↓"], does: "Move between the five verdicts" },
+      { keys: ["1", "2", "3"], does: "Good, not good, does not apply; then the next verdict" },
+      { keys: [MOD, "↵"], does: "Save the review and open the next answer" },
     ],
   },
 ];
@@ -110,6 +111,23 @@ export function isShortcutTarget(event: KeyboardEvent): boolean {
     return false;
   }
   return !typingIn(event);
+}
+
+/**
+ * Ctrl/⌘ Enter, "save and open the next": never in a dialog or a menu, and in a field only in
+ * the one it belongs to (the review's note), where Enter alone makes a new line.
+ */
+export function isSaveNextKey(event: KeyboardEvent, field: Element | undefined): boolean {
+  if (
+    event.key !== "Enter" ||
+    !(event.ctrlKey || event.metaKey) ||
+    event.altKey ||
+    event.shiftKey ||
+    event.defaultPrevented
+  ) {
+    return false;
+  }
+  return !typingIn(event) || (field !== undefined && event.target === field);
 }
 
 /**
