@@ -1,6 +1,8 @@
 import type {
   AnswersRow,
   AssistantUsage,
+  Attempt,
+  ConversationRow,
   GuardEventRow,
   ToolOutcome,
   TraceStep,
@@ -8,7 +10,7 @@ import type {
 
 /**
  * How the admin reads an answer's trace and the assistant's audit signals:
- * one line per step, the tone of each tool's outcome, the primary model's
+ * a sentence per step, the tone of each tool's outcome, the primary model's
  * cache hits per day (with the 50 % warning line), refusals at the gate and
  * the invented-citation rate. Pure, so the components stay thin.
  */
@@ -47,34 +49,154 @@ function percent(part: number, whole: number): string {
   return whole ? `${Math.round((part / whole) * 100)} %` : "0 %";
 }
 
-/** Who answered the step, how fast, what it read and wrote, how it ended. */
-export function stepLine(step: TraceStep): string {
-  const parts = [step.model ?? "no model could answer"];
+const tenths = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+const dollars = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 4,
+  maximumFractionDigits: 5,
+});
+
+/** "2.9 s". */
+export function seconds(ms: number): string {
+  return `${tenths.format(ms / 1000)} s`;
+}
+
+/** "$0.0079": an answer costs fractions of a cent. */
+export function cost(usd: number): string {
+  return dollars.format(usd);
+}
+
+/** A model attempt's outcome (`server/src/ask/models/fallback.ts`), as a verb phrase. */
+const ATTEMPT_WORDS = new Map<string, string>([
+  ["ok", "answered"],
+  ["rate-limited", "was rate-limited"],
+  ["server-error", "had a server error"],
+  ["client-error", "refused the request"],
+  ["network", "could not be reached"],
+  ["timeout", "timed out"],
+  ["skipped-open", "was paused after failures"],
+  ["skipped-missing", "is not set up here"],
+  ["skipped-capability", "cannot call tools"],
+  ["skipped-context", "had no room for the request"],
+]);
+
+/** How an answer or a step ended (`resolveFinishReason`, `server/src/ask/agent.ts`). */
+const FINISH_WORDS = new Map<string, string>([
+  ["stop", "finished"],
+  ["tool-calls", "called tools"],
+  ["length", "stopped at its length limit"],
+  ["content-filter", "was blocked by the safety filter"],
+  ["aborted", "was stopped by the visitor"],
+  ["error:unavailable", "failed: no model was available"],
+  ["error:timeout", "failed: it timed out"],
+  ["error:error", "failed"],
+  ["error", "failed"],
+]);
+
+export function attemptWords(outcome: string): string {
+  return ATTEMPT_WORDS.get(outcome) ?? outcome;
+}
+
+export function finishWords(reason: string): string {
+  return FINISH_WORDS.get(reason) ?? `ended (${reason})`;
+}
+
+/** One step in a sentence: who answered, how fast, what it read and wrote, how it ended. */
+export function stepSentence(step: TraceStep): string {
+  const parts: string[] = [];
   if (step.answerOnly) {
-    parts.push("answer-only");
+    parts.push("answering without tools");
   }
   if (step.ttftMs !== null) {
-    parts.push(`${count.format(step.ttftMs)} ms to first token`);
+    parts.push(`first word after ${seconds(step.ttftMs)}`);
   }
   if (step.tokens) {
     const { input, cached, output } = step.tokens;
     parts.push(
-      `${count.format(input)} in (${percent(cached, input)} cached)`,
-      `${count.format(output)} out`,
+      `${count.format(input)} tokens read (${percent(cached, input)} from the cache)`,
+      `${count.format(output)} written`,
     );
   }
-  if (step.finishReason) {
-    parts.push(step.finishReason);
-  }
-  return parts.join(" · ");
+  const who = step.model ?? "No model could answer";
+  const said = parts.length > 0 ? `${who}: ${parts.join(", ")}` : who;
+  return step.finishReason ? `${said}, then it ${finishWords(step.finishReason)}.` : `${said}.`;
 }
 
-/** The models a step passed over before one answered, or null when none were. */
-export function passedOverLine(step: TraceStep): string | null {
-  if (!step.passedOver.length) {
+/** The models a step passed over before one answered, in a sentence, or null when none were. */
+export function passedOverSentence(step: TraceStep): string | null {
+  if (step.passedOver.length === 0) {
     return null;
   }
-  return step.passedOver.map((p) => `${p.model} ${p.outcome} (${p.ms} ms)`).join(" → ");
+  return `Passed over first: ${step.passedOver.map((p) => attemptSentence(p)).join("; ")}.`;
+}
+
+function attemptSentence(attempt: Attempt): string {
+  const after = attempt.ms > 0 ? ` after ${seconds(attempt.ms)}` : "";
+  return `${attempt.model} ${attemptWords(attempt.outcome)}${after}`;
+}
+
+/**
+ * The facts of an answer, in sentences: where it was asked, how fast and at what cost it came,
+ * and the models tried for it when there was more than one.
+ */
+export function answerFacts(row: ConversationRow): string[] {
+  const language = row.locale === "de" ? "German" : "English";
+  const first = row.ttftMs === null ? "" : `, its first word after ${seconds(row.ttftMs)}`;
+  const { input, cached, output } = row.tokens;
+  const facts = [
+    `Asked in ${language}, session ${row.session}, on the ${row.route} route, prompt ${row.promptVersion}.`,
+    `Answered in ${seconds(row.totalMs)}${first}: ${count.format(input)} tokens read (${percent(cached, input)} from the cache), ${count.format(output)} written, ${cost(row.usd)}.`,
+  ];
+  if (row.attempts.length > 1) {
+    facts.push(`Models tried: ${row.attempts.map((a) => attemptSentence(a)).join("; ")}.`);
+  }
+  return facts;
+}
+
+/** A matched brief (visitor plan V20): "match: role, 5 rows, 1 taken back". */
+function matchWords(row: ConversationRow): string | null {
+  const match = row.route === "match" ? row.trace?.match : undefined;
+  if (!match) {
+    return null;
+  }
+  const rows = match.items.filter((item) => item.status !== null).length;
+  const back = match.items.filter((item) => item.downgraded).length;
+  return [
+    `match: ${match.kind}`,
+    rows === 1 ? "1 row" : `${rows} rows`,
+    back ? `${back} taken back` : "",
+    match.stop ? `stopped: ${match.stop}` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+/** What happened to an answer, worst first, in words; null when nothing did. */
+export function happenedWords(row: ConversationRow): string | null {
+  const words: string[] = [];
+  if (row.finishReason.startsWith("error") || row.finishReason === "aborted") {
+    words.push(finishWords(row.finishReason));
+  }
+  if (row.feedback !== null) {
+    words.push(row.feedback === 1 ? "thumbs up" : "thumbs down");
+  }
+  const dropped = row.droppedCitations.length;
+  // The check's "invented citation" says less than the count of those removed.
+  const flags = (row.checks?.flags ?? []).filter((f) => !dropped || f !== "invented-citation");
+  words.push(...flags.map((flag) => checkLabel(flag)));
+  if (dropped) {
+    words.push(`${dropped} invented ${dropped === 1 ? "citation" : "citations"} removed`);
+  }
+  const match = matchWords(row);
+  if (match) {
+    words.push(match);
+  }
+  const said = words.join(", ");
+  return said ? `${said.slice(0, 1).toUpperCase()}${said.slice(1)}` : null;
 }
 
 export interface CacheDay {

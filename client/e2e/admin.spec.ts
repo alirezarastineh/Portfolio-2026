@@ -2064,6 +2064,8 @@ test.describe("admin", () => {
     const sheet = page.getByRole("dialog", { name: "Keyboard shortcuts" });
     await expect(sheet).toBeVisible();
     await expect(sheet.getByText("Archive the open message")).toBeVisible();
+    // The assistant's queues have their keys too (plan 5, U20).
+    await expect(sheet.getByText("Open the next answer", { exact: true })).toBeVisible();
   });
 
   test("the assistant's seven views stay on one row on a phone, the current one in sight", async ({
@@ -2943,15 +2945,23 @@ test.describe("admin", () => {
     await expect(agents).toContainText("4");
     await expect(agents).toContainText(/search_portfolio 3\s*· 1 refused \(rate_limited 1\)/);
 
+    // Conversations (plan 5, U20): what happened in words in the row, the trace in sentences once it opens.
     await openView(page, "Conversations");
+    const row = page.getByRole("button", { name: "Which project cut support escalations?" });
+    await expect(page.getByRole("cell", { name: "1 invented citation removed" })).toBeVisible();
+    await row.click();
+    await expect(row).toHaveAttribute("aria-expanded", "true");
     await expect(
-      page.getByText("dropped (invented, never shown): project:nebula@en"),
+      page.getByText("Invented and removed before the visitor saw them: project:nebula@en"),
     ).toBeVisible();
-    await expect(page.getByText("invented citation", { exact: true })).toBeVisible();
-    await page.locator("summary", { hasText: "Timeline" }).click();
-    await expect(page.getByText("passed over: gemini-pro rate-limited (140 ms)")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "How it answered" })).toBeVisible();
     await expect(
-      page.getByText(/get_document \{"id":"project:nebula@en"\} → not found/),
+      page.getByText("Passed over first: gemini-pro was rate-limited after 0.1 s."),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        /get_document \{"id":"project:nebula@en"\}\s*:\s*not found\s*, 48 characters\./,
+      ),
     ).toBeVisible();
     expect(unmocked).toEqual([]);
   });
@@ -3600,6 +3610,8 @@ test.describe("admin", () => {
     await openAdmin(page, "/admin/assistant");
 
     await openView(page, "Conversations");
+    // The answer's actions sit in its opened row (plan 5, U20).
+    await page.getByRole("button", { name: "Which project cut support escalations?" }).click();
     await page.getByRole("button", { name: "Freeze as eval case" }).click();
     await expect(page.getByLabel("Must cite (ids, comma-separated)")).toHaveValue(
       "project:atlas@en",
@@ -3748,6 +3760,7 @@ test.describe("admin", () => {
 
     // Diagnose, no model: one line under the answer, then the journal.
     await openView(page, "Conversations");
+    await page.getByRole("button", { name: "Did he move the clusters to Kubernetes?" }).click();
     const diagnose = page.getByRole("button", { name: "Diagnose" });
     // Described by the question it acts on: every answer has its own button.
     await expect(diagnose).toHaveAccessibleDescription("Did he move the clusters to Kubernetes?");
@@ -4419,6 +4432,112 @@ test.describe("admin", () => {
     await section.getByLabel("Faithfulness window").selectOption("7");
     await expect.poll(() => asked).toEqual(["?days=30", "?days=7"]);
     expect(unmocked).toEqual([]);
+  });
+
+  test("Conversations keeps its filter, source and order in the address, loads older answers with before, and J and K open one after another", async ({
+    page,
+    baseURL,
+  }) => {
+    const newest = Array.from({ length: 100 }, (_, i) =>
+      answerRow(`m_page${String(i + 1).padStart(4, "0")}`, `Question number ${i + 1}?`, {
+        createdAt: minutesBefore(i),
+        feedback: -1,
+      }),
+    );
+    const older = answerRow("m_older00001", "An older question?", {
+      createdAt: minutesBefore(500),
+      feedback: -1,
+    });
+    const asked: string[] = [];
+    const unmocked = await fakeApi(page, baseURL);
+    // Answered by what was asked (plan 5, U20): `before` gets the page after the oldest shown.
+    await page.route(
+      (url) => url.pathname === "/admin/assistant/conversations",
+      (route) => {
+        const request = route.request();
+        const origin = request.headers()["origin"] ?? "*";
+        const headers = { ...CORS, "access-control-allow-origin": origin };
+        if (request.method() === "OPTIONS") {
+          return route.fulfill({ status: 204, headers });
+        }
+        const query = new URL(request.url()).searchParams;
+        asked.push(query.toString());
+        return route.fulfill({
+          headers,
+          json: { messages: query.has("before") ? [older] : newest },
+        });
+      },
+    );
+    await openAdmin(page, "/admin/assistant?view=conversations&filter=down");
+    const filters = page.getByRole("group", { name: "Show answers" });
+    await expect(filters.getByRole("button", { name: "Thumbs down" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.getByText("100 answers, newest first.")).toBeVisible();
+    expect(asked).toEqual(["source=terminal&filter=down"]);
+
+    // The source goes into the address too, and a reload keeps both.
+    await page
+      .getByRole("group", { name: "Answers from" })
+      .getByRole("button", { name: "Playground" })
+      .click();
+    await expect(page).toHaveURL(/\?view=conversations&filter=down&source=playground$/);
+    await page.reload();
+    await interactive(page);
+    await expect(page.getByText("100 answers, newest first.")).toBeVisible();
+    expect(asked.at(-1)).toBe("source=playground&filter=down");
+
+    // The order: Asked sorts oldest first, said to a screen reader on the column.
+    const asked1 = page.getByRole("columnheader", { name: "Asked" });
+    await expect(asked1).toHaveAttribute("aria-sort", "descending");
+    await asked1.getByRole("button", { name: "Asked" }).click();
+    await expect(asked1).toHaveAttribute("aria-sort", "ascending");
+    await expect(page).toHaveURL(/&sort=oldest$/);
+    await expect(page.getByText("100 answers, oldest first.")).toBeVisible();
+    await expect(page.getByRole("row").nth(1)).toContainText("Question number 100?");
+    await asked1.getByRole("button", { name: "Asked" }).click();
+    await expect(page.getByRole("row").nth(1)).toContainText("Question number 1?");
+
+    // Older answers: after the oldest shown, the focus on the first that came; the button goes.
+    await page.getByRole("button", { name: "Show older answers" }).click();
+    const olderRow = page.getByRole("button", { name: "An older question?" });
+    await expect(olderRow).toBeFocused();
+    expect(asked.at(-1)).toBe(
+      `source=playground&filter=down&before=${encodeURIComponent(minutesBefore(99))}`,
+    );
+    await expect(page.getByRole("button", { name: "Show older answers" })).toHaveCount(0);
+    await expect(page.getByText("101 answers, newest first.")).toBeVisible();
+
+    // K and J: the previous and the next answer, each opening alone, its button focused.
+    await page.keyboard.press("k");
+    const hundredth = page.getByRole("button", { name: "Question number 100?" });
+    await expect(hundredth).toBeFocused();
+    await expect(hundredth).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("j");
+    await expect(olderRow).toBeFocused();
+    await expect(olderRow).toHaveAttribute("aria-expanded", "true");
+    await expect(hundredth).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByText(/^Asked in English, session /)).toBeVisible();
+
+    await settled(page);
+    expect(await axeViolations(page)).toEqual([]);
+    expect(unmocked).toEqual([]);
+  });
+
+  test("Conversations says when a filter holds nothing, and Show all answers gives the focus to the heading", async ({
+    page,
+    baseURL,
+  }) => {
+    await fakeApi(page, baseURL, {
+      "GET /admin/assistant/conversations": () => ({ status: 200, body: { messages: [] } }),
+    });
+    await openAdmin(page, "/admin/assistant?view=conversations&filter=failed");
+    await expect(page.getByText("No answer failed.")).toBeVisible();
+    await page.getByRole("button", { name: "Show all answers" }).click();
+    await expect(page).toHaveURL(/\/admin\/assistant\?view=conversations$/);
+    await expect(page.getByText("No answers yet.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Answers", exact: true })).toBeFocused();
   });
 
   test("the Reviews tab labels an answer from the keyboard, then opens the next", async ({
@@ -7728,6 +7847,15 @@ test.describe("telling the truth", () => {
         stats: { answers: 0, queued: 0, reviewed: 0, labels: noVerdicts() },
       },
       after: "2026-W40",
+    },
+    {
+      name: "Conversations",
+      path: "/admin/assistant",
+      open: "Conversations",
+      endpoint: "GET /admin/assistant/conversations",
+      says: "Could not load the answers",
+      ok: { messages: [] },
+      after: "No answers yet.",
     },
     {
       name: "Insights",
@@ -14618,6 +14746,11 @@ function discardAsk(page: Page) {
 }
 
 /** One answer waiting for a review, a diagnosed journal entry, one visitor answer: typed text in each view. */
+/** Answers in order (plan 5, U20): `minutes` before noon UTC on 22 November 2026. */
+function minutesBefore(minutes: number): string {
+  return new Date(Date.UTC(2026, 10, 22, 12) - minutes * 60_000).toISOString();
+}
+
 function assistantWithWork(): Record<string, unknown> {
   return {
     "GET /admin/assistant/reviews": {

@@ -1,22 +1,27 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  answerFacts,
+  attemptWords,
   cacheDays,
   cacheShare,
   checkLabel,
   checkTone,
+  cost,
   dayRows,
   droppedRate,
-  passedOverLine,
+  finishWords,
+  happenedWords,
+  passedOverSentence,
   reasonLabel,
   refusalsByDay,
   refusalTotals,
   shareOf,
-  stepLine,
+  stepSentence,
   toolOutcomeLabel,
   toolTone,
 } from "./answer-trace";
-import type { AnswersRow, TraceStep } from "./assistant-types";
+import type { AnswersRow, ConversationRow, TraceStep } from "./assistant-types";
 
 const step: TraceStep = {
   model: "gemini-3.5-flash-lite",
@@ -42,28 +47,138 @@ function day(overrides: Partial<AnswersRow>): AnswersRow {
   };
 }
 
+function answer(overrides: Partial<ConversationRow>): ConversationRow {
+  return {
+    id: "m_a0000001",
+    createdAt: "2026-11-22T10:00:00Z",
+    session: "3f9a2c01b7",
+    locale: "en",
+    route: "lite",
+    question: "What has he shipped with RAG?",
+    answer: "Atlas.",
+    citedIds: [],
+    droppedCitations: [],
+    toolCalls: [],
+    model: "gemini-flash",
+    attempts: [],
+    ttftMs: 820,
+    totalMs: 2900,
+    tokens: { input: 12_345, cached: 9876, output: 456, thoughts: 0 },
+    usd: 0.0079,
+    finishReason: "stop",
+    promptVersion: "ask-2026-11-02.1",
+    trace: null,
+    corpusKey: null,
+    checks: null,
+    feedback: null,
+    ...overrides,
+  };
+}
+
 describe("answer traces", () => {
-  it("says in one line who answered a step, how fast, and what it cost in tokens", () => {
-    expect(stepLine(step)).toBe(
-      "gemini-3.5-flash-lite · 1,234 ms to first token · 12,000 in (75 % cached) · 80 out · tool-calls",
+  it("says in a sentence who answered a step, how fast, what it read and wrote, how it ended", () => {
+    expect(stepSentence(step)).toBe(
+      "gemini-3.5-flash-lite: first word after 1.2 s, 12,000 tokens read (75 % from the cache), 80 written, then it called tools.",
     );
-    expect(stepLine({ ...step, model: null, ttftMs: null, tokens: null, finishReason: null })).toBe(
-      "no model could answer",
+    expect(
+      stepSentence({ ...step, model: null, ttftMs: null, tokens: null, finishReason: null }),
+    ).toBe("No model could answer.");
+    expect(stepSentence({ ...step, answerOnly: true, tokens: null, finishReason: "stop" })).toBe(
+      "gemini-3.5-flash-lite: answering without tools, first word after 1.2 s, then it finished.",
     );
-    expect(stepLine({ ...step, answerOnly: true, tokens: null })).toContain("answer-only");
   });
 
-  it("lists the models a step passed over, or nothing", () => {
-    expect(passedOverLine(step)).toBeNull();
+  it("names the models a step passed over and why, or nothing", () => {
+    expect(passedOverSentence(step)).toBeNull();
     expect(
-      passedOverLine({
+      passedOverSentence({
         ...step,
         passedOver: [
           { model: "gemini-3.5-flash-lite", outcome: "rate-limited", ms: 120 },
           { model: "gemma", outcome: "skipped-open", ms: 0 },
         ],
       }),
-    ).toBe("gemini-3.5-flash-lite rate-limited (120 ms) → gemma skipped-open (0 ms)");
+    ).toBe(
+      "Passed over first: gemini-3.5-flash-lite was rate-limited after 0.1 s; gemma was paused after failures.",
+    );
+  });
+
+  it("says how an answer ended and what a model's attempt did, and keeps a code it does not know", () => {
+    expect(finishWords("error:timeout")).toBe("failed: it timed out");
+    expect(finishWords("aborted")).toBe("was stopped by the visitor");
+    expect(finishWords("unknown")).toBe("ended (unknown)");
+    expect(attemptWords("skipped-context")).toBe("had no room for the request");
+    expect(attemptWords("constructor")).toBe("constructor");
+  });
+
+  it("gives an answer's facts in sentences, and the models tried when there were several", () => {
+    expect(answerFacts(answer({}))).toEqual([
+      "Asked in English, session 3f9a2c01b7, on the lite route, prompt ask-2026-11-02.1.",
+      "Answered in 2.9 s, its first word after 0.8 s: 12,345 tokens read (80 % from the cache), 456 written, $0.0079.",
+    ]);
+    const tried = answerFacts(
+      answer({
+        locale: "de",
+        ttftMs: null,
+        attempts: [
+          { model: "gemini-pro", outcome: "timeout", ms: 6000 },
+          { model: "gemini-flash", outcome: "ok", ms: 2100 },
+        ],
+      }),
+    );
+    expect(tried[0]).toMatch(/^Asked in German/);
+    expect(tried[1]).toMatch(/^Answered in 2\.9 s: /);
+    expect(tried[2]).toBe(
+      "Models tried: gemini-pro timed out after 6.0 s; gemini-flash answered after 2.1 s.",
+    );
+  });
+
+  it("says what happened to an answer, worst first, or nothing", () => {
+    expect(happenedWords(answer({}))).toBeNull();
+    expect(
+      happenedWords(
+        answer({
+          finishReason: "error:unavailable",
+          feedback: -1,
+          checks: { v: 1, flags: ["uncited"] },
+          droppedCitations: ["project:nebula@de"],
+        }),
+      ),
+    ).toBe("Failed: no model was available, thumbs down, uncited, 1 invented citation removed");
+    expect(happenedWords(answer({ feedback: 1 }))).toBe("Thumbs up");
+    // The check's flag is the count of those removed, said once.
+    expect(
+      happenedWords(
+        answer({
+          checks: { v: 1, flags: ["invented-citation"] },
+          droppedCitations: ["a@en", "b@en"],
+        }),
+      ),
+    ).toBe("2 invented citations removed");
+    expect(
+      happenedWords(
+        answer({
+          route: "match",
+          trace: {
+            v: 1,
+            steps: [],
+            match: {
+              kind: "role",
+              items: [
+                { text: "a", status: "yes" },
+                { text: "b", status: "partly", downgraded: true },
+                { text: "c", status: null },
+              ],
+            },
+          },
+        }),
+      ),
+    ).toBe("Match: role, 2 rows, 1 taken back");
+  });
+
+  it("writes an answer's cost in dollars to the hundredth of a cent", () => {
+    expect(cost(0.0079)).toBe("$0.0079");
+    expect(cost(0.00002)).toBe("$0.00002");
   });
 
   it("colours tool outcomes: refusals and errors bad, empty results worth a look", () => {

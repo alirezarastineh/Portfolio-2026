@@ -37,6 +37,13 @@ export const SHORTCUTS: { where: string; items: Shortcut[] }[] = [
     ],
   },
   {
+    where: "In the assistant's conversations",
+    items: [
+      { keys: ["J"], does: "Open the next answer" },
+      { keys: ["K"], does: "Open the previous answer" },
+    ],
+  },
+  {
     where: "In the assistant's reviews",
     items: [
       { keys: ["J"], does: "Next answer" },

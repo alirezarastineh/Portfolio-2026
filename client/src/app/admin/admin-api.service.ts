@@ -525,8 +525,17 @@ export class AdminApiService {
     return this.request<AssistantUsage>("GET", `/admin/assistant/usage?days=${days}`);
   }
 
-  assistantConversations(filter: ConversationFilter, source: "terminal" | "playground") {
-    const query = new URLSearchParams({ source, ...(filter === "all" ? {} : { filter }) });
+  /** A page of answers, newest first; `before` (an answer's `createdAt`) asks for older ones. */
+  assistantConversations(
+    filter: ConversationFilter,
+    source: "terminal" | "playground",
+    before?: string,
+  ) {
+    const query = new URLSearchParams({
+      source,
+      ...(filter === "all" ? {} : { filter }),
+      ...(before ? { before } : {}),
+    });
     return this.request<{ messages: ConversationRow[] }>(
       "GET",
       `/admin/assistant/conversations?${query.toString()}`,
