@@ -1368,6 +1368,20 @@ async function tabTo(page: Page, target: Locator): Promise<void> {
   await expect(target).toBeFocused();
 }
 
+/**
+ * Tab to `target`, past at most `scrollers` table scrollers on the way and nothing else: a table that
+ * scrolls sideways is a Tab stop of its own in Chrome (with nothing focusable in it) and Firefox, so
+ * the keyboard can scroll it.
+ */
+async function tabPastScrollers(page: Page, target: Locator, scrollers: number): Promise<void> {
+  await page.keyboard.press("Tab");
+  if (scrollers > 0 && (await page.locator("[data-slot=table-container]:focus").count()) === 1) {
+    await tabPastScrollers(page, target, scrollers - 1);
+    return;
+  }
+  await expect(target).toBeFocused();
+}
+
 async function tabUntilFocused(page: Page, target: Locator, maxTabs: number): Promise<void> {
   if (maxTabs <= 0 || (await target.evaluate((el) => el === document.activeElement))) {
     return;
@@ -1581,7 +1595,9 @@ test.describe("admin", () => {
 
     const failed = page.getByRole("alert").filter({ hasText: "Could not load this section" });
     await expect(failed).toBeVisible();
-    await expect(failed).toContainText("upstream_down");
+    // The reason in words, never the code: a code the admin has no words for reads as a refusal.
+    await expect(failed).toContainText("The server refused this.");
+    await expect(failed).not.toContainText("upstream_down");
 
     await failed.getByRole("button", { name: "Try again" }).click();
     await expect(failed).toHaveCount(0);
@@ -3418,8 +3434,9 @@ test.describe("admin", () => {
     await openView(page, "Quality");
 
     const compare = page.getByRole("region", { name: "Compare two answerers" });
-    await expect(compare.getByLabel("A")).toHaveValue("lite");
-    await compare.getByLabel("B").fill("deep");
+    // Exact: "Past comparisons", a region of its own in here, holds an "a" too.
+    await expect(compare.getByLabel("A", { exact: true })).toHaveValue("lite");
+    await compare.getByLabel("B", { exact: true }).fill("deep");
     await compare.getByRole("button", { name: "Compare (paid)", exact: true }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Compare" }).click();
 
@@ -16348,7 +16365,8 @@ test.describe("Quality's reports, in words", () => {
       });
       await openAdmin(page, "/admin/assistant?view=quality");
       await expect(page.getByRole("table", { name: "The run's cases" })).toBeVisible();
-      await viewLink(page, "Quality").focus();
+      // From the last view link (Settings follows Quality), so the next Tab enters the view.
+      await viewLink(page, "Settings").focus();
       const button = (name: string, scope: Locator = page.locator("main")) =>
         scope.getByRole("button", { name, exact: true });
       const pastRuns = page.getByRole("region", { name: "Past runs", exact: true });
@@ -16375,8 +16393,9 @@ test.describe("Quality's reports, in words", () => {
         page.getByLabel("Routing window"),
         page.getByLabel("Primary metric"),
       ];
+      // At 390 the wider tables scroll sideways, and their scrollers are stops too.
       await runSequentially(stops, async (stop) => {
-        await tabTo(page, stop);
+        await tabPastScrollers(page, stop, 3);
         await expect(stop).toBeInViewport();
       });
 

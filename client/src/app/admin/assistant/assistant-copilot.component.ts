@@ -92,22 +92,22 @@ import {
                 </caption>
                 <thead hlmTHead>
                   <tr hlmTr>
-                    <th hlmTh scope="col">Version</th>
-                    <th hlmTh scope="col" class="text-right">Drafts</th>
-                    <th hlmTh scope="col" class="text-right">Kept as written</th>
-                    <th hlmTh scope="col" class="text-right">Edited</th>
-                    <th hlmTh scope="col" class="text-right">Discarded</th>
-                    <th hlmTh scope="col" class="text-right">Abstained</th>
-                    <th hlmTh scope="col" class="text-right">Waiting</th>
-                    <th hlmTh scope="col" class="text-right">Keep rate</th>
-                    <th hlmTh scope="col" class="text-right">Edit rate</th>
-                    <th hlmTh scope="col" class="text-right">Median edit</th>
+                    <th hlmTh scope="col" class="whitespace-normal">Version</th>
+                    <th hlmTh scope="col" class="text-right whitespace-normal">Drafts</th>
+                    <th hlmTh scope="col" class="text-right whitespace-normal">Kept as written</th>
+                    <th hlmTh scope="col" class="text-right whitespace-normal">Edited</th>
+                    <th hlmTh scope="col" class="text-right whitespace-normal">Discarded</th>
+                    <th hlmTh scope="col" class="text-right whitespace-normal">Abstained</th>
+                    <th hlmTh scope="col" class="text-right whitespace-normal">Waiting</th>
+                    <th hlmTh scope="col" class="text-right whitespace-normal">Keep rate</th>
+                    <th hlmTh scope="col" class="text-right whitespace-normal">Edit rate</th>
+                    <th hlmTh scope="col" class="text-right whitespace-normal">Median edit</th>
                   </tr>
                 </thead>
                 <tbody hlmTBody>
                   @for (row of skill.versions; track row.version) {
                     <tr hlmTr class="font-data text-xs">
-                      <th hlmTh scope="row" class="font-normal" translate="no">
+                      <th hlmTh scope="row" class="font-normal whitespace-normal" translate="no">
                         {{ row.version }}
                         @if (row.current) {
                           <span class="font-sans text-muted-foreground">(current)</span>
@@ -133,7 +133,7 @@ import {
                   <!-- The agents' drafts, decided on their proposals: counted apart. -->
                   @for (row of skill.agent ?? []; track row.version) {
                     <tr hlmTr class="font-data text-xs">
-                      <th hlmTh scope="row" class="font-normal" translate="no">
+                      <th hlmTh scope="row" class="font-normal whitespace-normal" translate="no">
                         {{ row.version }}
                         <span class="font-sans text-muted-foreground"
                           >({{ row.current ? "current, " : "" }}agent proposals)</span

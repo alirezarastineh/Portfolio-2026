@@ -495,7 +495,8 @@ export default class AdminAgentPage implements OnInit {
       this.runs.set(runs.data.runs);
       this.runsError.set(null);
     } else {
-      this.runsError.set(agentWords(runs.error));
+      // The code as it came: app-load-error says it in words.
+      this.runsError.set(runs.error);
     }
     if (proposals.ok) {
       // Hidden text is no gap to fill: its proposals stay out of sight.
@@ -505,7 +506,7 @@ export default class AdminAgentPage implements OnInit {
       this.limited.set(proposals.data.limited ?? false);
       this.loadError.set(null);
     } else {
-      this.loadError.set(agentWords(proposals.error));
+      this.loadError.set(proposals.error);
     }
     this.poll();
   }
