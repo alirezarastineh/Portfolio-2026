@@ -135,9 +135,11 @@ const TASKS = [
     answers: { "PATCH /admin/sections/ui": () => ({ status: 200, body: OK }) },
     walk: async (page, act) => {
       await act.press("Control+k");
-      await page.getByRole("dialog").getByRole("combobox").waitFor();
+      // Typed once the combobox has the focus: under load the first letter lands in the page behind it.
+      await page.getByRole("dialog").getByRole("combobox").and(page.locator(":focus")).waitFor();
       await act.type("send");
-      await page.getByRole("option", { selected: true }).waitFor();
+      // Enter once Words' row leads, as the e2e's task 1 waits: Find's content groups arrive after its pages.
+      await page.getByRole("option", { name: "Contact › Send message", exact: true, selected: true }).waitFor();
       await act.press("Enter");
       await page.waitForURL(/\/admin\/words/);
       await page.locator("#contact-submit-de:focus").waitFor();
