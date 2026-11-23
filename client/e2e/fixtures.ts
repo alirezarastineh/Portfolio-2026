@@ -119,8 +119,8 @@ export const test = base.extend<{ problems: PageProblems }>({
 
 /**
  * Waits until the page is interactive: Angular has hydrated it, including the
- * `@defer` blocks that hydrate once the browser is idle (projects, writing,
- * the contact form). The server-rendered markup is visible long before that,
+ * `@defer` blocks that hydrate once the browser is idle (projects, skills,
+ * writing, the contact form). The server-rendered markup is visible long before that,
  * so a visible element proves nothing — until hydration, links are plain
  * links, key handlers do not exist yet, and a form's typing can be lost.
  *

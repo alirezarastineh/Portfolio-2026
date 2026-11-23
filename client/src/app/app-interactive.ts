@@ -17,7 +17,7 @@ export function nextIdle(): Promise<void> {
 /**
  * Marks `<html>` once the page is interactive: the app has booted, the first
  * route has loaded and hydrated, and so have the `@defer (hydrate on idle)`
- * blocks — the home page's work, writing and contact sections.
+ * blocks — the home page's work, skills, writing and contact sections.
  *
  * Those blocks ask for their idle callback while the page hydrates, before
  * the first stability; one asked for after it runs after theirs, by which

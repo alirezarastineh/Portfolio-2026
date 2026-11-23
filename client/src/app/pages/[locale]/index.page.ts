@@ -59,11 +59,11 @@ export const routeMeta: RouteMeta = {
  * it, writing), and a way to get in touch.
  *
  * Below the hero, every section is server-rendered in full but hydrated
- * later, so its code stays out of the first load: about, experience and skills
- * when they scroll into view (`hydrate on viewport`); the work, the posts and
- * the contact form — links and a form — once the browser is idle. When the
- * page is rendered in the browser instead (arriving from another page), the
- * sections load at once (`on immediate`).
+ * later, so its code stays out of the first load: about and experience when
+ * they scroll into view (`hydrate on viewport`); the work, the skills, the
+ * posts and the contact form — links and a form — once the browser is idle.
+ * When the page is rendered in the browser instead (arriving from another
+ * page), the sections load at once (`on immediate`).
  *
  * Leaving or reloading with an unsent message asks first, in the browser's own words.
  */
@@ -86,10 +86,11 @@ export const routeMeta: RouteMeta = {
       <!-- The line beside the sections, filling as the reader goes, to Send (motion.css). -->
       <div class="relative">
         <span class="page-line" aria-hidden="true"></span>
-        <!-- The work and the posts lead elsewhere from early on: they hydrate once
-             the browser is idle, not in view, since a link followed before its
-             section had hydrated would load the next page in full, without the
-             page transition. -->
+        <!-- The work, the skills and the posts lead elsewhere from early on: they
+             hydrate once the browser is idle, not in view, since a link followed
+             before its section had hydrated would load the next page in full,
+             without the page transition, and a click while a section hydrates on
+             coming into view is lost (Firefox and WebKit, 2026-11-23). -->
         @defer (on immediate; hydrate on idle) {
           <app-projects-section />
         }
@@ -99,7 +100,7 @@ export const routeMeta: RouteMeta = {
         @defer (on immediate; hydrate on viewport) {
           <app-experience-section />
         }
-        @defer (on immediate; hydrate on viewport) {
+        @defer (on immediate; hydrate on idle) {
           <app-skills-section />
         }
         @defer (on immediate; hydrate on idle) {
