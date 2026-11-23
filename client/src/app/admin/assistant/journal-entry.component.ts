@@ -25,7 +25,8 @@ import { HlmButton } from "@spartan-ng/helm/button";
 import { AdminApiService } from "../admin-api.service";
 import type { RunRow } from "../assistant-types";
 import { ConfirmService } from "../components/confirm-dialog.component";
-import { isActive } from "../eval-runs";
+import { focusOnLeaving } from "../decision-keys";
+import { isActive, statusWord } from "../eval-runs";
 import { FaqDraftsService } from "../faq-drafts.service";
 import { apiWords } from "../api-words";
 import { faqProposalWords } from "../faq-proposals";
@@ -96,10 +97,18 @@ const DECISIONS: Record<JournalStatus, string> = {
     <article
       class="flex flex-col gap-3 rounded-lg border border-border p-4 text-sm"
       [attr.aria-labelledby]="'journal-' + e.id"
+      data-decide
+      [attr.data-waiting]="e.status === 'proposed' ? '' : null"
     >
       <header class="flex flex-wrap items-baseline justify-between gap-2">
-        <!-- Focus lands here after a decision, whose button is gone by then. -->
-        <h3 #heading tabindex="-1" [id]="'journal-' + e.id" class="m-0 text-sm font-medium">
+        <!-- Focus lands here after a decision, whose button is gone by then, and on J and K. -->
+        <h3
+          #heading
+          tabindex="-1"
+          [id]="'journal-' + e.id"
+          class="m-0 text-sm font-medium"
+          data-decide-heading
+        >
           {{ symptom(e.category) }}: {{ leading() }}
         </h3>
         <div class="flex items-center gap-2 text-xs text-muted-foreground">
@@ -241,6 +250,7 @@ const DECISIONS: Record<JournalStatus, string> = {
             name="journal-root-cause"
             rows="3"
             maxlength="2000"
+            data-decide-field
             class="rounded-lg border border-input-line bg-card px-2 py-1 text-foreground text-sm pointer-coarse:text-base"
             [attr.aria-describedby]="'journal-hint-' + e.id"
             [ngModel]="rootCause()"
@@ -268,6 +278,7 @@ const DECISIONS: Record<JournalStatus, string> = {
               <input
                 name="journal-fix-ref"
                 maxlength="200"
+                data-decide-field
                 class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 font-data text-foreground text-sm pointer-coarse:text-base"
                 [attr.aria-describedby]="'journal-ref-hint-' + e.id + ' journal-hint-' + e.id"
                 [ngModel]="fixRef()"
@@ -285,6 +296,7 @@ const DECISIONS: Record<JournalStatus, string> = {
             name="journal-fix"
             rows="2"
             maxlength="2000"
+            data-decide-field
             class="rounded-lg border border-input-line bg-card px-2 py-1 text-foreground text-sm pointer-coarse:text-base"
             [attr.aria-describedby]="'journal-hint-' + e.id"
             [ngModel]="fix()"
@@ -297,6 +309,7 @@ const DECISIONS: Record<JournalStatus, string> = {
             name="journal-heuristic"
             rows="2"
             maxlength="1000"
+            data-decide-field
             class="rounded-lg border border-input-line bg-card px-2 py-1 text-foreground text-sm pointer-coarse:text-base"
             [attr.aria-describedby]="'journal-heuristic-hint-' + e.id + ' journal-hint-' + e.id"
             [ngModel]="heuristic()"
@@ -319,16 +332,24 @@ const DECISIONS: Record<JournalStatus, string> = {
             Save
           </button>
           @for (status of next(); track status) {
+            @let key = status === "retired" ? "x" : "a";
             <button
               hlmBtn
               size="sm"
               type="button"
               [variant]="status === 'retired' ? 'ghost' : 'default'"
+              [attr.data-key]="key"
+              [attr.aria-keyshortcuts]="key === 'a' ? 'A Control+Enter Meta+Enter' : 'X'"
               [attr.aria-describedby]="'journal-' + e.id"
               [disabled]="saving()"
               (click)="decide(status)"
             >
               {{ decisionLabel(status) }}
+              <kbd
+                class="inline-flex items-center rounded-sm border border-current/30 px-1.5 py-px font-data text-xs pointer-coarse:hidden"
+                aria-hidden="true"
+                >{{ key.toUpperCase() }}</kbd
+              >
             </button>
           }
         </div>
@@ -411,7 +432,7 @@ const DECISIONS: Record<JournalStatus, string> = {
       </div>
       @if (replayable() && resumable(); as run) {
         <p [id]="'journal-stopped-' + e.id" class="m-0 text-hint text-muted-foreground">
-          The last replay stopped: {{ run.error ?? run.status }}
+          The last replay stopped: {{ run.error ?? runWord(run) }}
         </p>
       }
       @if ((replayable() || proposable()) && stop(); as reason) {
@@ -445,6 +466,8 @@ export class JournalEntryComponent {
 
   protected readonly fixTypes = FIX_TYPES;
   protected readonly statusLabel = statusLabel;
+  /** A run's state in the runs' one vocabulary (plan 5, U21). */
+  protected readonly runWord = statusWord;
   protected readonly symptom = symptomLabel;
   protected readonly ratio = ratioLine;
   protected readonly name = hypothesisName;
@@ -660,6 +683,12 @@ export class JournalEntryComponent {
   }
 
   private async send(patch: JournalPatch, done: string): Promise<void> {
+    const before = this.entry().status;
+    // A proposed entry decided leaves the queue: read where the focus goes before the list changes.
+    const leave =
+      before === "proposed" && patch.status !== undefined && patch.status !== "proposed"
+        ? focusOnLeaving(`journal-${this.entry().id}`)
+        : null;
     this.saving.set(true);
     const result = await this.api.updateJournalEntry(this.entry().id, patch);
     this.saving.set(false);
@@ -668,11 +697,16 @@ export class JournalEntryComponent {
       return;
     }
     toast.success(done);
+    if (this.gone) {
+      return;
+    }
     this.status.set(done);
-    const moved = patch.status !== undefined && patch.status !== this.entry().status;
+    const moved = patch.status !== undefined && patch.status !== before;
     this.changed.emit(result.data.entry);
-    // The decision's button is gone once the entry re-renders: keep focus in the entry.
-    if (moved) {
+    if (leave) {
+      afterNextRender(leave, { injector: this.injector });
+    } else if (moved) {
+      // The decision's button is gone once the entry re-renders: keep focus in the entry.
       afterNextRender(() => this.heading()?.nativeElement.focus(), { injector: this.injector });
     }
   }

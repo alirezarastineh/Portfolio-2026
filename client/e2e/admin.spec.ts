@@ -843,6 +843,24 @@ function faqProposalRow(change: Record<string, unknown> = {}) {
   };
 }
 
+/** An FAQ proposal drafted from a journal entry, which no new lesson measures (plan 5, U21). */
+function journalFaqProposal(n: number, question: string) {
+  return faqProposalRow({
+    id: `f0000000-0000-4000-8000-00000000002${n}`,
+    source: "journal",
+    snapshotId: null,
+    topicIndex: null,
+    topic: null,
+    journalId: JOURNAL_ID,
+    questionEn: question,
+    newLesson:
+      "a lesson from the journal needs 3 accepted or fixed entries: make it in the Journal, then link it here",
+  });
+}
+
+/** Such a proposal's heading: where it came from, by its question. */
+const fromJournal = (question: string) => `From a journal entry: “${question}”`;
+
 /** A content agent's proposal (plan phases 29–30), as `GET /admin/assistant/proposals` lists it. */
 function proposalRow(id: string, label: string, change: Record<string, unknown> = {}) {
   return {
@@ -2068,6 +2086,14 @@ test.describe("admin", () => {
     await expect(sheet.getByText("Open the next answer", { exact: true })).toBeVisible();
     await expect(sheet.getByText("Move between the five verdicts")).toBeVisible();
     await expect(sheet.getByText("Save the review and open the next answer")).toBeVisible();
+    // The four decision queues share one pattern (plan 5, U21).
+    await expect(
+      sheet.getByText(
+        "In the queues (the agent's proposals, FAQ proposals, journal entries, lessons)",
+      ),
+    ).toBeVisible();
+    await expect(sheet.getByText("Reject or retire", { exact: true })).toBeVisible();
+    await expect(sheet.getByText("The same as A, from a field", { exact: true })).toBeVisible();
   });
 
   test("the assistant's seven views stay on one row on a phone, the current one in sight", async ({
@@ -3825,8 +3851,12 @@ test.describe("admin", () => {
       fixType: "content",
       fixRef: "project:long@en",
     });
-    // Its button is gone: focus stays in the entry, on its heading, and the decision is said.
-    await expect(page.locator(":focus")).toHaveAttribute("id", `journal-${JOURNAL_ID}`);
+    // It left the queue: no other entry waits, so the done line takes the focus (plan 5, U21),
+    // and the decision is said.
+    await expect(page.locator(":focus")).toHaveAttribute("id", "journal-waiting");
+    await expect(page.locator("#journal-waiting")).toHaveText(
+      "No journal entry waits for a decision.",
+    );
     await expect(journal.getByRole("status")).toHaveText("Accept: done");
 
     // The regression case, frozen from the answer and linked to the entry.
@@ -4076,7 +4106,9 @@ test.describe("admin", () => {
         "Before: 3 answers: 3 said it isn't there, 0 thumbs down, 3 failed. Since: 5 answers: 1 said it isn't there, 0 thumbs down, 1 failed.",
       ),
     ).toBeVisible();
-    await expect(page.locator(":focus")).toHaveText(LESSON_STATEMENT);
+    // It left the queue, and no other lesson waits: the done line takes the focus (plan 5, U21).
+    await expect(page.locator(":focus")).toHaveAttribute("id", "lessons-waiting");
+    await expect(page.locator("#lessons-waiting")).toHaveText("No lesson waits for you.");
     await settled(page);
     const scanned = await new AxeBuilder({ page })
       .include("section[aria-labelledby=lessons-heading]")
@@ -4299,6 +4331,91 @@ test.describe("admin", () => {
     await expect(card).toHaveCount(0);
     // Its card, and the button with it, are gone: focus lands on the list's heading.
     await expect(page.locator(":focus")).toHaveAttribute("id", "lessons-heading");
+    expect(unmocked).toEqual([]);
+  });
+
+  test("the Journal decides from the keys: J walks the lessons, then the entries; Ctrl Enter applies a lesson from its reference, X retires an entry, and each done line takes the focus", async ({
+    page,
+    baseURL,
+  }) => {
+    const patched: { url: string; body: unknown }[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/lessons": {
+        lessons: [lessonRow()],
+        counts: { proposed: 1, active: 0, retired: 0 },
+      },
+      "GET /admin/assistant/journal": {
+        entries: [journalEntry()],
+        counts: { proposed: 1, accepted: 0, fixed: 0, retired: 0 },
+      },
+      [`PATCH /admin/assistant/lessons/${LESSON_ID}`]: {
+        lesson: lessonRow({
+          status: "active",
+          appliedAs: "faq",
+          appliedRef: "faq:relocation",
+          appliedAt: NOW,
+        }),
+      },
+      [`PATCH /admin/assistant/journal/${JOURNAL_ID}`]: {
+        entry: journalEntry({ status: "retired", decidedBy: "admin", decidedAt: NOW }),
+      },
+    });
+    page.on("request", (r) => {
+      if (r.method() === "PATCH") {
+        patched.push({ url: new URL(r.url()).pathname, body: r.postDataJSON() });
+      }
+    });
+    await openAdmin(page, "/admin/assistant");
+    await openView(page, "Journal");
+    const lessons = page.getByRole("region", { name: "Lessons" });
+    await expect(page.locator("#lessons-waiting")).toHaveText("1 lesson waits for you.");
+    await expect(page.locator("#journal-waiting")).toHaveText(
+      "1 journal entry waits for a decision.",
+    );
+    const focused = page.locator(":focus");
+
+    // J from the view: the lesson, then the entry, in page order; K goes back.
+    await page.keyboard.press("j");
+    await expect(focused).toHaveAttribute("id", `lesson-${LESSON_ID}`);
+    await page.keyboard.press("j");
+    await expect(focused).toHaveAttribute("id", `journal-${JOURNAL_ID}`);
+    await page.keyboard.press("k");
+    await expect(focused).toHaveAttribute("id", `lesson-${LESSON_ID}`);
+
+    // A with no reference: said, nothing sent. Typed, Ctrl Enter in the reference applies it.
+    await page.keyboard.press("a");
+    await expect(page.getByText("Name the fix first: its id, version or document.")).toBeVisible();
+    expect(patched).toEqual([]);
+    const reference = lessons.getByLabel("Reference", { exact: true });
+    await reference.fill("faq:relocation");
+    await reference.press("Control+Enter");
+    await expect
+      .poll(() => patched)
+      .toEqual([
+        {
+          url: `/admin/assistant/lessons/${LESSON_ID}`,
+          body: { apply: { as: "faq", ref: "faq:relocation" } },
+        },
+      ]);
+    // The lesson left the queue, and none waits: its done line takes the focus.
+    await expect(focused).toHaveAttribute("id", "lessons-waiting");
+    await expect(page.locator("#lessons-waiting")).toHaveText("No lesson waits for you.");
+
+    // From the done line J goes on, past the lesson, to the entry; X retires it.
+    await page.keyboard.press("j");
+    await expect(focused).toHaveAttribute("id", `lesson-${LESSON_ID}`);
+    await page.keyboard.press("j");
+    await expect(focused).toHaveAttribute("id", `journal-${JOURNAL_ID}`);
+    await page.keyboard.press("x");
+    await expect.poll(() => patched.length).toBe(2);
+    expect(patched[1]).toMatchObject({
+      url: `/admin/assistant/journal/${JOURNAL_ID}`,
+      body: { status: "retired" },
+    });
+    await expect(focused).toHaveAttribute("id", "journal-waiting");
+    await expect(page.locator("#journal-waiting")).toHaveText(
+      "No journal entry waits for a decision.",
+    );
     expect(unmocked).toEqual([]);
   });
 
@@ -5621,10 +5738,11 @@ test.describe("admin", () => {
           },
         },
       });
-    // Used now: the entry is listed with where it came from; the proposal is gone.
+    // Used now: the entry is listed with where it came from; the proposal is gone, and the done
+    // line takes the focus (plan 5, U21).
     await expect(proposals.getByRole("article")).toHaveCount(0);
     await expect(page.getByText("From insights: Relocation and remote work")).toBeVisible();
-    await expect(proposals.getByRole("heading", { name: "Proposals" })).toBeFocused();
+    await expect(page.locator("#faq-proposals-done")).toBeFocused();
     await expect(
       proposals.getByText("Accepted: it is an FAQ entry now, used at once; a lesson measures it."),
     ).toBeAttached();
@@ -5802,8 +5920,8 @@ test.describe("admin", () => {
       "From the insight topic “Relocation and remote work” (6 questions, not answered)";
     await expect(page.locator(":focus")).toHaveText(heading);
 
-    // The other one rejected: the list's heading takes focus, and keeps it once the list is
-    // read again (the drafted one, still listed, does not take it back).
+    // The other one rejected: the next that waits, the drafted one, takes the focus (plan 5, U21),
+    // and keeps it once the list is read again.
     const proposals = page.getByRole("region", { name: "Proposals" });
     await proposals
       .getByRole("article", { name: "From a journal entry: “Does he speak German?”" })
@@ -5817,7 +5935,7 @@ test.describe("admin", () => {
           setTimeout(resolve, 300);
         }),
     );
-    await expect(proposals.getByRole("heading", { name: "Proposals" })).toBeFocused();
+    await expect(proposals.getByRole("heading", { name: heading })).toBeFocused();
 
     // A question that reads as an order to the assistant: refused, in words.
     const card = proposals.getByRole("article", { name: heading });
@@ -5841,6 +5959,77 @@ test.describe("admin", () => {
     await expect.poll(() => listed).toBeGreaterThan(0);
     await expect(proposals.getByRole("article")).toHaveCount(0);
     await expect(proposals.getByRole("heading", { name: "Proposals" })).toBeFocused();
+    expect(unmocked).toEqual([]);
+  });
+
+  test("FAQ proposals decide from the keys: J and K move, A accepts, X rejects, Ctrl Enter accepts from a field, then the done line", async ({
+    page,
+    baseURL,
+  }) => {
+    const [first, second, third] = [
+      journalFaqProposal(1, "Is he open to relocating?"),
+      journalFaqProposal(2, "Does he consult?"),
+      journalFaqProposal(3, "Does he speak German?"),
+    ];
+    const sent: { url: string; body: unknown }[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/faq-proposals": { proposals: [first, second, third] },
+      [`POST /admin/assistant/faq-proposals/${first.id}/accept`]: {
+        proposal: { ...first, status: "accepted" },
+        linked: { journal: true, lesson: null },
+      },
+      [`POST /admin/assistant/faq-proposals/${second.id}/reject`]: {
+        proposal: { ...second, status: "rejected" },
+      },
+      [`POST /admin/assistant/faq-proposals/${third.id}/accept`]: {
+        proposal: { ...third, status: "accepted" },
+        linked: { journal: true, lesson: null },
+      },
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().includes("/admin/assistant/faq-proposals/")) {
+        sent.push({ url: new URL(r.url()).pathname, body: r.postDataJSON() });
+      }
+    });
+    await openAdmin(page, "/admin/assistant");
+    await openView(page, "Questions");
+    const proposals = page.getByRole("region", { name: "Proposals" });
+    const heading = (question: string) =>
+      proposals.getByRole("heading", { name: fromJournal(question), exact: true });
+    await expect(
+      proposals.getByText("J and K move, A accepts, X rejects,", { exact: false }),
+    ).toBeVisible();
+
+    await page.keyboard.press("j");
+    await expect(heading("Is he open to relocating?")).toBeFocused();
+    await page.keyboard.press("j");
+    await page.keyboard.press("k");
+    await expect(heading("Is he open to relocating?")).toBeFocused();
+    await page.keyboard.press("a");
+    await expect
+      .poll(() => sent.map((s) => s.url))
+      .toEqual([`/admin/assistant/faq-proposals/${first.id}/accept`]);
+    await expect(heading("Does he consult?")).toBeFocused();
+    await page.keyboard.press("x");
+    await expect.poll(() => sent.length).toBe(2);
+    expect(sent[1]?.url).toBe(`/admin/assistant/faq-proposals/${second.id}/reject`);
+    await expect(heading("Does he speak German?")).toBeFocused();
+
+    // Typed in its answer, a letter stays text; Ctrl Enter accepts what was typed.
+    const answer = proposals
+      .getByRole("article", { name: fromJournal("Does he speak German?") })
+      .getByRole("group", { name: /^en$/i })
+      .getByLabel("Answer", { exact: true });
+    await answer.fill("Yes, fluently");
+    await answer.press("a");
+    await answer.press("Control+Enter");
+    await expect.poll(() => sent.length).toBe(3);
+    expect(sent[2]).toMatchObject({
+      url: `/admin/assistant/faq-proposals/${third.id}/accept`,
+      body: { translations: { en: { answer: "Yes, fluentlya" } } },
+    });
+    await expect(page.locator("#faq-proposals-done")).toBeFocused();
+    await expect(page.locator("#faq-proposals-done")).toHaveText(/^\s*No proposals wait for you\./);
     expect(unmocked).toEqual([]);
   });
 
@@ -8181,6 +8370,35 @@ test.describe("telling the truth", () => {
       says: "Could not load the outcomes",
       ok: outcomesView("helpfulRate", false),
       after: "Primary metric",
+    },
+    // Plan 5, U21: before, nothing was said for these two, and the journal was a toast over
+    // "Nothing here yet".
+    {
+      name: "FAQ proposals",
+      path: "/admin/assistant",
+      open: "Questions",
+      endpoint: "GET /admin/assistant/faq-proposals",
+      says: "Could not load the FAQ proposals",
+      ok: { proposals: [] },
+      after: "No proposals wait for you.",
+    },
+    {
+      name: "Journal",
+      path: "/admin/assistant",
+      open: "Journal",
+      endpoint: "GET /admin/assistant/journal",
+      says: "Could not load the journal",
+      ok: { entries: [], counts: { proposed: 0, accepted: 0, fixed: 0, retired: 0 } },
+      after: "Nothing here yet",
+    },
+    {
+      name: "Lessons",
+      path: "/admin/assistant",
+      open: "Journal",
+      endpoint: "GET /admin/assistant/lessons",
+      says: "Could not load the lessons",
+      ok: { lessons: [], counts: { proposed: 0, active: 0, retired: 0 } },
+      after: "No lessons yet",
     },
   ];
 

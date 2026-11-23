@@ -53,6 +53,16 @@ export const SHORTCUTS: { where: string; items: Shortcut[] }[] = [
       { keys: [MOD, "↵"], does: "Save the review and open the next answer" },
     ],
   },
+  {
+    where: "In the queues (the agent's proposals, FAQ proposals, journal entries, lessons)",
+    items: [
+      { keys: ["J"], does: "Next item" },
+      { keys: ["K"], does: "Previous item" },
+      { keys: ["A"], does: "Apply or accept" },
+      { keys: ["X"], does: "Reject or retire" },
+      { keys: [MOD, "↵"], does: "The same as A, from a field" },
+    ],
+  },
 ];
 
 /** The `?` sheet: every shortcut the admin has, in one place. */

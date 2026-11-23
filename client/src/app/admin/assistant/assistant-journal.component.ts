@@ -4,6 +4,7 @@ import {
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
   Injector,
   input,
@@ -17,7 +18,9 @@ import { HlmToggleGroupImports } from "@spartan-ng/helm/toggle-group";
 
 import { AdminApiService } from "../admin-api.service";
 import { apiWords } from "../api-words";
-import { FormSkeletonComponent } from "../components/load-state.component";
+import { FormSkeletonComponent, LoadErrorComponent } from "../components/load-state.component";
+import { MOD } from "../components/shortcut-sheet.component";
+import { decisionKey } from "../decision-keys";
 import {
   STATUSES,
   stoppedReplays,
@@ -63,23 +66,34 @@ const formatCount = (n: number | null | undefined): string =>
     JournalEntryComponent,
     JournalLessonsComponent,
     LessonFormComponent,
+    LoadErrorComponent,
   ],
-  host: { class: "flex flex-col gap-8" },
+  host: { class: "flex flex-col gap-8", "(document:keydown)": "onKeydown($event)" },
   template: `
-    @if (lessons(); as view) {
+    @if (lessonsError(); as reason) {
+      <app-load-error
+        compact
+        title="Could not load the lessons"
+        [reason]="reason"
+        (retry)="load()"
+      />
+    } @else if (lessons(); as view) {
       <app-journal-lessons
         [lessons]="view.lessons"
         (changed)="replaceLesson($event)"
         (deleted)="dropLesson($event)"
       />
     }
-    <section class="flex flex-col gap-4" aria-labelledby="journal-heading">
+    <section class="flex flex-col gap-4" aria-labelledby="journal-heading" data-queue>
       <div class="flex flex-col gap-1">
         <h2 id="journal-heading" class="m-0 text-base font-semibold">Failure journal</h2>
         <p class="m-0 text-sm text-muted-foreground">
           Why answers failed, by experiment and not by feel: Diagnose (in Conversations) weighs
           seven causes on the evidence and proposes a fix and a lesson. Nothing counts until you
           accept it.
+        </p>
+        <p class="m-0 text-hint text-muted-foreground pointer-coarse:hidden">
+          J and K move, A accepts or marks fixed, X retires, {{ mod }} ↵ does the same from a field.
         </p>
       </div>
       <div
@@ -129,7 +143,13 @@ const formatCount = (n: number | null | undefined): string =>
 
       @if (loading()) {
         <app-form-skeleton kind="list" [rows]="2" label="Loading the journal…" />
+      } @else if (journalError(); as reason) {
+        <app-load-error title="Could not load the journal" [reason]="reason" (retry)="load()" />
       } @else {
+        @if (waitingLine(); as line) {
+          <!-- Also the done line: the last decision gives it the focus. -->
+          <p id="journal-waiting" tabindex="-1" class="m-0 text-sm" data-queue-done>{{ line }}</p>
+        }
         <ul class="m-0 flex list-none flex-col gap-3 p-0" role="list">
           @for (entry of shown(); track entry.id) {
             <li class="flex flex-col gap-1">
@@ -168,6 +188,8 @@ const formatCount = (n: number | null | undefined): string =>
 export class AssistantJournalComponent implements OnInit {
   private readonly api = inject(AdminApiService);
   private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  protected readonly mod = MOD;
 
   /** The entry the admin came to see: listed first, its evidence open. */
   readonly focus = input<string | null>(null);
@@ -181,6 +203,23 @@ export class AssistantJournalComponent implements OnInit {
   protected readonly resumable = signal<ReturnType<typeof stoppedReplays>>({});
   /** Lessons (plan phase 25); null until loaded, or from an API without them. */
   protected readonly lessons = signal<LessonsView | null>(null);
+  /** Why the first read of the journal or of the lessons failed, said in its place; a later one toasts. */
+  protected readonly journalError = signal<string | null>(null);
+  protected readonly lessonsError = signal<string | null>(null);
+  /** "2 journal entries wait for a decision.", or the done line once none does; null while empty. */
+  protected readonly waitingLine = computed(() => {
+    const counts = this.data()?.counts;
+    if (!counts || !Object.values(counts).some((n) => n > 0)) {
+      return null;
+    }
+    const waiting = counts.proposed;
+    if (!waiting) {
+      return "No journal entry waits for a decision.";
+    }
+    return waiting === 1
+      ? "1 journal entry waits for a decision."
+      : `${waiting} journal entries wait for a decision.`;
+  });
   /** Entries ticked for a lesson. */
   protected readonly selected = signal<ReadonlySet<string>>(new Set());
   protected readonly promoting = signal(false);
@@ -227,6 +266,11 @@ export class AssistantJournalComponent implements OnInit {
     void this.load();
   }
 
+  /** J, K, A, X and Ctrl/⌘ Enter on the lessons, then the entries, in page order (plan 5, U21). */
+  protected onKeydown(event: KeyboardEvent): void {
+    decisionKey(event, this.host.nativeElement);
+  }
+
   protected onFilter(value: unknown): void {
     const filter = this.filters().find((f) => f.id === value)?.id;
     if (!filter) {
@@ -248,13 +292,21 @@ export class AssistantJournalComponent implements OnInit {
     if (runs.ok) {
       this.resumable.set(stoppedReplays(runs.data.runs));
     }
+    // An API without lessons answers 404: there are none. A later failure keeps what is shown.
     if (lessons.ok) {
       this.lessons.set(lessons.data);
+      this.lessonsError.set(null);
+    } else if (lessons.error !== "http_404" && !this.lessons()) {
+      this.lessonsError.set(lessons.error);
     }
     if (result.ok) {
       this.data.set(result.data);
-    } else {
+      this.journalError.set(null);
+    } else if (this.data()) {
+      // The entries stay, and what was typed in them: a toast says the read failed.
       toast.error("Could not load the journal", { description: apiWords(result.error) });
+    } else {
+      this.journalError.set(result.error);
     }
   }
 

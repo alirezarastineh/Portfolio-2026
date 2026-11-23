@@ -2,8 +2,10 @@ import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  computed,
   DestroyRef,
   effect,
+  ElementRef,
   inject,
   Injector,
   input,
@@ -22,6 +24,9 @@ import { HlmTextarea } from "@spartan-ng/helm/textarea";
 import type { Locale } from "../../content/schema";
 import { AdminApiService } from "../admin-api.service";
 import { sameValue } from "../changed-fields";
+import { LoadErrorComponent } from "../components/load-state.component";
+import { MOD } from "../components/shortcut-sheet.component";
+import { decisionKey, focusOnLeaving } from "../decision-keys";
 import { RecoveryService, type RecoveryHandle } from "../recovery.service";
 import { UnsavedChangesService } from "../unsaved-changes.service";
 import {
@@ -47,10 +52,19 @@ import {
 @Component({
   selector: "app-faq-proposals",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, HlmBadge, HlmButton, HlmField, HlmFieldLabel, HlmInput, HlmTextarea],
-  host: { class: "block" },
+  imports: [
+    FormsModule,
+    HlmBadge,
+    HlmButton,
+    HlmField,
+    HlmFieldLabel,
+    HlmInput,
+    HlmTextarea,
+    LoadErrorComponent,
+  ],
+  host: { class: "block", "(document:keydown)": "onKeydown($event)" },
   template: `
-    <section class="flex flex-col gap-3" aria-labelledby="faq-proposals-title">
+    <section class="flex flex-col gap-3" aria-labelledby="faq-proposals-title" data-queue>
       <!-- The tab's first heading under the page's: a level 2, as the other tabs' sections. -->
       <h2 id="faq-proposals-title" tabindex="-1" class="m-0 text-sm font-medium outline-none">
         Proposals
@@ -60,15 +74,29 @@ import {
         the portfolio only, and both in German. Nothing is used until you accept one; accepting
         saves your text as an FAQ entry, used at once.
       </p>
-      @for (p of proposals(); track p.id) {
+      <p class="m-0 text-hint text-muted-foreground pointer-coarse:hidden">
+        J and K move, A accepts, X rejects, {{ mod }} ↵ accepts from a field.
+      </p>
+      @if (error(); as reason) {
+        <app-load-error
+          compact
+          title="Could not load the FAQ proposals"
+          [reason]="reason"
+          (retry)="retry.emit()"
+        />
+      }
+      @for (p of shown(); track p.id) {
         @let f = formOf(p);
         @let id = "faq-proposal-" + p.id;
         <article
           class="flex flex-col gap-3 rounded-lg border border-border p-4 text-sm"
           [attr.aria-labelledby]="id"
+          data-decide
+          data-waiting
         >
           <div class="flex flex-wrap items-center gap-2">
-            <h3 [id]="id" tabindex="-1" class="m-0 text-sm font-medium outline-none">
+            <!-- J and K land here: the ring shows which proposal A and X act on. -->
+            <h3 [id]="id" tabindex="-1" class="m-0 text-sm font-medium" data-decide-heading>
               {{ source(p) }}
             </h3>
             <span hlmBadge variant="outline">{{ status(p) }}</span>
@@ -90,6 +118,7 @@ import {
                 <input
                   hlmInput
                   maxlength="300"
+                  data-decide-field
                   [id]="id + '-q-' + locale"
                   [ngModel]="f.text[locale].question"
                   [ngModelOptions]="{ standalone: true }"
@@ -102,6 +131,7 @@ import {
                   hlmTextarea
                   rows="3"
                   maxlength="3000"
+                  data-decide-field
                   [id]="id + '-a-' + locale"
                   [ngModel]="f.text[locale].answer"
                   [ngModelOptions]="{ standalone: true }"
@@ -146,6 +176,7 @@ import {
                   hlmTextarea
                   rows="2"
                   maxlength="500"
+                  data-decide-field
                   [id]="id + '-statement'"
                   [aria-describedby]="id + '-statement-hint'"
                   [ngModel]="f.statement"
@@ -161,6 +192,7 @@ import {
                 <label hlmFieldLabel [for]="id + '-scope'">Words its questions contain</label>
                 <input
                   hlmInput
+                  data-decide-field
                   [id]="id + '-scope'"
                   [aria-describedby]="id + '-scope-hint'"
                   [ngModel]="f.scope"
@@ -177,33 +209,59 @@ import {
           <!-- Always there, so Accept is described by what still stops it (empty when nothing). -->
           <p [id]="id + '-problem'" class="m-0 text-xs text-accent-orange">{{ problem(p) }}</p>
           <div class="flex flex-wrap gap-2">
+            <!-- A stop, not disabled, while something stops it: A and a click say what. -->
             <button
               hlmBtn
               size="sm"
               type="button"
+              class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+              data-key="a"
+              aria-keyshortcuts="A Control+Enter Meta+Enter"
               [attr.aria-describedby]="id + ' ' + id + '-problem'"
-              [disabled]="!!busy() || !!problem(p)"
+              [attr.aria-disabled]="problem(p) ? 'true' : null"
+              [disabled]="!!busy()"
               (click)="accept(p)"
             >
               Accept
+              <kbd
+                class="inline-flex items-center rounded-sm border border-current/30 px-1.5 py-px font-data text-xs pointer-coarse:hidden"
+                aria-hidden="true"
+                >A</kbd
+              >
             </button>
             <button
               hlmBtn
               variant="ghost"
               size="sm"
               type="button"
+              data-key="x"
+              aria-keyshortcuts="X"
               [attr.aria-describedby]="id"
               [disabled]="!!busy()"
               (click)="reject(p)"
             >
               Reject
+              <kbd
+                class="inline-flex items-center rounded-sm border border-current/30 px-1.5 py-px font-data text-xs pointer-coarse:hidden"
+                aria-hidden="true"
+                >X</kbd
+              >
             </button>
           </div>
         </article>
       } @empty {
-        <p class="m-0 text-sm text-muted-foreground">
-          No proposals wait for you. Draft one from a topic in Insights or an entry in the Journal.
-        </p>
+        @if (!error()) {
+          <!-- Also the done line: the last decision gives it the focus. -->
+          <p
+            id="faq-proposals-done"
+            tabindex="-1"
+            class="m-0 text-sm text-muted-foreground"
+            data-queue-done
+          >
+            No proposals wait for you. Draft one from a topic in Insights or an entry in the
+            Journal.
+          </p>
+        }
       }
       <!-- Always in the page, so what is put in it is announced. -->
       <p class="sr-only" aria-live="polite">{{ said() }}</p>
@@ -213,14 +271,23 @@ import {
 export class FaqProposalsComponent {
   private readonly api = inject(AdminApiService);
   private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   /** The open proposals, newest first. */
   readonly proposals = input.required<FaqProposal[]>();
   /** One to show first: just drafted from Insights or the Journal. */
   readonly focus = input<string | null>(null);
+  /** Why the proposals did not load: the API's code, said in words in the list's place. */
+  readonly error = input<string | null>(null);
   /** Accepted or rejected: the FAQ tab reads the entries and the proposals again. */
   readonly decided = output();
+  /** Try again on a failed load. */
+  readonly retry = output();
 
+  protected readonly mod = MOD;
+  /** Decided here: out of the list at once, before the FAQ tab's read brings the rest. */
+  private readonly left = signal<ReadonlySet<string>>(new Set());
+  protected readonly shown = computed(() => this.proposals().filter((p) => !this.left().has(p.id)));
   protected readonly locales: Locale[] = ["en", "de"];
   protected readonly source = sourceLine;
   protected readonly status = (p: FaqProposal) => proposalStatusName(p.status);
@@ -279,6 +346,11 @@ export class FaqProposalsComponent {
     });
   }
 
+  /** J, K, A, X and Ctrl/⌘ Enter on the proposals (plan 5, U21). */
+  protected onKeydown(event: KeyboardEvent): void {
+    decisionKey(event, this.host.nativeElement);
+  }
+
   protected formOf(p: FaqProposal): AcceptForm {
     return this.forms()[p.id] ?? acceptForm(p);
   }
@@ -305,9 +377,13 @@ export class FaqProposalsComponent {
 
   protected async accept(p: FaqProposal): Promise<void> {
     const form = this.formOf(p);
-    if (acceptProblem(form)) {
+    // A stop says what still stops it and sends nothing.
+    const problem = acceptProblem(form);
+    if (problem) {
+      this.said.set(problem);
       return;
     }
+    const leave = focusOnLeaving(`faq-proposal-${p.id}`);
     this.busy.set(p.id);
     const result = await this.api.acceptFaqProposal(p.id, acceptBody(form));
     this.busy.set(null);
@@ -316,10 +392,11 @@ export class FaqProposalsComponent {
       return;
     }
     const measured = result.data.linked.lesson ? "; a lesson measures it" : "";
-    this.done(`Accepted: it is an FAQ entry now, used at once${measured}.`, p);
+    this.done(`Accepted: it is an FAQ entry now, used at once${measured}.`, p, leave);
   }
 
   protected async reject(p: FaqProposal): Promise<void> {
+    const leave = focusOnLeaving(`faq-proposal-${p.id}`);
     this.busy.set(p.id);
     const result = await this.api.rejectFaqProposal(p.id);
     this.busy.set(null);
@@ -327,7 +404,7 @@ export class FaqProposalsComponent {
       this.refused(result.error, result.detail);
       return;
     }
-    this.done("Rejected: nothing reached the FAQ.", p);
+    this.done("Rejected: nothing reached the FAQ.", p, leave);
   }
 
   private refused(error: string, detail: unknown): void {
@@ -344,8 +421,8 @@ export class FaqProposalsComponent {
     }
   }
 
-  /** Decided: the proposal leaves the list, so its heading's place goes to the list's. */
-  private done(words: string, p: FaqProposal): void {
+  /** Decided: the proposal leaves the list, the next that waits takes the focus, else the done line. */
+  private done(words: string, p: FaqProposal, leave: () => void): void {
     this.backup.drop(p.id);
     if (this.gone) {
       toast.success(words);
@@ -357,8 +434,9 @@ export class FaqProposalsComponent {
       delete rest[p.id];
       return rest;
     });
+    this.left.update((ids) => new Set([...ids, p.id]));
     this.decided.emit();
-    this.focusList();
+    afterNextRender(leave, { injector: this.injector });
   }
 
   private focusList(): void {

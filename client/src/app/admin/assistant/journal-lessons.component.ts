@@ -22,6 +22,8 @@ import { HlmButton } from "@spartan-ng/helm/button";
 import { AdminApiService } from "../admin-api.service";
 import { sameValue } from "../changed-fields";
 import { ConfirmService } from "../components/confirm-dialog.component";
+import { MOD } from "../components/shortcut-sheet.component";
+import { focusOnLeaving } from "../decision-keys";
 import { RecoveryService } from "../recovery.service";
 import { UnsavedChangesService } from "../unsaved-changes.service";
 import {
@@ -54,7 +56,7 @@ const STATUS: Record<Lesson["status"], string> = {
   imports: [FormsModule, HlmBadge, HlmButton],
   host: { class: "block" },
   template: `
-    <section class="flex flex-col gap-3" aria-labelledby="lessons-heading">
+    <section class="flex flex-col gap-3" aria-labelledby="lessons-heading" data-queue>
       <div class="flex flex-col gap-1">
         <!-- Focus lands here when a deleted lesson's card goes. -->
         <h2 #listHeading id="lessons-heading" tabindex="-1" class="m-0 text-base font-semibold">
@@ -64,6 +66,15 @@ const STATUS: Record<Lesson["status"], string> = {
           What several failures taught, applied as a fix and measured on the answers since.
           Effectiveness is correlation, not cause: a count until five answers match.
         </p>
+        <p class="m-0 text-hint text-muted-foreground pointer-coarse:hidden">
+          J and K move, A applies, X retires, {{ mod }} ↵ applies from the reference.
+        </p>
+        @if (lessons().length) {
+          <!-- Also the done line: the last decision gives it the focus. -->
+          <p id="lessons-waiting" tabindex="-1" class="m-0 text-sm" data-queue-done>
+            {{ waitingLine() }}
+          </p>
+        }
       </div>
       <ul class="m-0 flex list-none flex-col gap-3 p-0" role="list">
         @for (lesson of lessons(); track lesson.id) {
@@ -71,6 +82,8 @@ const STATUS: Record<Lesson["status"], string> = {
             <article
               class="flex flex-col gap-2 rounded-lg border border-border p-4 text-sm"
               [attr.aria-labelledby]="'lesson-' + lesson.id"
+              data-decide
+              [attr.data-waiting]="lesson.status === 'proposed' ? '' : null"
             >
               <header class="flex flex-wrap items-baseline justify-between gap-2">
                 <h3
@@ -78,6 +91,7 @@ const STATUS: Record<Lesson["status"], string> = {
                   tabindex="-1"
                   [id]="'lesson-' + lesson.id"
                   class="m-0 text-sm font-medium"
+                  data-decide-heading
                 >
                   {{ lesson.statement }}
                 </h3>
@@ -133,6 +147,7 @@ const STATUS: Record<Lesson["status"], string> = {
                     <input
                       class="h-9 pointer-coarse:h-11 rounded-lg border border-input-line bg-card px-2 font-data text-foreground text-sm pointer-coarse:text-base"
                       maxlength="200"
+                      data-decide-field
                       [name]="'lesson-ref-' + lesson.id"
                       [attr.aria-describedby]="'lesson-ref-hint-' + lesson.id"
                       [ngModel]="draftRef()[lesson.id] ?? lesson.appliedRef ?? ''"
@@ -144,20 +159,34 @@ const STATUS: Record<Lesson["status"], string> = {
                     hlmBtn
                     size="sm"
                     type="button"
+                    data-key="a"
+                    aria-keyshortcuts="A Control+Enter Meta+Enter"
                     [attr.aria-describedby]="'lesson-' + lesson.id"
                     (click)="apply(lesson)"
                   >
                     {{ lesson.appliedAs ? "Apply again" : "Apply" }}
+                    <kbd
+                      class="inline-flex items-center rounded-sm border border-current/30 px-1.5 py-px font-data text-xs pointer-coarse:hidden"
+                      aria-hidden="true"
+                      >A</kbd
+                    >
                   </button>
                   <button
                     hlmBtn
                     size="sm"
                     variant="ghost"
                     type="button"
+                    data-key="x"
+                    aria-keyshortcuts="X"
                     [attr.aria-describedby]="'lesson-' + lesson.id"
                     (click)="decide(lesson, { retire: true }, 'Retired')"
                   >
                     Retire
+                    <kbd
+                      class="inline-flex items-center rounded-sm border border-current/30 px-1.5 py-px font-data text-xs pointer-coarse:hidden"
+                      aria-hidden="true"
+                      >X</kbd
+                    >
                   </button>
                 } @else {
                   <button
@@ -165,10 +194,17 @@ const STATUS: Record<Lesson["status"], string> = {
                     size="sm"
                     variant="outline"
                     type="button"
+                    data-key="a"
+                    aria-keyshortcuts="A Control+Enter Meta+Enter"
                     [attr.aria-describedby]="'lesson-' + lesson.id"
                     (click)="decide(lesson, { reopen: true }, 'Reopened')"
                   >
                     Reopen
+                    <kbd
+                      class="inline-flex items-center rounded-sm border border-current/30 px-1.5 py-px font-data text-xs pointer-coarse:hidden"
+                      aria-hidden="true"
+                      >A</kbd
+                    >
                   </button>
                 }
                 <button
@@ -215,6 +251,15 @@ export class JournalLessonsComponent {
   readonly deleted = output<string>();
 
   protected readonly appliedAs = APPLIED_AS;
+  protected readonly mod = MOD;
+  /** "1 lesson waits for you.", or the done line once none does. */
+  protected readonly waitingLine = computed(() => {
+    const waiting = this.lessons().filter((l) => l.status === "proposed").length;
+    if (!waiting) {
+      return "No lesson waits for you.";
+    }
+    return waiting === 1 ? "1 lesson waits for you." : `${waiting} lessons wait for you.`;
+  });
   protected readonly draftAs = signal<Partial<Record<string, AppliedAs>>>({});
   protected readonly draftRef = signal<Partial<Record<string, string>>>({});
   protected readonly said = signal("");
@@ -244,13 +289,19 @@ export class JournalLessonsComponent {
     ),
   );
 
+  /** Left (another view): a decision answered meanwhile moves no focus (NG0911). */
+  private gone = false;
+
   constructor() {
     const unsaved = inject(UnsavedChangesService);
     // A fix typed and not saved: switching views asks first.
     effect(() =>
       unsaved.set("journal-lessons", !sameValue(this.savedFixes() ?? {}, this.typedFixes())),
     );
-    inject(DestroyRef).onDestroy(() => unsaved.clear("journal-lessons"));
+    inject(DestroyRef).onDestroy(() => {
+      this.gone = true;
+      unsaved.clear("journal-lessons");
+    });
     // Each lesson's typed fix by its id; nothing is looked for before the list is in.
     inject(RecoveryService).track({
       editor: "journal-lessons",
@@ -314,6 +365,8 @@ export class JournalLessonsComponent {
     patch: Pick<LessonPatch, "apply" | "retire" | "reopen">,
     done: string,
   ): Promise<void> {
+    // Read before the list changes: where the focus goes once a proposed lesson is decided.
+    const leave = lesson.status === "proposed" ? focusOnLeaving(`lesson-${lesson.id}`) : null;
     const result = await this.api.updateLesson(lesson.id, patch);
     if (!result.ok) {
       toast.error("Could not save the lesson", {
@@ -322,8 +375,15 @@ export class JournalLessonsComponent {
       return;
     }
     toast.success(done);
+    if (this.gone) {
+      return;
+    }
     this.said.set(`${done}: ${lesson.statement}`);
     this.changed.emit(result.data.lesson);
+    if (leave && result.data.lesson.status !== "proposed") {
+      afterNextRender(leave, { injector: this.injector });
+      return;
+    }
     // The button pressed may be gone: keep focus on the lesson.
     const index = this.lessons().findIndex((l) => l.id === lesson.id);
     afterNextRender(() => this.headings()[index]?.nativeElement.focus(), {
@@ -346,6 +406,11 @@ export class JournalLessonsComponent {
       toast.error("Could not delete the lesson", {
         description: lessonRefusal(result.error, result.detail),
       });
+      return;
+    }
+    // Left meanwhile: the toast says it, nothing here to update or focus.
+    if (this.gone) {
+      toast.success("Lesson deleted");
       return;
     }
     this.said.set(`Deleted: ${lesson.statement}`);

@@ -89,7 +89,13 @@ function emptyForm(question = ""): Form {
         <button hlmBtn type="button" size="sm" (click)="startNew()">New entry</button>
       </div>
 
-      <app-faq-proposals [proposals]="openProposals()" [focus]="proposal()" (decided)="load()" />
+      <app-faq-proposals
+        [proposals]="openProposals()"
+        [focus]="proposal()"
+        [error]="proposalsError()"
+        (decided)="load()"
+        (retry)="load()"
+      />
 
       @if (form(); as f) {
         <form
@@ -240,6 +246,8 @@ export class AssistantFaqComponent implements OnInit {
   /** The FAQ pipeline's proposals, newest first: the open ones to decide, the accepted ones' sources. */
   private readonly proposals = signal<FaqProposal[]>([]);
   protected readonly openProposals = computed(() => this.proposals().filter(isOpenProposal));
+  /** Why the proposals did not load: said in their list's place (an API without them is no failure). */
+  protected readonly proposalsError = signal<string | null>(null);
   /** Where each entry an accepted proposal made came from. */
   protected readonly provenance = computed(() => provenanceOf(this.proposals()));
   protected readonly loading = signal(true);
@@ -351,6 +359,9 @@ export class AssistantFaqComponent implements OnInit {
     if (proposals.ok) {
       this.proposals.set(proposals.data.proposals);
     }
+    this.proposalsError.set(
+      proposals.ok || proposals.error === "http_404" ? null : proposals.error,
+    );
   }
 
   /** A copy kept in this browser: its form opens again, and the copy comes back over it. */
