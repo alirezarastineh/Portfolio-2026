@@ -9266,6 +9266,44 @@ test.describe("touch targets on a phone", () => {
   }
 });
 
+/** axe (WCAG 2.2 AA, best practice) on every screen, both themes, on a laptop and on a phone (plan 5, U24). */
+for (const [width, phone] of [
+  [1280, false],
+  [390, true],
+] as const) {
+  test.describe(`axe on every screen at ${width}`, () => {
+    test.use(
+      phone
+        ? { viewport: { width, height: 844 }, hasTouch: true, isMobile: true }
+        : { viewport: { width, height: 800 } },
+    );
+    for (const colorScheme of ["dark", "light"] as const) {
+      for (const path of TOUCH_SCREENS) {
+        test(`${path}, ${colorScheme}: no axe violation`, async ({
+          page,
+          baseURL,
+          browserName,
+        }, testInfo) => {
+          testInfo.skip(
+            browserName !== "chromium",
+            "the table runs in Chromium; the flows scan all three",
+          );
+          await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+          await fakeApi(page, baseURL, TOUCH_ANSWERS[path] ?? {});
+          if (path === "/admin/login") {
+            await page.goto(path);
+            await interactive(page);
+          } else {
+            await openAdmin(page, path);
+          }
+          await expect(page.locator("[role=status] .sr-only")).toHaveCount(0);
+          expect(await axeViolations(page)).toEqual([]);
+        });
+      }
+    }
+  });
+}
+
 /** Draws a notch and a home bar: the page's env(safe-area-inset-*) take these (Chromium's CDP). */
 async function notch(
   page: Page,
