@@ -15,8 +15,10 @@ const require = createRequire(`${CLIENT}/package.json`);
 export const { chromium } = require("@playwright/test");
 
 export const SIZES = {
+  small: { width: 320, height: 568 },
   phone: { width: 390, height: 844 },
   tablet: { width: 820, height: 1180 },
+  landscape: { width: 1024, height: 768 },
   laptop: { width: 1280, height: 800 },
   wide: { width: 1920, height: 1080 },
 };
@@ -108,8 +110,9 @@ export async function open(browser, origin, answers, { theme = "dark", size = SI
     viewport: size,
     colorScheme: theme,
     reducedMotion: reduced ? "reduce" : "no-preference",
-    hasTouch: size.width < 700,
-    isMobile: size.width < 700,
+    // Phones and tablets, an iPad's 1024 in landscape included, are touch screens (plan 5, U23).
+    hasTouch: size.width <= 1024,
+    isMobile: size.width <= 1024,
   });
   const page = await context.newPage();
   const problems = [];

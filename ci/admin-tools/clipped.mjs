@@ -1,4 +1,4 @@
-// Names every visible one-line input whose text runs past it (the matrix counts them as `clippedInputs`).
+// Names every visible one-line input but a URL whose text runs past it (the matrix's `clippedInputs`).
 // Usage: node clipped.mjs [path filter]   (laptop dark and phone dark; client/dist as built)
 import { answersFor, ROUTES, VIEWS } from "./data.mjs";
 import { chromium, inTurn, loaded, open, SIZES, startServer } from "./lib.mjs";
@@ -18,8 +18,9 @@ try {
   await inTurn(runs, async ({ name, size, path }) => {
     const { page, context } = await open(browser, origin, answersFor(path), { theme: "dark", size, path });
     await loaded(page);
+    // A URL keeps one line and scrolls in its field, as an address bar does (plan 5, U23).
     const cut = await page.evaluate(() =>
-      [...document.querySelectorAll("input")]
+      [...document.querySelectorAll("input:not([type=url], [inputmode=url])")]
         .filter((f) => {
           const r = f.getBoundingClientRect();
           const shown = r.width > 0 && r.height > 0 && getComputedStyle(f).visibility !== "hidden";
