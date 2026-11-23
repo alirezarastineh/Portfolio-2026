@@ -345,7 +345,9 @@ export function answers() {
     ] },
     // Part M2: Quality follows the running eval run; without its detail it toasts "Could not load the run" (M1's gap).
     "GET /admin/assistant/runs/r1": { run: run("r1", "eval", "running"), items: [] },
-    "GET /admin/assistant/proposals": { proposals: [proposal("pr1", "Atlas · Hook (DE)", "pending"), proposal("pr2", "Atlas · Descriptor (DE)", "pending", { field: "descriptor", flags: ["length"] }), proposal("pr3", "Release gate · Hook (EN)", "applied", { locale: "en" }), proposal("pr4", "Supplier · Hook (EN)", "rejected", { locale: "en" })] },
+    // Part P (U21): "proposed", a status the app knows ("pending" left the Agent page and Today with none open).
+    "GET /admin/assistant/proposals": { proposals: [proposal("pr1", "Atlas · Hook (DE)", "proposed"), proposal("pr2", "Atlas · Descriptor (DE)", "proposed", { field: "descriptor", flags: ["length"] }), proposal("pr3", "Release gate · Hook (EN)", "applied", { locale: "en" }), proposal("pr4", "Supplier · Hook (EN)", "rejected", { locale: "en" })] },
+    "GET /admin/assistant/faq-proposals": { proposals: [fx.faqProposalRow()] },
   };
 }
 

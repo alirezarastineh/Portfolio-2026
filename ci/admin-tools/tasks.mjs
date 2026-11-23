@@ -126,6 +126,32 @@ function fiveToReview() {
   return { "GET /admin/assistant/reviews": () => ({ status: 200, body: week() }), ...Object.fromEntries(saves) };
 }
 
+/** Task 8's queues (plan 5, U21): each one's row on Today, by its words. */
+const QUEUES = [
+  ["the content agent's drafts", /drafts? from the content agent/],
+  ["FAQ proposals", /FAQ proposals?/],
+  ["journal entries", /journal entr(?:y|ies) proposed/],
+  ["lessons", /lessons? proposed/],
+];
+/** An FAQ proposal no new lesson can measure, so A accepts it as drafted. */
+const FAQ = fx.faqProposalRow({ newLesson: "its insight run is gone" });
+/** Task 8's writes: one decision in each queue, answered as the server does. */
+function queueWrites() {
+  const [pr1] = answersFor("/admin")["GET /admin/assistant/proposals"].proposals;
+  return {
+    "GET /admin/assistant/faq-proposals": { proposals: [FAQ] },
+    "POST /admin/assistant/proposals/pr1/apply": { proposal: { ...pr1, status: "applied" } },
+    [`POST /admin/assistant/faq-proposals/${FAQ.id}/accept`]: {
+      proposal: { ...FAQ, status: "accepted" },
+      linked: { journal: false, lesson: null },
+    },
+    [`PATCH /admin/assistant/lessons/${fx.LESSON_ID}`]: { lesson: fx.lessonRow({ status: "retired" }) },
+    [`PATCH /admin/assistant/journal/${fx.JOURNAL_ID}`]: { entry: fx.journalEntry({ status: "retired" }) },
+  };
+}
+/** Waits until the element with this id holds the focus. */
+const focused = (page, id) => page.waitForFunction((want) => document.activeElement?.id === want, id);
+
 /** Each task: its words, the plan's "today" and target, extra answers, and the walk from Today. */
 const TASKS = [
   {
@@ -289,18 +315,66 @@ const TASKS = [
   {
     n: 8,
     name: "Decide what waits",
-    target: "Today lists every queue with its count and a link",
-    answers: {},
-    walk: async (page) => {
-      const list = page.getByRole("heading", { name: "Needs you" });
-      await list.waitFor();
-      // Reading the list: its last row in view.
-      await page.evaluate(() => {
-        const rows = [...document.querySelectorAll("main li")];
-        rows.at(-1)?.scrollIntoView({ block: "end" });
+    target: "Today lists every queue with its count and a link; each queue works from the keyboard",
+    answers: queueWrites(),
+    walk: async (page, act) => {
+      const needs = page.getByRole("region", { name: "Needs you" });
+      await needs.waitFor();
+      const row = (name) => needs.getByRole("link", { name });
+      const missing = [];
+      await inTurn(QUEUES, async ([what, name]) => {
+        if (!(await row(name).count())) {
+          missing.push(what);
+        }
       });
-      await page.waitForTimeout(300);
-      return `${await page.locator("main li").count()} rows on Today`;
+      if (missing.length) {
+        throw new Error(`no row on Today for ${missing.join(", ")}`);
+      }
+      // Plan 5, U21: one click into each queue, then keys only; each decision moves the focus on.
+      await act.click(row(QUEUES[0][1]), "Today's content agent row");
+      await page.locator("#proposal-pr1").waitFor();
+      await act.press("j");
+      await focused(page, "proposal-pr1");
+      const applied = page.waitForRequest((r) => r.url().endsWith("/proposals/pr1/apply"));
+      await act.press("a");
+      await applied;
+      await focused(page, "proposal-pr2");
+
+      await act.click(rail(page, "Today"), "Today in the rail");
+      await act.click(row(QUEUES[1][1]), "Today's FAQ row");
+      await page.locator(`[id="faq-proposal-${FAQ.id}"]`).waitFor();
+      await act.press("j");
+      await focused(page, `faq-proposal-${FAQ.id}`);
+      const accepted = page.waitForRequest((r) => r.url().endsWith(`/faq-proposals/${FAQ.id}/accept`));
+      await act.press("a");
+      await accepted;
+      await focused(page, "faq-proposals-done");
+
+      // The Journal view holds two queues, lessons then entries: J walks both in page order.
+      await act.click(rail(page, "Today"), "Today in the rail");
+      await act.click(row(QUEUES[3][1]), "Today's lessons row");
+      await page.locator(`[id="lesson-${fx.LESSON_ID}"]`).waitFor();
+      await act.press("j");
+      await focused(page, `lesson-${fx.LESSON_ID}`);
+      const retired = page.waitForRequest((r) => r.url().endsWith(`/lessons/${fx.LESSON_ID}`));
+      await act.press("x");
+      await retired;
+      await focused(page, "lessons-waiting");
+      const entry = `journal-${fx.JOURNAL_ID}`;
+      const toEntry = async (left) => {
+        await act.press("j");
+        const at = await page.evaluate(() => document.activeElement?.id);
+        if (at !== entry && left > 1) {
+          await toEntry(left - 1);
+        }
+      };
+      await toEntry(5);
+      await focused(page, entry);
+      const closed = page.waitForRequest((r) => r.url().endsWith(`/journal/${fx.JOURNAL_ID}`));
+      await act.press("x");
+      await closed;
+      await focused(page, "journal-waiting");
+      return `${QUEUES.length} queues on Today with counts and links; 4 decided by keys, the focus on the next item or the done line`;
     },
   },
   {
