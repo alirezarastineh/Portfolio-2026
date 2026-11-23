@@ -14372,17 +14372,12 @@ test.describe("Media and the draft tab", () => {
     ).toBe("");
 
     await mediaTile(page, "architecture.png").click();
-    const remove = mediaPanel(page).getByRole("button", { name: "Delete" });
-    await expect(remove).toHaveAttribute("aria-disabled", "true");
-    await expect(remove).toHaveAccessibleDescription(
+    // Reachable from the keyboard, so the reason is heard; pressing it does nothing.
+    await pressStopped(
+      page,
+      mediaPanel(page).getByRole("button", { name: "Delete" }),
       "The live site shows it. Publish without it first.",
     );
-    // Reachable from the keyboard, so the reason is heard; pressing it does nothing.
-    await remove.focus();
-    await expect(remove).toBeFocused();
-    await page.keyboard.press("Enter");
-    await remove.click({ force: true });
-    await expect(alertDialog(page)).toHaveCount(0);
     expect(deletes).toEqual([]);
 
     await page.keyboard.press("Escape");
@@ -16089,6 +16084,8 @@ async function pressStopped(
   await expect(button).toBeFocused();
   await page.keyboard.press("Enter");
   await page.keyboard.press("Space");
+  // `force` skips the wait for a still box: a sheet sliding in holds the button off-screen.
+  await settled(page);
   await button.click({ force: true });
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
 }
