@@ -9266,6 +9266,67 @@ test.describe("touch targets on a phone", () => {
   }
 });
 
+/** Draws a notch and a home bar: the page's env(safe-area-inset-*) take these (Chromium's CDP). */
+async function notch(
+  page: Page,
+  insets: { top: number; right: number; bottom: number; left: number },
+): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets });
+}
+
+test.describe("safe areas on a phone", () => {
+  test.use({ hasTouch: true, isMobile: true });
+  const CDP_ONLY = "the notch is drawn through Chromium's CDP";
+
+  test("in portrait the save bar's Save and a toast stay above the home bar", async ({
+    page,
+    baseURL,
+    browserName,
+  }, testInfo) => {
+    testInfo.skip(browserName !== "chromium", CDP_ONLY);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await notch(page, { top: 47, right: 0, bottom: 34, left: 0 });
+    await fakeApi(page, baseURL, { "PATCH /admin/messages/m1": okReply });
+    await openAdmin(page, "/admin/assistant?view=settings");
+    const save = page.locator("app-save-bar").getByRole("button", { name: /^Save/ });
+    await expect(save).toBeVisible();
+    // The bar pads its foot by the home bar, stuck to the window's foot or not.
+    const bar = defined(await page.locator("app-save-bar").boundingBox(), "the save bar");
+    const saveBox = defined(await save.boundingBox(), "Save");
+    expect(bar.y + bar.height - (saveBox.y + saveBox.height)).toBeGreaterThanOrEqual(34);
+
+    await openAdmin(page, "/admin/inbox");
+    await page.locator("[data-message=m1]").tap();
+    await messageReader(page, "Ada Lovelace").getByRole("button", { name: "Archive" }).tap();
+    // Where the toast comes to rest: it slides in from below.
+    const toast = page.locator("[data-sonner-toast]").first();
+    await expect(toast).toBeVisible();
+    await expect
+      .poll(async () => {
+        const box = defined(await toast.boundingBox(), "the toast");
+        return box.y + box.height;
+      })
+      .toBeLessThanOrEqual(844 - 34);
+  });
+
+  test("in landscape a side sheet's Close stays clear of the notch", async ({
+    page,
+    baseURL,
+    browserName,
+  }, testInfo) => {
+    testInfo.skip(browserName !== "chromium", CDP_ONLY);
+    await page.setViewportSize({ width: 844, height: 390 });
+    await notch(page, { top: 0, right: 47, bottom: 21, left: 47 });
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/media?file=a1");
+    const close = page.getByRole("dialog").getByRole("button", { name: "Close", exact: true });
+    await expect(close).toBeVisible();
+    const box = defined(await close.boundingBox(), "Close");
+    expect(box.x + box.width).toBeLessThanOrEqual(844 - 47);
+  });
+});
+
 const todayHealth = () => defaults()["GET /admin/assistant/health"] as Record<string, unknown>;
 
 /** The assistant answering with nothing failing: no row for it. */

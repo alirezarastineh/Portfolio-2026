@@ -28,8 +28,9 @@ export const sheetVariants = cva(
         bottom:
           "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto border-t",
         left: "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm",
+        // Clear of a notch and the home bar (plan 5, U23), as the rail's sheet on the left is.
         right:
-          "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm",
+          "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)]",
       },
     },
     defaultVariants: {
@@ -56,7 +57,7 @@ export const sheetVariants = cva(
         hlmBtn
         variant="ghost"
         size="icon-sm"
-        class="absolute inset-e-4 top-4"
+        class="absolute inset-e-[calc(1rem+env(safe-area-inset-right))] top-[calc(1rem+env(safe-area-inset-top))]"
         hlmSheetClose
       >
         <span class="sr-only">Close</span>

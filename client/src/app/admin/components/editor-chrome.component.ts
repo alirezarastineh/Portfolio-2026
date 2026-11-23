@@ -124,7 +124,10 @@ const PREVIEW_WAIT_MS = 30_000;
     }
   `,
   template: `
-    <div class="-mx-6 border-t border-border bg-card/95 px-6 py-3 backdrop-blur-sm">
+    <!-- Clear of a phone's home bar (plan 5, U23). -->
+    <div
+      class="-mx-6 border-t border-border bg-card/95 px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm"
+    >
       <div class="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <!-- A new status takes the other branch, so the old one leaves as the new one enters. -->
         <p class="m-0 grid text-hint" role="status">
