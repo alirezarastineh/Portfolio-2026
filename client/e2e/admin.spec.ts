@@ -12421,6 +12421,19 @@ test.describe("Work and the project editor", () => {
   });
 });
 
+test.describe("Words at 320 on a touch screen", () => {
+  test.use({ viewport: { width: 320, height: 568 }, hasTouch: true, isMobile: true });
+
+  // Touch fields are 16px: a short phrase in a one-line field ran past it (plan 5, U24).
+  test("no row cuts its text", async ({ page, baseURL, browserName }, testInfo) => {
+    testInfo.skip(browserName !== "chromium", "touch emulation is Chromium's");
+    await fakeApi(page, baseURL);
+    await openAdmin(page, "/admin/words");
+    await expect(page.locator("#contact-submit-en")).toBeVisible({ timeout: 15_000 });
+    expect(await cutFields(page)).toEqual([]);
+  });
+});
+
 /** The whole page against WCAG 2.2 AA and best practice. */
 async function axeViolations(page: Page) {
   await settled(page);

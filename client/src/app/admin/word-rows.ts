@@ -193,6 +193,7 @@ export const ROWS: WordRow[] = [
     key: "subtitle",
     label: "Index description",
     hint: "The writing index's description in search results and shared links.",
+    multiline: true,
   },
   {
     group: "writing",
@@ -213,7 +214,7 @@ export const ROWS: WordRow[] = [
   { group: "legal", key: "updated", label: "Last updated label" },
   { group: "notFound", key: "title", label: "Heading", multiline: true },
   { group: "notFound", key: "body", label: "Text", multiline: true },
-  { group: "notFound", key: "home", label: "Home link" },
+  { group: "notFound", key: "home", label: "Home link", multiline: true },
   { group: "ask", key: "title", label: "Title" },
   { group: "ask", key: "hint", label: "Hint above the prompt", multiline: true },
   { group: "ask", key: "placeholder", label: "Input placeholder" },
