@@ -164,9 +164,10 @@ const required: ValidatorFn = (control) => Validators.required(control);
               (retry)="reloadSessions()"
             />
           } @else {
+            <!-- Ruled rows, not boxes: a card inside the card reads as nesting (the detector's nested cards). -->
             @for (row of sessions(); track row.id) {
               <div
-                class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
+                class="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3 first:border-t-0 first:pt-0"
               >
                 <div class="min-w-0">
                   <p class="m-0 text-data">
