@@ -1,13 +1,35 @@
-import { Directive } from "@angular/core";
+import { afterNextRender, DestroyRef, Directive, ElementRef, inject, signal } from "@angular/core";
 import { classes } from "@spartan-ng/helm/utils";
 
+const FOCUSABLE =
+  "a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex='-1'])";
+
+/**
+ * A table wider than its box scrolls inside it. With nothing in it to focus, the box is a Tab stop, so a keyboard can
+ * scroll it (WCAG 2.1.1, axe's scrollable-region-focusable): Chrome does so by itself, WebKit does not.
+ */
 @Directive({
   selector: "div[hlmTableContainer]",
-  host: { "data-slot": "table-container" },
+  host: { "data-slot": "table-container", "[attr.tabindex]": "stop() ? 0 : null" },
 })
 export class HlmTableContainer {
+  protected readonly stop = signal(false);
+
   constructor() {
     classes(() => "relative w-full overflow-x-auto");
+    const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+    const destroyRef = inject(DestroyRef);
+    afterNextRender(() => {
+      const resize = new ResizeObserver(() => {
+        this.stop.set(host.scrollWidth > host.clientWidth && !host.querySelector(FOCUSABLE));
+      });
+      resize.observe(host);
+      // The table grows as its rows arrive, which the box's own size does not show.
+      if (host.firstElementChild) {
+        resize.observe(host.firstElementChild);
+      }
+      destroyRef.onDestroy(() => resize.disconnect());
+    });
   }
 }
 
