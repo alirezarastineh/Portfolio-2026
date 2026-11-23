@@ -335,6 +335,8 @@ export function answers() {
     ] },
     "GET /admin/assistant/reviews": week,
     "GET /admin/assistant/insights": { snapshot, trigger: { at: HOUR_AGO, decision: "allowed", reason: "the trigger fired and insights ran; 0 lessons measured, 0 retired" } },
+    // The Questions view marks an automatic run seen (task 8 walks there).
+    [`POST /admin/assistant/insights/${snapshot.id}/seen`]: { ok: true },
     "GET /admin/assistant/journal": { entries: [fx.journalEntry()], counts: { proposed: 1, accepted: 0, fixed: 0, retired: 0 } },
     "GET /admin/assistant/lessons": { lessons: [fx.lessonRow(), fx.lessonRow({ id: "7a1c2a3b-0000-4000-8000-000000000002", status: "active", appliedAs: "faq", statement: "Say where he is based before saying when he is available." })], counts: { proposed: 1, active: 1, retired: 0 } },
     "GET /admin/assistant/runs": { runs: [
