@@ -66,7 +66,7 @@ export class SortableRowDirective {}
           <button
             cdkDragHandle
             type="button"
-            class="mt-0.5 cursor-grab rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
+            class="mt-0.5 cursor-grab rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing pointer-coarse:p-3.5"
             data-grip
             [hlmDropdownMenuTrigger]="moves"
             [hlmDropdownMenuTriggerData]="{ $implicit: i }"

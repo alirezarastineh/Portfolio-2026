@@ -9145,6 +9145,127 @@ test.describe("the shell on a phone", () => {
   });
 });
 
+/**
+ * Plan 5, U23: on a touch screen no target under 44px and no field under 16px, on the screens the
+ * tools' matrix measures nightly at 320, 390, 820 and 1024. A tap's area counts an absolute ::after
+ * reaching past the box (the switch's); a link inside a sentence is exempt, as WCAG 2.5.5 and 2.5.8
+ * have it.
+ */
+const TOUCH_SCREENS = [
+  "/admin/login",
+  "/admin",
+  "/admin/inbox",
+  "/admin/publications",
+  "/admin/preview",
+  "/admin/agent",
+  "/admin/hero",
+  "/admin/about",
+  "/admin/skills",
+  "/admin/projects",
+  "/admin/projects/project-one",
+  "/admin/experience",
+  "/admin/writing",
+  "/admin/writing/shipping-llms",
+  "/admin/words",
+  "/admin/legal",
+  "/admin/legal?doc=privacy",
+  "/admin/seo",
+  "/admin/media",
+  "/admin/media?file=a1",
+  "/admin/account",
+  "/admin/assistant",
+  "/admin/assistant?view=conversations",
+  "/admin/assistant?view=reviews",
+  "/admin/assistant?view=questions",
+  "/admin/assistant?view=journal",
+  "/admin/assistant?view=quality",
+  "/admin/assistant?view=settings",
+];
+/** What a screen needs beyond `defaults()`. */
+const TOUCH_ANSWERS: Record<string, Record<string, unknown>> = {
+  "/admin/login": { "GET /auth/me": SIGNED_OUT },
+  "/admin/writing/shipping-llms": {
+    "GET /admin/posts": { posts: [listedPost(postRow())] },
+    "GET /admin/posts/w1": { post: postRow() },
+  },
+};
+
+/** Every target under 44px and every field under 16px on the page, in words. */
+async function touchProblems(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const min = 44;
+    const problems: string[] = [];
+    const check = (el: Element): void => {
+      const box = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      const words = el.textContent?.trim() ?? "";
+      // In a sentence: inline, with words of its parent's own beside it.
+      const inSentence =
+        el.matches("a") &&
+        style.display === "inline" &&
+        [...(el.parentElement?.childNodes ?? [])].some(
+          (n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim() !== "",
+        );
+      if (box.width === 0 || box.height === 0 || style.visibility === "hidden" || inSentence) {
+        return;
+      }
+      const after = getComputedStyle(el, "::after");
+      const reach =
+        after.content !== "none" && after.position === "absolute" && after.pointerEvents !== "none";
+      const width = reach ? Math.max(box.width, Number.parseFloat(after.width) || 0) : box.width;
+      const height = reach
+        ? Math.max(box.height, Number.parseFloat(after.height) || 0)
+        : box.height;
+      if (width < min || height < min) {
+        const name = el.getAttribute("aria-label") ?? words;
+        problems.push(
+          `${el.tagName.toLowerCase()} "${name.slice(0, 30)}" ${Math.round(width)}x${Math.round(height)}`,
+        );
+      }
+    };
+    for (const el of document.querySelectorAll(
+      "a[href], button, input:not([type=checkbox], [type=radio]), select, [role=switch], [role=tab], summary",
+    )) {
+      check(el);
+    }
+    for (const field of document.querySelectorAll(
+      "input:not([type=checkbox], [type=radio]), textarea, select",
+    )) {
+      const box = field.getBoundingClientRect();
+      if (
+        box.width > 0 &&
+        box.height > 0 &&
+        Number.parseFloat(getComputedStyle(field).fontSize) < 16
+      ) {
+        problems.push(`field #${field.id} under 16px`);
+      }
+    }
+    return problems;
+  });
+}
+
+test.describe("touch targets on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  for (const path of TOUCH_SCREENS) {
+    test(`${path}: no target under 44px and no field under 16px`, async ({
+      page,
+      baseURL,
+      browserName,
+    }, testInfo) => {
+      testInfo.skip(browserName !== "chromium", "touch emulation is Chromium's");
+      await fakeApi(page, baseURL, TOUCH_ANSWERS[path] ?? {});
+      if (path === "/admin/login") {
+        await page.goto(path);
+        await interactive(page);
+      } else {
+        await openAdmin(page, path);
+      }
+      expect(await touchProblems(page)).toEqual([]);
+    });
+  }
+});
+
 const todayHealth = () => defaults()["GET /admin/assistant/health"] as Record<string, unknown>;
 
 /** The assistant answering with nothing failing: no row for it. */

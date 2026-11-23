@@ -149,16 +149,17 @@ const TONES = {
             }
           </ul>
         </div>
-        <!-- Each queue's count, a link to it, in one sentence: Today lists them as rows. -->
+        <!-- Each queue's count, a link to it, in one sentence: Today lists them as rows, and so does a
+             touch screen here, 44px each (plan 5, U23). A focused link is drawn above the next line's. -->
         @if (rows().length) {
-          <p class="m-0 text-sm">
+          <p class="m-0 text-sm pointer-coarse:flex pointer-coarse:flex-col">
             In the queues:
             @for (row of rows(); track row.words; let i = $index, n = $count) {
               <a
-                class="touch-manipulation underline decoration-muted-foreground underline-offset-4 hover:decoration-foreground"
+                class="touch-manipulation underline decoration-muted-foreground underline-offset-4 hover:decoration-foreground focus-visible:relative focus-visible:z-10 pointer-coarse:py-3"
                 [routerLink]="row.link"
                 [queryParams]="row.query ?? null"
-                >{{ row.words }}</a>{{ joiner(i, n) }}
+                >{{ row.words }}</a><span class="pointer-coarse:hidden">{{ joiner(i, n) }}</span>
             }
           </p>
         }

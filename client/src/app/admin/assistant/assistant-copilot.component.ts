@@ -176,7 +176,7 @@ import {
             </ul>
 
             <details class="text-xs">
-              <summary class="w-fit cursor-pointer text-muted-foreground">
+              <summary class="w-fit cursor-pointer text-muted-foreground pointer-coarse:min-h-11">
                 What version {{ skill.version }} tells the model
               </summary>
               <pre

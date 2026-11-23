@@ -503,7 +503,7 @@ function textsOf(asset: MediaAsset): { id: string; updatedAt: string } {
                     <li>
                       @if (place.link) {
                         <a
-                          class="underline underline-offset-4 hover:text-foreground"
+                          class="underline underline-offset-4 hover:text-foreground pointer-coarse:block pointer-coarse:py-3"
                           [routerLink]="place.link"
                           (click)="close()"
                           >{{ place.label }}</a

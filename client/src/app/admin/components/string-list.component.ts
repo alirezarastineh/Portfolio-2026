@@ -97,7 +97,7 @@ let counter = 0;
               variant="ghost"
               size="sm"
               type="button"
-              class="h-8 px-2 text-muted-foreground hover:text-destructive"
+              class="h-8 px-2 text-muted-foreground hover:text-destructive pointer-coarse:min-w-11"
               data-remove
               [attr.aria-label]="'Remove ' + label() + ' ' + (i + 1)"
               (click)="remove(entry.id)"

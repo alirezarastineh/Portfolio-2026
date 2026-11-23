@@ -47,6 +47,8 @@ interface FieldDef {
   /** Where its value appears. */
   hint: string;
   multiline?: boolean;
+  /** A multiline field's first lines (2 by default); a title takes 1 and wraps on a phone (plan 5, U23). */
+  rows?: number;
   /** Offer the AI copilot; off for URLs, names and codes. */
   ai?: boolean;
   /** Where search results and cards start cutting it off. */
@@ -71,6 +73,8 @@ const SECTIONS: Section[] = [
       {
         key: "title",
         label: "Page title",
+        multiline: true,
+        rows: 1,
         hint: "The home page's title: its tab, search results and the structured data.",
         softMax: 60,
       },
@@ -96,6 +100,8 @@ const SECTIONS: Section[] = [
       {
         key: "ogTitle",
         label: "OG title",
+        multiline: true,
+        rows: 1,
         hint: "The title on the home page's card where a link to it is shared.",
         softMax: 60,
       },
@@ -122,6 +128,8 @@ const SECTIONS: Section[] = [
       {
         key: "twitterTitle",
         label: "Twitter title",
+        multiline: true,
+        rows: 1,
         hint: "The title on the home page's card on X.",
         softMax: 70,
       },
@@ -255,7 +263,7 @@ export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
                       [label]="field.label"
                       [hint]="field.hint"
                       [multiline]="field.multiline ?? false"
-                      [rows]="2"
+                      [rows]="field.rows ?? 2"
                       [view]="shownView()"
                       [ai]="field.ai ?? true"
                       [softMax]="field.softMax ?? 0"

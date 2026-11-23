@@ -244,6 +244,14 @@
   }
 }
 
+/* On touch the rail collapsed to icons is 64px, so each icon is a 44px target inside the group's
+   padding (hlm-sidebar.token.ts reads it; plan 5, U23). */
+@media (pointer: coarse) {
+  :root {
+    --rail-icon: 4rem;
+  }
+}
+
 /* A toast stays above the save bar: Save is never under one. */
 :root:has(app-save-bar) [data-sonner-toaster][data-y-position="bottom"] {
   bottom: 6rem;

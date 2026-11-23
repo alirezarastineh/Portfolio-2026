@@ -89,7 +89,7 @@ const PLACEHOLDER: Record<Part, string> = {
             variant="ghost"
             size="sm"
             type="button"
-            class="h-9 px-2 text-muted-foreground hover:text-destructive"
+            class="h-9 px-2 text-muted-foreground hover:text-destructive pointer-coarse:min-w-11"
             data-part="remove"
             data-remove
             [attr.aria-label]="'Remove metric ' + (i + 1)"

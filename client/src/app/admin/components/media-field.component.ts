@@ -71,7 +71,7 @@ import { MediaPickerComponent } from "./media-picker.component";
                 variant="ghost"
                 size="sm"
                 type="button"
-                class="text-muted-foreground hover:text-destructive"
+                class="text-muted-foreground hover:text-destructive pointer-coarse:min-w-11"
                 (click)="chosen.emit(null)"
                 [attr.aria-label]="'Remove ' + label()"
               >

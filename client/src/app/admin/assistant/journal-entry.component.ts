@@ -127,7 +127,7 @@ const DECISIONS: Record<JournalStatus, string> = {
       </p>
 
       <details class="rounded-md border border-border px-3 py-2" [open]="open()">
-        <summary class="cursor-pointer text-xs text-muted-foreground">
+        <summary class="cursor-pointer text-xs text-muted-foreground pointer-coarse:min-h-11">
           Evidence · {{ d.hypotheses.length }} hypotheses (a count, not a probability)
         </summary>
         <ol class="m-0 mt-2 flex list-none flex-col gap-2 p-0 text-xs" role="list">

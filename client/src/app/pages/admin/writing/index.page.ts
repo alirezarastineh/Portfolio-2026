@@ -97,7 +97,7 @@ const FULL_DATE = new Intl.DateTimeFormat("en-GB", {
                 <tr hlmTr class="h-9 pointer-coarse:h-11">
                   <td hlmTd class="whitespace-normal">
                     <a
-                      class="font-medium wrap-anywhere text-foreground underline-offset-2 hover:underline"
+                      class="font-medium wrap-anywhere text-foreground underline-offset-2 hover:underline pointer-coarse:block pointer-coarse:py-3"
                       [routerLink]="['/admin/writing', row.slug]"
                       >{{ title(row) }}</a
                     >

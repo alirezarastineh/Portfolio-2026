@@ -131,7 +131,7 @@ function pagesOf(locale: Locale, content: AppContent, livePosts: Set<string>) {
                       @for (page of group.pages; track page.path) {
                         <li class="flex items-center gap-2">
                           <a
-                            class="truncate text-sm underline-offset-4 hover:underline"
+                            class="truncate text-sm underline-offset-4 hover:underline pointer-coarse:min-w-11 pointer-coarse:py-3"
                             [href]="page.path"
                             target="_blank"
                             rel="noopener"

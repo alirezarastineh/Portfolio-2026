@@ -64,7 +64,7 @@ const WORDS: Record<OutlineState, string> = {
           @let here = item.id === current();
           <li>
             <a
-              class="-ml-px flex min-h-8 items-center gap-2 border-l-2 py-1 pl-3 pr-1 text-sm transition-colors duration-(--dur-2) hover:text-foreground"
+              class="-ml-px flex min-h-8 items-center gap-2 border-l-2 py-1 pl-3 pr-1 text-sm transition-colors duration-(--dur-2) hover:text-foreground pointer-coarse:min-h-11"
               [class]="
                 here
                   ? 'border-accent-orange text-foreground'

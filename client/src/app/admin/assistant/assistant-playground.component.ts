@@ -165,7 +165,9 @@ export class PlaygroundSession {
             @if (reasoning(m); as thought) {
               <!-- Plan phase 23: the model's thoughts, for the admin only; evidence, not proof. -->
               <details class="rounded-md border border-border px-2 py-1 text-xs">
-                <summary class="cursor-pointer text-muted-foreground">Reasoning</summary>
+                <summary class="cursor-pointer text-muted-foreground pointer-coarse:min-h-11">
+                  Reasoning
+                </summary>
                 <p class="m-0 mt-1 whitespace-pre-wrap text-muted-foreground">{{ thought }}</p>
               </details>
             }

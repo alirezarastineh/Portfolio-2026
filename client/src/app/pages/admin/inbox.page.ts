@@ -257,7 +257,9 @@ const LANGUAGES: Record<Locale, string> = {
                 @if (message.askTranscript; as transcript) {
                   <!-- The visitor ticked "attach": their conversation, redacted, the last turns. -->
                   <details class="flex flex-col gap-2 border-l border-border pl-3 text-sm" open>
-                    <summary class="cursor-pointer text-hint text-muted-foreground">
+                    <summary
+                      class="cursor-pointer text-hint text-muted-foreground pointer-coarse:min-h-11"
+                    >
                       Their conversation with the assistant ({{ transcript.turns.length }}
                       {{ transcript.turns.length === 1 ? "answer" : "answers" }})
                     </summary>

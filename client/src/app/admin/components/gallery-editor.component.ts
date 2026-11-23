@@ -115,7 +115,7 @@ const MAX = 30;
               variant="ghost"
               size="sm"
               type="button"
-              class="h-8 px-2 text-muted-foreground hover:text-destructive"
+              class="h-8 px-2 text-muted-foreground hover:text-destructive pointer-coarse:min-w-11"
               data-remove
               (click)="remove(i)"
               [attr.aria-label]="'Remove image ' + (i + 1)"

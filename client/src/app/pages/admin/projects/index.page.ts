@@ -137,7 +137,7 @@ import { absoluteTime, relativeTime } from "../../../admin/relative-time";
                   </td>
                   <td hlmTd class="whitespace-normal">
                     <a
-                      class="font-medium wrap-anywhere text-foreground underline-offset-2 hover:underline"
+                      class="font-medium wrap-anywhere text-foreground underline-offset-2 hover:underline pointer-coarse:block pointer-coarse:py-3"
                       [routerLink]="['/admin/projects', row.slug]"
                       >{{ name(row) }}</a
                     >

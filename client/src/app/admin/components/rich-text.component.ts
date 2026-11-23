@@ -243,7 +243,7 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
           <button
             #tool
             type="button"
-            class="inline-flex size-7 items-center justify-center rounded-sm transition-colors"
+            class="inline-flex size-7 items-center justify-center rounded-sm transition-colors pointer-coarse:size-11"
             [class]="toolClass(activeMarks().includes(action.id))"
             [attr.tabindex]="$index === activeTool() ? 0 : -1"
             [attr.aria-label]="action.label"
@@ -258,7 +258,7 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
         <button
           #tool
           type="button"
-          class="inline-flex size-7 items-center justify-center rounded-sm transition-colors"
+          class="inline-flex size-7 items-center justify-center rounded-sm transition-colors pointer-coarse:size-11"
           [class]="toolClass(activeMarks().includes('link'))"
           [attr.tabindex]="actions().length === activeTool() ? 0 : -1"
           aria-label="Add or edit link"
@@ -272,7 +272,7 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
           <button
             #tool
             type="button"
-            class="inline-flex size-7 items-center justify-center rounded-sm transition-colors"
+            class="inline-flex size-7 items-center justify-center rounded-sm transition-colors pointer-coarse:size-11"
             [class]="toolClass(false)"
             [attr.tabindex]="actions().length + 1 === activeTool() ? 0 : -1"
             aria-label="Insert an image from the media library"
@@ -287,7 +287,7 @@ const LINK_PATTERN = /^(https?:\/\/\S+|mailto:\S+|\/[^\s]*)$/i;
           <label class="ml-1 flex items-center gap-1 text-xs text-muted-foreground">
             <span>language</span>
             <select
-              class="h-7 rounded-sm border border-border bg-card px-1 text-xs text-foreground"
+              class="h-7 rounded-sm border border-border bg-card px-1 text-xs text-foreground pointer-coarse:h-11 pointer-coarse:text-base"
               [ngModel]="codeLanguage()"
               (ngModelChange)="setCodeLanguage($event)"
               aria-label="Code block language"

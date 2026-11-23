@@ -56,8 +56,9 @@ export class HlmSwitch implements ControlValueAccessor {
   public readonly userClass = input<ClassValue>("", { alias: "class" }); // NOSONAR - alias required: 'class' is a reserved keyword, cannot be a TS property name
   protected readonly _computedClass = computed(() =>
     hlm(
-      // The track at 3:1 when off; its target reaches 32px with a mouse and 44px on touch.
-      "data-[state=checked]:bg-primary data-[state=unchecked]:bg-input-line group relative inline-flex h-[1.15rem] w-8 shrink-0 items-center rounded-full cursor-pointer touch-manipulation border border-transparent transition-colors after:absolute after:inset-x-0 after:-inset-y-1.75 pointer-coarse:after:-inset-x-1.5 pointer-coarse:after:-inset-y-3.25 data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-50",
+      // The track at 3:1 when off; its target, inset from inside the 1px border, reaches 30px with a
+      // mouse and 44px on touch (plan 5, U23: it was 42).
+      "data-[state=checked]:bg-primary data-[state=unchecked]:bg-input-line group relative inline-flex h-[1.15rem] w-8 shrink-0 items-center rounded-full cursor-pointer touch-manipulation border border-transparent transition-colors after:absolute after:inset-x-0 after:-inset-y-1.75 pointer-coarse:after:-inset-x-1.75 pointer-coarse:after:-inset-y-3.5 data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-50",
       this.userClass(),
     ),
   );

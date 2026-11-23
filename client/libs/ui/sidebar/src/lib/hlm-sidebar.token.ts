@@ -13,13 +13,14 @@ export interface HlmSidebarConfig {
   closeMobileSidebarOnMenuButtonClick: boolean;
 }
 
-// The admin's rail (plan 5, U8): 232 px, 56 px collapsed; a sheet below 768, collapsed to 1279.
-// Wider by a landscape notch, which the container pads. No keyboard shortcut here: the admin's
-// `[` is in its layout, and Ctrl+B stays the editor's bold.
+// The admin's rail (plan 5, U8): 232 px, 56 px collapsed (`--rail-icon`, 64 on touch in admin.css, so
+// its icons are 44 px targets: plan 5, U23); a sheet below 768, collapsed to 1279. Wider by a landscape
+// notch, which the container pads. No keyboard shortcut here: the admin's `[` is in its layout, and
+// Ctrl+B stays the editor's bold.
 const defaultConfig: HlmSidebarConfig = {
   sidebarWidth: "calc(14.5rem + env(safe-area-inset-left, 0px))",
   sidebarWidthMobile: "18rem",
-  sidebarWidthIcon: "calc(3.5rem + env(safe-area-inset-left, 0px))",
+  sidebarWidthIcon: "calc(var(--rail-icon, 3.5rem) + env(safe-area-inset-left, 0px))",
   sidebarStorageKey: "sidebar_state",
   mobileBreakpoint: "767.98px",
   openBreakpoint: "1280px",

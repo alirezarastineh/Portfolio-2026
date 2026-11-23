@@ -91,7 +91,7 @@ const plural = (noun: string): string =>
                 <button
                   #token
                   type="button"
-                  class="token h-6 cursor-grab rounded-l-sm px-2 underline-offset-2 hover:underline focus-visible:outline-offset-1 pointer-coarse:h-11"
+                  class="token h-6 cursor-grab rounded-l-sm px-2 underline-offset-2 hover:underline focus-visible:outline-offset-1 pointer-coarse:h-11 pointer-coarse:min-w-11"
                   translate="no"
                   [hlmDropdownMenuTrigger]="menu"
                   [hlmDropdownMenuTriggerData]="{ $implicit: i }"
