@@ -41,6 +41,7 @@ step probe node probe.mjs
 step probe2 node probe2.mjs
 step keyboard-dark-1280 node keyboard-walk.mjs dark 1280
 step keyboard-light-390 node keyboard-walk.mjs light 390
+step keyboard-forced-1280 node keyboard-walk.mjs forced 1280
 step vercel-sweep node vercel-sweep.mjs
 step view-chunks node view-chunks.mjs
 step tasks node tasks.mjs

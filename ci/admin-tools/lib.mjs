@@ -21,6 +21,8 @@ export const SIZES = {
   landscape: { width: 1024, height: 768 },
   laptop: { width: 1280, height: 800 },
   wide: { width: 1920, height: 1080 },
+  // A 1280×1024 window at 400% zoom, with a mouse: WCAG 1.4.10's reflow (plan 5, U24).
+  zoom: { width: 320, height: 256 },
 };
 
 export function startServer(port) {
@@ -105,14 +107,15 @@ export async function fake(page, origin, answers, given) {
 }
 
 /** A fresh page on `path`, ready when the admin's sidebar or login has rendered. */
-export async function open(browser, origin, answers, { theme = "dark", size = SIZES.laptop, path, reduced = true, init, clock } = {}) {
+export async function open(browser, origin, answers, { theme = "dark", size = SIZES.laptop, path, reduced = true, init, clock, touch = size.width <= 1024, forced = false } = {}) {
   const context = await browser.newContext({
     viewport: size,
     colorScheme: theme,
     reducedMotion: reduced ? "reduce" : "no-preference",
+    forcedColors: forced ? "active" : "none",
     // Phones and tablets, an iPad's 1024 in landscape included, are touch screens (plan 5, U23).
-    hasTouch: size.width <= 1024,
-    isMobile: size.width <= 1024,
+    hasTouch: touch,
+    isMobile: touch,
   });
   const page = await context.newPage();
   const problems = [];

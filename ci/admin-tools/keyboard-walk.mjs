@@ -1,11 +1,14 @@
 // A keyboard walk through the admin: Tab from the top of each screen to the end, recording every focus stop.
 // Flags a stop with no visible indicator, one covered by something fixed (WCAG 2.4.11), one outside the viewport,
 // focus falling back to <body> early, and a stop that jumps backwards. Prints only flagged stops and a summary per
-// screen. Usage: node keyboard-walk.mjs [dark|light] [390|1280] [path-filter]
+// screen. Usage: node keyboard-walk.mjs [dark|light|forced] [390|1280] [path-filter]
 import { answersFor, ROUTES, VIEWS } from "./data.mjs";
 import { chromium, inTurn, loaded, open, startServer } from "./lib.mjs";
 
-const theme = process.argv[2] ?? "dark";
+// `forced`: the dark theme in forced colours, where a ring drawn by a shadow or a fill is gone (plan 5, U24).
+const mode = process.argv[2] ?? "dark";
+const forced = mode === "forced";
+const theme = forced ? "dark" : mode;
 const width = Number(process.argv[3] ?? 1280);
 const filter = process.argv[4] ?? "";
 const height = width < 700 ? 844 : 900;
@@ -54,8 +57,10 @@ async function describeStop() {
   } else if (focused !== blurred) {
     indicator = "frame/pseudo";
   }
-  const cx = Math.min(Math.max(r.left + r.width / 2, 0), innerWidth - 1);
-  const cy = Math.min(Math.max(r.top + Math.min(r.height / 2, 12), 0), innerHeight - 1);
+  // A link that wraps spans two lines, and the middle of the box around both can be another link: probe its first line.
+  const line = el.getClientRects()[0] ?? r;
+  const cx = Math.min(Math.max(line.left + line.width / 2, 0), innerWidth - 1);
+  const cy = Math.min(Math.max(line.top + Math.min(line.height / 2, 12), 0), innerHeight - 1);
   const top = document.elementFromPoint(cx, cy);
   const covered = !!top && top !== el && !el.contains(top) && !top.contains(el);
   return {
@@ -128,7 +133,7 @@ async function walk(page, stops, lastY) {
 
 try {
   await inTurn(screens, async (screen) => {
-    const { page, context } = await open(browser, origin, answersFor(screen.path), { path: screen.path, size: { width, height }, theme });
+    const { page, context } = await open(browser, origin, answersFor(screen.path), { path: screen.path, size: { width, height }, theme, forced });
     await loaded(page);
     const stops = await walk(page, [], -Infinity);
     const flagged = stops.filter((s) => s.issues.length);
@@ -146,5 +151,5 @@ try {
   await browser.close();
   server.kill();
 }
-console.log(`\n${flaggedTotal} flagged stop(s) in ${screens.length} screens, ${theme} ${width}px`);
+console.log(`\n${flaggedTotal} flagged stop(s) in ${screens.length} screens, ${mode} ${width}px`);
 console.log("outlines seen:", JSON.stringify(outlines));
