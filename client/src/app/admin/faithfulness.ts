@@ -1,3 +1,5 @@
+import { statusWord } from "./eval-runs";
+
 /**
  * Overview → Faithfulness (plan phase 26; `server/src/ask/faithfulness-routes.ts`):
  * what the judge found on visitors' answers, per model and per route. The
@@ -91,5 +93,7 @@ export function nightlyLine(run: NightlyRun | null): string {
   if (run.status === "queued" || run.status === "running") {
     return `Judging ${count} now.`;
   }
-  return `The last night stopped after ${count}: ${run.error ?? run.status}`;
+  // The run's own sentence, else its state in the runs' one vocabulary (plan 5, U21).
+  const why = run.error ?? `${statusWord(run)}.`;
+  return `The last night stopped after ${count}: ${why}`;
 }

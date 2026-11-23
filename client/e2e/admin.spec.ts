@@ -4948,11 +4948,12 @@ test.describe("admin", () => {
     });
     await openAdmin(page, "/admin/agent");
 
-    // The run that drafted them, its cost and what it came to.
+    // The run that drafted them in the runs' one vocabulary, its cost and what it came to.
     const runs = page.getByRole("region", { name: "Runs" });
-    await expect(runs.getByText(/Done · Translations, Search descriptions/)).toBeVisible();
-    await expect(runs.getByText("3 of 3 items · $0.0123")).toBeVisible();
-    await expect(runs.getByText("2 proposed, 1 need you")).toBeVisible();
+    await expect(
+      runs.getByText(/Finished: translations and search descriptions, started 1 hour ago\./),
+    ).toBeVisible();
+    await expect(runs.getByText("3 of 3 items, $0.0123: 2 proposed, 1 need you.")).toBeVisible();
 
     // Open proposals, grouped by what they change; the applied one is under its filter.
     const proposals = page.getByRole("region", { name: "Proposals" });
@@ -4973,10 +4974,18 @@ test.describe("admin", () => {
     const { violations } = await new AxeBuilder({ page }).include("app-admin-agent").analyze();
     expect(violations).toEqual([]);
 
-    // A run: the goals chosen and the limits, as the API takes them.
+    // A run: it asks first with its goals and limit (plan 5, U21), then sends them as the API takes them.
     await page.getByRole("checkbox", { name: "Alt text" }).uncheck();
     await page.getByLabel("Items, at most").fill("5");
     await page.getByRole("button", { name: "Start a run" }).click();
+    const ask = page.getByRole("alertdialog");
+    await expect(ask.getByText("Draft up to 5 items?")).toBeVisible();
+    await expect(
+      ask.getByText(
+        "Translations and search descriptions for the content's gaps, as proposals you decide. The run stops at its limit, $0.05,",
+      ),
+    ).toBeVisible();
+    await ask.getByRole("button", { name: "Start the run" }).click();
     await expect
       .poll(() => sent.find((s) => s.url === "/admin/assistant/runs")?.body)
       .toEqual({
@@ -4987,10 +4996,10 @@ test.describe("admin", () => {
         maxUsd: 0.05,
       });
 
-    // Apply: it leaves the open list, and focus lands on the list's heading.
+    // Apply: it leaves the open list, and the next proposal that waits takes the focus.
     await proposals.getByRole("button", { name: "Apply Project one · Hook (DE)" }).click();
     await expect(proposals.getByRole("article")).toHaveCount(2);
-    await expect(proposals.getByRole("heading", { name: "Proposals" })).toBeFocused();
+    await expect(proposals.getByRole("heading", { name: "Name (DE)" })).toBeFocused();
     await expect(page.locator("#agent-said")).toHaveText(
       "Applied to the draft: Project one · Hook (DE).",
     );
@@ -5009,7 +5018,11 @@ test.describe("admin", () => {
 
     await proposals.getByRole("button", { name: "Reject Project one · Name (DE)" }).click();
     await expect(proposals.getByRole("article")).toHaveCount(0);
-    await expect(proposals.getByText("No proposals wait for you.", { exact: false })).toBeVisible();
+    // The last one decided: the done line takes the focus.
+    await expect(page.locator("#agent-proposals-done")).toBeFocused();
+    await expect(page.locator("#agent-proposals-done")).toHaveText(
+      /No proposals wait for you\. Start a run/,
+    );
 
     // Revert an applied one: the filter asks the server for the applied ones.
     await page.getByRole("button", { name: "Applied", exact: true }).click();
@@ -5072,6 +5085,129 @@ test.describe("admin", () => {
     expect(unmocked).toEqual([]);
   });
 
+  test("the Agent page decides from the keys: J and K move, A applies, X rejects, Ctrl Enter applies an edit, and the focus goes on", async ({
+    page,
+    baseURL,
+  }) => {
+    const hook = proposalRow("k1", "Project one · Hook (DE)");
+    const name = proposalRow("k2", "Project one · Name (DE)", { field: "name" });
+    const role = proposalRow("k3", "Project one · Role (DE)", { field: "role" });
+    const sent: { url: string; body: unknown }[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/proposals": { proposals: [hook, name, role] },
+      "POST /admin/assistant/proposals/k1/apply": {
+        proposal: { ...hook, status: "applied", appliedAt: NOW },
+      },
+      "POST /admin/assistant/proposals/k2/reject": { proposal: { ...name, status: "rejected" } },
+      "POST /admin/assistant/proposals/k3/apply": {
+        proposal: { ...role, status: "applied", appliedAt: NOW },
+      },
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().includes("/admin/assistant/proposals/")) {
+        sent.push({ url: new URL(r.url()).pathname, body: r.postDataJSON() });
+      }
+    });
+    await openAdmin(page, "/admin/agent");
+    const proposals = page.getByRole("region", { name: "Proposals" });
+    const heading = (field: string) => proposals.getByRole("heading", { name: field, exact: true });
+    await expect(
+      proposals.getByText("J and K move, A applies, X rejects,", { exact: false }),
+    ).toBeVisible();
+    await expect(
+      proposals.getByRole("button", { name: "Apply Project one · Hook (DE)" }),
+    ).toHaveAttribute("aria-keyshortcuts", "A Control+Enter Meta+Enter");
+
+    // J from the page: the first proposal; J and K walk them, and nothing is sent.
+    await page.keyboard.press("j");
+    await expect(heading("Hook (DE)")).toBeFocused();
+    await page.keyboard.press("j");
+    await expect(heading("Name (DE)")).toBeFocused();
+    await page.keyboard.press("k");
+    await expect(heading("Hook (DE)")).toBeFocused();
+    expect(sent).toEqual([]);
+
+    // A applies the one in focus, and the next that waits takes the focus; X rejects that one.
+    await page.keyboard.press("a");
+    await expect
+      .poll(() => sent.map((s) => s.url))
+      .toEqual(["/admin/assistant/proposals/k1/apply"]);
+    await expect(heading("Name (DE)")).toBeFocused();
+    await page.keyboard.press("x");
+    await expect.poll(() => sent.length).toBe(2);
+    expect(sent[1]?.url).toBe("/admin/assistant/proposals/k2/reject");
+    await expect(heading("Role (DE)")).toBeFocused();
+
+    // In the edit a letter is text; Ctrl Enter there applies the text, and the last decision
+    // gives the done line the focus.
+    await proposals.getByRole("button", { name: "Edit Project one · Role (DE)" }).click();
+    const text = proposals.getByLabel("Text for Project one · Role (DE)");
+    await expect(text).toBeFocused();
+    await text.fill("Rolle");
+    await page.keyboard.press("a");
+    await expect(text).toHaveValue("Rollea");
+    expect(sent).toHaveLength(2);
+    await page.keyboard.press("Control+Enter");
+    await expect
+      .poll(() => sent[2])
+      .toEqual({ url: "/admin/assistant/proposals/k3/apply", body: { text: "Rollea" } });
+    await expect(page.locator("#agent-proposals-done")).toBeFocused();
+    expect(unmocked).toEqual([]);
+  });
+
+  test("a proposal whose field changed, or that has no draft, has no Apply: A says why and sends nothing, X rejects", async ({
+    page,
+    baseURL,
+  }) => {
+    const changed = proposalRow("s1", "Project one · Hook (DE)", { changed: true });
+    const empty = proposalRow("s2", "Project one · Role (DE)", { field: "role", after: null });
+    const sent: string[] = [];
+    const unmocked = await fakeApi(page, baseURL, {
+      "GET /admin/assistant/proposals": { proposals: [changed, empty] },
+      "POST /admin/assistant/proposals/s1/reject": { proposal: { ...changed, status: "rejected" } },
+    });
+    page.on("request", (r) => {
+      if (r.method() === "POST") {
+        sent.push(new URL(r.url()).pathname);
+      }
+    });
+    await openAdmin(page, "/admin/agent");
+    const proposals = page.getByRole("region", { name: "Proposals" });
+    const why =
+      "Its field changed since the draft: it cannot be applied. Reject it, or write the field in its editor.";
+    const apply = proposals.getByRole("button", { name: "Apply Project one · Hook (DE)" });
+    await expect(apply).toHaveAttribute("aria-disabled", "true");
+    await expect(apply).toHaveAccessibleDescription(why);
+    // No Edit either: an edited text would overwrite the newer field too.
+    await expect(
+      proposals.getByRole("button", { name: "Edit Project one · Hook (DE)" }),
+    ).toHaveCount(0);
+    const applyEmpty = proposals.getByRole("button", { name: "Apply Project one · Role (DE)" });
+    await expect(applyEmpty).toHaveAttribute("aria-disabled", "true");
+    await expect(applyEmpty).toHaveAccessibleDescription(
+      "There is no draft: edit it and write the text first.",
+    );
+    await expect(
+      proposals.getByRole("button", { name: "Edit Project one · Role (DE)" }),
+    ).toBeVisible();
+    await settled(page);
+    const { violations } = await new AxeBuilder({ page }).include("app-admin-agent").analyze();
+    expect(violations).toEqual([]);
+
+    // A on it: the reason said, nothing sent.
+    await page.keyboard.press("j");
+    await expect(proposals.getByRole("heading", { name: "Hook (DE)", exact: true })).toBeFocused();
+    await page.keyboard.press("a");
+    await expect(page.locator("#agent-said")).toHaveText(`Project one · Hook (DE): ${why}`);
+    expect(sent).toEqual([]);
+
+    // X rejects it, and the one left takes the focus.
+    await page.keyboard.press("x");
+    await expect.poll(() => sent).toEqual(["/admin/assistant/proposals/s1/reject"]);
+    await expect(proposals.getByRole("heading", { name: "Role (DE)", exact: true })).toBeFocused();
+    expect(unmocked).toEqual([]);
+  });
+
   test("the Agent page follows a running run until it is left, and cancels and resumes one, saying so", async ({
     page,
     baseURL,
@@ -5111,7 +5247,9 @@ test.describe("admin", () => {
     });
     await openAdmin(page, "/admin/agent");
     const runs = page.getByRole("region", { name: "Runs" });
-    await expect(runs.getByText(/^Running · Translations, Search descriptions/)).toBeVisible();
+    await expect(
+      runs.getByText(/Running: translations and search descriptions, started 1 hour ago\./),
+    ).toBeVisible();
     // Read again every 3 seconds while it runs.
     await expect.poll(() => reads, { timeout: 12_000 }).toBeGreaterThanOrEqual(3);
 
@@ -5136,11 +5274,26 @@ test.describe("admin", () => {
     await expect(page.locator("#agent-said")).toHaveText(
       "Run cancelled: what it drafted stays below.",
     );
-    await expect(runs.getByText(/^Cancelled · /)).toBeVisible();
+    await expect(runs.getByText(/Cancelled: translations and search descriptions/)).toBeVisible();
     await expect(runs.getByRole("heading", { name: "Runs" })).toBeFocused();
+
+    // Resume asks first, with the items left and the run's limit against what it spent (U21);
+    // Cancel sends nothing.
+    await runs.getByRole("button", { name: "Resume" }).click();
+    const ask = page.getByRole("alertdialog");
+    await expect(ask.getByText("Resume the run?")).toBeVisible();
+    await expect(
+      ask.getByText(
+        "Its 2 items left are drafted. It stops at its limit, $0.05, of which $0.0123 is spent, and spends under Admin agents' cap.",
+      ),
+    ).toBeVisible();
+    await ask.getByRole("button", { name: "Cancel" }).click();
+    await expect(ask).toHaveCount(0);
+    expect(sent).toEqual([`/admin/assistant/runs/${contentRun.id}/cancel`]);
 
     // A resume refused: in words, never a raw code; the focus on the heading again.
     await runs.getByRole("button", { name: "Resume" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Resume" }).click();
     await expect(page.locator("#agent-said")).toHaveText(
       "Could not resume the run: That run cannot be resumed: only a failed, interrupted or cancelled one can.",
     );
@@ -5180,7 +5333,7 @@ test.describe("admin", () => {
       runs.getByText("The API failed (HTTP 500): try again; its log says why."),
     ).toBeVisible();
     await runs.getByRole("button", { name: "Try again" }).click();
-    await expect(runs.getByText(/^Done · Translations, Search descriptions/)).toBeVisible();
+    await expect(runs.getByText(/Finished: translations and search descriptions/)).toBeVisible();
 
     // The applied ones are asked for, then the rejected ones, before the first answer comes.
     await page.getByRole("button", { name: "Applied", exact: true }).click();

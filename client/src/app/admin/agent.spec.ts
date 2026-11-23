@@ -2,21 +2,29 @@ import { describe, expect, it } from "vitest";
 
 import {
   agentWords,
+  applyStop,
   filterProposals,
   filterStatuses,
+  goalsWords,
   groupProposals,
   isContentRun,
   isOpen,
+  itemsLine,
   plainText,
+  resumeWords,
+  runCost,
+  runLine,
   runSummary,
   runWords,
   splitLabel,
+  startQuestion,
   startWords,
   statusName,
   summaryLine,
   textWords,
   type Proposal,
 } from "./agent";
+import type { RunRow } from "./assistant-types";
 
 function proposal(label: string, status: Proposal["status"] = "proposed"): Proposal {
   return {
@@ -86,7 +94,7 @@ describe("the Agent page's helpers (plan phase 30)", () => {
     expect(isContentRun({ kind: "agent", params: { task: "content" } })).toBe(true);
     expect(isContentRun({ kind: "agent", params: { task: "replay", entry: "e" } })).toBe(false);
     expect(isContentRun({ kind: "eval", params: {} })).toBe(false);
-    const summary = runSummary({ summary: { proposed: 3, needsYou: 1, stale: 2 } as never });
+    const summary = runSummary({ summary: { proposed: 3, needsYou: 1, stale: 2 } });
     expect(summary).toEqual({ proposed: 3, needsYou: 1, stale: 2 });
     if (!summary) {
       throw new Error("expected summary");
@@ -142,5 +150,53 @@ describe("the Agent page's helpers (plan phase 30)", () => {
     );
     expect(textWords([])).toBe("The text does not fit the field.");
     expect(textWords(undefined)).toBe("The text does not fit the field.");
+  });
+
+  it("says a run in the runs' one vocabulary, with its items, cost and what it drafted", () => {
+    const now = Date.parse("2026-11-23T12:00:00.000Z");
+    const stopped = {
+      status: "failed",
+      params: { task: "content", goals: ["alt", "seo", "unknown"], maxUsd: 0.05 },
+      startedAt: "2026-11-21T12:00:00.000Z",
+      createdAt: "2026-11-21T11:59:00.000Z",
+      progress: { total: 20, done: 12, failed: 0, unavailable: 0 },
+      usd: 0.0412,
+      summary: { proposed: 12, needsYou: 0, stale: 0 },
+    } satisfies Pick<
+      RunRow,
+      "status" | "params" | "startedAt" | "createdAt" | "progress" | "usd"
+    > & {
+      summary: unknown;
+    };
+    expect(runLine(stopped, now)).toBe(
+      "Stopped: alt text and search descriptions, started 2 days ago.",
+    );
+    expect(itemsLine(stopped)).toBe("12 of 20 items, $0.0412: 12 proposed, 0 need you.");
+    expect(runLine({ ...stopped, status: "queued", startedAt: null, params: {} }, now)).toBe(
+      "Waiting to start, asked 2 days ago.",
+    );
+    expect(
+      itemsLine({ ...stopped, progress: { ...stopped.progress, total: 1 }, summary: null }),
+    ).toBe("12 of 1 item, $0.0412.");
+    expect(resumeWords(stopped)).toBe(
+      "Its 8 items left are drafted. It stops at its limit, $0.05, of which $0.0412 is spent, and spends under Admin agents' cap.",
+    );
+    expect(runCost(1.5)).toBe("$1.50");
+  });
+
+  it("asks before a run with its goals and limit, and stops Apply on a changed or empty draft", () => {
+    expect(goalsWords(["translations", "alt", "seo"])).toBe(
+      "translations, alt text and search descriptions",
+    );
+    expect(startQuestion(["translations"], 1, 0.05)).toEqual({
+      title: "Draft up to 1 item?",
+      description:
+        "Translations for the content's gaps, as proposals you decide. The run stops at its limit, $0.05, and spends under Admin agents' switch and cap (Settings, under Spending).",
+    });
+    expect(applyStop({ changed: true, after: "Text" })).toMatch(
+      /^Its field changed since the draft/,
+    );
+    expect(applyStop({ after: null })).toBe(agentWords("no_text"));
+    expect(applyStop({ changed: false, after: "Text" })).toBeNull();
   });
 });

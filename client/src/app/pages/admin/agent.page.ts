@@ -1,9 +1,12 @@
+import type { RouteMeta } from "@analogjs/router";
 import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
   DestroyRef,
+  effect,
+  ElementRef,
   inject,
   Injector,
   OnInit,
@@ -21,6 +24,7 @@ import { isHidden } from "../../admin/hidden-fields";
 import { AdminApiService, type ApiResult } from "../../admin/admin-api.service";
 import {
   agentWords,
+  applyStop,
   CONTENT_GOALS,
   filterProposals,
   filterStatuses,
@@ -28,27 +32,37 @@ import {
   groupProposals,
   isContentRun,
   isOpen,
+  itemsLine,
   plainText,
   PROPOSAL_FILTERS,
+  resumeWords,
   RUN_LIMITS,
-  runSummary,
+  runLine,
   runWords,
   splitLabel,
+  startQuestion,
   startWords,
   statusName,
-  summaryLine,
   textWords,
   type ContentGoal,
   type Proposal,
   type ProposalFilter,
 } from "../../admin/agent";
 import type { RunRow } from "../../admin/assistant-types";
+import { ConfirmService } from "../../admin/components/confirm-dialog.component";
 import {
   FormSkeletonComponent,
   LoadErrorComponent,
 } from "../../admin/components/load-state.component";
 import { AdminPageHeaderComponent } from "../../admin/components/page-header.component";
+import { MOD } from "../../admin/components/shortcut-sheet.component";
+import { decisionKey, focusOnLeaving } from "../../admin/decision-keys";
 import { canResume, isActive } from "../../admin/eval-runs";
+import { absoluteTime } from "../../admin/relative-time";
+import { UnsavedChangesService, unsavedChangesGuard } from "../../admin/unsaved-changes.service";
+
+/** Leaving with a proposal's text edited and not applied asks first (plan 5, U21). */
+export const routeMeta: RouteMeta = { canDeactivate: [unsavedChangesGuard] };
 
 /** How often the page reads a running run again. */
 const POLL_MS = 3000;
@@ -78,7 +92,7 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
     HlmToggleGroupImports,
     LoadErrorComponent,
   ],
-  host: { class: "block" },
+  host: { class: "block", "(document:keydown)": "onKeydown($event)" },
   template: `
     <div class="mx-auto flex max-w-5xl flex-col gap-8 pb-12">
       <app-page-header
@@ -155,13 +169,8 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
               <li
                 class="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-border px-3 py-2 text-sm"
               >
-                <span class="font-medium">{{ runStatus(run) }}</span>
-                <span class="text-xs tabular-nums">
-                  {{ run.progress.done }} of {{ run.progress.total }} items · {{ cost(run.usd) }}
-                </span>
-                @if (summaryOf(run); as line) {
-                  <span class="text-muted-foreground">{{ line }}</span>
-                }
+                <span class="font-medium" [title]="startedAt(run)">{{ runLine(run) }}</span>
+                <span class="text-xs tabular-nums">{{ itemsLine(run) }}</span>
                 @if (run.error) {
                   <span class="text-destructive">{{ run.error }}</span>
                 }
@@ -182,7 +191,7 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
         }
       </section>
 
-      <section aria-labelledby="agent-proposals-title" class="flex flex-col gap-4">
+      <section aria-labelledby="agent-proposals-title" class="flex flex-col gap-4" data-queue>
         <h2 id="agent-proposals-title" tabindex="-1" class="m-0 text-section-title outline-none">
           Proposals
         </h2>
@@ -190,6 +199,9 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
           Applying writes your draft, never the live site. An editor already open on the same item
           keeps the text it loaded: reload it before you save there, or its save puts the old text
           back.
+        </p>
+        <p class="m-0 text-hint text-muted-foreground pointer-coarse:hidden">
+          J and K move, A applies, X rejects, {{ mod }} ↵ applies the text you edit.
         </p>
         <div
           hlmToggleGroup
@@ -240,7 +252,15 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
         } @else if (loadError(); as reason) {
           <app-load-error title="Could not load the proposals" [reason]="reason" (retry)="load()" />
         } @else if (!groups().length) {
-          <p class="m-0 text-sm text-muted-foreground">{{ emptyText() }}</p>
+          <!-- Also the done line: the last decision gives it the focus. -->
+          <p
+            id="agent-proposals-done"
+            tabindex="-1"
+            class="m-0 text-sm text-muted-foreground"
+            data-queue-done
+          >
+            {{ emptyText() }}
+          </p>
         } @else {
           @if (limited()) {
             <p class="m-0 text-hint text-muted-foreground">
@@ -256,6 +276,8 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
                 <article
                   [attr.aria-labelledby]="'proposal-' + p.id"
                   class="flex flex-col gap-2 rounded-md border border-border p-3"
+                  data-decide
+                  [attr.data-waiting]="open(p) ? '' : null"
                 >
                   <div class="flex flex-wrap items-center gap-2">
                     @if (open(p)) {
@@ -267,18 +289,20 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
                         (change)="select(p.id, $any($event.target).checked)"
                       />
                     }
+                    <!-- J and K land here: the ring shows which proposal A and X act on. -->
                     <h4
                       [id]="'proposal-' + p.id"
                       tabindex="-1"
-                      class="m-0 text-sm font-medium outline-none"
+                      class="m-0 text-sm font-medium"
+                      data-decide-heading
                     >
                       {{ field(p) }}
                     </h4>
                     <span hlmBadge variant="outline">{{ status(p) }}</span>
                   </div>
-                  @if (open(p) && p.changed) {
-                    <p class="m-0 text-xs text-accent-orange">
-                      Its field changed since the draft: applying it would not overwrite it.
+                  @if (open(p) && stopOf(p); as reason) {
+                    <p [id]="'proposal-' + p.id + '-stop'" class="m-0 text-xs text-accent-orange">
+                      {{ reason }}
                     </p>
                   }
                   @if (p.notes.length) {
@@ -305,6 +329,7 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
                           <textarea
                             hlmTextarea
                             rows="4"
+                            data-decide-field
                             [id]="'proposal-' + p.id + '-text'"
                             [value]="draftText()"
                             (input)="draftText.set($any($event.target).value)"
@@ -324,10 +349,17 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
                           hlmBtn
                           size="sm"
                           type="button"
+                          data-key="a"
+                          aria-keyshortcuts="A Control+Enter Meta+Enter"
                           [disabled]="!!busy() || !draftText().trim()"
                           (click)="apply(p, draftText())"
                         >
                           Apply this text
+                          <kbd
+                            class="inline-flex items-center rounded-sm border border-current/30 px-1.5 py-px font-data text-xs pointer-coarse:hidden"
+                            aria-hidden="true"
+                            >{{ mod }} ↵</kbd
+                          >
                         </button>
                         <button
                           hlmBtn
@@ -339,37 +371,55 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
                           Cancel
                         </button>
                       } @else {
+                        <!-- A stop, not disabled: A and a click say why (plan 5, U21). -->
                         <button
                           hlmBtn
                           size="sm"
                           type="button"
-                          [disabled]="!!busy() || p.after === null"
-                          [attr.aria-label]="'Apply ' + p.label"
+                          class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                          data-key="a"
+                          aria-keyshortcuts="A Control+Enter Meta+Enter"
+                          [attr.aria-disabled]="stopOf(p) ? 'true' : null"
+                          [attr.aria-describedby]="stopOf(p) ? 'proposal-' + p.id + '-stop' : null"
+                          [disabled]="!!busy()"
                           (click)="apply(p)"
                         >
-                          Apply
+                          Apply<span class="sr-only"> {{ p.label }}</span>
+                          <kbd
+                            class="inline-flex items-center rounded-sm border border-current/30 px-1.5 py-px font-data text-xs pointer-coarse:hidden"
+                            aria-hidden="true"
+                            >A</kbd
+                          >
                         </button>
-                        <button
-                          hlmBtn
-                          variant="outline"
-                          size="sm"
-                          type="button"
-                          [disabled]="!!busy()"
-                          [attr.aria-label]="'Edit ' + p.label"
-                          (click)="edit(p)"
-                        >
-                          Edit
-                        </button>
+                        @if (!p.changed) {
+                          <button
+                            hlmBtn
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            [disabled]="!!busy()"
+                            [attr.aria-label]="'Edit ' + p.label"
+                            (click)="edit(p)"
+                          >
+                            Edit
+                          </button>
+                        }
                         <button
                           hlmBtn
                           variant="ghost"
                           size="sm"
                           type="button"
+                          data-key="x"
+                          aria-keyshortcuts="X"
                           [disabled]="!!busy()"
-                          [attr.aria-label]="'Reject ' + p.label"
                           (click)="reject(p)"
                         >
-                          Reject
+                          Reject<span class="sr-only"> {{ p.label }}</span>
+                          <kbd
+                            class="inline-flex items-center rounded-sm border border-current/30 px-1.5 py-px font-data text-xs pointer-coarse:hidden"
+                            aria-hidden="true"
+                            >X</kbd
+                          >
                         </button>
                       }
                     } @else if (p.status === "applied") {
@@ -398,18 +448,25 @@ const UNCHANGED_BY: ReadonlySet<string> = new Set(["invalid_input", "no_text"]);
 })
 export default class AdminAgentPage implements OnInit {
   private readonly api = inject(AdminApiService);
+  private readonly confirm = inject(ConfirmService);
   private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected readonly goals = CONTENT_GOALS;
   protected readonly goalName = GOAL_NAMES;
   protected readonly limits = RUN_LIMITS;
   protected readonly filters = PROPOSAL_FILTERS;
+  protected readonly mod = MOD;
   protected readonly open = isOpen;
   protected readonly status = (p: Proposal) => statusName(p.status);
   protected readonly field = (p: Proposal) => splitLabel(p.label).field || p.label;
   protected readonly shown = plainText;
   protected readonly active = isActive;
   protected readonly resumable = canResume;
+  protected readonly stopOf = applyStop;
+  protected readonly runLine = runLine;
+  protected readonly itemsLine = itemsLine;
+  protected readonly startedAt = (run: RunRow) => absoluteTime(run.startedAt ?? run.createdAt);
 
   protected readonly chosen = signal<Record<ContentGoal, boolean>>({
     translations: true,
@@ -440,6 +497,8 @@ export default class AdminAgentPage implements OnInit {
   );
   protected readonly editing = signal<string | null>(null);
   protected readonly draftText = signal("");
+  /** The text the edit opened with: what an unsaved edit is told apart from. */
+  private readonly editedFrom = signal("");
   /** A decision in flight: a proposal's id, or "batch". */
   protected readonly busy = signal<string | null>(null);
   /** The last decision, for the polite live region. */
@@ -472,10 +531,21 @@ export default class AdminAgentPage implements OnInit {
   private latest = 0;
 
   constructor() {
+    const unsaved = inject(UnsavedChangesService);
+    // A proposal's text edited and not applied: leaving the page asks first.
+    effect(() =>
+      unsaved.set("agent-edit", this.editing() !== null && this.draftText() !== this.editedFrom()),
+    );
     inject(DestroyRef).onDestroy(() => {
       this.destroyed = true;
       this.stopPolling();
+      unsaved.clear("agent-edit");
     });
+  }
+
+  /** J, K, A, X and Ctrl/⌘ Enter on the proposals (plan 5, U21). */
+  protected onKeydown(event: KeyboardEvent): void {
+    decisionKey(event, this.host.nativeElement);
   }
 
   ngOnInit(): void {
@@ -530,16 +600,23 @@ export default class AdminAgentPage implements OnInit {
     this.chosen.update((chosen) => ({ ...chosen, [goal]: on }));
   }
 
+  /** Paid: it asks first, with what the run drafts and the limit it stops at. */
   protected async start(): Promise<void> {
     if (!this.canStart()) {
       return;
     }
-    this.starting.set(true);
-    const result = await this.api.startContentRun({
-      goals: CONTENT_GOALS.filter((goal) => this.chosen()[goal]),
-      maxItems: this.maxItems(),
-      maxUsd: this.maxUsd(),
+    const goals = CONTENT_GOALS.filter((goal) => this.chosen()[goal]);
+    const maxItems = this.maxItems();
+    const maxUsd = this.maxUsd();
+    const go = await this.confirm.ask({
+      ...startQuestion(goals, maxItems, maxUsd),
+      confirmLabel: "Start the run",
     });
+    if (!go || this.destroyed) {
+      return;
+    }
+    this.starting.set(true);
+    const result = await this.api.startContentRun({ goals, maxItems, maxUsd });
     this.starting.set(false);
     if (!result.ok) {
       toast.error("The run did not start", { description: startWords(result.error) });
@@ -557,8 +634,17 @@ export default class AdminAgentPage implements OnInit {
     );
   }
 
-  protected resume(run: RunRow): Promise<void> {
-    return this.controlRun(
+  /** Paid: it asks first, with the items left and the run's own limit against what it spent. */
+  protected async resume(run: RunRow): Promise<void> {
+    const go = await this.confirm.ask({
+      title: "Resume the run?",
+      description: resumeWords(run),
+      confirmLabel: "Resume",
+    });
+    if (!go || this.destroyed) {
+      return;
+    }
+    await this.controlRun(
       () => this.api.resumeRun(run.id),
       "Run resumed: it drafts what is left.",
       "Could not resume the run",
@@ -581,24 +667,6 @@ export default class AdminAgentPage implements OnInit {
     this.said.set(result.ok ? done : `${refused}: ${runWords(result.error)}`);
     await this.load();
     this.focusLater("agent-runs-title");
-  }
-
-  protected runStatus(run: RunRow): string {
-    const when = new Date(run.startedAt ?? run.createdAt).toLocaleString();
-    const goals = ((run.params["goals"] as ContentGoal[] | undefined) ?? [])
-      .map((goal) => GOAL_NAMES[goal] ?? goal)
-      .join(", ");
-    return `${run.status[0].toUpperCase()}${run.status.slice(1)} · ${goals} · ${when}`;
-  }
-
-  protected summaryOf(run: RunRow): string | null {
-    const summary = runSummary(run);
-    return summary ? summaryLine(summary) : null;
-  }
-
-  protected cost(usd: number): string {
-    // A run costs cents: four places under a dollar.
-    return `$${usd.toFixed(usd < 1 ? 4 : 2)}`;
   }
 
   /** Another filter: the server lists its proposals (the newest 200 of them). */
@@ -624,8 +692,10 @@ export default class AdminAgentPage implements OnInit {
   }
 
   protected edit(p: Proposal): void {
+    const text = p.after ?? p.before;
     this.editing.set(p.id);
-    this.draftText.set(p.after ?? p.before);
+    this.editedFrom.set(text);
+    this.draftText.set(text);
     this.focusLater(`proposal-${p.id}-text`);
   }
 
@@ -635,6 +705,12 @@ export default class AdminAgentPage implements OnInit {
   }
 
   protected async apply(p: Proposal, text?: string): Promise<void> {
+    // A stop says why and sends nothing: an edited text may stand in for a missing draft.
+    const stop = text === undefined ? applyStop(p) : null;
+    if (stop) {
+      this.said.set(`${p.label}: ${stop}`);
+      return;
+    }
     await this.decide(p, () => this.api.applyProposal(p.id, text), "Applied to the draft");
   }
 
@@ -652,6 +728,8 @@ export default class AdminAgentPage implements OnInit {
     call: () => ReturnType<AdminApiService["rejectProposal"]>,
     done: string,
   ): Promise<void> {
+    // Read before the list changes: where the focus goes once this one leaves the queue.
+    const leave = isOpen(p) ? focusOnLeaving(`proposal-${p.id}`) : null;
     this.busy.set(p.id);
     const result = await call();
     this.busy.set(null);
@@ -680,7 +758,11 @@ export default class AdminAgentPage implements OnInit {
     this.replace([result.data.proposal]);
     this.editing.set(null);
     this.said.set(`${done}: ${p.label}.`);
-    this.focusAfter(p.id);
+    if (leave && !isOpen(result.data.proposal)) {
+      afterNextRender(leave, { injector: this.injector });
+    } else {
+      this.focusAfter(p.id);
+    }
   }
 
   protected async decideSelected(action: "apply" | "reject"): Promise<void> {

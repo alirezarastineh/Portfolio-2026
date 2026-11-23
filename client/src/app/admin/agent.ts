@@ -1,7 +1,9 @@
 import type { Locale } from "../content/schema";
 import { apiWords } from "./api-words";
 import type { RunRow } from "./assistant-types";
+import { statusWord } from "./eval-runs";
 import { REFUSALS } from "./journal";
+import { relativeTime } from "./relative-time";
 
 /**
  * The content agent as the Agent page reads it (plan phases 29–30): its runs,
@@ -135,12 +137,15 @@ export function groupProposals(
 export const isContentRun = (run: Pick<RunRow, "kind" | "params">): boolean =>
   run.kind === "agent" && run.params["task"] === "content";
 
-/** Its summary's counts, when it has them. */
-export function runSummary(run: Pick<RunRow, "summary">): ContentSummary | null {
-  const s = run.summary as Partial<ContentSummary> | null;
-  return s && typeof s.proposed === "number"
-    ? { proposed: s.proposed, needsYou: s.needsYou ?? 0, stale: s.stale ?? 0 }
-    : null;
+/** Its summary's counts, when it has them (a run's summary is typed for the evals'). */
+export function runSummary(run: { readonly summary: unknown }): ContentSummary | null {
+  const s = run.summary;
+  if (typeof s !== "object" || s === null || !("proposed" in s) || typeof s.proposed !== "number") {
+    return null;
+  }
+  const needsYou = "needsYou" in s && typeof s.needsYou === "number" ? s.needsYou : 0;
+  const stale = "stale" in s && typeof s.stale === "number" ? s.stale : 0;
+  return { proposed: s.proposed, needsYou, stale };
 }
 
 /** "3 proposed, 1 needs you, 2 stale". */
@@ -150,6 +155,67 @@ export function summaryLine(summary: ContentSummary): string {
     parts.push(`${summary.stale} stale`);
   }
   return parts.join(", ");
+}
+
+/** A run's cost: cents, so four places under a dollar. */
+export const runCost = (usd: number): string => `$${usd.toFixed(usd < 1 ? 4 : 2)}`;
+
+const LIST = new Intl.ListFormat("en-GB", { type: "conjunction" });
+const upperFirst = (text: string): string => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+
+/** A run's goals as the server stored them, the ones this page knows. */
+function goalsOf(run: Pick<RunRow, "params">): ContentGoal[] {
+  const stored: unknown = run.params["goals"];
+  const list: unknown[] = Array.isArray(stored) ? stored : [];
+  return list.flatMap((goal) => CONTENT_GOALS.find((known) => known === goal) ?? []);
+}
+
+/** "translations, alt text and search descriptions". */
+export const goalsWords = (goals: readonly ContentGoal[]): string =>
+  LIST.format(goals.map((goal) => GOAL_NAMES[goal].toLowerCase()));
+
+/** A run in the runs' one vocabulary (`statusWord`): "Stopped: alt text, started 2 days ago." */
+export function runLine(
+  run: Pick<RunRow, "status" | "params" | "startedAt" | "createdAt">,
+  now = Date.now(),
+): string {
+  const goals = goalsWords(goalsOf(run));
+  const what = goals ? `${upperFirst(statusWord(run))}: ${goals}` : upperFirst(statusWord(run));
+  const when = run.startedAt
+    ? `started ${relativeTime(run.startedAt, now)}`
+    : `asked ${relativeTime(run.createdAt, now)}`;
+  return `${what}, ${when}.`;
+}
+
+/** "12 of 20 items, $0.0412: 12 proposed, 0 need you." */
+export function itemsLine(
+  run: Pick<RunRow, "progress" | "usd"> & { readonly summary: unknown },
+): string {
+  const { done, total } = run.progress;
+  const summary = runSummary(run);
+  const drafted = summary ? `: ${summaryLine(summary)}` : "";
+  return `${done} of ${total} ${total === 1 ? "item" : "items"}, ${runCost(run.usd)}${drafted}.`;
+}
+
+/** Start's question: what a run drafts, and the limit it stops at. */
+export function startQuestion(
+  goals: readonly ContentGoal[],
+  items: number,
+  usd: number,
+): { title: string; description: string } {
+  return {
+    title: `Draft up to ${items} ${items === 1 ? "item" : "items"}?`,
+    description: `${upperFirst(goalsWords(goals))} for the content's gaps, as proposals you decide. The run stops at its limit, $${usd.toFixed(2)}, and spends under Admin agents' switch and cap (Settings, under Spending).`,
+  };
+}
+
+/** Resume's question: the items left, and the run's own limit against what it spent. */
+export function resumeWords(run: Pick<RunRow, "params" | "progress" | "usd">): string {
+  const left = Math.max(0, run.progress.total - run.progress.done);
+  const stored = run.params["maxUsd"];
+  const limit = typeof stored === "number" ? stored : RUN_LIMITS.usd.default;
+  const items = left === 1 ? "item left is" : "items left are";
+  return `Its ${left} ${items} drafted. It stops at its limit, $${limit.toFixed(2)}, of which ${runCost(run.usd)} is spent, and spends under Admin agents' cap.`;
 }
 
 /** The server's refusals and errors on this page, in words. */
@@ -170,6 +236,14 @@ const AGENT_WORDS: Record<string, string> = {
 };
 
 export const agentWords = (code: string): string => AGENT_WORDS[code] ?? apiWords(code);
+
+/** Why Apply is a stop on an open proposal: its field changed since the draft, or it has none. */
+export function applyStop(p: Pick<Proposal, "changed" | "after">): string | null {
+  if (p.changed) {
+    return "Its field changed since the draft: it cannot be applied. Reject it, or write the field in its editor.";
+  }
+  return p.after === null ? agentWords("no_text") : null;
+}
 
 /** Why a run did not start, in words: its limits, when they are what the server refused. */
 export const startWords = (code: string): string =>

@@ -66,5 +66,9 @@ describe("faithfulness in the admin (plan phase 26)", () => {
     ).toBe(
       "The last night stopped after 2 of 5 answers of 2026-10-06: This kind of run reached its own daily cap.",
     );
+    // No sentence of its own: its state in the runs' one vocabulary, never the raw status.
+    expect(nightlyLine(run({ status: "interrupted", judged: 2 }))).toBe(
+      "The last night stopped after 2 of 5 answers of 2026-10-06: interrupted by a restart.",
+    );
   });
 });
