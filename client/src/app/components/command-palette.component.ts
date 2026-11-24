@@ -32,7 +32,6 @@ import { AskLauncherService } from "../ask/ask-launcher.service";
 import { newsCount, visitNews } from "../ask/news";
 import { fetchMap, updatesSince } from "../ask/portfolio-map";
 import { otherLocale } from "../content/locale";
-import { splitCommentMark } from "../i18n/comment-mark";
 import { CHROME } from "../i18n/chrome";
 import { CommandPaletteService } from "../services/command-palette.service";
 import { LanguageService } from "../services/language.service";
@@ -377,7 +376,7 @@ export class CommandPaletteComponent {
 
     const section = (id: string, label: string, icon = "lucideHash"): Command => ({
       id: `palette-section-${id}`,
-      label: splitCommentMark(label).text,
+      label,
       icon,
       run: go(["/", l], id),
     });

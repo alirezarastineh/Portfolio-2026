@@ -1,6 +1,5 @@
 import type { Locale } from "../content/locale";
 import type { AppContent } from "../content/schema";
-import { splitCommentMark } from "../i18n/comment-mark";
 import { fmt } from "../i18n/interpolate";
 import type { AskCopy } from "./ask-copy";
 import type { AskMessage } from "./ask-types";
@@ -81,7 +80,7 @@ export function defaultTour(content: AppContent, locale: Locale): TourStop[] {
   return [
     {
       id: "about",
-      title: splitCommentMark(ui.about.heading).text,
+      title: ui.about.heading,
       url: `/${locale}#about`,
       line: firstSentence(ui.about.philosophy),
     },
@@ -99,7 +98,7 @@ export function defaultTour(content: AppContent, locale: Locale): TourStop[] {
     ...study(studies[1]),
     {
       id: "contact",
-      title: splitCommentMark(ui.contact.heading).text,
+      title: ui.contact.heading,
       url: `/${locale}#contact`,
       line: firstSentence(ui.about.terminalOutputContact),
     },

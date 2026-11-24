@@ -3,7 +3,6 @@ import { formatPeriod } from "../content/period";
 import { regionName } from "../content/place";
 import type { AppContent } from "../content/schema";
 import { fmt } from "../i18n/interpolate";
-import { splitCommentMark } from "../i18n/comment-mark";
 import type { AskCopy } from "./ask-copy";
 
 /**
@@ -371,9 +370,7 @@ export function openTarget(content: AppContent, locale: Locale, arg: string): st
     [content.ui.about.heading, "about"],
     [content.ui.contact.heading, "contact"],
   ];
-  const heading = byHeading.find(
-    ([label]) => splitCommentMark(label).text.toLowerCase() === wanted,
-  );
+  const heading = byHeading.find(([label]) => label.toLowerCase() === wanted);
   return heading ? `/${locale}#${heading[1]}` : null;
 }
 
