@@ -39,8 +39,12 @@ echo "== ${SITE}"
 REDIRECT="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "${SITE}/" || true)"
 expect "/ redirects to a language (${REDIRECT})" grep -qE "^302 ${SITE}/(en|de)$" <<< "${REDIRECT}"
 HOME_EN="$(body "${SITE}/en")"
+HOME_DE="$(body "${SITE}/de")"
 expect "/en renders English" grep -qF '<html lang="en"' <<< "${HOME_EN}"
-expect "/de renders German" grep -qF '<html lang="de"' <<< "$(body "${SITE}/de")"
+expect "/de renders German" grep -qF '<html lang="de"' <<< "${HOME_DE}"
+# Placeholder content never goes live: a project or a text still saying TODO: fails the day.
+TODOS="$(grep -oF 'TODO:' <<< "${HOME_EN}${HOME_DE}" | wc -l | tr -d ' ')"
+expect "home shows no TODO: placeholder (${TODOS} on /en and /de)" test "${TODOS}" = 0
 expect "an unknown page answers 404" test "$(code "${SITE}/en/does-not-exist")" = 404
 # A second policy (from Caddy, say) would apply on top of the page's, without
 # its nonce.
