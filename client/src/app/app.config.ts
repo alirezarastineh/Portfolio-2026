@@ -1,16 +1,13 @@
-import { provideHttpClient, withInterceptors } from "@angular/common/http";
+import { provideHttpClient } from "@angular/common/http";
 import { ApplicationConfig, ErrorHandler, provideBrowserGlobalErrorListeners } from "@angular/core";
 import { provideClientHydration, withEventReplay } from "@angular/platform-browser";
 import { withInMemoryScrolling, withRouterConfig, withViewTransitions } from "@angular/router";
-import { provideFileRouter, requestContextInterceptor, routes } from "@analogjs/router";
+import { provideFileRouter } from "@analogjs/router";
 
-import { guardLocaleRoute } from "./content/locale-route";
+import { provideLocaleRouteGuard } from "./content/locale-route";
 import { ReportingErrorHandler } from "./monitoring/reporting-error-handler";
 import { providePageScroll } from "./navigation/page-scroll";
 import { animatePageChangesOnly } from "./navigation/view-transitions";
-
-// Before the router reads the routes: `/fr` must not match `:locale`.
-guardLocaleRoute(routes);
 
 /**
  * No app-wide content preload: public pages load their locale's content in the
@@ -34,8 +31,11 @@ export const appConfig: ApplicationConfig = {
         onViewTransitionCreated: animatePageChangesOnly,
       }),
     ),
+    // Before the first navigation: `/fr` must not match `:locale`.
+    provideLocaleRouteGuard(),
     providePageScroll(),
-    provideHttpClient(withInterceptors([requestContextInterceptor])),
+    // `provideFileRouter()` adds Analog's request-context interceptor itself.
+    provideHttpClient(),
     // Incremental hydration is on by default since Angular 22: `@defer
     // (hydrate on …)` blocks (the home page's sections) arrive server-rendered
     // and load their code only when needed.

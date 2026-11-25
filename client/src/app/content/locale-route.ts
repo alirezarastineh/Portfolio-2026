@@ -1,5 +1,5 @@
-import { inject } from "@angular/core";
-import type { CanMatchFn, ResolveFn, Route, Routes } from "@angular/router";
+import { type EnvironmentProviders, inject, provideEnvironmentInitializer } from "@angular/core";
+import { type CanMatchFn, type ResolveFn, type Route, Router, type Routes } from "@angular/router";
 
 import { LanguageService } from "../services/language.service";
 import { ContentStore } from "./content.store";
@@ -46,6 +46,17 @@ export function guardLocaleRoute(fileRoutes: Route[]): void {
     }
     return loaded;
   };
+}
+
+/**
+ * Applies `guardLocaleRoute` to the router's own routes, before the first navigation. Analog 3
+ * builds the file routes for each app (no shared list to change up front), and the router keeps
+ * a copy of each route it is given, so only its copies count.
+ */
+export function provideLocaleRouteGuard(): EnvironmentProviders {
+  return provideEnvironmentInitializer(() => {
+    guardLocaleRoute(inject(Router).config);
+  });
 }
 
 /**

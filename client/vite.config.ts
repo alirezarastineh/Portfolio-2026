@@ -2,6 +2,8 @@ import { createRequire } from "node:module";
 
 import { defineConfig, loadEnv } from "vite";
 import analog from "@analogjs/platform";
+import angular from "@analogjs/vite-plugin-angular";
+import nitro from "@analogjs/vite-plugin-nitro";
 import tailwindcss from "@tailwindcss/vite";
 
 // With its extension: Vite's native config loader (Node type stripping) needs it.
@@ -212,27 +214,27 @@ export default defineConfig(({ mode }) => {
       // Nitro defaults to prerendering `/` at build time and bakes the content
       // into dist/analog/public/index.html — every CMS edit would then be
       // invisible in production until the next rebuild.
-      analog({
-        prerender: { routes: [] },
-        nitro: {
-          // Brotli and gzip copies of the build's scripts and styles, written
-          // once at build time and served by content negotiation. Smaller than
-          // what Caddy compresses on the fly (which it then skips), and what
-          // Lighthouse measures locally is what visitors download.
-          compressPublicAssets: { brotli: true, gzip: true },
-          externals: { traceInclude: [HARFBUZZ_WASM] },
-          routeRules: {
-            // A page's HTML now depends only on its URL (no cookie picks the
-            // language), so a shared cache may keep it briefly.
-            ...Object.fromEntries(
-              ["/en", "/en/**", "/de", "/de/**"].map((path) => [
-                path,
-                { headers: PUBLIC_PAGE_CACHE },
-              ]),
-            ),
-            "/admin": { headers: NO_STORE },
-            "/admin/**": { headers: NO_STORE },
-          },
+      analog({ prerender: { routes: [] } }),
+      angular(),
+      // Nitro 2 (h3 1), which reads `analog()`'s options.
+      nitro({
+        // Brotli and gzip copies of the build's scripts and styles, written
+        // once at build time and served by content negotiation. Smaller than
+        // what Caddy compresses on the fly (which it then skips), and what
+        // Lighthouse measures locally is what visitors download.
+        compressPublicAssets: { brotli: true, gzip: true },
+        externals: { traceInclude: [HARFBUZZ_WASM] },
+        routeRules: {
+          // A page's HTML now depends only on its URL (no cookie picks the
+          // language), so a shared cache may keep it briefly.
+          ...Object.fromEntries(
+            ["/en", "/en/**", "/de", "/de/**"].map((path) => [
+              path,
+              { headers: PUBLIC_PAGE_CACHE },
+            ]),
+          ),
+          "/admin": { headers: NO_STORE },
+          "/admin/**": { headers: NO_STORE },
         },
       }),
       tailwindcss(),
