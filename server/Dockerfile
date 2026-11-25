@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 ARG NODE_VERSION=26.13.1
-ARG PNPM_VERSION=12.21.0
+ARG PNPM_VERSION=12.23.0
 
 FROM node:${NODE_VERSION}-alpine AS base
 WORKDIR /usr/src/app
