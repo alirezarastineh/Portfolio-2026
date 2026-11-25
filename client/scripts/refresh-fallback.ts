@@ -1,7 +1,10 @@
 /**
- * Regenerates the bundled disaster fallbacks from the live content API:
- * the core (`fallback.{en,de}.json`) and every doc it lists
- * (`fallback-docs.{en,de}.json`: case studies, posts, legal pages).
+ * Regenerates the bundled disaster fallbacks from the live content API, in
+ * `src/server/fallback/`: the core (`fallback.{en,de}.json`) and every doc it
+ * lists (`fallback-docs.{en,de}.json`: case studies, posts, legal pages). The
+ * files of the same names in `src/app/content/` are the frozen seed content that
+ * the unit tests, the e2e fixtures and the admin tools build on: never refresh
+ * those.
  *
  * These files are a **disaster fallback, not a live mirror** — they are what
  * the site renders when the API is unreachable. They go stale by design; refresh
@@ -30,7 +33,7 @@ import {
 } from "../src/app/content/schema";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const OUT_DIR = resolve(here, "../src/app/content");
+const OUT_DIR = resolve(here, "../src/server/fallback");
 
 function resolveApiBase(): string {
   const flag = process.argv.indexOf("--api");

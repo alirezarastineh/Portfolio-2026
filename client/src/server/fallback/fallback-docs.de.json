@@ -1,0 +1,482 @@
+{
+  "legal:imprint": {
+    "kind": "legal",
+    "doc": "imprint",
+    "title": "Impressum",
+    "body": "<h2 id=\"angaben-gemass-5-ddg\">Angaben gemäß § 5 DDG</h2><p>Alireza Rastineh</p><h2 id=\"kontakt\">Kontakt</h2><p>E-Mail: contact@alirezarastineh.me</p><h2 id=\"verantwortlich-fur-den-inhalt-nach-18-abs-2-mstv\">Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2><p>Alireza Rastineh</p>",
+    "updatedAt": "2026-09-23T11:23:33.990Z"
+  },
+  "legal:privacy": {
+    "kind": "legal",
+    "doc": "privacy",
+    "title": "Datenschutzerklärung",
+    "body": "<h2 id=\"verantwortlicher\"><strong>Verantwortlicher</strong></h2><p>Verantwortlich für die Datenverarbeitung auf dieser Website ist Alireza Rastineh, E-Mail: <a target=\"_blank\" rel=\"noreferrer noopener\" href=\"mailto:contact@alirezarastineh.me\">contact@alirezarastineh.me</a>.</p><h2 id=\"hosting-und-server-logs\"><strong>Hosting und Server-Logs</strong></h2><p>Diese Website läuft auf einem Server der Hetzner Online GmbH, Industriestr. 25, 91710 Gunzenhausen, Deutschland, in einem Rechenzentrum in Nürnberg.</p><p>Bei jeder Anfrage erfasst der Webserver automatisch: IP-Adresse, Datum und Uhrzeit, die aufgerufene Adresse, den Referrer, Browser und Betriebssystem (User-Agent) sowie den Antwortstatus. Öffnen Sie einen Link, der eine Frage an den Assistenten enthält (siehe „Eine Frage teilen“), ist diese Frage Teil der aufgerufenen Adresse und wird mit ihr erfasst. Das dient dazu, die Website sicher zu halten und Fehler zu beheben; die Daten werden nach 14 Tagen gelöscht.</p><p>Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO; mein berechtigtes Interesse ist der sichere und zuverlässige Betrieb der Website.</p><h2 id=\"kontaktformular\"><strong>Kontaktformular</strong></h2><p>Wenn Sie mir über das Kontaktformular schreiben, speichere ich Ihren Namen, Ihre E-Mail-Adresse, Ihre Nachricht und die Seitensprache, um Ihnen zu antworten. Zum Schutz vor Missbrauch speichere ich außerdem einen gesalzenen Hashwert Ihrer IP-Adresse, aus dem sich die Adresse nicht wiederherstellen lässt – nicht die Adresse selbst.</p><p>Die Nachricht wird mir über den E-Mail-Dienst Resend (Resend, Inc., USA) zugestellt, der Ihren Namen, Ihre E-Mail-Adresse und Ihre Nachricht in die USA übermittelt. Die Übermittlung ist durch die Standardvertragsklauseln der Europäischen Kommission abgesichert.</p><p>Gespeicherte Nachrichten werden mit diesem Hashwert 180 Tage nach dem Absenden gelöscht, binnen sechs Stunden danach. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO, soweit Ihre Anfrage einen Vertrag betrifft, sonst Art. 6 Abs. 1 lit. f DSGVO.</p><h2 id=\"portfolio-assistent-ki\"><strong>Portfolio-Assistent (KI)</strong></h2><p>Auf jeder Seite dieser Website können Sie ein Fenster öffnen und einem KI-Assistenten Fragen zu meiner Arbeit stellen. Seine Antworten erzeugt ein Sprachmodell aus den Inhalten dieser Website; sie können Fehler enthalten. Bitte geben Sie dort keine personenbezogenen Daten ein.</p><p>Für eine Antwort werden Ihre Frage, die früheren Fragen und Antworten desselben Gesprächs und die Seitensprache an Google übermittelt (Gemini API; Google Ireland Ltd. bzw. Google LLC, USA). Nach Googles Bedingungen für Entwickler im Europäischen Wirtschaftsraum nutzt Google sie nicht zur Verbesserung seiner Produkte und protokolliert sie nur für begrenzte Zeit, ausschließlich um Missbrauch zu erkennen und zu verhindern und für gesetzlich vorgeschriebene Offenlegungen. Kann Google nicht rechtzeitig antworten, werden sie stattdessen an OpenRouter (OpenRouter, Inc., USA) und den Anbieter des kostenlosen Modells übermittelt, das OpenRouter auswählt; die Anbieter dieser kostenlosen Modelle können Ihre Eingabe speichern und nutzen, um ihre Modelle zu trainieren oder zu verbessern. Dabei kann es zu einer Übermittlung außerhalb der EU kommen, insbesondere in die USA, die durch die Standardvertragsklauseln der Europäischen Kommission oder das EU-US Data Privacy Framework abgesichert ist.</p><h3 id=\"die-seite-die-sie-lesen-worauf-sie-zeigen-und-wie-technisch\"><strong>Die Seite, die Sie lesen, worauf Sie zeigen, und wie technisch Antworten sind</strong></h3><p>Mit jeder Frage sendet der Assistent die Adresse der Seite, auf der Sie sind, damit „das hier“ die Fallstudie oder den Artikel meinen kann, den Sie lesen. Auf Fallstudien und Artikeln senden die Schaltflächen „fragen“ und „Erklären“, welchen Abschnitt oder welchen Codeblock Sie meinen, und die Schaltfläche, die beim Markieren von Text erscheint, sendet den markierten Text, höchstens 600 Zeichen. Tippen Sie „level plain“ oder „level expert“, behält Ihr Browser diese Wahl (siehe „Cookies und Browserspeicher“) und sendet sie mit jeder Frage; „level standard“ entfernt sie. Zusammen mit Ihrer Frage gehen diese Angaben an die oben genannten Anbieter (die Seite nur, wenn es eine Fallstudie oder ein Artikel ist). Der markierte Text wird nicht gespeichert, es sei denn, die Antwort zitiert ihn; was ich behalte, steht in der folgenden Liste.</p><h3 id=\"weiterlesen-und-was-ist-neu\"><strong>Weiterlesen und „Was ist neu“</strong></h3><p>Am Ende jeder Fallstudie und jedes Artikels schlägt „Weiterlesen“ drei verwandte Seiten vor. Dafür lädt Ihr Browser die Liste der veröffentlichten Seiten dieser Website von meinem Server, ohne dass ein KI-Modell beteiligt ist; Anfragen danach werden mit einem gesalzenen Hashwert der IP-Adresse begrenzt, der binnen anderthalb Tagen gelöscht wird. „Wie hängt das zusammen?“ fragt den Assistenten wie jede andere Frage.</p><p>„Was ist neu“ funktioniert nur, wenn Sie es einschalten; vorher wird nichts gespeichert. Ist es eingeschaltet, behält Ihr Browser das Datum Ihres letzten Besuchs (siehe „Cookies und Browserspeicher“) und vergleicht es bei Ihrem nächsten Besuch selbst mit den Daten der Seiten: Das Datum wird nie gesendet. Das Auflisten der Neuigkeiten ruft kein KI-Modell auf; „zusammenfassen“ stellt dem Assistenten eine Frage, die die Titel der neuen Seiten nennt.</p><h3 id=\"rundgange\"><strong>Rundgänge</strong></h3><p>Tippen Sie „tour“, zeigt der Assistent einen kurzen Rundgang durch die Website, den Ihr Browser ohne KI-Modell zusammenstellt; dabei wird nichts gesendet. Tippen Sie „tour“ und dahinter ein Interesse (höchstens 120 Zeichen, etwa „tour Datenplattformen“), plant der Assistent einen Rundgang dazu: Ihr Interesse wird wie eine Frage an die oben genannten Anbieter gesendet, zusammen mit der Liste der Seiten der Website, und wie eine Frage gespeichert (siehe „Was ich speichere“), mit der Einleitung und den Stationen des Rundgangs als Antwort. „tour more like this“ plant noch einmal, ausgehend von der Station, auf der Sie sind. Wo Sie in einem Rundgang sind, bleibt mit dem Gespräch in Ihrem Browser (siehe „Cookies und Browserspeicher“).</p><h3 id=\"eine-frage-teilen\"><strong>Eine Frage teilen</strong></h3><p>Neben jeder Antwort kopiert „teilen“ einen Link zu der Seite, auf der Sie sind, mit Ihrer Frage in der Adresse („?ask=…“). Wer den Link öffnet, findet die Frage im Eingabefeld des Assistenten; gesendet wird nichts, bevor er oder sie Enter drückt. Beim Öffnen der Seite entfernt der Browser die Frage aus der Adresse, und Umami erhält sie nie (siehe „Reichweitenmessung mit Umami“). Der Webserver erfasst sie mit der Adresse, wie bei jeder Anfrage, und löscht sie nach 14 Tagen (siehe „Hosting und Server-Logs“). Wer den Link hat, kann die Frage lesen, ebenso die Dienste, über die Sie ihn senden.</p><h3 id=\"einen-text-mit-meiner-arbeit-abgleichen\"><strong>Einen Text mit meiner Arbeit abgleichen</strong></h3><p>Wenn ich es anbiete, können Sie einen Text auf der Seite „Prüf, ob es passt“ (/de/match) mit meiner Arbeit abgleichen, oder im Assistenten mit „match role“, „match project“ oder „match problem“ (oder „fit“ für eine Stelle). In beiden Fällen nimmt ein Feld eine Stellenbeschreibung oder die Beschreibung eines Projekts oder Problems auf, mit höchstens 4.000 Zeichen. Gesendet wird nichts, bevor Sie „abgleichen“ drücken. Bitte fügen Sie nichts Vertrauliches ein: Der Text geht an die oben genannten Modellanbieter, zu den Bedingungen ihrer kostenlosen Stufen, nach denen sie ihn speichern und zur Verbesserung ihrer Modelle nutzen dürfen.</p><p>Der Assistent listet die Punkte auf, nach denen Ihr Text fragt, durchsucht diese Website nach jedem einzelnen und prüft jeden an dem, was veröffentlicht ist; einen Punkt, den nichts Veröffentlichtes belegt, markiert er als „nicht veröffentlicht“, und zu Bezahlung, Budget oder Sätzen schätzt er nichts. Ihr Text wird wie eine Frage gespeichert (siehe „Was ich speichere“): seine ersten 2.000 Zeichen, bereinigt, 90 Tage lang, mit den Punkten, den Seiten, die jede Suche fand, und wie jeder markiert wurde. Am Ende bietet der Assistent das Kontaktformular an, mit einem Entwurf, der die Art nennt und mit den ersten Wörtern Ihres Textes beginnt; Ihr Text und der Abgleich werden nur angehängt, wenn Sie das Kästchen ankreuzen (siehe „Übergabe an das Kontaktformular“). Anfragen sind auf 3 pro Stunde je Gespräch und 6 pro Tag je IP-Adresse begrenzt, mit gesalzenen Hashwerten, die binnen anderthalb Tagen gelöscht werden.</p><p>Das Ergebnis bleibt mit dem Gespräch in Ihrem Browser (siehe „Cookies und Browserspeicher“). Die Seite zeigt es als Tabelle der Punkte, mit den Seiten, auf denen jeder beruht, egal ob Sie den Text dort oder im Assistenten gesendet haben. Solange es dort liegt, tragen die Seiten, die es als Beleg nennt, eine Markierung, die zu ihm zurückführt. Ihr Browser ermittelt die Markierungen aus diesem gespeicherten Gespräch: Dafür wird nichts gesendet, und sie verschwinden, wenn Sie den Tab schließen. „Löschen“ nimmt die Tabelle und die Markierungen aus Ihrem Tab. Was ich speichere, löscht das nicht; das tut „forget“ (siehe „Ihr Gespräch löschen“).</p><h3 id=\"wie-eine-antwort-entstand\"><strong>Wie eine Antwort entstand</strong></h3><p>Unter jeder Antwort kann der Assistent zeigen, wie sie entstand: welche Art Modell antwortete, wie viele Abfragen es machte, wie viele Quellen es prüfte und ob etwas entfernt wurde. Jede Quelle zeigt, wann ihre Seite zuletzt geändert wurde. Tippen Sie „inspect“, zeigt er, was ich zu einer Ihrer Antworten speichere (siehe „Was ich speichere“): ihre Schritte, die versuchten Modelle, ihre Abfragen mit Suchbegriffen, ihre Quellen und ihre Prüfungen, nie den Text der Überlegungen eines Modells oder seiner Anweisungen. Abfragen kann das nur das Gespräch in Ihrem Tab: Die Anfrage trägt seine Sitzungs-ID, die mit dem gesalzenen Hashwert abgeglichen wird, den ich speichere. Für beides wird nichts zusätzlich gespeichert.</p><h3 id=\"ihr-gesprach-loschen\"><strong>Ihr Gespräch löschen</strong></h3><p>Tippen Sie „forget“ und dann „ja“, wird gelöscht, was ich von Ihrem Gespräch in diesem Tab speichere (siehe „Was ich speichere“), auch was Sie darin vor einem „reset“ gefragt haben, zusammen mit Ihren Bewertungen, dem, was Ihr Browser gemeldet hat, meiner wöchentlichen Durchsicht dieser Antworten und den Beispielfragen, die ein Thema daraus zitiert (siehe „Inhalte verbessern“). Zweierlei bleibt: Eine Nachricht, die Sie mir über das Kontaktformular geschickt haben, behält das angehängte Gespräch, denn Sie haben es mir geschickt; und ein Testfall, den ich bereits aus einer Ihrer Fragen gemacht habe, bleibt, denn es stand nichts Persönliches mehr darin. Ihr Browser vergisst dann, wie technisch die Antworten sein sollten, und das für „Was ist neu“ behaltene Datum, beendet einen Rundgang, und ein neues Gespräch beginnt. Ich zähle, wie oft „forget“ pro Tag genutzt wird, nie von wem. Anfragen werden mit einem gesalzenen Hashwert der IP-Adresse begrenzt, der binnen anderthalb Tagen gelöscht wird.</p><h3 id=\"was-ich-speichere-und-wie-lange\"><strong>Was ich speichere, und wie lange</strong></h3><p>Folgendes speichere ich 90 Tage lang, um den Assistenten zu verbessern, und lösche jeden Eintrag danach binnen sechs Stunden, oder sofort, wenn Sie Ihr Gespräch löschen (siehe „Ihr Gespräch löschen“):</p><ul><li><p>Ihre Frage (bei einem Rundgang das eingegebene Interesse, bei einem Abgleich die ersten 2.000 Zeichen des eingefügten Textes) und die ersten 2.000 Zeichen der Antwort (bei einem Rundgang seine Einleitung und Stationen, bei einem Abgleich seine Punkte und wie jeder markiert wurde); E-Mail-Adressen, Telefonnummern und lange Ziffernfolgen werden vorher entfernt;</p></li><li><p>Zeitpunkt der Frage, Seitensprache, das antwortende Modell, Dauer, Kosten, die zitierten Dokumente, ob Sie die Antwort bewertet haben und, bei einem Daumen nach unten, den gewählten Grund;</p></li><li><p>auf welcher Fallstudie oder welchem Artikel Sie gefragt haben, falls zutreffend; ob Sie auf einen Abschnitt, einen Codeblock oder eine markierte Passage gezeigt haben und ob die Seite sie enthält, nie aber den markierten Text; und, falls gewählt, wie technisch die Antworten sein sollen;</p></li><li><p>die Schritte des Assistenten: welche Werkzeuge er nutzte und was er ihnen übergab (etwa seine Suchbegriffe), ebenso bereinigt und auf je 300 Zeichen gekürzt, und wie viele Passagen der Schutz entfernte, nach Art, nie ihren Text; bei einem Rundgang, wie viele Stationen er hat und welche seiner Prüfungen fehlschlugen, bevor er gezeigt wurde; bei einem Abgleich, die Art des Textes, die daraus gelisteten Punkte (ebenso bereinigt, je höchstens 160 Zeichen), die Seiten, die jede Suche fand, wie jeder Punkt markiert wurde und welche Prüfungen er nicht bestand;</p></li><li><p>was Ihr Browser über die Antwort meldet: wie lange es bis zu den ersten Wörtern und bis zur vollständigen Antwort dauerte, ob Sie sie angehalten haben, wie viele der vorgeschlagenen Folgefragen und Quellen Sie angeklickt haben, wie oft Sie sie kopiert und wie oft Sie nach einem Fehler erneut gefragt haben; bei einem Rundgang, wie viele Schritte Sie gegangen sind und ob Sie seine letzte Station erreicht haben. Es sind nur Zählungen und Zeiten, nie Text; verlassen Sie die Seite, bevor sie gesendet wurden, sendet Ihr Browser sie beim Schließen der Seite;</p></li><li><p>ob Sie sein Angebot angenommen haben, Sie an das Kontaktformular zu übergeben;</p></li><li><p>einen gesalzenen Hashwert der zufälligen Sitzungs-ID des Assistenten, der ein Gespräch zusammenfasst, Sie aber nicht identifiziert.</p></li></ul><p>IP-Adressen speichere ich nicht; Anfragen werden mit einem gesalzenen Hashwert der IP-Adresse begrenzt, der binnen anderthalb Tagen gelöscht wird. Das Gespräch selbst bleibt im Sitzungsspeicher (Session Storage) Ihres Browsers und wird gelöscht, wenn Sie den Tab schließen; das ist für die von Ihnen genutzte Funktion erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG).</p><h3 id=\"wie-antworten-gepruft-werden\"><strong>Wie Antworten geprüft werden</strong></h3><ul><li><p>Jede Antwort durchläuft automatische Prüfungen ihrer Sprache und ihrer Quellenangaben. Ein Schutz entfernt Passagen, die aus den eigenen Anweisungen des Assistenten kopiert sind, und seine Schlüssel, bevor Sie die Antwort sehen. Eine Frage, die wie ein Versuch aussieht, den Assistenten umzusteuern, wird als solche markiert.</p></li><li><p>Wöchentlich lese ich eine kleine Zufallsstichprobe der Antworten, dazu die von den Prüfungen oder einem Daumen nach unten markierten.</p></li><li><p>Jede Nacht kann ein Modell außerdem eine Zufallsstichprobe von 5 % der Antworten des Vortags bewerten, dazu die markierten: wie treu jede den zitierten Dokumenten ist und wie hilfreich sie ist. Das übernimmt nur ein Modell, das ohnehin Besucherfragen beantwortet, und die Bewertung wird mit der Antwort gespeichert, so lange wie diese.</p></li></ul><h3 id=\"die-leistungsubersicht-des-assistenten\"><strong>Die Leistungsübersicht des Assistenten</strong></h3><p>Wenn ich sie veröffentliche, zeigt „evals“, wie gut der Assistent ist: die Ergebnisse seines letzten Testlaufs und für die letzten 30 Tage Anteile und Zählungen über alle Antworten, etwa wie viele nur echte Quellen zitierten oder wie lange es bis zu den ersten Wörtern dauerte. Jede Zahl braucht mindestens 20 Antworten und sagt nichts über einzelne Besucher. Anfragen danach werden mit einem gesalzenen Hashwert der IP-Adresse begrenzt, der binnen anderthalb Tagen gelöscht wird.</p><h3 id=\"suche-nach-bedeutung\"><strong>Suche nach Bedeutung</strong></h3><p>Um Passagen zu finden, die zu Ihrer Frage passen, kann der Assistent seine Suchbegriffe, die aus Ihrer Frage stammen, auch an Googles Embedding-Modell senden (Gemini API, wie oben). Sie werden nicht über die oben beschriebenen Schritte hinaus gespeichert.</p><h3 id=\"inhalte-verbessern\"><strong>Inhalte verbessern</strong></h3><ul><li><p>Ich kann die Fragen der letzten 30 Tage zu Themen zusammenfassen, um zu sehen, was das Portfolio noch nicht beantwortet; das kann auch automatisch laufen, wenn Antworten häufiger misslingen. Dafür liest ein Modell der oben genannten Anbieter die (wie oben bereinigten) Fragen, zusammen mit den Punkten abgeglichener Texte, die nichts Veröffentlichtes abdeckt. Die Themen werden mit einigen Beispielfragen höchstens 60 Tage gespeichert; „forget“ entfernt die Beispielfragen und Punkte, die aus Ihrem Gespräch stammen.</p></li><li><p>Aus einem solchen Thema oder der Frage einer einzelnen Antwort kann ein FAQ-Eintrag entworfen werden. Ein Modell derselben Anbieter liest diese Fragen als Daten, nie als Anweisungen. Der Entwurf wartet auf meine Entscheidung und wird spätestens mit den Fragen gelöscht, aus denen er entstand: nach höchstens 60 Tagen bei einem Thema, 90 bei einer Antwort. Sobald ich ihn annehme oder ablehne, wird kein Entwurfstext mehr gespeichert.</p></li><li><p>Meine Notizen dazu, warum eine Antwort misslang, und die Lehren, die ich daraus ziehe, enthalten keinen Text Ihrer Frage, nur einige ihrer Schlüsselwörter. Ich bewahre sie auf, bis ich sie lösche.</p></li></ul><h3 id=\"testfalle\"><strong>Testfälle</strong></h3><p>Ich kann eine Frage als Testfall behalten, um zu prüfen, dass spätere Versionen des Assistenten sie weiterhin gut beantworten, zusammen mit bis zu drei Fragen, die Sie im selben Gespräch davor gestellt haben. Bevor ich sie behalte, entferne ich alles Persönliche aus jeder und bestätige, dass nichts Persönliches mehr darin steht. Dann werden sie über die 90 Tage hinaus aufbewahrt, bis ich sie lösche. Die Antworten des Assistenten werden nicht mit ihnen aufbewahrt: Jeder Test beantwortet die Fragen neu.</p><h3 id=\"ubergabe-an-das-kontaktformular\"><strong>Übergabe an das Kontaktformular</strong></h3><ul><li><p>Wenn Sie das Angebot des Assistenten annehmen, mir zu schreiben, öffnet sich das Kontaktformular mit einem Entwurf. Nach einem Abgleich nennt der Entwurf dessen Art und beginnt mit den ersten Wörtern Ihres Textes.</p></li><li><p>Ihr Gespräch wird nur angehängt, wenn Sie „Mein Gespräch mit dem Assistenten anhängen“ ankreuzen. Dann wird es mit Ihrer Nachricht gespeichert: dieselben bereinigten Fragen und Antwortauszüge wie oben, höchstens die letzten 10. Es wird mit der Nachricht gelöscht, wie unter „Kontaktformular“ beschrieben.</p></li><li><p>Ohne das Häkchen wird nichts angehängt; die Antwort mit dem Angebot hält trotzdem fest, dass Sie es angenommen haben.</p></li></ul><h3 id=\"fur-ki-agenten-und-werkzeuge\"><strong>Für KI-Agenten und Werkzeuge</strong></h3><p>Diese Website bietet KI-Agenten und Werkzeugen eine Schnittstelle, die nur liest: /llms.txt, eine Agent Card unter /.well-known/agent-card.json und einen MCP-Endpunkt unter <a target=\"_blank\" rel=\"noreferrer noopener\" href=\"https://api.alirezarastineh.me/v1/mcp\">https://api.alirezarastineh.me/v1/mcp</a>. Sie liefert nur die veröffentlichten Inhalte und ruft kein KI-Modell auf. Von einer Anfrage an den Endpunkt speichere ich nichts von ihrem Inhalt, nur eine tägliche Zählung ihrer Art. Anfragen werden mit einem gesalzenen Hashwert der IP-Adresse begrenzt, der binnen anderthalb Tagen gelöscht wird.</p><p>Ein Browser, der WebMCP anbietet, lässt einen KI-Agenten, den Sie nutzen, in Ihrem Auftrag mit dieser Website arbeiten: Er kann Seiten auflisten und öffnen, dem Assistenten eine Frage stellen oder einen Text abgleichen, und was er sendet, wird genauso übertragen und gespeichert, als hätten Sie es selbst eingegeben; er kann auch das Kontaktformular ausfüllen, aber absenden müssen Sie es selbst.</p><h3 id=\"zusammenfassungen-und-begriffe-in-fallstudien\"><strong>Zusammenfassungen und Begriffe in Fallstudien</strong></h3><p>Eine Fallstudie kann eine kurze Zusammenfassung, eine Zusammenfassung für Fachleute und eine Begriffsliste zeigen. Ich entwerfe sie mit einem KI-Modell aus dem eigenen Text der Fallstudie und prüfe sie, bevor ich sie veröffentliche. Daten von Besuchern sind daran nicht beteiligt, und beim Lesen wird nichts an ein KI-Modell gesendet.</p><h3 id=\"rechtsgrundlage\"><strong>Rechtsgrundlage</strong></h3><p>Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO; mein berechtigtes Interesse ist, Fragen zu meiner Arbeit direkt zu beantworten, zu prüfen, dass diese Antworten zutreffen, und die veröffentlichten Inhalte in einer Form anzubieten, die KI-Werkzeuge lesen können. Wenn Sie ein Gespräch an das Kontaktformular übergeben, gilt der Abschnitt zum Kontaktformular.</p><h2 id=\"reichweitenmessung-mit-umami\"><strong>Reichweitenmessung mit Umami</strong></h2><p>Um zu verstehen, welche Seiten gelesen werden, nutze ich Umami. Es läuft auf meinem eigenen Server; es werden keine Daten an Dritte weitergegeben. Umami setzt keine Cookies und speichert keine IP-Adressen. Es erfasst die besuchte Seite, den Referrer, Browser, Betriebssystem, Gerätetyp und Land sowie, welche Funktionen genutzt werden (etwa den Assistenten öffnen, und über welche Schaltfläche oder einen geteilten Link, eine Frage stellen, das Eintreffen einer Antwort, eine Antwort anhalten, kopieren, bewerten, untersuchen oder teilen, eine ihrer Quellen oder vorgeschlagenen Fragen anklicken, ihr Angebot des Kontaktformulars annehmen, die Leistungsübersicht lesen, von einer Fallstudie oder einem Artikel aus weiterlesen, „Was ist neu“ ein- oder ausschalten oder auflisten, einen Rundgang machen, seine Schritte und ob er beendet wurde, das Feld zum Abgleichen eines Textes öffnen, ihn senden, nach Art und danach, woher er kam (Assistent, Abgleichseite oder Browser-Agent), einer Markierung auf abgeglichener Arbeit zurück zum Abgleich folgen, oder die Nutzung eines Werkzeugs dieser Website durch einen Browser-Agenten, nach dem Namen des Werkzeugs), ohne Text, den Sie eingeben. Eine Frage, die ein geteilter Link enthält, wird aus den Adressen entfernt, die Umami erfasst.</p><p>Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO; mein berechtigtes Interesse ist, die Website anhand ihrer Nutzung zu verbessern.</p><h2 id=\"fehleruberwachung-mit-sentry\"><strong>Fehlerüberwachung mit Sentry</strong></h2><p>Tritt ein technischer Fehler auf, wird ein Fehlerbericht an Sentry (Functional Software, Inc., USA) gesendet und in der EU (Frankfurt) gespeichert. Er enthält die Fehlermeldung, die betroffene Seite sowie Browser und Betriebssystem; IP-Adressen werden nicht gespeichert. Da Sentry ein US-Unternehmen ist, lässt sich ein Zugriff aus den USA nicht ausschließen; er ist durch die Standardvertragsklauseln der Europäischen Kommission abgesichert.</p><p>Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO; mein berechtigtes Interesse ist eine funktionierende Website.</p><h2 id=\"schutz-vor-missbrauch-cloudflare-turnstile\"><strong>Schutz vor Missbrauch (Cloudflare Turnstile)</strong></h2><p>Um automatisierten Missbrauch vom Kontaktformular und vom Assistenten fernzuhalten, nutze ich Turnstile von Cloudflare (Cloudflare, Inc., USA). Es läuft nur, wenn Sie das Kontaktformular absenden, und normalerweise einmal je Gespräch mit dem Assistenten, bei dessen erster Anfrage (einer Frage, dem Interesse für einen Rundgang oder einem Text zum Abgleichen); vorher nimmt Ihr Browser keinen Kontakt zu Cloudflare auf. Ihr Browser lädt dann ein Skript und einen Frame von Cloudflare, und Cloudflare wertet technische Signale aus, etwa Ihre IP-Adresse, den TLS-Fingerabdruck und den User-Agent Ihres Browsers und welche Website fragt. Meist sehen Sie davon nichts; ist Cloudflare unsicher, zeigt es Ihnen ein Kontrollkästchen. Anschließend lässt mein Server das Ergebnis von Cloudflare bestätigen und sendet dabei Ihre IP-Adresse mit. Turnstile liest nicht, was Sie eingeben.</p><p>Cloudflare handelt dabei in meinem Auftrag. In eigener Verantwortung nutzt es diese Signale außerdem, um seine Bot-Erkennung zu verbessern; das erklärt es unter <a target=\"_blank\" rel=\"noreferrer noopener\" href=\"https://www.cloudflare.com/turnstile-privacy-policy/\">https://www.cloudflare.com/turnstile-privacy-policy/</a>. Dabei kann es zu einer Übermittlung in die USA kommen, die durch das EU-US Data Privacy Framework oder die Standardvertragsklauseln der Europäischen Kommission abgesichert ist.</p><p>Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO; mein berechtigtes Interesse ist, das Formular und den Assistenten vor automatisiertem Missbrauch zu schützen. Was die Prüfung aus Ihrem Browser ausliest, ist für die von Ihnen genutzte Funktion erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG).</p><h2 id=\"cookies-und-browserspeicher\"><strong>Cookies und Browserspeicher</strong></h2><p>Wenn Sie die Sprache wechseln, setzt diese Website ein Cookie, „portfolio-lang“. Es speichert nur die gewählte Sprache, damit Ihr nächster Besuch in dieser Sprache öffnet, und läuft nach einem Jahr ab. Wenn Sie zwischen hellem und dunklem Design wechseln, wird Ihre Wahl im lokalen Speicher (Local Storage) Ihres Browsers („theme“) aufbewahrt, bis Sie ihn löschen. Wählen Sie, wie technisch der Assistent antworten soll („level plain“ oder „level expert“), wird diese Wahl dort ebenfalls aufbewahrt („ask:level“), bis Sie „level standard“ oder „forget“ eingeben oder ihn löschen. Schalten Sie „Was ist neu“ ein, wird dort auch das Datum Ihres letzten Besuchs aufbewahrt („ask:news“), bis Sie es ausschalten, „forget“ eingeben oder ihn löschen. Der Assistent bewahrt Ihr Gespräch im Sitzungsspeicher Ihres Browsers auf, bis Sie den Tab schließen (siehe oben), mit den Zeilen eines Abgleichs, Ihrer Position in einem Rundgang, einem zum Abgleich eingefügten Text (damit er nach einem Fehler erneut gesendet werden kann) und den Sitzungs-IDs dessen, was Sie in diesem Tab vor einem „reset“ gefragt haben, damit „forget“ auch das löschen kann. Jedes davon ist für eine von Ihnen gewünschte Funktion erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG). Abgesehen von dem, was die Prüfung von Cloudflare in ihrem eigenen Frame ablegen kann (siehe „Schutz vor Missbrauch“), setzt weitere Cookies nur der Admin-Bereich, und nur für den Betreiber der Website.</p><h2 id=\"ihre-rechte\"><strong>Ihre Rechte</strong></h2><p>Sie haben das Recht auf Auskunft (Art. 15 DSGVO), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18) und Datenübertragbarkeit (Art. 20) sowie das Recht, einer Verarbeitung auf Grundlage von Art. 6 Abs. 1 lit. f DSGVO zu widersprechen (Art. 21). Schreiben Sie dazu an <a target=\"_blank\" rel=\"noreferrer noopener\" href=\"mailto:contact@alirezarastineh.me\">contact@alirezarastineh.me</a>. Was ich von einem Gespräch mit dem Assistenten speichere, können Sie auch selbst löschen, mit „forget“ (siehe „Ihr Gespräch löschen“).</p><p>Sie können sich außerdem bei einer Datenschutz-Aufsichtsbehörde beschweren, zum Beispiel bei der an Ihrem Wohnort.</p>",
+    "updatedAt": "2026-11-08T14:22:32.868Z"
+  },
+  "post:guarding-and-testing-the-assistant": {
+    "slug": "guarding-and-testing-the-assistant",
+    "title": "Wie der Assistent auf dieser Website geschützt und getestet wird",
+    "excerpt": "Sieben eng begrenzte Werkzeuge, kostenlose Modelle mit Ersatzkette, ein Filter für jede Antwort und 100 Eval-Fälle: was den Assistenten daran hindert, Fakten über mich zu erfinden, und wo seine Grenzen liegen.",
+    "publishedAt": "2026-11-24T14:22:11.273Z",
+    "updatedAt": "2026-11-25T08:25:52.356Z",
+    "tags": ["Evals", "Guardrails", "AI SDK"],
+    "cover": null,
+    "readingMinutes": 4,
+    "alternates": {
+      "en": "/en/writing/guarding-and-testing-the-assistant",
+      "de": "/de/writing/guarding-and-testing-the-assistant"
+    },
+    "kind": "post",
+    "body": "<p>Der Assistent auf dieser Website beantwortet Fragen zu meiner Arbeit. Steht in einer Antwort etwas Falsches, schreibt mir das etwas zu, das nicht stimmt. Deshalb antwortet er nur aus den veröffentlichten Inhalten, und seine Qualität wird gemessen. So funktioniert das.</p><h2 id=\"was-er-darf\">Was er darf</h2><p>Er ist ein einzelner Agent mit sieben Werkzeugen. Vier lesen die veröffentlichte Website: die Suche, ein einzelnes Dokument, die Projektliste und den Lebenslauf. Zwei helfen beim Lesen: Eines öffnet eine Seite, eines schlägt Folgefragen vor. Das siebte schickt mir eine Nachricht, aber nur, wenn der Besucher zustimmt. Keines davon kann die Website ändern. Das Veröffentlichen ist für jeden Agenten nicht erreichbar, und ein Test schlägt fehl, wenn sich das je ändert.</p><p>Jede Antwort darf höchstens vier Dokumente und 40.000 Zeichen lesen. Fragt das Modell dieselbe Suche oder dasselbe Dokument zweimal ab, bekommt es „bereits geliefert“ zurück. Dann arbeitet es mit dem, was es hat.</p><h2 id=\"bevor-das-modell-aufgerufen-wird\">Bevor das Modell aufgerufen wird</h2><p>Die billigsten Prüfungen kommen zuerst: Notschalter, ein Tagesbudget, Limits pro Besucher in der Datenbank, die ein Neustart nicht zurücksetzt, und eine Grenze für gleichzeitige Antworten. In der Kette sind nur Modelle aus kostenlosen Tarifen. Ein Modell, das Kosten verursachen würde, bleibt draußen, und der Server meldet das beim Start.</p><p>Der Text des Besuchers kommt als Daten in den Prompt, nie als Anweisung. Den Verlauf des Gesprächs schickt der Browser, und der könnte alles schicken. Darum nutzt der Server eine frühere Antwort nur, wenn sie seine Signatur trägt: einen Hash mit Schlüssel über die Sitzung, die Nachrichten-ID und den genauen Text. Eine veränderte oder erfundene Antwort des „Assistenten“ fällt weg.</p><h2 id=\"wahrend-er-schreibt\">Während er schreibt</h2><p>Zuerst antwortet Gemini, danach kostenlose Modelle über OpenRouter. Ein Circuit Breaker pausiert ein Modell nach drei Fehlern hintereinander oder nach einem Rate Limit. So muss kein Besucher auf ein ausgefallenes Modell warten. Die Kette darf das Modell nur wechseln, bevor das erste Wort beim Besucher ankommt. Danach beendet ein Fehler die Antwort, und der Besucher kann es noch einmal versuchen. Eine Antwort beginnt nie zweimal.</p><p>Während die Antwort entsteht, entfernt ein Ausgabefilter drei Dinge, bevor jemand sie sieht: eine Kontrollzeile (Canary) in den Anweisungen, die keine Antwort enthalten sollte; jede Folge von zwölf Wörtern, die aus den Anweisungen kopiert ist, außer die Inhalte der Website sagen dasselbe; und Geheimnisse, interne Adressen und Zeichenketten, die wie Schlüssel aussehen. Er hält Text nur so lange zurück, wie daraus noch eines davon werden könnte. Ein Wort trennt er dabei nie.</p><h2 id=\"nach-der-antwort\">Nach der Antwort</h2><p>Jede fertige Antwort durchläuft feste Prüfungen. Sie kosten nichts, dauern Millisekunden und werden mit der Antwort gespeichert. Sie markieren eine Antwort ab 25 Wörtern ohne Quelle, eine Quelle, die es nicht gibt (die Markierung wird entfernt), eine Zahl, die in keinem genannten Dokument steht, eine Antwort in der falschen Sprache und eine Prompt-Injection in der Frage. Eine Antwort, die ohne ein Wort endet, bekommt einen weiteren Aufruf, ohne Werkzeuge. Im Admin behält jede Antwort ihren Verlauf: welche Quellen sie nennt, welches Modell geantwortet hat, wie lange es gedauert hat und was die Schutzregeln erkannt haben.</p><h2 id=\"wie-er-getestet-wird\">Wie er getestet wird</h2><p>Unit-Tests steuern den echten Agenten mit einem Modell nach Skript. Kein Test ruft also ein echtes Modell auf. Property-Tests schicken Antworten in zufällig geschnittenen Stücken. Sie prüfen, dass die Kontrollzeile, ein Schlüssel oder zwölf kopierte Wörter nie durchkommen, dass keine erfundene Quelle bleibt und dass der Assistent nur Seiten dieser Website öffnen kann.</p><p>Dazu kommen Evals: 100 Fälle in 15 Kategorien, von einfachen Fakten und Fragen in mehreren Schritten bis zu Fallen für erfundene Antworten, Prompt-Injections, persönlichen Daten und Deutsch. Der gespeicherte Lauf vom 2. November 2026 hat 93 von 100 bestanden: alle 3 Fallen für erfundene Antworten, alle 9 deutschen Fragen, 8 von 9 Injections und 16 von 18 Faktenfragen. Dieser Lauf ist der Maßstab. Eine Änderung am System-Prompt bekommt eine neue Version, und die neue Version darf nicht schlechter abschneiden.</p><h2 id=\"grenzen\">Grenzen</h2><p>Ein Filter für Text sieht kein Leck, das das Modell verschlüsselt, etwa in Base64, und keines, das über die Eingabe eines Werkzeugs läuft. Eingaben von Werkzeugen werden nachträglich geprüft. Verschlüsselter Text ist ein offenes Problem. Auch deshalb lesen die Werkzeuge nur veröffentlichte Inhalte.</p>",
+    "toc": [
+      {
+        "id": "was-er-darf",
+        "text": "Was er darf",
+        "level": 2
+      },
+      {
+        "id": "bevor-das-modell-aufgerufen-wird",
+        "text": "Bevor das Modell aufgerufen wird",
+        "level": 2
+      },
+      {
+        "id": "wahrend-er-schreibt",
+        "text": "Während er schreibt",
+        "level": 2
+      },
+      {
+        "id": "nach-der-antwort",
+        "text": "Nach der Antwort",
+        "level": 2
+      },
+      {
+        "id": "wie-er-getestet-wird",
+        "text": "Wie er getestet wird",
+        "level": 2
+      },
+      {
+        "id": "grenzen",
+        "text": "Grenzen",
+        "level": 2
+      }
+    ],
+    "seo": {
+      "title": "Wie der Assistent auf dieser Website geschützt und getestet wird",
+      "description": "Sieben eng begrenzte Werkzeuge, kostenlose Modelle mit Ersatzkette, ein Ausgabefilter und 100 Eval-Fälle (93 bestanden am 2. November 2026): wie der Assistent keine Fakten erfindet."
+    },
+    "canonicalUrl": null
+  },
+  "project:bda-web": {
+    "kind": "project",
+    "slug": "bda-web",
+    "body": "<h2 id=\"mein-teil\">Mein Teil</h2><p>Ich arbeite im Team am Frontend, in Vue-3-Komponenten und Composables.</p><h2 id=\"wie-ich-arbeite\">Wie ich arbeite</h2><p>Die Logik bleibt von den Komponenten getrennt. So hat sie eigene Tests, und jeder Build führt sie aus.</p>",
+    "toc": [
+      {
+        "id": "mein-teil",
+        "text": "Mein Teil",
+        "level": 2
+      },
+      {
+        "id": "wie-ich-arbeite",
+        "text": "Wie ich arbeite",
+        "level": 2
+      }
+    ],
+    "gallery": [],
+    "seo": {
+      "title": "",
+      "description": ""
+    },
+    "glossary": [
+      {
+        "term": "Composable",
+        "definition": "Eine Funktion in Vue, die Logik und Zustand enthält. So können mehrere Komponenten sie nutzen."
+      },
+      {
+        "term": "Pinia",
+        "definition": "Die Vue-Bibliothek für Zustand, den viele Komponenten nutzen."
+      },
+      {
+        "term": "PrimeVue",
+        "definition": "Eine Bibliothek mit fertigen Teilen für Vue-Oberflächen, zum Beispiel Tabellen, Dialoge und Formularfelder."
+      },
+      {
+        "term": "Komponententest",
+        "definition": "Ein Test, der einen Teil der Oberfläche anzeigt und ihn so benutzt, wie ein Mensch es tut."
+      }
+    ],
+    "alternates": {
+      "en": "/en/work/bda-web",
+      "de": "/de/work/bda-web"
+    },
+    "updatedAt": "2026-11-25T08:25:51.957Z"
+  },
+  "project:customer-portal": {
+    "kind": "project",
+    "slug": "customer-portal",
+    "body": "<h2 id=\"mein-teil\">Mein Teil</h2><p>Ich entwickle das Portal auf beiden Seiten: die Seiten und Komponenten im Client und die API, das Datenmodell und die Berechtigungen auf dem Server.</p><h2 id=\"wie-ich-arbeite\">Wie ich arbeite</h2><p>Ich schreibe strenges TypeScript, lasse Linter und Typprüfungen auf beiden Seiten laufen und teste Komponenten, Abläufe im Browser und den Server.</p>",
+    "toc": [
+      {
+        "id": "mein-teil",
+        "text": "Mein Teil",
+        "level": 2
+      },
+      {
+        "id": "wie-ich-arbeite",
+        "text": "Wie ich arbeite",
+        "level": 2
+      }
+    ],
+    "gallery": [],
+    "seo": {
+      "title": "",
+      "description": ""
+    },
+    "glossary": [
+      {
+        "term": "REST-API",
+        "definition": "Adressen auf dem Server, die ein Client über HTTP aufruft, um Daten zu lesen oder zu ändern."
+      },
+      {
+        "term": "Statischer Export",
+        "definition": "Die Seiten werden einmal als Dateien gebaut. So kann ein einfacher Webserver sie ausliefern."
+      },
+      {
+        "term": "RTK Query",
+        "definition": "Der Teil von Redux Toolkit, der Daten von einer API lädt und eine Kopie im Browser behält."
+      },
+      {
+        "term": "JWT",
+        "definition": "Ein signiertes Token, das zeigt, wer angemeldet ist. Es läuft nach einer Weile ab und wird dann erneuert."
+      },
+      {
+        "term": "React Aria",
+        "definition": "React-Bausteine von Adobe, die Tastatur und Screenreader schon unterstützen."
+      },
+      {
+        "term": "Migration",
+        "definition": "Eine kleine Datei, die das Datenbankschema um einen Schritt ändert. So ist jede Kopie der Datenbank am Ende gleich."
+      }
+    ],
+    "alternates": {
+      "en": "/en/work/customer-portal",
+      "de": "/de/work/customer-portal"
+    },
+    "updatedAt": "2026-11-25T08:25:51.957Z"
+  },
+  "project:dashboard": {
+    "kind": "project",
+    "slug": "dashboard",
+    "body": "<h2 id=\"mein-teil\">Mein Teil</h2><p>Ich arbeite im Team am Frontend. Mein Teil sind die Tabellen und Diagramme, das Raster und sein Laden, das Speichern und Importieren der Einstellungen, gemeinsame Oberflächenkomponenten und ihre Tests.</p><h2 id=\"wie-ich-arbeite\">Wie ich arbeite</h2><p>Die Logik liegt in Composables und Services. So lässt sie sich ohne Browser testen. Ändert sich das Verhalten, kommt ein Test dazu. Die Tests für Tastatur und axe an den Datentabellen habe ich geschrieben.</p>",
+    "toc": [
+      {
+        "id": "mein-teil",
+        "text": "Mein Teil",
+        "level": 2
+      },
+      {
+        "id": "wie-ich-arbeite",
+        "text": "Wie ich arbeite",
+        "level": 2
+      }
+    ],
+    "gallery": [],
+    "seo": {
+      "title": "",
+      "description": ""
+    },
+    "glossary": [
+      {
+        "term": "Composable",
+        "definition": "Eine Funktion in Vue, die Logik und Zustand enthält. So können mehrere Komponenten sie nutzen."
+      },
+      {
+        "term": "Pinia",
+        "definition": "Die Vue-Bibliothek für Zustand, den viele Komponenten nutzen."
+      },
+      {
+        "term": "GridStack",
+        "definition": "Eine Bibliothek für Raster, deren Teile man verschieben und in der Größe ändern kann."
+      },
+      {
+        "term": "Zeilen-Virtualisierung",
+        "definition": "Nur die sichtbaren Zeilen werden gezeichnet. So bleibt eine lange Tabelle für den Browser klein."
+      },
+      {
+        "term": "axe",
+        "definition": "Ein Werkzeug, das Probleme mit der Barrierefreiheit auf einer Seite automatisch findet."
+      },
+      {
+        "term": "WCAG 2.2 AA",
+        "definition": "Die mittlere Stufe der internationalen Richtlinien für barrierefreie Websites."
+      }
+    ],
+    "alternates": {
+      "en": "/en/work/dashboard",
+      "de": "/de/work/dashboard"
+    },
+    "updatedAt": "2026-11-25T08:25:51.957Z"
+  },
+  "project:persiber": {
+    "kind": "project",
+    "slug": "persiber",
+    "body": "<h2 id=\"erste-version\">Erste Version</h2><p>PERSiBER begann im August 2024 als App mit Next.js, React, Redux Toolkit und Tailwind und einer NestJS-11-API auf Fastify mit MongoDB und JWT, beides auf Vercel. Sie verwaltete Gäste und Mitglieder, QR-Codes als PDF, einen Scanner am Einlass, der denselben Code kein zweites Mal annimmt, Rabatte, Getränkegutscheine und Statistiken. Der Code ist öffentlich auf <a href=\"https://github.com/alirezarastineh/PERSiBER-Event-Management\">GitHub</a>.</p>",
+    "toc": [
+      {
+        "id": "erste-version",
+        "text": "Erste Version",
+        "level": 2
+      }
+    ],
+    "gallery": [
+      {
+        "src": "/media/83146f79-331c-49c7-8c86-3ef3e0730567.png",
+        "srcset": "/media/83146f79-331c-49c7-8c86-3ef3e0730567-480w.webp 480w, /media/83146f79-331c-49c7-8c86-3ef3e0730567-768w.webp 768w, /media/83146f79-331c-49c7-8c86-3ef3e0730567-1200w.webp 1200w, /media/83146f79-331c-49c7-8c86-3ef3e0730567-1600w.webp 1600w, /media/83146f79-331c-49c7-8c86-3ef3e0730567-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/83146f79-331c-49c7-8c86-3ef3e0730567-480w.avif 480w, /media/83146f79-331c-49c7-8c86-3ef3e0730567-768w.avif 768w, /media/83146f79-331c-49c7-8c86-3ef3e0730567-1200w.avif 1200w, /media/83146f79-331c-49c7-8c86-3ef3e0730567-1600w.avif 1600w, /media/83146f79-331c-49c7-8c86-3ef3e0730567-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/83146f79-331c-49c7-8c86-3ef3e0730567-480w.webp 480w, /media/83146f79-331c-49c7-8c86-3ef3e0730567-768w.webp 768w, /media/83146f79-331c-49c7-8c86-3ef3e0730567-1200w.webp 1200w, /media/83146f79-331c-49c7-8c86-3ef3e0730567-1600w.webp 1600w, /media/83146f79-331c-49c7-8c86-3ef3e0730567-2400w.webp 2400w"
+          }
+        ],
+        "width": 3840,
+        "height": 2400,
+        "alt": "Die Gästeliste eines Events: Suche und Filter, Zähler für Damen, Studierende, Treue, Erstbesuche, freien Eintritt und Gutscheine und eine Tabelle der Gäste mit Herkunft, Organisator, Merkmalen, Getränken, QR-Status und Einlasszeit.",
+        "blur": "data:image/webp;base64,UklGRigAAABXRUJQVlA4IBwAAABQAQCdASoQAAoAA4BaJZwABAAAAP7xqO0sS8AA",
+        "caption": "Alle Gäste eines Events mit Herkunft, Organisator, Gutscheinen, QR-Ticket und Einlasszeit. Beispieldaten."
+      },
+      {
+        "src": "/media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1.png",
+        "srcset": "/media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-480w.webp 480w, /media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-768w.webp 768w, /media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-1200w.webp 1200w, /media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-1600w.webp 1600w, /media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-480w.avif 480w, /media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-768w.avif 768w, /media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-1200w.avif 1200w, /media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-1600w.avif 1600w, /media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-480w.webp 480w, /media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-768w.webp 768w, /media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-1200w.webp 1200w, /media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-1600w.webp 1600w, /media/b388b6ed-3ce3-4c8a-9855-84464ad2aad1-2400w.webp 2400w"
+          }
+        ],
+        "width": 2880,
+        "height": 1800,
+        "alt": "Der Copilot für das Team beantwortet „How is the door doing right now?“ nach einem Blick auf den Einlass mit einer kurzen Antwort und vier Kacheln; die Frage „Is Lisa R. here yet?“ öffnet den Gast mit Einlass, Ticket und Getränkegutscheinen.",
+        "blur": "data:image/webp;base64,UklGRiwAAABXRUJQVlA4ICAAAABQAQCdASoQAAoAA4BaJZwABAAAAP7xpSDtD4xG4CAAAA==",
+        "caption": "Der Copilot antwortet dem Team aus den Daten von heute Abend, mit Werkzeugen für Einlass, Gäste und Events, und zeigt die Daten neben der Antwort. Beispieldaten, gespeicherte Antwort."
+      },
+      {
+        "src": "/media/8950cf41-041f-4613-8efc-69093b04176f.png",
+        "srcset": "/media/8950cf41-041f-4613-8efc-69093b04176f-480w.webp 480w, /media/8950cf41-041f-4613-8efc-69093b04176f-768w.webp 768w, /media/8950cf41-041f-4613-8efc-69093b04176f-1200w.webp 1200w, /media/8950cf41-041f-4613-8efc-69093b04176f-1600w.webp 1600w, /media/8950cf41-041f-4613-8efc-69093b04176f-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/8950cf41-041f-4613-8efc-69093b04176f-480w.avif 480w, /media/8950cf41-041f-4613-8efc-69093b04176f-768w.avif 768w, /media/8950cf41-041f-4613-8efc-69093b04176f-1200w.avif 1200w, /media/8950cf41-041f-4613-8efc-69093b04176f-1600w.avif 1600w, /media/8950cf41-041f-4613-8efc-69093b04176f-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/8950cf41-041f-4613-8efc-69093b04176f-480w.webp 480w, /media/8950cf41-041f-4613-8efc-69093b04176f-768w.webp 768w, /media/8950cf41-041f-4613-8efc-69093b04176f-1200w.webp 1200w, /media/8950cf41-041f-4613-8efc-69093b04176f-1600w.webp 1600w, /media/8950cf41-041f-4613-8efc-69093b04176f-2400w.webp 2400w"
+          }
+        ],
+        "width": 3840,
+        "height": 2400,
+        "alt": "KI-Auswertung eines Events: eine Zusammenfassung mit mittlerer Sicherheit, Kennzahlen, Einlass-Effizienz, Spitzenzeit, mittlerer Abstand und Scan-Fehler, Engpässe, Auffälligkeiten und eine Empfehlung zum Personal; jeder Befund nennt seine Kennzahlen.",
+        "blur": "data:image/webp;base64,UklGRiwAAABXRUJQVlA4ICAAAABQAQCdASoQAAoAA4BaJZwABAAAAP7xoNfSVVa3EbgIAA==",
+        "caption": "Gespeicherte KI-Auswertung eines Events: Befunde mit den Kennzahlen, auf denen sie beruhen. Beispieldaten."
+      },
+      {
+        "src": "/media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0.png",
+        "srcset": "/media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-480w.webp 480w, /media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-768w.webp 768w, /media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-1200w.webp 1200w, /media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-1600w.webp 1600w, /media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-480w.avif 480w, /media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-768w.avif 768w, /media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-1200w.avif 1200w, /media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-1600w.avif 1600w, /media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-480w.webp 480w, /media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-768w.webp 768w, /media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-1200w.webp 1200w, /media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-1600w.webp 1600w, /media/ceb1b1b2-1dd9-4aee-9e37-19737ca81eb0-2400w.webp 2400w"
+          }
+        ],
+        "width": 3840,
+        "height": 2400,
+        "alt": "Drei Handy-Bildschirme: die Gästeliste als Karten mit Status und Getränken, die Bestätigung des Einlasses für einen Gast und der Copilot mit Einlass-Kacheln und einer Gastsuche.",
+        "blur": "data:image/webp;base64,UklGRjAAAABXRUJQVlA4ICQAAABwAQCdASoQAAoAA4BaJZzxqACIAAD+8+jchm3vB2XO7iMlQAA=",
+        "caption": "Dieselbe App auf dem Handy, am Einlass: Gästekarten, Einlass und der Copilot. Beispieldaten."
+      }
+    ],
+    "seo": {
+      "title": "",
+      "description": "PERSiBER, die App hinter einer Eventreihe: signierte QR-Tickets, ein Scanner in einer Android-App und ein KI-Copilot mit 11 Werkzeugen, die nur lesen, neu gebaut aus der ersten Version."
+    },
+    "glossary": [
+      {
+        "term": "HMAC",
+        "definition": "Eine Signatur mit einem geheimen Schlüssel. Ohne den Schlüssel kann niemand eine gültige Signatur für einen veränderten oder erfundenen Code erzeugen."
+      },
+      {
+        "term": "Nonce",
+        "definition": "Ein Zufallswert, der jedes Token einzigartig macht."
+      },
+      {
+        "term": "Passkey",
+        "definition": "Eine Anmeldung ohne Passwort: Das Handy oder der Laptop beweist mit einem gespeicherten Schlüssel, wer Sie sind (WebAuthn)."
+      },
+      {
+        "term": "Capacitor",
+        "definition": "Ein Werkzeug, das eine Web-App als native App für Android oder iOS verpackt."
+      },
+      {
+        "term": "LangGraph",
+        "definition": "Eine Bibliothek, mit der man einen KI-Agenten als Graph aus Schritten baut. Hier ist es die Schleife, in der der Copilot Werkzeuge aufruft und dann antwortet."
+      },
+      {
+        "term": "LiteLLM",
+        "definition": "Eine Bibliothek, die viele Modellanbieter über eine gemeinsame Schnittstelle aufruft."
+      },
+      {
+        "term": "Schwärzung",
+        "definition": "Das Entfernen sensibler Werte aus einem Text, bevor er weitergeht. Hier passiert es, bevor ein Prompt an einen Modellanbieter geht."
+      }
+    ],
+    "alternates": {
+      "en": "/en/work/persiber",
+      "de": "/de/work/persiber"
+    },
+    "updatedAt": "2026-11-25T08:25:51.957Z"
+  },
+  "project:portfolio": {
+    "kind": "project",
+    "slug": "portfolio",
+    "body": "<h2 id=\"wie-der-assistent-geschutzt-und-getestet-wird\">Wie der Assistent geschützt und getestet wird</h2><p>Text von Besuchern erreicht das Modell als Daten, nie als Anweisung. Während eine Antwort entsteht, entfernt ein Ausgabefilter eine Kontrollzeile (Canary) aus den Anweisungen, jede Folge von zwölf Wörtern, die aus ihnen kopiert ist, und alles, was wie ein Schlüssel aussieht. Frühere Antworten nutzt der Server nur, wenn sie seine Signatur tragen. So kann niemand erfundene Fakten unterschieben. Unit-Tests steuern den echten Agenten mit einem Modell nach Skript. Kein Test ruft also ein echtes Modell auf. Dazu messen 100 Eval-Fälle in 15 Kategorien die Qualität, von einfachen Fakten bis zu Fallen für erfundene Antworten, Prompt-Injections und Deutsch. Eine Änderung am Prompt darf nicht schlechter abschneiden als der gespeicherte Lauf. Mehr dazu steht im Artikel <a href=\"/de/writing/guarding-and-testing-the-assistant\">Wie der Assistent auf dieser Website geschützt und getestet wird</a>.</p>",
+    "toc": [
+      {
+        "id": "wie-der-assistent-geschutzt-und-getestet-wird",
+        "text": "Wie der Assistent geschützt und getestet wird",
+        "level": 2
+      }
+    ],
+    "gallery": [
+      {
+        "src": "/media/6a215aea-5f5d-43b3-becc-6b40fecb5755.png",
+        "srcset": "/media/6a215aea-5f5d-43b3-becc-6b40fecb5755-480w.webp 480w, /media/6a215aea-5f5d-43b3-becc-6b40fecb5755-768w.webp 768w, /media/6a215aea-5f5d-43b3-becc-6b40fecb5755-1200w.webp 1200w, /media/6a215aea-5f5d-43b3-becc-6b40fecb5755-1600w.webp 1600w, /media/6a215aea-5f5d-43b3-becc-6b40fecb5755-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/6a215aea-5f5d-43b3-becc-6b40fecb5755-480w.avif 480w, /media/6a215aea-5f5d-43b3-becc-6b40fecb5755-768w.avif 768w, /media/6a215aea-5f5d-43b3-becc-6b40fecb5755-1200w.avif 1200w, /media/6a215aea-5f5d-43b3-becc-6b40fecb5755-1600w.avif 1600w, /media/6a215aea-5f5d-43b3-becc-6b40fecb5755-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/6a215aea-5f5d-43b3-becc-6b40fecb5755-480w.webp 480w, /media/6a215aea-5f5d-43b3-becc-6b40fecb5755-768w.webp 768w, /media/6a215aea-5f5d-43b3-becc-6b40fecb5755-1200w.webp 1200w, /media/6a215aea-5f5d-43b3-becc-6b40fecb5755-1600w.webp 1600w, /media/6a215aea-5f5d-43b3-becc-6b40fecb5755-2400w.webp 2400w"
+          }
+        ],
+        "width": 2880,
+        "height": 1800,
+        "alt": "Der Bereich „Ausgewählte Projekte“ der Startseite: das Portfolio mit Titelbild, zwei gemessenen Zahlen und ihrer Messung, dem Stack und dem Link zur Fallstudie; darunter der Anfang von Dashboard und PERSiBER.",
+        "blur": "data:image/webp;base64,UklGRioAAABXRUJQVlA4IB4AAAAwAQCdASoQAAoAA4BaJaQAA3AA/vTN8AIOQgIgAAA=",
+        "caption": "Die öffentliche Startseite: jedes Projekt mit seinen Zahlen, ihrer Messung und dem Stack. Echte Inhalte; das Titelbild darin zeigt Beispieldaten."
+      },
+      {
+        "src": "/media/72a07a5d-3263-4de0-b27f-c952508c79f5.png",
+        "srcset": "/media/72a07a5d-3263-4de0-b27f-c952508c79f5-480w.webp 480w, /media/72a07a5d-3263-4de0-b27f-c952508c79f5-768w.webp 768w, /media/72a07a5d-3263-4de0-b27f-c952508c79f5-1200w.webp 1200w, /media/72a07a5d-3263-4de0-b27f-c952508c79f5-1600w.webp 1600w, /media/72a07a5d-3263-4de0-b27f-c952508c79f5-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/72a07a5d-3263-4de0-b27f-c952508c79f5-480w.avif 480w, /media/72a07a5d-3263-4de0-b27f-c952508c79f5-768w.avif 768w, /media/72a07a5d-3263-4de0-b27f-c952508c79f5-1200w.avif 1200w, /media/72a07a5d-3263-4de0-b27f-c952508c79f5-1600w.avif 1600w, /media/72a07a5d-3263-4de0-b27f-c952508c79f5-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/72a07a5d-3263-4de0-b27f-c952508c79f5-480w.webp 480w, /media/72a07a5d-3263-4de0-b27f-c952508c79f5-768w.webp 768w, /media/72a07a5d-3263-4de0-b27f-c952508c79f5-1200w.webp 1200w, /media/72a07a5d-3263-4de0-b27f-c952508c79f5-1600w.webp 1600w, /media/72a07a5d-3263-4de0-b27f-c952508c79f5-2400w.webp 2400w"
+          }
+        ],
+        "width": 2880,
+        "height": 1800,
+        "alt": "Die Seite „Assistant“, Ansicht „Now“: ein Modell nach drei Quota-Fehlern pausiert, 12 Antworten in 24 Stunden, offene Prüfungen und 0,42 $ von 2,00 $ Tagesbudget, aufgeteilt in Evals und den Assistenten für Besucher.",
+        "blur": "data:image/webp;base64,UklGRigAAABXRUJQVlA4IBwAAAAwAQCdASoQAAoAA4BaJaQAA3AA/vWQuS7PAAAA",
+        "caption": "Der Assistent auf einen Blick: was auf eine Prüfung wartet, was er heute im Rahmen seines Budgets gekostet hat und welches Modell pausiert ist. Beispieldaten."
+      },
+      {
+        "src": "/media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920.png",
+        "srcset": "/media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-480w.webp 480w, /media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-768w.webp 768w, /media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-1200w.webp 1200w, /media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-1600w.webp 1600w, /media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-480w.avif 480w, /media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-768w.avif 768w, /media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-1200w.avif 1200w, /media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-1600w.avif 1600w, /media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-480w.webp 480w, /media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-768w.webp 768w, /media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-1200w.webp 1200w, /media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-1600w.webp 1600w, /media/9bb08bc0-9bc1-458a-8ed8-dc91524d9920-2400w.webp 2400w"
+          }
+        ],
+        "width": 2880,
+        "height": 1800,
+        "alt": "Die Seite „Today“ im Admin mit der ganzen Navigation des CMS: die letzte Veröffentlichung, drei Änderungen noch nicht live, eine Liste mit offenen Entscheidungen und eine Checkliste vor dem Start.",
+        "blur": "data:image/webp;base64,UklGRiYAAABXRUJQVlA4IBoAAAAwAQCdASoQAAoAA4BaJaQAA3AA/vWTZAAAAA==",
+        "caption": "„Today“, die Startseite des selbst gebauten CMS: was live ist, was eine Entscheidung braucht und was vor dem Start noch fehlt. Beispieldaten."
+      },
+      {
+        "src": "/media/222f69f3-1a0c-4b48-8db7-de8c638a40cf.png",
+        "srcset": "/media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-480w.webp 480w, /media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-768w.webp 768w, /media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-1200w.webp 1200w, /media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-1600w.webp 1600w, /media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-480w.avif 480w, /media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-768w.avif 768w, /media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-1200w.avif 1200w, /media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-1600w.avif 1600w, /media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-480w.webp 480w, /media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-768w.webp 768w, /media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-1200w.webp 1200w, /media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-1600w.webp 1600w, /media/222f69f3-1a0c-4b48-8db7-de8c638a40cf-2400w.webp 2400w"
+          }
+        ],
+        "width": 3840,
+        "height": 2400,
+        "alt": "Drei Bildschirme des Admins auf dem Handy, dunkel: „Today“ mit offenen Entscheidungen, die Ansicht „Conversations“ des Assistenten mit einem offenen Verlauf und die Ansicht „Now“ mit den Ausgaben von heute.",
+        "blur": "data:image/webp;base64,UklGRiYAAABXRUJQVlA4IBoAAAAwAQCdASoQAAoAA4BaJaQAA3AA/vT6Z4hwAA==",
+        "caption": "Das ganze CMS funktioniert auf dem Handy, bis zum Verlauf und zu den Kosten des Assistenten. Beispieldaten."
+      }
+    ],
+    "seo": {
+      "title": "",
+      "description": "Wie der KI-Assistent dieser Website aus veröffentlichten Inhalten antwortet, wie er geschützt und getestet wird (93 von 100 Eval-Fällen) und welches CMS, Hosting und CI dahinterstehen."
+    },
+    "glossary": [
+      {
+        "term": "Eval",
+        "definition": "Ein fester Satz Fragen mit bekannten guten Antworten. Damit wird der Assistent gemessen. Ein gespeicherter Lauf ist der Maßstab für spätere Läufe."
+      },
+      {
+        "term": "BM25",
+        "definition": "Ein klassisches Verfahren für die Textsuche. Es bewertet Dokumente nach den Wörtern, die sie mit der Frage gemeinsam haben."
+      },
+      {
+        "term": "Embeddings",
+        "definition": "Zahlen, die die Bedeutung eines Textes darstellen. So findet man Texte mit ähnlicher Bedeutung, auch wenn sie andere Wörter benutzen."
+      },
+      {
+        "term": "Reciprocal Rank Fusion",
+        "definition": "Ein Verfahren, das zwei sortierte Listen nach den Plätzen ihrer Ergebnisse zusammenführt, ohne ihre Punktzahlen zu vergleichen."
+      },
+      {
+        "term": "Circuit Breaker",
+        "definition": "Ein Schalter, der einen fehlerhaften Dienst eine Zeit lang nicht mehr aufruft. So wartet nicht jede Anfrage auf eine Zeitüberschreitung."
+      },
+      {
+        "term": "Prompt-Injection",
+        "definition": "Text, der ein Sprachmodell dazu bringen will, seine Anweisungen zu ignorieren, zum Beispiel eine Nachricht von Besuchern mit neuen Befehlen."
+      },
+      {
+        "term": "Canary",
+        "definition": "Eine Zeile in den Anweisungen, die keine Antwort enthalten sollte. Taucht sie in einer Antwort auf, gelangen die Anweisungen nach außen."
+      },
+      {
+        "term": "Hydration",
+        "definition": "Der Schritt, in dem der Browser eine Seite übernimmt, die der Server schon gerendert hat, und sie bedienbar macht."
+      }
+    ],
+    "alternates": {
+      "en": "/en/work/portfolio",
+      "de": "/de/work/portfolio"
+    },
+    "updatedAt": "2026-11-25T08:25:51.957Z"
+  }
+}

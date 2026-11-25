@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 import { appContentSchema, docKey, docSchema, type DocKind } from "../../app/content/schema";
-import fallbackDe from "../../app/content/fallback.de.json";
-import fallbackDocsDe from "../../app/content/fallback-docs.de.json";
-import fallbackDocsEn from "../../app/content/fallback-docs.en.json";
-import fallbackEn from "../../app/content/fallback.en.json";
+import fallbackDe from "../fallback/fallback.de.json";
+import fallbackDocsDe from "../fallback/fallback-docs.de.json";
+import fallbackDocsEn from "../fallback/fallback-docs.en.json";
+import fallbackEn from "../fallback/fallback.en.json";
 
 /**
  * The one place the SSR server fetches published content from the API. The

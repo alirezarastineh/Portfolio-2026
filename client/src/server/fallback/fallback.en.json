@@ -1,0 +1,804 @@
+{
+  "version": 2,
+  "locale": "en",
+  "ui": {
+    "profile": {
+      "role": "Full Stack AI Engineer",
+      "heroHeadline": "I turn language models into products that keep working after the demo.",
+      "heroSubheadline": "Reliable cloud infrastructure and defensive AI, built to run in production.",
+      "primaryCta": "See the work",
+      "secondaryCta": "Get in Touch",
+      "location": "Berlin - Remote"
+    },
+    "nav": {
+      "skills": "Skills",
+      "projects": "Work",
+      "about": "About",
+      "contact": "Contact",
+      "work": "Work",
+      "experience": "Experience",
+      "writing": "Writing"
+    },
+    "hero": {
+      "availabilityOpen": "Open to senior AI / full-stack roles",
+      "availabilityLimited": "Limited availability",
+      "availabilityClosed": "Not available for new work",
+      "downloadCv": "Download CV",
+      "askCta": "Ask about my work"
+    },
+    "skills": {
+      "heading": "Skills",
+      "subtitle": "What I work with"
+    },
+    "about": {
+      "heading": "About",
+      "subtitle": "How I work",
+      "philosophy": "I treat a language model like any other part of a system that can fail. The assistant on this site answers only from the published content and cites it. What a visitor types is data to it, never instructions. An output guard filters what it writes before anyone sees it, and if a model is down, the next free model in the chain answers. A set of 100 eval cases measures it, and a change to the prompt must not score below the recorded run. Every push runs lint, type checks, unit tests, end-to-end tests in three browsers with accessibility checks, and Lighthouse budgets before a deploy.",
+      "terminalTitle": "user@portfolio — zsh",
+      "terminalPrompt": "user@portfolio:~$",
+      "terminalOutputWhoami": "Alireza Rastineh — Full-Stack AI Engineer",
+      "terminalOutputLs": "core-architecture/   ai-ml-stack/   devops/   data-pipelines/",
+      "terminalOutputContact": "Open to senior full-stack and AI engineering roles. Reach out via the contact form below or email directly.",
+      "bio": "I’m a full-stack software engineer in Berlin. I build web products with AI features, from the interface to the server they run on."
+    },
+    "projects": {
+      "heading": "Selected work",
+      "subtitle": "Case studies"
+    },
+    "experience": {
+      "heading": "Experience",
+      "subtitle": "Work",
+      "work": "Work",
+      "education": "Education",
+      "certifications": "Certifications",
+      "present": "Present",
+      "credential": "Show credential",
+      "years": "{n} yr",
+      "months": "{n} mo",
+      "fullTime": "Full-time",
+      "partTime": "Part-time",
+      "contract": "Contract",
+      "freelance": "Freelance",
+      "internship": "Internship"
+    },
+    "writing": {
+      "heading": "Writing",
+      "subtitle": "Notes from production",
+      "readingTime": "{n} min read",
+      "allPosts": "All posts",
+      "empty": "Nothing published yet.",
+      "rss": "RSS feed",
+      "published": "Published",
+      "updated": "Updated",
+      "tags": "Tags"
+    },
+    "caseStudy": {
+      "allWork": "All work",
+      "readCaseStudy": "Read case study",
+      "role": "Role",
+      "period": "Period",
+      "category": "Category",
+      "metrics": "Results",
+      "gallery": "Gallery",
+      "toc": "On this page",
+      "previous": "Previous project",
+      "next": "Next project",
+      "ctaHeading": "Building something similar?",
+      "ctaBody": "Tell me what you’re working on. I reply within 24 hours.",
+      "ctaButton": "Discuss a similar project"
+    },
+    "contact": {
+      "heading": "Contact",
+      "subtitle": "Let’s talk",
+      "labelName": "Name",
+      "labelEmail": "Email",
+      "labelMessage": "Message",
+      "placeholderName": "Jane Doe",
+      "placeholderEmail": "jane@example.com",
+      "placeholderMessage": "What you’re building, the timeline, and what “done” looks like…",
+      "submit": "Send message",
+      "sending": "Sending…",
+      "successLine1": "Message sent",
+      "successLine2": "I’ll reply within 24 hours. Or email me:",
+      "errorRequired": "Required.",
+      "errorEmail": "Invalid email.",
+      "errorMinlength": "At least {n} chars.",
+      "errorMaxlength": "Max {n} chars.",
+      "errorInvalid": "Invalid.",
+      "errorFixFields": "Please fix the highlighted fields.",
+      "errorRateLimited": "Too many requests. Try again in a few minutes.",
+      "errorInvalidInput": "Form data was rejected by the server.",
+      "errorMailerUnavailable": "Email service unavailable. Please email me directly.",
+      "errorSendFailed": "Could not send. Please email me directly.",
+      "errorNetwork": "Network error. Please try again.",
+      "replyTime": "I reply within 24 hours."
+    },
+    "projectCard": {
+      "problem": "Problem",
+      "arch": "Architecture",
+      "infra": "Infrastructure",
+      "outcomes": "Outcomes",
+      "caseLabel": "Case {i}",
+      "live": "Live",
+      "repo": "Code",
+      "caseStudy": "Case study",
+      "techStackAriaLabel": "Tech stack"
+    },
+    "legal": {
+      "nav": "Legal",
+      "imprint": "Imprint",
+      "privacy": "Privacy",
+      "updated": "Last updated"
+    },
+    "notFound": {
+      "title": "This page isn’t here.",
+      "body": "It may have moved, or the link is wrong.",
+      "home": "Back to the homepage"
+    },
+    "ask": {
+      "title": "Ask about my work",
+      "hint": "Best for questions about projects, experience, skills and availability.",
+      "placeholder": "Ask a question…",
+      "disclosure": "Answers come from an AI, using this site’s content.",
+      "offline": "The assistant is resting. Please use the contact form."
+    }
+  },
+  "identity": {
+    "name": "Alireza Rastineh",
+    "handle": "@alirezarastineh",
+    "contactEmail": "contact@alirezarastineh.me",
+    "primaryCtaHref": "#projects",
+    "secondaryCtaHref": "#contact",
+    "siteUrl": "https://alirezarastineh.me",
+    "availability": "open",
+    "location": {
+      "city": "Berlin",
+      "country": "DE"
+    },
+    "timezone": "Europe/Berlin",
+    "avatar": {
+      "src": "/media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02.jpg",
+      "srcset": "/media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-480w.webp 480w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-768w.webp 768w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-1200w.webp 1200w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-1600w.webp 1600w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-2400w.webp 2400w",
+      "sources": [
+        {
+          "type": "image/avif",
+          "srcset": "/media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-480w.avif 480w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-768w.avif 768w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-1200w.avif 1200w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-1600w.avif 1600w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-2400w.avif 2400w"
+        },
+        {
+          "type": "image/webp",
+          "srcset": "/media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-480w.webp 480w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-768w.webp 768w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-1200w.webp 1200w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-1600w.webp 1600w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-2400w.webp 2400w"
+        }
+      ],
+      "width": 2668,
+      "height": 4000,
+      "alt": "Alireza Rastineh",
+      "blur": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAAAwBACdASoQABgAPu1krU2ppaSiMAgBMB2JZwDKACHfT7lv5Sgx4OnJpiAA/uczgAUxB2umNDXbDx15Ea40iEhRtwCx6UAbCAzTSgtfWOx9Stl4J14DArAAAAA="
+    },
+    "resume": {
+      "href": "/media/48173471-8880-4f93-ad2a-ba9d1e91a398.pdf",
+      "bytes": 51396
+    }
+  },
+  "socials": [
+    {
+      "label": "Email",
+      "href": "mailto:contact@alirezarastineh.me",
+      "icon": "mail"
+    },
+    {
+      "label": "LinkedIn",
+      "href": "https://www.linkedin.com/in/alirezarastineh",
+      "icon": "linkedin"
+    },
+    {
+      "label": "GitHub",
+      "href": "https://github.com/alirezarastineh",
+      "icon": "github"
+    }
+  ],
+  "skills": [
+    {
+      "id": "ai-engineering",
+      "icon": "brain-circuit",
+      "span": "lg",
+      "items": [
+        "AI SDK",
+        "LangGraph",
+        "LiteLLM",
+        "Gemini",
+        "OpenRouter",
+        "Tool calling",
+        "BM25 and embeddings",
+        "Evals",
+        "Guardrails",
+        "Prompt versioning",
+        "Model fallback chains",
+        "MCP"
+      ],
+      "title": "AI engineering",
+      "caption": "",
+      "narrative": "Agents that get their facts through read-only tools and say where they come from, model chains that fall back across free tiers, guards on what goes in and comes out, and evals that every prompt change has to pass. Built for this site’s assistant and PERSiBER’s copilot."
+    },
+    {
+      "id": "full-stack-web",
+      "icon": "cpu",
+      "span": "tall",
+      "items": [
+        "TypeScript",
+        "Angular",
+        "AnalogJS",
+        "React",
+        "Next.js",
+        "Vue 3",
+        "Tailwind CSS",
+        "Node.js",
+        "Hono",
+        "Python",
+        "FastAPI",
+        "Django",
+        "PostgreSQL",
+        "Drizzle",
+        "SQLAlchemy",
+        "WebAuthn",
+        "Capacitor"
+      ],
+      "title": "Full-stack web",
+      "caption": "",
+      "narrative": "Frontends in Angular, Next.js and Vue, and the APIs behind them in Hono, FastAPI and Django, on PostgreSQL."
+    },
+    {
+      "id": "infrastructure",
+      "icon": "container",
+      "span": "sm",
+      "items": [
+        "Docker",
+        "Docker Compose",
+        "Caddy",
+        "Hetzner",
+        "Linux",
+        "GitHub Actions",
+        "Woodpecker CI",
+        "Sentry",
+        "PostgreSQL backups"
+      ],
+      "title": "Infrastructure and CI/CD",
+      "caption": "",
+      "narrative": "I run what I build: Docker Compose on Hetzner behind Caddy, migrations that run on boot, deploys started by hand behind a guard, a check of the live stack after each one, and CI that gates every push."
+    },
+    {
+      "id": "quality",
+      "icon": "shield-check",
+      "span": "sm",
+      "items": [
+        "Vitest",
+        "Playwright",
+        "axe-core",
+        "Lighthouse CI",
+        "fast-check",
+        "Jest",
+        "Testing Library",
+        "pytest",
+        "ESLint",
+        "mypy",
+        "ruff"
+      ],
+      "title": "Quality and testing",
+      "caption": "",
+      "narrative": "Unit and property tests, end-to-end tests in three browsers with accessibility checks, Lighthouse budgets and strict lint, run on every push."
+    }
+  ],
+  "projects": [
+    {
+      "slug": "portfolio",
+      "name": "Portfolio",
+      "descriptor": "This site, built end to end",
+      "hook": "My own website: a CMS I built, and an AI assistant that answers questions about my work from the published content.",
+      "problem": "<p>Visitors ask about my work in their own words. A language model can answer them, but it can also make things up, so the assistant answers only from the published content and cites its sources. The content is edited in the CMS and changes without a deploy, in English and German.</p>",
+      "aiArchitecture": "<p><strong>One agent, seven tools.</strong> The assistant is a single agent. Four tools read the published content: search, a single document, the project list and the CV. Two guide the visitor: one opens a page, one suggests follow-up questions. The seventh hands a message to me, and only after the visitor says yes. Search is BM25 over the published pages; when switched on, embeddings join it through Reciprocal Rank Fusion, and anything short of that falls back to BM25 alone. Each answer may read at most four documents and 40,000 characters.</p><p><strong>Free models, with a fallback chain.</strong> Only free-tier models are in the chain: Gemini first, then free models on OpenRouter. A circuit breaker pauses a model after three failures in a row or any rate limit. The chain may switch models only before the first word reaches the visitor, so an answer never starts twice.</p>",
+      "fullStackInfra": "<p><strong>The site and the CMS.</strong> AnalogJS on Angular 22: server-rendered, zoneless, with incremental hydration and Tailwind 4. The API and the CMS are Hono with Drizzle on PostgreSQL 17. Content is edited as drafts and checked in a review that shows what will change in each language before it is published; History can roll the site back to an earlier version.</p><p><strong>Hosting.</strong> One Hetzner server runs Docker Compose behind Caddy. Database migrations only add, and they run when the API starts. A deploy goes to the API first, then the client, then a script checks the live stack.</p><p><strong>CI.</strong> GitHub Actions checks every push: lint, type checks, unit tests, end-to-end tests with axe in Chromium, Firefox and WebKit, Lighthouse budgets, screenshots, and a smoke test of the built images as a stack. I start deploys by hand, and a guard refuses one unless main’s checks passed.</p>",
+      "outcomes": [
+        "Visitors ask in their own words and get answers that cite the pages they rest on; a citation to a page that does not exist is removed before the answer appears.",
+        "Nothing reaches production unless every test passes on the server and in three browsers; the deploy guard refuses anything else.",
+        "Content changes without a deploy: drafts, a review of what will change, publishing per language, and a History that rolls back."
+      ],
+      "stack": [
+        "Angular",
+        "AnalogJS",
+        "TypeScript",
+        "Tailwind CSS",
+        "Hono",
+        "Node.js",
+        "Drizzle",
+        "PostgreSQL",
+        "AI SDK",
+        "Gemini",
+        "OpenRouter",
+        "Tiptap",
+        "Vitest",
+        "Playwright",
+        "axe-core",
+        "Lighthouse CI",
+        "Docker",
+        "Caddy",
+        "Hetzner",
+        "GitHub Actions"
+      ],
+      "links": {
+        "live": "",
+        "repo": "https://github.com/alirezarastineh/Portfolio-2026",
+        "caseStudy": ""
+      },
+      "cover": {
+        "src": "/media/de979938-32aa-4340-87f6-9dc28b9ffb8e.png",
+        "srcset": "/media/de979938-32aa-4340-87f6-9dc28b9ffb8e-480w.webp 480w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-768w.webp 768w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-1200w.webp 1200w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-1600w.webp 1600w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/de979938-32aa-4340-87f6-9dc28b9ffb8e-480w.avif 480w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-768w.avif 768w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-1200w.avif 1200w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-1600w.avif 1600w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/de979938-32aa-4340-87f6-9dc28b9ffb8e-480w.webp 480w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-768w.webp 768w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-1200w.webp 1200w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-1600w.webp 1600w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-2400w.webp 2400w"
+          }
+        ],
+        "width": 2880,
+        "height": 1800,
+        "alt": "The admin’s Assistant page, Conversations view: a visitor’s question with its cited sample answer and trace (route, prompt version, timing, tokens, cost), above an uncited answer, an answer whose invented citation was removed, and a flagged prompt injection.",
+        "blur": "data:image/webp;base64,UklGRigAAABXRUJQVlA4IBwAAAAwAQCdASoQAAoAA4BaJaQAA3AA/vUtUSvFgAAA"
+      },
+      "featured": true,
+      "period": {
+        "start": "2026-09-22",
+        "end": null
+      },
+      "role": "All of it: frontend, backend, the AI assistant, hosting, deployment and CI/CD",
+      "category": {
+        "key": "own-project",
+        "label": "Own project"
+      },
+      "tags": ["Angular", "Hono", "PostgreSQL", "AI SDK", "Evals", "CI/CD"],
+      "metrics": [
+        {
+          "value": "93/100",
+          "label": "eval cases passed",
+          "context": "Recorded run of 2 November 2026: all 3 hallucination traps, 9 of 9 German questions, 8 of 9 injections"
+        },
+        {
+          "value": "4,719",
+          "label": "tests on every push to main",
+          "context": "CI, 24 November 2026: 1,451 server, 858 client and 2,410 end-to-end tests in three browsers"
+        },
+        {
+          "value": "99",
+          "label": "Lighthouse performance on a phone",
+          "context": "Home page, mobile, median of 3 runs on a local production build, 24 November 2026; accessibility, best practices, SEO: 100"
+        }
+      ],
+      "hasCaseStudy": true,
+      "updatedAt": "2026-11-25T08:25:51.957Z"
+    },
+    {
+      "slug": "dashboard",
+      "name": "Dashboard",
+      "descriptor": "Configurable data dashboard",
+      "hook": "At my employer I build the frontend of a configurable data dashboard in a team, with unit, end-to-end and accessibility tests.",
+      "problem": "<p>People who work with a lot of data want the charts and tables they need on one screen, in the order they choose. The dashboard lets them arrange these on a grid and remembers the arrangement.</p>",
+      "aiArchitecture": "<p><strong>Layers.</strong> The app is Vue 3 with the Composition API and strict TypeScript. Components show things, composables hold the logic, and services and repositories talk to the API. Pinia keeps the state that many parts share.</p><p><strong>Grid and loading.</strong> GridStack lays out the grid. A part of the board renders only when it comes close to the visible area, and a request that is no longer needed is cancelled.</p><p><strong>Tables and charts.</strong> The tables are built on TanStack Table. Above 100 rows, TanStack Virtual draws only the rows in view. The charts use Chart.js.</p><p><strong>Saved settings.</strong> Changes are saved after a short pause. If that fails, the app tries again and waits longer each time. Imported settings are checked with Zod schemas, and files from older versions are migrated first.</p>",
+      "fullStackInfra": "<p><strong>Checks.</strong> Vite builds the app, and the type check runs with every build. ESLint and Prettier keep the code in one style. Unit and component tests run with Vitest and Vue Test Utils.</p><p><strong>In the browser.</strong> Playwright is set up for Chromium, Firefox, WebKit and a phone profile. A mock backend lets tests run without a server, some tests compare screenshots, and axe checks the data tables.</p><p><strong>CI.</strong> On every push, Woodpecker runs the dependency audit, lint, the type check and build, the unit tests and browser tests.</p>",
+      "outcomes": [
+        "A board opens without loading everything at once: each part loads when it comes close to the visible area.",
+        "The data tables work with the keyboard alone, and axe checks them against WCAG 2.2 AA.",
+        "Settings saved in an older version can still be imported: the app migrates and checks them first."
+      ],
+      "stack": [
+        "Vue 3",
+        "TypeScript",
+        "Vite",
+        "Pinia",
+        "PrimeVue",
+        "Reka UI",
+        "Tailwind CSS",
+        "GridStack",
+        "Chart.js",
+        "TanStack Table",
+        "TanStack Virtual",
+        "VueUse",
+        "Zod",
+        "Vitest",
+        "Vue Test Utils",
+        "Playwright",
+        "axe-core",
+        "ESLint",
+        "Woodpecker CI"
+      ],
+      "links": {
+        "live": "",
+        "repo": "",
+        "caseStudy": ""
+      },
+      "cover": {
+        "src": "/media/39ede79e-eaa7-4cc4-beb8-d0f03369683d.png",
+        "srcset": "/media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-480w.webp 480w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-768w.webp 768w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-1200w.webp 1200w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-1600w.webp 1600w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-480w.avif 480w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-768w.avif 768w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-1200w.avif 1200w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-1600w.avif 1600w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-480w.webp 480w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-768w.webp 768w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-1200w.webp 1200w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-1600w.webp 1600w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-2400w.webp 2400w"
+          }
+        ],
+        "width": 2880,
+        "height": 1800,
+        "alt": "The name “Dashboard” in large white type on black, with an orange dot.",
+        "blur": "data:image/webp;base64,UklGRjIAAABXRUJQVlA4ICYAAACwAQCdASoQAAoAA4BaJaQAAudc4/AAAP75LHCJFRDjild2gAAAAA=="
+      },
+      "featured": false,
+      "period": {
+        "start": "2025-07-02",
+        "end": null
+      },
+      "role": "Frontend engineer in a team",
+      "category": {
+        "key": "company",
+        "label": "Company work"
+      },
+      "tags": [],
+      "metrics": [
+        {
+          "value": "263",
+          "label": "test files",
+          "context": "233 for units and components, 30 for the browser; counted on 25 November 2026"
+        },
+        {
+          "value": "4",
+          "label": "browser setups",
+          "context": "Playwright: Chromium, Firefox, WebKit and a phone profile (Pixel 5)"
+        },
+        {
+          "value": "9",
+          "label": "accessibility tests for the data tables",
+          "context": "axe at WCAG 2.2 AA, keyboard only, focus, small screens; counted on 25 November 2026"
+        }
+      ],
+      "hasCaseStudy": true,
+      "updatedAt": "2026-11-25T08:25:51.957Z"
+    },
+    {
+      "slug": "persiber",
+      "name": "PERSiBER",
+      "descriptor": "Event app with signed tickets",
+      "hook": "The app behind the event series I co-run: staff manage guests, check people in at the door on a phone, and ask an AI copilot about the night.",
+      "problem": "<p>An event series needs one place for guest lists, QR tickets, the door and the numbers afterwards. PERSiBER is the app the team uses for all of it.</p>",
+      "aiArchitecture": "<p><strong>The app.</strong> A Next.js 16 client with TanStack Query and zustand, a FastAPI server with async SQLAlchemy and Alembic on PostgreSQL, and an Android app built with Capacitor. Staff sign in with passkeys.</p><p><strong>Signed tickets.</strong> Each QR code is a compact token: the guest’s ID, a nonce and a 16-byte HMAC-SHA256 signature. A changed or made-up code fails the check at the door, and the scanner tells a forged code apart from an old but genuine ticket.</p><p><strong>A copilot that asks for data.</strong> The copilot is a LangGraph loop over 11 read-only tools for guests, members, the door, events, staff and analytics. Through them the model asks for exactly the data it needs. Ticket tokens, IDs and links are redacted from every prompt, and a token budget keeps the context inside the window. Guest names are sent on purpose, so the copilot can tell two guests with the same first name apart.</p><p><strong>Three model chains.</strong> Through LiteLLM, free tiers first: Gemini Flash Lite leads everyday chat because its free allowance is the most generous, a deep question can ask for a stronger model, and structured insights end on a model that accepts a JSON schema. The chain moves on after rate limits, timeouts and server errors, never after a request our own code got wrong: that is a bug to fix, not a reason to spend another call.</p><p><strong>Insights that cite their numbers.</strong> Insights are generated from a fact pack of the dashboard’s own metrics. Each metric has a stable key, the answer must cite the keys it rests on, and the result is checked against a schema and stored.</p>",
+      "fullStackInfra": "<p>Docker Compose on a Hetzner server behind Caddy, with scripts to back up and restore PostgreSQL. Credentials stay on the server: the browser talks only to the app’s own AI endpoints and never learns which provider answered, and one switch turns all AI off before any provider is called.</p><p>GitHub Actions builds the Android and iOS releases and runs the security scans. The server is checked with mypy, ruff and pytest, and the client’s lint also blocks browser APIs that the supported browsers lack.</p>",
+      "outcomes": [
+        "Every QR ticket is signed, so the door rejects codes we never issued and tells a forged code from an old one.",
+        "Staff ask the copilot about the night in plain words; a live eval checks that it picks the right tool, hedges on a fuzzy name match and refuses topics it does not track.",
+        "Insights name the metrics they rest on, so a finding can be checked against the dashboard."
+      ],
+      "stack": [
+        "Next.js",
+        "React",
+        "TypeScript",
+        "TanStack Query",
+        "zustand",
+        "AI SDK",
+        "Capacitor",
+        "WebAuthn",
+        "Python",
+        "FastAPI",
+        "SQLAlchemy",
+        "Alembic",
+        "PostgreSQL",
+        "LangGraph",
+        "LiteLLM",
+        "Gemini",
+        "OpenRouter",
+        "pytest",
+        "Docker",
+        "Caddy",
+        "Hetzner",
+        "GitHub Actions"
+      ],
+      "links": {
+        "live": "",
+        "repo": "",
+        "caseStudy": ""
+      },
+      "cover": {
+        "src": "/media/e005896d-336b-4f20-8afe-98d62ce9c245.png",
+        "srcset": "/media/e005896d-336b-4f20-8afe-98d62ce9c245-480w.webp 480w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-768w.webp 768w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-1200w.webp 1200w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-1600w.webp 1600w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/e005896d-336b-4f20-8afe-98d62ce9c245-480w.avif 480w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-768w.avif 768w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-1200w.avif 1200w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-1600w.avif 1600w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/e005896d-336b-4f20-8afe-98d62ce9c245-480w.webp 480w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-768w.webp 768w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-1200w.webp 1200w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-1600w.webp 1600w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-2400w.webp 2400w"
+          }
+        ],
+        "width": 3808,
+        "height": 2380,
+        "alt": "PERSiBER’s dashboard: attendance rate, events, unique guests and guest records, the most popular event and the biggest promoter; for the current event, registered, attended, QR and coupon counts, a guest funnel, and the guest and coupon mix.",
+        "blur": "data:image/webp;base64,UklGRjAAAABXRUJQVlA4ICQAAACwAQCdASoQAAoAA4BaJZwC7AEO+COAAP70LGLCurkr4tmQAAA="
+      },
+      "featured": false,
+      "period": {
+        "start": "2024-08-09",
+        "end": null
+      },
+      "role": "Frontend, backend, hosting and deployment; I also co-run the event series",
+      "category": {
+        "key": "own-project",
+        "label": "Own project"
+      },
+      "tags": ["Next.js", "FastAPI", "LangGraph", "Capacitor", "PostgreSQL"],
+      "metrics": [
+        {
+          "value": "11",
+          "label": "read-only copilot tools",
+          "context": "Counted in the server’s tool registry, 24 November 2026"
+        },
+        {
+          "value": "68",
+          "label": "test files",
+          "context": "47 server and 21 client, counted 24 November 2026"
+        },
+        {
+          "value": "225",
+          "label": "commits in 2026",
+          "context": "13 February to 8 October 2026, not counting 65 by Dependabot"
+        }
+      ],
+      "hasCaseStudy": true,
+      "updatedAt": "2026-11-25T08:25:51.957Z"
+    },
+    {
+      "slug": "customer-portal",
+      "name": "Customer Portal",
+      "descriptor": "Portal for customers and staff",
+      "hook": "At my employer I build a customer portal, frontend and backend, with accessible components and tests on both sides.",
+      "problem": "<p>Customers and staff need one place on the web where each person signs in and sees what their account allows. The portal has a part for customers and a part for staff.</p>",
+      "aiArchitecture": "<p><strong>Client.</strong> Next.js 16 and React 19 in strict TypeScript, exported as static files. Redux Toolkit Query loads the data, keeps a copy and loads it again after a change. The interface is built on HeroUI and React Aria, which bring keyboard and screen reader behaviour with them. Tiptap edits formatted text, and TanStack Table runs data tables.</p><p><strong>Server.</strong> Django and Django REST Framework on PostgreSQL. Permission classes decide who may use an endpoint. Changes that touch several tables run in one transaction, and lists load their related rows up front instead of one by one.</p><p><strong>Sign-in.</strong> Simple JWT issues the tokens. When a token has expired, one request renews it, and the others wait until that is done.</p>",
+      "fullStackInfra": "<p><strong>Delivery.</strong> The client is a set of static files, so only the API runs code on the server. The database schema changes only through migrations.</p><p><strong>Checks.</strong> On the client: strict TypeScript, ESLint with the SonarJS, unicorn, Tailwind and Testing Library rules, and Prettier. On the server: ruff, and mypy with the Django plugin.</p><p><strong>Tests.</strong> Jest and Testing Library test components and hooks, Playwright tests the app in a browser, and Django’s own test framework tests the server.</p>",
+      "outcomes": [
+        "The client is written in strict TypeScript, without a single any.",
+        "When a sign-in token expires, one request renews it; the waiting requests go out after that.",
+        "Dialogs, menus and form fields take their keyboard and screen reader behaviour from React Aria."
+      ],
+      "stack": [
+        "Next.js",
+        "React",
+        "TypeScript",
+        "Redux Toolkit",
+        "HeroUI",
+        "React Aria",
+        "Tiptap",
+        "TanStack Table",
+        "React Hook Form",
+        "Zod",
+        "Tailwind CSS",
+        "Python",
+        "Django",
+        "Django REST Framework",
+        "Simple JWT",
+        "PostgreSQL",
+        "Jest",
+        "Testing Library",
+        "Playwright",
+        "ESLint",
+        "ruff",
+        "mypy"
+      ],
+      "links": {
+        "live": "",
+        "repo": "",
+        "caseStudy": ""
+      },
+      "cover": {
+        "src": "/media/b1a32421-7829-4826-abbb-7c16f42bc45d.png",
+        "srcset": "/media/b1a32421-7829-4826-abbb-7c16f42bc45d-480w.webp 480w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-768w.webp 768w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-1200w.webp 1200w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-1600w.webp 1600w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/b1a32421-7829-4826-abbb-7c16f42bc45d-480w.avif 480w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-768w.avif 768w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-1200w.avif 1200w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-1600w.avif 1600w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/b1a32421-7829-4826-abbb-7c16f42bc45d-480w.webp 480w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-768w.webp 768w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-1200w.webp 1200w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-1600w.webp 1600w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-2400w.webp 2400w"
+          }
+        ],
+        "width": 2880,
+        "height": 1800,
+        "alt": "The name “Customer Portal” in large white type on black, with an orange dot.",
+        "blur": "data:image/webp;base64,UklGRjAAAABXRUJQVlA4ICQAAACQAQCdASoQAAoAA4BaJaQAAudYugAA/vkn/gk+LbjV9dAAAAA="
+      },
+      "featured": false,
+      "period": {
+        "start": "2025-05-05",
+        "end": null
+      },
+      "role": "Full-stack engineer",
+      "category": {
+        "key": "company",
+        "label": "Company work"
+      },
+      "tags": [],
+      "metrics": [
+        {
+          "value": "625",
+          "label": "automated tests",
+          "context": "382 on the server and 243 in the client; counted on 25 November 2026 in the code"
+        },
+        {
+          "value": "0",
+          "label": "uses of any in the client",
+          "context": "Strict TypeScript; counted on 25 November 2026"
+        },
+        {
+          "value": "166",
+          "label": "database migrations",
+          "context": "Django, each schema change as its own step; counted on 25 November 2026"
+        }
+      ],
+      "hasCaseStudy": true,
+      "updatedAt": "2026-11-25T08:25:51.957Z"
+    },
+    {
+      "slug": "bda-web",
+      "name": "BDA-Web",
+      "descriptor": "Viewing and analysing work done",
+      "hook": "At my employer I work in the team on the frontend of a web app that shows and analyses work done.",
+      "problem": "<p>Recorded work has to be found, read and analysed. The app shows it in tables and analyses it in charts.</p>",
+      "aiArchitecture": "<p><strong>App.</strong> Vue 3 with Vue Router, and Pinia for the state. PrimeVue brings the tables, dialogs and form fields, and Chart.js draws the charts.</p><p><strong>Logic.</strong> Loading, selecting, editing, the table columns and the export each have a composable of their own, apart from the components. A service talks to the API.</p><p><strong>Export.</strong> The browser builds Excel files with ExcelJS, and CSV files too, without a server.</p>",
+      "fullStackInfra": "<p>Vite builds the app. The build script runs the tests and the linter first and stops if one of them fails. The tests run with Vitest and Testing Library in happy-dom. ESLint and Prettier keep the code in one style, and Tailwind CSS styles the interface.</p>",
+      "outcomes": [
+        "Nothing is built with a failing test or a lint error: the build script checks both first.",
+        "The logic is tested without a browser, because it sits in composables.",
+        "Excel and CSV exports are made in the browser."
+      ],
+      "stack": [
+        "Vue 3",
+        "Vite",
+        "Pinia",
+        "PrimeVue",
+        "Tailwind CSS",
+        "Chart.js",
+        "ExcelJS",
+        "Vitest",
+        "Testing Library",
+        "ESLint"
+      ],
+      "links": {
+        "live": "",
+        "repo": "",
+        "caseStudy": ""
+      },
+      "cover": {
+        "src": "/media/79b7e69f-f552-4da4-9d49-d8ee403e5554.png",
+        "srcset": "/media/79b7e69f-f552-4da4-9d49-d8ee403e5554-480w.webp 480w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-768w.webp 768w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-1200w.webp 1200w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-1600w.webp 1600w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/79b7e69f-f552-4da4-9d49-d8ee403e5554-480w.avif 480w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-768w.avif 768w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-1200w.avif 1200w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-1600w.avif 1600w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/79b7e69f-f552-4da4-9d49-d8ee403e5554-480w.webp 480w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-768w.webp 768w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-1200w.webp 1200w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-1600w.webp 1600w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-2400w.webp 2400w"
+          }
+        ],
+        "width": 2880,
+        "height": 1800,
+        "alt": "The name “BDA-Web” in large white type on black, with an orange dot.",
+        "blur": "data:image/webp;base64,UklGRjYAAABXRUJQVlA4ICoAAACQAQCdASoQAAoAA4BaJaQAAudYugAA/vhvSWXN7zUTDujYGS6sXRfgAAA="
+      },
+      "featured": false,
+      "period": null,
+      "role": "Frontend work in the team",
+      "category": {
+        "key": "company",
+        "label": "Company work"
+      },
+      "tags": [],
+      "metrics": [
+        {
+          "value": "142",
+          "label": "unit and component tests",
+          "context": "In 11 files, counted on 25 November 2026 in the code"
+        },
+        {
+          "value": "2",
+          "label": "checks before every build",
+          "context": "The tests and the linter; the build stops if one fails"
+        }
+      ],
+      "hasCaseStudy": true,
+      "updatedAt": "2026-11-25T08:25:51.957Z"
+    }
+  ],
+  "experiences": [
+    {
+      "id": "fb43e7d3-cec9-42ce-ab7d-e1229934e70c",
+      "kind": "work",
+      "org": {
+        "name": "Datenbankgesellschaft mbH",
+        "url": "https://datenbankgesellschaft.de/",
+        "logo": null
+      },
+      "title": "Full-Stack Software Engineer",
+      "summary": "Full-stack and frontend engineering on the company’s web apps.",
+      "highlights": [
+        "Customer Portal: I build it full stack, with Next.js, React and React Aria in front and Django REST Framework and PostgreSQL behind, with tests on both sides.",
+        "Dashboard: frontend work in a team, in Vue 3 and TypeScript, with unit and end-to-end tests and accessibility checks with axe.",
+        "BDA-Web: frontend work in the team on a Vue 3 app that shows and analyses work done."
+      ],
+      "location": "Falkensee",
+      "employmentType": "full-time",
+      "period": {
+        "start": "2024-03-04",
+        "end": null,
+        "precision": "month"
+      },
+      "credential": null,
+      "skills": [
+        "TypeScript",
+        "Vue 3",
+        "Next.js",
+        "React",
+        "Python",
+        "Django",
+        "PostgreSQL",
+        "Vitest",
+        "Playwright",
+        "Jest"
+      ]
+    }
+  ],
+  "posts": [
+    {
+      "slug": "guarding-and-testing-the-assistant",
+      "title": "How the assistant on this site is guarded and tested",
+      "excerpt": "Seven narrow tools, free models with a fallback chain, a guard on every answer and 100 eval cases: what keeps the assistant on this site from inventing facts about me, and where its limits are.",
+      "publishedAt": "2026-11-24T14:22:11.273Z",
+      "updatedAt": "2026-11-25T08:25:52.356Z",
+      "tags": ["Evals", "Guardrails", "AI SDK"],
+      "cover": null,
+      "readingMinutes": 4,
+      "alternates": {
+        "en": "/en/writing/guarding-and-testing-the-assistant",
+        "de": "/de/writing/guarding-and-testing-the-assistant"
+      }
+    }
+  ],
+  "legal": [
+    {
+      "doc": "imprint",
+      "title": "Imprint",
+      "updatedAt": "2026-09-23T11:23:33.982Z"
+    },
+    {
+      "doc": "privacy",
+      "title": "Privacy policy",
+      "updatedAt": "2026-11-08T14:22:32.868Z"
+    }
+  ],
+  "seo": {
+    "title": "Alireza Rastineh — Full Stack AI Software Engineer",
+    "description": "Full-stack AI engineer in Berlin. I build web products with AI features that are tested, guarded and measured: Angular, Next.js, FastAPI, PostgreSQL.",
+    "author": "Alireza Rastineh",
+    "siteName": "Alireza Rastineh",
+    "canonical": "https://alirezarastineh.me/",
+    "ogTitle": "Alireza Rastineh — Full Stack AI Software Engineer",
+    "ogDescription": "Case studies of full-stack products with AI features that are tested, guarded and measured, and an assistant that answers from this site.",
+    "ogImage": "https://alirezarastineh.me/og.png",
+    "ogUrl": "https://alirezarastineh.me/",
+    "ogLocale": "en_US",
+    "twitterCard": "summary_large_image",
+    "twitterTitle": "Alireza Rastineh — Full Stack AI Software Engineer",
+    "twitterDescription": "Case studies of full-stack products with AI features that are tested, guarded and measured, and an assistant that answers from this site.",
+    "twitterImage": "https://alirezarastineh.me/og.png"
+  }
+}

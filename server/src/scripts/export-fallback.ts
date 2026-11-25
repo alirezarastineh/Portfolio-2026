@@ -13,16 +13,18 @@ import { loadEnvFiles } from "../lib/env.js";
  * `pnpm content:fallback` — regenerates the content the site's SSR server
  * shows when the API is unreachable:
  *
- *   client/src/app/content/fallback.{en,de}.json       the core payload
- *   client/src/app/content/fallback-docs.{en,de}.json  its docs, by key
+ *   client/src/server/fallback/fallback.{en,de}.json       the core payload
+ *   client/src/server/fallback/fallback-docs.{en,de}.json  its docs, by key
  *
  * From the live publication (read-only: it only SELECTs, so pointing it at the
  * production tunnel is safe). `--from-files` instead upcasts the fallback files
- * already in the client — how the first v2 fallback was made.
+ * already in the client — how the first v2 fallback was made. The files of the
+ * same names in `client/src/app/content/` are the frozen seed content the tests
+ * build on: never export into them.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const CONTENT_DIR = resolve(here, "../../../client/src/app/content");
+const CONTENT_DIR = resolve(here, "../../../client/src/server/fallback");
 
 function write(name: string, value: unknown): void {
   const path = resolve(CONTENT_DIR, name);

@@ -1,0 +1,804 @@
+{
+  "version": 2,
+  "locale": "de",
+  "ui": {
+    "profile": {
+      "role": "Full Stack AI Engineer",
+      "heroHeadline": "Ich mache aus Sprachmodellen Produkte, die auch nach der Demo funktionieren.",
+      "heroSubheadline": "Zuverlässige Cloud-Infrastruktur und defensive KI, gebaut für den Betrieb.",
+      "primaryCta": "Projekte ansehen",
+      "secondaryCta": "Kontakt aufnehmen",
+      "location": "Berlin - Remote"
+    },
+    "nav": {
+      "skills": "Fähigkeiten",
+      "projects": "Projekte",
+      "about": "Über mich",
+      "contact": "Kontakt",
+      "work": "Projekte",
+      "experience": "Werdegang",
+      "writing": "Artikel"
+    },
+    "hero": {
+      "availabilityOpen": "Offen für Senior-Rollen in AI / Full-Stack",
+      "availabilityLimited": "Eingeschränkt verfügbar",
+      "availabilityClosed": "Derzeit keine neuen Projekte",
+      "downloadCv": "Lebenslauf herunterladen",
+      "askCta": "Fragen zu meiner Arbeit"
+    },
+    "skills": {
+      "heading": "Fähigkeiten",
+      "subtitle": "Womit ich arbeite"
+    },
+    "about": {
+      "heading": "Über mich",
+      "subtitle": "Wie ich arbeite",
+      "philosophy": "Ein Sprachmodell ist für mich ein Teil des Systems, der ausfallen kann. Der Assistent auf dieser Website antwortet nur aus den veröffentlichten Inhalten und nennt seine Quellen. Was Besucher schreiben, sind für ihn Daten, nie Anweisungen. Ein Ausgabefilter prüft, was er schreibt, bevor es jemand sieht. Fällt ein Modell aus, antwortet das nächste kostenlose Modell in der Kette. 100 feste Eval-Fälle messen die Qualität, und eine Änderung am Prompt darf nicht schlechter abschneiden als der gespeicherte Lauf. Vor jedem Deployment laufen Lint, Typprüfungen, Unit-Tests, End-to-End-Tests in drei Browsern mit Prüfungen zur Barrierefreiheit und Lighthouse-Budgets.",
+      "terminalTitle": "user@portfolio — zsh",
+      "terminalPrompt": "user@portfolio:~$",
+      "terminalOutputWhoami": "Alireza Rastineh — Full-Stack AI Engineer",
+      "terminalOutputLs": "kernarchitektur/   ki-ml-stack/   devops/   datenpipelines/",
+      "terminalOutputContact": "Offen für Senior-Fullstack- und KI-Engineering-Rollen. Kontaktaufnahme über das Kontaktformular oder direkt per E-Mail.",
+      "bio": "Ich bin Full-Stack-Softwareentwickler in Berlin. Ich baue Webprodukte mit KI-Funktionen, von der Oberfläche bis zum Server, auf dem sie laufen."
+    },
+    "projects": {
+      "heading": "Ausgewählte Projekte",
+      "subtitle": "Fallstudien"
+    },
+    "experience": {
+      "heading": "Werdegang",
+      "subtitle": "Beruf",
+      "work": "Beruf",
+      "education": "Ausbildung",
+      "certifications": "Zertifikate",
+      "present": "Heute",
+      "credential": "Nachweis ansehen",
+      "years": "{n} J.",
+      "months": "{n} Mon.",
+      "fullTime": "Vollzeit",
+      "partTime": "Teilzeit",
+      "contract": "Vertrag",
+      "freelance": "Freiberuflich",
+      "internship": "Praktikum"
+    },
+    "writing": {
+      "heading": "Artikel",
+      "subtitle": "Notizen aus der Praxis",
+      "readingTime": "{n} Min. Lesezeit",
+      "allPosts": "Alle Artikel",
+      "empty": "Noch nichts veröffentlicht.",
+      "rss": "RSS-Feed",
+      "published": "Veröffentlicht",
+      "updated": "Aktualisiert",
+      "tags": "Themen"
+    },
+    "caseStudy": {
+      "allWork": "Alle Projekte",
+      "readCaseStudy": "Fallstudie lesen",
+      "role": "Rolle",
+      "period": "Zeitraum",
+      "category": "Kategorie",
+      "metrics": "Ergebnisse",
+      "gallery": "Galerie",
+      "toc": "Auf dieser Seite",
+      "previous": "Vorheriges Projekt",
+      "next": "Nächstes Projekt",
+      "ctaHeading": "Sie planen etwas Ähnliches?",
+      "ctaBody": "Erzählen Sie mir, woran Sie arbeiten. Ich antworte innerhalb von 24 Stunden.",
+      "ctaButton": "Ähnliches Projekt besprechen"
+    },
+    "contact": {
+      "heading": "Kontakt",
+      "subtitle": "Sprechen wir",
+      "labelName": "Name",
+      "labelEmail": "E-Mail",
+      "labelMessage": "Nachricht",
+      "placeholderName": "Max Mustermann",
+      "placeholderEmail": "max@beispiel.de",
+      "placeholderMessage": "Was Sie bauen, Ihr Zeitplan und was „fertig“ für Sie heißt…",
+      "submit": "Nachricht senden",
+      "sending": "Wird gesendet…",
+      "successLine1": "Nachricht gesendet",
+      "successLine2": "Ich antworte innerhalb von 24 Stunden. Oder per E-Mail:",
+      "errorRequired": "Pflichtfeld.",
+      "errorEmail": "Ungültige E-Mail-Adresse.",
+      "errorMinlength": "Mindestens {n} Zeichen.",
+      "errorMaxlength": "Maximal {n} Zeichen.",
+      "errorInvalid": "Ungültig.",
+      "errorFixFields": "Bitte die markierten Felder korrigieren.",
+      "errorRateLimited": "Zu viele Anfragen. Bitte in einigen Minuten erneut versuchen.",
+      "errorInvalidInput": "Formulardaten wurden vom Server abgelehnt.",
+      "errorMailerUnavailable": "E-Mail-Dienst nicht verfügbar. Bitte direkt per E-Mail kontaktieren.",
+      "errorSendFailed": "Senden fehlgeschlagen. Bitte direkt per E-Mail kontaktieren.",
+      "errorNetwork": "Netzwerkfehler. Bitte erneut versuchen.",
+      "replyTime": "Ich antworte innerhalb von 24 Stunden."
+    },
+    "projectCard": {
+      "problem": "Problem",
+      "arch": "Architektur",
+      "infra": "Infrastruktur",
+      "outcomes": "Ergebnisse",
+      "caseLabel": "Fall {i}",
+      "live": "Live",
+      "repo": "Code",
+      "caseStudy": "Fallstudie",
+      "techStackAriaLabel": "Tech-Stack"
+    },
+    "legal": {
+      "nav": "Rechtliches",
+      "imprint": "Impressum",
+      "privacy": "Datenschutz",
+      "updated": "Stand"
+    },
+    "notFound": {
+      "title": "Diese Seite gibt es nicht.",
+      "body": "Vielleicht ist sie umgezogen, oder der Link stimmt nicht.",
+      "home": "Zur Startseite"
+    },
+    "ask": {
+      "title": "Fragen zu meiner Arbeit",
+      "hint": "Am besten für Fragen zu Projekten, Erfahrung, Fähigkeiten und Verfügbarkeit.",
+      "placeholder": "Eine Frage stellen…",
+      "disclosure": "Die Antworten erzeugt eine KI aus den Inhalten dieser Website.",
+      "offline": "Der Assistent pausiert. Bitte nutzen Sie das Kontaktformular."
+    }
+  },
+  "identity": {
+    "name": "Alireza Rastineh",
+    "handle": "@alirezarastineh",
+    "contactEmail": "contact@alirezarastineh.me",
+    "primaryCtaHref": "#projects",
+    "secondaryCtaHref": "#contact",
+    "siteUrl": "https://alirezarastineh.me",
+    "availability": "open",
+    "location": {
+      "city": "Berlin",
+      "country": "DE"
+    },
+    "timezone": "Europe/Berlin",
+    "avatar": {
+      "src": "/media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02.jpg",
+      "srcset": "/media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-480w.webp 480w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-768w.webp 768w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-1200w.webp 1200w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-1600w.webp 1600w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-2400w.webp 2400w",
+      "sources": [
+        {
+          "type": "image/avif",
+          "srcset": "/media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-480w.avif 480w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-768w.avif 768w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-1200w.avif 1200w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-1600w.avif 1600w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-2400w.avif 2400w"
+        },
+        {
+          "type": "image/webp",
+          "srcset": "/media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-480w.webp 480w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-768w.webp 768w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-1200w.webp 1200w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-1600w.webp 1600w, /media/6f5a7468-2c47-44c4-91c2-ae07c00f1a02-2400w.webp 2400w"
+        }
+      ],
+      "width": 2668,
+      "height": 4000,
+      "alt": "Alireza Rastineh",
+      "blur": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAAAwBACdASoQABgAPu1krU2ppaSiMAgBMB2JZwDKACHfT7lv5Sgx4OnJpiAA/uczgAUxB2umNDXbDx15Ea40iEhRtwCx6UAbCAzTSgtfWOx9Stl4J14DArAAAAA="
+    },
+    "resume": {
+      "href": "/media/939cedc7-7941-44c0-b75b-697b7cb3c2a4.pdf",
+      "bytes": 52992
+    }
+  },
+  "socials": [
+    {
+      "label": "Email",
+      "href": "mailto:contact@alirezarastineh.me",
+      "icon": "mail"
+    },
+    {
+      "label": "LinkedIn",
+      "href": "https://www.linkedin.com/in/alirezarastineh",
+      "icon": "linkedin"
+    },
+    {
+      "label": "GitHub",
+      "href": "https://github.com/alirezarastineh",
+      "icon": "github"
+    }
+  ],
+  "skills": [
+    {
+      "id": "ai-engineering",
+      "icon": "brain-circuit",
+      "span": "lg",
+      "items": [
+        "AI SDK",
+        "LangGraph",
+        "LiteLLM",
+        "Gemini",
+        "OpenRouter",
+        "Tool calling",
+        "BM25 and embeddings",
+        "Evals",
+        "Guardrails",
+        "Prompt versioning",
+        "Model fallback chains",
+        "MCP"
+      ],
+      "title": "KI-Engineering",
+      "caption": "",
+      "narrative": "Agenten, die ihre Fakten über Werkzeuge lesen und ihre Quellen nennen, Modellketten mit Ersatzmodellen in kostenlosen Tarifen, Schutz für Ein- und Ausgaben und Evals, die jede Änderung am Prompt bestehen muss. Gebaut für den Assistenten dieser Website und den Copilot von PERSiBER."
+    },
+    {
+      "id": "full-stack-web",
+      "icon": "cpu",
+      "span": "tall",
+      "items": [
+        "TypeScript",
+        "Angular",
+        "AnalogJS",
+        "React",
+        "Next.js",
+        "Vue 3",
+        "Tailwind CSS",
+        "Node.js",
+        "Hono",
+        "Python",
+        "FastAPI",
+        "Django",
+        "PostgreSQL",
+        "Drizzle",
+        "SQLAlchemy",
+        "WebAuthn",
+        "Capacitor"
+      ],
+      "title": "Full-Stack-Web",
+      "caption": "",
+      "narrative": "Frontends mit Angular, Next.js und Vue und die APIs dahinter mit Hono, FastAPI und Django, auf PostgreSQL."
+    },
+    {
+      "id": "infrastructure",
+      "icon": "container",
+      "span": "sm",
+      "items": [
+        "Docker",
+        "Docker Compose",
+        "Caddy",
+        "Hetzner",
+        "Linux",
+        "GitHub Actions",
+        "Woodpecker CI",
+        "Sentry",
+        "PostgreSQL backups"
+      ],
+      "title": "Infrastruktur und CI/CD",
+      "caption": "",
+      "narrative": "Ich betreibe, was ich baue: Docker Compose bei Hetzner hinter Caddy, Migrationen beim Start, Deployments von Hand mit einem Wächter, eine Prüfung des laufenden Systems nach jedem Deployment und CI, das jeden Push prüft."
+    },
+    {
+      "id": "quality",
+      "icon": "shield-check",
+      "span": "sm",
+      "items": [
+        "Vitest",
+        "Playwright",
+        "axe-core",
+        "Lighthouse CI",
+        "fast-check",
+        "Jest",
+        "Testing Library",
+        "pytest",
+        "ESLint",
+        "mypy",
+        "ruff"
+      ],
+      "title": "Qualität und Tests",
+      "caption": "",
+      "narrative": "Unit- und Property-Tests, End-to-End-Tests in drei Browsern mit Prüfungen zur Barrierefreiheit, Lighthouse-Budgets und strenger Lint, bei jedem Push."
+    }
+  ],
+  "projects": [
+    {
+      "slug": "portfolio",
+      "name": "Portfolio",
+      "descriptor": "Diese Website, komplett selbst gebaut",
+      "hook": "Meine Website: ein CMS, das ich selbst gebaut habe, und ein KI-Assistent, der Fragen zu meiner Arbeit aus den veröffentlichten Inhalten beantwortet.",
+      "problem": "<p>Besucher fragen in eigenen Worten nach meiner Arbeit. Ein Sprachmodell kann antworten, es kann aber auch etwas erfinden. Deshalb antwortet der Assistent nur aus den veröffentlichten Inhalten und nennt seine Quellen. Die Inhalte werden im CMS bearbeitet und ändern sich ohne Deployment, auf Englisch und auf Deutsch.</p>",
+      "aiArchitecture": "<p><strong>Ein Agent, sieben Werkzeuge.</strong> Der Assistent ist ein einzelner Agent. Vier Werkzeuge lesen die veröffentlichten Inhalte: die Suche, ein einzelnes Dokument, die Projektliste und den Lebenslauf. Zwei helfen beim Lesen: Eines öffnet eine Seite, eines schlägt Folgefragen vor. Das siebte schickt mir eine Nachricht, aber erst, wenn der Besucher zustimmt. Die Suche nutzt BM25 über die veröffentlichten Seiten. Wenn sie eingeschaltet sind, kommen Embeddings über Reciprocal Rank Fusion dazu. Klappt das nicht, sucht der Assistent nur mit BM25. Jede Antwort darf höchstens vier Dokumente und 40.000 Zeichen lesen.</p><p><strong>Kostenlose Modelle mit Ersatzkette.</strong> In der Kette sind nur Modelle aus kostenlosen Tarifen: zuerst Gemini, danach kostenlose Modelle über OpenRouter. Ein Circuit Breaker pausiert ein Modell nach drei Fehlern hintereinander oder nach einem Rate Limit. Die Kette darf das Modell nur wechseln, bevor das erste Wort beim Besucher ankommt. So beginnt eine Antwort nie zweimal.</p>",
+      "fullStackInfra": "<p><strong>Website und CMS.</strong> AnalogJS auf Angular 22: auf dem Server gerendert, ohne Zone.js, mit inkrementeller Hydration und Tailwind 4. API und CMS laufen mit Hono und Drizzle auf PostgreSQL 17. Inhalte entstehen als Entwürfe. Eine Prüfung zeigt vor dem Veröffentlichen, was sich in jeder Sprache ändert. Über den Verlauf lässt sich die Website auf eine frühere Version zurücksetzen.</p><p><strong>Hosting.</strong> Ein Server bei Hetzner betreibt Docker Compose hinter Caddy. Datenbank-Migrationen fügen nur hinzu und laufen beim Start der API. Ein Deployment geht zuerst an die API, dann an den Client. Danach prüft ein Skript das laufende System.</p><p><strong>CI.</strong> GitHub Actions prüft jeden Push: Lint, Typprüfungen, Unit-Tests, End-to-End-Tests mit axe in Chromium, Firefox und WebKit, Lighthouse-Budgets, Screenshots und einen Smoke-Test der gebauten Images. Deployments starte ich von Hand. Ein Wächter lehnt sie ab, wenn die Prüfungen auf main nicht bestanden sind.</p>",
+      "outcomes": [
+        "Besucher fragen in eigenen Worten und bekommen Antworten mit Quellen. Eine Quelle, die es nicht gibt, wird entfernt, bevor die Antwort erscheint.",
+        "Nichts geht live, wenn nicht alle Tests auf dem Server und in drei Browsern bestanden sind. Der Wächter für Deployments lehnt alles andere ab.",
+        "Inhalte ändern sich ohne Deployment: Entwürfe, eine Prüfung der Änderungen, Veröffentlichung pro Sprache und ein Verlauf zum Zurücksetzen."
+      ],
+      "stack": [
+        "Angular",
+        "AnalogJS",
+        "TypeScript",
+        "Tailwind CSS",
+        "Hono",
+        "Node.js",
+        "Drizzle",
+        "PostgreSQL",
+        "AI SDK",
+        "Gemini",
+        "OpenRouter",
+        "Tiptap",
+        "Vitest",
+        "Playwright",
+        "axe-core",
+        "Lighthouse CI",
+        "Docker",
+        "Caddy",
+        "Hetzner",
+        "GitHub Actions"
+      ],
+      "links": {
+        "live": "",
+        "repo": "https://github.com/alirezarastineh/Portfolio-2026",
+        "caseStudy": ""
+      },
+      "cover": {
+        "src": "/media/de979938-32aa-4340-87f6-9dc28b9ffb8e.png",
+        "srcset": "/media/de979938-32aa-4340-87f6-9dc28b9ffb8e-480w.webp 480w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-768w.webp 768w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-1200w.webp 1200w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-1600w.webp 1600w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/de979938-32aa-4340-87f6-9dc28b9ffb8e-480w.avif 480w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-768w.avif 768w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-1200w.avif 1200w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-1600w.avif 1600w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/de979938-32aa-4340-87f6-9dc28b9ffb8e-480w.webp 480w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-768w.webp 768w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-1200w.webp 1200w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-1600w.webp 1600w, /media/de979938-32aa-4340-87f6-9dc28b9ffb8e-2400w.webp 2400w"
+          }
+        ],
+        "width": 2880,
+        "height": 1800,
+        "alt": "Die Seite „Assistant“ im Admin, Ansicht „Conversations“: eine Besucherfrage mit Beispielantwort, Quelle und Verlauf (Route, Prompt-Version, Zeit, Tokens, Kosten), darunter eine Antwort ohne Quelle, eine mit entfernter erfundener Quelle und eine markierte Prompt-Injection.",
+        "blur": "data:image/webp;base64,UklGRigAAABXRUJQVlA4IBwAAAAwAQCdASoQAAoAA4BaJaQAA3AA/vUtUSvFgAAA"
+      },
+      "featured": true,
+      "period": {
+        "start": "2026-09-22",
+        "end": null
+      },
+      "role": "Alles: Frontend, Backend, KI-Assistent, Hosting, Deployment und CI/CD",
+      "category": {
+        "key": "own-project",
+        "label": "Eigenes Projekt"
+      },
+      "tags": ["Angular", "Hono", "PostgreSQL", "AI SDK", "Evals", "CI/CD"],
+      "metrics": [
+        {
+          "value": "93/100",
+          "label": "bestandene Eval-Fälle",
+          "context": "Gespeicherter Lauf vom 2. November 2026: alle 3 Fallen für erfundene Antworten, 9 von 9 deutschen Fragen, 8 von 9 Injections"
+        },
+        {
+          "value": "4.719",
+          "label": "Tests bei jedem Push auf main",
+          "context": "CI, 24. November 2026: 1.451 Server-, 858 Client- und 2.410 End-to-End-Tests in drei Browsern"
+        },
+        {
+          "value": "99",
+          "label": "Lighthouse-Performance auf dem Handy",
+          "context": "Startseite, mobil, Median aus 3 Läufen auf einem lokalen Produktions-Build, 24. November 2026; Barrierefreiheit, Best Practices, SEO: 100"
+        }
+      ],
+      "hasCaseStudy": true,
+      "updatedAt": "2026-11-25T08:25:51.957Z"
+    },
+    {
+      "slug": "dashboard",
+      "name": "Dashboard",
+      "descriptor": "Anpassbares Daten-Dashboard",
+      "hook": "Bei meinem Arbeitgeber entwickle ich im Team das Frontend eines anpassbaren Daten-Dashboards, mit Unit-, End-to-End- und Barrierefreiheitstests.",
+      "problem": "<p>Wer mit vielen Daten arbeitet, braucht die wichtigen Diagramme und Tabellen auf einem Bildschirm, in der eigenen Reihenfolge. Im Dashboard ordnet man sie auf einem Raster an, und die Anordnung bleibt gespeichert.</p>",
+      "aiArchitecture": "<p><strong>Schichten.</strong> Die App ist Vue 3 mit der Composition API und strengem TypeScript. Komponenten zeigen etwas an, Composables enthalten die Logik, und Services und Repositories sprechen mit der API. Pinia verwaltet den Zustand, den viele Teile gemeinsam nutzen.</p><p><strong>Raster und Laden.</strong> GridStack ordnet das Raster an. Ein Teil des Dashboards wird erst geladen, wenn er in die Nähe des sichtbaren Bereichs kommt. Eine Anfrage, die nicht mehr gebraucht wird, bricht die App ab.</p><p><strong>Tabellen und Diagramme.</strong> Die Tabellen bauen auf TanStack Table auf. Bei mehr als 100 Zeilen zeichnet TanStack Virtual nur die sichtbaren. Die Diagramme nutzen Chart.js.</p><p><strong>Gespeicherte Einstellungen.</strong> Änderungen werden nach einer kurzen Pause gespeichert. Klappt das nicht, versucht es die App erneut und wartet jedes Mal länger. Importierte Einstellungen prüfen Zod-Schemas, und Dateien aus älteren Versionen werden vorher umgewandelt.</p>",
+      "fullStackInfra": "<p><strong>Prüfungen.</strong> Vite baut die App, und bei jedem Build läuft die Typprüfung. ESLint und Prettier halten den Code einheitlich. Unit- und Komponententests laufen mit Vitest und Vue Test Utils.</p><p><strong>Im Browser.</strong> Playwright ist für Chromium, Firefox, WebKit und ein Handy-Profil eingerichtet. Mit einem nachgebauten Backend laufen Tests ohne Server, einige Tests vergleichen Screenshots, und axe prüft die Datentabellen.</p><p><strong>CI.</strong> Bei jedem Push startet Woodpecker die Prüfung der Abhängigkeiten, Lint, Typprüfung und Build, Unit-Tests und Browser-Tests.</p>",
+      "outcomes": [
+        "Das Dashboard öffnet sich, ohne alles auf einmal zu laden: Jeder Teil lädt, wenn er in die Nähe des sichtbaren Bereichs kommt.",
+        "Die Datentabellen lassen sich ganz ohne Maus bedienen, und axe prüft sie nach WCAG 2.2 AA.",
+        "Einstellungen aus einer älteren Version lassen sich weiter importieren: Die App wandelt sie um und prüft sie vorher."
+      ],
+      "stack": [
+        "Vue 3",
+        "TypeScript",
+        "Vite",
+        "Pinia",
+        "PrimeVue",
+        "Reka UI",
+        "Tailwind CSS",
+        "GridStack",
+        "Chart.js",
+        "TanStack Table",
+        "TanStack Virtual",
+        "VueUse",
+        "Zod",
+        "Vitest",
+        "Vue Test Utils",
+        "Playwright",
+        "axe-core",
+        "ESLint",
+        "Woodpecker CI"
+      ],
+      "links": {
+        "live": "",
+        "repo": "",
+        "caseStudy": ""
+      },
+      "cover": {
+        "src": "/media/39ede79e-eaa7-4cc4-beb8-d0f03369683d.png",
+        "srcset": "/media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-480w.webp 480w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-768w.webp 768w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-1200w.webp 1200w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-1600w.webp 1600w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-480w.avif 480w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-768w.avif 768w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-1200w.avif 1200w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-1600w.avif 1600w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-480w.webp 480w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-768w.webp 768w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-1200w.webp 1200w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-1600w.webp 1600w, /media/39ede79e-eaa7-4cc4-beb8-d0f03369683d-2400w.webp 2400w"
+          }
+        ],
+        "width": 2880,
+        "height": 1800,
+        "alt": "Der Name „Dashboard“ in großer weißer Schrift auf Schwarz, mit einem orangefarbenen Punkt.",
+        "blur": "data:image/webp;base64,UklGRjIAAABXRUJQVlA4ICYAAACwAQCdASoQAAoAA4BaJaQAAudc4/AAAP75LHCJFRDjild2gAAAAA=="
+      },
+      "featured": false,
+      "period": {
+        "start": "2025-07-02",
+        "end": null
+      },
+      "role": "Frontend-Entwicklung im Team",
+      "category": {
+        "key": "company",
+        "label": "Projekt beim Arbeitgeber"
+      },
+      "tags": [],
+      "metrics": [
+        {
+          "value": "263",
+          "label": "Test-Dateien",
+          "context": "233 für Units und Komponenten, 30 für den Browser, gezählt am 25. November 2026"
+        },
+        {
+          "value": "4",
+          "label": "Browser-Profile",
+          "context": "Playwright: Chromium, Firefox, WebKit und ein Handy-Profil (Pixel 5)"
+        },
+        {
+          "value": "9",
+          "label": "Tests zur Barrierefreiheit der Datentabellen",
+          "context": "axe nach WCAG 2.2 AA, nur Tastatur, Fokus, kleine Bildschirme, gezählt am 25. November 2026"
+        }
+      ],
+      "hasCaseStudy": true,
+      "updatedAt": "2026-11-25T08:25:51.957Z"
+    },
+    {
+      "slug": "persiber",
+      "name": "PERSiBER",
+      "descriptor": "Event-App mit signierten Tickets",
+      "hook": "Die App hinter der Eventreihe, die ich mit organisiere: Das Team verwaltet Gäste, prüft den Einlass mit dem Handy und fragt einen KI-Copilot zum Abend.",
+      "problem": "<p>Eine Eventreihe braucht einen Ort für Gästelisten, QR-Tickets, den Einlass und die Zahlen danach. PERSiBER ist die App, mit der das Team all das macht.</p>",
+      "aiArchitecture": "<p><strong>Die App.</strong> Ein Next.js-16-Client mit TanStack Query und zustand, ein FastAPI-Server mit asynchronem SQLAlchemy und Alembic auf PostgreSQL und eine Android-App mit Capacitor. Das Team meldet sich mit Passkeys an.</p><p><strong>Signierte Tickets.</strong> Jeder QR-Code ist ein kurzes Token: die ID des Gastes, eine Nonce und eine 16-Byte-Signatur mit HMAC-SHA256. Ein veränderter oder erfundener Code scheitert am Einlass. Der Scanner unterscheidet einen gefälschten Code von einem alten, aber echten Ticket.</p><p><strong>Ein Copilot, der nach Daten fragt.</strong> Der Copilot ist eine LangGraph-Schleife mit 11 Werkzeugen, die nur lesen: für Gäste, Mitglieder, den Einlass, Events, das Team und Analysen. Darüber fragt das Modell genau nach den Daten, die es braucht. Ticket-Tokens, IDs und Links werden aus jedem Prompt entfernt. Ein Token-Budget hält den Kontext im Fenster des Modells. Namen von Gästen schickt die App mit Absicht, damit der Copilot zwei Gäste mit demselben Vornamen unterscheiden kann.</p><p><strong>Drei Modellketten.</strong> Über LiteLLM, zuerst kostenlose Tarife: Gemini Flash Lite führt im normalen Chat, weil sein kostenloses Kontingent am größten ist. Eine tiefe Frage kann ein stärkeres Modell anfordern. Strukturierte Auswertungen enden bei einem Modell, das ein JSON-Schema annimmt. Die Kette wechselt nach Rate Limits, Zeitüberschreitungen und Serverfehlern. Sie wechselt nie, wenn unser eigener Code die Anfrage falsch gebaut hat: Das ist ein Fehler, den wir beheben müssen, und kein Grund für einen weiteren Aufruf.</p><p><strong>Auswertungen mit Belegen.</strong> Die KI-Auswertungen entstehen aus einem Faktenpaket mit den Kennzahlen des Dashboards. Jede Kennzahl hat einen festen Schlüssel. Die Antwort muss die Schlüssel nennen, auf denen sie beruht. Das Ergebnis wird gegen ein Schema geprüft und gespeichert.</p>",
+      "fullStackInfra": "<p>Docker Compose auf einem Server bei Hetzner hinter Caddy, mit Skripten für Backup und Wiederherstellung von PostgreSQL. Zugangsdaten bleiben auf dem Server: Der Browser spricht nur mit den eigenen KI-Endpunkten der App und erfährt nie, welcher Anbieter geantwortet hat. Ein Schalter stellt die ganze KI ab, bevor ein Anbieter aufgerufen wird.</p><p>GitHub Actions baut die Releases für Android und iOS und führt die Sicherheitsscans aus. Den Server prüfen mypy, ruff und pytest. Der Lint im Client blockiert auch Browser-APIs, die den unterstützten Browsern fehlen.</p>",
+      "outcomes": [
+        "Jedes QR-Ticket ist signiert. Der Einlass lehnt Codes ab, die wir nie ausgegeben haben, und unterscheidet gefälschte von alten Codes.",
+        "Das Team fragt den Copilot in normalen Worten nach dem Abend. Ein Live-Eval prüft, ob er das richtige Werkzeug wählt, bei unsicheren Namen vorsichtig antwortet und Themen ablehnt, die er nicht kennt.",
+        "Auswertungen nennen die Kennzahlen, auf denen sie beruhen. So lässt sich jeder Befund am Dashboard prüfen."
+      ],
+      "stack": [
+        "Next.js",
+        "React",
+        "TypeScript",
+        "TanStack Query",
+        "zustand",
+        "AI SDK",
+        "Capacitor",
+        "WebAuthn",
+        "Python",
+        "FastAPI",
+        "SQLAlchemy",
+        "Alembic",
+        "PostgreSQL",
+        "LangGraph",
+        "LiteLLM",
+        "Gemini",
+        "OpenRouter",
+        "pytest",
+        "Docker",
+        "Caddy",
+        "Hetzner",
+        "GitHub Actions"
+      ],
+      "links": {
+        "live": "",
+        "repo": "",
+        "caseStudy": ""
+      },
+      "cover": {
+        "src": "/media/e005896d-336b-4f20-8afe-98d62ce9c245.png",
+        "srcset": "/media/e005896d-336b-4f20-8afe-98d62ce9c245-480w.webp 480w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-768w.webp 768w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-1200w.webp 1200w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-1600w.webp 1600w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/e005896d-336b-4f20-8afe-98d62ce9c245-480w.avif 480w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-768w.avif 768w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-1200w.avif 1200w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-1600w.avif 1600w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/e005896d-336b-4f20-8afe-98d62ce9c245-480w.webp 480w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-768w.webp 768w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-1200w.webp 1200w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-1600w.webp 1600w, /media/e005896d-336b-4f20-8afe-98d62ce9c245-2400w.webp 2400w"
+          }
+        ],
+        "width": 3808,
+        "height": 2380,
+        "alt": "Das Dashboard von PERSiBER: Anwesenheit, Events, verschiedene Gäste und Gasteinträge, das beliebteste Event und der größte Promoter; für das aktuelle Event Anmeldungen, Anwesenheit, QR und Gutscheine, ein Gäste-Trichter und die Verteilung von Gästen und Gutscheinen.",
+        "blur": "data:image/webp;base64,UklGRjAAAABXRUJQVlA4ICQAAACwAQCdASoQAAoAA4BaJZwC7AEO+COAAP70LGLCurkr4tmQAAA="
+      },
+      "featured": false,
+      "period": {
+        "start": "2024-08-09",
+        "end": null
+      },
+      "role": "Frontend, Backend, Hosting und Deployment; ich organisiere die Eventreihe mit",
+      "category": {
+        "key": "own-project",
+        "label": "Eigenes Projekt"
+      },
+      "tags": ["Next.js", "FastAPI", "LangGraph", "Capacitor", "PostgreSQL"],
+      "metrics": [
+        {
+          "value": "11",
+          "label": "Copilot-Werkzeuge, die nur lesen",
+          "context": "Gezählt in der Werkzeugliste des Servers, 24. November 2026"
+        },
+        {
+          "value": "68",
+          "label": "Test-Dateien",
+          "context": "47 im Server und 21 im Client, gezählt am 24. November 2026"
+        },
+        {
+          "value": "225",
+          "label": "Commits im Jahr 2026",
+          "context": "13. Februar bis 8. Oktober 2026, ohne 65 von Dependabot"
+        }
+      ],
+      "hasCaseStudy": true,
+      "updatedAt": "2026-11-25T08:25:51.957Z"
+    },
+    {
+      "slug": "customer-portal",
+      "name": "Customer Portal",
+      "descriptor": "Portal für Kunden und Mitarbeitende",
+      "hook": "Bei meinem Arbeitgeber entwickle ich ein Kundenportal, Frontend und Backend, mit barrierefreien Komponenten und Tests auf beiden Seiten.",
+      "problem": "<p>Kunden und Mitarbeitende brauchen einen Ort im Web, an dem sich jede Person anmeldet und sieht, was ihr Konto erlaubt. Das Portal hat einen Bereich für Kunden und einen für Mitarbeitende.</p>",
+      "aiArchitecture": "<p><strong>Client.</strong> Next.js 16 und React 19 in strengem TypeScript, als statische Dateien exportiert. Redux Toolkit Query lädt die Daten, behält eine Kopie und lädt sie nach einer Änderung neu. Die Oberfläche baut auf HeroUI und React Aria auf. Beide bringen die Bedienung mit Tastatur und Screenreader mit. Tiptap bearbeitet formatierten Text, und TanStack Table steuert Datentabellen.</p><p><strong>Server.</strong> Django und Django REST Framework mit PostgreSQL. Berechtigungsklassen legen fest, wer einen Endpunkt nutzen darf. Änderungen an mehreren Tabellen laufen in einer Transaktion. Listen laden verknüpfte Zeilen vorab statt einzeln.</p><p><strong>Anmeldung.</strong> Simple JWT erstellt die Tokens. Ist ein Token abgelaufen, erneuert es eine Anfrage, und die anderen warten so lange.</p>",
+      "fullStackInfra": "<p><strong>Auslieferung.</strong> Der Client besteht aus statischen Dateien. Nur die API führt Code auf dem Server aus. Das Datenbankschema ändert sich nur über Migrationen.</p><p><strong>Prüfungen.</strong> Im Client: strenges TypeScript, ESLint mit den Regeln von SonarJS, unicorn, Tailwind und Testing Library, dazu Prettier. Auf dem Server: ruff und mypy mit dem Django-Plugin.</p><p><strong>Tests.</strong> Jest und Testing Library testen Komponenten und Hooks, Playwright testet die App im Browser, und das Test-Framework von Django testet den Server.</p>",
+      "outcomes": [
+        "Der Client ist in strengem TypeScript geschrieben, ohne ein einziges any.",
+        "Läuft ein Anmelde-Token ab, erneuert es eine Anfrage. Die wartenden Anfragen werden danach gesendet.",
+        "Dialoge, Menüs und Formularfelder übernehmen das Verhalten für Tastatur und Screenreader von React Aria."
+      ],
+      "stack": [
+        "Next.js",
+        "React",
+        "TypeScript",
+        "Redux Toolkit",
+        "HeroUI",
+        "React Aria",
+        "Tiptap",
+        "TanStack Table",
+        "React Hook Form",
+        "Zod",
+        "Tailwind CSS",
+        "Python",
+        "Django",
+        "Django REST Framework",
+        "Simple JWT",
+        "PostgreSQL",
+        "Jest",
+        "Testing Library",
+        "Playwright",
+        "ESLint",
+        "ruff",
+        "mypy"
+      ],
+      "links": {
+        "live": "",
+        "repo": "",
+        "caseStudy": ""
+      },
+      "cover": {
+        "src": "/media/b1a32421-7829-4826-abbb-7c16f42bc45d.png",
+        "srcset": "/media/b1a32421-7829-4826-abbb-7c16f42bc45d-480w.webp 480w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-768w.webp 768w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-1200w.webp 1200w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-1600w.webp 1600w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/b1a32421-7829-4826-abbb-7c16f42bc45d-480w.avif 480w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-768w.avif 768w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-1200w.avif 1200w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-1600w.avif 1600w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/b1a32421-7829-4826-abbb-7c16f42bc45d-480w.webp 480w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-768w.webp 768w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-1200w.webp 1200w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-1600w.webp 1600w, /media/b1a32421-7829-4826-abbb-7c16f42bc45d-2400w.webp 2400w"
+          }
+        ],
+        "width": 2880,
+        "height": 1800,
+        "alt": "Der Name „Customer Portal“ in großer weißer Schrift auf Schwarz, mit einem orangefarbenen Punkt.",
+        "blur": "data:image/webp;base64,UklGRjAAAABXRUJQVlA4ICQAAACQAQCdASoQAAoAA4BaJaQAAudYugAA/vkn/gk+LbjV9dAAAAA="
+      },
+      "featured": false,
+      "period": {
+        "start": "2025-05-05",
+        "end": null
+      },
+      "role": "Full-Stack-Entwicklung",
+      "category": {
+        "key": "company",
+        "label": "Projekt beim Arbeitgeber"
+      },
+      "tags": [],
+      "metrics": [
+        {
+          "value": "625",
+          "label": "automatische Tests",
+          "context": "382 auf dem Server und 243 im Client, im Code gezählt am 25. November 2026"
+        },
+        {
+          "value": "0",
+          "label": "Verwendungen von any im Client",
+          "context": "Strenges TypeScript, gezählt am 25. November 2026"
+        },
+        {
+          "value": "166",
+          "label": "Datenbank-Migrationen",
+          "context": "Django, jede Änderung am Schema ein eigener Schritt, gezählt am 25. November 2026"
+        }
+      ],
+      "hasCaseStudy": true,
+      "updatedAt": "2026-11-25T08:25:51.957Z"
+    },
+    {
+      "slug": "bda-web",
+      "name": "BDA-Web",
+      "descriptor": "Geleistete Arbeit ansehen und auswerten",
+      "hook": "Bei meinem Arbeitgeber arbeite ich im Team am Frontend einer Web-App, die geleistete Arbeit zeigt und auswertet.",
+      "problem": "<p>Erfasste Arbeit muss man finden, lesen und auswerten können. Die App zeigt sie in Tabellen und wertet sie in Diagrammen aus.</p>",
+      "aiArchitecture": "<p><strong>App.</strong> Vue 3 mit Vue Router und Pinia für den Zustand. PrimeVue liefert Tabellen, Dialoge und Formularfelder, und Chart.js zeichnet die Diagramme.</p><p><strong>Logik.</strong> Laden, Auswählen, Bearbeiten, die Tabellenspalten und der Export haben je ein eigenes Composable, getrennt von den Komponenten. Ein Service spricht mit der API.</p><p><strong>Export.</strong> Der Browser erstellt Excel-Dateien mit ExcelJS und auch CSV-Dateien, ohne Server.</p>",
+      "fullStackInfra": "<p>Vite baut die App. Das Build-Skript startet zuerst die Tests und den Linter und stoppt, wenn etwas fehlschlägt. Die Tests laufen mit Vitest und Testing Library in happy-dom. ESLint und Prettier halten den Code einheitlich, und Tailwind CSS gestaltet die Oberfläche.</p>",
+      "outcomes": [
+        "Kein Build mit einem fehlgeschlagenen Test oder einem Lint-Fehler: Das Build-Skript prüft beides zuerst.",
+        "Die Logik lässt sich ohne Browser testen, weil sie in Composables liegt.",
+        "Excel- und CSV-Exporte entstehen im Browser."
+      ],
+      "stack": [
+        "Vue 3",
+        "Vite",
+        "Pinia",
+        "PrimeVue",
+        "Tailwind CSS",
+        "Chart.js",
+        "ExcelJS",
+        "Vitest",
+        "Testing Library",
+        "ESLint"
+      ],
+      "links": {
+        "live": "",
+        "repo": "",
+        "caseStudy": ""
+      },
+      "cover": {
+        "src": "/media/79b7e69f-f552-4da4-9d49-d8ee403e5554.png",
+        "srcset": "/media/79b7e69f-f552-4da4-9d49-d8ee403e5554-480w.webp 480w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-768w.webp 768w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-1200w.webp 1200w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-1600w.webp 1600w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-2400w.webp 2400w",
+        "sources": [
+          {
+            "type": "image/avif",
+            "srcset": "/media/79b7e69f-f552-4da4-9d49-d8ee403e5554-480w.avif 480w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-768w.avif 768w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-1200w.avif 1200w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-1600w.avif 1600w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-2400w.avif 2400w"
+          },
+          {
+            "type": "image/webp",
+            "srcset": "/media/79b7e69f-f552-4da4-9d49-d8ee403e5554-480w.webp 480w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-768w.webp 768w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-1200w.webp 1200w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-1600w.webp 1600w, /media/79b7e69f-f552-4da4-9d49-d8ee403e5554-2400w.webp 2400w"
+          }
+        ],
+        "width": 2880,
+        "height": 1800,
+        "alt": "Der Name „BDA-Web“ in großer weißer Schrift auf Schwarz, mit einem orangefarbenen Punkt.",
+        "blur": "data:image/webp;base64,UklGRjYAAABXRUJQVlA4ICoAAACQAQCdASoQAAoAA4BaJaQAAudYugAA/vhvSWXN7zUTDujYGS6sXRfgAAA="
+      },
+      "featured": false,
+      "period": null,
+      "role": "Frontend-Arbeit im Team",
+      "category": {
+        "key": "company",
+        "label": "Projekt beim Arbeitgeber"
+      },
+      "tags": [],
+      "metrics": [
+        {
+          "value": "142",
+          "label": "Unit- und Komponententests",
+          "context": "In 11 Dateien, im Code gezählt am 25. November 2026"
+        },
+        {
+          "value": "2",
+          "label": "Prüfungen vor jedem Build",
+          "context": "Die Tests und der Linter; bei einem Fehler stoppt der Build"
+        }
+      ],
+      "hasCaseStudy": true,
+      "updatedAt": "2026-11-25T08:25:51.957Z"
+    }
+  ],
+  "experiences": [
+    {
+      "id": "fb43e7d3-cec9-42ce-ab7d-e1229934e70c",
+      "kind": "work",
+      "org": {
+        "name": "Datenbankgesellschaft mbH",
+        "url": "https://datenbankgesellschaft.de/",
+        "logo": null
+      },
+      "title": "Full-Stack-Softwareentwickler",
+      "summary": "Full-Stack- und Frontend-Entwicklung für die Web-Apps des Unternehmens.",
+      "highlights": [
+        "Customer Portal: Ich entwickle Frontend und Backend, mit Next.js, React und React Aria sowie Django REST Framework und PostgreSQL, mit Tests auf beiden Seiten.",
+        "Dashboard: Frontend-Arbeit im Team, mit Vue 3 und TypeScript, mit Unit- und End-to-End-Tests und Prüfungen zur Barrierefreiheit mit axe.",
+        "BDA-Web: Frontend-Arbeit im Team an einer Vue-3-App, die geleistete Arbeit zeigt und auswertet."
+      ],
+      "location": "Falkensee",
+      "employmentType": "full-time",
+      "period": {
+        "start": "2024-03-04",
+        "end": null,
+        "precision": "month"
+      },
+      "credential": null,
+      "skills": [
+        "TypeScript",
+        "Vue 3",
+        "Next.js",
+        "React",
+        "Python",
+        "Django",
+        "PostgreSQL",
+        "Vitest",
+        "Playwright",
+        "Jest"
+      ]
+    }
+  ],
+  "posts": [
+    {
+      "slug": "guarding-and-testing-the-assistant",
+      "title": "Wie der Assistent auf dieser Website geschützt und getestet wird",
+      "excerpt": "Sieben eng begrenzte Werkzeuge, kostenlose Modelle mit Ersatzkette, ein Filter für jede Antwort und 100 Eval-Fälle: was den Assistenten daran hindert, Fakten über mich zu erfinden, und wo seine Grenzen liegen.",
+      "publishedAt": "2026-11-24T14:22:11.273Z",
+      "updatedAt": "2026-11-25T08:25:52.356Z",
+      "tags": ["Evals", "Guardrails", "AI SDK"],
+      "cover": null,
+      "readingMinutes": 4,
+      "alternates": {
+        "en": "/en/writing/guarding-and-testing-the-assistant",
+        "de": "/de/writing/guarding-and-testing-the-assistant"
+      }
+    }
+  ],
+  "legal": [
+    {
+      "doc": "imprint",
+      "title": "Impressum",
+      "updatedAt": "2026-09-23T11:23:33.990Z"
+    },
+    {
+      "doc": "privacy",
+      "title": "Datenschutzerklärung",
+      "updatedAt": "2026-11-08T14:22:32.868Z"
+    }
+  ],
+  "seo": {
+    "title": "Alireza Rastineh — Fullstack-KI-Softwareingenieur",
+    "description": "Fullstack-KI-Softwareingenieur in Berlin. Ich baue Webprodukte mit KI-Funktionen, die getestet, abgesichert und gemessen sind: Angular, Next.js, FastAPI, PostgreSQL.",
+    "author": "Alireza Rastineh",
+    "siteName": "Alireza Rastineh",
+    "canonical": "https://alirezarastineh.me/",
+    "ogTitle": "Alireza Rastineh — Fullstack-KI-Softwareingenieur",
+    "ogDescription": "Fallstudien zu Full-Stack-Produkten mit KI-Funktionen, getestet, abgesichert und gemessen, und ein Assistent, der aus den Inhalten dieser Website antwortet.",
+    "ogImage": "https://alirezarastineh.me/og.png",
+    "ogUrl": "https://alirezarastineh.me/",
+    "ogLocale": "de_DE",
+    "twitterCard": "summary_large_image",
+    "twitterTitle": "Alireza Rastineh — Fullstack-KI-Softwareingenieur",
+    "twitterDescription": "Fallstudien zu Full-Stack-Produkten mit KI-Funktionen, getestet, abgesichert und gemessen, und ein Assistent, der aus den Inhalten dieser Website antwortet.",
+    "twitterImage": "https://alirezarastineh.me/og.png"
+  }
+}
