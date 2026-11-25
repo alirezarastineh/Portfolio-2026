@@ -52,15 +52,17 @@ module.exports = {
         "categories:seo": ["error", { minScore: 1 }],
         "categories:performance": ["warn", { minScore: 0.95 }],
         "cumulative-layout-shift": ["error", { maxNumericValue: 0.1 }],
-        // Transferred bytes. Measured 2026-09-25: scripts ~204 KB on home
-        // (sections below the hero hydrate, and load, as they scroll into
-        // view; the assistant's terminal loads on demand), ~163-172 KB on
-        // subpages; styles ~9.9 KB (admin CSS lives in the admin's chunk);
-        // fonts 50.1 KB at most (Instrument Sans, and B612 where a page shows it).
-        // The font budget is that plus 15%: a new family or subset fails it.
-        "resource-summary:script:size": ["error", { maxNumericValue: 240 * KB }],
+        // Transferred bytes. Measured 2026-11-24 (CI's run on 49cb582): scripts
+        // 205.2 KB on home (sections below the hero hydrate, and load, as they
+        // scroll into view; the assistant's terminal loads on demand), 164.5-179.3 KB
+        // on subpages; styles 11.8 KB (admin CSS lives in the admin's chunk); fonts
+        // 50.5 KB at most (Instrument Sans, and B612 where a page shows it). The live
+        // content measured the same on a local build (home 208 KB of scripts). The
+        // script budget is about 10% over that and the font budget 7%: a new family
+        // or subset fails it.
+        "resource-summary:script:size": ["error", { maxNumericValue: 225 * KB }],
         "resource-summary:stylesheet:size": ["error", { maxNumericValue: 16 * KB }],
-        "resource-summary:font:size": ["error", { maxNumericValue: 60 * KB }],
+        "resource-summary:font:size": ["error", { maxNumericValue: 54 * KB }],
         // A blocked request still counts as one (0 bytes), so the tracker's
         // own is allowed; any other third-party request, and any byte from
         // one (a block that stopped matching), fails.
