@@ -770,14 +770,20 @@ test.describe("feeds and files", () => {
 });
 
 test.describe("home: experience", () => {
-  test("the timeline groups work, education and certifications", async ({ page }) => {
+  test("the timeline groups work, education and certifications; work shows no dates", async ({
+    page,
+  }) => {
     await page.goto("/en");
     const section = page.locator("#experience");
     await expect(section.locator("h3")).toHaveText(["Work", "Education", "Certifications"]);
     await expect(section.locator("h4").first()).toHaveText("Senior AI Engineer");
-    await expect(section).toContainText("Mar 2024 – Present");
-    await expect(section).toContainText("Jan 2021 – Feb 2024");
-    await expect(section).toContainText("3 yr 2 mo");
+    // The four jobs have dates in the CMS; only the education and the certification show theirs.
+    await expect(section.locator("time")).toHaveCount(2);
+    await expect(section).not.toContainText("Present");
+    await expect(section).not.toContainText("Mar 2024");
+    await expect(section).not.toContainText("3 yr 2 mo");
+    await expect(section).toContainText("2018 – 2020");
+    await expect(section).toContainText("May 2023");
     await expect(section.getByRole("link", { name: /Show credential/ })).toHaveAttribute(
       "href",
       "https://example.com/credential/abc-123",

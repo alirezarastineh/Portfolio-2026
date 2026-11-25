@@ -17,9 +17,12 @@ interface Group {
 
 interface Entry {
   experience: Experience;
-  /** `Mar 2024 – Present`; for a certification, when it was issued (and until when). */
+  /**
+   * `Mar 2024 – Present`; for a certification, when it was issued (and until when); empty for work,
+   * which shows no dates (the owner's choice).
+   */
   when: string;
-  /** `2 yr 3 mo`; empty for certifications, which have no duration. */
+  /** `2 yr 3 mo`; empty for certifications and work, which show no duration. */
   duration: string;
   /** Employment type and location, as one line. */
   details: string;
@@ -38,7 +41,7 @@ const HIGHLIGHTS = 3;
  * headings of their own, each entry a tick on the line, in the order set in the admin. Rendered
  * only when there is something to show. Phones read the role, its organisation, then its dates;
  * from `md` the dates stand in a column of their own at the left, from `lg` held in view while the
- * entry scrolls past.
+ * entry scrolls past. Work has no dates, so its text takes the whole width.
  */
 @Component({
   selector: "app-experience-section",
@@ -70,7 +73,10 @@ const HIGHLIGHTS = 3;
                     <article
                       class="flex flex-col gap-3 md:grid md:grid-cols-12 md:gap-x-(--col-gap)"
                     >
-                      <div class="flex flex-col gap-1 md:col-span-9 md:col-start-4 md:row-start-1">
+                      <div
+                        class="flex flex-col gap-1 md:row-start-1"
+                        [class]="entry.when ? 'md:col-span-9 md:col-start-4' : 'md:col-span-12'"
+                      >
                         <h4 class="m-0 text-subtitle text-foreground">
                           {{ entry.experience.title }}
                         </h4>
@@ -103,22 +109,27 @@ const HIGHLIGHTS = 3;
                         </p>
                       </div>
 
-                      <!-- After the role on phones; its own column from md, held in view from lg
-                           while the entry scrolls past. -->
-                      <p
-                        class="m-0 text-data text-muted-foreground md:col-span-3 md:col-start-1 md:row-span-2 md:row-start-1 md:flex md:flex-col md:self-start lg:sticky lg:top-24"
-                      >
-                        <time
-                          class="text-foreground"
-                          [attr.datetime]="entry.experience.period.start"
-                          >{{ entry.when }}</time
+                      @if (entry.when) {
+                        <!-- After the role on phones; its own column from md, held in view from
+                             lg while the entry scrolls past. -->
+                        <p
+                          class="m-0 text-data text-muted-foreground md:col-span-3 md:col-start-1 md:row-span-2 md:row-start-1 md:flex md:flex-col md:self-start lg:sticky lg:top-24"
                         >
-                        @if (entry.duration) {
-                          <span class="md:hidden">, </span><span>{{ entry.duration }}</span>
-                        }
-                      </p>
+                          <time
+                            class="text-foreground"
+                            [attr.datetime]="entry.experience.period.start"
+                            >{{ entry.when }}</time
+                          >
+                          @if (entry.duration) {
+                            <span class="md:hidden">, </span><span>{{ entry.duration }}</span>
+                          }
+                        </p>
+                      }
 
-                      <div class="flex flex-col gap-3 md:col-span-9 md:col-start-4 md:row-start-2">
+                      <div
+                        class="flex flex-col gap-3 md:row-start-2"
+                        [class]="entry.when ? 'md:col-span-9 md:col-start-4' : 'md:col-span-12'"
+                      >
                         @if (marks.count("experience:" + entry.experience.id); as n) {
                           <app-match-mark [n]="n" />
                         }
@@ -211,6 +222,12 @@ export class ExperienceSectionComponent {
       more: highlights.slice(HIGHLIGHTS),
     };
 
+    const details = [this.employmentLabel(experience.employmentType), experience.location]
+      .filter(Boolean)
+      .join(", ");
+    if (experience.kind === "work") {
+      return { experience, when: "", duration: "", details, ...folded };
+    }
     if (experience.kind === "certification") {
       const issued = formatMonth(period.start, locale, period.precision);
       return {
@@ -228,9 +245,7 @@ export class ExperienceSectionComponent {
       experience,
       when: formatPeriod(period, locale, t.present, period.precision),
       duration: formatDuration(period, t, this.now, period.precision),
-      details: [this.employmentLabel(experience.employmentType), experience.location]
-        .filter(Boolean)
-        .join(", "),
+      details,
       ...folded,
     };
   }
