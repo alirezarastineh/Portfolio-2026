@@ -137,7 +137,7 @@ const IDENTITY: PlainField[] = [
   {
     key: "availability",
     label: "Availability",
-    hint: "The hero's dot and line, the console and the assistant.",
+    hint: "The dot's colour, and which of your lines shows: write all three in Words, under Hero labels.",
   },
   {
     key: "timezone",

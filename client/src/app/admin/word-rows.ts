@@ -35,20 +35,20 @@ export const ROWS: WordRow[] = [
     key: "availabilityOpen",
     label: "Availability line when open",
     multiline: true,
-    hint: "Beside the hero's dot and in the console, while Availability is open.",
+    hint: "While Availability is open: beside the hero's dot, in About, the contact section, the console, llms.txt and the assistant.",
   },
   {
     group: "hero",
     key: "availabilityLimited",
     label: "Availability line when limited",
-    hint: "Beside the hero's dot and in the console, while Availability is limited.",
+    hint: "While Availability is limited: beside the hero's dot, in About, the contact section, the console, llms.txt and the assistant.",
   },
   {
     group: "hero",
     key: "availabilityClosed",
     label: "Availability line when closed",
     multiline: true,
-    hint: "Beside the hero's dot and in the console, while Availability is closed.",
+    hint: "While Availability is closed: beside the hero's dot, in About, the contact section, the console, llms.txt and the assistant.",
   },
   {
     group: "hero",
