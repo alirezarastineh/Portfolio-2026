@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { publishAll } from "../../content/publish.js";
+import { UI_V2_ADDITIONS } from "../../content/ui-defaults.js";
 import { getDb } from "../../db/client.js";
 import {
   experiences,
@@ -44,6 +45,18 @@ describe("getCorpus", () => {
     // Never the legal pages.
     expect(corpus.text).not.toMatch(/Impressum|Datenschutz|Privacy policy/);
     expect(corpus.text).toContain("---\nid: profile@en\nlocale: en");
+  });
+
+  it("says the availability in the owner's published words too, in each language", async () => {
+    await getDb().update(siteProfile).set({ availability: "limited" });
+    await publishAll();
+
+    const corpus = await getCorpus();
+    for (const locale of ["en", "de"] as const) {
+      const profile = corpus.documents.find((d) => d.id === `profile@${locale}`);
+      const words = UI_V2_ADDITIONS[locale].hero.availabilityLimited;
+      expect(profile?.text).toContain(`\nAvailability: limited (${words})\n`);
+    }
   });
 
   it("returns the same bytes until something is published, then rebuilds", async () => {

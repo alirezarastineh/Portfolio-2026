@@ -397,6 +397,11 @@ function documentsFor(
   // What only the publish dates: the profile, the experience and the skills.
   const published = day(live.publishedAt);
   const dated = published ? { updated: published } : {};
+  const availabilityWords = {
+    open: ui.hero.availabilityOpen,
+    limited: ui.hero.availabilityLimited,
+    closed: ui.hero.availabilityClosed,
+  }[identity.availability];
 
   const profileDoc: CorpusDocument = {
     id: `profile@${locale}`,
@@ -409,7 +414,7 @@ function documentsFor(
       ui.profile.heroHeadline,
       ui.profile.heroSubheadline,
       ui.about.philosophy,
-      `Availability: ${identity.availability}`,
+      `Availability: ${identity.availability} (${availabilityWords})`,
       `Location: ${[identity.location.city, identity.location.country].filter(Boolean).join(", ") || ui.profile.location}`,
       identity.timezone ? `Time zone: ${identity.timezone}` : "",
       `Contact: ${identity.contactEmail}`,
