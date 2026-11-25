@@ -222,20 +222,22 @@ test.describe("home", () => {
     await interactive(page);
     const card = page.locator("#projects li").first();
     await expect(card.getByRole("link")).toHaveCount(1);
-    // Its image, well away from the link's text, is part of the link too.
+    // Its review, well away from the link's words, is part of the link too; it holds no photo.
+    await expect(card.locator("img")).toHaveCount(0);
     await card.scrollIntoViewIfNeeded();
-    const image = await requireBox(card.locator(".card-media"));
-    await page.mouse.click(image.x + image.width / 2, image.y + image.height / 2);
+    const review = await requireBox(card.locator("article p").last());
+    await page.mouse.click(review.x + review.width / 2, review.y + review.height / 2);
     await expect(page).toHaveURL(/\/en\/work\/project-one$/);
   });
 
-  test("a plate is flat: its stack plain text, its hook whole, its title underlined while its link is hovered or focused", async ({
+  test("a plate is a short review: no photo, numbers or stack, its hook whole, its title underlined while its link is hovered or focused", async ({
     page,
   }) => {
     await page.goto("/en");
     await interactive(page);
     const plate = page.locator("#projects li").first();
-    await expect(plate.getByText("TypeScript, Python, FastAPI, Postgres")).toBeVisible();
+    await expect(plate.locator("img, app-metrics")).toHaveCount(0);
+    await expect(plate.getByText("TypeScript, Python, FastAPI, Postgres")).toHaveCount(0);
     await expect(plate.locator(".chip")).toHaveCount(0);
     await expect(plate.getByText(/^Answers support agents/)).toHaveCSS(
       "-webkit-line-clamp",
@@ -245,10 +247,10 @@ test.describe("home", () => {
     const underline = () =>
       plate.locator("h3 .title-draw").evaluate((el) => getComputedStyle(el).backgroundSize);
     expect(await underline()).toBe("0px 2px");
-    // Over the cover, which the plate's one link covers too.
+    // Over the hook, away from the link's words, which the plate's one link covers too.
     await plate.scrollIntoViewIfNeeded();
-    const cover = await requireBox(plate.locator(".card-media"));
-    await page.mouse.move(cover.x + cover.width / 2, cover.y + cover.height / 2);
+    const hook = await requireBox(plate.getByText(/^Answers support agents/));
+    await page.mouse.move(hook.x + hook.width / 2, hook.y + hook.height / 2);
     await expect.poll(underline).toBe("100% 2px");
     await page.mouse.move(0, 0);
     await expect.poll(underline).toBe("0px 2px");

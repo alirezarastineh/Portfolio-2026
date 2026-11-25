@@ -133,9 +133,9 @@ a {
  * them in script, navigation/view-transitions.ts):
  * - the old page fades out quickly (120ms) and the new one fades in, rising 8px;
  * - the header and the ask button hold still: they are on both pages;
- * - a project card's image and title morph into its case study's cover and
- *   `<h1>` (they share `project-<slug>` and `project-title-<slug>`);
- * - a named element on one side only (another card's image) leaves or arrives
+ * - a project card's title morphs into its case study's `<h1>` (they share
+ *   `project-title-<slug>`);
+ * - a named element on one side only (another card's title) leaves or arrives
  *   with its page (`:only-child`);
  * - between case studies (types `forward` / `back`) the pages slide 24px the
  *   way the reader is going. Without types, the plain fade.

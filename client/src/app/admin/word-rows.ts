@@ -126,7 +126,7 @@ export const ROWS: WordRow[] = [
     group: "projectCard",
     key: "techStackAriaLabel",
     label: "Stack list name",
-    hint: "Read out on the home page's plates; shown over the stack on a case study.",
+    hint: "Over the stack on a case study.",
   },
   {
     group: "caseStudy",

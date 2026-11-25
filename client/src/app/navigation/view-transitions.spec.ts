@@ -7,7 +7,6 @@ import { LanguageService } from "../services/language.service";
 import {
   animatePageChangesOnly,
   projectTitleTransitionName,
-  projectTransitionName,
   studyDirection,
 } from "./view-transitions";
 
@@ -120,9 +119,8 @@ describe("studyDirection", () => {
   });
 });
 
-describe("transition names", () => {
-  it("are valid CSS identifiers for any slug", () => {
-    expect(projectTransitionName("2024-launch")).toBe("project-2024-launch");
+describe("the title's transition name", () => {
+  it("is a valid CSS identifier for any slug", () => {
     expect(projectTitleTransitionName("2024-launch")).toBe("project-title-2024-launch");
   });
 });

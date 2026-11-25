@@ -6,10 +6,10 @@ import { SectionHeadingComponent } from "../components/section-heading.component
 import { LanguageService } from "../services/language.service";
 
 /**
- * Selected work: every project, in the admin's order, as flat plates that lead
- * to their case studies, with space between them. Featured projects span the
- * row; the rest go two across, and a plate that would be left alone on its row
- * spans it too.
+ * Selected work: every project, in the admin's order, as a flat plate with a
+ * short review that opens its case study, with space between them. Featured
+ * projects span the row; the rest go two across, and a plate that would be left
+ * alone on its row spans it too.
  */
 @Component({
   selector: "app-projects-section",
@@ -37,11 +37,7 @@ import { LanguageService } from "../services/language.service";
               [id]="'work-' + project.slug"
               [class]="layouts()[i] === 'half' ? '' : 'md:col-span-2'"
             >
-              <app-project-card
-                class="h-full"
-                [project]="project"
-                [layout]="layouts()[i] ?? 'half'"
-              />
+              <app-project-card class="h-full" [project]="project" />
             </li>
           }
         </ul>

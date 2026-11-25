@@ -948,7 +948,7 @@ export default class AdminProjectEditorPage implements OnInit {
   protected readonly coverHint = computed(() => {
     const words = this.words("coverId");
     return [
-      "Shown on the card and at the top of the case study. Without one, the card has no picture.",
+      "Shown at the top of the case study. The home page's card has no picture.",
       words && `${words}.`,
     ]
       .filter(Boolean)

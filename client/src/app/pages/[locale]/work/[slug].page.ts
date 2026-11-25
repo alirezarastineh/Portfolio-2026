@@ -26,10 +26,7 @@ import type { Locale, Project, ProjectDoc } from "../../../content/schema";
 import { CHROME } from "../../../i18n/chrome";
 import { fmt } from "../../../i18n/interpolate";
 import { sentenceCase } from "../../../i18n/sentence-case";
-import {
-  projectTitleTransitionName,
-  projectTransitionName,
-} from "../../../navigation/view-transitions";
+import { projectTitleTransitionName } from "../../../navigation/view-transitions";
 import { applyHead } from "../../../seo/head";
 import { injectMarkNotFound } from "../../../seo/http-status";
 import {
@@ -293,10 +290,7 @@ const AID_LABELS = {
             }
 
             @if (s.project.cover) {
-              <div
-                class="aspect-16/10 overflow-hidden bg-muted lg:col-span-12 lg:row-start-1"
-                [style.view-transition-name]="transitionName()"
-              >
+              <div class="aspect-16/10 overflow-hidden bg-muted lg:col-span-12 lg:row-start-1">
                 <!-- Bound, not static: the server would print static inputs
                      on <app-picture> as attributes too. -->
                 <app-picture
@@ -454,11 +448,7 @@ export default class CaseStudyPageComponent {
     this.study()?.project.cover ? "lg:row-start-2" : "lg:row-start-1",
   );
 
-  /** Shared with the home page's card, which morphs into these. */
-  protected readonly transitionName = computed(() => {
-    const s = this.study();
-    return s ? projectTransitionName(s.project.slug) : null;
-  });
+  /** Shared with the home page's card, whose title morphs into this one. */
   protected readonly titleTransitionName = computed(() => {
     const s = this.study();
     return s ? projectTitleTransitionName(s.project.slug) : null;

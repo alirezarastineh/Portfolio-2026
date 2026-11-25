@@ -5,15 +5,10 @@ import { pageKey } from "../content/locale";
 import { LanguageService } from "../services/language.service";
 
 /**
- * The `view-transition-name` a project card's image and its case study's
- * cover share, so the browser morphs one into the other. Slugs are
+ * The `view-transition-name` a project card's title and its case study's
+ * `<h1>` share, so the browser morphs one into the other. Slugs are
  * `[a-z0-9-]`, so the name is always a valid CSS identifier.
  */
-export function projectTransitionName(slug: string): string {
-  return `project-${slug}`;
-}
-
-/** The name a project card's title and its case study's `<h1>` share. */
 export function projectTitleTransitionName(slug: string): string {
   return `project-title-${slug}`;
 }

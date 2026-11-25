@@ -1,9 +1,9 @@
 /**
  * How a project card sits in the home page's two-column grid:
  *
- * - `featured`: spans the row, image 7 columns and text 5 on wide screens;
+ * - `featured`: spans the row;
  * - `half`: one of two cards side by side;
- * - `wide`: spans the row as a compact horizontal card (image 5, text 7).
+ * - `wide`: spans the row too, as a project that would be left alone on it does.
  */
 export type CardLayout = "featured" | "half" | "wide";
 

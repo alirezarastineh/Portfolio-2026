@@ -4,13 +4,10 @@ import { NgIcon, provideIcons } from "@ng-icons/core";
 import { lucideExternalLink, lucideFileText } from "@ng-icons/lucide";
 
 import { MatchMarkComponent, MatchMarks } from "../ask/match-marks";
-import { MetricsComponent } from "./metrics.component";
 import { brandGithub } from "../icons/brand-icons";
-import { PictureComponent } from "./picture.component";
-import type { CardLayout } from "./project-layout";
 import type { Project } from "../content/schema";
 import { CHROME } from "../i18n/chrome";
-import { projectTitleTransitionName, projectTransitionName } from "../navigation/view-transitions";
+import { projectTitleTransitionName } from "../navigation/view-transitions";
 import { LanguageService } from "../services/language.service";
 
 interface DetailBlock {
@@ -27,70 +24,27 @@ interface ExternalLink {
   icon: string;
 }
 
-/** Metrics a plate shows; the case study shows them all. */
-const CARD_METRICS = 3;
-
 /**
- * Per layout: the plate's grid, the cover's and the text's columns, and the
- * cover's rendered width for `sizes`. Below `lg`, and without a cover, a plate
- * is one column.
- */
-const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; sizes: string }> = {
-  featured: {
-    card: "lg:grid lg:grid-cols-12 lg:items-start lg:gap-x-(--col-gap)",
-    media: "lg:col-span-7",
-    body: "lg:col-span-5",
-    sizes: "(min-width: 1280px) 690px, (min-width: 1024px) 55vw, 100vw",
-  },
-  wide: {
-    card: "lg:grid lg:grid-cols-12 lg:items-start lg:gap-x-(--col-gap)",
-    media: "lg:col-span-5",
-    body: "lg:col-span-7",
-    sizes: "(min-width: 1280px) 495px, (min-width: 1024px) 40vw, 100vw",
-  },
-  half: {
-    card: "",
-    media: "",
-    body: "",
-    sizes: "(min-width: 1280px) 580px, (min-width: 768px) 46vw, 100vw",
-  },
-};
-
-/**
- * A project on the home page, as a flat plate: no box, space around it. With a
- * case study the whole plate is its "Read case study" link (stretched over it;
- * the live and repo links sit above it), its title's underline draws while the
- * link is hovered, focused or pressed, and its cover and title morph into the
+ * A project on the home page, as a flat plate: a short review of it (its name,
+ * what it is, and one sentence), with no box and space around it. The photos,
+ * the numbers and the stack open with it: with a case study the whole plate is
+ * its "Read case study" link (stretched over it), its title's underline draws
+ * while the link is hovered, focused or pressed, and its title morphs into the
  * case study's. Without one, its problem / architecture / infra / outcomes open
- * in place (a native `<details>`, so no script is needed). Link styles:
- * motion.css.
+ * in place (a native `<details>`, so no script is needed) with its links.
+ * Link styles: motion.css.
  */
 @Component({
   selector: "app-project-card",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatchMarkComponent, MetricsComponent, NgIcon, PictureComponent, RouterLink],
+  imports: [MatchMarkComponent, NgIcon, RouterLink],
   viewProviders: [provideIcons({ lucideExternalLink, lucideFileText, brandGithub })],
   host: {
     class: "block",
   },
   template: `
-    <article class="relative isolate flex h-full flex-col gap-6" [class]="classes().card">
-      @if (project().cover; as cover) {
-        <div
-          class="card-media relative aspect-16/10 shrink-0 overflow-hidden bg-muted"
-          [class]="classes().media"
-          [style.view-transition-name]="transitionName()"
-        >
-          <app-picture
-            [image]="cover"
-            [sizes]="classes().sizes"
-            [imgClass]="'block size-full object-cover'"
-          />
-        </div>
-      }
-
-      <!-- What it is close together; its proof and its stack apart. -->
-      <div class="flex flex-1 flex-col gap-6" [class]="classes().body">
+    <article class="relative isolate flex h-full flex-col gap-6">
+      <div class="flex flex-1 flex-col gap-6">
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
             <h3
@@ -109,18 +63,6 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
         </div>
         @if (marks.count("project:" + project().slug); as n) {
           <app-match-mark [n]="n" />
-        }
-
-        @if (metrics().length) {
-          <!-- No larger than the title: the plate is the project, not the number. -->
-          <app-metrics class="[--metric-max:2rem] [--metric-min:8.5rem]" [metrics]="metrics()" />
-        }
-
-        @if (project().stack.length) {
-          <p class="m-0 text-small text-muted-foreground">
-            <span class="sr-only">{{ lang.t().projectCard.techStackAriaLabel }}: </span
-            ><span translate="no">{{ project().stack.join(", ") }}</span>
-          </p>
         }
 
         @if (!project().hasCaseStudy && hasDetails()) {
@@ -162,7 +104,7 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
                 }}<span class="sr-only">: {{ project().name }}</span></a
               >
             }
-            @if (links().length) {
+            @if (!project().hasCaseStudy && links().length) {
               <ul
                 class="m-0 flex list-none flex-wrap gap-2 p-0"
                 role="list"
@@ -192,26 +134,15 @@ const LAYOUTS: Record<CardLayout, { card: string; media: string; body: string; s
 export class ProjectCardComponent {
   readonly lang = inject(LanguageService);
   readonly project = input.required<Project>();
-  /** Where the plate sits in the section's grid (project-layout.ts). */
-  readonly layout = input<CardLayout>("half");
 
-  /** A plate without a cover is its text alone, one column at every width. */
-  protected readonly classes = computed(
-    () => LAYOUTS[this.project().cover ? this.layout() : "half"],
-  );
   protected readonly chrome = computed(() => CHROME[this.lang.lang()].projectCard);
   protected readonly marks = inject(MatchMarks);
 
   readonly caseStudyLink = computed(() => ["/", this.lang.lang(), "work", this.project().slug]);
-  /** Shared with the case study's cover and `<h1>`, which these morph into. */
-  readonly transitionName = computed(() =>
-    this.project().hasCaseStudy ? projectTransitionName(this.project().slug) : null,
-  );
+  /** Shared with the case study's `<h1>`, which this morphs into. */
   readonly titleTransitionName = computed(() =>
     this.project().hasCaseStudy ? projectTitleTransitionName(this.project().slug) : null,
   );
-
-  protected readonly metrics = computed(() => this.project().metrics.slice(0, CARD_METRICS));
 
   readonly blocks = computed<DetailBlock[]>(() => {
     const p = this.project();
